@@ -11,11 +11,11 @@ export function Header() {
   const { user, refreshToken, clearSession } = useAuthStore();
 
   const handleLogout = async () => {
-    try {
-      await authApi.logout(refreshToken);
-    } catch {
-      /* ignore */
-    }
+    // Best-effort server-side token revocation. Whether the network call
+    // succeeds or not, we still want to clear local state and navigate to
+    // /login — the user's intent is to end the session here.
+    // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort revoke
+    try { await authApi.logout(refreshToken); } catch { /* ignore */ }
     clearSession();
     navigate('/login', { replace: true });
   };

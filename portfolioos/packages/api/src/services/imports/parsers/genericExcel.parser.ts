@@ -31,11 +31,11 @@ export const genericExcelParser: Parser = {
       // back to the file the user actually uploaded (not our temp CSV).
       return { ...result, adapter: 'generic.excel', adapterVer: '1' };
     } finally {
-      try {
-        await unlink(tempPath);
-      } catch {
-        // ignore
-      }
+      // Best-effort temp-file cleanup; a failure here never changes the
+      // parse result, so we swallow the error rather than masking the
+      // primary outcome. `tmpdir()` gets GC'd by the OS regardless.
+      // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort cleanup
+      try { await unlink(tempPath); } catch { /* ignore */ }
     }
   },
 };

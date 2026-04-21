@@ -184,8 +184,12 @@ async function markGmailAccountForReauth(accountId: string, reason: string): Pro
         lastPolledAt: new Date(),
       },
     });
-  } catch {
-    /* ignore */
+  } catch (err) {
+    // This is itself the error-recovery path. If it fails, the worst case
+    // is that the account stays marked active and the next poll fails the
+    // same way — the user still sees broken sync, just via a different
+    // surface. Log so operators aren't blind to it.
+    logger.warn({ err, accountId, reason }, '[gmail] failed to mark account for reauth');
   }
 }
 

@@ -1,0 +1,95 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs for the same ref when a new commit lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: install · typecheck · lint · test · build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    # Tests touch Postgres (RLS invariant tests in particular need a real
+    # database; they won't run against mocks). Spin up services here instead
+    # of docker-compose so CI stays hermetic.
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: portfolioos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Runtime (app role) and migration (superuser) URLs — mirrors the
+      # dev/prod split from §5.1 task 11. In CI we use the same postgres
+      # role for both; the RLS-isolation invariant test creates the
+      # dedicated `portfolioos_app` role itself.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/portfolioos_test?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/portfolioos_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
+      # Match local defaults so tests that read env don't bail out.
+      JWT_SECRET: ci-test-secret-change-me
+      APP_ENCRYPTION_KEY: "00000000000000000000000000000000000000000000"
+      ENABLE_IMPORT_WORKER: "false"
+      ENABLE_MAILBOX_POLLER: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Prisma client must be generated before typecheck (the API package
+      # imports generated types).
+      - name: Generate Prisma client
+        run: pnpm --filter @portfolioos/api exec prisma generate
+
+      - name: Apply migrations
+        run: pnpm --filter @portfolioos/api exec prisma migrate deploy
+
+      - name: Lint
+        run: pnpm -r run lint
+
+      - name: Typecheck
+        run: pnpm -r run typecheck
+
+      - name: Test
+        run: pnpm -r run test
+
+      - name: Build
+        run: pnpm -r run build

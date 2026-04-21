@@ -30,7 +30,7 @@ work so history is auditable.
 | 10 | CG cascade on edit/delete | ✅ completed | 2026-04-20 | 2026-04-20 | `e7e65e0` | — |
 | 11 | Postgres RLS on user-scoped tables | ✅ completed | 2026-04-21 | 2026-04-21 | `011f4fa` + `ed3e072` | — |
 | 12 | Bull worker atomicity (bounded runtime, single tx commit) | ✅ completed | 2026-04-21 | 2026-04-21 | pending | — |
-| 13 | Linter rules + CI (no silent catch, money-type ban) | ⏳ pending | — | — | — | — |
+| 13 | Linter rules + CI (no silent catch, money-type ban) | ✅ completed | 2026-04-21 | 2026-04-21 | pending | — |
 
 Legend: ✅ completed · 🔄 in_progress · ⏳ pending · ❌ blocked
 
@@ -96,6 +96,38 @@ Bull worker bounded runtime + atomicity. Addresses BUG-011.
   closing the "ghost PROCESSING row" gap.
 
 40/40 tests pass, typecheck clean, lint clean (0 errors, 25 pre-existing warnings).
+
+## Task 13 — done
+
+Linter rules + CI enforcing §3.2 and §3.10.
+
+- `eslint-plugin-portfolioos/` — local workspace package exposing two
+  rules:
+  - `portfolioos/no-silent-catch` (error) — bans empty catches and
+    catches whose body is only `console.*` calls. Anything else
+    (rethrow, logger.*, DLQ writes, next(err), typed-failure returns,
+    DB updates) counts as handling. Escape-hatch for best-effort
+    cleanup is `// eslint-disable-next-line portfolioos/no-silent-catch -- <reason>`.
+    First run caught 5 real empty-catch sites (gmail reauth marker,
+    mailbox socket teardowns, import file unlink, excel temp-file
+    unlink, web logout revoke) — all fixed with either a logger.warn
+    or an explicit disable + rationale.
+  - `portfolioos/no-money-coercion` (warn) — flags every `parseFloat()`
+    and `Number()` call site so reviewers audit each one. Legit
+    non-monetary uses (date parsing, port numbers, query pagination)
+    stay in place with warnings visible; new monetary coercion
+    attempts get noticed in review. Escape-hatch with a rationale
+    when intentional.
+- Registered via root `.eslintrc.cjs` with `plugins: ['portfolioos']`
+  and rule entries in the shared `rules` block so every package inherits.
+- `.github/workflows/ci.yml` — runs on push / PR to main with
+  Postgres 15 + Redis 7 services. Pipeline: install → prisma generate →
+  migrate deploy → lint → typecheck → test → build. Concurrency group
+  cancels superseded runs.
+
+Final state: 44/44 tests pass (40 API + 4 web), typecheck clean across 3
+packages, lint clean (0 errors, 39 warnings — all pre-existing or
+intentional `Number(...)` call sites).
 
 ## Exit criteria (§5.2)
 

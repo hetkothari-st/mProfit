@@ -143,11 +143,11 @@ async function pollOne(
       where: { id: accountId },
       data: { lastError: (err as Error).message, lastPolledAt: new Date() },
     });
-    try {
-      await client.close();
-    } catch {
-      // ignore
-    }
+    // Best-effort socket teardown after the primary poll failure — the real
+    // error is already logged above; a close() failure here would just be
+    // noise.
+    // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort cleanup
+    try { await client.close(); } catch { /* ignore */ }
     return { processed, imported, errors: errors + 1 };
   }
 
@@ -229,11 +229,10 @@ export async function testMailboxConnection(
     await client.logout();
     return { ok: true };
   } catch (err) {
-    try {
-      await client.close();
-    } catch {
-      // ignore
-    }
+    // Best-effort socket teardown on connection-test failure; the actual
+    // error is returned to the caller below.
+    // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort cleanup
+    try { await client.close(); } catch { /* ignore */ }
     const e = err as Error & {
       authenticationFailed?: boolean;
       response?: string;

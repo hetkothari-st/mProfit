@@ -17,6 +17,9 @@ importers:
       eslint:
         specifier: ^8.57.0
         version: 8.57.1
+      eslint-plugin-portfolioos:
+        specifier: workspace:*
+        version: link:eslint-plugin-portfolioos
       eslint-plugin-react-hooks:
         specifier: ^4.6.2
         version: 4.6.2(eslint@8.57.1)
@@ -144,6 +147,8 @@ importers:
       vitest:
         specifier: ^2.1.4
         version: 2.1.9(@types/node@22.19.17)
+
+  eslint-plugin-portfolioos: {}
 
   packages/api:
     dependencies:
