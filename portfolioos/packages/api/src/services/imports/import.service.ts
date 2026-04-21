@@ -1,10 +1,10 @@
 import { readFile, unlink } from 'node:fs/promises';
-import type { ImportType, TransactionType, AssetClass, Exchange } from '@prisma/client';
+import type { ImportType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
-import { NotFoundError, ForbiddenError, BadRequestError } from '../../lib/errors.js';
-import { runParser } from './parsers/index.js';
-import type { ParsedTransaction } from './parsers/types.js';
+import { NotFoundError, ForbiddenError } from '../../lib/errors.js';
+import { runFileImportAdapter } from '../../adapters/fileImport/runner.js';
+import { projectTransactionEvent } from '../../adapters/fileImport/projection.js';
 import { createTransaction } from '../transaction.service.js';
 import { hashBytes, positionalHash } from '../sourceHash.js';
 import { getImportQueue } from '../../lib/queue.js';
@@ -104,29 +104,63 @@ export async function processImportJob(importJobId: string): Promise<{
     data: { status: 'PROCESSING' },
   });
 
-  const { parser, result } = await runParser({
+  const { adapter, result } = await runFileImportAdapter({
     filePath: job.filePath,
     fileName: job.fileName,
     portfolioId: job.portfolioId,
     userId: job.userId,
   });
 
-  // File-hash backs the positional fallback for rows without a broker natural
-  // key — re-uploading the exact same bytes must produce zero new rows (§3.3,
-  // idempotency invariant test). We hash the file ONCE here rather than per
-  // row: cheaper and also keeps the row-level hash deterministic across
-  // parser re-runs.
+  // A hard parse failure (e.g. truncated PDF, parser threw) surfaces as
+  // ok:false. Phase 4.5 stops short of the full DLQ plumbing (Task 8), so
+  // for now we write the failure into errorLog and mark the job FAILED —
+  // Task 8 will redirect this into IngestionFailure with rawPayload intact.
+  if (!result.ok) {
+    await prisma.importJob.update({
+      where: { id: importJobId },
+      data: {
+        status: 'FAILED',
+        totalRows: 0,
+        successRows: 0,
+        failedRows: 0,
+        errorLog: {
+          adapter: adapter?.id ?? 'none',
+          adapterVer: adapter?.version ?? null,
+          parseError: result.error,
+          rawPayload: result.rawPayload ?? null,
+        },
+        completedAt: new Date(),
+      },
+    });
+    return {
+      parser: adapter?.id ?? 'none',
+      total: 0,
+      success: 0,
+      failed: 0,
+      errors: [{ row: 0, reason: result.error }],
+    };
+  }
+
+  const events = result.events;
+  const warnings = result.warnings ?? [];
+  const adapterId = adapter?.id ?? 'none';
+  const adapterVer = adapter?.version ?? '1';
+
+  // File-hash backs the positional fallback for events without a broker
+  // natural key — re-uploading the exact same bytes must produce zero new
+  // rows (§3.3). Hash ONCE per job rather than per event.
   let fileHash: string | null = null;
   try {
     const bytes = await readFile(job.filePath);
     fileHash = hashBytes(bytes);
   } catch (err) {
-    logger.warn({ err, importJobId }, '[import] failed to hash source file — rows without natural keys will be admitted without dedup');
+    logger.warn(
+      { err, importJobId },
+      '[import] failed to hash source file — rows without natural keys will be admitted without dedup',
+    );
   }
-  const adapterId = result.adapter ?? parser;
-  const adapterVer = result.adapterVer ?? '1';
 
-  const total = result.transactions.length;
+  const total = events.length;
   let success = 0;
   let failed = 0;
   let skipped = 0;
@@ -156,31 +190,37 @@ export async function processImportJob(importJobId: string): Promise<{
         completedAt: new Date(),
       },
     });
-    return { parser, total, success: 0, failed: total, errors: [{ row: 0, reason: 'No portfolio available' }] };
+    return {
+      parser: adapterId,
+      total,
+      success: 0,
+      failed: total,
+      errors: [{ row: 0, reason: 'No portfolio available' }],
+    };
   }
 
-  for (const [i, pt] of result.transactions.entries()) {
+  for (const [i, event] of events.entries()) {
     try {
-      // Per §6.2 preference order: parser-supplied hash (rare) → broker natural
-      // key (handled inside createTransaction) → file+row fallback (this file).
-      // For parsers like CAS/CSV that don't emit orderNo+tradeNo, the file-hash
-      // path is what makes re-uploading the same file a no-op.
+      // Per §6.2 preference order: adapter-supplied hash → broker natural
+      // key (derived inside createTransaction) → file+row positional
+      // fallback. For adapters like CAS/CSV that don't emit orderNo+tradeNo,
+      // the positional path is what makes re-uploading the same file a no-op.
       const rowHash =
-        pt.sourceHash ??
-        (pt.broker && pt.orderNo && pt.tradeNo
+        event.sourceHash ??
+        (event.metadata.broker && event.metadata.orderNo && event.metadata.tradeNo
           ? undefined // let createTransaction derive the natural-key hash
           : fileHash
             ? positionalHash({ adapterId, fileHash, rowIndex: i })
             : undefined);
 
+      const eventForProjection = rowHash
+        ? { ...event, sourceHash: rowHash }
+        : event;
+
       const before = await prisma.transaction.count({ where: { portfolioId } });
       const created = await createTransaction(
         job.userId,
-        toTransactionInput(pt, portfolioId, {
-          sourceAdapter: adapterId,
-          sourceAdapterVer: adapterVer,
-          sourceHash: rowHash,
-        }),
+        projectTransactionEvent(eventForProjection, portfolioId),
       );
       const after = await prisma.transaction.count({ where: { portfolioId } });
 
@@ -213,10 +253,9 @@ export async function processImportJob(importJobId: string): Promise<{
       successRows: success,
       failedRows: failed,
       errorLog: {
-        parser,
         adapter: adapterId,
         adapterVer,
-        parserWarnings: result.warnings,
+        parserWarnings: warnings,
         rowErrors: errors,
         skippedAsDuplicates: skipped,
       },
@@ -224,47 +263,5 @@ export async function processImportJob(importJobId: string): Promise<{
     },
   });
 
-  return { parser, total, success, failed, errors };
-}
-
-function toTransactionInput(
-  pt: ParsedTransaction,
-  portfolioId: string,
-  source: {
-    sourceAdapter: string;
-    sourceAdapterVer: string;
-    sourceHash?: string;
-  },
-) {
-  return {
-    portfolioId,
-    assetClass: pt.assetClass as AssetClass,
-    transactionType: pt.transactionType as TransactionType,
-    stockSymbol: pt.symbol,
-    stockName: pt.stockName ?? pt.assetName,
-    exchange: pt.exchange as Exchange | undefined,
-    schemeCode: pt.schemeCode,
-    schemeName: pt.schemeName ?? pt.assetName,
-    amcName: pt.amcName,
-    assetName: pt.assetName ?? pt.stockName ?? pt.schemeName,
-    isin: pt.isin,
-    tradeDate: pt.tradeDate,
-    settlementDate: pt.settlementDate,
-    quantity: pt.quantity,
-    price: pt.price,
-    brokerage: pt.brokerage,
-    stt: pt.stt,
-    stampDuty: pt.stampDuty,
-    exchangeCharges: pt.exchangeCharges,
-    gst: pt.gst,
-    sebiCharges: pt.sebiCharges,
-    otherCharges: pt.otherCharges,
-    broker: pt.broker,
-    orderNo: pt.orderNo,
-    tradeNo: pt.tradeNo,
-    narration: pt.narration,
-    sourceAdapter: source.sourceAdapter,
-    sourceAdapterVer: source.sourceAdapterVer,
-    sourceHash: source.sourceHash,
-  };
+  return { parser: adapterId, total, success, failed, errors };
 }
