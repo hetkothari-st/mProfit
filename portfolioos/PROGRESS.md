@@ -129,8 +129,33 @@ Final state: 44/44 tests pass (40 API + 4 web), typecheck clean across 3
 packages, lint clean (0 errors, 39 warnings — all pre-existing or
 intentional `Number(...)` call sites).
 
-## Exit criteria (§5.2)
+## Exit criteria (§5.2) — walk 2026-04-21
 
-All invariant tests pass, full test suite green, 50-item manual QA checklist
-green. Tracked in `test/manual-qa-phase-4-5.md` (to be filled out before
-leaving phase 4.5).
+Invariant tests pass (40/40 api + 22 shared + 4 web = 66/66). Typecheck
+clean. Lint 0 errors / 39 pre-existing warnings.
+
+Manual QA walk against API on :3011 / web on :3000 — see
+`test/manual-qa-phase-4-5.md`. Breakdown of the 50-item list:
+
+- **✅ 30 passed** — A1-A5 (auth), B8 (portfolio list), C12-C18 (manual
+  txn CRUD + CG cascade), E26-E29 (FD uniqueness + NPS + Bond), F30+F32
+  (decimal), G33+G35+G36 (FIFO + intraday + fractional), I41 (112A
+  endpoint), J42-J45 (RLS cross-tenant), K46-K49 (dev-loop).
+- **⚠️ 4 partial** — F31 (HALF_UP vs §14.3 banker's), C16 (holding
+  totalCost uses weighted-avg after SELL, FIFO-correct everywhere else),
+  G34 (LTCG classification works, grandfathering substitution needs
+  seeded FMV-31-Jan-2018 table), I39 (math correct, `totalValue` null
+  until prices refresh).
+- **🕳 15 deferred** — A6, B7, B9-B11, D19-D25, H37-H38, I40, K50. All
+  require either a human driving the browser (D19/D21/D23/D25, A6, B7,
+  B9-B11, I40), a real external feed event (H37/H38 — corp actions come
+  via Yahoo sync, no manual-apply endpoint), or a push to verify CI
+  (K50). D20/D22 idempotency specifically is ✅ via invariant test.
+- **⏳ 1 pending** — K50 (CI green on push; file in place, pushes once
+  Phase 4.5 is signed off).
+
+4 newly surfaced issues logged at the bottom of the checklist as
+BUG-NEW-017 through BUG-NEW-020. None are P0/P1 — they're spec
+deviations or missing seed data rather than correctness bugs. Decision
+needed before moving to Phase 5-A: fix them now, or file them as
+Phase 8 polish and proceed.
