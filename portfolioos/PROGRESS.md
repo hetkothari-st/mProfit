@@ -29,8 +29,8 @@ work so history is auditable.
 | 9 | Golden test fixtures (≥5 per parser) | ✅ completed | 2026-04-21 | 2026-04-21 | `b768c28` | — |
 | 10 | CG cascade on edit/delete | ✅ completed | 2026-04-20 | 2026-04-20 | `e7e65e0` | — |
 | 11 | Postgres RLS on user-scoped tables | ✅ completed | 2026-04-21 | 2026-04-21 | `011f4fa` + `ed3e072` | — |
-| 12 | Bull worker atomicity (bounded runtime, single tx commit) | ✅ completed | 2026-04-21 | 2026-04-21 | pending | — |
-| 13 | Linter rules + CI (no silent catch, money-type ban) | ✅ completed | 2026-04-21 | 2026-04-21 | pending | — |
+| 12 | Bull worker atomicity (bounded runtime, single tx commit) | ✅ completed | 2026-04-21 | 2026-04-21 | `0ae88fd` | — |
+| 13 | Linter rules + CI (no silent catch, money-type ban) | ✅ completed | 2026-04-21 | 2026-04-21 | `aff7a20` | — |
 
 Legend: ✅ completed · 🔄 in_progress · ⏳ pending · ❌ blocked
 
