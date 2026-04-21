@@ -20,6 +20,7 @@
 
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { findSeedForAddress } from './templateSeeds.service.js';
 
 export interface CreateMonitoredSenderInput {
   address: string;
@@ -80,11 +81,22 @@ export async function createMonitoredSender(
   if (existing) {
     throw new BadRequestError(`Sender ${address} is already monitored`);
   }
+
+  // §6.10 auto-fill: if the user adopted a pre-seeded institution
+  // without specifying a label, lift the seed's suggested label. A
+  // label the user *did* supply always wins — we never overwrite
+  // intent.
+  let displayLabel = input.displayLabel ?? null;
+  if (displayLabel === null) {
+    const seed = await findSeedForAddress(address);
+    if (seed) displayLabel = seed.suggestedDisplayLabel;
+  }
+
   return prisma.monitoredSender.create({
     data: {
       userId,
       address,
-      displayLabel: input.displayLabel ?? null,
+      displayLabel,
       autoCommitAfter,
     },
   });

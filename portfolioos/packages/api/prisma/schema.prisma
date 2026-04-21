@@ -928,6 +928,39 @@ model LearnedTemplate {
   @@unique([userId, senderAddress, bodyStructureHash, version])
 }
 
+// ─── §6.10 PRE-SEEDED SENDER DIRECTORY ───────────────────────────
+//
+// Shared reference table (NOT user-scoped) shipped with the Phase
+// 5-A release. Maps known financial-institution sender addresses to
+// human-readable metadata so that:
+//   1. The §6.6 discovery UI can label "alerts@hdfcbank.net" as
+//      "HDFC Bank" without the user typing anything.
+//   2. When a user adopts a MonitoredSender that matches a seed, the
+//      seed's display label / suggested threshold auto-fill.
+//
+// Unlike `LearnedTemplate`, a seed row carries NO extractionRecipe —
+// that's learned from actual email samples via §6.4 promotion. A
+// seed is metadata only; the parse path is still LLM-on-first-sight.
+
+model TemplateSeed {
+  id                       String              @id @default(cuid())
+  address                  String              @unique
+  institutionName          String
+  institutionKind          InstitutionKind
+  suggestedDisplayLabel    String
+  suggestedAutoCommitAfter Int                 @default(5)
+  isActive                 Boolean             @default(true)
+  notes                    String?
+  createdAt                DateTime            @default(now())
+}
+
+enum InstitutionKind {
+  BANK
+  BROKER
+  INSURER
+  REGISTRAR
+}
+
 // ─── §4.3 INGESTION DLQ ──────────────────────────────────────────
 //
 // Parse failures never crash the job (§3.5, BUG-006). Raw payload is

@@ -23,7 +23,9 @@
 
 import { google } from 'googleapis';
 import type { gmail_v1 } from 'googleapis';
+import type { InstitutionKind } from '@prisma/client';
 import { getAuthorizedClientFor } from '../../connectors/gmail.connector.js';
+import { findSeedsForAddresses } from '../../services/templateSeeds.service.js';
 import { parseFromHeader } from './headers.js';
 import { DISCOVERY_THRESHOLD, scoreSender } from './keywords.js';
 
@@ -81,6 +83,19 @@ export interface DiscoveredSender {
   score: number;
   /** A handful of recent subjects for the UI to render as preview chips. */
   recentSubjects: string[];
+  /**
+   * §6.10 TemplateSeed match, if this address belongs to a pre-seeded
+   * institution. `null` for addresses the user is discovering blind —
+   * the UI still lets them add the sender; it just won't have a pretty
+   * label to show. Knowing the `kind` upfront also lets the UI group
+   * results ("Your banks", "Your brokers", …) before the user has
+   * labelled anything.
+   */
+  seedMatch: {
+    institutionName: string;
+    institutionKind: InstitutionKind;
+    suggestedDisplayLabel: string;
+  } | null;
 }
 
 interface SenderAccumulator {
@@ -240,7 +255,24 @@ export async function _runDiscovery(
       messageCount: acc.messageCount,
       score,
       recentSubjects: acc.subjects.slice(0, MAX_SAMPLE_SUBJECTS),
+      seedMatch: null,
     });
+  }
+
+  // One DB round-trip to attach pre-seeded institution metadata (§6.10).
+  // Lookup is by exact address match — a seed at "@hdfcbank.net" does
+  // NOT wildcard-hit "alerts@hdfcbank.net"; the UI can still present
+  // the domain-scoped form later when the user adds a MonitoredSender.
+  const seeds = await findSeedsForAddresses(candidates.map((c) => c.address));
+  for (const c of candidates) {
+    const seed = seeds.get(c.address);
+    if (seed) {
+      c.seedMatch = {
+        institutionName: seed.institutionName,
+        institutionKind: seed.institutionKind,
+        suggestedDisplayLabel: seed.suggestedDisplayLabel,
+      };
+    }
   }
 
   // Highest-scoring first; break ties by message volume so a chatty
