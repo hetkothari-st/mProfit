@@ -41,6 +41,7 @@ const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'PremiumPayment',
   'InsuranceClaim',
   'AuditLog',
+  'LlmSpend',
 ]);
 
 const basePrisma =

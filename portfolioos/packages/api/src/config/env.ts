@@ -38,6 +38,18 @@ const EnvSchema = z.object({
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   GOOGLE_OAUTH_REDIRECT_URL: z.string().optional(),
+
+  // Phase 5-A (§6, §16 gate G5). The LLM wrapper refuses to emit a live
+  // call until `ANTHROPIC_API_KEY` is set AND `ENABLE_LLM_PARSER=true`
+  // — this gate is code-enforced, not just documentation, so
+  // accidentally flipping one of the two leaves the other as a stop.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ENABLE_LLM_PARSER: z.enum(['true', 'false']).default('false'),
+  LLM_MODEL: z.string().default('claude-haiku-4-5-20251001'),
+  // Per §13: Anthropic zero-retention is an account-level setting, not a
+  // per-request header. This env var is advisory — if set to 'true' we
+  // log the assumption so ops can double-check the Anthropic console.
+  ANTHROPIC_ZERO_RETENTION_CONFIRMED: z.enum(['true', 'false']).default('false'),
 });
 
 function loadEnv() {

@@ -50,6 +50,11 @@ model User {
   rentalProperties  RentalProperty[]
   insurancePolicies InsurancePolicy[]
   auditLogs         AuditLog[]
+
+  // Phase 5-A — per-call LLM spend ledger (§8, §16 gate G5). Every
+  // Anthropic API call writes a row here so the monthly budget check
+  // can aggregate exactly what this user has spent.
+  llmSpend LlmSpend[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -1177,4 +1182,35 @@ model AppSetting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+// ─── §8 LLM SPEND LEDGER ─────────────────────────────────────────
+//
+// Per-user, per-call cost record for the Anthropic API calls made by the
+// Phase 5-A ingestion pipeline. The monthly budget service aggregates
+// `costInr` over the last calendar month to decide whether to warn the
+// user (default ₹500), cap further calls (₹1000), or let them through.
+// Budget thresholds live in `AppSetting` so they're configurable
+// without a migration.
+//
+// A row is written for every attempted call — failures included — so
+// that a flaky upstream (rate limits, timeouts) can't silently exhaust
+// the budget without a trail.
+
+model LlmSpend {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  costInr      Decimal  @db.Decimal(10, 4)
+  purpose      String // "email.parse" | "template.promote" | ...
+  sourceRef    String? // e.g. Gmail message id, file hash
+  success      Boolean  @default(true)
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
