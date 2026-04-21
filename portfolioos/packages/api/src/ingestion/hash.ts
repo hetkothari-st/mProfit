@@ -197,3 +197,137 @@ export function bodyStructureHash(input: string): string {
   const normalized = normalizeForStructureHash(input);
   return sha256Hex(normalized).slice(0, 16);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  §6.4 — template slot extraction (promoted-recipe applier input)           */
+/* -------------------------------------------------------------------------- */
+
+/** Slot kinds that recipes can address. Mirrors the tokens produced by
+ * {@link normalizeForStructureHash}. URLs and emails are intentionally
+ * excluded — they aren't things a recipe ever wants to extract.
+ */
+export type SlotKind = 'AMT' | 'DATE' | 'NUM';
+
+export interface ExtractedSlot {
+  slot: SlotKind;
+  /** 0-based position of this slot *within its slot kind*. */
+  index: number;
+  /** The verbatim substring that matched in the body. */
+  raw: string;
+  /**
+   * Comparable canonical form, or `null` if the slot couldn't be parsed:
+   *   AMT  → plain decimal string, no currency / commas / `/-` tail
+   *   DATE → ISO-8601 `YYYY-MM-DD`
+   *   NUM  → digits only (commas removed)
+   */
+  normalized: string | null;
+}
+
+/** Remove common amount decorations → a plain decimal string. */
+function normalizeAmount(raw: string): string | null {
+  // Strip currency symbols, slashes/hyphens, and thousand separators.
+  const stripped = raw
+    .replace(/(?:rs\.?|inr|₹)/gi, '')
+    .replace(/\/-/g, '')
+    .replace(/,/g, '')
+    .trim();
+  if (!stripped) return null;
+  if (!/^-?\d+(?:\.\d+)?$/.test(stripped)) return null;
+  return stripped;
+}
+
+const MONTH_MAP: Record<string, string> = {
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+  january: '01', february: '02', march: '03', april: '04',
+  june: '06', july: '07', august: '08', september: '09',
+  october: '10', november: '11', december: '12',
+};
+
+/** Parse the date formats that DATE_RE accepts → ISO-8601 string. */
+function normalizeDate(raw: string): string | null {
+  const s = raw.trim().toLowerCase();
+  // ISO `YYYY-MM-DD` — already canonical.
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  // `DD[-/]MONTH[-/]YY(YY)` where MONTH is name or digits.
+  const m = /^(\d{1,2})[-/]([a-z]+|\d{1,2})[-/](\d{2}|\d{4})$/.exec(s);
+  if (!m) return null;
+  const [, dd, monToken, yyRaw] = m;
+  const day = dd!.padStart(2, '0');
+  let month: string;
+  if (/^\d+$/.test(monToken!)) month = monToken!.padStart(2, '0');
+  else {
+    const key = monToken!;
+    if (!(key in MONTH_MAP)) return null;
+    month = MONTH_MAP[key]!;
+  }
+  const year = yyRaw!.length === 2 ? `20${yyRaw}` : yyRaw!;
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Walk an email body in the same pattern order as
+ * {@link normalizeForStructureHash} (URLs/emails stripped, then AMT, DATE,
+ * NUM) and return every slot that appears, tagged with its type and
+ * within-kind index. The resulting list is what {@link applyRecipe} (in
+ * `templates.ts`) uses to look up `{slot, index}` references.
+ *
+ * The pipeline order is load-bearing: AMT must run before NUM so "₹100"
+ * becomes one AMT slot rather than one AMT slot *and* a phantom NUM slot
+ * on the `100`. That mirrors the normaliser exactly — if the two ever
+ * drift, a recipe trained on the normaliser's slot ordering will pick
+ * the wrong slot at apply time.
+ */
+export function extractTemplateSlots(input: string): ExtractedSlot[] {
+  // Strip HTML first for parity with the normaliser. URLs/emails are
+  // replaced (not collected) so their digits/dates don't leak into NUM
+  // or DATE slots.
+  let s = stripHtml(input);
+  s = s.replace(URL_RE, ' ');
+  s = s.replace(EMAIL_RE, ' ');
+
+  const found: Array<{ slot: SlotKind; raw: string; start: number }> = [];
+
+  const collect = (re: RegExp, slot: SlotKind, replaceWith: string): void => {
+    // Build a new string where each match is replaced with `replaceWith`
+    // so subsequent regex passes can't re-match the same substring. We
+    // capture positions in the *pre-replacement* string so the `index`
+    // ordering at the end reflects source order.
+    const matches: Array<{ raw: string; start: number }> = [];
+    // Reset regex state; the module-level regexes carry `g` flag.
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) {
+      matches.push({ raw: m[0]!, start: m.index });
+      // Protect against zero-width matches getting stuck in the loop.
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    for (const { raw, start } of matches) found.push({ slot, raw, start });
+    s = s.replace(re, () => replaceWith);
+  };
+
+  // Module-level regexes are shared with the hasher; we can't mutate
+  // them (the hasher also depends on the `g` flag), but calling lastIndex
+  // = 0 and re-exec'ing is safe because each call resets state explicitly.
+  collect(AMT_RE, 'AMT', ' <AMT> ');
+  collect(DATE_RE, 'DATE', ' <DATE> ');
+  collect(NUM_RE, 'NUM', ' <NUM> ');
+
+  // Sort strictly by source-order position so two AMT slots inside one
+  // paragraph get indices 0, 1 (not 0 and something arbitrary from regex
+  // alternation). Stable sort — same position means same origin.
+  found.sort((a, b) => a.start - b.start);
+
+  const perKindIndex: Record<SlotKind, number> = { AMT: 0, DATE: 0, NUM: 0 };
+  const out: ExtractedSlot[] = [];
+  for (const { slot, raw } of found) {
+    const normalized =
+      slot === 'AMT' ? normalizeAmount(raw)
+      : slot === 'DATE' ? normalizeDate(raw)
+      : raw.replace(/,/g, '');
+    out.push({ slot, index: perKindIndex[slot]++, raw, normalized });
+  }
+  return out;
+}

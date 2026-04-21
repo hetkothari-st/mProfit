@@ -48,6 +48,12 @@ import {
 } from '../llm/client.js';
 import { extractEmailBody } from './bodyExtract.js';
 import type { ParsedEvent } from '../llm/schema.js';
+import {
+  applyRecipe,
+  findPromotedTemplate,
+  recordRecipeMiss,
+  recordSample,
+} from '../templates.js';
 
 /**
  * Adapter identifiers. §3.4 / BUG-007: every CanonicalEvent carries
@@ -56,6 +62,15 @@ import type { ParsedEvent } from '../llm/schema.js';
  */
 export const GMAIL_LLM_ADAPTER_ID = 'gmail.generic.v1';
 export const GMAIL_LLM_ADAPTER_VER = '1';
+
+/**
+ * Separate adapter id for deterministic (§6.4) template-recipe-produced
+ * events. Keeping this distinct from the LLM adapter lets analytics and
+ * re-parse jobs filter on provenance: "how many events were extracted
+ * without an LLM call?" / "if this recipe is buggy, which events need
+ * re-parsing?"
+ */
+export const GMAIL_TEMPLATE_ADAPTER_ID = 'gmail.template.v1';
 
 /**
  * Outcome of processing one email. Tests and the poller both consume
@@ -203,11 +218,43 @@ export async function processEmail(
     return { kind: 'gate_closed', reason: gate.reason };
   }
 
-  // 4. Template-cache lookup placeholder. §6.4 promotion (commit 7)
-  //    fills this in. Computing the hash now means the column is
-  //    populated on every event so future promotions have historical
-  //    data to work with.
+  // 4. Template-cache lookup (§6.4). If an active promoted recipe
+  //    exists for this (sender, structure-hash) triple, apply it
+  //    deterministically and never call the LLM. On a miss we decay
+  //    the template's confidence; two consecutive misses deactivate
+  //    the recipe and the next email falls through to learning mode.
   const structureHash = bodyStructureHash(body);
+
+  const promoted = await findPromotedTemplate({
+    userId: input.userId,
+    senderAddress: input.senderAddress,
+    bodyStructureHash: structureHash,
+  });
+  if (promoted) {
+    const recipeEvent = applyRecipe(promoted.fields, body);
+    if (recipeEvent) {
+      return persistEvents({
+        input,
+        sourceHash,
+        events: [recipeEvent],
+        sourceAdapter: GMAIL_TEMPLATE_ADAPTER_ID,
+        sourceAdapterVer: String(promoted.version),
+        metadata: {
+          template: { id: promoted.templateId, version: promoted.version },
+        },
+      });
+    }
+    await recordRecipeMiss({ userId: input.userId, templateId: promoted.templateId });
+    logger.info(
+      {
+        userId: input.userId,
+        messageId: input.messageId,
+        templateId: promoted.templateId,
+        structureHash,
+      },
+      'gmail.pipeline.recipe_miss_falling_back_to_llm',
+    );
+  }
 
   // 5. LLM call.
   const llm = await parseEmail({
@@ -234,15 +281,54 @@ export async function processEmail(
     return { kind: 'created', eventIds: [] };
   }
 
-  // 6. Persist one CanonicalEvent per parsed event. Multi-event
-  //    messages (e.g. a statement listing 10 lines) get per-event
-  //    hashes via `eventWithinSourceHash` so even within one message
-  //    each row has its own idempotency key.
+  // 6. Persist one CanonicalEvent per parsed event.
+  const outcome = await persistEvents({
+    input,
+    sourceHash,
+    events: llm.events,
+    sourceAdapter: GMAIL_LLM_ADAPTER_ID,
+    sourceAdapterVer: GMAIL_LLM_ADAPTER_VER,
+  });
+
+  // 7. Feed the template learner. We only learn from successful,
+  //    single-event LLM parses — the sample threshold (§6.4) will
+  //    eventually promote a recipe that replaces the LLM entirely.
+  //    Fire-and-forget: `recordSample` never throws.
+  if (outcome.kind === 'created' && outcome.eventIds.length > 0) {
+    await recordSample({
+      userId: input.userId,
+      senderAddress: input.senderAddress,
+      bodyStructureHash: structureHash,
+      messageId: input.messageId,
+      redactedBody: redactForLlm(body).text,
+      events: llm.events,
+    });
+  }
+
+  return outcome;
+}
+
+/**
+ * Write one CanonicalEvent per parsed event. Multi-event messages
+ * (e.g. a statement listing 10 lines) get per-event hashes via
+ * `eventWithinSourceHash` so even within one message each row has its
+ * own idempotency key. Extracted so the deterministic recipe path and
+ * the LLM path share the same persistence + race-handling behaviour.
+ */
+async function persistEvents(opts: {
+  input: ProcessEmailInput;
+  sourceHash: string;
+  events: ParsedEvent[];
+  sourceAdapter: string;
+  sourceAdapterVer: string;
+  metadata?: Prisma.InputJsonValue;
+}): Promise<ProcessEmailOutcome> {
+  const { input, sourceHash, events, sourceAdapter, sourceAdapterVer, metadata } = opts;
   const eventIds: string[] = [];
-  for (let i = 0; i < llm.events.length; i++) {
-    const ev = llm.events[i]!;
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i]!;
     const eventHash =
-      llm.events.length === 1
+      events.length === 1
         ? sourceHash
         : eventWithinSourceHash({
             sourceHash,
@@ -252,19 +338,21 @@ export async function processEmail(
           });
 
     try {
+      const data = canonicalRowFromParsed(
+        {
+          userId: input.userId,
+          sourceAdapter,
+          sourceAdapterVer,
+          sourceRef: input.messageId,
+          sourceHash: eventHash,
+          senderAddress: input.senderAddress,
+          autoCommitEnabled: input.autoCommitEnabled,
+        },
+        ev,
+      );
+      if (metadata !== undefined) data.metadata = metadata;
       const row = await prisma.canonicalEvent.create({
-        data: canonicalRowFromParsed(
-          {
-            userId: input.userId,
-            sourceAdapter: GMAIL_LLM_ADAPTER_ID,
-            sourceAdapterVer: GMAIL_LLM_ADAPTER_VER,
-            sourceRef: input.messageId,
-            sourceHash: eventHash,
-            senderAddress: input.senderAddress,
-            autoCommitEnabled: input.autoCommitEnabled,
-          },
-          ev,
-        ),
+        data,
         select: { id: true },
       });
       eventIds.push(row.id);
@@ -288,7 +376,6 @@ export async function processEmail(
       return { kind: 'failed', reason: 'canonical_event_create_failed' };
     }
   }
-
   return { kind: 'created', eventIds };
 }
 
