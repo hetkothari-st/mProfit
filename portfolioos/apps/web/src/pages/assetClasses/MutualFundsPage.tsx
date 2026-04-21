@@ -10,7 +10,7 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
-import { formatINR, formatPercent } from '@portfolioos/shared';
+import { formatINR, formatPercent, Decimal, toDecimal } from '@portfolioos/shared';
 import type { HoldingRow } from '@portfolioos/shared';
 
 export function MutualFundsPage() {
@@ -49,10 +49,20 @@ export function MutualFundsPage() {
   );
   const mfs = all.filter((h) => h.assetClass === 'MUTUAL_FUND');
 
-  const totalValue = mfs.reduce((s, h) => s + (h.currentValue ?? 0), 0);
-  const totalCost = mfs.reduce((s, h) => s + h.totalCost, 0);
-  const totalPnL = totalValue - totalCost;
-  const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
+  // Sum money in Decimal — the API delivers Money strings per §3.2 and direct
+  // `+` would coerce through IEEE-754.
+  const totalValueD = mfs.reduce(
+    (s, h) => (h.currentValue !== null ? s.plus(toDecimal(h.currentValue)) : s),
+    new Decimal(0),
+  );
+  const totalCostD = mfs.reduce((s, h) => s.plus(toDecimal(h.totalCost)), new Decimal(0));
+  const totalPnLD = totalValueD.minus(totalCostD);
+  const totalValue = totalValueD.toFixed(4);
+  const totalCost = totalCostD.toFixed(4);
+  const totalPnL = totalPnLD.toFixed(4);
+  const totalPnLPct = totalCostD.greaterThan(0)
+    ? totalPnLD.dividedBy(totalCostD).times(100).toNumber()
+    : 0;
 
   return (
     <div>
@@ -111,7 +121,11 @@ export function MutualFundsPage() {
                 <div className="text-xs text-muted-foreground">Unrealised P&L</div>
                 <div
                   className={`text-xl font-semibold mt-1 tabular-nums ${
-                    totalPnL > 0 ? 'text-positive' : totalPnL < 0 ? 'text-negative' : ''
+                    totalPnLD.greaterThan(0)
+                      ? 'text-positive'
+                      : totalPnLD.isNegative()
+                        ? 'text-negative'
+                        : ''
                   }`}
                 >
                   {formatINR(totalPnL)}
@@ -123,7 +137,11 @@ export function MutualFundsPage() {
                 <div className="text-xs text-muted-foreground">Return</div>
                 <div
                   className={`text-xl font-semibold mt-1 tabular-nums ${
-                    totalPnL > 0 ? 'text-positive' : totalPnL < 0 ? 'text-negative' : ''
+                    totalPnLD.greaterThan(0)
+                      ? 'text-positive'
+                      : totalPnLD.isNegative()
+                        ? 'text-negative'
+                        : ''
                   }`}
                 >
                   {formatPercent(totalPnLPct)}
@@ -164,7 +182,11 @@ export function MutualFundsPage() {
                       </td>
                       <td
                         className={`py-2 pr-4 text-right tabular-nums ${
-                          (h.unrealisedPnL ?? 0) > 0 ? 'text-positive' : (h.unrealisedPnL ?? 0) < 0 ? 'text-negative' : ''
+                          h.unrealisedPnL && toDecimal(h.unrealisedPnL).greaterThan(0)
+                            ? 'text-positive'
+                            : h.unrealisedPnL && toDecimal(h.unrealisedPnL).isNegative()
+                              ? 'text-negative'
+                              : ''
                         }`}
                       >
                         {h.unrealisedPnL != null ? formatINR(h.unrealisedPnL) : '—'}

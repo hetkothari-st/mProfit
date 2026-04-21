@@ -98,7 +98,10 @@ describe('invariant: decimal precision on money (BUG-005, BUG-009)', () => {
       const result = await computePortfolioXirr(s.portfolioId);
       // totalInvested MUST be exactly 100. IEEE-754 drift would give
       // 99.99999999999859 or 100.00000000000014 depending on accumulation order.
-      expect(result.totalInvested).toBe(100);
+      // After §3.2 boundary flip the service emits a fixed-precision string —
+      // equality against "100.0000" confirms Decimal never round-tripped via Number.
+      expect(new Decimal(result.totalInvested).equals(100)).toBe(true);
+      expect(result.totalInvested).toBe('100.0000');
     } finally {
       await s.cleanup();
     }

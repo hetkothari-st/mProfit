@@ -12,7 +12,25 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
-import { formatINR, formatPercent, formatQuantity, ASSET_CLASS_LABELS } from '@portfolioos/shared';
+import {
+  formatINR,
+  formatPercent,
+  formatQuantity,
+  ASSET_CLASS_LABELS,
+  toDecimal,
+} from '@portfolioos/shared';
+
+// Money arrives as a branded string (§3.2); `> 0` / `< 0` would lex-compare.
+// Route through Decimal so the sign is evaluated on the actual number.
+function signClass(m: string | null | undefined): 'up' | 'down' | 'flat' {
+  if (m == null || m === '') return 'flat';
+  try {
+    const d = toDecimal(m);
+    return d.greaterThan(0) ? 'up' : d.isNegative() ? 'down' : 'flat';
+  } catch {
+    return 'flat';
+  }
+}
 
 export function PortfolioDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -97,12 +115,7 @@ export function PortfolioDetailPage() {
           value={formatINR(summary?.unrealisedPnL ?? 0, { showSign: true })}
           icon={LineChartIcon}
           trend={{
-            direction:
-              (summary?.unrealisedPnL ?? 0) > 0
-                ? 'up'
-                : (summary?.unrealisedPnL ?? 0) < 0
-                  ? 'down'
-                  : 'flat',
+            direction: signClass(summary?.unrealisedPnL),
             value: formatPercent(summary?.unrealisedPnLPct ?? 0, 2, true),
           }}
         />
@@ -111,12 +124,7 @@ export function PortfolioDetailPage() {
           value={formatINR(summary?.todaysChange ?? 0, { showSign: true })}
           icon={Percent}
           trend={{
-            direction:
-              (summary?.todaysChange ?? 0) > 0
-                ? 'up'
-                : (summary?.todaysChange ?? 0) < 0
-                  ? 'down'
-                  : 'flat',
+            direction: signClass(summary?.todaysChange),
             value: formatPercent(summary?.todaysChangePct ?? 0, 2, true),
           }}
         />
@@ -183,9 +191,9 @@ export function PortfolioDetailPage() {
                       </td>
                       <td
                         className={`px-4 py-2 text-right numeric ${
-                          (h.unrealisedPnL ?? 0) > 0
+                          h.unrealisedPnL && toDecimal(h.unrealisedPnL).greaterThan(0)
                             ? 'text-positive'
-                            : (h.unrealisedPnL ?? 0) < 0
+                            : h.unrealisedPnL && toDecimal(h.unrealisedPnL).isNegative()
                               ? 'text-negative'
                               : ''
                         }`}

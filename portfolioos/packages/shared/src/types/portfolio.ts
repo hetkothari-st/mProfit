@@ -1,4 +1,5 @@
 import type { PortfolioType, AssetClass } from './enums.js';
+import type { Money, Quantity } from '../decimal.js';
 
 export interface Portfolio {
   id: string;
@@ -16,11 +17,12 @@ export interface Portfolio {
 export interface PortfolioSummary {
   id: string;
   name: string;
-  currentValue: number;
-  totalInvestment: number;
-  unrealisedPnL: number;
+  currentValue: Money;
+  totalInvestment: Money;
+  unrealisedPnL: Money;
+  // Percent fields are dimensionless; small rounding on display is fine.
   unrealisedPnLPct: number;
-  todaysChange: number;
+  todaysChange: Money;
   todaysChangePct: number;
   xirr: number | null;
   holdingCount: number;
@@ -29,7 +31,7 @@ export interface PortfolioSummary {
 
 export interface AssetAllocationSlice {
   assetClass: AssetClass;
-  value: number;
+  value: Money;
   percent: number;
   holdingCount: number;
 }
@@ -58,12 +60,12 @@ export interface HoldingRow {
   assetName: string;
   symbol?: string | null;
   isin?: string | null;
-  quantity: number;
-  avgCostPrice: number;
-  totalCost: number;
-  currentPrice: number | null;
-  currentValue: number | null;
-  unrealisedPnL: number | null;
+  quantity: Quantity;
+  avgCostPrice: Money;
+  totalCost: Money;
+  currentPrice: Money | null;
+  currentValue: Money | null;
+  unrealisedPnL: Money | null;
   unrealisedPnLPct: number | null;
   xirr: number | null;
   holdingPeriodDays: number | null;
@@ -71,14 +73,14 @@ export interface HoldingRow {
 
 export interface HistoricalValuationPoint {
   date: string;
-  value: number;
-  invested: number;
+  value: Money;
+  invested: Money;
 }
 
 export interface CashFlowEntry {
   id: string;
   date: string;
   type: 'INFLOW' | 'OUTFLOW';
-  amount: number;
+  amount: Money;
   description?: string | null;
 }

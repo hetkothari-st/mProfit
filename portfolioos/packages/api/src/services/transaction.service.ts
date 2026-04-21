@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import type { Money, Quantity } from '@portfolioos/shared';
 import type { AssetClass, Exchange, Prisma, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
@@ -353,23 +354,25 @@ export function toTransactionDTO(tx: TransactionWithRefs | Prisma.TransactionGet
     exchange: tx.exchange,
     tradeDate: tx.tradeDate.toISOString().slice(0, 10),
     settlementDate: tx.settlementDate ? tx.settlementDate.toISOString().slice(0, 10) : null,
-    quantity: Number(tx.quantity),
-    price: Number(tx.price),
-    grossAmount: Number(tx.grossAmount),
-    brokerage: Number(tx.brokerage),
-    stt: Number(tx.stt),
-    stampDuty: Number(tx.stampDuty),
-    exchangeCharges: Number(tx.exchangeCharges),
-    gst: Number(tx.gst),
-    sebiCharges: Number(tx.sebiCharges),
-    otherCharges: Number(tx.otherCharges),
-    netAmount: Number(tx.netAmount),
-    strikePrice: tx.strikePrice ? Number(tx.strikePrice) : null,
+    // Money + quantity fields leave as strings (§3.2). Prisma's Decimal
+    // has a stable .toString() with full precision; we forward that.
+    quantity: tx.quantity.toString() as Quantity,
+    price: tx.price.toString() as Money,
+    grossAmount: tx.grossAmount.toString() as Money,
+    brokerage: tx.brokerage.toString() as Money,
+    stt: tx.stt.toString() as Money,
+    stampDuty: tx.stampDuty.toString() as Money,
+    exchangeCharges: tx.exchangeCharges.toString() as Money,
+    gst: tx.gst.toString() as Money,
+    sebiCharges: tx.sebiCharges.toString() as Money,
+    otherCharges: tx.otherCharges.toString() as Money,
+    netAmount: tx.netAmount.toString() as Money,
+    strikePrice: tx.strikePrice ? (tx.strikePrice.toString() as Money) : null,
     expiryDate: tx.expiryDate ? tx.expiryDate.toISOString().slice(0, 10) : null,
     optionType: tx.optionType,
     lotSize: tx.lotSize,
     maturityDate: tx.maturityDate ? tx.maturityDate.toISOString().slice(0, 10) : null,
-    interestRate: tx.interestRate ? Number(tx.interestRate) : null,
+    interestRate: tx.interestRate ? tx.interestRate.toString() : null,
     interestFrequency: tx.interestFrequency,
     broker: tx.broker,
     orderNo: tx.orderNo,

@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
+import { Decimal, toDecimal } from '@portfolioos/shared';
 
 export interface ExportColumn {
   key: string;
@@ -162,14 +163,33 @@ export function streamPdf(res: Response, payload: ExportPayload): void {
   doc.end();
 }
 
+// Format money or quantity for reports. Parses through Decimal so the 4dp/6dp
+// strings coming off the API don't lose their last digit to IEEE-754 before
+// en-IN grouping is applied (§3.2).
 export function fmtNum(v: unknown, decimals = 2): string {
   if (v == null || v === '') return '';
-  const n = typeof v === 'string' ? Number(v) : (v as number);
-  if (!isFinite(n)) return String(v);
-  return n.toLocaleString('en-IN', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+  let d: Decimal;
+  try {
+    d = toDecimal(v as Parameters<typeof toDecimal>[0]);
+  } catch {
+    return String(v);
+  }
+  if (!d.isFinite()) return String(v);
+  const fixed = d.toFixed(decimals, Decimal.ROUND_HALF_EVEN);
+  // Indian grouping (lakhs/crores): first group of 3 from the right, then 2's.
+  const [intPart, fracPart] = fixed.split('.');
+  const negative = intPart!.startsWith('-');
+  const digits = negative ? intPart!.slice(1) : intPart!;
+  let grouped: string;
+  if (digits.length <= 3) {
+    grouped = digits;
+  } else {
+    const last3 = digits.slice(-3);
+    const rest = digits.slice(0, -3);
+    grouped = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last3;
+  }
+  const signed = negative ? '-' + grouped : grouped;
+  return fracPart ? `${signed}.${fracPart}` : signed;
 }
 
 export function fmtDate(v: unknown): string {

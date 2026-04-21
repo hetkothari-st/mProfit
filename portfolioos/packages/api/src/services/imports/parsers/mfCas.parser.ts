@@ -1,3 +1,4 @@
+import { Decimal } from '@portfolioos/shared';
 import type { Parser, ParserResult, ParsedTransaction } from './types.js';
 import { logger } from '../../../lib/logger.js';
 import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../lib/pdf.js';
@@ -25,10 +26,18 @@ function toIso(d: string, mo: string, y: string): string | null {
   return `${y}-${m}-${d.padStart(2, '0')}`;
 }
 
-function asNum(s: string): number {
+// Preserve exact decimal representation from PDF text (§3.2). Returns a
+// Decimal wrapper so the caller can keep working in arbitrary-precision
+// arithmetic instead of dropping through JS Number.
+function asDecimal(s: string): Decimal {
   const cleaned = s.replace(/[,₹\s]/g, '').replace(/\((.+)\)/, '-$1');
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : 0;
+  if (!cleaned || cleaned === '-') return new Decimal(0);
+  try {
+    const d = new Decimal(cleaned);
+    return d.isFinite() ? d : new Decimal(0);
+  } catch {
+    return new Decimal(0);
+  }
 }
 
 function detectType(txnLine: string): { type: 'BUY' | 'SELL' | 'SIP' | 'SWITCH_IN' | 'SWITCH_OUT' | 'DIVIDEND_REINVEST' | 'REDEMPTION' | null } {
@@ -124,15 +133,20 @@ export const mfCasParser: Parser = {
       const { type } = detectType(rest);
       if (!type) continue;
 
-      const nums = Array.from(rest.matchAll(/-?[\d,]+\.\d{2,6}/g)).map((m) => asNum(m[0]));
+      const nums = Array.from(rest.matchAll(/-?[\d,]+\.\d{2,6}/g)).map((m) => asDecimal(m[0]));
       if (nums.length < 2) continue;
 
       // In CAS statements: units, NAV, amount appear in that order at the end
       const amount = nums[nums.length - 1]!;
       const nav = nums[nums.length - 2]!;
-      const units = nums.length >= 3 ? nums[nums.length - 3]! : Math.abs(amount / (nav || 1));
+      const units =
+        nums.length >= 3
+          ? nums[nums.length - 3]!
+          : nav.isZero()
+            ? new Decimal(0)
+            : amount.abs().dividedBy(nav);
 
-      if (units === 0 || nav === 0) continue;
+      if (units.isZero() || nav.isZero()) continue;
 
       txs.push({
         assetClass: 'MUTUAL_FUND',
@@ -141,8 +155,8 @@ export const mfCasParser: Parser = {
         isin: currentScheme.isin ?? undefined,
         assetName: currentScheme.name || undefined,
         tradeDate,
-        quantity: Math.abs(units),
-        price: Math.abs(nav),
+        quantity: units.abs().toString(),
+        price: nav.abs().toString(),
         narration: rest.trim().slice(0, 200),
       });
     }

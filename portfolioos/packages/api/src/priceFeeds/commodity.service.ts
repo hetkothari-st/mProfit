@@ -32,7 +32,10 @@ export async function fetchCommoditySpotInr(
 
 export interface CommoditySyncResult {
   commodity: CommodityType;
-  price: number | null;
+  // Spot price is a per-gram rupee value — keep it in the Money dimension
+  // (string, §3.2) so aggregators that sum commodity-weighted holdings stay
+  // exact. Callers rehydrate via toDecimal.
+  price: string | null;
   stored: boolean;
 }
 
@@ -63,7 +66,7 @@ export async function syncCommodityPrice(
     },
   });
 
-  return { commodity, price: price.toNumber(), stored: true };
+  return { commodity, price: price.toFixed(4), stored: true };
 }
 
 export async function syncAllCommodities(): Promise<CommoditySyncResult[]> {
@@ -89,7 +92,7 @@ export async function syncAllCommodities(): Promise<CommoditySyncResult[]> {
       update: { price },
       create: { commodity: c, date: today, price, unit: 'PROXY_ETF', source: 'YAHOO_ETF_PROXY' },
     });
-    out.push({ commodity: c, price: price.toNumber(), stored: true });
+    out.push({ commodity: c, price: price.toFixed(4), stored: true });
   }
   logger.info({ out }, '[commodity] all commodities synced');
   return out;

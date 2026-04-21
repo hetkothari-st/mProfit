@@ -1,5 +1,10 @@
 import type { AssetClass, Exchange, TransactionType } from './enums.js';
+import type { Money, Quantity } from '../decimal.js';
 
+// Money-dimension fields are serialized as strings at the API boundary per
+// §3.2 — IEEE-754 must never touch monetary values in transit. Consumers
+// should `toDecimal` before arithmetic and `formatINR` (string-tolerant)
+// for display.
 export interface TransactionDTO {
   id: string;
   portfolioId: string;
@@ -15,23 +20,23 @@ export interface TransactionDTO {
   exchange: Exchange | null;
   tradeDate: string;
   settlementDate: string | null;
-  quantity: number;
-  price: number;
-  grossAmount: number;
-  brokerage: number;
-  stt: number;
-  stampDuty: number;
-  exchangeCharges: number;
-  gst: number;
-  sebiCharges: number;
-  otherCharges: number;
-  netAmount: number;
-  strikePrice: number | null;
+  quantity: Quantity;
+  price: Money;
+  grossAmount: Money;
+  brokerage: Money;
+  stt: Money;
+  stampDuty: Money;
+  exchangeCharges: Money;
+  gst: Money;
+  sebiCharges: Money;
+  otherCharges: Money;
+  netAmount: Money;
+  strikePrice: Money | null;
   expiryDate: string | null;
   optionType: 'CALL' | 'PUT' | null;
   lotSize: number | null;
   maturityDate: string | null;
-  interestRate: number | null;
+  interestRate: string | null;
   interestFrequency: string | null;
   broker: string | null;
   orderNo: string | null;
@@ -104,9 +109,10 @@ export interface AssetSearchHit {
 export interface LiveQuote {
   symbol: string;
   name: string | null;
-  price: number;
-  previousClose: number | null;
-  dayChange: number | null;
+  price: Money;
+  previousClose: Money | null;
+  dayChange: Money | null;
+  // percentage is dimensionless — fine as a number for display.
   dayChangePct: number | null;
   currency: string;
   exchange: string;

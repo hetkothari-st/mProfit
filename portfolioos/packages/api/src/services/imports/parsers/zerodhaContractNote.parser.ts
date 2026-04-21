@@ -1,3 +1,4 @@
+import { Decimal } from '@portfolioos/shared';
 import type { Parser, ParserResult, ParsedTransaction } from './types.js';
 import { logger } from '../../../lib/logger.js';
 import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../lib/pdf.js';
@@ -29,10 +30,17 @@ function toIsoDate(raw: string): string | null {
   return null;
 }
 
-function asNum(s: string): number {
+// Preserve exact decimal representation from the PDF text (§3.2). Returns a
+// Decimal-parseable string or '0' on malformed input.
+function cleanNumString(s: string): string {
   const cleaned = s.replace(/[,\s₹]/g, '').replace(/\((.+)\)/, '-$1');
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : 0;
+  if (!cleaned || cleaned === '-') return '0';
+  try {
+    const d = new Decimal(cleaned);
+    return d.isFinite() ? cleaned : '0';
+  } catch {
+    return '0';
+  }
 }
 
 export const zerodhaContractNoteParser: Parser = {
@@ -95,13 +103,16 @@ export const zerodhaContractNoteParser: Parser = {
       const isin = parts[isinIdx]!;
       const symbol = parts[isinIdx + 1];
       const side = parts.find((p) => /^[BS]$/i.test(p) || /^BUY$/i.test(p) || /^SELL$/i.test(p));
-      const numeric = parts.filter((p) => /^-?[\d,]+(?:\.\d+)?$/.test(p)).map(asNum);
-      if (!symbol || !side || numeric.length < 2) continue;
+      const numericStrs = parts.filter((p) => /^-?[\d,]+(?:\.\d+)?$/.test(p)).map(cleanNumString);
+      if (!symbol || !side || numericStrs.length < 2) continue;
 
-      const qty = numeric[numeric.length - 3] ?? numeric[numeric.length - 2];
-      const rate = numeric[numeric.length - 2];
+      const qty = numericStrs[numericStrs.length - 3] ?? numericStrs[numericStrs.length - 2];
+      const rate = numericStrs[numericStrs.length - 2];
 
-      if (!qty || !rate || qty === 0) continue;
+      if (!qty || !rate) continue;
+      const qtyD = new Decimal(qty);
+      const rateD = new Decimal(rate);
+      if (qtyD.isZero()) continue;
 
       const isSell = /S/i.test(side);
       txs.push({
@@ -111,8 +122,8 @@ export const zerodhaContractNoteParser: Parser = {
         isin,
         exchange: 'NSE',
         tradeDate: tradeDate ?? new Date().toISOString().slice(0, 10),
-        quantity: Math.abs(qty),
-        price: Math.abs(rate),
+        quantity: qtyD.abs().toString(),
+        price: rateD.abs().toString(),
         broker: 'Zerodha',
       });
     }

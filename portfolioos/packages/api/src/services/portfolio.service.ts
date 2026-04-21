@@ -1,5 +1,13 @@
 import { Prisma } from '@prisma/client';
 import type { Portfolio } from '@prisma/client';
+import {
+  Decimal,
+  toDecimal,
+  serializeMoney,
+  serializeQuantity,
+  type Money,
+  type Quantity,
+} from '@portfolioos/shared';
 import { prisma } from '../lib/prisma.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 
@@ -129,46 +137,52 @@ export async function getPortfolioSummary(userId: string, id: string) {
     }),
   ]);
 
-  const totalInvestment = Number(agg._sum.totalCost ?? 0);
-  const currentValue = Number(agg._sum.currentValue ?? 0);
-  const unrealisedPnL = Number(agg._sum.unrealisedPnL ?? 0);
-  const unrealisedPnLPct = totalInvestment > 0 ? (unrealisedPnL / totalInvestment) * 100 : 0;
+  const totalInvestment = toDecimal(agg._sum.totalCost ?? 0);
+  const currentValue = toDecimal(agg._sum.currentValue ?? 0);
+  const unrealisedPnL = toDecimal(agg._sum.unrealisedPnL ?? 0);
+  // Pct is dimensionless; float is fine once the numerator/denominator are
+  // already exact Decimals.
+  const unrealisedPnLPct = totalInvestment.greaterThan(0)
+    ? unrealisedPnL.dividedBy(totalInvestment).times(100).toNumber()
+    : 0;
 
-  let todaysChange = 0;
+  let todaysChange = new Decimal(0);
   const stockIds = holdings.map((h) => h.stockId!).filter(Boolean);
   if (stockIds.length > 0) {
     const prices = await prisma.stockPrice.findMany({
       where: { stockId: { in: stockIds } },
       orderBy: [{ stockId: 'asc' }, { date: 'desc' }],
     });
-    const byStock = new Map<string, { latestClose: number; prevClose: number | null }>();
+    const byStock = new Map<string, { latestClose: Decimal; prevClose: Decimal | null }>();
     for (const p of prices) {
       const existing = byStock.get(p.stockId);
       if (!existing) {
-        byStock.set(p.stockId, { latestClose: Number(p.close), prevClose: null });
+        byStock.set(p.stockId, { latestClose: toDecimal(p.close), prevClose: null });
       } else if (existing.prevClose === null) {
-        existing.prevClose = Number(p.close);
+        existing.prevClose = toDecimal(p.close);
       }
     }
     for (const h of holdings) {
       if (!h.stockId) continue;
       const pair = byStock.get(h.stockId);
       if (!pair || pair.prevClose === null) continue;
-      const delta = pair.latestClose - pair.prevClose;
-      todaysChange += delta * Number(h.quantity);
+      const delta = pair.latestClose.minus(pair.prevClose);
+      todaysChange = todaysChange.plus(delta.times(toDecimal(h.quantity)));
     }
   }
 
-  const todaysChangePct =
-    currentValue - todaysChange > 0 ? (todaysChange / (currentValue - todaysChange)) * 100 : 0;
+  const priorValue = currentValue.minus(todaysChange);
+  const todaysChangePct = priorValue.greaterThan(0)
+    ? todaysChange.dividedBy(priorValue).times(100).toNumber()
+    : 0;
 
   return {
     id,
-    totalInvestment,
-    currentValue,
-    unrealisedPnL,
+    totalInvestment: serializeMoney(totalInvestment),
+    currentValue: serializeMoney(currentValue),
+    unrealisedPnL: serializeMoney(unrealisedPnL),
     unrealisedPnLPct,
-    todaysChange,
+    todaysChange: serializeMoney(todaysChange),
     todaysChangePct,
     xirr: null as number | null,
     holdingCount,
@@ -190,14 +204,12 @@ export async function getPortfolioHoldings(userId: string, id: string) {
     const assetName = h.stock?.name ?? h.fund?.schemeName ?? h.assetName ?? 'Unknown';
     const symbol = h.stock?.symbol ?? h.fund?.schemeCode ?? null;
     const isin = h.isin ?? h.stock?.isin ?? h.fund?.isin ?? null;
-    const quantity = Number(h.quantity);
-    const avgCostPrice = Number(h.avgCostPrice);
-    const totalCost = Number(h.totalCost);
-    const currentPrice = h.currentPrice !== null ? Number(h.currentPrice) : null;
-    const currentValue = h.currentValue !== null ? Number(h.currentValue) : null;
-    const unrealisedPnL = h.unrealisedPnL !== null ? Number(h.unrealisedPnL) : null;
+    const totalCost = toDecimal(h.totalCost);
+    const unrealisedPnL = h.unrealisedPnL !== null ? toDecimal(h.unrealisedPnL) : null;
     const unrealisedPnLPct =
-      unrealisedPnL !== null && totalCost > 0 ? (unrealisedPnL / totalCost) * 100 : null;
+      unrealisedPnL !== null && totalCost.greaterThan(0)
+        ? unrealisedPnL.dividedBy(totalCost).times(100).toNumber()
+        : null;
 
     return {
       id: h.id,
@@ -205,12 +217,12 @@ export async function getPortfolioHoldings(userId: string, id: string) {
       assetName,
       symbol,
       isin,
-      quantity,
-      avgCostPrice,
-      totalCost,
-      currentPrice,
-      currentValue,
-      unrealisedPnL,
+      quantity: serializeQuantity(h.quantity) as Quantity,
+      avgCostPrice: serializeMoney(h.avgCostPrice) as Money,
+      totalCost: serializeMoney(totalCost) as Money,
+      currentPrice: h.currentPrice !== null ? (serializeMoney(h.currentPrice) as Money) : null,
+      currentValue: h.currentValue !== null ? (serializeMoney(h.currentValue) as Money) : null,
+      unrealisedPnL: unrealisedPnL !== null ? (serializeMoney(unrealisedPnL) as Money) : null,
       unrealisedPnLPct,
       xirr: null as number | null,
       holdingPeriodDays: null as number | null,
@@ -226,13 +238,16 @@ export async function getAssetAllocation(userId: string, id: string) {
     _sum: { currentValue: true },
     _count: { _all: true },
   });
-  const total = groups.reduce((acc, g) => acc + Number(g._sum.currentValue ?? 0), 0);
+  const total = groups.reduce(
+    (acc, g) => acc.plus(toDecimal(g._sum.currentValue ?? 0)),
+    new Decimal(0),
+  );
   return groups.map((g) => {
-    const value = Number(g._sum.currentValue ?? 0);
+    const value = toDecimal(g._sum.currentValue ?? 0);
     return {
       assetClass: g.assetClass,
-      value,
-      percent: total > 0 ? (value / total) * 100 : 0,
+      value: serializeMoney(value) as Money,
+      percent: total.greaterThan(0) ? value.dividedBy(total).times(100).toNumber() : 0,
       holdingCount: g._count._all,
     };
   });
@@ -240,7 +255,7 @@ export async function getAssetAllocation(userId: string, id: string) {
 
 export async function getHistoricalValuation(userId: string, id: string) {
   await ensureOwnership(userId, id);
-  return [] as Array<{ date: string; value: number; invested: number }>;
+  return [] as Array<{ date: string; value: Money; invested: Money }>;
 }
 
 export async function getCashFlows(userId: string, id: string) {
@@ -253,7 +268,7 @@ export async function getCashFlows(userId: string, id: string) {
     id: f.id,
     date: f.date.toISOString().slice(0, 10),
     type: f.type,
-    amount: Number(f.amount),
+    amount: serializeMoney(f.amount) as Money,
     description: f.description,
   }));
 }

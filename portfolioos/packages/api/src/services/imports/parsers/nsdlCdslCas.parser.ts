@@ -1,3 +1,4 @@
+import { Decimal } from '@portfolioos/shared';
 import type { Parser, ParserResult, ParsedTransaction } from './types.js';
 import { logger } from '../../../lib/logger.js';
 import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../lib/pdf.js';
@@ -63,10 +64,17 @@ function parseDate(line: string): string | null {
   return null;
 }
 
-function asNum(s: string): number {
+// Preserve exact decimal representation from PDF text (§3.2). Returns a
+// Decimal so downstream sign/magnitude checks run in arbitrary precision.
+function asDecimal(s: string): Decimal {
   const cleaned = s.replace(/[,₹\s]/g, '').replace(/\((.+)\)/, '-$1');
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : 0;
+  if (!cleaned || cleaned === '-') return new Decimal(0);
+  try {
+    const d = new Decimal(cleaned);
+    return d.isFinite() ? d : new Decimal(0);
+  } catch {
+    return new Decimal(0);
+  }
 }
 
 type TxType = 'BUY' | 'SELL' | 'BONUS' | 'OPENING_BALANCE' | 'WITHDRAWAL' | null;
@@ -209,11 +217,11 @@ export const nsdlCdslCasParser: Parser = {
       // number that isn't part of the date. Price (market rate) is typically
       // the last 2-dp decimal on the row; may be absent.
       const numTokens = Array.from(line.matchAll(/-?[\d,]+(?:\.\d{1,6})?/g))
-        .map((m) => ({ raw: m[0], v: asNum(m[0]) }))
+        .map((m) => ({ raw: m[0], v: asDecimal(m[0]) }))
         // Filter out calendar numbers from the date portion: anything that's
         // part of DD-MMM-YYYY or DD/MM/YYYY gets noisy. We prune after-the-fact
         // by removing up to 3 leading tokens that look like date components.
-        .filter((t) => t.v !== 0);
+        .filter((t) => !t.v.isZero());
 
       // Strip date-component tokens from the head
       const candidates = numTokens.slice();
@@ -227,19 +235,19 @@ export const nsdlCdslCasParser: Parser = {
       if (candidates.length === 0) continue;
 
       // Quantity: first remaining number (often integer, but fractional units exist for bonus/split)
-      const qty = Math.abs(candidates[0]!.v);
-      if (qty === 0) continue;
+      const qtyD = candidates[0]!.v.abs();
+      if (qtyD.isZero()) continue;
 
       // Price: last 2-dp number that's clearly a price (> qty in magnitude
       // isn't reliable; use presence of decimal as signal)
       const priceCand = [...candidates].reverse().find((t) => /\./.test(t.raw));
-      const price = priceCand ? Math.abs(priceCand.v) : 0;
-      if (price === 0) priceMissingCount++;
+      const priceD = priceCand ? priceCand.v.abs() : new Decimal(0);
+      if (priceD.isZero()) priceMissingCount++;
 
       // Direction sign: flip type if explicit sign on qty
       let finalType = type;
-      if (type === 'BUY' && candidates[0]!.v < 0) finalType = 'SELL';
-      if (type === 'SELL' && candidates[0]!.v < 0) finalType = 'BUY';
+      if (type === 'BUY' && candidates[0]!.v.isNegative()) finalType = 'SELL';
+      if (type === 'SELL' && candidates[0]!.v.isNegative()) finalType = 'BUY';
 
       txs.push({
         assetClass: 'EQUITY',
@@ -248,8 +256,8 @@ export const nsdlCdslCasParser: Parser = {
         stockName: currentName ?? undefined,
         assetName: currentName ?? undefined,
         tradeDate: date,
-        quantity: qty,
-        price,
+        quantity: qtyD.toString(),
+        price: priceD.toString(),
         broker: depository ? `${depository} CAS` : 'Depository CAS',
         narration: line.slice(0, 200),
       });
@@ -270,14 +278,14 @@ export const nsdlCdslCasParser: Parser = {
     const holdingsDate = holdingsAsOnMatch ? parseDate(holdingsAsOnMatch[1]!) : null;
 
     if (holdingsDate) {
-      type HoldingBuf = { isin: string; namePieces: string[]; numbers: number[] };
+      type HoldingBuf = { isin: string; namePieces: string[]; numbers: Decimal[] };
       let buf: HoldingBuf | null = null;
       let inHoldingsSection = false;
 
       const flushHolding = () => {
         if (!buf) return;
-        const qty = buf.numbers[0] ?? 0;
-        if (qty > 0) {
+        const qty = buf.numbers[0] ?? new Decimal(0);
+        if (qty.greaterThan(0)) {
           const name = buf.namePieces
             .join(' ')
             .replace(/\s+/g, ' ')
@@ -290,8 +298,8 @@ export const nsdlCdslCasParser: Parser = {
             stockName: name || undefined,
             assetName: name || undefined,
             tradeDate: holdingsDate,
-            quantity: Math.abs(qty),
-            price: 0,
+            quantity: qty.abs().toString(),
+            price: '0',
             broker: depository ? `${depository} CAS` : 'Depository CAS',
             narration: `Opening holding from ${depository ?? 'depository'} statement (cost basis unknown)`,
           });
@@ -325,7 +333,7 @@ export const nsdlCdslCasParser: Parser = {
           if (before && before.length < 80) buf.namePieces.push(before);
           for (const t of after.split(/\s+/).filter(Boolean)) {
             if (/^-?[\d,]+(?:\.\d+)?$/.test(t)) {
-              buf.numbers.push(asNum(t));
+              buf.numbers.push(asDecimal(t));
             } else if (buf.numbers.length === 0) {
               buf.namePieces.push(t);
             }
@@ -336,7 +344,7 @@ export const nsdlCdslCasParser: Parser = {
         if (buf) {
           for (const t of line.split(/\s+/).filter(Boolean)) {
             if (/^-?[\d,]+(?:\.\d+)?$/.test(t)) {
-              buf.numbers.push(asNum(t));
+              buf.numbers.push(asDecimal(t));
             } else if (buf.numbers.length === 0) {
               buf.namePieces.push(t);
             }

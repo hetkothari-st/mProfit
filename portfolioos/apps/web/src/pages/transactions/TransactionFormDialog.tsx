@@ -29,7 +29,33 @@ import {
   type TransactionDTO,
   type CreateTransactionRequest,
   Exchange,
+  Decimal,
+  toDecimal,
+  formatINR,
 } from '@portfolioos/shared';
+
+// Money/Quantity fields hydrate from Money-string DTOs (§3.2). z.coerce.number
+// alone types its input as `number`, which would force a `Number()` cast on
+// hydration; z.preprocess widens the input side so strings pass through
+// untouched and only coerce on submit.
+//
+// Split into two constants (rather than one helper with a boolean arg) so TS
+// infers each output type independently — a ternary inside preprocess would
+// union both branches and collapse the required-branch output to
+// `number | undefined`.
+const numPreprocess = (v: unknown) => (v === '' || v === null ? undefined : v);
+const moneyInRequired = z.preprocess(
+  numPreprocess,
+  z.coerce.number({ invalid_type_error: 'Must be a number' }).nonnegative(),
+);
+const moneyInOptional = z.preprocess(
+  numPreprocess,
+  z.coerce.number({ invalid_type_error: 'Must be a number' }).nonnegative().optional(),
+);
+const qtyIn = z.preprocess(
+  numPreprocess,
+  z.coerce.number({ invalid_type_error: 'Must be a number' }).positive('Must be > 0'),
+);
 
 const schema = z.object({
   portfolioId: z.string().min(1, 'Select a portfolio'),
@@ -45,20 +71,24 @@ const schema = z.object({
   isin: z.string().optional(),
   tradeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   settlementDate: z.string().optional(),
-  quantity: z.coerce.number().positive('Must be > 0'),
-  price: z.coerce.number().nonnegative(),
-  brokerage: z.coerce.number().nonnegative().optional(),
-  stt: z.coerce.number().nonnegative().optional(),
-  stampDuty: z.coerce.number().nonnegative().optional(),
-  exchangeCharges: z.coerce.number().nonnegative().optional(),
-  gst: z.coerce.number().nonnegative().optional(),
-  sebiCharges: z.coerce.number().nonnegative().optional(),
-  otherCharges: z.coerce.number().nonnegative().optional(),
+  quantity: qtyIn,
+  price: moneyInRequired,
+  brokerage: moneyInOptional,
+  stt: moneyInOptional,
+  stampDuty: moneyInOptional,
+  exchangeCharges: moneyInOptional,
+  gst: moneyInOptional,
+  sebiCharges: moneyInOptional,
+  otherCharges: moneyInOptional,
   broker: z.string().optional(),
   narration: z.string().optional(),
 });
 
-type FormValues = z.infer<typeof schema>;
+// Input type lets us hand Money/Quantity strings straight to `reset()`.
+// Output type is what zodResolver returns on submit: numbers for the
+// preprocessed fields, which is what `CreateTransactionRequest` accepts.
+type FormValues = z.input<typeof schema>;
+type FormOutput = z.output<typeof schema>;
 
 interface Props {
   open: boolean;
@@ -153,7 +183,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
   }, [open, initial, defaultPortfolioId, portfolios, reset]);
 
   const saveMutation = useMutation({
-    mutationFn: async (values: FormValues) => {
+    mutationFn: async (values: FormOutput) => {
       const payload: CreateTransactionRequest = {
         portfolioId: values.portfolioId,
         transactionType: values.transactionType,
@@ -234,20 +264,30 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
     }
   };
 
-  const qty = Number(watch('quantity') || 0);
-  const price = Number(watch('price') || 0);
-  const gross = qty * price;
-  const charges =
-    Number(watch('brokerage') || 0) +
-    Number(watch('stt') || 0) +
-    Number(watch('stampDuty') || 0) +
-    Number(watch('exchangeCharges') || 0) +
-    Number(watch('gst') || 0) +
-    Number(watch('sebiCharges') || 0) +
-    Number(watch('otherCharges') || 0);
+  // Live preview math in Decimal — HTML number inputs can hold up to 17
+  // significant digits, but `qty * price` in IEEE-754 still drifts for the
+  // long MF-unit × NAV products that show up on CAS imports (§3.2, BUG-005).
+  const d = (v: unknown): Decimal => {
+    if (v === null || v === undefined || v === '') return new Decimal(0);
+    try {
+      return toDecimal(v as Parameters<typeof toDecimal>[0]);
+    } catch {
+      return new Decimal(0);
+    }
+  };
+  const qtyD = d(watch('quantity'));
+  const priceD = d(watch('price'));
+  const grossD = qtyD.times(priceD);
+  const chargesD = d(watch('brokerage'))
+    .plus(d(watch('stt')))
+    .plus(d(watch('stampDuty')))
+    .plus(d(watch('exchangeCharges')))
+    .plus(d(watch('gst')))
+    .plus(d(watch('sebiCharges')))
+    .plus(d(watch('otherCharges')));
   const txType = watch('transactionType');
   const isBuyish = ['BUY', 'SWITCH_IN', 'SIP', 'DIVIDEND_REINVEST', 'RIGHTS_ISSUE'].includes(txType);
-  const net = isBuyish ? gross + charges : gross - charges;
+  const netD = isBuyish ? grossD.plus(chargesD) : grossD.minus(chargesD);
 
   const handleDelete = () => {
     if (!initial) return;
@@ -265,7 +305,15 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit((v) => saveMutation.mutate(v))} className="space-y-4">
+        <form
+          onSubmit={handleSubmit((v) =>
+            // zodResolver runs the preprocess/coerce pipeline, so at submit time
+            // the values are FormOutput (numbers) even though TFieldValues is
+            // FormValues (unknown-side inputs). The cast is the minimal bridge.
+            saveMutation.mutate(v as unknown as FormOutput),
+          )}
+          className="space-y-4"
+        >
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="portfolioId">Portfolio</Label>
@@ -396,15 +444,15 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
           <div className="rounded-md bg-muted/40 px-3 py-2 text-sm grid grid-cols-3 gap-2">
             <div>
               <div className="text-xs text-muted-foreground">Gross</div>
-              <div className="tabular-nums font-medium">{gross.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</div>
+              <div className="tabular-nums font-medium">{formatINR(grossD.toFixed(4))}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Charges</div>
-              <div className="tabular-nums font-medium">{charges.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</div>
+              <div className="tabular-nums font-medium">{formatINR(chargesD.toFixed(4))}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Net {isBuyish ? '(outflow)' : '(inflow)'}</div>
-              <div className="tabular-nums font-semibold">{net.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</div>
+              <div className="tabular-nums font-semibold">{formatINR(netD.toFixed(4))}</div>
             </div>
           </div>
 

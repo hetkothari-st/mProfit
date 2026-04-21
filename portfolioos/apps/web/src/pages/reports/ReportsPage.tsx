@@ -11,6 +11,7 @@ import { cn } from '@/lib/cn';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { reportsApi } from '@/api/reports.api';
 import { useAuthStore } from '@/stores/auth.store';
+import { Decimal, toDecimal } from '@portfolioos/shared';
 
 type Tab =
   | 'summary'
@@ -53,14 +54,40 @@ function fyOptions(): string[] {
   return years;
 }
 
+// Route Money strings through Decimal before display so the en-IN grouping
+// we render matches the exact value on the wire (§3.2). `Number(n)` would
+// coerce "123456789.1234" via IEEE-754 and lose the last digit.
 function fmt(n: string | number | null | undefined, decimals = 2): string {
   if (n == null || n === '') return '—';
-  const v = typeof n === 'string' ? Number(n) : n;
-  if (!isFinite(v)) return '—';
-  return v.toLocaleString('en-IN', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+  let d: Decimal;
+  try {
+    d = toDecimal(n);
+  } catch {
+    return '—';
+  }
+  if (!d.isFinite()) return '—';
+  const fixed = d.toFixed(decimals, Decimal.ROUND_HALF_EVEN);
+  const [intPart, fracPart] = fixed.split('.');
+  const negative = intPart!.startsWith('-');
+  const digits = negative ? intPart!.slice(1) : intPart!;
+  let grouped: string;
+  if (digits.length <= 3) grouped = digits;
+  else {
+    const last3 = digits.slice(-3);
+    const rest = digits.slice(0, -3);
+    grouped = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last3;
+  }
+  const signed = negative ? '-' + grouped : grouped;
+  return fracPart ? `${signed}.${fracPart}` : signed;
+}
+
+function isNonNegativeMoney(s: string | number | null | undefined): boolean {
+  if (s == null || s === '') return true;
+  try {
+    return !toDecimal(s).isNegative();
+  } catch {
+    return true;
+  }
 }
 
 function fmtPct(n: number | null | undefined): string {
@@ -294,7 +321,9 @@ function SummaryView({ data, loading }: { data: ReturnType<typeof reportsApi.sum
           <div>Value: ₹{fmt(data.unrealised.totalValue)}</div>
           <div
             className={
-              Number(data.unrealised.unrealisedPnL) >= 0 ? 'text-positive' : 'text-negative'
+              isNonNegativeMoney(data.unrealised.unrealisedPnL)
+                ? 'text-positive'
+                : 'text-negative'
             }
           >
             P&L: ₹{fmt(data.unrealised.unrealisedPnL)}
@@ -375,7 +404,9 @@ function UnrealisedView({
           {data.count} holdings · Invested ₹{fmt(data.totalCost)} · Value ₹
           {fmt(data.totalValue)} · P&L{' '}
           <span
-            className={Number(data.unrealisedPnL) >= 0 ? 'text-positive' : 'text-negative'}
+            className={
+              isNonNegativeMoney(data.unrealisedPnL) ? 'text-positive' : 'text-negative'
+            }
           >
             ₹{fmt(data.unrealisedPnL)}
           </span>
@@ -410,7 +441,7 @@ function UnrealisedView({
                   <td
                     className={cn(
                       'p-2 text-right',
-                      Number(r.unrealisedPnL) >= 0 ? 'text-positive' : 'text-negative',
+                      isNonNegativeMoney(r.unrealisedPnL) ? 'text-positive' : 'text-negative',
                     )}
                   >
                     {fmt(r.unrealisedPnL)}
@@ -498,7 +529,7 @@ function GainsView({
                   <td
                     className={cn(
                       'p-2 text-right',
-                      Number(r.gainLoss) >= 0 ? 'text-positive' : 'text-negative',
+                      isNonNegativeMoney(r.gainLoss) ? 'text-positive' : 'text-negative',
                     )}
                   >
                     {fmt(r.gainLoss)}

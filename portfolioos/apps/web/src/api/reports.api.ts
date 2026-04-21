@@ -71,10 +71,12 @@ export interface UnrealisedReport {
 }
 
 export interface XirrBlock {
+  // XIRR rate is dimensionless — fine as a JS number.
   xirr: number | null;
   cashflowCount: number;
-  totalInvested: number;
-  terminalValue: number;
+  // Money fields arrive as strings (§3.2); display via fmt() (Decimal-backed).
+  totalInvested: string;
+  terminalValue: string;
 }
 
 export interface XirrReport {

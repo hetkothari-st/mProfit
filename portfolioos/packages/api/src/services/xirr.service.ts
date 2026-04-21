@@ -161,10 +161,13 @@ async function terminalValue(portfolioId: string, filter: {
 }
 
 export interface XirrResult {
+  // XIRR itself is a dimensionless annualized-rate number (see §14.3).
   xirr: number | null;
   cashflowCount: number;
-  totalInvested: number;
-  terminalValue: number;
+  // Invested capital and terminal value are money — emit as strings so
+  // IEEE-754 can't re-enter here (§3.2). Consumers rehydrate via toDecimal.
+  totalInvested: string;
+  terminalValue: string;
 }
 
 export async function computePortfolioXirr(
@@ -205,8 +208,8 @@ export async function computePortfolioXirr(
   return {
     xirr: xirr(flows),
     cashflowCount: flows.length,
-    totalInvested: invested.toNumber(),
-    terminalValue: tv.toNumber(),
+    totalInvested: invested.toFixed(4),
+    terminalValue: tv.toFixed(4),
   };
 }
 
@@ -234,8 +237,8 @@ export async function computeUserXirr(userId: string): Promise<XirrResult> {
   return {
     xirr: xirr(allFlows),
     cashflowCount: allFlows.length,
-    totalInvested: invested.toNumber(),
-    terminalValue: tv.toNumber(),
+    totalInvested: invested.toFixed(4),
+    terminalValue: tv.toFixed(4),
   };
 }
 

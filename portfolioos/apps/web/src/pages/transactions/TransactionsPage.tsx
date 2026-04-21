@@ -10,7 +10,7 @@ import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { TransactionFormDialog } from './TransactionFormDialog';
 import type { TransactionDTO } from '@portfolioos/shared';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR, formatQuantity } from '@portfolioos/shared';
 
 export function TransactionsPage() {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('');
@@ -119,7 +119,7 @@ export function TransactionsPage() {
                           {r.symbol ?? r.schemeCode ?? r.isin ?? r.assetClass}
                         </div>
                       </td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{r.quantity}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums">{formatQuantity(r.quantity)}</td>
                       <td className="py-2 pr-4 text-right tabular-nums">{formatINR(r.price)}</td>
                       <td className="py-2 pr-4 text-right tabular-nums font-medium">{formatINR(r.netAmount)}</td>
                       <td className="py-2 pr-4 text-muted-foreground">{r.broker ?? '—'}</td>

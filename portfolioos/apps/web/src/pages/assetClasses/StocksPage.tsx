@@ -10,8 +10,15 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
-import { formatINR, formatPercent } from '@portfolioos/shared';
-import type { HoldingRow } from '@portfolioos/shared';
+import {
+  formatINR,
+  formatPercent,
+  Decimal,
+  toDecimal,
+  serializeMoney,
+  serializeQuantity,
+} from '@portfolioos/shared';
+import type { HoldingRow, Money, Quantity } from '@portfolioos/shared';
 
 interface AggregatedHolding extends HoldingRow {
   portfolioIds: string[];
@@ -56,6 +63,9 @@ export function StocksPage() {
 
   const stocks = allHoldings.filter((h) => h.assetClass === 'EQUITY' || h.assetClass === 'ETF');
 
+  // Aggregate per symbol across portfolios in Decimal — quantities and money
+  // arrive as branded strings (§3.2), so `+` would string-concat. Decimal
+  // addition keeps the 18,6 / 18,4 precision promised by the schema.
   const aggregated = Object.values(
     stocks.reduce<Record<string, AggregatedHolding>>((acc, h) => {
       const key = `${h.symbol ?? h.assetName}`;
@@ -63,18 +73,24 @@ export function StocksPage() {
         acc[key] = { ...h, portfolioIds: [h.portfolioId], portfolioNames: [h.portfolioName] };
       } else {
         const existing = acc[key];
-        const newQty = existing.quantity + h.quantity;
-        const newCost = existing.totalCost + h.totalCost;
-        existing.quantity = newQty;
-        existing.totalCost = newCost;
-        existing.avgCostPrice = newQty > 0 ? newCost / newQty : 0;
+        const newQtyD = toDecimal(existing.quantity).plus(toDecimal(h.quantity));
+        const newCostD = toDecimal(existing.totalCost).plus(toDecimal(h.totalCost));
+        existing.quantity = serializeQuantity(newQtyD) as Quantity;
+        existing.totalCost = serializeMoney(newCostD) as Money;
+        existing.avgCostPrice = serializeMoney(
+          newQtyD.greaterThan(0) ? newCostD.dividedBy(newQtyD) : new Decimal(0),
+        ) as Money;
         existing.currentValue =
           existing.currentValue != null && h.currentValue != null
-            ? existing.currentValue + h.currentValue
+            ? (serializeMoney(
+                toDecimal(existing.currentValue).plus(toDecimal(h.currentValue)),
+              ) as Money)
             : existing.currentValue ?? h.currentValue;
         existing.unrealisedPnL =
           existing.unrealisedPnL != null && h.unrealisedPnL != null
-            ? existing.unrealisedPnL + h.unrealisedPnL
+            ? (serializeMoney(
+                toDecimal(existing.unrealisedPnL).plus(toDecimal(h.unrealisedPnL)),
+              ) as Money)
             : existing.unrealisedPnL ?? h.unrealisedPnL;
         if (!existing.portfolioIds.includes(h.portfolioId)) {
           existing.portfolioIds.push(h.portfolioId);
@@ -85,10 +101,18 @@ export function StocksPage() {
     }, {}),
   );
 
-  const totalValue = aggregated.reduce((s, h) => s + (h.currentValue ?? 0), 0);
-  const totalCost = aggregated.reduce((s, h) => s + h.totalCost, 0);
-  const totalPnL = totalValue - totalCost;
-  const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
+  const totalValueD = aggregated.reduce(
+    (s, h) => (h.currentValue != null ? s.plus(toDecimal(h.currentValue)) : s),
+    new Decimal(0),
+  );
+  const totalCostD = aggregated.reduce((s, h) => s.plus(toDecimal(h.totalCost)), new Decimal(0));
+  const totalPnLD = totalValueD.minus(totalCostD);
+  const totalValue = totalValueD.toFixed(4);
+  const totalCost = totalCostD.toFixed(4);
+  const totalPnL = totalPnLD.toFixed(4);
+  const totalPnLPct = totalCostD.greaterThan(0)
+    ? totalPnLD.dividedBy(totalCostD).times(100).toNumber()
+    : 0;
 
   return (
     <div>
@@ -147,7 +171,11 @@ export function StocksPage() {
                 <div className="text-xs text-muted-foreground">Unrealised P&L</div>
                 <div
                   className={`text-xl font-semibold mt-1 tabular-nums ${
-                    totalPnL > 0 ? 'text-positive' : totalPnL < 0 ? 'text-negative' : ''
+                    totalPnLD.greaterThan(0)
+                      ? 'text-positive'
+                      : totalPnLD.isNegative()
+                        ? 'text-negative'
+                        : ''
                   }`}
                 >
                   {formatINR(totalPnL)}
@@ -159,7 +187,11 @@ export function StocksPage() {
                 <div className="text-xs text-muted-foreground">Return</div>
                 <div
                   className={`text-xl font-semibold mt-1 tabular-nums ${
-                    totalPnL > 0 ? 'text-positive' : totalPnL < 0 ? 'text-negative' : ''
+                    totalPnLD.greaterThan(0)
+                      ? 'text-positive'
+                      : totalPnLD.isNegative()
+                        ? 'text-negative'
+                        : ''
                   }`}
                 >
                   {formatPercent(totalPnLPct)}
@@ -199,7 +231,11 @@ export function StocksPage() {
                       </td>
                       <td
                         className={`py-2 pr-4 text-right tabular-nums ${
-                          (h.unrealisedPnL ?? 0) > 0 ? 'text-positive' : (h.unrealisedPnL ?? 0) < 0 ? 'text-negative' : ''
+                          h.unrealisedPnL && toDecimal(h.unrealisedPnL).greaterThan(0)
+                            ? 'text-positive'
+                            : h.unrealisedPnL && toDecimal(h.unrealisedPnL).isNegative()
+                              ? 'text-negative'
+                              : ''
                         }`}
                       >
                         {h.unrealisedPnL != null ? formatINR(h.unrealisedPnL) : '—'}

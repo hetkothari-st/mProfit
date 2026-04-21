@@ -22,16 +22,19 @@ export interface ParsedTransaction {
 
   tradeDate: string; // YYYY-MM-DD
   settlementDate?: string;
-  quantity: number;
-  price: number;
+  // Money-dimension fields accept strings so parsers can forward the raw
+  // cleaned representation from source documents through to the Decimal-based
+  // ingestion path without a JS Number round-trip (§3.2, BUG-005/009).
+  quantity: number | string;
+  price: number | string;
 
-  brokerage?: number;
-  stt?: number;
-  stampDuty?: number;
-  exchangeCharges?: number;
-  gst?: number;
-  sebiCharges?: number;
-  otherCharges?: number;
+  brokerage?: number | string;
+  stt?: number | string;
+  stampDuty?: number | string;
+  exchangeCharges?: number | string;
+  gst?: number | string;
+  sebiCharges?: number | string;
+  otherCharges?: number | string;
 
   broker?: string;
   orderNo?: string;

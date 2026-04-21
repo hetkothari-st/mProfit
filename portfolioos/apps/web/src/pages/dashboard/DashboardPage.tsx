@@ -13,7 +13,13 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { transactionsApi } from '@/api/transactions.api';
 import { assetsApi } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR, formatPercent, ASSET_CLASS_LABELS } from '@portfolioos/shared';
+import {
+  formatINR,
+  formatPercent,
+  ASSET_CLASS_LABELS,
+  Decimal,
+  toDecimal,
+} from '@portfolioos/shared';
 
 export function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string>('ALL');
@@ -45,19 +51,30 @@ export function DashboardPage() {
     queryFn: async () => {
       const ids = portfolios.map((p) => p.id);
       const allSlices = await Promise.all(ids.map((id) => portfoliosApi.allocation(id)));
-      const merged: Record<string, { assetClass: string; value: number; holdingCount: number }> = {};
+      // Merge slices in Decimal — s.value is a Money string on the wire (§3.2).
+      const merged: Record<string, { assetClass: string; valueD: Decimal; holdingCount: number }> = {};
       for (const list of allSlices) {
         for (const s of list) {
-          const m = merged[s.assetClass] ?? { assetClass: s.assetClass, value: 0, holdingCount: 0 };
-          m.value += s.value;
+          const m =
+            merged[s.assetClass] ??
+            { assetClass: s.assetClass, valueD: new Decimal(0), holdingCount: 0 };
+          m.valueD = m.valueD.plus(toDecimal(s.value));
           m.holdingCount += s.holdingCount;
           merged[s.assetClass] = m;
         }
       }
-      const total = Object.values(merged).reduce((a, b) => a + b.value, 0);
+      const totalD = Object.values(merged).reduce(
+        (a, b) => a.plus(b.valueD),
+        new Decimal(0),
+      );
       return Object.values(merged)
-        .map((m) => ({ ...m, percent: total > 0 ? (m.value / total) * 100 : 0 }))
-        .sort((a, b) => b.value - a.value);
+        .map((m) => ({
+          assetClass: m.assetClass,
+          value: m.valueD.toFixed(4),
+          holdingCount: m.holdingCount,
+          percent: totalD.greaterThan(0) ? m.valueD.dividedBy(totalD).times(100).toNumber() : 0,
+        }))
+        .sort((a, b) => (toDecimal(b.value).greaterThan(toDecimal(a.value)) ? 1 : -1));
     },
     enabled: portfolios.length > 0,
   });
@@ -77,18 +94,33 @@ export function DashboardPage() {
     const summaries = summariesQuery.data ?? [];
     const filtered =
       selectedId === 'ALL' ? summaries : summaries.filter((s) => s.id === selectedId);
+    // Summaries arrive with Money strings (§3.2). Accumulate in Decimal so
+    // four portfolios each reporting "33.3300" don't drift to 133.3199996.
     const sum = (key: 'currentValue' | 'totalInvestment' | 'unrealisedPnL' | 'todaysChange') =>
-      filtered.reduce((acc, s) => acc + (s[key] ?? 0), 0);
-    const currentValue = sum('currentValue');
-    const totalInvestment = sum('totalInvestment');
-    const unrealisedPnL = sum('unrealisedPnL');
-    const unrealisedPct = totalInvestment > 0 ? (unrealisedPnL / totalInvestment) * 100 : 0;
+      filtered.reduce(
+        (acc, s) => (s[key] != null ? acc.plus(toDecimal(s[key])) : acc),
+        new Decimal(0),
+      );
+    const currentValueD = sum('currentValue');
+    const totalInvestmentD = sum('totalInvestment');
+    const unrealisedPnLD = sum('unrealisedPnL');
+    const todaysChangeD = sum('todaysChange');
+    const unrealisedPct = totalInvestmentD.greaterThan(0)
+      ? unrealisedPnLD.dividedBy(totalInvestmentD).times(100).toNumber()
+      : 0;
+    const priorValueD = currentValueD.minus(todaysChangeD);
+    const todaysChangePct = priorValueD.greaterThan(0)
+      ? todaysChangeD.dividedBy(priorValueD).times(100).toNumber()
+      : null;
     return {
-      currentValue,
-      totalInvestment,
-      unrealisedPnL,
+      currentValue: currentValueD.toFixed(4),
+      totalInvestment: totalInvestmentD.toFixed(4),
+      unrealisedPnL: unrealisedPnLD.toFixed(4),
+      unrealisedPnLD,
       unrealisedPct,
-      todaysChange: sum('todaysChange'),
+      todaysChange: todaysChangeD.toFixed(4),
+      todaysChangeD,
+      todaysChangePct,
       holdingCount: filtered.reduce((a, s) => a + (s.holdingCount ?? 0), 0),
     };
   }, [summariesQuery.data, selectedId]);
@@ -163,8 +195,11 @@ export function DashboardPage() {
           value={formatINR(totals.unrealisedPnL, { showSign: true })}
           icon={LineChartIcon}
           trend={{
-            direction:
-              totals.unrealisedPnL > 0 ? 'up' : totals.unrealisedPnL < 0 ? 'down' : 'flat',
+            direction: totals.unrealisedPnLD.greaterThan(0)
+              ? 'up'
+              : totals.unrealisedPnLD.isNegative()
+                ? 'down'
+                : 'flat',
             value: formatPercent(totals.unrealisedPct, 2, true),
           }}
         />
@@ -173,14 +208,14 @@ export function DashboardPage() {
           value={formatINR(totals.todaysChange, { showSign: true })}
           icon={Percent}
           trend={{
-            direction: totals.todaysChange > 0 ? 'up' : totals.todaysChange < 0 ? 'down' : 'flat',
+            direction: totals.todaysChangeD.greaterThan(0)
+              ? 'up'
+              : totals.todaysChangeD.isNegative()
+                ? 'down'
+                : 'flat',
             value:
-              totals.currentValue - totals.todaysChange > 0
-                ? formatPercent(
-                    (totals.todaysChange / (totals.currentValue - totals.todaysChange)) * 100,
-                    2,
-                    true,
-                  )
+              totals.todaysChangePct != null
+                ? formatPercent(totals.todaysChangePct, 2, true)
                 : '—',
           }}
         />

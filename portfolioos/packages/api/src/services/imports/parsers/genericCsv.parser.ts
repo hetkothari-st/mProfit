@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { parse } from 'csv-parse/sync';
+import { Decimal, toDecimal } from '@portfolioos/shared';
 import type { Parser, ParserContext, ParserResult, ParsedTransaction } from './types.js';
 import type { AssetClass, Exchange, TransactionType } from '@prisma/client';
 import { logger } from '../../../lib/logger.js';
@@ -43,11 +44,25 @@ function pick(row: Record<string, string>, key: keyof typeof ALIASES): string | 
   return undefined;
 }
 
-function asNumber(v: string | undefined, def = 0): number {
+// Strip currency/grouping/parenthesized-negative syntax and return the exact
+// decimal representation as a string (§3.2). JS Number would drop trailing
+// precision on inputs like "33.33" once they accumulate. toDecimal on the
+// downstream side handles the string.
+function cleanDecimalString(v: string | undefined, def = '0'): string {
   if (!v) return def;
   const cleaned = v.replace(/[₹,\s]/g, '').replace(/\(([^)]+)\)/, '-$1');
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : def;
+  if (cleaned === '' || cleaned === '-') return def;
+  try {
+    const d = new Decimal(cleaned);
+    if (!d.isFinite()) return def;
+    return cleaned;
+  } catch {
+    return def;
+  }
+}
+
+function decimalValue(s: string): Decimal {
+  return toDecimal(s);
 }
 
 function parseDate(s: string | undefined): string | null {
@@ -144,10 +159,10 @@ export const genericCsvParser: Parser = {
 
     for (const [i, row] of rows.entries()) {
       const tradeDate = parseDate(pick(row, 'tradedate'));
-      const quantity = asNumber(pick(row, 'quantity'));
-      const price = asNumber(pick(row, 'price'));
+      const quantity = cleanDecimalString(pick(row, 'quantity'));
+      const price = cleanDecimalString(pick(row, 'price'));
 
-      if (!tradeDate || quantity <= 0 || price < 0) {
+      if (!tradeDate || decimalValue(quantity).lessThanOrEqualTo(0) || decimalValue(price).lessThan(0)) {
         warnings.push(`Row ${i + 2}: skipped (missing/invalid date or quantity)`);
         continue;
       }
@@ -166,13 +181,13 @@ export const genericCsvParser: Parser = {
         tradeDate,
         quantity,
         price,
-        brokerage: asNumber(pick(row, 'brokerage')),
-        stt: asNumber(pick(row, 'stt')),
-        stampDuty: asNumber(pick(row, 'stampduty')),
-        exchangeCharges: asNumber(pick(row, 'exchangecharges')),
-        gst: asNumber(pick(row, 'gst')),
-        sebiCharges: asNumber(pick(row, 'sebicharges')),
-        otherCharges: asNumber(pick(row, 'othercharges')),
+        brokerage: cleanDecimalString(pick(row, 'brokerage')),
+        stt: cleanDecimalString(pick(row, 'stt')),
+        stampDuty: cleanDecimalString(pick(row, 'stampduty')),
+        exchangeCharges: cleanDecimalString(pick(row, 'exchangecharges')),
+        gst: cleanDecimalString(pick(row, 'gst')),
+        sebiCharges: cleanDecimalString(pick(row, 'sebicharges')),
+        otherCharges: cleanDecimalString(pick(row, 'othercharges')),
         broker: pick(row, 'broker'),
         orderNo: pick(row, 'orderno'),
         tradeNo: pick(row, 'tradeno'),

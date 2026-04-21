@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { Exchange } from '@prisma/client';
+import { serializeMoney, type Money } from '@portfolioos/shared';
 import {
   searchAssets,
   searchStocks,
@@ -48,9 +49,10 @@ export async function liveQuote(req: Request, res: Response) {
   ok(res, {
     symbol: q.symbol,
     name: q.name,
-    price: q.price.toNumber(),
-    previousClose: q.previousClose?.toNumber() ?? null,
-    dayChange: q.dayChange?.toNumber() ?? null,
+    price: serializeMoney(q.price),
+    previousClose: q.previousClose ? serializeMoney(q.previousClose) : null,
+    dayChange: q.dayChange ? serializeMoney(q.dayChange) : null,
+    // Pct is dimensionless — keep as number.
     dayChangePct: q.dayChangePct?.toNumber() ?? null,
     currency: q.currency,
     exchange: q.exchange,
@@ -61,14 +63,14 @@ export async function latestStockPrice(req: Request, res: Response) {
   const stockId = req.params.id!;
   const price = await getLatestStockPrice(stockId);
   if (!price) throw new NotFoundError('No price data');
-  ok(res, { stockId, price: price.toNumber() });
+  ok(res, { stockId, price: serializeMoney(price) });
 }
 
 export async function latestFundNav(req: Request, res: Response) {
   const fundId = req.params.id!;
   const nav = await getLatestNavForFund(fundId);
   if (!nav) throw new NotFoundError('No NAV data');
-  ok(res, { fundId, nav: nav.toNumber() });
+  ok(res, { fundId, nav: serializeMoney(nav) });
 }
 
 export async function refreshPortfolio(req: Request, res: Response) {
@@ -140,18 +142,18 @@ export async function listCommodityPrices(_req: Request, res: Response) {
     getLatestCommodityPrice('PLATINUM'),
   ]);
   ok(res, {
-    GOLD: gold?.toNumber() ?? null,
-    SILVER: silver?.toNumber() ?? null,
-    PLATINUM: platinum?.toNumber() ?? null,
+    GOLD: gold ? serializeMoney(gold) : null,
+    SILVER: silver ? serializeMoney(silver) : null,
+    PLATINUM: platinum ? serializeMoney(platinum) : null,
   });
 }
 
 export async function listFxRates(_req: Request, res: Response) {
   const pairs = ['USD', 'EUR', 'GBP', 'JPY', 'AED', 'SGD', 'AUD', 'CAD', 'CHF'];
-  const rates: Record<string, number | null> = {};
+  const rates: Record<string, Money | null> = {};
   for (const base of pairs) {
     const r = await getLatestFxRate(base, 'INR');
-    rates[base] = r?.toNumber() ?? null;
+    rates[base] = r ? serializeMoney(r) : null;
   }
   ok(res, rates);
 }
