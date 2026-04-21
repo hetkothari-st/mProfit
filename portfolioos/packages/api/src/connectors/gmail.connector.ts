@@ -130,7 +130,7 @@ export async function exchangeGmailCode(
   return { id: row.id, email };
 }
 
-async function getAuthorizedClientFor(accountId: string): Promise<OAuth2Client> {
+export async function getAuthorizedClientFor(accountId: string): Promise<OAuth2Client> {
   const acc = await prisma.mailboxAccount.findUnique({ where: { id: accountId } });
   if (!acc || acc.provider !== 'GMAIL_OAUTH' || !acc.refreshTokenEnc) {
     throw new Error('Invalid Gmail account');
