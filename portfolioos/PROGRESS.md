@@ -9,7 +9,7 @@ work so history is auditable.
 - G1 (audit approved) — ✅ passed before task 0
 - G2 (pre-migration review) — ✅ passed before task 3 apply
 - G3 (production migration) — not yet relevant (no hosted environment)
-- G4 (enable RLS on existing tables) — ⏳ **PENDING** (currently blocking task 11)
+- G4 (enable RLS on existing tables) — ✅ passed during task 11 (Option A: dedicated non-superuser role)
 
 ---
 
@@ -28,43 +28,48 @@ work so history is auditable.
 | 8 | DLQ + IngestionFailure UI | ✅ completed | 2026-04-21 | 2026-04-21 | `d7dc609` | — |
 | 9 | Golden test fixtures (≥5 per parser) | ✅ completed | 2026-04-21 | 2026-04-21 | `b768c28` | — |
 | 10 | CG cascade on edit/delete | ✅ completed | 2026-04-20 | 2026-04-20 | `e7e65e0` | — |
-| 11 | Postgres RLS on user-scoped tables | 🔄 **in_progress** | 2026-04-21 | — | `011f4fa` (WIP) | **Gate G4** — user approval before `prisma migrate dev` |
-| 12 | Bull worker atomicity (bounded runtime, single tx commit) | ⏳ pending | — | — | — | blocked on task 11 |
+| 11 | Postgres RLS on user-scoped tables | ✅ completed | 2026-04-21 | 2026-04-21 | `011f4fa` + `<pending>` | — |
+| 12 | Bull worker atomicity (bounded runtime, single tx commit) | ⏳ pending | — | — | — | — |
 | 13 | Linter rules + CI (no silent catch, money-type ban) | ⏳ pending | — | — | — | blocked on task 12 |
 
 Legend: ✅ completed · 🔄 in_progress · ⏳ pending · ❌ blocked
 
 ---
 
-## Task 11 — current step
+## Task 11 — done
 
-- Code written (pre-commit `011f4fa`):
-  - `prisma/migrations/20260421140000_phase_4_5_rls/migration.sql` with RLS
-    policies + `app_current_user_id()` / `app_is_system()` helpers on all 24
-    user-scoped tables.
-  - `src/lib/requestContext.ts` — AsyncLocalStorage `userContext`,
-    `runAsUser`, `runAsSystem`, `enterUserContext`.
-  - `src/lib/prisma.ts` — `$extends.$allOperations` hook that opens a short
-    interactive transaction and calls `SELECT set_config(…, true)`.
-  - `src/middleware/authenticate.ts` — wraps `next()` in `userContext.run`.
-  - `jobs/startupSync.ts`, `jobs/priceJobs.ts`, `jobs/importWorker.ts`,
-    `jobs/mailboxPoller.ts` — wrapped in `runAsSystem` / `runAsUser` at the
-    right boundaries.
-  - `test/helpers/db.ts` — setup/cleanup in `runAsSystem`, auto-enters user
-    context for the scope.
-  - `test/invariants/rls-isolation.test.ts` — new cross-tenant invariant (7
-    assertions including insert-with-foreign-userId rejection).
-- **Remaining before task 11 closes:**
-  1. Typecheck clean (`pnpm -C packages/api exec tsc --noEmit`).
-  2. Pre-migration test suite green (confirms no regression from the
-     extension + context wiring on the current DB).
-  3. Gate G4 approval.
-  4. `pnpm -C packages/api exec prisma migrate dev` to apply the RLS
-     migration.
-  5. Re-run test suite under RLS; confirm `rls-isolation.test.ts` passes and
-     the other invariant suites still pass.
-  6. Replace WIP commit with a proper `feat(security): Postgres RLS …`
-     commit (either `--amend` if still just `011f4fa`, or a follow-up).
+Landed via `011f4fa` + follow-up:
+
+- `prisma/migrations/20260421140000_phase_4_5_rls/migration.sql` — RLS policies
+  + `app_current_user_id()` / `app_is_system()` helpers on all 24 user-scoped
+  tables (ENABLE + FORCE so the DB owner can't implicitly bypass).
+- `prisma/migrations/20260421150000_phase_4_5_rls_app_role/migration.sql` —
+  creates `portfolioos_app` login role (`NOSUPERUSER NOBYPASSRLS`) with
+  table/sequence grants + `ALTER DEFAULT PRIVILEGES`. Runtime connects as this
+  role via `DATABASE_URL`; migrations run as superuser via `DIRECT_URL`.
+- `src/lib/requestContext.ts` — `userContext` AsyncLocalStorage stashed on
+  `globalThis` so every test-file module graph observes the same instance
+  (vitest's per-file isolation otherwise creates fresh ALS instances while the
+  Prisma client stays cached on `globalThis` — the $extends hook then reads
+  from the first file's ALS forever). `runAsUser` / `runAsSystem` wrap the
+  callback in an inner `async () => await fn()` so the store survives
+  Prisma's deferred-promise execution (the hook runs after `.run` has exited
+  if fn is non-async).
+- `src/lib/prisma.ts` — `$extends.$allOperations` hook opens a short
+  interactive transaction and calls `SELECT set_config(…, true)`. `USER_SCOPED_MODELS`
+  set lists the 24 tables that get wrapped; reference tables (StockMaster,
+  MFNav, FXRate, CII) pass through unchanged.
+- `src/middleware/authenticate.ts` — wraps `next()` in `userContext.run`.
+- `jobs/startupSync.ts`, `jobs/priceJobs.ts`, `jobs/importWorker.ts`,
+  `jobs/mailboxPoller.ts` — wrapped in `runAsSystem` / `runAsUser` at entry.
+- `test/helpers/db.ts` — setup + cleanup in `runAsSystem`; tests wrap bodies
+  in `scope.runAs(fn)` to opt into user context for the assertion phase.
+- `test/invariants/rls-isolation.test.ts` — 7 cross-tenant assertions
+  including insert-with-foreign-userId rejection.
+- `vitest.config.ts` — `pool: 'forks'`, `singleFork: true`, `fileParallelism:
+  false` so the async-context model is deterministic across files.
+
+All 40 tests pass (7 files), typecheck clean, lint clean (0 errors).
 
 ## Exit criteria (§5.2)
 

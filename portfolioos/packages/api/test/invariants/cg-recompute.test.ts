@@ -41,7 +41,9 @@ describe('invariant: capital-gains cascade on transaction edit (BUG-004)', () =>
     await scope.cleanup();
   });
 
-  it('editing a matched BUY updates the persisted CapitalGain row', async () => {
+  // Each `it()` runs in a fresh async scope; wrap the body in `scope.runAs`
+  // so RLS policies see `app.current_user_id` for the duration of the test.
+  it('editing a matched BUY updates the persisted CapitalGain row', () => scope.runAs(async () => {
     // BUY 100 @ ₹100 on 2022-01-05 → cost basis ₹10,000.
     const buy = await createTransaction(scope.userId, {
       portfolioId: scope.portfolioId,
@@ -98,5 +100,5 @@ describe('invariant: capital-gains cascade on transaction edit (BUG-004)', () =>
     // Under BUG-004 the row is stale: buyAmount stays at 10000, gainLoss at 2000.
     expect(new Decimal(afterEdit!.buyAmount.toString()).equals(new Decimal('11000'))).toBe(true);
     expect(new Decimal(afterEdit!.gainLoss.toString()).equals(new Decimal('1000'))).toBe(true);
-  });
+  }));
 });

@@ -41,7 +41,9 @@ describe('invariant: decimal precision on money (BUG-005, BUG-009)', () => {
     await scope.cleanup();
   });
 
-  it('3 BUYs × ₹33.33/unit → holding.totalCost is exactly 99.99', async () => {
+  // Each `it()` runs in a fresh async scope; wrap the body in `scope.runAs`
+  // so RLS policies see `app.current_user_id` for the duration of the test.
+  it('3 BUYs × ₹33.33/unit → holding.totalCost is exactly 99.99', () => scope.runAs(async () => {
     for (let i = 0; i < 3; i++) {
       await createTransaction(scope.userId, {
         portfolioId: scope.portfolioId,
@@ -63,12 +65,13 @@ describe('invariant: decimal precision on money (BUG-005, BUG-009)', () => {
     expect(holding).not.toBeNull();
     const totalCost = new Decimal(holding!.totalCost.toString());
     expect(totalCost.equals(new Decimal('99.99'))).toBe(true);
-  });
+  }));
 
   it('1000 BUYs × ₹0.10 each → XIRR.totalInvested is exactly ₹100 (no float drift)', async () => {
     // Use a fresh scope — earlier test in this file already has transactions.
     const s = await createTestScope('decimal-xirr');
     try {
+    return await s.runAs(async () => {
       const seeded = await seedStockMaster(s, { symbol: 'TSTDRIFT' });
       const stock = await prisma.stockMaster.findUnique({ where: { symbol: seeded.symbol } });
       if (!stock) throw new Error('seed failed');
@@ -104,6 +107,7 @@ describe('invariant: decimal precision on money (BUG-005, BUG-009)', () => {
       // equality against "100.0000" confirms Decimal never round-tripped via Number.
       expect(new Decimal(result.totalInvested).equals(100)).toBe(true);
       expect(result.totalInvested).toBe('100.0000');
+    });
     } finally {
       await s.cleanup();
     }

@@ -18,7 +18,24 @@ export interface RequestContext {
   isSystem?: boolean;
 }
 
-export const userContext = new AsyncLocalStorage<RequestContext>();
+/**
+ * Stash the AsyncLocalStorage on globalThis so every module graph that imports
+ * this file observes the same instance. The PrismaClient in `lib/prisma.ts` is
+ * cached on globalThis too — its `$extends` hook closures over whichever
+ * `userContext` was loaded first. Without this shim, vitest's per-file module
+ * isolation creates a fresh ALS per test file while the Prisma hook still
+ * reads from the first file's ALS, so `runAsUser` in later files silently
+ * fails to propagate context into queries.
+ */
+const globalForUserContext = globalThis as unknown as {
+  __portfolioos_userContext?: AsyncLocalStorage<RequestContext>;
+};
+
+export const userContext: AsyncLocalStorage<RequestContext> =
+  globalForUserContext.__portfolioos_userContext ??
+  new AsyncLocalStorage<RequestContext>();
+
+globalForUserContext.__portfolioos_userContext = userContext;
 
 export function getCurrentUserId(): string | null {
   const store = userContext.getStore();
@@ -34,9 +51,16 @@ export function isSystemContext(): boolean {
  * Bull-job and startup-sync paths need to explicitly opt in to a user
  * context before touching user-scoped tables. Wrap those entry points in
  * `runAsUser(userId, async () => { ... })`.
+ *
+ * We internally `await fn()` inside the `.run` callback rather than just
+ * returning its promise. With a non-async `fn` (e.g. `() => prisma.x.y(...)`)
+ * Prisma returns a deferred PrismaPromise synchronously; `.run` then exits
+ * the store before the promise's continuation — and the $allOperations hook
+ * — is scheduled, so `getCurrentUserId()` / `isSystemContext()` see nothing.
+ * The `await` here keeps the store active across the microtask boundary.
  */
 export function runAsUser<T>(userId: string, fn: () => Promise<T>): Promise<T> {
-  return userContext.run({ userId }, fn);
+  return userContext.run({ userId }, async () => await fn());
 }
 
 /**
@@ -45,7 +69,7 @@ export function runAsUser<T>(userId: string, fn: () => Promise<T>): Promise<T> {
  * need to see every user's rows — never from HTTP request handlers.
  */
 export function runAsSystem<T>(fn: () => Promise<T>): Promise<T> {
-  return userContext.run({ userId: '__system__', isSystem: true }, fn);
+  return userContext.run({ userId: '__system__', isSystem: true }, async () => await fn());
 }
 
 /**

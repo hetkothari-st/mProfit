@@ -1,11 +1,7 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../src/lib/prisma.js';
-import {
-  enterUserContext,
-  runAsSystem,
-  runAsUser,
-} from '../../src/lib/requestContext.js';
+import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 
 export interface TestScope {
   userId: string;
@@ -51,10 +47,11 @@ export async function createTestScope(label: string): Promise<TestScope> {
 
   const stockMasterIds: string[] = [];
 
-  // Set ambient context for the remainder of this test's async scope so
-  // subsequent prisma.* calls made outside any explicit `runAs` wrapper still
-  // see RLS-compliant rows. Cleanup switches to system context.
-  enterUserContext(user.id);
+  // Deliberately NOT calling `enterUserContext` here. `enterWith` persists for
+  // the current async resource and bleeds across vitest hook phases on the
+  // shared runner scope, which causes cross-file context contamination when
+  // test files run back-to-back. Tests must wrap query-ing code in
+  // `scope.runAs(fn)` to opt into user-scoped RLS for their body.
 
   return {
     userId: user.id,

@@ -28,7 +28,11 @@ describe('invariant: holdings uniqueness for non-stock/non-MF assets (BUG-001)',
     await scope.cleanup();
   });
 
-  it('two FDs with different names in one portfolio produce two Holding rows', async () => {
+  // Each `it()` is a fresh vitest async scope, so `enterUserContext` set in
+  // beforeAll doesn't survive. `scope.runAs` explicitly re-establishes the
+  // user context around the test body so RLS policies see
+  // `app.current_user_id`.
+  it('two FDs with different names in one portfolio produce two Holding rows', () => scope.runAs(async () => {
     await createTransaction(scope.userId, {
       portfolioId: scope.portfolioId,
       transactionType: 'BUY',
@@ -66,5 +70,5 @@ describe('invariant: holdings uniqueness for non-stock/non-MF assets (BUG-001)',
       'HDFC Bank FD - 1 year @ 7.1%',
       'ICICI Bank FD - 2 year @ 7.25%',
     ]);
-  });
+  }));
 });

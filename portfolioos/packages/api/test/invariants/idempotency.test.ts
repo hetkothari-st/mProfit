@@ -32,7 +32,9 @@ describe('invariant: ingestion idempotency (BUG-003)', () => {
     await scope.cleanup();
   });
 
-  it('re-submitting the same (broker, orderNo, tradeNo) triplet creates zero new rows', async () => {
+  // Each `it()` runs in a fresh async scope; wrap the body in `scope.runAs`
+  // so RLS policies see `app.current_user_id` for the duration of the test.
+  it('re-submitting the same (broker, orderNo, tradeNo) triplet creates zero new rows', () => scope.runAs(async () => {
     const payload = {
       portfolioId: scope.portfolioId,
       transactionType: 'BUY' as const,
@@ -61,5 +63,5 @@ describe('invariant: ingestion idempotency (BUG-003)', () => {
     });
 
     expect(count).toBe(1);
-  });
+  }));
 });

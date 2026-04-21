@@ -4,7 +4,12 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Runtime queries connect as `portfolioos_app` (NOSUPERUSER, NOBYPASSRLS)
+  // so RLS policies in migration 20260421140000_phase_4_5_rls are enforced.
   url      = env("DATABASE_URL")
+  // Prisma CLI (`migrate dev`, `db push`, shadow DB) needs CREATE TABLE /
+  // CREATE ROLE privileges — stay on `postgres` for that.
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── USERS & AUTH ───────────────────────────────────────────────
