@@ -366,12 +366,8 @@ export async function computeUserCapitalGains(userId: string): Promise<CapitalGa
   return { rows, summaryByFy: summarize(rows) };
 }
 
-export async function persistCapitalGainsForPortfolio(portfolioId: string): Promise<number> {
-  const { rows } = await computePortfolioCapitalGains(portfolioId);
-  // Replace existing rows for this portfolio
-  await prisma.capitalGain.deleteMany({ where: { portfolioId } });
-  if (rows.length === 0) return 0;
-  const data: Prisma.CapitalGainCreateManyInput[] = rows.map((r) => ({
+function toCGCreateInput(r: CapitalGainRow): Prisma.CapitalGainCreateManyInput {
+  return {
     portfolioId: r.portfolioId,
     sellTransactionId: r.sellTransactionId,
     buyTransactionId: r.buyTransactionId,
@@ -390,7 +386,57 @@ export async function persistCapitalGainsForPortfolio(portfolioId: string): Prom
     gainLoss: r.gainLoss.toString(),
     taxableGain: r.taxableGain.toString(),
     financialYear: r.financialYear,
-  }));
+  };
+}
+
+export async function persistCapitalGainsForPortfolio(portfolioId: string): Promise<number> {
+  const { rows } = await computePortfolioCapitalGains(portfolioId);
+  // Replace existing rows for this portfolio
+  await prisma.capitalGain.deleteMany({ where: { portfolioId } });
+  if (rows.length === 0) return 0;
+  const data = rows.map(toCGCreateInput);
   await prisma.capitalGain.createMany({ data });
   return data.length;
+}
+
+/**
+ * Scoped re-persist: only rebuilds CapitalGain rows for one (portfolio,
+ * assetKey). Used by transaction edit/delete so we don't re-FIFO the whole
+ * portfolio every time a narration changes. §5.1 task 10 / BUG-004.
+ *
+ * `buyTransactionId` is a bare String on CapitalGain (no FK), so deleting a
+ * BUY does NOT cascade-delete the CG rows that reference it — we explicitly
+ * wipe by touching-tx-id here. `sellTransactionId` has onDelete:Cascade, but
+ * deleteMany is idempotent, so covering both sides is safe and keeps the
+ * logic symmetric.
+ */
+export async function persistCapitalGainsForAsset(
+  portfolioId: string,
+  assetKey: string,
+): Promise<number> {
+  const txs = await prisma.transaction.findMany({
+    where: { portfolioId, assetKey },
+    orderBy: { tradeDate: 'asc' },
+  });
+  const txIds = txs.map((t) => t.id);
+
+  // Clear any prior CG rows that touch this asset's transactions (either as
+  // buy or sell leg). Scope to portfolioId as a belt-and-suspenders filter so
+  // we never wander into another user's data.
+  if (txIds.length > 0) {
+    await prisma.capitalGain.deleteMany({
+      where: {
+        portfolioId,
+        OR: [
+          { buyTransactionId: { in: txIds } },
+          { sellTransactionId: { in: txIds } },
+        ],
+      },
+    });
+  }
+
+  const rows = computeFIFOGains(txs);
+  if (rows.length === 0) return 0;
+  await prisma.capitalGain.createMany({ data: rows.map(toCGCreateInput) });
+  return rows.length;
 }

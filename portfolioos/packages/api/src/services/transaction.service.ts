@@ -7,6 +7,7 @@ import { ensureStockMaster, ensureMutualFundMaster } from './masterData.service.
 import { recomputeForAsset } from './holdingsProjection.js';
 import { computeAssetKey } from './assetKey.js';
 import { naturalKeyHash } from './sourceHash.js';
+import { persistCapitalGainsForAsset } from './capitalGains.service.js';
 
 export interface CreateTransactionInput {
   portfolioId: string;
@@ -283,6 +284,9 @@ export async function updateTransaction(
       assetName: updated.assetName,
     });
   await recomputeForAsset(updated.portfolioId, assetKey);
+  // Cascade FIFO recompute for this asset — §5.1 task 10 / BUG-004. Editing
+  // a matched BUY or SELL must not leave stale CapitalGain rows behind.
+  await persistCapitalGainsForAsset(updated.portfolioId, assetKey);
 
   return toTransactionDTO(updated);
 }
@@ -303,6 +307,10 @@ export async function deleteTransaction(userId: string, id: string): Promise<voi
       assetName: existing.assetName,
     });
   await recomputeForAsset(existing.portfolioId, assetKey);
+  // Cascade FIFO recompute. onDelete:Cascade wipes CGs tied via
+  // sellTransactionId, but CGs referencing this row via the bare-string
+  // buyTransactionId would dangle without this — §5.1 task 10 / BUG-004.
+  await persistCapitalGainsForAsset(existing.portfolioId, assetKey);
 }
 
 export async function getTransaction(userId: string, id: string) {
