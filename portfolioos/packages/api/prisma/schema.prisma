@@ -24,38 +24,48 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  portfolios      Portfolio[]
-  portfolioGroups PortfolioGroup[]
-  clients         Client[]
-  alerts          Alert[]
-  importJobs      ImportJob[]
-  accounts        Account[]
-  vouchers        Voucher[]
-  refreshTokens   RefreshToken[]
+  portfolios          Portfolio[]
+  portfolioGroups     PortfolioGroup[]
+  clients             Client[]
+  alerts              Alert[]
+  importJobs          ImportJob[]
+  accounts            Account[]
+  vouchers            Voucher[]
+  refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
-  brokerAccounts  BrokerAccount[]
-  mailboxAccounts MailboxAccount[]
+  brokerAccounts      BrokerAccount[]
+  mailboxAccounts     MailboxAccount[]
+
+  // Phase 4.5 hardening — ingestion + real-asset modules (§4.1–§4.9)
+  canonicalEvents   CanonicalEvent[]
+  monitoredSenders  MonitoredSender[]
+  learnedTemplates  LearnedTemplate[]
+  ingestionFailures IngestionFailure[]
+  vehicles          Vehicle[]
+  rentalProperties  RentalProperty[]
+  insurancePolicies InsurancePolicy[]
+  auditLogs         AuditLog[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
 
 model BrokerAccount {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  portfolioId  String?
-  portfolio    Portfolio? @relation(fields: [portfolioId], references: [id])
-  provider     BrokerProvider
-  label        String?
-  apiKey       String?
-  apiSecretEnc String?
+  id             String          @id @default(cuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId    String?
+  portfolio      Portfolio?      @relation(fields: [portfolioId], references: [id])
+  provider       BrokerProvider
+  label          String?
+  apiKey         String?
+  apiSecretEnc   String?
   accessTokenEnc String?
-  publicUserId String?
-  status       ConnectorStatus @default(PENDING)
-  lastSyncAt   DateTime?
-  lastError    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  publicUserId   String?
+  status         ConnectorStatus @default(PENDING)
+  lastSyncAt     DateTime?
+  lastError      String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([userId])
 }
@@ -128,25 +138,25 @@ enum PlanTier {
 }
 
 model RefreshToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
+  id        String    @id @default(cuid())
+  token     String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
+  id        String    @id @default(cuid())
+  token     String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
@@ -185,12 +195,16 @@ model Portfolio {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  groups       PortfolioGroupMember[]
-  holdings     Holding[]
-  transactions Transaction[]
-  cashFlows    CashFlow[]
-  alerts       Alert[]
+  groups         PortfolioGroupMember[]
+  holdings       Holding[]
+  transactions   Transaction[]
+  cashFlows      CashFlow[]
+  alerts         Alert[]
   brokerAccounts BrokerAccount[]
+
+  // Phase 4.5 hardening
+  holdingProjections HoldingProjection[]
+  canonicalEvents    CanonicalEvent[]
 
   @@index([userId])
   @@index([clientId])
@@ -338,12 +352,12 @@ enum CorporateActionType {
 // ─── COMMODITY / CRYPTO / FX PRICE FEEDS ─────────────────────────
 
 model CommodityPrice {
-  id       String          @id @default(cuid())
+  id        String        @id @default(cuid())
   commodity CommodityType
-  date     DateTime        @db.Date
-  price    Decimal         @db.Decimal(18, 4)
-  unit     String          @default("GRAM_24K")
-  source   String          @default("IBJA")
+  date      DateTime      @db.Date
+  price     Decimal       @db.Decimal(18, 4)
+  unit      String        @default("GRAM_24K")
+  source    String        @default("IBJA")
 
   @@unique([commodity, date, unit])
   @@index([commodity, date])
@@ -467,7 +481,7 @@ model Transaction {
   transactionType TransactionType
 
   stockId   String?
-  stock     StockMaster? @relation(fields: [stockId], references: [id])
+  stock     StockMaster?      @relation(fields: [stockId], references: [id])
   fundId    String?
   fund      MutualFundMaster? @relation(fields: [fundId], references: [id])
   assetName String?
@@ -506,6 +520,17 @@ model Transaction {
   importJobId String?
   importJob   ImportJob? @relation(fields: [importJobId], references: [id])
 
+  // Phase 4.5 hardening (§4.5): idempotency + parser lineage + asset identity.
+  // assetKey starts nullable for backfill; a follow-up migration flips it to
+  // NOT NULL after the UPDATE in 20260421_phase_4_5_hardening completes.
+  // sourceHash is nullable because manually-entered rows predate it.
+  assetKey         String?
+  sourceAdapter    String?
+  sourceAdapterVer String?
+  sourceHash       String?         @unique
+  canonicalEventId String?
+  canonicalEvent   CanonicalEvent? @relation("CanonicalEventToTransaction", fields: [canonicalEventId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -516,6 +541,8 @@ model Transaction {
   @@index([stockId])
   @@index([fundId])
   @@index([importJobId])
+  @@index([portfolioId, assetKey])
+  @@index([sourceAdapter, sourceAdapterVer])
 }
 
 enum TransactionType {
@@ -663,14 +690,14 @@ enum VoucherType {
 }
 
 model VoucherEntry {
-  id              String  @id @default(cuid())
+  id              String       @id @default(cuid())
   voucherId       String
-  voucher         Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  voucher         Voucher      @relation(fields: [voucherId], references: [id], onDelete: Cascade)
   debitAccountId  String
   creditAccountId String
-  debitAccount    Account @relation("DebitAccount", fields: [debitAccountId], references: [id])
-  creditAccount   Account @relation("CreditAccount", fields: [creditAccountId], references: [id])
-  amount          Decimal @db.Decimal(18, 4)
+  debitAccount    Account      @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccount   Account      @relation("CreditAccount", fields: [creditAccountId], references: [id])
+  amount          Decimal      @db.Decimal(18, 4)
   narration       String?
   transactionId   String?
   transaction     Transaction? @relation(fields: [transactionId], references: [id])
@@ -729,19 +756,19 @@ enum ImportStatus {
 // ─── ALERTS & REMINDERS ───────────────────────────────────────────
 
 model Alert {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   portfolioId String?
   portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
   type        AlertType
   title       String
   description String?
   triggerDate DateTime
-  isRead      Boolean   @default(false)
-  isActive    Boolean   @default(true)
+  isRead      Boolean    @default(false)
+  isActive    Boolean    @default(true)
   metadata    Json?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime   @default(now())
 
   @@index([userId, triggerDate])
 }
@@ -756,4 +783,393 @@ enum AlertType {
   CORPORATE_ACTION
   PRICE_TARGET
   CUSTOM
+}
+
+// ─── PHASE 4.5 HARDENING — §4.1 CANONICAL INGESTION LAYER ────────
+//
+// All ingested events — from Gmail, CAS, contract notes, bank feeds, vehicle
+// portals — land here first as a canonical record before being projected into
+// Transaction / CashFlow / PremiumPayment / RentReceipt. Idempotency is
+// enforced by the (userId, sourceHash) unique constraint (§3.3, BUG-003).
+
+model CanonicalEvent {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId String?
+  portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
+
+  sourceAdapter    String
+  sourceAdapterVer String
+  sourceRef        String
+  sourceHash       String
+
+  eventType        CanonicalEventType
+  eventDate        DateTime           @db.Date
+  amount           Decimal?           @db.Decimal(18, 4)
+  quantity         Decimal?           @db.Decimal(18, 6)
+  price            Decimal?           @db.Decimal(18, 4)
+  counterparty     String?
+  instrumentIsin   String?
+  instrumentSymbol String?
+  instrumentName   String?
+  accountLast4     String?
+  currency         String             @default("INR")
+  metadata         Json?
+  confidence       Decimal            @default(1.00) @db.Decimal(3, 2)
+  parserNotes      String?
+
+  status                 CanonicalEventStatus @default(PARSED)
+  reviewedById           String?
+  reviewedAt             DateTime?
+  projectedTransactionId String?
+  projectedCashFlowId    String?
+  rejectionReason        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectedTransactions Transaction[] @relation("CanonicalEventToTransaction")
+
+  @@unique([userId, sourceHash])
+  @@index([userId, status, eventDate])
+  @@index([sourceAdapter, sourceAdapterVer])
+}
+
+enum CanonicalEventType {
+  BUY
+  SELL
+  DIVIDEND
+  INTEREST_CREDIT
+  INTEREST_DEBIT
+  EMI_DEBIT
+  PREMIUM_PAID
+  MATURITY_CREDIT
+  RENT_RECEIVED
+  RENT_PAID
+  SIP_INSTALLMENT
+  FD_CREATION
+  FD_MATURITY
+  CARD_PURCHASE
+  CARD_PAYMENT
+  UPI_CREDIT
+  UPI_DEBIT
+  NEFT_CREDIT
+  NEFT_DEBIT
+  VALUATION_SNAPSHOT
+  VEHICLE_CHALLAN
+  OTHER
+}
+
+enum CanonicalEventStatus {
+  PARSED
+  PENDING_REVIEW
+  CONFIRMED
+  PROJECTED
+  REJECTED
+  FAILED
+  ARCHIVED
+}
+
+// ─── §4.2 MONITORED SENDERS + LEARNED TEMPLATES ──────────────────
+//
+// User-chosen Gmail addresses the poller should fetch (§6.7); LearnedTemplate
+// is the regex/xpath recipe promoted from LLM-parsed samples once the
+// (sender, bodyStructureHash) has enough agreeing extractions to be cheap to
+// re-run without the LLM (§6.4).
+
+model MonitoredSender {
+  id                  String           @id @default(cuid())
+  userId              String
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address             String
+  displayLabel        String?
+  isActive            Boolean          @default(true)
+  autoCommitAfter     Int              @default(5)
+  autoCommitEnabled   Boolean          @default(false)
+  confirmedEventCount Int              @default(0)
+  currentTemplateId   String?
+  template            LearnedTemplate? @relation(fields: [currentTemplateId], references: [id])
+  firstSeenAt         DateTime         @default(now())
+  lastFetchedAt       DateTime?
+
+  @@unique([userId, address])
+  @@index([userId, isActive])
+}
+
+model LearnedTemplate {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  senderAddress     String
+  bodyStructureHash String
+  extractionRecipe  Json
+  sampleCount       Int       @default(1)
+  confidenceScore   Decimal   @default(0.00) @db.Decimal(3, 2)
+  version           Int       @default(1)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  lastUsedAt        DateTime?
+
+  monitoredSenders MonitoredSender[]
+
+  @@unique([userId, senderAddress, bodyStructureHash, version])
+}
+
+// ─── §4.3 INGESTION DLQ ──────────────────────────────────────────
+//
+// Parse failures never crash the job (§3.5, BUG-006). Raw payload is
+// redacted per §15.9 before being stored here.
+
+model IngestionFailure {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceAdapter  String
+  adapterVersion String
+  sourceRef      String
+  errorMessage   String
+  errorStack     String?
+  rawPayload     Json?
+  resolvedAt     DateTime?
+  resolvedAction String?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, resolvedAt])
+}
+
+// ─── §4.4 HOLDINGS AS PROJECTION ─────────────────────────────────
+//
+// Computed by replaying Transaction + CorporateAction through the FIFO engine.
+// Mutated only by recomputeForAsset (§5.1 task 4); never by any write path
+// except the projection service (§3.1, BUG-002). The legacy Holding table
+// stays read-only for one release after parity is confirmed (§4.10 step 6).
+
+model HoldingProjection {
+  id            String     @id @default(cuid())
+  portfolioId   String
+  portfolio     Portfolio  @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  assetKey      String
+  assetClass    AssetClass
+  stockId       String?
+  fundId        String?
+  assetName     String?
+  isin          String?
+  quantity      Decimal    @db.Decimal(18, 6)
+  avgCostPrice  Decimal    @db.Decimal(18, 4)
+  totalCost     Decimal    @db.Decimal(18, 4)
+  currentPrice  Decimal?   @db.Decimal(18, 4)
+  currentValue  Decimal?   @db.Decimal(18, 4)
+  unrealisedPnL Decimal?   @db.Decimal(18, 4)
+  realisedPnL   Decimal    @default(0) @db.Decimal(18, 4)
+  computedAt    DateTime   @default(now())
+  sourceTxCount Int
+
+  @@unique([portfolioId, assetKey])
+  @@index([portfolioId, assetClass])
+}
+
+// ─── §4.6 VEHICLES + CHALLANS ────────────────────────────────────
+
+model Vehicle {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId        String?
+  registrationNo     String
+  make               String?
+  model              String?
+  variant            String?
+  manufacturingYear  Int?
+  fuelType           String?
+  color              String?
+  chassisLast4       String?
+  rtoCode            String?
+  ownerName          String?
+  purchaseDate       DateTime? @db.Date
+  purchasePrice      Decimal?  @db.Decimal(14, 2)
+  currentValue       Decimal?  @db.Decimal(14, 2)
+  currentValueSource String?
+  insuranceExpiry    DateTime? @db.Date
+  insurancePolicyId  String?
+  pucExpiry          DateTime? @db.Date
+  fitnessExpiry      DateTime? @db.Date
+  roadTaxExpiry      DateTime? @db.Date
+  permitExpiry       DateTime? @db.Date
+  lastRefreshedAt    DateTime?
+  refreshSource      String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  challans          Challan[]
+  insurancePolicies InsurancePolicy[] @relation("VehicleInsurance")
+
+  @@unique([userId, registrationNo])
+  @@index([userId, insuranceExpiry])
+  @@index([userId, pucExpiry])
+}
+
+model Challan {
+  id          String   @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  challanNo   String
+  offenceDate DateTime @db.Date
+  offenceType String?
+  location    String?
+  amount      Decimal  @db.Decimal(10, 2)
+  status      String
+  details     Json?
+  fetchedAt   DateTime @default(now())
+
+  @@unique([vehicleId, challanNo])
+}
+
+// ─── §4.7 RENTAL ─────────────────────────────────────────────────
+
+model RentalProperty {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId   String?
+  name          String
+  address       String?
+  propertyType  String
+  purchaseDate  DateTime? @db.Date
+  purchasePrice Decimal?  @db.Decimal(14, 2)
+  currentValue  Decimal?  @db.Decimal(14, 2)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+
+  tenancies Tenancy[]
+  expenses  PropertyExpense[]
+}
+
+model Tenancy {
+  id              String         @id @default(cuid())
+  propertyId      String
+  property        RentalProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenantName      String
+  tenantContact   String?
+  startDate       DateTime       @db.Date
+  endDate         DateTime?      @db.Date
+  monthlyRent     Decimal        @db.Decimal(12, 2)
+  securityDeposit Decimal?       @db.Decimal(12, 2)
+  rentDueDay      Int            @default(1)
+  isActive        Boolean        @default(true)
+  notes           String?
+  createdAt       DateTime       @default(now())
+
+  rentReceipts RentReceipt[]
+
+  @@index([propertyId, isActive])
+}
+
+model RentReceipt {
+  id                     String    @id @default(cuid())
+  tenancyId              String
+  tenancy                Tenancy   @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
+  forMonth               String
+  expectedAmount         Decimal   @db.Decimal(12, 2)
+  receivedAmount         Decimal?  @db.Decimal(12, 2)
+  dueDate                DateTime  @db.Date
+  receivedOn             DateTime? @db.Date
+  status                 String
+  cashFlowId             String?
+  notes                  String?
+  autoMatchedFromEventId String?
+
+  @@unique([tenancyId, forMonth])
+  @@index([dueDate, status])
+}
+
+model PropertyExpense {
+  id          String         @id @default(cuid())
+  propertyId  String
+  property    RentalProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  expenseType String
+  amount      Decimal        @db.Decimal(12, 2)
+  paidOn      DateTime       @db.Date
+  description String?
+  receiptUrl  String?
+}
+
+// ─── §4.8 INSURANCE ──────────────────────────────────────────────
+
+model InsurancePolicy {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId        String?
+  insurer            String
+  policyNumber       String
+  type               String
+  planName           String?
+  policyHolder       String
+  nominees           Json?
+  sumAssured         Decimal   @db.Decimal(14, 2)
+  premiumAmount      Decimal   @db.Decimal(12, 2)
+  premiumFrequency   String
+  startDate          DateTime  @db.Date
+  maturityDate       DateTime? @db.Date
+  nextPremiumDue     DateTime? @db.Date
+  vehicleId          String?
+  vehicle            Vehicle?  @relation("VehicleInsurance", fields: [vehicleId], references: [id])
+  healthCoverDetails Json?
+  status             String    @default("ACTIVE")
+  createdAt          DateTime  @default(now())
+
+  premiumHistory PremiumPayment[]
+  claims         InsuranceClaim[]
+
+  @@unique([userId, insurer, policyNumber])
+  @@index([userId, nextPremiumDue])
+}
+
+model PremiumPayment {
+  id               String          @id @default(cuid())
+  policyId         String
+  policy           InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  paidOn           DateTime        @db.Date
+  amount           Decimal         @db.Decimal(12, 2)
+  periodFrom       DateTime        @db.Date
+  periodTo         DateTime        @db.Date
+  canonicalEventId String?
+}
+
+model InsuranceClaim {
+  id            String          @id @default(cuid())
+  policyId      String
+  policy        InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  claimNumber   String?
+  claimDate     DateTime        @db.Date
+  claimType     String
+  claimedAmount Decimal         @db.Decimal(14, 2)
+  settledAmount Decimal?        @db.Decimal(14, 2)
+  status        String
+  settledOn     DateTime?       @db.Date
+  documents     Json?
+}
+
+// ─── §4.9 AUDIT LOG + APP SETTINGS ───────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  resource  String?
+  ip        String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
 }
