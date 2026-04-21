@@ -10,22 +10,24 @@ import {
 import { createMonitoredSender } from '../../src/services/monitoredSenders.service.js';
 
 /**
- * §6.10 template seed directory. The 25 seed rows are installed by
- * migration 20260421180000_phase_5_a_template_seeds and must be
- * present in any dev DB these tests run against.
+ * §6.10 template seed directory. The 28 seed rows are installed by
+ * migrations 20260421180000_phase_5_a_template_seeds (25 rows) and
+ * 20260421190000_phase_5_a_seed_additions (+3 rows that closed the
+ * gap to the full 12/9/5/2 list in §6.10). They must be present in
+ * any dev DB these tests run against.
  */
 
 describe('TemplateSeed directory', () => {
-  it('ships all 25 seed rows from the migration', async () => {
+  it('ships all 28 seed rows from the migrations', async () => {
     const rows = await runAsSystem(() => listActiveSeeds());
-    expect(rows.length).toBe(25);
+    expect(rows.length).toBe(28);
     const byKind = rows.reduce<Record<string, number>>((acc, r) => {
       acc[r.institutionKind] = (acc[r.institutionKind] ?? 0) + 1;
       return acc;
     }, {});
     expect(byKind).toEqual({
-      BANK: 10,
-      BROKER: 8,
+      BANK: 12,
+      BROKER: 9,
       INSURER: 5,
       REGISTRAR: 2,
     });
