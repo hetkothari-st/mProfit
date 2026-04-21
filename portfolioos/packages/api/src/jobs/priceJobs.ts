@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
+import { runAsSystem } from '../lib/requestContext.js';
 import { loadAmfiNavToDb } from '../priceFeeds/amfi.service.js';
 import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
 import { refreshAllHoldingPrices } from '../services/holdings.service.js';
@@ -35,7 +36,9 @@ async function runGuarded<K extends keyof typeof running>(
   const t0 = Date.now();
   try {
     logger.info(`[cron] ${label} starting`);
-    const r = await fn();
+    // Scheduled jobs refresh shared price tables and every user's holdings,
+    // so they need cross-tenant access. Wrap in system context (§5.1 task 11).
+    const r = await runAsSystem(() => fn() as Promise<unknown>);
     logger.info({ r, ms: Date.now() - t0 }, `[cron] ${label} done`);
   } catch (err) {
     logger.error({ err }, `[cron] ${label} failed`);

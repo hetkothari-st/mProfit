@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../services/jwt.service.js';
 import { UnauthorizedError } from '../lib/errors.js';
+import { userContext } from '../lib/requestContext.js';
 import type { UserRole } from '@prisma/client';
 
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
@@ -17,7 +18,11 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
       role: payload.role as UserRole,
       plan: payload.plan as never,
     };
-    next();
+    // Run the rest of the request chain inside the ambient user context so
+    // Prisma's $allOperations hook can set Postgres session variable
+    // `app.current_user_id` before each user-scoped query — matching the RLS
+    // policies from migration 20260421140000_phase_4_5_rls.
+    userContext.run({ userId: payload.sub }, () => next());
   } catch (err) {
     next(err);
   }

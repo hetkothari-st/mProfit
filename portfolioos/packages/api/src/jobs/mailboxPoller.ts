@@ -10,6 +10,7 @@ import { logger } from '../lib/logger.js';
 import { decryptSecret } from '../lib/secrets.js';
 import { createImportJob } from '../services/imports/import.service.js';
 import { syncGmailAccount } from '../connectors/gmail.connector.js';
+import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 
 const ALLOWED_EXT = new Set(['.pdf', '.csv', '.tsv', '.xlsx', '.xls', '.html', '.htm']);
 
@@ -158,13 +159,21 @@ async function pollOne(
 }
 
 export async function pollAllMailboxes(): Promise<void> {
-  const accounts = await prisma.mailboxAccount.findMany({ where: { isActive: true } });
+  // MailboxAccount isn't user-scoped (not in USER_SCOPED_MODELS), but to scan
+  // across every user's accounts we still need the bypass so the scheduler is
+  // explicit that it's running cross-tenant.
+  const accounts = await runAsSystem(() =>
+    prisma.mailboxAccount.findMany({ where: { isActive: true } }),
+  );
   for (const acc of accounts) {
     try {
-      const r =
+      // Each mailbox belongs to one user; downstream import-job creation is
+      // user-scoped and RLS-enforced.
+      const r = await runAsUser(acc.userId, async () =>
         acc.provider === 'GMAIL_OAUTH'
-          ? await syncGmailAccount(acc.id)
-          : await pollOne(acc.id);
+          ? syncGmailAccount(acc.id)
+          : pollOne(acc.id),
+      );
       logger.info(
         { accountId: acc.id, provider: acc.provider, ...r },
         '[mailbox] polled',

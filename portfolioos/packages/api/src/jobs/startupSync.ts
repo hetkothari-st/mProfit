@@ -1,5 +1,6 @@
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
+import { runAsSystem } from '../lib/requestContext.js';
 import { loadAmfiNavToDb } from '../priceFeeds/amfi.service.js';
 import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
 import { syncAllCommodities } from '../priceFeeds/commodity.service.js';
@@ -44,6 +45,12 @@ export async function runStartupSync(): Promise<void> {
     logger.info('[startup] sync disabled via ENABLE_STARTUP_SYNC=false');
     return;
   }
+  // Refreshes shared price feeds plus every user's holding projections —
+  // needs cross-tenant read/write, so run under the RLS bypass context.
+  return runAsSystem(() => runStartupSyncInner());
+}
+
+async function runStartupSyncInner(): Promise<void> {
   logger.info('[startup] initial data sync beginning');
 
   const universeCount = await prisma.stockMaster.count({ where: { isActive: true } });
