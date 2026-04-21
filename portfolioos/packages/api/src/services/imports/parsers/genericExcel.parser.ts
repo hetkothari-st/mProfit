@@ -27,7 +27,9 @@ export const genericExcelParser: Parser = {
     try {
       await writeFile(tempPath, csv, 'utf8');
       const result = await genericCsvParser.parse({ ...ctx, filePath: tempPath, fileName: 'temp.csv' });
-      return result;
+      // Stamp as the Excel adapter so the lineage on Transaction rows points
+      // back to the file the user actually uploaded (not our temp CSV).
+      return { ...result, adapter: 'generic.excel', adapterVer: '1' };
     } finally {
       try {
         await unlink(tempPath);

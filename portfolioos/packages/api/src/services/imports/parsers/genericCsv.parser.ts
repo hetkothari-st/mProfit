@@ -194,6 +194,11 @@ export const genericCsvParser: Parser = {
       });
     }
 
-    return { transactions: txs, warnings };
+    return {
+      adapter: 'generic.csv',
+      adapterVer: '1',
+      transactions: txs,
+      warnings,
+    };
   },
 };

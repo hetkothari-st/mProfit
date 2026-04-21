@@ -379,6 +379,8 @@ export const nsdlCdslCasParser: Parser = {
 
     return {
       broker: depository ? `${depository} CAS` : 'Depository CAS',
+      adapter: 'cas.depository.nsdl_cdsl',
+      adapterVer: '1',
       transactions: txs,
       warnings,
     };

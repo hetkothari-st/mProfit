@@ -133,6 +133,12 @@ export const zerodhaContractNoteParser: Parser = {
       logger.warn({ fileName: ctx.fileName }, '[zerodha-pdf] no trades parsed');
     }
 
-    return { broker: 'Zerodha', transactions: txs, warnings };
+    return {
+      broker: 'Zerodha',
+      adapter: 'zerodha.contract_note',
+      adapterVer: '1',
+      transactions: txs,
+      warnings,
+    };
   },
 };

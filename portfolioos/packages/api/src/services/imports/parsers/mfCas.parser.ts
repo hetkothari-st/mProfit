@@ -168,6 +168,12 @@ export const mfCasParser: Parser = {
       logger.warn({ fileName: ctx.fileName }, '[mf-cas] no trades parsed');
     }
 
-    return { broker: 'CAMS/KFintech CAS', transactions: txs, warnings };
+    return {
+      broker: 'CAMS/KFintech CAS',
+      adapter: 'cas.mf.cams_kfintech',
+      adapterVer: '1',
+      transactions: txs,
+      warnings,
+    };
   },
 };

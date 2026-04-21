@@ -6,6 +6,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js
 import { ensureStockMaster, ensureMutualFundMaster } from './masterData.service.js';
 import { recomputeForAsset } from './holdingsProjection.js';
 import { computeAssetKey } from './assetKey.js';
+import { naturalKeyHash } from './sourceHash.js';
 
 export interface CreateTransactionInput {
   portfolioId: string;
@@ -49,6 +50,14 @@ export interface CreateTransactionInput {
   orderNo?: string;
   tradeNo?: string;
   narration?: string;
+
+  // Ingestion lineage + idempotency (§3.3, §3.4, §4.5). Callers that already
+  // computed a deterministic key (e.g. the importer's file-hash path) pass it
+  // here; otherwise createTransaction derives one from (broker, orderNo,
+  // tradeNo) when those are present.
+  sourceAdapter?: string;
+  sourceAdapterVer?: string;
+  sourceHash?: string;
 }
 
 function d(v: number | string | undefined | null, fallback = 0): Decimal {
@@ -130,6 +139,19 @@ function computeGrossAndNet(
   return { gross, charges, net };
 }
 
+function deriveSourceHash(userId: string, input: CreateTransactionInput): string | null {
+  if (input.sourceHash) return input.sourceHash;
+  if (input.broker && input.orderNo && input.tradeNo) {
+    return naturalKeyHash({
+      userId,
+      broker: input.broker,
+      orderNo: input.orderNo,
+      tradeNo: input.tradeNo,
+    });
+  }
+  return null;
+}
+
 export async function createTransaction(userId: string, input: CreateTransactionInput) {
   await assertPortfolio(userId, input.portfolioId);
 
@@ -137,6 +159,17 @@ export async function createTransaction(userId: string, input: CreateTransaction
   const price = d(input.price);
   if (qty.lte(0)) throw new BadRequestError('Quantity must be > 0');
   if (price.lt(0)) throw new BadRequestError('Price cannot be negative');
+
+  // Idempotency gate: if the caller can identify this event deterministically
+  // (either an explicit hash or a broker-provided natural key) and we've
+  // already ingested it, silently return the existing row. Manual entries
+  // without any source tracking have sourceHash=NULL and are exempted from
+  // dedup — we can't tell a double-click from two genuine trades.
+  const sourceHash = deriveSourceHash(userId, input);
+  if (sourceHash) {
+    const existing = await prisma.transaction.findUnique({ where: { sourceHash } });
+    if (existing) return toTransactionDTO(existing);
+  }
 
   const refs = await resolveAssetRefs(input);
   const { gross, net } = computeGrossAndNet(input);
@@ -176,6 +209,9 @@ export async function createTransaction(userId: string, input: CreateTransaction
     orderNo: input.orderNo ?? null,
     tradeNo: input.tradeNo ?? null,
     narration: input.narration ?? null,
+    sourceAdapter: input.sourceAdapter ?? null,
+    sourceAdapterVer: input.sourceAdapterVer ?? null,
+    sourceHash: sourceHash,
   };
 
   const tx = await prisma.transaction.create({ data });
