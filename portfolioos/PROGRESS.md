@@ -28,9 +28,9 @@ work so history is auditable.
 | 8 | DLQ + IngestionFailure UI | ✅ completed | 2026-04-21 | 2026-04-21 | `d7dc609` | — |
 | 9 | Golden test fixtures (≥5 per parser) | ✅ completed | 2026-04-21 | 2026-04-21 | `b768c28` | — |
 | 10 | CG cascade on edit/delete | ✅ completed | 2026-04-20 | 2026-04-20 | `e7e65e0` | — |
-| 11 | Postgres RLS on user-scoped tables | ✅ completed | 2026-04-21 | 2026-04-21 | `011f4fa` + `<pending>` | — |
-| 12 | Bull worker atomicity (bounded runtime, single tx commit) | ⏳ pending | — | — | — | — |
-| 13 | Linter rules + CI (no silent catch, money-type ban) | ⏳ pending | — | — | — | blocked on task 12 |
+| 11 | Postgres RLS on user-scoped tables | ✅ completed | 2026-04-21 | 2026-04-21 | `011f4fa` + `ed3e072` | — |
+| 12 | Bull worker atomicity (bounded runtime, single tx commit) | ✅ completed | 2026-04-21 | 2026-04-21 | pending | — |
+| 13 | Linter rules + CI (no silent catch, money-type ban) | ⏳ pending | — | — | — | — |
 
 Legend: ✅ completed · 🔄 in_progress · ⏳ pending · ❌ blocked
 
@@ -70,6 +70,32 @@ Landed via `011f4fa` + follow-up:
   false` so the async-context model is deterministic across files.
 
 All 40 tests pass (7 files), typecheck clean, lint clean (0 errors).
+
+## Task 12 — done
+
+Bull worker bounded runtime + atomicity. Addresses BUG-011.
+
+- `src/lib/queue.ts` — 5-min `timeout` in `defaultJobOptions` (Bull hard-kills
+  runaway jobs and surfaces via the failed event). `lockDuration: 5 min` with
+  `lockRenewTime` at half that so concurrent workers don't double-claim a
+  live job. `stalledInterval: 30s`, `maxStalledCount: 1` (Bull default).
+  Added `stalled` event listener for operator visibility.
+- `src/jobs/importWorker.ts` — wraps each job with wall-clock timing; logs
+  a warn when a job exceeds `SLOW_JOB_WARN_MS = 60_000` so regressions get
+  noticed before the 5-min timeout trips. Added terminal-failure listener:
+  when `attemptsMade >= attemptsTotal`, flips the ImportJob row to `FAILED`
+  with an `errorLog` payload (workerError, timedOut flag, attemptsMade) and
+  sets `completedAt`. Without this, a timed-out / crashed job would leave
+  the row stuck in PROCESSING forever and the /import UI would show a
+  ghost. Listener runs under `runAsSystem` because it fires outside any
+  request / runAsUser frame.
+- Existing job body (`processImportJob`) already avoids the long-running
+  transaction antipattern — rows are created via short per-row `$transaction`
+  blocks inside the row loop, not one transaction wrapping the whole parse.
+  No refactor needed for atomicity; the work here is bounding runtime and
+  closing the "ghost PROCESSING row" gap.
+
+40/40 tests pass, typecheck clean, lint clean (0 errors, 25 pre-existing warnings).
 
 ## Exit criteria (§5.2)
 
