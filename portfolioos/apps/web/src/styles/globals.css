@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* PortfolioOS tokens (Section 7 of spec) */
+    --background: 210 33% 98%;           /* #F8FAFC */
+    --foreground: 215 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 30% 12%;
+
+    --primary: 210 93% 17%;              /* #022B54 deep blue */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 215 30% 12%;
+
+    --accent: 137 64% 37%;               /* #219C48 green */
+    --accent-foreground: 0 0% 100%;
+
+    --muted: 210 30% 94%;
+    --muted-foreground: 215 15% 40%;
+
+    --destructive: 0 70% 55%;            /* #D93C3C */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 30% 91%;
+    --input: 214 30% 91%;
+    --ring: 210 93% 17%;
+
+    --positive: 137 64% 37%;
+    --negative: 0 70% 55%;
+
+    --sidebar: 210 93% 17%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-accent: 210 93% 23%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 210 70% 25%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 215 30% 8%;
+    --foreground: 210 40% 96%;
+    --card: 215 30% 11%;
+    --card-foreground: 210 40% 96%;
+    --popover: 215 30% 11%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 210 60% 70%;
+    --primary-foreground: 215 30% 10%;
+    --secondary: 215 25% 18%;
+    --secondary-foreground: 210 40% 96%;
+    --accent: 137 50% 45%;
+    --accent-foreground: 0 0% 100%;
+    --muted: 215 25% 18%;
+    --muted-foreground: 215 15% 65%;
+    --destructive: 0 60% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 25% 22%;
+    --input: 215 25% 22%;
+    --ring: 210 60% 70%;
+    --sidebar: 215 35% 10%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-accent: 215 30% 16%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 215 25% 22%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  .numeric {
+    @apply font-numeric tabular-nums;
+  }
+}
+
+@layer utilities {
+  .text-positive {
+    color: hsl(var(--positive));
+  }
+  .text-negative {
+    color: hsl(var(--negative));
+  }
+  .bg-positive\/10 {
+    background-color: hsl(var(--positive) / 0.1);
+  }
+  .bg-negative\/10 {
+    background-color: hsl(var(--negative) / 0.1);
+  }
+}

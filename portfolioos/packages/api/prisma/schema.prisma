@@ -1,0 +1,759 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USERS & AUTH ───────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  phone         String?
+  pan           String?
+  dob           DateTime?
+  role          UserRole  @default(INVESTOR)
+  plan          PlanTier  @default(FREE)
+  planExpiresAt DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  portfolios      Portfolio[]
+  portfolioGroups PortfolioGroup[]
+  clients         Client[]
+  alerts          Alert[]
+  importJobs      ImportJob[]
+  accounts        Account[]
+  vouchers        Voucher[]
+  refreshTokens   RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  brokerAccounts  BrokerAccount[]
+  mailboxAccounts MailboxAccount[]
+}
+
+// ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
+
+model BrokerAccount {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId  String?
+  portfolio    Portfolio? @relation(fields: [portfolioId], references: [id])
+  provider     BrokerProvider
+  label        String?
+  apiKey       String?
+  apiSecretEnc String?
+  accessTokenEnc String?
+  publicUserId String?
+  status       ConnectorStatus @default(PENDING)
+  lastSyncAt   DateTime?
+  lastError    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum BrokerProvider {
+  ZERODHA_KITE
+  UPSTOX
+  ANGEL_ONE
+  ICICI_BREEZE
+  FIVE_PAISA
+  OTHER
+}
+
+enum ConnectorStatus {
+  PENDING
+  CONNECTED
+  ERROR
+  DISABLED
+}
+
+enum MailboxProvider {
+  IMAP
+  GMAIL_OAUTH
+}
+
+model MailboxAccount {
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider        MailboxProvider @default(IMAP)
+  label           String?
+  host            String?
+  port            Int?            @default(993)
+  secure          Boolean         @default(true)
+  username        String?
+  passwordEnc     String?
+  refreshTokenEnc String?
+  accessTokenEnc  String?
+  tokenExpiresAt  DateTime?
+  googleEmail     String?
+  historyId       String?
+  folder          String          @default("INBOX")
+  fromFilter      String?
+  subjectFilter   String?
+  lastPolledAt    DateTime?
+  lastError       String?
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId])
+}
+
+enum UserRole {
+  INVESTOR
+  HNI
+  FAMILY_OFFICE
+  ADVISOR
+  CA
+  ADMIN
+}
+
+enum PlanTier {
+  FREE
+  LITE
+  PLUS
+  HNI
+  FAMILY_OFFICE
+  ADVISOR
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── CLIENTS (for Advisor/CA role) ──────────────────────────────
+
+model Client {
+  id        String   @id @default(cuid())
+  advisorId String
+  advisor   User     @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+  name      String
+  email     String?
+  pan       String?
+  phone     String?
+  category  String?
+  createdAt DateTime @default(now())
+
+  portfolios Portfolio[]
+
+  @@index([advisorId])
+}
+
+// ─── PORTFOLIOS & GROUPS ─────────────────────────────────────────
+
+model Portfolio {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId    String?
+  client      Client?       @relation(fields: [clientId], references: [id])
+  name        String
+  description String?
+  type        PortfolioType @default(INVESTMENT)
+  currency    String        @default("INR")
+  isDefault   Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  groups       PortfolioGroupMember[]
+  holdings     Holding[]
+  transactions Transaction[]
+  cashFlows    CashFlow[]
+  alerts       Alert[]
+  brokerAccounts BrokerAccount[]
+
+  @@index([userId])
+  @@index([clientId])
+}
+
+enum PortfolioType {
+  INVESTMENT
+  TRADING
+  GOAL
+  STRATEGY
+}
+
+model PortfolioGroup {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  members PortfolioGroupMember[]
+
+  @@index([userId])
+}
+
+model PortfolioGroupMember {
+  portfolioId String
+  groupId     String
+  portfolio   Portfolio      @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  group       PortfolioGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([portfolioId, groupId])
+}
+
+// ─── ASSET MASTER DATA ───────────────────────────────────────────
+
+model StockMaster {
+  id        String   @id @default(cuid())
+  symbol    String   @unique
+  name      String
+  exchange  Exchange
+  isin      String?  @unique
+  sector    String?
+  industry  String?
+  isActive  Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  holdings         Holding[]
+  transactions     Transaction[]
+  prices           StockPrice[]
+  corporateActions CorporateAction[]
+}
+
+enum Exchange {
+  BSE
+  NSE
+  MCX
+  NFO
+  BFO
+}
+
+model MutualFundMaster {
+  id          String     @id @default(cuid())
+  schemeCode  String     @unique
+  schemeName  String
+  amcName     String
+  category    MFCategory
+  subCategory String?
+  isin        String?
+  isActive    Boolean    @default(true)
+  updatedAt   DateTime   @updatedAt
+
+  holdings     Holding[]
+  transactions Transaction[]
+  navHistory   MFNav[]
+}
+
+enum MFCategory {
+  EQUITY
+  DEBT
+  HYBRID
+  SOLUTION_ORIENTED
+  OTHER
+  ETF
+  INDEX_FUND
+  ELSS
+  FMP
+  LIQUID
+}
+
+// ─── PRICES ──────────────────────────────────────────────────────
+
+model StockPrice {
+  id      String      @id @default(cuid())
+  stockId String
+  stock   StockMaster @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  date    DateTime    @db.Date
+  open    Decimal     @db.Decimal(18, 4)
+  high    Decimal     @db.Decimal(18, 4)
+  low     Decimal     @db.Decimal(18, 4)
+  close   Decimal     @db.Decimal(18, 4)
+  volume  BigInt?
+
+  @@unique([stockId, date])
+  @@index([stockId])
+}
+
+model MFNav {
+  id     String           @id @default(cuid())
+  fundId String
+  fund   MutualFundMaster @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  date   DateTime         @db.Date
+  nav    Decimal          @db.Decimal(18, 4)
+
+  @@unique([fundId, date])
+  @@index([fundId])
+}
+
+// ─── CORPORATE ACTIONS ───────────────────────────────────────────
+
+model CorporateAction {
+  id        String              @id @default(cuid())
+  stockId   String
+  stock     StockMaster         @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  type      CorporateActionType
+  exDate    DateTime            @db.Date
+  ratio     Decimal?            @db.Decimal(18, 6)
+  amount    Decimal?            @db.Decimal(18, 4)
+  details   Json?
+  createdAt DateTime            @default(now())
+
+  @@index([stockId, exDate])
+}
+
+enum CorporateActionType {
+  DIVIDEND
+  BONUS
+  SPLIT
+  MERGER
+  DEMERGER
+  RIGHTS
+  BUYBACK
+}
+
+// ─── COMMODITY / CRYPTO / FX PRICE FEEDS ─────────────────────────
+
+model CommodityPrice {
+  id       String          @id @default(cuid())
+  commodity CommodityType
+  date     DateTime        @db.Date
+  price    Decimal         @db.Decimal(18, 4)
+  unit     String          @default("GRAM_24K")
+  source   String          @default("IBJA")
+
+  @@unique([commodity, date, unit])
+  @@index([commodity, date])
+}
+
+enum CommodityType {
+  GOLD
+  SILVER
+  PLATINUM
+}
+
+model CryptoMaster {
+  id          String        @id @default(cuid())
+  coinGeckoId String        @unique
+  symbol      String
+  name        String
+  isActive    Boolean       @default(true)
+  updatedAt   DateTime      @updatedAt
+  prices      CryptoPrice[]
+}
+
+model CryptoPrice {
+  id       String       @id @default(cuid())
+  cryptoId String
+  crypto   CryptoMaster @relation(fields: [cryptoId], references: [id], onDelete: Cascade)
+  date     DateTime     @db.Date
+  priceInr Decimal      @db.Decimal(24, 8)
+  priceUsd Decimal?     @db.Decimal(24, 8)
+
+  @@unique([cryptoId, date])
+  @@index([cryptoId, date])
+}
+
+model FXRate {
+  id       String   @id @default(cuid())
+  baseCcy  String
+  quoteCcy String
+  date     DateTime @db.Date
+  rate     Decimal  @db.Decimal(18, 6)
+  source   String   @default("RBI")
+
+  @@unique([baseCcy, quoteCcy, date])
+  @@index([baseCcy, quoteCcy, date])
+}
+
+// ─── HOLDINGS ────────────────────────────────────────────────────
+
+model Holding {
+  id          String     @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio  @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  assetClass  AssetClass
+
+  stockId String?
+  stock   StockMaster? @relation(fields: [stockId], references: [id])
+
+  fundId String?
+  fund   MutualFundMaster? @relation(fields: [fundId], references: [id])
+
+  assetName String?
+  isin      String?
+
+  quantity      Decimal  @db.Decimal(18, 6)
+  avgCostPrice  Decimal  @db.Decimal(18, 4)
+  totalCost     Decimal  @db.Decimal(18, 4)
+  currentPrice  Decimal? @db.Decimal(18, 4)
+  currentValue  Decimal? @db.Decimal(18, 4)
+  unrealisedPnL Decimal? @db.Decimal(18, 4)
+
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@unique([portfolioId, assetClass, stockId, fundId, isin])
+  @@index([portfolioId])
+  @@index([stockId])
+  @@index([fundId])
+}
+
+enum AssetClass {
+  EQUITY
+  FUTURES
+  OPTIONS
+  MUTUAL_FUND
+  ETF
+  BOND
+  GOVT_BOND
+  CORPORATE_BOND
+  FIXED_DEPOSIT
+  NPS
+  PPF
+  EPF
+  PMS
+  AIF
+  REIT
+  INVIT
+  GOLD_BOND
+  GOLD_ETF
+  PHYSICAL_GOLD
+  PHYSICAL_SILVER
+  ULIP
+  INSURANCE
+  REAL_ESTATE
+  PRIVATE_EQUITY
+  CRYPTOCURRENCY
+  ART_COLLECTIBLES
+  CASH
+  OTHER
+}
+
+// ─── TRANSACTIONS ─────────────────────────────────────────────────
+
+model Transaction {
+  id          String    @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  holdingId   String?
+  holding     Holding?  @relation(fields: [holdingId], references: [id])
+
+  assetClass      AssetClass
+  transactionType TransactionType
+
+  stockId   String?
+  stock     StockMaster? @relation(fields: [stockId], references: [id])
+  fundId    String?
+  fund      MutualFundMaster? @relation(fields: [fundId], references: [id])
+  assetName String?
+  isin      String?
+
+  tradeDate      DateTime  @db.Date
+  settlementDate DateTime? @db.Date
+  quantity       Decimal   @db.Decimal(18, 6)
+  price          Decimal   @db.Decimal(18, 4)
+  grossAmount    Decimal   @db.Decimal(18, 4)
+
+  brokerage       Decimal @default(0) @db.Decimal(18, 4)
+  stt             Decimal @default(0) @db.Decimal(18, 4)
+  stampDuty       Decimal @default(0) @db.Decimal(18, 4)
+  exchangeCharges Decimal @default(0) @db.Decimal(18, 4)
+  gst             Decimal @default(0) @db.Decimal(18, 4)
+  sebiCharges     Decimal @default(0) @db.Decimal(18, 4)
+  otherCharges    Decimal @default(0) @db.Decimal(18, 4)
+  netAmount       Decimal @db.Decimal(18, 4)
+
+  strikePrice Decimal?    @db.Decimal(18, 4)
+  expiryDate  DateTime?   @db.Date
+  optionType  OptionType?
+  lotSize     Int?
+
+  maturityDate      DateTime? @db.Date
+  interestRate      Decimal?  @db.Decimal(8, 4)
+  interestFrequency String?
+
+  broker    String?
+  exchange  Exchange?
+  orderNo   String?
+  tradeNo   String?
+  narration String?
+
+  importJobId String?
+  importJob   ImportJob? @relation(fields: [importJobId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  capitalGains   CapitalGain[]
+  voucherEntries VoucherEntry[]
+
+  @@index([portfolioId, tradeDate])
+  @@index([stockId])
+  @@index([fundId])
+  @@index([importJobId])
+}
+
+enum TransactionType {
+  BUY
+  SELL
+  SWITCH_IN
+  SWITCH_OUT
+  SIP
+  DIVIDEND_REINVEST
+  DIVIDEND_PAYOUT
+  BONUS
+  SPLIT
+  MERGER_IN
+  MERGER_OUT
+  DEMERGER_IN
+  DEMERGER_OUT
+  RIGHTS_ISSUE
+  INTEREST_RECEIVED
+  MATURITY
+  REDEMPTION
+  DEPOSIT
+  WITHDRAWAL
+  OPENING_BALANCE
+}
+
+enum OptionType {
+  CALL
+  PUT
+}
+
+// ─── CAPITAL GAINS ────────────────────────────────────────────────
+
+model CapitalGain {
+  id                String      @id @default(cuid())
+  portfolioId       String
+  sellTransactionId String
+  sellTransaction   Transaction @relation(fields: [sellTransactionId], references: [id], onDelete: Cascade)
+
+  buyTransactionId String
+  assetClass       AssetClass
+  assetName        String
+  isin             String?
+
+  buyDate    DateTime @db.Date
+  sellDate   DateTime @db.Date
+  quantity   Decimal  @db.Decimal(18, 6)
+  buyPrice   Decimal  @db.Decimal(18, 4)
+  sellPrice  Decimal  @db.Decimal(18, 4)
+  buyAmount  Decimal  @db.Decimal(18, 4)
+  sellAmount Decimal  @db.Decimal(18, 4)
+
+  indexedCostOfAcquisition Decimal? @db.Decimal(18, 4)
+
+  capitalGainType CapitalGainType
+  gainLoss        Decimal         @db.Decimal(18, 4)
+  taxableGain     Decimal         @db.Decimal(18, 4)
+  financialYear   String
+
+  createdAt DateTime @default(now())
+
+  @@index([portfolioId, financialYear])
+  @@index([sellTransactionId])
+}
+
+enum CapitalGainType {
+  INTRADAY
+  SHORT_TERM
+  LONG_TERM
+}
+
+// ─── CASH FLOWS ───────────────────────────────────────────────────
+
+model CashFlow {
+  id          String       @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio    @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  date        DateTime     @db.Date
+  type        CashFlowType
+  amount      Decimal      @db.Decimal(18, 4)
+  description String?
+  createdAt   DateTime     @default(now())
+
+  @@index([portfolioId, date])
+}
+
+enum CashFlowType {
+  INFLOW
+  OUTFLOW
+}
+
+// ─── ACCOUNTING MODULE ────────────────────────────────────────────
+
+model Account {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  type           AccountType
+  parentId       String?
+  parent         Account?    @relation("AccountTree", fields: [parentId], references: [id])
+  children       Account[]   @relation("AccountTree")
+  openingBalance Decimal     @default(0) @db.Decimal(18, 4)
+  createdAt      DateTime    @default(now())
+
+  debitEntries  VoucherEntry[] @relation("DebitAccount")
+  creditEntries VoucherEntry[] @relation("CreditAccount")
+
+  @@unique([userId, code])
+  @@index([userId])
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  INCOME
+  EXPENSE
+  EQUITY
+}
+
+model Voucher {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            VoucherType
+  voucherNo       String
+  date            DateTime    @db.Date
+  narration       String?
+  isAutoGenerated Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+
+  entries VoucherEntry[]
+
+  @@unique([userId, type, voucherNo])
+  @@index([userId, date])
+}
+
+enum VoucherType {
+  JOURNAL
+  PAYMENT
+  RECEIPT
+  CONTRA
+  PURCHASE
+  SALES
+}
+
+model VoucherEntry {
+  id              String  @id @default(cuid())
+  voucherId       String
+  voucher         Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  debitAccountId  String
+  creditAccountId String
+  debitAccount    Account @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccount   Account @relation("CreditAccount", fields: [creditAccountId], references: [id])
+  amount          Decimal @db.Decimal(18, 4)
+  narration       String?
+  transactionId   String?
+  transaction     Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([voucherId])
+  @@index([debitAccountId])
+  @@index([creditAccountId])
+}
+
+// ─── IMPORT JOBS ──────────────────────────────────────────────────
+
+model ImportJob {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId String?
+  type        ImportType
+  status      ImportStatus @default(PENDING)
+  fileName    String
+  filePath    String
+  broker      String?
+  totalRows   Int?
+  successRows Int?
+  failedRows  Int?
+  errorLog    Json?
+  createdAt   DateTime     @default(now())
+  completedAt DateTime?
+
+  transactions Transaction[]
+
+  @@index([userId, createdAt])
+}
+
+enum ImportType {
+  CONTRACT_NOTE_PDF
+  CONTRACT_NOTE_EXCEL
+  CONTRACT_NOTE_HTML
+  MF_CAS_PDF
+  MF_CAS_EXCEL
+  BACK_OFFICE_CSV
+  BANK_STATEMENT_PDF
+  BANK_STATEMENT_CSV
+  NPS_STATEMENT
+  GENERIC_CSV
+  GENERIC_EXCEL
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+}
+
+// ─── ALERTS & REMINDERS ───────────────────────────────────────────
+
+model Alert {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId String?
+  portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
+  type        AlertType
+  title       String
+  description String?
+  triggerDate DateTime
+  isRead      Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, triggerDate])
+}
+
+enum AlertType {
+  FD_MATURITY
+  BOND_MATURITY
+  MF_LOCK_IN_EXPIRY
+  SIP_DUE
+  INSURANCE_PREMIUM
+  DIVIDEND_RECEIVED
+  CORPORATE_ACTION
+  PRICE_TARGET
+  CUSTOM
+}

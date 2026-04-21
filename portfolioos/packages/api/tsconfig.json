@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@portfolioos/shared": ["../shared/src/index.ts"],
+      "@portfolioos/shared/*": ["../shared/src/*"]
+    }
+  },
+  "include": ["src/**/*", "prisma/**/*.ts"]
+}

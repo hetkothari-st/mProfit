@@ -1,0 +1,113 @@
+import type { AssetClass, Exchange, TransactionType } from './enums.js';
+
+export interface TransactionDTO {
+  id: string;
+  portfolioId: string;
+  assetClass: AssetClass;
+  transactionType: TransactionType;
+  stockId: string | null;
+  fundId: string | null;
+  assetName: string | null;
+  symbol: string | null;
+  schemeCode: string | null;
+  amcName: string | null;
+  isin: string | null;
+  exchange: Exchange | null;
+  tradeDate: string;
+  settlementDate: string | null;
+  quantity: number;
+  price: number;
+  grossAmount: number;
+  brokerage: number;
+  stt: number;
+  stampDuty: number;
+  exchangeCharges: number;
+  gst: number;
+  sebiCharges: number;
+  otherCharges: number;
+  netAmount: number;
+  strikePrice: number | null;
+  expiryDate: string | null;
+  optionType: 'CALL' | 'PUT' | null;
+  lotSize: number | null;
+  maturityDate: string | null;
+  interestRate: number | null;
+  interestFrequency: string | null;
+  broker: string | null;
+  orderNo: string | null;
+  tradeNo: string | null;
+  narration: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTransactionRequest {
+  portfolioId: string;
+  transactionType: TransactionType;
+  assetClass: AssetClass;
+  stockSymbol?: string;
+  stockName?: string;
+  exchange?: Exchange;
+  schemeCode?: string;
+  schemeName?: string;
+  amcName?: string;
+  assetName?: string;
+  isin?: string;
+  tradeDate: string;
+  settlementDate?: string;
+  quantity: number | string;
+  price: number | string;
+  brokerage?: number | string;
+  stt?: number | string;
+  stampDuty?: number | string;
+  exchangeCharges?: number | string;
+  gst?: number | string;
+  sebiCharges?: number | string;
+  otherCharges?: number | string;
+  strikePrice?: number | string;
+  expiryDate?: string;
+  optionType?: 'CALL' | 'PUT';
+  lotSize?: number;
+  maturityDate?: string;
+  interestRate?: number | string;
+  interestFrequency?: string;
+  broker?: string;
+  orderNo?: string;
+  tradeNo?: string;
+  narration?: string;
+}
+
+export type UpdateTransactionRequest = Partial<CreateTransactionRequest>;
+
+export interface TransactionListResponse {
+  items: TransactionDTO[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface AssetSearchHit {
+  kind: 'STOCK' | 'MUTUAL_FUND';
+  id: string | null;
+  symbol: string | null;
+  name: string;
+  exchange?: Exchange | null;
+  schemeCode?: string | null;
+  amcName?: string | null;
+  isin?: string | null;
+  source: 'LOCAL' | 'YAHOO';
+}
+
+export interface LiveQuote {
+  symbol: string;
+  name: string | null;
+  price: number;
+  previousClose: number | null;
+  dayChange: number | null;
+  dayChangePct: number | null;
+  currency: string;
+  exchange: string;
+}
