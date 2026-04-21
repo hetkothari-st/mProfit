@@ -1,0 +1,10 @@
+CONTRACT NOTE
+Zerodha Broking Limited
+SEBI Registration: INZ000031633
+Trading Member Code: 08081
+
+Trade Date: 2024-01-15
+Settlement Date: 2024-01-17
+
+ISIN         Symbol       Series  Order No.         Trade No.     Time      Buy/Sell  Qty     Rate        Net Amount
+INE002A01018 RELIANCE     EQ      1500000012345    T00000123     09:15:32  B         10      2850.50     28505.00

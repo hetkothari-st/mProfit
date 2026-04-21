@@ -1,0 +1,20 @@
+CAMS Consolidated Account Statement
+CAMS Investor Services
+Mutual Fund Holdings as on 31-Mar-2024
+
+PAN: XXXXX1234
+Investor: TEST USER
+
+Folio No: 12345678 / 90
+
+HDFC Large Cap Fund - Direct Growth - ISIN: INF179K01YV8
+AMC: HDFC Asset Management Company Limited
+Advisor: DIRECT
+Registrar: CAMS
+
+Date          Transaction           Units         NAV          Amount
+01-Jan-2024   Purchase              150.234       66.5821      9999.98
+15-Feb-2024   Purchase              145.678       68.6512      9999.99
+15-Mar-2024   Purchase              138.902       71.9854      10000.00
+
+Closing Units: 434.814

@@ -1,0 +1,24 @@
+KFINTECH Consolidated Account Statement
+KFin Technologies Ltd
+Period: 01-Apr-2023 to 31-Mar-2024
+
+PAN: XXXXX5678
+
+Folio No: 87654321
+
+ICICI Prudential Bluechip Fund - Direct Growth - ISIN: INF109K01Q83
+AMC: ICICI Prudential Asset Management Company Limited
+Advisor: DIRECT
+
+Date          Transaction           Units         NAV          Amount
+05-Apr-2023   Purchase              245.125       81.5912      19999.97
+05-May-2023   SIP Installment       120.456       82.9654      10000.01
+
+Folio No: 87654321
+
+SBI Small Cap Fund - Direct Growth - ISIN: INF200K01T30
+AMC: SBI Funds Management Limited
+
+Date          Transaction           Units         NAV          Amount
+10-Jun-2023   Purchase              85.432        117.0654     10000.00
+20-Jan-2024   Redemption            -25.000       132.4532     3311.33

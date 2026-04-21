@@ -1,0 +1,6 @@
+SchemeCode,SchemeName,AMCName,AssetClass,TransactionType,TradeDate,Quantity,Price
+100384,Axis Bluechip Fund - Growth,Axis Mutual Fund,MUTUAL_FUND,SIP,2024-01-05,41.123,48.7890
+100384,Axis Bluechip Fund - Growth,Axis Mutual Fund,MUTUAL_FUND,SIP,2024-02-05,40.895,48.9100
+100384,Axis Bluechip Fund - Growth,Axis Mutual Fund,MUTUAL_FUND,SIP,2024-03-05,39.112,51.1200
+120465,Parag Parikh Flexi Cap Fund - Direct - Growth,PPFAS Mutual Fund,MUTUAL_FUND,SIP,2024-01-10,25.440,78.6300
+120465,Parag Parikh Flexi Cap Fund - Direct - Growth,PPFAS Mutual Fund,MUTUAL_FUND,BUY,2024-03-18,100.000,79.1450

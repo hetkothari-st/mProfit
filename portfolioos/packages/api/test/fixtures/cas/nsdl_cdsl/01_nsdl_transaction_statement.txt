@@ -1,0 +1,22 @@
+NSDL Consolidated Account Statement
+National Securities Depository Limited
+Transaction Statement
+
+DP ID: IN300513
+Client ID: 12345678
+BO ID: 1205030012345678
+
+Period: 01-Jan-2024 to 31-Mar-2024
+
+RELIANCE INDUSTRIES LIMITED - INE002A01018
+Date          Description                Quantity     Price
+15-Jan-2024   Pur-NSE Credit            20           2855.50
+10-Feb-2024   Pur-NSE Credit            15           2902.75
+22-Mar-2024   Sal-NSE Debit             10           2980.25
+
+TATA CONSULTANCY SERVICES LIMITED - INE467B01029
+Date          Description                Quantity     Price
+05-Feb-2024   Pur-NSE Credit            8            3918.50
+18-Mar-2024   Sal-NSE Debit             5            3965.80
+
+System generated document — please do not reply.

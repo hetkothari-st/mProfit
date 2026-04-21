@@ -1,0 +1,12 @@
+CONTRACT NOTE
+Zerodha Broking Limited
+Trading Member: Zerodha Broking Ltd
+
+Trade Date: 12/03/2024
+
+ISIN         Symbol       Series  Order No.         Trade No.     B/S  Qty    Rate       Net Amount
+INE002A01018 RELIANCE     EQ      2003120001       T20031201     B    7      2918.40    20428.80
+INE030A01027 HINDUNILVR   EQ      2003120002       T20031202     B    4      2422.15    9688.60
+INE090A01021 ICICIBANK    EQ      2003120003       T20031203     B    25     1022.30    25557.50
+INE585B01010 MARUTI       EQ      2003120004       T20031204     S    1      11342.60   11342.60
+INE154A01025 ITC          EQ      2003120005       T20031205     B    45     443.80     19971.00

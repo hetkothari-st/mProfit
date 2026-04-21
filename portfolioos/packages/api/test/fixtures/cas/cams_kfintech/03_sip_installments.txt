@@ -1,0 +1,16 @@
+CAMS Consolidated Account Statement
+Period: 01-Oct-2023 to 31-Mar-2024
+
+Folio No: 11223344
+
+Axis Midcap Fund - Direct Growth - ISIN: INF846K01EW8
+AMC: Axis Asset Management Company Ltd
+Advisor: DIRECT
+
+Date          Transaction                  Units         NAV          Amount
+07-Oct-2023   SIP Installment              89.123        56.1012      5000.00
+07-Nov-2023   SIP Installment              85.654        58.3712      5000.01
+07-Dec-2023   SIP Installment              83.212        60.0912      5000.00
+07-Jan-2024   SIP Installment              81.045        61.6912      5000.00
+07-Feb-2024   SIP Installment              78.654        63.5712      5000.00
+07-Mar-2024   SIP Installment              75.432        66.2812      5000.01

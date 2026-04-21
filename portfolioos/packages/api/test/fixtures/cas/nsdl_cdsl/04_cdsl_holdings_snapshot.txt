@@ -1,0 +1,20 @@
+CDSL Transaction with Holding Statement
+Central Depository Services (India) Limited
+
+DP ID: 12086600
+Client ID: 00987654
+
+Period: 01-Jan-2024 to 31-Jan-2024
+
+STATE BANK OF INDIA - INE062A01020
+Date          Description              Quantity     Rate
+18-Jan-2024   Purchase                 50           768.25
+
+Holdings as on 31-Jan-2024
+ISIN          Scrip                                Qty  Free  Locked  CurrRate  Value     PrevValue  Chg%     Cost
+INE062A01020  STATE BANK OF INDIA - EQ            150  150   0       785.40    117810    115237.50  2.23     768.25
+INE002A01018  RELIANCE INDUSTRIES LIMITED - EQ    20   20    0       2978.50   59570     59102.00   0.79     2855.50
+INE040A01034  HDFC BANK LIMITED - EQ              25   25    0       1512.80   37820     37412.50   1.09     1522.40
+
+Total: 215235.30
+System generated document.

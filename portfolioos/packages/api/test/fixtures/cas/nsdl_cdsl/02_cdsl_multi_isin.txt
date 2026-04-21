@@ -1,0 +1,23 @@
+CDSL Consolidated Account Statement
+Central Depository Services (India) Limited
+Transaction Statement
+
+DP ID: 12030000
+Client ID: 00123456
+Beneficiary Owner: TEST USER
+
+Period: 01-Apr-2023 to 31-Mar-2024
+
+INFOSYS LIMITED - INE009A01021
+Date          Description              Quantity     Rate
+10-Apr-2023   Purchase                 30           1410.25
+15-Jun-2023   Purchase                 20           1365.80
+
+HDFC BANK LIMITED - INE040A01034
+Date          Description              Quantity     Rate
+22-May-2023   Purchase                 25           1678.50
+08-Nov-2023   Sale                     10           1552.75
+
+BHARTI AIRTEL LIMITED - INE397D01024
+Date          Description              Quantity     Rate
+12-Sep-2023   Purchase                 40           895.30

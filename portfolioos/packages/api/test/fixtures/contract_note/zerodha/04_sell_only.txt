@@ -1,0 +1,14 @@
+CONTRACT NOTE
+Zerodha Broking Limited
+SEBI Registration No.: INZ000031633
+
+Trade Date: 2024-04-18
+
+Equity Segment Trades:
+ISIN         Symbol       Series  Order No.         Trade No.    B/S  Qty    Rate       Net Amount
+INE397D01024 BHARTIARTL   EQ      2404180001       T24041801    S    15     1188.25    17823.75
+INE062A01020 SBIN         EQ      2404180002       T24041802    S    20     765.50     15310.00
+INE075A01022 WIPRO        EQ      2404180003       T24041803    S    30     452.10     13563.00
+
+Total Turnover: 46,696.75
+Confirmation of Trade — subject to settlement.

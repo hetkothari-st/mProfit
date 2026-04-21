@@ -1,0 +1,12 @@
+NSDL Consolidated Account Statement
+National Securities Depository Limited
+Transaction Statement
+
+DP ID: IN300513
+Client ID: 99999999
+BO ID: 1205030099999999
+
+Period: 01-Feb-2024 to 29-Feb-2024
+
+No transactions during the statement period.
+System generated document — please do not reply.

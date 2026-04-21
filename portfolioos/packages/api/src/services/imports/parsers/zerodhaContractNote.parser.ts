@@ -83,53 +83,8 @@ export const zerodhaContractNoteParser: Parser = {
       throw err;
     }
 
-    const tradeDateMatch = text.match(DATE_RE);
-    const tradeDate = tradeDateMatch ? toIsoDate(tradeDateMatch[1]!) : null;
-
-    const txs: ParsedTransaction[] = [];
-    const warnings: string[] = [];
-
-    const lines = text.split(/\r?\n/);
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line) continue;
-      const isinMatch = line.match(ISIN_RE);
-      if (!isinMatch) continue;
-
-      const parts = line.split(/\s+/);
-      const isinIdx = parts.findIndex((p) => ISIN_RE.test(p));
-      if (isinIdx < 0) continue;
-
-      const isin = parts[isinIdx]!;
-      const symbol = parts[isinIdx + 1];
-      const side = parts.find((p) => /^[BS]$/i.test(p) || /^BUY$/i.test(p) || /^SELL$/i.test(p));
-      const numericStrs = parts.filter((p) => /^-?[\d,]+(?:\.\d+)?$/.test(p)).map(cleanNumString);
-      if (!symbol || !side || numericStrs.length < 2) continue;
-
-      const qty = numericStrs[numericStrs.length - 3] ?? numericStrs[numericStrs.length - 2];
-      const rate = numericStrs[numericStrs.length - 2];
-
-      if (!qty || !rate) continue;
-      const qtyD = new Decimal(qty);
-      const rateD = new Decimal(rate);
-      if (qtyD.isZero()) continue;
-
-      const isSell = /S/i.test(side);
-      txs.push({
-        assetClass: 'EQUITY',
-        transactionType: isSell ? 'SELL' : 'BUY',
-        symbol: symbol.toUpperCase(),
-        isin,
-        exchange: 'NSE',
-        tradeDate: tradeDate ?? new Date().toISOString().slice(0, 10),
-        quantity: qtyD.abs().toString(),
-        price: rateD.abs().toString(),
-        broker: 'Zerodha',
-      });
-    }
-
-    if (txs.length === 0) {
-      warnings.push('No trades detected in Zerodha PDF — file may be scanned image or unsupported format');
+    const { transactions, warnings } = parseZerodhaContractNoteText(text);
+    if (transactions.length === 0) {
       logger.warn({ fileName: ctx.fileName }, '[zerodha-pdf] no trades parsed');
     }
 
@@ -137,8 +92,70 @@ export const zerodhaContractNoteParser: Parser = {
       broker: 'Zerodha',
       adapter: 'zerodha.contract_note',
       adapterVer: '1',
-      transactions: txs,
+      transactions,
       warnings,
     };
   },
 };
+
+/**
+ * Pure text-parsing entry point — the seam the DLQ pipeline (post-PDF-extract)
+ * and the golden-fixture test suite (§5.1 task 9) both call. Isolating this
+ * from the readPdfText/fs side-effects lets snapshots run against canned
+ * text inputs without needing a real PDF checked into the repo.
+ */
+export function parseZerodhaContractNoteText(text: string): {
+  transactions: ParsedTransaction[];
+  warnings: string[];
+} {
+  const tradeDateMatch = text.match(DATE_RE);
+  const tradeDate = tradeDateMatch ? toIsoDate(tradeDateMatch[1]!) : null;
+
+  const txs: ParsedTransaction[] = [];
+  const warnings: string[] = [];
+
+  const lines = text.split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const isinMatch = line.match(ISIN_RE);
+    if (!isinMatch) continue;
+
+    const parts = line.split(/\s+/);
+    const isinIdx = parts.findIndex((p) => ISIN_RE.test(p));
+    if (isinIdx < 0) continue;
+
+    const isin = parts[isinIdx]!;
+    const symbol = parts[isinIdx + 1];
+    const side = parts.find((p) => /^[BS]$/i.test(p) || /^BUY$/i.test(p) || /^SELL$/i.test(p));
+    const numericStrs = parts.filter((p) => /^-?[\d,]+(?:\.\d+)?$/.test(p)).map(cleanNumString);
+    if (!symbol || !side || numericStrs.length < 2) continue;
+
+    const qty = numericStrs[numericStrs.length - 3] ?? numericStrs[numericStrs.length - 2];
+    const rate = numericStrs[numericStrs.length - 2];
+
+    if (!qty || !rate) continue;
+    const qtyD = new Decimal(qty);
+    const rateD = new Decimal(rate);
+    if (qtyD.isZero()) continue;
+
+    const isSell = /S/i.test(side);
+    txs.push({
+      assetClass: 'EQUITY',
+      transactionType: isSell ? 'SELL' : 'BUY',
+      symbol: symbol.toUpperCase(),
+      isin,
+      exchange: 'NSE',
+      tradeDate: tradeDate ?? new Date().toISOString().slice(0, 10),
+      quantity: qtyD.abs().toString(),
+      price: rateD.abs().toString(),
+      broker: 'Zerodha',
+    });
+  }
+
+  if (txs.length === 0) {
+    warnings.push('No trades detected in Zerodha PDF — file may be scanned image or unsupported format');
+  }
+
+  return { transactions: txs, warnings };
+}

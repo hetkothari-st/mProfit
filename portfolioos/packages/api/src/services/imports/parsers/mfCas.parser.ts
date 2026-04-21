@@ -92,79 +92,9 @@ export const mfCasParser: Parser = {
       }
       throw err;
     }
-    const lines = text.split(/\r?\n/);
 
-    const currentScheme: {
-      name: string;
-      isin: string | null;
-      folio: string | null;
-      amc: string | null;
-    } = { name: '', isin: null, folio: null, amc: null };
-
-    const txs: ParsedTransaction[] = [];
-    const warnings: string[] = [];
-
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line) continue;
-
-      const folioMatch = line.match(FOLIO_RE);
-      if (folioMatch) {
-        currentScheme.folio = folioMatch[1]!.trim();
-        continue;
-      }
-
-      const isinMatch = line.match(ISIN_RE);
-      if (isinMatch && line.length < 200 && line.toLowerCase().includes('isin')) {
-        currentScheme.isin = isinMatch[1]!;
-        const nameBefore = line.split(/ISIN/i)[0]?.trim();
-        if (nameBefore) currentScheme.name = nameBefore;
-        continue;
-      }
-
-      // Try trade row: "DD-MMM-YYYY <desc> <qty> <nav> <amount>"
-      const dateMatch = line.match(DATE_RE);
-      if (!dateMatch) continue;
-
-      const tradeDate = toIso(dateMatch[1]!, dateMatch[2]!, dateMatch[3]!);
-      if (!tradeDate) continue;
-
-      const rest = line.slice(dateMatch[0].length);
-      const { type } = detectType(rest);
-      if (!type) continue;
-
-      const nums = Array.from(rest.matchAll(/-?[\d,]+\.\d{2,6}/g)).map((m) => asDecimal(m[0]));
-      if (nums.length < 2) continue;
-
-      // In CAS statements: units, NAV, amount appear in that order at the end
-      const amount = nums[nums.length - 1]!;
-      const nav = nums[nums.length - 2]!;
-      const units =
-        nums.length >= 3
-          ? nums[nums.length - 3]!
-          : nav.isZero()
-            ? new Decimal(0)
-            : amount.abs().dividedBy(nav);
-
-      if (units.isZero() || nav.isZero()) continue;
-
-      txs.push({
-        assetClass: 'MUTUAL_FUND',
-        transactionType: type,
-        schemeName: currentScheme.name || undefined,
-        isin: currentScheme.isin ?? undefined,
-        assetName: currentScheme.name || undefined,
-        tradeDate,
-        quantity: units.abs().toString(),
-        price: nav.abs().toString(),
-        narration: rest.trim().slice(0, 200),
-      });
-    }
-
-    if (txs.length === 0) {
-      warnings.push(
-        'No MF transactions detected in CAS PDF — if your CAS is password-protected, remove the password and re-upload',
-      );
+    const { transactions, warnings } = parseMfCasText(text);
+    if (transactions.length === 0) {
       logger.warn({ fileName: ctx.fileName }, '[mf-cas] no trades parsed');
     }
 
@@ -172,8 +102,93 @@ export const mfCasParser: Parser = {
       broker: 'CAMS/KFintech CAS',
       adapter: 'cas.mf.cams_kfintech',
       adapterVer: '1',
-      transactions: txs,
+      transactions,
       warnings,
     };
   },
 };
+
+/**
+ * Pure text-parsing entry point — used by the PDF path after text
+ * extraction and by the golden-fixture test suite (§5.1 task 9).
+ */
+export function parseMfCasText(text: string): {
+  transactions: ParsedTransaction[];
+  warnings: string[];
+} {
+  const lines = text.split(/\r?\n/);
+
+  const currentScheme: {
+    name: string;
+    isin: string | null;
+    folio: string | null;
+    amc: string | null;
+  } = { name: '', isin: null, folio: null, amc: null };
+
+  const txs: ParsedTransaction[] = [];
+  const warnings: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const folioMatch = line.match(FOLIO_RE);
+    if (folioMatch) {
+      currentScheme.folio = folioMatch[1]!.trim();
+      continue;
+    }
+
+    const isinMatch = line.match(ISIN_RE);
+    if (isinMatch && line.length < 200 && line.toLowerCase().includes('isin')) {
+      currentScheme.isin = isinMatch[1]!;
+      const nameBefore = line.split(/ISIN/i)[0]?.trim();
+      if (nameBefore) currentScheme.name = nameBefore;
+      continue;
+    }
+
+    // Try trade row: "DD-MMM-YYYY <desc> <qty> <nav> <amount>"
+    const dateMatch = line.match(DATE_RE);
+    if (!dateMatch) continue;
+
+    const tradeDate = toIso(dateMatch[1]!, dateMatch[2]!, dateMatch[3]!);
+    if (!tradeDate) continue;
+
+    const rest = line.slice(dateMatch[0].length);
+    const { type } = detectType(rest);
+    if (!type) continue;
+
+    const nums = Array.from(rest.matchAll(/-?[\d,]+\.\d{2,6}/g)).map((m) => asDecimal(m[0]));
+    if (nums.length < 2) continue;
+
+    const amount = nums[nums.length - 1]!;
+    const nav = nums[nums.length - 2]!;
+    const units =
+      nums.length >= 3
+        ? nums[nums.length - 3]!
+        : nav.isZero()
+          ? new Decimal(0)
+          : amount.abs().dividedBy(nav);
+
+    if (units.isZero() || nav.isZero()) continue;
+
+    txs.push({
+      assetClass: 'MUTUAL_FUND',
+      transactionType: type,
+      schemeName: currentScheme.name || undefined,
+      isin: currentScheme.isin ?? undefined,
+      assetName: currentScheme.name || undefined,
+      tradeDate,
+      quantity: units.abs().toString(),
+      price: nav.abs().toString(),
+      narration: rest.trim().slice(0, 200),
+    });
+  }
+
+  if (txs.length === 0) {
+    warnings.push(
+      'No MF transactions detected in CAS PDF — if your CAS is password-protected, remove the password and re-upload',
+    );
+  }
+
+  return { transactions: txs, warnings };
+}

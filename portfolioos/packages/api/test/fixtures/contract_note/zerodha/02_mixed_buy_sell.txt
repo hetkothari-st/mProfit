@@ -1,0 +1,11 @@
+CONTRACT NOTE
+Zerodha Broking Limited
+SEBI Registration: INZ000031633
+
+Trade Date: 05-Feb-2024
+
+ISIN         Symbol       Series  Order No.         Trade No.     Time      B/S  Qty   Rate       Net Amount
+INE467B01029 TCS          EQ      1500000022222    T00000234     09:45:12  B    5     3920.75    19603.75
+INE009A01021 INFY         EQ      1500000033333    T00000356     10:22:05  B    12    1655.25    19863.00
+INE040A01034 HDFCBANK     EQ      1500000044444    T00000478     11:08:44  S    8     1525.60    12204.80
+INE467B01029 TCS          EQ      1500000055555    T00000612     14:32:18  S    3     3935.00    11805.00

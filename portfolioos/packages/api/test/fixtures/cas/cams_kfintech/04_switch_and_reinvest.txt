@@ -1,0 +1,19 @@
+KFINTECH Consolidated Account Statement
+Period: 01-Jan-2024 to 31-Mar-2024
+
+Folio No: 55566677
+
+Kotak Flexi Cap Fund - Direct Growth - ISIN: INF174K01LS2
+Registrar: KFintech
+
+Date          Transaction                   Units         NAV         Amount
+05-Jan-2024   Purchase                       110.456      72.4512     8002.45
+18-Feb-2024   Dividend Reinvestment          2.234        74.1256     165.64
+12-Mar-2024   Switch Out                     -50.000      75.8923     3794.62
+
+Folio No: 55566677
+
+Kotak Equity Opportunities Fund - Direct Growth - ISIN: INF174K01HF1
+
+Date          Transaction                   Units         NAV         Amount
+12-Mar-2024   Switch In                      62.345       60.8723     3794.61

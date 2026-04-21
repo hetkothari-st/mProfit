@@ -1,0 +1,18 @@
+NSDL Consolidated Account Statement
+National Securities Depository Limited
+Transaction Statement
+
+DP ID: IN302902
+Client ID: 45678901
+
+Period: 01-Jul-2023 to 31-Dec-2023
+
+ICICI BANK LIMITED - INE090A01021
+Date          Description                   Quantity     Rate
+12-Jul-2023   Pur-NSE Credit               50           975.40
+15-Sep-2023   Bonus Credit                 25           0.00
+
+MAZAGON DOCK SHIPBUILDERS LTD - INE249Z01020
+Date          Description                   Quantity     Rate
+20-Oct-2023   IPO Allotment Credit         100          145.00
+05-Nov-2023   Sal-NSE Debit                100          1820.60
