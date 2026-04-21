@@ -8,6 +8,7 @@ import { projectTransactionEvent } from '../../adapters/fileImport/projection.js
 import { createTransaction } from '../transaction.service.js';
 import { hashBytes, positionalHash } from '../sourceHash.js';
 import { getImportQueue } from '../../lib/queue.js';
+import { writeIngestionFailure } from '../ingestionFailures.service.js';
 
 export interface CreateImportJobInput {
   userId: string;
@@ -111,11 +112,19 @@ export async function processImportJob(importJobId: string): Promise<{
     userId: job.userId,
   });
 
-  // A hard parse failure (e.g. truncated PDF, parser threw) surfaces as
-  // ok:false. Phase 4.5 stops short of the full DLQ plumbing (Task 8), so
-  // for now we write the failure into errorLog and mark the job FAILED —
-  // Task 8 will redirect this into IngestionFailure with rawPayload intact.
+  // A hard parse failure (e.g. truncated PDF, parser threw) is both an
+  // ImportJob-level failure (so the user can find it in /import) AND an
+  // IngestionFailure row (so the DLQ carries the rawPayload for manual
+  // review/retry — §3.5, §5.1 task 8).
   if (!result.ok) {
+    const dlq = await writeIngestionFailure({
+      userId: job.userId,
+      sourceAdapter: adapter?.id ?? 'file-import.unmatched',
+      adapterVersion: adapter?.version ?? '1',
+      sourceRef: job.filePath,
+      error: result.error,
+      rawPayload: { fileName: job.fileName, adapter: result.rawPayload ?? null },
+    });
     await prisma.importJob.update({
       where: { id: importJobId },
       data: {
@@ -127,7 +136,7 @@ export async function processImportJob(importJobId: string): Promise<{
           adapter: adapter?.id ?? 'none',
           adapterVer: adapter?.version ?? null,
           parseError: result.error,
-          rawPayload: result.rawPayload ?? null,
+          ingestionFailureId: dlq?.id ?? null,
         },
         completedAt: new Date(),
       },
@@ -239,6 +248,17 @@ export async function processImportJob(importJobId: string): Promise<{
       failed++;
       errors.push({ row: i + 1, reason: (err as Error).message });
       logger.warn({ err, row: i, importJobId }, '[import] row failed');
+      // §3.5: per-row DLQ write. Preserves the offending event shape so a
+      // human can open /imports/failures, see the raw field values, and
+      // either correct+re-upload or create a manual entry.
+      await writeIngestionFailure({
+        userId: job.userId,
+        sourceAdapter: adapterId,
+        adapterVersion: adapterVer,
+        sourceRef: `${job.filePath}#row-${i + 1}`,
+        error: err as Error,
+        rawPayload: { rowIndex: i + 1, event },
+      });
     }
   }
 

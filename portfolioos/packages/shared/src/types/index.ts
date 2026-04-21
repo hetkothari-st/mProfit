@@ -4,3 +4,4 @@ export * from './portfolio.js';
 export * from './transaction.js';
 export * from './enums.js';
 export * from './imports.js';
+export * from './ingestionFailures.js';

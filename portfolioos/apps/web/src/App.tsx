@@ -13,6 +13,7 @@ import { TransactionsPage } from './pages/transactions/TransactionsPage';
 import { StocksPage } from './pages/assetClasses/StocksPage';
 import { MutualFundsPage } from './pages/assetClasses/MutualFundsPage';
 import { ImportPage } from './pages/imports/ImportPage';
+import { FailuresPage } from './pages/imports/FailuresPage';
 import { ConnectorsPage } from './pages/connectors/ConnectorsPage';
 import { MailboxesPage } from './pages/mailboxes/MailboxesPage';
 import { GmailCallbackPage } from './pages/mailboxes/GmailCallbackPage';
@@ -47,6 +48,7 @@ export function App() {
         <Route path="/others" element={<PlaceholderPage title="Other Assets" />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/import" element={<ImportPage />} />
+        <Route path="/import/failures" element={<FailuresPage />} />
         <Route path="/connectors" element={<ConnectorsPage />} />
         <Route path="/mailboxes" element={<MailboxesPage />} />
         <Route path="/gmail/callback" element={<GmailCallbackPage />} />

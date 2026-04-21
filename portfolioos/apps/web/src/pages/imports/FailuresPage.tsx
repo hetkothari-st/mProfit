@@ -1,0 +1,300 @@
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw,
+  Inbox,
+  ChevronRight,
+  ArrowLeft,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/common/EmptyState';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ingestionFailuresApi } from '@/api/ingestionFailures.api';
+import { apiErrorMessage } from '@/api/client';
+import type {
+  IngestionFailureDTO,
+  IngestionResolveAction,
+} from '@portfolioos/shared';
+import {
+  INGESTION_RESOLVE_ACTIONS,
+  INGESTION_RESOLVE_ACTION_LABELS,
+} from '@portfolioos/shared';
+
+type Filter = 'unresolved' | 'resolved' | 'all';
+
+export function FailuresPage() {
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<Filter>('unresolved');
+  const [detail, setDetail] = useState<IngestionFailureDTO | null>(null);
+
+  const listQuery = useQuery({
+    queryKey: ['ingestion-failures', filter],
+    queryFn: () =>
+      ingestionFailuresApi.list({
+        resolved: filter === 'all' ? undefined : filter === 'resolved',
+      }),
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: IngestionResolveAction }) =>
+      ingestionFailuresApi.resolve(id, action),
+    onSuccess: (row) => {
+      toast.success('Marked resolved');
+      setDetail(null);
+      queryClient.invalidateQueries({ queryKey: ['ingestion-failures'] });
+      // Keep the updated row in view if the user stays on the page
+      queryClient.setQueryData<IngestionFailureDTO[] | undefined>(
+        ['ingestion-failures', filter],
+        (old) => old?.map((r) => (r.id === row.id ? row : r)),
+      );
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to resolve')),
+  });
+
+  const rows = listQuery.data ?? [];
+  const unresolvedCount = rows.filter((r) => !r.resolvedAt).length;
+
+  return (
+    <div>
+      <PageHeader
+        title="Ingestion failures"
+        description="Rows that couldn't be parsed into a transaction. Review the payload, correct the file, and retry — or enter the transaction manually."
+      />
+
+      <div className="flex items-center justify-between mb-4">
+        <Link
+          to="/import"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Back to imports
+        </Link>
+        <div className="flex gap-1">
+          {(['unresolved', 'resolved', 'all'] as const).map((f) => (
+            <Button
+              key={f}
+              variant={filter === f ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilter(f)}
+            >
+              {f === 'unresolved' ? `Unresolved${unresolvedCount ? ` (${unresolvedCount})` : ''}` : f[0]!.toUpperCase() + f.slice(1)}
+            </Button>
+          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              queryClient.invalidateQueries({ queryKey: ['ingestion-failures'] })
+            }
+          >
+            <RefreshCw className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Dead-letter queue</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {listQuery.isLoading ? (
+            <div className="p-6 text-sm text-muted-foreground">Loading failures…</div>
+          ) : rows.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                icon={Inbox}
+                title={
+                  filter === 'unresolved'
+                    ? 'No unresolved failures'
+                    : 'Nothing to show'
+                }
+                description={
+                  filter === 'unresolved'
+                    ? 'Every ingestion attempt so far has produced clean transactions. When something fails, it will land here with the raw payload.'
+                    : 'Try another filter.'
+                }
+              />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="text-left font-medium px-4 py-2">Adapter</th>
+                    <th className="text-left font-medium px-4 py-2">Source</th>
+                    <th className="text-left font-medium px-4 py-2">Error</th>
+                    <th className="text-left font-medium px-4 py-2">When</th>
+                    <th className="text-left font-medium px-4 py-2">Status</th>
+                    <th className="w-8" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {rows.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="hover:bg-muted/30 cursor-pointer"
+                      onClick={() => setDetail(r)}
+                    >
+                      <td className="px-4 py-2 font-mono text-xs">
+                        <div>{r.sourceAdapter}</div>
+                        <div className="text-muted-foreground">v{r.adapterVersion}</div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground max-w-[28ch] truncate">
+                        {r.sourceRef}
+                      </td>
+                      <td className="px-4 py-2 max-w-[40ch]">
+                        <div className="flex items-start gap-1.5">
+                          <AlertTriangle className="h-3 w-3 mt-0.5 text-negative shrink-0" />
+                          <span className="truncate">{r.errorMessage}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground">
+                        {new Date(r.createdAt).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2">
+                        {r.resolvedAt ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-positive">
+                            <CheckCircle2 className="h-3 w-3" />
+                            {r.resolvedAction
+                              ? INGESTION_RESOLVE_ACTION_LABELS[r.resolvedAction]
+                              : 'Resolved'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+                            Unresolved
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        <ChevronRight className="h-3 w-3" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={Boolean(detail)} onOpenChange={(o) => !o && setDetail(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Ingestion failure</DialogTitle>
+          </DialogHeader>
+          {detail && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <Field label="Adapter" value={`${detail.sourceAdapter} v${detail.adapterVersion}`} mono />
+                <Field label="Created" value={new Date(detail.createdAt).toLocaleString()} />
+                <Field label="Source" value={detail.sourceRef} mono wrap />
+                <Field
+                  label="Status"
+                  value={
+                    detail.resolvedAt
+                      ? `${detail.resolvedAction ? INGESTION_RESOLVE_ACTION_LABELS[detail.resolvedAction] : 'Resolved'} · ${new Date(detail.resolvedAt).toLocaleString()}`
+                      : 'Unresolved'
+                  }
+                />
+              </div>
+
+              <div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                  Error
+                </div>
+                <div className="rounded-md border border-negative/40 bg-negative/5 p-3 text-sm text-negative font-mono whitespace-pre-wrap break-words">
+                  {detail.errorMessage}
+                </div>
+              </div>
+
+              {detail.errorStack && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-muted-foreground">
+                    Stack trace
+                  </summary>
+                  <pre className="mt-2 p-3 rounded-md bg-muted/50 overflow-x-auto text-[11px]">
+                    {detail.errorStack}
+                  </pre>
+                </details>
+              )}
+
+              {detail.rawPayload !== null && detail.rawPayload !== undefined && (
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    Raw payload
+                  </div>
+                  <pre className="p-3 rounded-md bg-muted/50 overflow-x-auto text-[11px] max-h-64">
+                    {JSON.stringify(detail.rawPayload, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {!detail.resolvedAt && (
+                <div className="border-t pt-4">
+                  <div className="text-sm font-medium mb-2">Mark as resolved</div>
+                  <div className="flex flex-wrap gap-2">
+                    {INGESTION_RESOLVE_ACTIONS.map((action) => (
+                      <Button
+                        key={action}
+                        variant="outline"
+                        size="sm"
+                        disabled={resolveMutation.isPending}
+                        onClick={() =>
+                          resolveMutation.mutate({ id: detail.id, action })
+                        }
+                      >
+                        {INGESTION_RESOLVE_ACTION_LABELS[action]}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  mono,
+  wrap,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  wrap?: boolean;
+}) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground uppercase tracking-wide">
+        {label}
+      </div>
+      <div
+        className={[
+          'text-sm',
+          mono ? 'font-mono' : '',
+          wrap ? 'break-all' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
