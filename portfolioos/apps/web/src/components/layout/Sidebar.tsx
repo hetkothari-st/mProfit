@@ -18,11 +18,14 @@ import {
   Plug,
   Mail,
   FileDown,
+  Search,
+  Inbox,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
+import { BudgetGauge } from './BudgetGauge';
 
 interface NavItem {
   label: string;
@@ -48,6 +51,14 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Fixed Deposits', to: '/fds', icon: PiggyBank },
       { label: 'NPS', to: '/nps', icon: ShieldCheck },
       { label: 'Others', to: '/others', icon: Boxes },
+    ],
+  },
+  {
+    heading: 'Ingestion',
+    items: [
+      { label: 'Review', to: '/ingestion/review', icon: Inbox },
+      { label: 'Senders', to: '/ingestion/senders', icon: Mail },
+      { label: 'Discovery', to: '/ingestion/discovery', icon: Search },
     ],
   },
   {
@@ -136,11 +147,14 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {!collapsed && (
-        <div className="px-4 py-3 border-t border-sidebar-border text-xs text-sidebar-foreground/60">
-          v0.3.0 · Phase 3
-        </div>
-      )}
+      <div className="border-t border-sidebar-border">
+        <BudgetGauge collapsed={collapsed} />
+        {!collapsed && (
+          <div className="px-4 py-2 text-xs text-sidebar-foreground/60">
+            v0.5.0 · Phase 5-A
+          </div>
+        )}
+      </div>
     </aside>
   );
 }

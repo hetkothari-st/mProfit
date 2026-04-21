@@ -19,6 +19,9 @@ import { MailboxesPage } from './pages/mailboxes/MailboxesPage';
 import { GmailCallbackPage } from './pages/mailboxes/GmailCallbackPage';
 import { CasPage } from './pages/cas/CasPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
+import { DiscoveryPage } from './pages/ingestion/DiscoveryPage';
+import { SendersPage } from './pages/ingestion/SendersPage';
+import { ReviewPage } from './pages/ingestion/ReviewPage';
 
 export function App() {
   return (
@@ -53,6 +56,9 @@ export function App() {
         <Route path="/mailboxes" element={<MailboxesPage />} />
         <Route path="/gmail/callback" element={<GmailCallbackPage />} />
         <Route path="/cas" element={<CasPage />} />
+        <Route path="/ingestion/discovery" element={<DiscoveryPage />} />
+        <Route path="/ingestion/senders" element={<SendersPage />} />
+        <Route path="/ingestion/review" element={<ReviewPage />} />
         <Route path="/accounting" element={<PlaceholderPage title="Accounting" />} />
         <Route path="/alerts" element={<PlaceholderPage title="Alerts & Reminders" />} />
         <Route path="/settings" element={<SettingsPage />} />
