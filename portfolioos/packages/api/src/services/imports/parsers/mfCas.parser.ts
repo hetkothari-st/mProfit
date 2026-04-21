@@ -11,8 +11,8 @@ import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../l
 
 const ISIN_RE = /\b(IN[EF][0-9A-Z]{9})\b/;
 const DATE_RE = /^(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{4})/;
-const FOLIO_RE = /Folio No[:\s]*([A-Z0-9/\-]+)/i;
-const AMC_RE = /^([A-Z][A-Za-z0-9 &.'\-]{2,}(?:Mutual Fund|MF|Asset Management))/m;
+const FOLIO_RE = /Folio No[:\s]*([A-Z0-9/-]+)/i;
+const AMC_RE = /^([A-Z][A-Za-z0-9 &.'-]{2,}(?:Mutual Fund|MF|Asset Management))/m;
 const SCHEME_RE = /ISIN[:\s]*(IN[EF][0-9A-Z]{9})[\s\S]*?(?:Scheme|Advisor|Registrar)/i;
 
 function toIso(d: string, mo: string, y: string): string | null {
@@ -85,7 +85,7 @@ export const mfCasParser: Parser = {
     }
     const lines = text.split(/\r?\n/);
 
-    let currentScheme: {
+    const currentScheme: {
       name: string;
       isin: string | null;
       folio: string | null;

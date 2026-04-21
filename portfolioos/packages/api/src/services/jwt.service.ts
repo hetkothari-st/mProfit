@@ -56,7 +56,8 @@ export function refreshTokenExpiry(): Date {
       d: 24 * 60 * 60 * 1000,
       w: 7 * 24 * 60 * 60 * 1000,
     };
-    ms = value * (mult[unit] ?? mult.d!);
+    const multiplier = unit ? mult[unit] : undefined;
+    ms = value * (multiplier ?? mult.d!);
   }
   return new Date(Date.now() + ms);
 }

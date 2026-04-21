@@ -216,7 +216,7 @@ export const nsdlCdslCasParser: Parser = {
         .filter((t) => t.v !== 0);
 
       // Strip date-component tokens from the head
-      let candidates = numTokens.slice();
+      const candidates = numTokens.slice();
       const dateLike = /^(\d{1,2}|\d{4})$/;
       let stripped = 0;
       while (candidates.length && stripped < 3 && dateLike.test(candidates[0]!.raw)) {

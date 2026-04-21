@@ -1,7 +1,8 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import pinoHttp from 'pino-http';
+import { pinoHttp } from 'pino-http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -29,14 +30,14 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(
   pinoHttp({
     logger,
-    customLogLevel: (_req, res, err) => {
+    customLogLevel: (_req: IncomingMessage, res: ServerResponse, err?: Error) => {
       if (err || res.statusCode >= 500) return 'error';
       if (res.statusCode >= 400) return 'warn';
       return 'info';
     },
     serializers: {
-      req: (req) => ({ method: req.method, url: req.url }),
-      res: (res) => ({ statusCode: res.statusCode }),
+      req: (req: Request) => ({ method: req.method, url: req.url }),
+      res: (res: Response) => ({ statusCode: res.statusCode }),
     },
   }),
 );

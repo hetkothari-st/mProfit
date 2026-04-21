@@ -8,10 +8,8 @@
     "rootDir": "src",
     "types": ["node"],
     "baseUrl": ".",
-    "paths": {
-      "@portfolioos/shared": ["../shared/src/index.ts"],
-      "@portfolioos/shared/*": ["../shared/src/*"]
-    }
+    "declaration": false,
+    "declarationMap": false
   },
-  "include": ["src/**/*", "prisma/**/*.ts"]
+  "include": ["src/**/*"]
 }

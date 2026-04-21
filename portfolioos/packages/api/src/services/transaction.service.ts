@@ -336,7 +336,7 @@ type TransactionWithRefs = Prisma.TransactionGetPayload<{
   };
 }>;
 
-export function toTransactionDTO(tx: TransactionWithRefs | Prisma.TransactionGetPayload<{}>) {
+export function toTransactionDTO(tx: TransactionWithRefs | Prisma.TransactionGetPayload<Record<string, never>>) {
   const anyTx = tx as any;
   return {
     id: tx.id,

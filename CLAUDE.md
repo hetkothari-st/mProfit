@@ -787,6 +787,15 @@ Goal: Fix every bug class in Section 2.4 without breaking existing features. Fea
 
 Each task ends with a commit. Do them in this order to minimize cascading breakage.
 
+0. **Repair build/test/lint infra.** Added 2026-04-21 after the audit surfaced that `pnpm -r run build|typecheck|lint|test` all fail on a fresh checkout. None of the downstream tasks are executable until these are green. In order:
+   - Fix `packages/api/tsconfig.build.json` — drop the stray `declarationMap` override (TS5069).
+   - Fix `packages/api/tsconfig.json` — stop including `prisma/**/*.ts` from the shared tsconfig (TS6059 on `seed.ts`); keep the `prisma:seed` script working via `tsx`.
+   - Install ESLint + `@typescript-eslint/*` in both `packages/api` and `apps/web`. Add a shared `.eslintrc.cjs` per package (strict preset only; the bespoke rules in §5.1 task 13 are added later).
+   - Install `vitest` in `packages/shared` and add a `test` script. Add minimal `vitest.config.ts` files where missing.
+   - Add one smoke test per testable package (`packages/api`, `packages/shared`, `apps/web`) so `pnpm -r run test` exits 0 and we have a working baseline.
+   - Verify: `pnpm -r run build && pnpm -r run typecheck && pnpm -r run lint && pnpm -r run test` all pass.
+   - Commit: `chore(infra): repair build/typecheck/lint/test baseline`.
+
 1. **Add invariant tests first.** Before fixing anything, write tests that expose the bugs:
    - `test/invariants/idempotency.test.ts` — re-importing the same CAS twice yields 0 new rows. Currently FAILS.
    - `test/invariants/holding-uniqueness.test.ts` — creating two FD holdings with different `assetName` produces 2 distinct rows. Currently FAILS.

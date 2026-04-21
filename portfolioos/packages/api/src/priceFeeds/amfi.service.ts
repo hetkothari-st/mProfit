@@ -42,7 +42,9 @@ function parseDate(dateStr: string): Date | null {
     Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
     Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
   };
-  const mo = months[m[2]];
+  const monthKey = m[2];
+  if (!monthKey) return null;
+  const mo = months[monthKey];
   if (mo === undefined) return null;
   return new Date(Date.UTC(Number(m[3]), mo, Number(m[1])));
 }
@@ -86,6 +88,7 @@ export function parseAmfiNavText(text: string): AmfiNavRow[] {
     if (parts.length < 6) continue;
     const [schemeCode, isin, isinReinvest, schemeName, navStr, dateStr] = parts;
     if (!schemeCode || !/^\d+$/.test(schemeCode.trim())) continue;
+    if (!schemeName || !dateStr) continue;
     const nav = navStr?.trim();
     if (!nav || nav === 'N.A.' || isNaN(Number(nav))) continue;
 

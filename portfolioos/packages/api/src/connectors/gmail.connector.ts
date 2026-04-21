@@ -152,7 +152,7 @@ async function getAuthorizedClientFor(accountId: string): Promise<OAuth2Client> 
         }
       : {}),
   });
-  client.on('tokens', (tokens) => {
+  client.on('tokens', (tokens: { access_token?: string | null; expiry_date?: number | null; refresh_token?: string | null }) => {
     void (async () => {
       const update: Record<string, unknown> = {};
       if (tokens.access_token) update.accessTokenEnc = encryptSecret(tokens.access_token);

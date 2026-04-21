@@ -43,6 +43,7 @@ export async function yahooQuoteRaw(symbols: string[]): Promise<any[]> {
   for (let i = 0; i < symbols.length; i += CHUNK_SIZE) {
     const chunk = symbols.slice(i, i + CHUNK_SIZE);
     let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
         const results = await throttled(() => yahooFinance.quote(chunk));
