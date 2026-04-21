@@ -1,11 +1,18 @@
-import { Decimal } from 'decimal.js';
+import { Decimal, toDecimal } from '@portfolioos/shared';
 import type { Transaction, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';
 
+/**
+ * Internal cashflow representation. Amounts are Decimal to avoid IEEE-754
+ * accumulation drift across thousands of transactions (BUG-005, BUG-009).
+ * The Newton-Raphson XIRR solver itself still operates on JS numbers — that
+ * is fundamental to transcendental rate-search and its error is bounded by
+ * the iteration tolerance, not the input magnitude.
+ */
 export interface CashFlow {
   date: Date;
-  amount: number; // negative = outflow (buy), positive = inflow (sell/dividend/terminal)
+  amount: Decimal; // negative = outflow (buy), positive = inflow (sell/dividend/terminal)
 }
 
 const OUTFLOW_TYPES = new Set<TransactionType>([
@@ -35,7 +42,10 @@ function yearFraction(a: Date, b: Date): number {
 function npv(rate: number, flows: CashFlow[], t0: Date): number {
   let total = 0;
   for (const cf of flows) {
-    total += cf.amount / Math.pow(1 + rate, yearFraction(t0, cf.date));
+    // Rate search is a float operation by nature; cast cashflow amount once
+    // at the boundary. The accumulator error matters less than the solver
+    // tolerance (1e-7), so we don't need Decimal here.
+    total += cf.amount.toNumber() / Math.pow(1 + rate, yearFraction(t0, cf.date));
   }
   return total;
 }
@@ -44,7 +54,7 @@ function npvDerivative(rate: number, flows: CashFlow[], t0: Date): number {
   let total = 0;
   for (const cf of flows) {
     const t = yearFraction(t0, cf.date);
-    total -= (t * cf.amount) / Math.pow(1 + rate, t + 1);
+    total -= (t * cf.amount.toNumber()) / Math.pow(1 + rate, t + 1);
   }
   return total;
 }
@@ -56,8 +66,8 @@ function npvDerivative(rate: number, flows: CashFlow[], t0: Date): number {
 export function xirr(flows: CashFlow[], guess = 0.1): number | null {
   if (flows.length < 2) return null;
   // Require at least one positive and one negative flow
-  const hasPos = flows.some((f) => f.amount > 0);
-  const hasNeg = flows.some((f) => f.amount < 0);
+  const hasPos = flows.some((f) => f.amount.greaterThan(0));
+  const hasNeg = flows.some((f) => f.amount.lessThan(0));
   if (!hasPos || !hasNeg) return null;
 
   const sorted = [...flows].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -108,14 +118,14 @@ interface PortfolioCashflowOptions {
 }
 
 function txToCashflow(tx: Transaction): CashFlow | null {
-  const net = new Decimal(tx.netAmount.toString()).toNumber();
+  const net = toDecimal(tx.netAmount);
   if (OUTFLOW_TYPES.has(tx.transactionType)) {
     // BONUS / demerger-in have cost 0 but we want qty impact only → skip
-    if (net === 0) return null;
-    return { date: tx.tradeDate, amount: -net };
+    if (net.isZero()) return null;
+    return { date: tx.tradeDate, amount: net.negated() };
   }
   if (INFLOW_TYPES.has(tx.transactionType)) {
-    if (net === 0) return null;
+    if (net.isZero()) return null;
     return { date: tx.tradeDate, amount: net };
   }
   return null;
@@ -125,17 +135,17 @@ async function terminalValue(portfolioId: string, filter: {
   assetClass?: string;
   stockId?: string;
   fundId?: string;
-}): Promise<number> {
+}): Promise<Decimal> {
   const where: Record<string, unknown> = { portfolioId };
   if (filter.assetClass) where.assetClass = filter.assetClass;
   if (filter.stockId) where.stockId = filter.stockId;
   if (filter.fundId) where.fundId = filter.fundId;
   const holdings = await prisma.holding.findMany({ where });
-  let total = 0;
+  let total = new Decimal(0);
   for (const h of holdings) {
     let price: Decimal | null = null;
     if (h.currentPrice) {
-      price = new Decimal(h.currentPrice.toString());
+      price = toDecimal(h.currentPrice);
     } else {
       price = await routePriceLookup({
         assetClass: h.assetClass,
@@ -144,8 +154,8 @@ async function terminalValue(portfolioId: string, filter: {
       });
     }
     if (!price) continue;
-    const qty = new Decimal(h.quantity.toString());
-    total += qty.times(price).toNumber();
+    const qty = toDecimal(h.quantity);
+    total = total.plus(qty.times(price));
   }
   return total;
 }
@@ -177,12 +187,12 @@ export async function computePortfolioXirr(
   });
 
   const flows: CashFlow[] = [];
-  let invested = 0;
+  let invested = new Decimal(0);
   for (const tx of txs) {
     const cf = txToCashflow(tx);
     if (!cf) continue;
     flows.push(cf);
-    if (cf.amount < 0) invested += -cf.amount;
+    if (cf.amount.isNegative()) invested = invested.plus(cf.amount.negated());
   }
 
   const tv = await terminalValue(portfolioId, {
@@ -190,21 +200,21 @@ export async function computePortfolioXirr(
     stockId: opts.stockId,
     fundId: opts.fundId,
   });
-  if (tv > 0) flows.push({ date: opts.to ?? new Date(), amount: tv });
+  if (tv.greaterThan(0)) flows.push({ date: opts.to ?? new Date(), amount: tv });
 
   return {
     xirr: xirr(flows),
     cashflowCount: flows.length,
-    totalInvested: invested,
-    terminalValue: tv,
+    totalInvested: invested.toNumber(),
+    terminalValue: tv.toNumber(),
   };
 }
 
 export async function computeUserXirr(userId: string): Promise<XirrResult> {
   const portfolios = await prisma.portfolio.findMany({ where: { userId }, select: { id: true } });
   const allFlows: CashFlow[] = [];
-  let invested = 0;
-  let tv = 0;
+  let invested = new Decimal(0);
+  let tv = new Decimal(0);
 
   for (const p of portfolios) {
     const txs = await prisma.transaction.findMany({
@@ -215,17 +225,17 @@ export async function computeUserXirr(userId: string): Promise<XirrResult> {
       const cf = txToCashflow(tx);
       if (!cf) continue;
       allFlows.push(cf);
-      if (cf.amount < 0) invested += -cf.amount;
+      if (cf.amount.isNegative()) invested = invested.plus(cf.amount.negated());
     }
-    tv += await terminalValue(p.id, {});
+    tv = tv.plus(await terminalValue(p.id, {}));
   }
-  if (tv > 0) allFlows.push({ date: new Date(), amount: tv });
+  if (tv.greaterThan(0)) allFlows.push({ date: new Date(), amount: tv });
 
   return {
     xirr: xirr(allFlows),
     cashflowCount: allFlows.length,
-    totalInvested: invested,
-    terminalValue: tv,
+    totalInvested: invested.toNumber(),
+    terminalValue: tv.toNumber(),
   };
 }
 

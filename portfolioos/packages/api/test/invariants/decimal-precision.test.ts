@@ -68,25 +68,32 @@ describe('invariant: decimal precision on money (BUG-005, BUG-009)', () => {
     const s = await createTestScope('decimal-xirr');
     try {
       const seeded = await seedStockMaster(s, { symbol: 'TSTDRIFT' });
+      const stock = await prisma.stockMaster.findUnique({ where: { symbol: seeded.symbol } });
+      if (!stock) throw new Error('seed failed');
 
-      // 1000 BUYs of 1 unit at 0.10, one per day so they're distinct dates.
+      // Bulk-insert 1000 Transactions directly. This test exercises the XIRR
+      // math's Decimal fidelity, not the ingestion flow — routing each BUY
+      // through createTransaction would also trigger 1000 holding recalcs
+      // and blow the 30s timeout.
       const base = new Date('2021-01-01T00:00:00Z');
-      const rows = Array.from({ length: 1000 }, (_, i) => {
+      const data = Array.from({ length: 1000 }, (_, i) => {
         const d = new Date(base.getTime() + i * 24 * 60 * 60 * 1000);
-        return d.toISOString().slice(0, 10);
-      });
-      for (const tradeDate of rows) {
-        await createTransaction(s.userId, {
+        return {
           portfolioId: s.portfolioId,
-          transactionType: 'BUY',
-          assetClass: 'EQUITY',
-          stockSymbol: seeded.symbol,
-          exchange: 'NSE',
-          tradeDate,
+          assetClass: 'EQUITY' as const,
+          transactionType: 'BUY' as const,
+          stockId: stock.id,
+          assetName: stock.name,
+          isin: stock.isin,
+          tradeDate: d,
           quantity: '1',
           price: '0.10',
-        });
-      }
+          grossAmount: '0.10',
+          netAmount: '0.10',
+          exchange: 'NSE' as const,
+        };
+      });
+      await prisma.transaction.createMany({ data });
 
       const result = await computePortfolioXirr(s.portfolioId);
       // totalInvested MUST be exactly 100. IEEE-754 drift would give
