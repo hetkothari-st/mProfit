@@ -140,7 +140,7 @@ async function terminalValue(portfolioId: string, filter: {
   if (filter.assetClass) where.assetClass = filter.assetClass;
   if (filter.stockId) where.stockId = filter.stockId;
   if (filter.fundId) where.fundId = filter.fundId;
-  const holdings = await prisma.holding.findMany({ where });
+  const holdings = await prisma.holdingProjection.findMany({ where });
   let total = new Decimal(0);
   for (const h of holdings) {
     let price: Decimal | null = null;

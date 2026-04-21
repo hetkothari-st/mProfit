@@ -55,7 +55,9 @@ describe('invariant: decimal precision on money (BUG-005, BUG-009)', () => {
       });
     }
 
-    const holding = await prisma.holding.findFirst({
+    // HoldingProjection replaced Holding as the source of truth per §3.1;
+    // the legacy table is frozen post-§4.10 step 6.
+    const holding = await prisma.holdingProjection.findFirst({
       where: { portfolioId: scope.portfolioId, assetClass: 'EQUITY' },
     });
     expect(holding).not.toBeNull();

@@ -138,7 +138,7 @@ export async function updateStockPricesFromYahoo(
 ): Promise<{ updated: number; failed: number; scope: string }> {
   let stocks: { id: string; symbol: string; exchange: Exchange }[];
   if (opts.onlyHeld) {
-    const held = await prisma.holding.findMany({
+    const held = await prisma.holdingProjection.findMany({
       where: { stockId: { not: null } },
       select: { stockId: true },
       distinct: ['stockId'],

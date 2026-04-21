@@ -4,7 +4,8 @@ import type { AssetClass, Exchange, Prisma, TransactionType } from '@prisma/clie
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { ensureStockMaster, ensureMutualFundMaster } from './masterData.service.js';
-import { recalculateHoldingForKey } from './holdings.service.js';
+import { recomputeForAsset } from './holdingsProjection.js';
+import { computeAssetKey } from './assetKey.js';
 
 export interface CreateTransactionInput {
   portfolioId: string;
@@ -139,6 +140,7 @@ export async function createTransaction(userId: string, input: CreateTransaction
 
   const refs = await resolveAssetRefs(input);
   const { gross, net } = computeGrossAndNet(input);
+  const assetKey = computeAssetKey(refs);
 
   const data: Prisma.TransactionUncheckedCreateInput = {
     portfolioId: input.portfolioId,
@@ -148,6 +150,7 @@ export async function createTransaction(userId: string, input: CreateTransaction
     fundId: refs.fundId,
     assetName: refs.assetName,
     isin: refs.isin,
+    assetKey,
     tradeDate: toDateOnly(input.tradeDate),
     settlementDate: input.settlementDate ? toDateOnly(input.settlementDate) : null,
     quantity: qty.toString(),
@@ -177,13 +180,7 @@ export async function createTransaction(userId: string, input: CreateTransaction
 
   const tx = await prisma.transaction.create({ data });
 
-  await recalculateHoldingForKey({
-    portfolioId: tx.portfolioId,
-    assetClass: tx.assetClass,
-    stockId: tx.stockId,
-    fundId: tx.fundId,
-    isin: tx.isin,
-  });
+  await recomputeForAsset(tx.portfolioId, assetKey);
 
   return toTransactionDTO(tx);
 }
@@ -238,13 +235,18 @@ export async function updateTransaction(
 
   const updated = await prisma.transaction.update({ where: { id }, data: patch });
 
-  await recalculateHoldingForKey({
-    portfolioId: updated.portfolioId,
-    assetClass: updated.assetClass,
-    stockId: updated.stockId,
-    fundId: updated.fundId,
-    isin: updated.isin,
-  });
+  // The current update endpoint doesn't mutate stockId/fundId/isin/assetName,
+  // so the assetKey is stable — but fall back to recompute if a row pre-dates
+  // the §4.10 backfill and is somehow still NULL.
+  const assetKey =
+    updated.assetKey ??
+    computeAssetKey({
+      stockId: updated.stockId,
+      fundId: updated.fundId,
+      isin: updated.isin,
+      assetName: updated.assetName,
+    });
+  await recomputeForAsset(updated.portfolioId, assetKey);
 
   return toTransactionDTO(updated);
 }
@@ -256,13 +258,15 @@ export async function deleteTransaction(userId: string, id: string): Promise<voi
 
   await prisma.transaction.delete({ where: { id } });
 
-  await recalculateHoldingForKey({
-    portfolioId: existing.portfolioId,
-    assetClass: existing.assetClass,
-    stockId: existing.stockId,
-    fundId: existing.fundId,
-    isin: existing.isin,
-  });
+  const assetKey =
+    existing.assetKey ??
+    computeAssetKey({
+      stockId: existing.stockId,
+      fundId: existing.fundId,
+      isin: existing.isin,
+      assetName: existing.assetName,
+    });
+  await recomputeForAsset(existing.portfolioId, assetKey);
 }
 
 export async function getTransaction(userId: string, id: string) {

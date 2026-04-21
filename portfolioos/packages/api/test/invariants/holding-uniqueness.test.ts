@@ -53,9 +53,11 @@ describe('invariant: holdings uniqueness for non-stock/non-MF assets (BUG-001)',
       maturityDate: '2026-02-01',
     });
 
-    const holdings = await prisma.holding.findMany({
+    // Read from HoldingProjection — the legacy Holding table is frozen per §4.10
+    // step 6, and the projection is what downstream UI/reports query.
+    const holdings = await prisma.holdingProjection.findMany({
       where: { portfolioId: scope.portfolioId, assetClass: 'FIXED_DEPOSIT' },
-      orderBy: { updatedAt: 'asc' },
+      orderBy: { computedAt: 'asc' },
     });
 
     expect(holdings).toHaveLength(2);

@@ -31,12 +31,12 @@ export async function listPortfolios(userId: string) {
     where: { userId },
     orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
     include: {
-      _count: { select: { holdings: true, transactions: true } },
+      _count: { select: { holdingProjections: true, transactions: true } },
     },
   });
   return rows.map((p) => ({
     ...toPortfolioDTO(p),
-    holdingCount: p._count.holdings,
+    holdingCount: p._count.holdingProjections,
     transactionCount: p._count.transactions,
   }));
 }
@@ -122,7 +122,7 @@ export async function deletePortfolio(userId: string, id: string): Promise<void>
 export async function getPortfolioSummary(userId: string, id: string) {
   await ensureOwnership(userId, id);
   const [agg, holdingCount, holdings] = await Promise.all([
-    prisma.holding.aggregate({
+    prisma.holdingProjection.aggregate({
       where: { portfolioId: id },
       _sum: {
         totalCost: true,
@@ -130,8 +130,8 @@ export async function getPortfolioSummary(userId: string, id: string) {
         unrealisedPnL: true,
       },
     }),
-    prisma.holding.count({ where: { portfolioId: id } }),
-    prisma.holding.findMany({
+    prisma.holdingProjection.count({ where: { portfolioId: id } }),
+    prisma.holdingProjection.findMany({
       where: { portfolioId: id, stockId: { not: null } },
       select: { quantity: true, currentValue: true, stockId: true },
     }),
@@ -191,19 +191,39 @@ export async function getPortfolioSummary(userId: string, id: string) {
 
 export async function getPortfolioHoldings(userId: string, id: string) {
   await ensureOwnership(userId, id);
-  const holdings = await prisma.holding.findMany({
+  const holdings = await prisma.holdingProjection.findMany({
     where: { portfolioId: id },
-    include: {
-      stock: { select: { symbol: true, name: true, isin: true } },
-      fund: { select: { schemeCode: true, schemeName: true, isin: true } },
-    },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: { computedAt: 'desc' },
   });
 
+  // HoldingProjection stores assetName/isin directly — we still need stock
+  // symbol / fund schemeCode for display, so batch-fetch those in one round-
+  // trip instead of 1+N joins.
+  const stockIds = [...new Set(holdings.map((h) => h.stockId).filter((s): s is string => !!s))];
+  const fundIds = [...new Set(holdings.map((h) => h.fundId).filter((f): f is string => !!f))];
+  const [stocks, funds] = await Promise.all([
+    stockIds.length
+      ? prisma.stockMaster.findMany({
+          where: { id: { in: stockIds } },
+          select: { id: true, symbol: true, name: true, isin: true },
+        })
+      : Promise.resolve([] as Array<{ id: string; symbol: string; name: string; isin: string | null }>),
+    fundIds.length
+      ? prisma.mutualFundMaster.findMany({
+          where: { id: { in: fundIds } },
+          select: { id: true, schemeCode: true, schemeName: true, isin: true },
+        })
+      : Promise.resolve([] as Array<{ id: string; schemeCode: string; schemeName: string; isin: string | null }>),
+  ]);
+  const stockById = new Map(stocks.map((s) => [s.id, s]));
+  const fundById = new Map(funds.map((f) => [f.id, f]));
+
   return holdings.map((h) => {
-    const assetName = h.stock?.name ?? h.fund?.schemeName ?? h.assetName ?? 'Unknown';
-    const symbol = h.stock?.symbol ?? h.fund?.schemeCode ?? null;
-    const isin = h.isin ?? h.stock?.isin ?? h.fund?.isin ?? null;
+    const stock = h.stockId ? stockById.get(h.stockId) ?? null : null;
+    const fund = h.fundId ? fundById.get(h.fundId) ?? null : null;
+    const assetName = stock?.name ?? fund?.schemeName ?? h.assetName ?? 'Unknown';
+    const symbol = stock?.symbol ?? fund?.schemeCode ?? null;
+    const isin = h.isin ?? stock?.isin ?? fund?.isin ?? null;
     const totalCost = toDecimal(h.totalCost);
     const unrealisedPnL = h.unrealisedPnL !== null ? toDecimal(h.unrealisedPnL) : null;
     const unrealisedPnLPct =
@@ -232,7 +252,7 @@ export async function getPortfolioHoldings(userId: string, id: string) {
 
 export async function getAssetAllocation(userId: string, id: string) {
   await ensureOwnership(userId, id);
-  const groups = await prisma.holding.groupBy({
+  const groups = await prisma.holdingProjection.groupBy({
     by: ['assetClass'],
     where: { portfolioId: id },
     _sum: { currentValue: true },

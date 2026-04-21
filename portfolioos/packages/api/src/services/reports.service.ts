@@ -129,9 +129,9 @@ export async function incomeReport(portfolioId: string, fy?: string) {
 // ─── Unrealised P&L (current holdings snapshot) ─────────────────────
 
 export async function unrealisedReport(portfolioId: string) {
-  const holdings = await prisma.holding.findMany({
+  const holdings = await prisma.holdingProjection.findMany({
     where: { portfolioId },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: { computedAt: 'desc' },
   });
 
   let totalCost = new Decimal(0);
@@ -309,7 +309,7 @@ export async function portfolioSummary(portfolioId: string) {
 
   const [txCount, holdingCount] = await Promise.all([
     prisma.transaction.count({ where: { portfolioId } }),
-    prisma.holding.count({ where: { portfolioId } }),
+    prisma.holdingProjection.count({ where: { portfolioId } }),
   ]);
 
   return {
