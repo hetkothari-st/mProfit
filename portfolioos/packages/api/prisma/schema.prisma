@@ -813,6 +813,7 @@ model CanonicalEvent {
   sourceAdapterVer String
   sourceRef        String
   sourceHash       String
+  senderAddress    String?
 
   eventType        CanonicalEventType
   eventDate        DateTime           @db.Date
@@ -843,6 +844,7 @@ model CanonicalEvent {
 
   @@unique([userId, sourceHash])
   @@index([userId, status, eventDate])
+  @@index([userId, senderAddress])
   @@index([sourceAdapter, sourceAdapterVer])
 }
 

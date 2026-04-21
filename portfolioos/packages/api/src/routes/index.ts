@@ -10,6 +10,8 @@ import { mailboxesRouter } from './mailboxes.routes.js';
 import { gmailRouter } from './gmail.routes.js';
 import { reportsRouter } from './reports.routes.js';
 import { casRouter } from './cas.routes.js';
+import { canonicalEventsRouter } from './canonicalEvents.routes.js';
+import { monitoredSendersRouter } from './monitoredSenders.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -23,4 +25,6 @@ export function registerRoutes(app: Express): void {
   app.use('/api/gmail', gmailRouter);
   app.use('/api/reports', reportsRouter);
   app.use('/api/cas', casRouter);
+  app.use('/api/canonical-events', canonicalEventsRouter);
+  app.use('/api/monitored-senders', monitoredSendersRouter);
 }

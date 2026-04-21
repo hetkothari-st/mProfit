@@ -94,6 +94,7 @@ function canonicalRowFromParsed(
     sourceAdapterVer: string;
     sourceRef: string;
     sourceHash: string;
+    senderAddress: string;
     autoCommitEnabled: boolean;
   },
   ev: ParsedEvent,
@@ -104,6 +105,7 @@ function canonicalRowFromParsed(
     sourceAdapterVer: base.sourceAdapterVer,
     sourceRef: base.sourceRef,
     sourceHash: base.sourceHash,
+    senderAddress: base.senderAddress.toLowerCase(),
     eventType: ev.event_type,
     eventDate: new Date(`${ev.event_date}T00:00:00.000Z`),
     amount: ev.amount ?? null,
@@ -258,6 +260,7 @@ export async function processEmail(
             sourceAdapterVer: GMAIL_LLM_ADAPTER_VER,
             sourceRef: input.messageId,
             sourceHash: eventHash,
+            senderAddress: input.senderAddress,
             autoCommitEnabled: input.autoCommitEnabled,
           },
           ev,
@@ -311,6 +314,7 @@ async function handleLlmFailure(
         sourceAdapterVer: GMAIL_LLM_ADAPTER_VER,
         sourceRef: input.messageId,
         sourceHash: gmailSourceHash(input.messageId),
+        senderAddress: input.senderAddress.toLowerCase(),
         eventType: 'OTHER',
         eventDate: new Date(),
         amount: null,

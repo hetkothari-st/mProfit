@@ -10,6 +10,7 @@ import { logger } from '../lib/logger.js';
 import { decryptSecret } from '../lib/secrets.js';
 import { createImportJob } from '../services/imports/import.service.js';
 import { syncGmailAccount } from '../connectors/gmail.connector.js';
+import { pollMonitoredSendersForAccount } from '../ingestion/gmail/poller.js';
 import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 
 const ALLOWED_EXT = new Set(['.pdf', '.csv', '.tsv', '.xlsx', '.xls', '.html', '.htm']);
@@ -169,15 +170,35 @@ export async function pollAllMailboxes(): Promise<void> {
     try {
       // Each mailbox belongs to one user; downstream import-job creation is
       // user-scoped and RLS-enforced.
-      const r = await runAsUser(acc.userId, async () =>
-        acc.provider === 'GMAIL_OAUTH'
-          ? syncGmailAccount(acc.id)
-          : pollOne(acc.id),
-      );
-      logger.info(
-        { accountId: acc.id, provider: acc.provider, ...r },
-        '[mailbox] polled',
-      );
+      if (acc.provider === 'GMAIL_OAUTH') {
+        // Two paths for Gmail: the §6.7 monitored-sender poller that
+        // creates CanonicalEvents from email bodies, and the legacy
+        // attachment sync that produces ImportJobs. They read the same
+        // mailbox but consume different parts of each message, so they
+        // run back-to-back for each account rather than being mutually
+        // exclusive.
+        const canonical = await runAsUser(acc.userId, () =>
+          pollMonitoredSendersForAccount(acc.id),
+        );
+        const attachments = await runAsUser(acc.userId, () =>
+          syncGmailAccount(acc.id),
+        );
+        logger.info(
+          {
+            accountId: acc.id,
+            provider: acc.provider,
+            canonical,
+            attachments,
+          },
+          '[mailbox] polled',
+        );
+      } else {
+        const r = await runAsUser(acc.userId, () => pollOne(acc.id));
+        logger.info(
+          { accountId: acc.id, provider: acc.provider, ...r },
+          '[mailbox] polled',
+        );
+      }
     } catch (err) {
       logger.error({ err, accountId: acc.id }, '[mailbox] poller error');
     }
