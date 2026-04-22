@@ -97,7 +97,16 @@ interface Props {
   defaultPortfolioId?: string;
 }
 
-const ASSET_CLASS_OPTIONS: AssetClass[] = ['EQUITY', 'MUTUAL_FUND', 'ETF', 'BOND', 'FIXED_DEPOSIT'];
+const ASSET_CLASS_OPTIONS: AssetClass[] = [
+  'EQUITY', 'MUTUAL_FUND', 'ETF',
+  'BOND', 'GOVT_BOND', 'CORPORATE_BOND',
+  'FIXED_DEPOSIT',
+  'NPS', 'PPF', 'EPF',
+  'PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF', 'PHYSICAL_SILVER',
+  'CRYPTOCURRENCY', 'REIT', 'INVIT',
+  'PMS', 'AIF', 'ULIP',
+  'REAL_ESTATE', 'ART_COLLECTIBLES', 'CASH', 'OTHER',
+];
 
 const TXN_TYPE_OPTIONS: TransactionType[] = [
   'BUY',

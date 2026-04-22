@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { Sun, Moon } from 'lucide-react';
+import { useThemeStore } from '@/stores/theme.store';
 
 interface AuthLayoutProps {
   title: string;
@@ -9,9 +11,23 @@ interface AuthLayoutProps {
 }
 
 export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps) {
+  const { dark, toggle } = useThemeStore();
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <div className="flex flex-1 items-center justify-center px-4 py-10">
+      {/* Top-right theme toggle */}
+      <div className="flex justify-end px-6 pt-4">
+        <button
+          type="button"
+          onClick={toggle}
+          title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="h-9 w-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
+      </div>
+
+      <div className="flex flex-1 items-center justify-center px-4 pb-10">
         <div className="w-full max-w-md">
           <Link to="/" className="flex items-center justify-center gap-2 mb-8">
             <div className="h-10 w-10 rounded-md bg-primary grid place-items-center text-primary-foreground font-bold text-lg">

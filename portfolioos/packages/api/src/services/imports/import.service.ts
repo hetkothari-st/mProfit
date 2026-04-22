@@ -9,6 +9,7 @@ import { createTransaction } from '../transaction.service.js';
 import { hashBytes, positionalHash } from '../sourceHash.js';
 import { getImportQueue } from '../../lib/queue.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';
+import { runAsUser } from '../../lib/requestContext.js';
 
 export interface CreateImportJobInput {
   userId: string;
@@ -20,34 +21,40 @@ export interface CreateImportJobInput {
 }
 
 export async function createImportJob(input: CreateImportJobInput) {
-  if (input.portfolioId) {
-    const p = await prisma.portfolio.findUnique({ where: { id: input.portfolioId } });
-    if (!p) throw new NotFoundError('Portfolio not found');
-    if (p.userId !== input.userId) throw new ForbiddenError();
-  }
+  // Wrap in runAsUser so RLS context is always set regardless of how this
+  // function is called (HTTP upload via multer breaks ALS propagation from
+  // authenticate; Bull job callers may not have set a context). The userId
+  // is already validated by the caller — this is purely a context bridge.
+  return runAsUser(input.userId, async () => {
+    if (input.portfolioId) {
+      const p = await prisma.portfolio.findUnique({ where: { id: input.portfolioId } });
+      if (!p) throw new NotFoundError('Portfolio not found');
+      if (p.userId !== input.userId) throw new ForbiddenError();
+    }
 
-  const job = await prisma.importJob.create({
-    data: {
-      userId: input.userId,
-      portfolioId: input.portfolioId,
-      type: input.type,
-      status: 'PENDING',
-      fileName: input.fileName,
-      filePath: input.filePath,
-      broker: input.broker ?? null,
-    },
+    const job = await prisma.importJob.create({
+      data: {
+        userId: input.userId,
+        portfolioId: input.portfolioId,
+        type: input.type,
+        status: 'PENDING',
+        fileName: input.fileName,
+        filePath: input.filePath,
+        broker: input.broker ?? null,
+      },
+    });
+
+    // Enqueue for async processing
+    try {
+      const q = getImportQueue();
+      await q.add({ importJobId: job.id, userId: input.userId });
+      logger.info({ jobId: job.id }, '[import] enqueued');
+    } catch (err) {
+      logger.warn({ err, jobId: job.id }, '[import] enqueue failed — will need manual retry');
+    }
+
+    return job;
   });
-
-  // Enqueue for async processing
-  try {
-    const q = getImportQueue();
-    await q.add({ importJobId: job.id, userId: input.userId });
-    logger.info({ jobId: job.id }, '[import] enqueued');
-  } catch (err) {
-    logger.warn({ err, jobId: job.id }, '[import] enqueue failed — will need manual retry');
-  }
-
-  return job;
 }
 
 export async function getImportJob(userId: string, id: string) {
@@ -133,9 +140,9 @@ export async function processImportJob(importJobId: string): Promise<{
         successRows: 0,
         failedRows: 0,
         errorLog: {
-          adapter: adapter?.id ?? 'none',
-          adapterVer: adapter?.version ?? null,
-          parseError: result.error,
+          parser: adapter?.id ?? 'none',
+          parserWarnings: [result.error],
+          rowErrors: [],
           ingestionFailureId: dlq?.id ?? null,
         },
         completedAt: new Date(),
@@ -262,8 +269,18 @@ export async function processImportJob(importJobId: string): Promise<{
     }
   }
 
+  // If 0 transactions were parsed and the parser emitted warnings (e.g. "no
+  // adapter matched" or "no transactions found"), surface it as FAILED so the
+  // user can see immediately that something went wrong rather than seeing
+  // "Completed" with 0 rows and having to hunt for the warnings button.
   const finalStatus =
-    failed === 0 ? 'COMPLETED' : success === 0 && skipped === 0 ? 'FAILED' : 'COMPLETED_WITH_ERRORS';
+    total === 0 && warnings.length > 0
+      ? 'FAILED'
+      : failed === 0
+        ? 'COMPLETED'
+        : success === 0 && skipped === 0
+          ? 'FAILED'
+          : 'COMPLETED_WITH_ERRORS';
 
   await prisma.importJob.update({
     where: { id: importJobId },
@@ -273,8 +290,7 @@ export async function processImportJob(importJobId: string): Promise<{
       successRows: success,
       failedRows: failed,
       errorLog: {
-        adapter: adapterId,
-        adapterVer,
+        parser: adapterId,
         parserWarnings: warnings,
         rowErrors: errors,
         skippedAsDuplicates: skipped,

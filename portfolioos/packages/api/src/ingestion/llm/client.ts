@@ -118,7 +118,12 @@ export interface LlmUsage {
 export function checkLlmGate():
   | { ok: true }
   | { ok: false; reason: 'disabled' | 'missing_api_key'; message: string } {
-  if (env.ENABLE_LLM_PARSER !== 'true') {
+  // In development the gate is open as long as an API key is present, so
+  // developers don't need to set ENABLE_LLM_PARSER=true manually. In
+  // production BOTH flags are required (belt-and-suspenders per §16 G5).
+  const gateOpen =
+    env.ENABLE_LLM_PARSER === 'true' || env.NODE_ENV !== 'production';
+  if (!gateOpen) {
     return {
       ok: false,
       reason: 'disabled',

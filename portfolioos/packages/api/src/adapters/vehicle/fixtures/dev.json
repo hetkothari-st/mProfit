@@ -1,0 +1,50 @@
+{
+  "MH47BT5590": {
+    "make": "Maruti Suzuki",
+    "model": "Swift VXi",
+    "variant": "VXi AGS",
+    "mfgYear": 2019,
+    "fuelType": "Petrol",
+    "color": "White",
+    "chassisNo": "MA3EYNE1S00284729",
+    "rtoCode": "MH47",
+    "ownerName": "Test User",
+    "insuranceExpiry": "2026-11-30",
+    "pucExpiry": "2026-08-15",
+    "fitnessExpiry": "2034-09-20",
+    "taxExpiry": "2034-09-20",
+    "permitExpiry": null
+  },
+  "MH47BT5950": {
+    "make": "Maruti Suzuki",
+    "model": "Swift VXi",
+    "variant": "VXi AGS",
+    "mfgYear": 2019,
+    "fuelType": "Petrol",
+    "color": "Silver",
+    "chassisNo": "MA3EYNE1S00293847",
+    "rtoCode": "MH47",
+    "ownerName": "Test User",
+    "insuranceExpiry": "2026-11-14",
+    "pucExpiry": "2026-07-22",
+    "fitnessExpiry": "2034-08-12",
+    "taxExpiry": "2034-08-12",
+    "permitExpiry": null
+  },
+  "KA01AB1234": {
+    "make": "Hyundai",
+    "model": "Creta",
+    "variant": "SX(O) Diesel",
+    "mfgYear": 2021,
+    "fuelType": "Diesel",
+    "color": "White",
+    "chassisNo": "MALB281CLEM123456",
+    "rtoCode": "KA01",
+    "ownerName": "Test User",
+    "insuranceExpiry": "2026-06-30",
+    "pucExpiry": "2026-05-15",
+    "fitnessExpiry": "2036-03-10",
+    "taxExpiry": "2036-03-10",
+    "permitExpiry": null
+  }
+}

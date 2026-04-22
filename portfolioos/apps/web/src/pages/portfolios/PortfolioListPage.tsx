@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PortfolioFormDialog } from './PortfolioFormDialog';
 import { portfoliosApi, type PortfolioListItem } from '@/api/portfolios.api';
+import { formatINR } from '@portfolioos/shared';
 
 export function PortfolioListPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -117,7 +118,9 @@ function PortfolioCard({
         <div className="mt-4 pt-4 border-t flex items-center justify-between">
           <div>
             <div className="text-xs text-muted-foreground">Current value</div>
-            <div className="numeric font-semibold text-lg">—</div>
+            <div className="font-semibold text-lg tabular-nums">
+              {portfolio.holdingCount > 0 ? formatINR(portfolio.currentValue) : '—'}
+            </div>
           </div>
           <Button asChild variant="ghost" size="sm">
             <Link to={`/portfolios/${portfolio.id}`}>

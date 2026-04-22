@@ -16,6 +16,7 @@ export interface ImportJobDTO {
     parser?: string;
     parserWarnings?: string[];
     rowErrors?: { row: number; reason: string }[];
+    skippedAsDuplicates?: number;
     general?: string;
   } | null;
   createdAt: string;

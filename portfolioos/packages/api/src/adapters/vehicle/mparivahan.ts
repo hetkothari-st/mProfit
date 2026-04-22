@@ -17,6 +17,8 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { logger } from '../../lib/logger.js';
 import type {
   VehicleAdapter,
@@ -27,7 +29,25 @@ import type {
 const ID = 'vahan.mparivahan.api';
 const VERSION = '1';
 
-function isEnabled(): boolean {
+/**
+ * Shipped dev fixture. Always co-located with this source file so a fresh
+ * clone can drive `MH47BT5950` and a couple of other reg numbers through the
+ * chain without any env setup. Users can still override with
+ * `MPARIVAHAN_FIXTURE_PATH` for their own test data.
+ */
+const BUILTIN_FIXTURE_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  'fixtures',
+  'dev.json',
+);
+
+/**
+ * Gate G6: only blocks when running in production WITHOUT an explicit
+ * opt-in. In development the built-in fixture is always available, so the
+ * gate is effectively a no-op until the live HTTP implementation ships.
+ */
+function isGateOpen(): boolean {
+  if (process.env.NODE_ENV !== 'production') return true;
   return process.env.ENABLE_MPARIVAHAN_ADAPTER === 'true';
 }
 
@@ -93,17 +113,14 @@ export function parseMparivahanPayload(payload: unknown, regNo: string): Vehicle
  * response shapes into a typed `API_CHANGED` error (§7.2 requirement).
  */
 async function callLiveEndpoint(regNo: string): Promise<unknown> {
-  const fixturePath = process.env.MPARIVAHAN_FIXTURE_PATH;
-  if (!fixturePath) {
-    throw new Error(
-      'mParivahan live endpoint not yet wired (Gate G6). Set MPARIVAHAN_FIXTURE_PATH for local testing.',
-    );
-  }
+  const fixturePath = process.env.MPARIVAHAN_FIXTURE_PATH ?? BUILTIN_FIXTURE_PATH;
   const raw = readFileSync(fixturePath, 'utf-8');
   const all = JSON.parse(raw) as Record<string, unknown>;
   const found = all[regNo.toUpperCase()];
   if (!found) {
-    throw new Error(`No fixture entry for ${regNo}`);
+    throw new Error(
+      `No fixture entry for ${regNo} in ${fixturePath} (Gate G6 not cleared — live API disabled)`,
+    );
   }
   return found;
 }
@@ -114,7 +131,7 @@ export const mparivahanAdapter: VehicleAdapter = {
   displayName: 'mParivahan API',
   supportsAuto: true,
   async fetch(regNo): Promise<VehicleFetchResult> {
-    if (!isEnabled()) {
+    if (!isGateOpen()) {
       return {
         ok: false,
         error:

@@ -83,7 +83,9 @@ export async function refreshPortfolio(req: Request, res: Response) {
 }
 
 export async function refreshAllPrices(_req: Request, res: Response) {
-  const stocks = await updateStockPricesFromYahoo();
+  // Only fetch prices for stocks the user actually holds — fetching the full
+  // NSE/BSE universe (5 000+ symbols) would time out a user-facing request.
+  const stocks = await updateStockPricesFromYahoo({ onlyHeld: true });
   const holdings = await refreshAllHoldingPrices();
   ok(res, { stocks, holdings });
 }

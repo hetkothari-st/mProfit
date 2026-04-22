@@ -37,6 +37,8 @@ import { NpsPage } from './pages/assetClasses/NpsPage';
 import { PpfPage } from './pages/assetClasses/PpfPage';
 import { OtherAssetsPage } from './pages/assetClasses/OtherAssetsPage';
 import { AccountingPage } from './pages/accounting/AccountingPage';
+import { AlertsPage } from './pages/alerts/AlertsPage';
+import { OnboardingWizard } from './pages/onboarding/OnboardingWizard';
 
 export function App() {
   return (
@@ -44,6 +46,14 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute>
+            <OnboardingWizard onComplete={() => localStorage.setItem('onboarding_v2_done', '1')} />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         element={
@@ -88,7 +98,7 @@ export function App() {
         <Route path="/ingestion/review" element={<Navigate to="/ingestion" replace />} />
         <Route path="/ingestion/discovery" element={<Navigate to="/ingestion" replace />} />
         <Route path="/accounting" element={<AccountingPage />} />
-        <Route path="/alerts" element={<PlaceholderPage title="Alerts & Reminders" />} />
+        <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
 

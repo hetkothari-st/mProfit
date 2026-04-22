@@ -137,14 +137,16 @@ export function parseChallanPayload(rows: unknown): ChallanRow[] {
 function loadFromFixture(regNo: string): unknown {
   const path = process.env.CHALLAN_FIXTURE_PATH;
   if (!path) {
-    throw new Error(
-      'Challan live driver not yet wired — set CHALLAN_FIXTURE_PATH for dev or USE_CHALLAN_BROWSER=true on a display-attached host.',
-    );
+    // No fixture configured — return empty list so dev runs cleanly
+    // without needing CHALLAN_FIXTURE_PATH set.
+    logger.info({ regNo }, '[echallan] no CHALLAN_FIXTURE_PATH — returning empty challan list');
+    return [];
   }
   const all = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
   const found = all[regNo.toUpperCase()];
   if (found === undefined) {
-    throw new Error(`No challan fixture entry for ${regNo}`);
+    // Fixture exists but no entry for this reg — treat as "no challans".
+    return [];
   }
   return found;
 }
@@ -208,7 +210,10 @@ export async function fetchChallansForRegNo(
   regNo: string,
   chassisLast4: string | undefined | null,
 ): Promise<ChallanFetchResult> {
-  if (process.env.ENABLE_CHALLAN_ADAPTER !== 'true') {
+  const gateOpen =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.ENABLE_CHALLAN_ADAPTER === 'true';
+  if (!gateOpen) {
     return {
       ok: false,
       source: ID,

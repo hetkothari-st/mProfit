@@ -2,12 +2,15 @@ import { Decimal } from 'decimal.js';
 import type { Money, Quantity } from '@portfolioos/shared';
 import type { AssetClass, Exchange, Prisma, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { ensureStockMaster, ensureMutualFundMaster } from './masterData.service.js';
 import { recomputeForAsset } from './holdingsProjection.js';
 import { computeAssetKey } from './assetKey.js';
 import { naturalKeyHash } from './sourceHash.js';
 import { persistCapitalGainsForAsset } from './capitalGains.service.js';
+import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
+import { refreshAllHoldingPrices } from './holdings.service.js';
 
 export interface CreateTransactionInput {
   portfolioId: string;
@@ -218,6 +221,15 @@ export async function createTransaction(userId: string, input: CreateTransaction
   const tx = await prisma.transaction.create({ data });
 
   await recomputeForAsset(tx.portfolioId, assetKey);
+
+  // Fire-and-forget price refresh so the new holding's current value shows
+  // immediately without the user having to click "Refresh".
+  const priceable = ['EQUITY', 'ETF', 'MUTUAL_FUND'] as AssetClass[];
+  if (priceable.includes(input.assetClass)) {
+    updateStockPricesFromYahoo({ onlyHeld: true })
+      .then(() => refreshAllHoldingPrices())
+      .catch((err) => logger.warn({ err }, '[transaction] background price refresh failed'));
+  }
 
   return toTransactionDTO(tx);
 }

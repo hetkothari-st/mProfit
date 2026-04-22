@@ -9,7 +9,9 @@ import {
   type Quantity,
 } from '@portfolioos/shared';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { fetchHistorical, buildYahooSymbol } from '../priceFeeds/yahoo.service.js';
 
 function toPortfolioDTO(p: Portfolio) {
   return {
@@ -34,10 +36,29 @@ export async function listPortfolios(userId: string) {
       _count: { select: { holdingProjections: true, transactions: true } },
     },
   });
+
+  // Aggregate current value per portfolio in one query
+  const portfolioIds = rows.map((p) => p.id);
+  const holdingValues = portfolioIds.length > 0
+    ? await prisma.holdingProjection.findMany({
+        where: { portfolioId: { in: portfolioIds } },
+        select: { portfolioId: true, currentValue: true, totalCost: true },
+      })
+    : [];
+
+  const valueByPortfolio = new Map<string, Decimal>();
+  for (const h of holdingValues) {
+    const prev = valueByPortfolio.get(h.portfolioId) ?? new Decimal(0);
+    // Use currentValue if available, else fall back to cost (FDs, bonds, gold, etc.)
+    const effective = h.currentValue !== null ? toDecimal(h.currentValue) : toDecimal(h.totalCost);
+    valueByPortfolio.set(h.portfolioId, prev.plus(effective));
+  }
+
   return rows.map((p) => ({
     ...toPortfolioDTO(p),
     holdingCount: p._count.holdingProjections,
     transactionCount: p._count.transactions,
+    currentValue: serializeMoney(valueByPortfolio.get(p.id) ?? new Decimal(0)),
   }));
 }
 
@@ -121,25 +142,30 @@ export async function deletePortfolio(userId: string, id: string): Promise<void>
 
 export async function getPortfolioSummary(userId: string, id: string) {
   await ensureOwnership(userId, id);
-  const [agg, holdingCount, holdings] = await Promise.all([
-    prisma.holdingProjection.aggregate({
+  const [rows, holdingCount] = await Promise.all([
+    prisma.holdingProjection.findMany({
       where: { portfolioId: id },
-      _sum: {
+      select: {
         totalCost: true,
         currentValue: true,
         unrealisedPnL: true,
+        quantity: true,
+        stockId: true,
       },
     }),
     prisma.holdingProjection.count({ where: { portfolioId: id } }),
-    prisma.holdingProjection.findMany({
-      where: { portfolioId: id, stockId: { not: null } },
-      select: { quantity: true, currentValue: true, stockId: true },
-    }),
   ]);
 
-  const totalInvestment = toDecimal(agg._sum.totalCost ?? 0);
-  const currentValue = toDecimal(agg._sum.currentValue ?? 0);
-  const unrealisedPnL = toDecimal(agg._sum.unrealisedPnL ?? 0);
+  const holdings = rows.filter((h) => h.stockId);
+
+  const totalInvestment = rows.reduce((s, h) => s.plus(toDecimal(h.totalCost)), new Decimal(0));
+  // For assets without a live price (FD, Gold, Bonds, EPF, PPF…) use totalCost
+  // as current value — they're worth at least what was invested until repriced.
+  const currentValue = rows.reduce((s, h) => {
+    const cv = h.currentValue !== null ? toDecimal(h.currentValue) : toDecimal(h.totalCost);
+    return s.plus(cv);
+  }, new Decimal(0));
+  const unrealisedPnL = currentValue.minus(totalInvestment);
   // Pct is dimensionless; float is fine once the numerator/denominator are
   // already exact Decimals.
   const unrealisedPnLPct = totalInvestment.greaterThan(0)
@@ -252,30 +278,205 @@ export async function getPortfolioHoldings(userId: string, id: string) {
 
 export async function getAssetAllocation(userId: string, id: string) {
   await ensureOwnership(userId, id);
-  const groups = await prisma.holdingProjection.groupBy({
-    by: ['assetClass'],
+  // groupBy + _sum skips NULL currentValue rows — so we fetch all rows and
+  // sum in JS using totalCost as fallback for unpriced assets.
+  const rows = await prisma.holdingProjection.findMany({
     where: { portfolioId: id },
-    _sum: { currentValue: true },
-    _count: { _all: true },
+    select: { assetClass: true, currentValue: true, totalCost: true },
   });
-  const total = groups.reduce(
-    (acc, g) => acc.plus(toDecimal(g._sum.currentValue ?? 0)),
-    new Decimal(0),
-  );
-  return groups.map((g) => {
-    const value = toDecimal(g._sum.currentValue ?? 0);
-    return {
-      assetClass: g.assetClass,
-      value: serializeMoney(value) as Money,
-      percent: total.greaterThan(0) ? value.dividedBy(total).times(100).toNumber() : 0,
-      holdingCount: g._count._all,
-    };
-  });
+  const byClass = new Map<string, { value: Decimal; count: number }>();
+  for (const h of rows) {
+    const val = h.currentValue !== null ? toDecimal(h.currentValue) : toDecimal(h.totalCost);
+    const entry = byClass.get(h.assetClass) ?? { value: new Decimal(0), count: 0 };
+    entry.value = entry.value.plus(val);
+    entry.count++;
+    byClass.set(h.assetClass, entry);
+  }
+  const total = [...byClass.values()].reduce((s, e) => s.plus(e.value), new Decimal(0));
+  return [...byClass.entries()].map(([assetClass, entry]) => ({
+    assetClass,
+    value: serializeMoney(entry.value) as Money,
+    percent: total.greaterThan(0) ? entry.value.dividedBy(total).times(100).toNumber() : 0,
+    holdingCount: entry.count,
+  }));
 }
 
-export async function getHistoricalValuation(userId: string, id: string) {
+export async function getHistoricalValuation(
+  userId: string,
+  id: string,
+  days = 365,
+) {
   await ensureOwnership(userId, id);
-  return [] as Array<{ date: string; value: Money; invested: Money }>;
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const allTransactions = await prisma.transaction.findMany({
+    where: { portfolioId: id },
+    orderBy: { tradeDate: 'asc' },
+    select: { tradeDate: true, assetKey: true, stockId: true, transactionType: true, quantity: true, netAmount: true },
+  });
+  if (allTransactions.length === 0) return [] as Array<{ date: string; value: Money; invested: Money }>;
+
+  const firstTxDate = allTransactions[0]!.tradeDate.toISOString().slice(0, 10);
+  const windowStart = days === 0
+    ? firstTxDate
+    : new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+  const rangeStart = windowStart < firstTxDate ? firstTxDate : windowStart;
+
+  // Unique stocks held in this portfolio
+  const stockIds = [...new Set(allTransactions.map((t) => t.stockId).filter((s): s is string => !!s))];
+
+  // Backfill Yahoo historical prices for stocks that lack data in the window
+  if (stockIds.length > 0) {
+    const fromDate = new Date(rangeStart);
+    const existingCount = await prisma.stockPrice.count({
+      where: { stockId: { in: stockIds }, date: { gte: fromDate } },
+    });
+    // If we have fewer rows than (stocks × days × 0.5), assume we need a backfill
+    const minExpected = stockIds.length * days * 0.4;
+    if (existingCount < minExpected) {
+      const stocks = await prisma.stockMaster.findMany({
+        where: { id: { in: stockIds } },
+        select: { id: true, symbol: true, exchange: true },
+      });
+      await Promise.allSettled(
+        stocks.map(async (s) => {
+          try {
+            const bars = await fetchHistorical(s.symbol, s.exchange, fromDate);
+            if (bars.length === 0) return;
+            await prisma.$transaction(
+              bars.map((b) =>
+                prisma.stockPrice.upsert({
+                  where: { stockId_date: { stockId: s.id, date: b.date } },
+                  update: { open: b.open.toString(), high: b.high.toString(), low: b.low.toString(), close: b.close.toString() },
+                  create: { stockId: s.id, date: b.date, open: b.open.toString(), high: b.high.toString(), low: b.low.toString(), close: b.close.toString() },
+                }),
+              ),
+            );
+          } catch (err) {
+            logger.warn({ err, symbol: s.symbol }, '[portfolio] historical backfill failed');
+          }
+        }),
+      );
+    }
+  }
+
+  // Load prices from DB
+  const allPrices = stockIds.length
+    ? await prisma.stockPrice.findMany({
+        where: { stockId: { in: stockIds } },
+        select: { stockId: true, date: true, close: true },
+        orderBy: [{ stockId: 'asc' }, { date: 'asc' }],
+      })
+    : [];
+  const pricesByStock = new Map<string, Array<{ d: string; close: Decimal }>>();
+  for (const p of allPrices) {
+    if (!pricesByStock.has(p.stockId)) pricesByStock.set(p.stockId, []);
+    pricesByStock.get(p.stockId)!.push({ d: p.date.toISOString().slice(0, 10), close: toDecimal(p.close) });
+  }
+  function priceOnOrBefore(stockId: string, dateStr: string): Decimal | null {
+    const arr = pricesByStock.get(stockId);
+    if (!arr) return null;
+    let best: Decimal | null = null;
+    for (const p of arr) {
+      if (p.d <= dateStr) best = p.close;
+      else break;
+    }
+    return best;
+  }
+
+  const BUY_TYPES = new Set(['BUY','SIP','SWITCH_IN','BONUS','OPENING_BALANCE','DIVIDEND_REINVEST','MERGER_IN','DEMERGER_IN','RIGHTS_ISSUE']);
+
+  // Apply all transactions up to windowStart to get the starting state
+  const state = new Map<string, { qty: Decimal; cost: Decimal; stockId: string | null }>();
+  let invested = new Decimal(0);
+  const byDate = new Map<string, typeof allTransactions>();
+  for (const tx of allTransactions) {
+    const d = tx.tradeDate.toISOString().slice(0, 10);
+    if (!byDate.has(d)) byDate.set(d, []);
+    byDate.get(d)!.push(tx);
+  }
+
+  // Apply all transactions before window start as baseline
+  for (const [d, txns] of [...byDate.entries()].sort()) {
+    if (d > rangeStart) break;
+    for (const tx of txns) {
+      const key = tx.assetKey ?? `_${tx.stockId ?? d}`;
+      const qty = toDecimal(tx.quantity);
+      const net = toDecimal(tx.netAmount);
+      const h = state.get(key) ?? { qty: new Decimal(0), cost: new Decimal(0), stockId: tx.stockId };
+      if (BUY_TYPES.has(tx.transactionType)) {
+        h.qty = h.qty.plus(qty); h.cost = h.cost.plus(net); invested = invested.plus(net);
+      } else {
+        const prev = h.qty;
+        h.qty = Decimal.max(new Decimal(0), h.qty.minus(qty));
+        if (prev.greaterThan(0)) h.cost = h.cost.times(h.qty.dividedBy(prev));
+      }
+      state.set(key, h);
+    }
+  }
+
+  // Generate daily samples from rangeStart to today
+  function portfolioValueOn(dateStr: string): Decimal {
+    let v = new Decimal(0);
+    for (const h of state.values()) {
+      if (h.qty.lte(0)) continue;
+      const price = h.stockId ? priceOnOrBefore(h.stockId, dateStr) : null;
+      v = v.plus(price ? h.qty.times(price) : h.cost);
+    }
+    return v;
+  }
+
+  const points: Array<{ date: string; value: Money; invested: Money }> = [];
+  const cursor = new Date(rangeStart + 'T00:00:00Z');
+  const end = new Date(todayStr + 'T00:00:00Z');
+
+  while (cursor <= end) {
+    const d = cursor.toISOString().slice(0, 10);
+
+    // Apply any transactions on this date
+    for (const tx of byDate.get(d) ?? []) {
+      const key = tx.assetKey ?? `_${tx.stockId ?? d}`;
+      const qty = toDecimal(tx.quantity);
+      const net = toDecimal(tx.netAmount);
+      const h = state.get(key) ?? { qty: new Decimal(0), cost: new Decimal(0), stockId: tx.stockId };
+      if (BUY_TYPES.has(tx.transactionType)) {
+        h.qty = h.qty.plus(qty); h.cost = h.cost.plus(net); invested = invested.plus(net);
+      } else {
+        const prev = h.qty;
+        h.qty = Decimal.max(new Decimal(0), h.qty.minus(qty));
+        if (prev.greaterThan(0)) h.cost = h.cost.times(h.qty.dividedBy(prev));
+      }
+      state.set(key, h);
+    }
+
+    const value = portfolioValueOn(d);
+    // Only emit if we have a meaningful value (skip zero-value pre-investment days)
+    if (value.greaterThan(0) || invested.greaterThan(0)) {
+      points.push({
+        date: d,
+        value: serializeMoney(value) as Money,
+        invested: serializeMoney(invested) as Money,
+      });
+    }
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  // Replace today's point with live HoldingProjection values (most accurate)
+  const projections = await prisma.holdingProjection.findMany({
+    where: { portfolioId: id },
+    select: { currentValue: true, totalCost: true },
+  });
+  const liveValue = projections.reduce((s, h) => s.plus(toDecimal(h.currentValue ?? h.totalCost)), new Decimal(0));
+  const liveCost  = projections.reduce((s, h) => s.plus(toDecimal(h.totalCost)), new Decimal(0));
+
+  if (points.length > 0 && points[points.length - 1]!.date === todayStr) {
+    points[points.length - 1] = { date: todayStr, value: serializeMoney(liveValue) as Money, invested: serializeMoney(liveCost) as Money };
+  } else if (liveValue.greaterThan(0)) {
+    points.push({ date: todayStr, value: serializeMoney(liveValue) as Money, invested: serializeMoney(liveCost) as Money });
+  }
+
+  return points;
 }
 
 export async function getCashFlows(userId: string, id: string) {

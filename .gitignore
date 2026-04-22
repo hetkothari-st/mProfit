@@ -39,3 +39,6 @@ uploads/
 
 # Misc
 *.tsbuildinfo
+
+# Test corpus (locally generated financial samples)
+dev-corpus/

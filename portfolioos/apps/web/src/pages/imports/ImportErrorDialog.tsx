@@ -27,6 +27,12 @@ export function ImportErrorDialog({ job, onClose }: Props) {
           </div>
         )}
 
+        {(log?.skippedAsDuplicates ?? 0) > 0 && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-50 dark:bg-amber-900/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+            {log!.skippedAsDuplicates} row(s) skipped as duplicates — they were already imported from this file.
+          </div>
+        )}
+
         {(log?.parserWarnings ?? []).length > 0 && (
           <div>
             <div className="text-sm font-medium mb-1">Parser warnings</div>

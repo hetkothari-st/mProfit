@@ -68,7 +68,8 @@ export async function allocation(req: Request, res: Response) {
 }
 
 export async function historicalValuation(req: Request, res: Response) {
-  ok(res, await getHistoricalValuation(userId(req), req.params.id!));
+  const days = req.query.days !== undefined ? Number(req.query.days) : 365;
+  ok(res, await getHistoricalValuation(userId(req), req.params.id!, isNaN(days) ? 365 : days));
 }
 
 export async function cashFlows(req: Request, res: Response) {

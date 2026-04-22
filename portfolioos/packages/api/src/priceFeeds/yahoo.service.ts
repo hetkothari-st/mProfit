@@ -1,8 +1,10 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import type { Exchange } from '@prisma/client';
+import type { AssetClass, Exchange } from '@prisma/client';
 import { yahooQuoteRaw, yahooQuoteOne, yahooSearch, yahooHistorical } from './yahooClient.js';
+import { getNseBhavPrice } from './nseBhavcopy.service.js';
+import { getNseLivePrice } from './nseLive.service.js';
 
 export interface YahooQuote {
   symbol: string;
@@ -137,25 +139,63 @@ export async function updateStockPricesFromYahoo(
   opts: { onlyHeld?: boolean } = {},
 ): Promise<{ updated: number; failed: number; scope: string }> {
   let stocks: { id: string; symbol: string; exchange: Exchange }[];
+
   if (opts.onlyHeld) {
-    const held = await prisma.holdingProjection.findMany({
+    // Part 1: holdings already linked to a StockMaster row
+    const heldWithId = await prisma.holdingProjection.findMany({
       where: { stockId: { not: null } },
       select: { stockId: true },
       distinct: ['stockId'],
     });
-    const ids = held.map((h) => h.stockId!).filter(Boolean);
+    const ids = heldWithId.map((h) => h.stockId!).filter(Boolean);
     stocks = await prisma.stockMaster.findMany({
       where: { isActive: true, id: { in: ids } },
       select: { id: true, symbol: true, exchange: true },
     });
+
+    // Part 2: equity holdings with null stockId — treat assetName as NSE symbol
+    // and auto-create a minimal StockMaster row so prices can be stored.
+    const unlinked = await prisma.holdingProjection.findMany({
+      where: {
+        stockId: null,
+        assetClass: { in: ['EQUITY', 'ETF'] as AssetClass[] },
+        assetName: { not: null },
+      },
+      select: { assetName: true },
+      distinct: ['assetName'],
+    });
+
+    for (const h of unlinked) {
+      if (!h.assetName) continue;
+      const symbol = h.assetName.trim().toUpperCase();
+      if (stocks.some((s) => s.symbol === symbol)) continue;
+      // Upsert a minimal StockMaster row so StockPrice can reference it.
+      const sm = await prisma.stockMaster.upsert({
+        where: { symbol },
+        create: { symbol, name: symbol, exchange: 'NSE', isActive: true },
+        update: {},
+        select: { id: true, symbol: true, exchange: true },
+      });
+      stocks.push(sm);
+    }
   } else {
     stocks = await prisma.stockMaster.findMany({
       where: { isActive: true },
       select: { id: true, symbol: true, exchange: true },
     });
   }
+
   const scope = opts.onlyHeld ? 'held' : 'all-active';
-  const map = await fetchQuotesBulk(stocks.map((s) => ({ symbol: s.symbol, exchange: s.exchange })));
+  if (stocks.length === 0) {
+    logger.info({ scope }, 'No stocks to price — no held equity holdings found');
+    return { updated: 0, failed: 0, scope };
+  }
+
+  // Bulk fetch from Yahoo Finance (real-time, 15-min delayed for NSE)
+  const yahooMap = await fetchQuotesBulk(
+    stocks.map((s) => ({ symbol: s.symbol, exchange: s.exchange })),
+  );
+
   let updated = 0;
   let failed = 0;
   const today = new Date();
@@ -163,31 +203,35 @@ export async function updateStockPricesFromYahoo(
 
   for (const stock of stocks) {
     const ySym = buildYahooSymbol(stock.symbol, stock.exchange);
-    const q = map.get(ySym);
-    if (!q) {
+    let price: Decimal | null = yahooMap.get(ySym)?.price ?? null;
+
+    // Fallback 1: NSE live API
+    if (!price) {
+      price = await getNseLivePrice(stock.symbol);
+    }
+
+    // Fallback 2: NSE EOD bhavcopy
+    if (!price) {
+      price = await getNseBhavPrice(stock.symbol);
+    }
+
+    if (!price) {
       failed++;
       continue;
     }
+
+    const yahooQ = yahooMap.get(ySym);
+    const open = yahooQ?.previousClose ?? price;
+
     await prisma.stockPrice.upsert({
       where: { stockId_date: { stockId: stock.id, date: today } },
-      update: {
-        open: q.previousClose ?? q.price,
-        high: q.price,
-        low: q.price,
-        close: q.price,
-      },
-      create: {
-        stockId: stock.id,
-        date: today,
-        open: q.previousClose ?? q.price,
-        high: q.price,
-        low: q.price,
-        close: q.price,
-      },
+      update: { open, high: price, low: price, close: price },
+      create: { stockId: stock.id, date: today, open, high: price, low: price, close: price },
     });
     updated++;
   }
-  logger.info({ updated, failed, scope, total: stocks.length }, 'Stock prices refreshed from Yahoo');
+
+  logger.info({ updated, failed, scope, total: stocks.length }, 'Stock prices refreshed');
   return { updated, failed, scope };
 }
 

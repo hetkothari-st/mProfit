@@ -32,7 +32,8 @@ import type {
 const ID = 'vahan.parivahan.portal';
 const VERSION = '1';
 
-function isEnabled(): boolean {
+function isGateOpen(): boolean {
+  if (process.env.NODE_ENV !== 'production') return true;
   return process.env.ENABLE_PARIVAHAN_PORTAL_ADAPTER === 'true';
 }
 
@@ -279,7 +280,7 @@ export const parivahanPortalAdapter: VehicleAdapter = {
     regNo: string,
     ctx: VehicleAdapterContext,
   ): Promise<VehicleFetchResult> {
-    if (!isEnabled()) {
+    if (!isGateOpen()) {
       return {
         ok: false,
         error:

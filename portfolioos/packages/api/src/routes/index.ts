@@ -18,6 +18,7 @@ import { cashFlowsRouter } from './cashflows.routes.js';
 import { rentalRouter } from './rental.routes.js';
 import { insuranceRouter } from './insurance.routes.js';
 import { accountingRouter } from './accounting.routes.js';
+import { alertsRouter } from './alerts.routes.js';
 import { dashboardRouter } from './dashboard.routes.js';
 
 export function registerRoutes(app: Express): void {
@@ -40,5 +41,6 @@ export function registerRoutes(app: Express): void {
   app.use('/api/rental', rentalRouter);
   app.use('/api/insurance', insuranceRouter);
   app.use('/api/accounting', accountingRouter);
+  app.use('/api/alerts', alertsRouter);
   app.use('/api/dashboard', dashboardRouter);
 }

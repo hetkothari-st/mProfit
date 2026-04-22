@@ -14,6 +14,7 @@ import type {
 export interface PortfolioListItem extends Portfolio {
   holdingCount: number;
   transactionCount: number;
+  currentValue: string;
 }
 
 function unwrap<T>(data: ApiResponse<T>): T {
@@ -57,9 +58,9 @@ export const portfoliosApi = {
     );
     return unwrap(data);
   },
-  async historicalValuation(id: string): Promise<HistoricalValuationPoint[]> {
+  async historicalValuation(id: string, days = 365): Promise<HistoricalValuationPoint[]> {
     const { data } = await api.get<ApiResponse<HistoricalValuationPoint[]>>(
-      `/api/portfolios/${id}/historical-valuation`,
+      `/api/portfolios/${id}/historical-valuation?days=${days}`,
     );
     return unwrap(data);
   },

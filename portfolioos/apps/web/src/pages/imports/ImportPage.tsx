@@ -209,15 +209,16 @@ export function ImportPage() {
                         </td>
                         <td className="px-4 py-2">
                           <div className="flex justify-end gap-1">
-                            {(j.failedRows ?? 0) > 0 || j.errorLog?.parserWarnings?.length ? (
+                            {((j.failedRows ?? 0) > 0 || (j.errorLog?.parserWarnings?.length ?? 0) > 0 || (j.errorLog?.rowErrors?.length ?? 0) > 0) && (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setViewError(j)}
                               >
-                                <AlertTriangle className="h-3 w-3" /> Errors
+                                <AlertTriangle className="h-3 w-3" />
+                                {(j.failedRows ?? 0) > 0 || (j.errorLog?.rowErrors?.length ?? 0) > 0 ? 'Errors' : 'Warnings'}
                               </Button>
-                            ) : null}
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"

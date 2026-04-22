@@ -125,6 +125,12 @@ export function parseMfCasText(text: string): {
     amc: string | null;
   } = { name: '', isin: null, folio: null, amc: null };
 
+  // Real CAMS/KFintech PDFs often place the scheme name on the line BEFORE
+  // the "ISIN: INFxxxxxx" line. We track the last candidate name line so that
+  // when the ISIN line is processed and nameBefore is empty, we can fall back
+  // to it.
+  let pendingName = '';
+
   const txs: ParsedTransaction[] = [];
   const warnings: string[] = [];
 
@@ -142,13 +148,36 @@ export function parseMfCasText(text: string): {
     if (isinMatch && line.length < 200 && line.toLowerCase().includes('isin')) {
       currentScheme.isin = isinMatch[1]!;
       const nameBefore = line.split(/ISIN/i)[0]?.trim();
-      if (nameBefore) currentScheme.name = nameBefore;
+      if (nameBefore) {
+        currentScheme.name = nameBefore;
+      } else if (pendingName) {
+        // Scheme name was on the previous line (multi-line CAS format)
+        currentScheme.name = pendingName;
+      }
+      pendingName = '';
       continue;
     }
 
     // Try trade row: "DD-MMM-YYYY <desc> <qty> <nav> <amount>"
     const dateMatch = line.match(DATE_RE);
-    if (!dateMatch) continue;
+    if (!dateMatch) {
+      // Non-date, non-folio, non-ISIN line — candidate scheme name.
+      // Must start with a capital letter, contain letters, be a reasonable
+      // length. Excludes lines that are pure numbers, separators, or headers.
+      if (
+        /^[A-Z]/.test(line) &&
+        /[A-Za-z]{3,}/.test(line) &&
+        line.length > 5 &&
+        line.length < 250 &&
+        !line.startsWith('Opening Balance') &&
+        !line.startsWith('Closing Balance') &&
+        !line.startsWith('Date') &&
+        !/^\d/.test(line)
+      ) {
+        pendingName = line;
+      }
+      continue;
+    }
 
     const tradeDate = toIso(dateMatch[1]!, dateMatch[2]!, dateMatch[3]!);
     if (!tradeDate) continue;
@@ -176,7 +205,10 @@ export function parseMfCasText(text: string): {
       transactionType: type,
       schemeName: currentScheme.name || undefined,
       isin: currentScheme.isin ?? undefined,
-      assetName: currentScheme.name || undefined,
+      // Fall back to ISIN when the scheme name couldn't be extracted (e.g.
+      // multi-line CAS where the name line wasn't recognized). This prevents
+      // "Asset name or symbol is required" in createTransaction.
+      assetName: currentScheme.name || currentScheme.isin || undefined,
       tradeDate,
       quantity: units.abs().toString(),
       price: nav.abs().toString(),
