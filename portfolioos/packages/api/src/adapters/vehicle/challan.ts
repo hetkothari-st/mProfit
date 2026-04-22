@@ -210,6 +210,14 @@ export async function fetchChallansForRegNo(
   regNo: string,
   chassisLast4: string | undefined | null,
 ): Promise<ChallanFetchResult> {
+  // 1. APIMall commercial API — auto-capable, no chassis needed
+  const { fetchChallansViaApimall } = await import('./apimall.js');
+  const apimallResult = await fetchChallansViaApimall(regNo);
+  if (apimallResult.ok) return apimallResult;
+  // If APIMall key is missing it returns retryable:false — log and fall through
+  logger.debug({ err: apimallResult.error, regNo }, '[echallan] APIMall fallback to portal');
+
+  // 2. Playwright portal — needs chassis + OTP
   const gateOpen =
     process.env.NODE_ENV !== 'production' ||
     process.env.ENABLE_CHALLAN_ADAPTER === 'true';
@@ -230,19 +238,14 @@ export async function fetchChallansForRegNo(
       source: ID,
       sourceVersion: VERSION,
       challans: [],
-      error: 'Chassis last 4 required for challan lookup.',
+      error: 'Chassis last 4 required for portal challan lookup.',
       retryable: false,
     };
   }
   try {
     const raw = await runChallanSession(regNo.toUpperCase(), chassisLast4);
     const challans = parseChallanPayload(raw);
-    return {
-      ok: true,
-      source: ID,
-      sourceVersion: VERSION,
-      challans,
-    };
+    return { ok: true, source: ID, sourceVersion: VERSION, challans };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.warn({ err: message, regNo }, '[echallan] fetch failed');
