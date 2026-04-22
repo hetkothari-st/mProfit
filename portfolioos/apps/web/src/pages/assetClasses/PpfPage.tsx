@@ -1,5 +1,6 @@
 import { BookOpen } from 'lucide-react';
 import { SimpleAssetPage } from './SimpleAssetPage';
+import { PPFFormDialog } from './PPFNpsFormDialog';
 
 export function PpfPage() {
   return (
@@ -9,6 +10,7 @@ export function PpfPage() {
       icon={BookOpen}
       assetClasses={['PPF']}
       defaultAssetClass="PPF"
+      FormComponent={PPFFormDialog}
     />
   );
 }

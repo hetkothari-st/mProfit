@@ -19,7 +19,6 @@ import { logger } from '../../lib/logger.js';
 import { smsVehicleAdapter } from './sms.js';
 import { mparivahanAdapter } from './mparivahan.js';
 import { parivahanPortalAdapter } from './portal.js';
-import { apimallRcAdapter } from './apimall.js';
 import type {
   VehicleAdapter,
   VehicleAdapterContext,
@@ -29,17 +28,14 @@ import type {
 export type VehicleFetchMode = 'auto' | 'interactive';
 
 /**
- * Default chain order per §7.1.
- * APIMall commercial API is tried after mParivahan (free) and before the
- * interactive portal — it is auto-capable and needs only APIMALL_API_KEY.
- * The adapter self-disables (retryable:false, descriptive error) when the
- * key is not set, so the chain degrades gracefully without it.
+ * Default chain order per §7.1: mParivahan first (free, fastest when
+ * available), parivahan portal second (interactive OTP), SMS last as
+ * the guaranteed human-in-the-loop fallback.
  */
 const DEFAULT_CHAIN: VehicleAdapter[] = [
-  mparivahanAdapter,   // free, government endpoint (may fail outside mobile IPs)
-  apimallRcAdapter,    // commercial, reliable — needs APIMALL_API_KEY
-  parivahanPortalAdapter, // interactive OTP, user must be present
-  smsVehicleAdapter,   // human-in-the-loop final fallback
+  mparivahanAdapter,
+  parivahanPortalAdapter,
+  smsVehicleAdapter,
 ];
 
 export interface RunVehicleChainInput {

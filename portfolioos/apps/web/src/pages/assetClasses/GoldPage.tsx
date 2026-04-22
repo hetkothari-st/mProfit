@@ -1,5 +1,6 @@
 import { Coins } from 'lucide-react';
 import { SimpleAssetPage } from './SimpleAssetPage';
+import { GoldFormDialog } from './GoldFormDialog';
 
 export function GoldPage() {
   return (
@@ -9,6 +10,7 @@ export function GoldPage() {
       icon={Coins}
       assetClasses={['PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF', 'PHYSICAL_SILVER']}
       defaultAssetClass="PHYSICAL_GOLD"
+      FormComponent={GoldFormDialog}
     />
   );
 }

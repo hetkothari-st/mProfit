@@ -1,5 +1,6 @@
 import { Boxes } from 'lucide-react';
 import { SimpleAssetPage } from './SimpleAssetPage';
+import { OtherAssetFormDialog } from './OtherAssetFormDialog';
 
 export function OtherAssetsPage() {
   return (
@@ -13,6 +14,7 @@ export function OtherAssetsPage() {
         'REAL_ESTATE', 'ART_COLLECTIBLES', 'CASH', 'OTHER',
       ]}
       defaultAssetClass="OTHER"
+      FormComponent={OtherAssetFormDialog}
     />
   );
 }

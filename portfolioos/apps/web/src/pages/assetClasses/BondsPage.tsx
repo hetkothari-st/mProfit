@@ -1,5 +1,6 @@
 import { Landmark } from 'lucide-react';
 import { SimpleAssetPage } from './SimpleAssetPage';
+import { BondFormDialog } from './BondFormDialog';
 
 export function BondsPage() {
   return (
@@ -9,6 +10,7 @@ export function BondsPage() {
       icon={Landmark}
       assetClasses={['BOND', 'GOVT_BOND', 'CORPORATE_BOND']}
       defaultAssetClass="BOND"
+      FormComponent={BondFormDialog}
     />
   );
 }

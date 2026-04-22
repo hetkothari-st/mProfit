@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import {
   Building2,
   Plus,
@@ -11,6 +12,9 @@ import {
   CheckCircle2,
   Clock,
   TrendingUp,
+  Pencil,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -52,28 +56,46 @@ function getPropertySummary(property: RentalPropertyDTO) {
   return { activeTenancy, overdueCount, expectedCount, nextDue };
 }
 
-// ── Create property dialog ────────────────────────────────────────────
+// ── Create / Edit property dialog ─────────────────────────────────────
 
 function CreatePropertyDialog({
   open,
   onOpenChange,
+  initial,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  initial?: RentalPropertyDTO | null;
 }) {
   const qc = useQueryClient();
+  const isEdit = !!initial;
   const [form, setForm] = useState<CreatePropertyInput>({
-    name: '',
-    propertyType: 'RESIDENTIAL',
-    address: '',
-    purchaseDate: '',
-    purchasePrice: '',
-    currentValue: '',
+    name: initial?.name ?? '',
+    propertyType: initial?.propertyType ?? 'RESIDENTIAL',
+    address: initial?.address ?? '',
+    purchaseDate: initial?.purchaseDate ?? '',
+    purchasePrice: initial?.purchasePrice ?? '',
+    currentValue: initial?.currentValue ?? '',
   });
   const [errors, setErrors] = useState<Partial<Record<keyof CreatePropertyInput, string>>>({});
 
+  // Re-sync form when dialog opens with a different initial
+  useState(() => {
+    if (open) {
+      setForm({
+        name: initial?.name ?? '',
+        propertyType: initial?.propertyType ?? 'RESIDENTIAL',
+        address: initial?.address ?? '',
+        purchaseDate: initial?.purchaseDate ?? '',
+        purchasePrice: initial?.purchasePrice ?? '',
+        currentValue: initial?.currentValue ?? '',
+      });
+    }
+  });
+
   const mutation = useMutation({
-    mutationFn: (input: CreatePropertyInput) => rentalApi.createProperty(input),
+    mutationFn: (input: CreatePropertyInput) =>
+      isEdit ? rentalApi.updateProperty(initial!.id, input) : rentalApi.createProperty(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rental-properties'] });
       onOpenChange(false);
@@ -105,7 +127,7 @@ function CreatePropertyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add property</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit property' : 'Add property'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
@@ -182,7 +204,7 @@ function CreatePropertyDialog({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : 'Save'}
+            {mutation.isPending ? 'Saving…' : isEdit ? 'Save changes' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -192,7 +214,17 @@ function CreatePropertyDialog({
 
 // ── Property card ─────────────────────────────────────────────────────
 
-function PropertyCard({ property }: { property: RentalPropertyDTO }) {
+function PropertyCard({
+  property,
+  onEdit,
+  onDelete,
+  isDeleting,
+}: {
+  property: RentalPropertyDTO;
+  onEdit: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
+}) {
   const { activeTenancy, overdueCount, nextDue } = getPropertySummary(property);
 
   const statusColor = overdueCount > 0 ? 'text-negative' : 'text-positive';
@@ -239,11 +271,19 @@ function PropertyCard({ property }: { property: RentalPropertyDTO }) {
               )}
             </div>
           </div>
-          <Button asChild variant="ghost" size="sm" className="shrink-0">
-            <Link to={`/rental/${property.id}`}>
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={onDelete} disabled={isDeleting} title="Delete">
+              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            </Button>
+            <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
+              <Link to={`/rental/${property.id}`}>
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
 
         <div className="mt-4 pt-3 border-t space-y-2">
@@ -354,10 +394,23 @@ function SummaryStrip({ properties }: { properties: RentalPropertyDTO[] }) {
 
 export function RentalListPage() {
   const [createOpen, setCreateOpen] = useState(false);
+  const [editProperty, setEditProperty] = useState<RentalPropertyDTO | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const qc = useQueryClient();
 
   const { data: properties, isLoading } = useQuery({
     queryKey: ['rental-properties'],
     queryFn: () => rentalApi.listProperties(),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => rentalApi.deleteProperty(id),
+    onSuccess: () => {
+      toast.success('Property deleted');
+      setConfirmDeleteId(null);
+      qc.invalidateQueries({ queryKey: ['rental-properties'] });
+    },
+    onError: () => toast.error('Failed to delete property'),
   });
 
   const list = properties ?? [];
@@ -400,12 +453,37 @@ export function RentalListPage() {
       {!isLoading && list.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {list.map((p) => (
-            <PropertyCard key={p.id} property={p} />
+            <div key={p.id}>
+              {confirmDeleteId === p.id ? (
+                <Card className="border-destructive">
+                  <CardContent className="p-5 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">Delete "{p.name}"?</p>
+                    <div className="flex gap-2">
+                      <Button variant="destructive" size="sm" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(p.id)}>
+                        {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes, delete'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <PropertyCard
+                  property={p}
+                  onEdit={() => { setEditProperty(p); setCreateOpen(true); }}
+                  onDelete={() => setConfirmDeleteId(p.id)}
+                  isDeleting={deleteMutation.isPending && confirmDeleteId === p.id}
+                />
+              )}
+            </div>
           ))}
         </div>
       )}
 
-      <CreatePropertyDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreatePropertyDialog
+        open={createOpen}
+        onOpenChange={(v) => { setCreateOpen(v); if (!v) setEditProperty(null); }}
+        initial={editProperty}
+      />
     </div>
   );
 }

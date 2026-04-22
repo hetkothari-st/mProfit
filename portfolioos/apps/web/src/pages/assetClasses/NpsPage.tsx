@@ -1,5 +1,6 @@
 import { ShieldCheck } from 'lucide-react';
 import { SimpleAssetPage } from './SimpleAssetPage';
+import { NpsFormDialog } from './PPFNpsFormDialog';
 
 export function NpsPage() {
   return (
@@ -9,6 +10,7 @@ export function NpsPage() {
       icon={ShieldCheck}
       assetClasses={['NPS']}
       defaultAssetClass="NPS"
+      FormComponent={NpsFormDialog}
     />
   );
 }

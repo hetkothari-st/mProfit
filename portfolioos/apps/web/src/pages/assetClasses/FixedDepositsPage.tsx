@@ -1,5 +1,6 @@
 import { PiggyBank } from 'lucide-react';
 import { SimpleAssetPage } from './SimpleAssetPage';
+import { FDFormDialog } from './FDFormDialog';
 
 export function FixedDepositsPage() {
   return (
@@ -9,6 +10,7 @@ export function FixedDepositsPage() {
       icon={PiggyBank}
       assetClasses={['FIXED_DEPOSIT']}
       defaultAssetClass="FIXED_DEPOSIT"
+      FormComponent={FDFormDialog}
     />
   );
 }

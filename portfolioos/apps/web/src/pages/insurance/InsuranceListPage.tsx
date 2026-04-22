@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import {
   Shield,
   Plus,
@@ -13,6 +14,9 @@ import {
   Home,
   Plane,
   FileText,
+  Pencil,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -120,7 +124,17 @@ function SummaryStrip({ policies }: { policies: InsurancePolicyDTO[] }) {
 
 // ── Policy card ───────────────────────────────────────────────────────
 
-function PolicyCard({ policy }: { policy: InsurancePolicyDTO }) {
+function PolicyCard({
+  policy,
+  onEdit,
+  onDelete,
+  isDeleting,
+}: {
+  policy: InsurancePolicyDTO;
+  onEdit: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
+}) {
   const statusMeta = getStatusMeta(policy);
 
   return (
@@ -139,11 +153,19 @@ function PolicyCard({ policy }: { policy: InsurancePolicyDTO }) {
               {policy.planName ?? policy.policyHolder} · {policy.policyNumber}
             </p>
           </div>
-          <Button asChild variant="ghost" size="sm" className="shrink-0">
-            <Link to={`/insurance/${policy.id}`}>
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={onDelete} disabled={isDeleting} title="Delete">
+              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            </Button>
+            <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
+              <Link to={`/insurance/${policy.id}`}>
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
 
         <div className="mt-4 pt-3 border-t space-y-2">
@@ -187,30 +209,37 @@ function PolicyCard({ policy }: { policy: InsurancePolicyDTO }) {
   );
 }
 
-// ── Create dialog ─────────────────────────────────────────────────────
+// ── Create / Edit dialog ──────────────────────────────────────────────
 
 function CreatePolicyDialog({
   open,
   onOpenChange,
+  initial,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  initial?: InsurancePolicyDTO | null;
 }) {
   const qc = useQueryClient();
+  const isEdit = !!initial;
   const [form, setForm] = useState<CreatePolicyInput>({
-    insurer: '',
-    policyNumber: '',
-    type: 'TERM',
-    policyHolder: '',
-    sumAssured: '',
-    premiumAmount: '',
-    premiumFrequency: 'ANNUAL',
-    startDate: '',
+    insurer: initial?.insurer ?? '',
+    policyNumber: initial?.policyNumber ?? '',
+    type: (initial?.type as CreatePolicyInput['type']) ?? 'TERM',
+    planName: initial?.planName ?? '',
+    policyHolder: initial?.policyHolder ?? '',
+    sumAssured: initial?.sumAssured ?? '',
+    premiumAmount: initial?.premiumAmount ?? '',
+    premiumFrequency: (initial?.premiumFrequency as CreatePolicyInput['premiumFrequency']) ?? 'ANNUAL',
+    startDate: initial?.startDate ?? '',
+    maturityDate: initial?.maturityDate ?? '',
+    nextPremiumDue: initial?.nextPremiumDue ?? '',
   });
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
 
   const mutation = useMutation({
-    mutationFn: (input: CreatePolicyInput) => insuranceApi.createPolicy(input),
+    mutationFn: (input: CreatePolicyInput) =>
+      isEdit ? insuranceApi.updatePolicy(initial!.id, input) : insuranceApi.createPolicy(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['insurance-policies'] });
       onOpenChange(false);
@@ -256,7 +285,7 @@ function CreatePolicyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add insurance policy</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit insurance policy' : 'Add insurance policy'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -365,10 +394,23 @@ function CreatePolicyDialog({
 
 export function InsuranceListPage() {
   const [createOpen, setCreateOpen] = useState(false);
+  const [editPolicy, setEditPolicy] = useState<InsurancePolicyDTO | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const qc = useQueryClient();
 
   const { data: policies, isLoading } = useQuery({
     queryKey: ['insurance-policies'],
     queryFn: () => insuranceApi.listPolicies(),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => insuranceApi.deletePolicy(id),
+    onSuccess: () => {
+      toast.success('Policy deleted');
+      setConfirmDeleteId(null);
+      qc.invalidateQueries({ queryKey: ['insurance-policies'] });
+    },
+    onError: () => toast.error('Failed to delete policy'),
   });
 
   const list = policies ?? [];
@@ -416,7 +458,29 @@ export function InsuranceListPage() {
       {!isLoading && byStatus.active.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {byStatus.active.map((p) => <PolicyCard key={p.id} policy={p} />)}
+            {byStatus.active.map((p) =>
+              confirmDeleteId === p.id ? (
+                <Card key={p.id} className="border-destructive">
+                  <CardContent className="p-5 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium truncate">Delete "{p.insurer} {p.policyNumber}"?</p>
+                    <div className="flex gap-2 shrink-0">
+                      <Button variant="destructive" size="sm" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(p.id)}>
+                        {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <PolicyCard
+                  key={p.id}
+                  policy={p}
+                  onEdit={() => { setEditPolicy(p); setCreateOpen(true); }}
+                  onDelete={() => setConfirmDeleteId(p.id)}
+                  isDeleting={deleteMutation.isPending && confirmDeleteId === p.id}
+                />
+              )
+            )}
           </div>
           {byStatus.inactive.length > 0 && (
             <>
@@ -424,14 +488,40 @@ export function InsuranceListPage() {
                 Inactive / lapsed
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 opacity-60">
-                {byStatus.inactive.map((p) => <PolicyCard key={p.id} policy={p} />)}
+                {byStatus.inactive.map((p) =>
+                  confirmDeleteId === p.id ? (
+                    <Card key={p.id} className="border-destructive">
+                      <CardContent className="p-5 flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium truncate">Delete "{p.insurer}"?</p>
+                        <div className="flex gap-2 shrink-0">
+                          <Button variant="destructive" size="sm" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(p.id)}>
+                            {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <PolicyCard
+                      key={p.id}
+                      policy={p}
+                      onEdit={() => { setEditPolicy(p); setCreateOpen(true); }}
+                      onDelete={() => setConfirmDeleteId(p.id)}
+                      isDeleting={deleteMutation.isPending && confirmDeleteId === p.id}
+                    />
+                  )
+                )}
               </div>
             </>
           )}
         </>
       )}
 
-      <CreatePolicyDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreatePolicyDialog
+        open={createOpen}
+        onOpenChange={(v) => { setCreateOpen(v); if (!v) setEditPolicy(null); }}
+        initial={editPolicy}
+      />
     </div>
   );
 }
