@@ -44,6 +44,7 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
 import { computeAssetKey } from '../services/assetKey.js';
+import { hookAutoMatchRentalCredit } from '../services/rental.service.js';
 
 export type ProjectionOutcome =
   | { kind: 'projected_transaction'; eventId: string; transactionId: string }
@@ -232,6 +233,27 @@ async function projectCashFlow(
     });
     return cf;
   });
+
+  // §8.2 rental auto-match: for inbound credits, check if the amount +
+  // date + counterparty matches an expected rent receipt. Never throws —
+  // the projection is already durable at this point.
+  if (
+    direction === 'INFLOW' &&
+    (event.eventType === 'UPI_CREDIT' || event.eventType === 'NEFT_CREDIT')
+  ) {
+    void hookAutoMatchRentalCredit(
+      {
+        id: event.id,
+        userId: event.userId,
+        eventDate: event.eventDate,
+        amount: event.amount
+          ? new Prisma.Decimal(event.amount.toString())
+          : null,
+        counterparty: event.counterparty,
+      },
+      created.id,
+    );
+  }
 
   return { kind: 'projected_cashflow', eventId: event.id, cashFlowId: created.id };
 }

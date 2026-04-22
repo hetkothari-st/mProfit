@@ -85,6 +85,7 @@ describe('fetchChallansForRegNo', () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    process.env.NODE_ENV = 'production'; // gate requires explicit flag in production
     delete process.env.ENABLE_CHALLAN_ADAPTER;
     delete process.env.USE_CHALLAN_BROWSER;
     delete process.env.CHALLAN_FIXTURE_PATH;

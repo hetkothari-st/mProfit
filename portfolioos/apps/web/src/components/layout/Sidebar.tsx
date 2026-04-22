@@ -10,6 +10,7 @@ import {
   // ShieldCheck — unused while NPS nav item is disabled (see below).
   Boxes,
   Car,
+  Building2,
   FileText,
   Upload,
   BookOpenCheck,
@@ -22,6 +23,7 @@ import {
   Inbox,
   PanelLeftClose,
   PanelLeftOpen,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -39,6 +41,7 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
       { label: 'Portfolios', to: '/portfolios', icon: Briefcase },
       { label: 'Transactions', to: '/transactions', icon: Receipt },
+      { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },
     ],
   },
   {
@@ -53,6 +56,7 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       // §10.2 NSDL CRA Playwright adapter lands.
       // { label: 'NPS', to: '/nps', icon: ShieldCheck },
       { label: 'Vehicles', to: '/vehicles', icon: Car },
+      { label: 'Rental', to: '/rental', icon: Building2 },
       { label: 'Others', to: '/others', icon: Boxes },
     ],
   },

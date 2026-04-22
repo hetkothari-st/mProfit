@@ -32,11 +32,14 @@ const {
 const envAny = env as unknown as Record<string, string | undefined>;
 
 function withEnv(
-  overrides: Partial<Record<'ENABLE_LLM_PARSER' | 'ANTHROPIC_API_KEY', string | undefined>>,
+  overrides: Partial<
+    Record<'ENABLE_LLM_PARSER' | 'ANTHROPIC_API_KEY' | 'NODE_ENV', string | undefined>
+  >,
 ): () => void {
   const snap = {
     ENABLE_LLM_PARSER: envAny.ENABLE_LLM_PARSER,
     ANTHROPIC_API_KEY: envAny.ANTHROPIC_API_KEY,
+    NODE_ENV: envAny.NODE_ENV,
   };
   for (const [k, v] of Object.entries(overrides)) {
     if (v === undefined) delete envAny[k];
@@ -65,7 +68,7 @@ describe('LLM client', () => {
 
   describe('checkLlmGate', () => {
     it('refuses when ENABLE_LLM_PARSER is not "true"', () => {
-      const restore = withEnv({ ENABLE_LLM_PARSER: 'false', ANTHROPIC_API_KEY: 'sk-xxx' });
+      const restore = withEnv({ ENABLE_LLM_PARSER: 'false', ANTHROPIC_API_KEY: 'sk-xxx', NODE_ENV: 'production' });
       try {
         const g = checkLlmGate();
         expect(g.ok).toBe(false);
@@ -98,7 +101,7 @@ describe('LLM client', () => {
 
   describe('parseEmailWithLlm gate behaviour', () => {
     it('returns disabled without calling the SDK', async () => {
-      const restore = withEnv({ ENABLE_LLM_PARSER: 'false', ANTHROPIC_API_KEY: 'sk-test' });
+      const restore = withEnv({ ENABLE_LLM_PARSER: 'false', ANTHROPIC_API_KEY: 'sk-test', NODE_ENV: 'production' });
       try {
         const r = await scope.runAs(() =>
           parseEmailWithLlm({

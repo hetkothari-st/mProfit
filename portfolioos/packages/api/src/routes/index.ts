@@ -14,6 +14,8 @@ import { canonicalEventsRouter } from './canonicalEvents.routes.js';
 import { monitoredSendersRouter } from './monitoredSenders.routes.js';
 import { ingestionRouter } from './ingestion.routes.js';
 import { vehiclesRouter } from './vehicles.routes.js';
+import { cashFlowsRouter } from './cashflows.routes.js';
+import { rentalRouter } from './rental.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -31,4 +33,6 @@ export function registerRoutes(app: Express): void {
   app.use('/api/monitored-senders', monitoredSendersRouter);
   app.use('/api/ingestion', ingestionRouter);
   app.use('/api/vehicles', vehiclesRouter);
+  app.use('/api/cashflows', cashFlowsRouter);
+  app.use('/api/rental', rentalRouter);
 }
