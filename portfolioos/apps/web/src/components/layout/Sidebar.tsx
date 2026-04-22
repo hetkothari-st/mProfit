@@ -18,7 +18,6 @@ import {
   Plug,
   Mail,
   FileDown,
-  Search,
   Inbox,
   PanelLeftClose,
   PanelLeftOpen,
@@ -54,11 +53,8 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
     ],
   },
   {
-    heading: 'Ingestion',
     items: [
-      { label: 'Review', to: '/ingestion/review', icon: Inbox },
-      { label: 'Senders', to: '/ingestion/senders', icon: Mail },
-      { label: 'Discovery', to: '/ingestion/discovery', icon: Search },
+      { label: 'Ingestion', to: '/ingestion', icon: Inbox },
     ],
   },
   {
