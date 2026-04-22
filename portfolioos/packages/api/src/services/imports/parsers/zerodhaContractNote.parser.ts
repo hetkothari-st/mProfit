@@ -13,19 +13,28 @@ import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../l
  */
 
 const ISIN_RE = /\b(IN[EF][0-9A-Z]{9})\b/;
-const DATE_RE = /Trade Date[:\s]*([0-9]{1,2}[-/][A-Za-z]{3}[-/][0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})/i;
+const DATE_RE = /Trade Date[:\s]*([0-9]{1,2}[-/][A-Za-z]{3}[-/][0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{4})/i;
 
 function toIsoDate(raw: string): string | null {
   const s = raw.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const m = s.match(/^(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{4})$/);
-  if (m) {
+  const monAlpha = s.match(/^(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{4})$/);
+  if (monAlpha) {
     const months: Record<string, string> = {
       jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
       jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
     };
-    const mo = months[m[2]!.toLowerCase()];
-    if (mo) return `${m[3]}-${mo}-${m[1]!.padStart(2, '0')}`;
+    const mo = months[monAlpha[2]!.toLowerCase()];
+    if (mo) return `${monAlpha[3]}-${mo}-${monAlpha[1]!.padStart(2, '0')}`;
+  }
+  // DD/MM/YYYY or DD-MM-YYYY — Indian contract notes routinely use this form.
+  const dmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmy) {
+    const dd = dmy[1]!.padStart(2, '0');
+    const mm = dmy[2]!.padStart(2, '0');
+    if (Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31) {
+      return `${dmy[3]}-${mm}-${dd}`;
+    }
   }
   return null;
 }

@@ -581,7 +581,7 @@ exports[`parser golden fixtures > Zerodha contract note (PDF text) > zerodha-pdf
       "price": "2918.4",
       "quantity": "7",
       "symbol": "RELIANCE",
-      "tradeDate": "2026-04-21",
+      "tradeDate": "2024-03-12",
       "transactionType": "BUY",
     },
     {
@@ -592,7 +592,7 @@ exports[`parser golden fixtures > Zerodha contract note (PDF text) > zerodha-pdf
       "price": "2422.15",
       "quantity": "4",
       "symbol": "HINDUNILVR",
-      "tradeDate": "2026-04-21",
+      "tradeDate": "2024-03-12",
       "transactionType": "BUY",
     },
     {
@@ -603,7 +603,7 @@ exports[`parser golden fixtures > Zerodha contract note (PDF text) > zerodha-pdf
       "price": "1022.3",
       "quantity": "25",
       "symbol": "ICICIBANK",
-      "tradeDate": "2026-04-21",
+      "tradeDate": "2024-03-12",
       "transactionType": "BUY",
     },
     {
@@ -614,7 +614,7 @@ exports[`parser golden fixtures > Zerodha contract note (PDF text) > zerodha-pdf
       "price": "11342.6",
       "quantity": "1",
       "symbol": "MARUTI",
-      "tradeDate": "2026-04-21",
+      "tradeDate": "2024-03-12",
       "transactionType": "SELL",
     },
     {
@@ -625,7 +625,7 @@ exports[`parser golden fixtures > Zerodha contract note (PDF text) > zerodha-pdf
       "price": "443.8",
       "quantity": "45",
       "symbol": "ITC",
-      "tradeDate": "2026-04-21",
+      "tradeDate": "2024-03-12",
       "transactionType": "BUY",
     },
   ],
