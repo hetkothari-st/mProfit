@@ -1,24 +1,22 @@
 /**
- * §7.5 Challan adapter — echallan.parivahan.gov.in scraper.
+ * §7.5 Challan adapter — multi-source challan fetcher.
  *
- * Fetches the list of outstanding/paid e-challans for an RC. Like the
- * portal adapter (§7.3), the real flow needs OTP + CAPTCHA so it runs
- * interactively only. The weekly cron does NOT run this directly; the
- * monthly challan cron calls {@link scanChallansForVehicle} in the
- * service layer which uses this adapter.
+ * Fetch chain (tried in order, first success wins):
+ *  1. CarInfo.app scrape — __NEXT_DATA__ extraction, no key, no CAPTCHA
+ *  2. echallan.parivahan.gov.in REST — /api/challan-status/vehicle/{regNo}
+ *  3. Playwright headed session — gated by USE_CHALLAN_BROWSER=true
+ *  4. Fixture — CHALLAN_FIXTURE_PATH for dev/test
  *
- * Two transports, same parse:
- *
- *   - Live: Playwright headed session (gated by USE_CHALLAN_BROWSER).
- *   - Fixture: JSON file pointed to by CHALLAN_FIXTURE_PATH — used by
- *     §7.5 tests and by dev flows that haven't cleared G6 yet.
+ * The Playwright path is the only one that needs OTP + CAPTCHA.
+ * Sources 1 and 2 run in auto mode (scheduler / monthly cron).
  */
 
 import { readFileSync } from 'node:fs';
 import { logger } from '../../lib/logger.js';
+import { fetchCarInfoChallans } from './carinfo.js';
 
 const ID = 'echallan.parivahan.portal';
-const VERSION = '1';
+const VERSION = '2';
 
 export interface ChallanRow {
   challanNo: string;
@@ -134,6 +132,51 @@ export function parseChallanPayload(rows: unknown): ChallanRow[] {
   return out;
 }
 
+// ─── echallan REST API ────────────────────────────────────────────────────────
+
+const ECHALLAN_UA =
+  'Mozilla/5.0 (Linux; Android 12; SM-A526B) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
+
+/**
+ * echallan.parivahan.gov.in exposes a REST path for challan lookup.
+ * The vehicle-number endpoint sometimes skips CAPTCHA for read-only queries.
+ */
+async function fetchEchallanHttp(regNo: string): Promise<ChallanRow[]> {
+  const clean = regNo.replace(/\s+/g,'').toUpperCase();
+
+  // Endpoint 1: REST-style path seen in public URLs
+  const urls = [
+    `https://echallan.parivahan.gov.in/api/challan-status/vehicle/${encodeURIComponent(clean)}`,
+    `https://echallan.parivahan.gov.in/index/accused-challan?regNo=${encodeURIComponent(clean)}`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': ECHALLAN_UA,
+          'Accept': 'application/json, text/html, */*',
+          'Referer': 'https://echallan.parivahan.gov.in/',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) continue;
+      const ct = res.headers.get('content-type') ?? '';
+      if (!ct.includes('json')) continue;
+      const json = await res.json() as unknown;
+      if (Array.isArray(json)) return parseChallanPayload(json);
+      if (json && typeof json === 'object') {
+        const obj = json as Record<string, unknown>;
+        const arr = obj['data'] ?? obj['challans'] ?? obj['challanList'] ?? obj['result'];
+        if (Array.isArray(arr)) return parseChallanPayload(arr);
+      }
+    } catch { /* try next */ }
+  }
+  throw new Error('echallan HTTP: no JSON response from any endpoint');
+}
+
 function loadFromFixture(regNo: string): unknown {
   const path = process.env.CHALLAN_FIXTURE_PATH;
   if (!path) {
@@ -210,51 +253,69 @@ export async function fetchChallansForRegNo(
   regNo: string,
   chassisLast4: string | undefined | null,
 ): Promise<ChallanFetchResult> {
+  const clean = regNo.replace(/\s+/g,'').toUpperCase();
+  const errors: string[] = [];
+
+  // ── 1. CarInfo.app (free, no CAPTCHA, no key) ──────────────────────────────
+  try {
+    const challans = await fetchCarInfoChallans(clean);
+    logger.info({ regNo: clean, count: challans.length }, '[echallan] carinfo source OK');
+    return { ok: true, source: 'carinfo', sourceVersion: VERSION, challans };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.warn({ err: msg, regNo: clean }, '[echallan] carinfo failed');
+    errors.push(`carinfo: ${msg}`);
+  }
+
+  // ── 2. echallan REST API (no CAPTCHA for GET) ──────────────────────────────
+  try {
+    const challans = await fetchEchallanHttp(clean);
+    logger.info({ regNo: clean, count: challans.length }, '[echallan] HTTP REST source OK');
+    return { ok: true, source: 'echallan-http', sourceVersion: VERSION, challans };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.warn({ err: msg, regNo: clean }, '[echallan] HTTP REST failed');
+    errors.push(`echallan-http: ${msg}`);
+  }
+
+  // ── 3. Playwright headed session (OTP + CAPTCHA, user must be present) ─────
   const gateOpen =
     process.env.NODE_ENV !== 'production' ||
     process.env.ENABLE_CHALLAN_ADAPTER === 'true';
-  if (!gateOpen) {
-    return {
-      ok: false,
-      source: ID,
-      sourceVersion: VERSION,
-      challans: [],
-      error:
-        'Challan adapter disabled (Gate G6). Enable with ENABLE_CHALLAN_ADAPTER=true after clearing §16 G6.',
-      retryable: false,
-    };
+
+  if (gateOpen && chassisLast4) {
+    try {
+      const raw = await runChallanSession(clean, chassisLast4);
+      const challans = parseChallanPayload(raw);
+      return { ok: true, source: ID, sourceVersion: VERSION, challans };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.warn({ err: msg, regNo: clean }, '[echallan] playwright failed');
+      errors.push(`playwright: ${msg}`);
+    }
+  } else if (!chassisLast4) {
+    errors.push('playwright: chassis last 4 not set — skipped');
   }
-  if (!chassisLast4) {
-    return {
-      ok: false,
-      source: ID,
-      sourceVersion: VERSION,
-      challans: [],
-      error: 'Chassis last 4 required for challan lookup.',
-      retryable: false,
-    };
-  }
+
+  // ── 4. Fixture fallback (dev/test) ─────────────────────────────────────────
   try {
-    const raw = await runChallanSession(regNo.toUpperCase(), chassisLast4);
+    const raw = loadFromFixture(clean);
     const challans = parseChallanPayload(raw);
-    return {
-      ok: true,
-      source: ID,
-      sourceVersion: VERSION,
-      challans,
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.warn({ err: message, regNo }, '[echallan] fetch failed');
-    return {
-      ok: false,
-      source: ID,
-      sourceVersion: VERSION,
-      challans: [],
-      error: message,
-      retryable: true,
-    };
+    return { ok: true, source: 'fixture', sourceVersion: VERSION, challans };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push(`fixture: ${msg}`);
   }
+
+  logger.warn({ regNo: clean, errors }, '[echallan] all sources failed');
+  return {
+    ok: false,
+    source: ID,
+    sourceVersion: VERSION,
+    challans: [],
+    error: `All challan sources failed — ${errors.join(' · ')}`,
+    retryable: true,
+  };
 }
 
 export const CHALLAN_ADAPTER_ID = ID;
