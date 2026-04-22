@@ -66,18 +66,52 @@ function extractNextData(html: string): Record<string, unknown> | null {
   return null;
 }
 
+// HTML tag names — if obj keys are mostly these, it's an HTML parse, not data
+const HTML_KEYS = new Set(['title','div','span','a','body','html','head','marquee','h1','h2','h3','p','ul','li','table','tr','td','th','form','input','button','script','style','header','footer','nav','section','article','main']);
+
+function looksLikeVehicleObj(obj: Record<string, unknown>): boolean {
+  const keys = Object.keys(obj).map(k => k.toLowerCase());
+  if (keys.length === 0) return false;
+  const htmlCount = keys.filter(k => HTML_KEYS.has(k)).length;
+  if (htmlCount >= 3 || htmlCount / keys.length > 0.4) return false;
+  const vehicleStems = ['make','model','fuel','owner','chassis','insurance','puc','fitness','tax','permit','reg','rto','color','colour','mfg','vehicle','manufacturer'];
+  return vehicleStems.some(stem => keys.some(k => k.includes(stem)));
+}
+
 function findVehicleObject(pageProps: Record<string, unknown>): Record<string, unknown> | null {
-  // Common top-level keys CarInfo uses
+  // Direct top-level candidates — 'rc' is what CarInfo uses in __NEXT_DATA__
   const candidates = [
-    'rcData', 'vehicleData', 'rcDetails', 'data', 'vehicleDetails',
-    'rcInfo', 'rcResult', 'vehicleInfo',
+    'rc', 'rcData', 'vehicleData', 'rcDetails', 'vehicleDetails',
+    'rcInfo', 'rcResult', 'vehicleInfo', 'xdataprops',
   ];
   for (const k of candidates) {
     const v = pageProps[k];
-    if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const obj = v as Record<string, unknown>;
+      if (looksLikeVehicleObj(obj)) return obj;
+      // One level deeper (e.g. {rc: {data: {...}}})
+      for (const inner of ['data','rcData','vehicleData','details','result']) {
+        const w = obj[inner];
+        if (w && typeof w === 'object' && !Array.isArray(w) && looksLikeVehicleObj(w as Record<string, unknown>)) {
+          return w as Record<string, unknown>;
+        }
+      }
+    }
   }
-  // If pageProps itself looks like vehicle data
-  if (pageProps['owner_name'] || pageProps['maker_desc'] || pageProps['reg_no']) return pageProps;
+
+  // Deep-search initialState (Redux store shape: {reducer: {rcData: {...}}})
+  const initialState = pageProps['initialState'];
+  if (initialState && typeof initialState === 'object' && !Array.isArray(initialState)) {
+    for (const reducerVal of Object.values(initialState as Record<string, unknown>)) {
+      if (reducerVal && typeof reducerVal === 'object' && !Array.isArray(reducerVal)) {
+        const inner = findVehicleObject(reducerVal as Record<string, unknown>);
+        if (inner) return inner;
+      }
+    }
+  }
+
+  // Flat pageProps itself looks like vehicle data
+  if (looksLikeVehicleObj(pageProps)) return pageProps;
   return null;
 }
 

@@ -163,19 +163,40 @@ async function primeVahanSession(): Promise<Session | null> {
 
 // ─── response body handling ───────────────────────────────────────────────────
 
+// HTML structural tag names — 3+ of these in the flat map = HTML page, not data
+const HTML_TAG_SET = new Set([
+  'title','div','span','a','body','html','head','marquee',
+  'h1','h2','h3','p','ul','li','table','tr','td','th',
+  'form','input','button','script','style','header','footer',
+  'nav','section','article','main','meta','link','noscript',
+]);
+
 function tryParseBody(text: string, label: string): Record<string,unknown> {
   const t = text.trimStart();
   let obj: Record<string,unknown>;
+
+  // Reject HTML up-front (<!DOCTYPE or <html> opener)
+  if (/^<!DOCTYPE\s/i.test(t) || /^<html[\s>]/i.test(t)) {
+    throw new Error(`API_CHANGED: ${label} returned an HTML page (maintenance/login), not vehicle data`);
+  }
+
   if (t.startsWith('{') || t.startsWith('[')) {
     try { obj = JSON.parse(text) as Record<string,unknown>; }
     catch (e) { throw new Error(`API_CHANGED: bad JSON from ${label}: ${e}`); }
   } else if (t.startsWith('<')) {
     const flat = xmlToFlat(text);
     if (Object.keys(flat).length === 0) throw new Error(`API_CHANGED: empty XML from ${label}: ${text.slice(0,200)}`);
+
+    // Detect HTML parsed-as-XML: if ≥3 keys are common HTML tag names, it's a page not data
+    const htmlKeyCount = Object.keys(flat).filter(k => HTML_TAG_SET.has(k.toLowerCase())).length;
+    if (htmlKeyCount >= 3) {
+      throw new Error(`API_CHANGED: ${label} returned HTML (keys include: ${Object.keys(flat).slice(0,8).join(', ')})`);
+    }
     obj = flat;
   } else {
     throw new Error(`API_CHANGED: unrecognised body from ${label}: ${text.slice(0,200)}`);
   }
+
   if (process.env['VAHAN_DEBUG'] === 'true') {
     logger.debug({ label, keys: Object.keys(obj), snippet: text.slice(0,300) }, '[vahan] raw response');
   }
