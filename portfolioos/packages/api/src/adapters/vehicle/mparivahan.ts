@@ -362,11 +362,12 @@ export const mparivahanAdapter: VehicleAdapter = {
     logger.debug({ vahanSess: !!vahanSess, citizenSess: !!citizenSess }, '[vahan.mparivahan] sessions');
 
     const errors: string[] = [];
+    let apiChangedCount = 0;
+
     for (const { name, run } of buildAttempts(clean, vahanSess, citizenSess)) {
       try {
         const obj = await run();
 
-        // Detect error/session responses before spending time on parse
         const errMsg = isErrorResponse(obj);
         if (errMsg) { errors.push(`${name}: server error — ${errMsg}`); continue; }
 
@@ -377,7 +378,6 @@ export const mparivahanAdapter: VehicleAdapter = {
           continue;
         }
 
-        // Detect "vehicle not found" before parsing
         const allVals = Object.values(obj).map(v => String(v ?? '').toUpperCase()).join(' ');
         if (/INVALID\s+VEHICLE|NOT\s+FOUND|NO\s+RECORD|VEHICLE\s+NOT/.test(allVals) &&
             !allVals.includes('MARUTI') && !allVals.includes('HYUNDAI') && !allVals.includes('HONDA')) {
@@ -395,16 +395,19 @@ export const mparivahanAdapter: VehicleAdapter = {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.warn({ err: msg, regNo: clean, endpoint: name }, `[vahan.mparivahan] ${name} failed`);
-        if (msg.startsWith('API_CHANGED')) return { ok: false, error: msg, retryable: false, rawPayload: null };
+        // API_CHANGED means this endpoint structure changed — skip to next, don't abort
+        if (msg.startsWith('API_CHANGED')) apiChangedCount++;
         errors.push(`${name}: ${msg}`);
       }
     }
 
+    const totalAttempts = buildAttempts(clean, vahanSess, citizenSess).length;
     logger.warn({ regNo: clean, errors }, '[vahan.mparivahan] all endpoints failed');
     return {
       ok: false,
       error: `All endpoints failed — ${errors.join(' · ')}`,
-      retryable: true,
+      // Non-retryable only if every single endpoint returned API_CHANGED
+      retryable: apiChangedCount < totalAttempts,
       rawPayload: null,
     };
   },

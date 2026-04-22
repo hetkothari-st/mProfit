@@ -78,40 +78,66 @@ function looksLikeVehicleObj(obj: Record<string, unknown>): boolean {
   return vehicleStems.some(stem => keys.some(k => k.includes(stem)));
 }
 
-function findVehicleObject(pageProps: Record<string, unknown>): Record<string, unknown> | null {
-  // Direct top-level candidates — 'rc' is what CarInfo uses in __NEXT_DATA__
-  const candidates = [
+/**
+ * Recursively searches an object for a sub-object that looks like vehicle data.
+ * Depth-limited to 4 levels to avoid runaway recursion on large state trees.
+ */
+function findVehicleObject(obj: Record<string, unknown>, depth = 0): Record<string, unknown> | null {
+  if (depth > 4) return null;
+
+  // Direct match
+  if (depth > 0 && looksLikeVehicleObj(obj)) return obj;
+
+  // Priority keys to check first (most likely carriers of RC data)
+  const priorityKeys = [
     'rc', 'rcData', 'vehicleData', 'rcDetails', 'vehicleDetails',
     'rcInfo', 'rcResult', 'vehicleInfo', 'xdataprops',
+    'data', 'result', 'details', 'vehicle',
   ];
-  for (const k of candidates) {
-    const v = pageProps[k];
+  for (const k of priorityKeys) {
+    const v = obj[k];
     if (v && typeof v === 'object' && !Array.isArray(v)) {
-      const obj = v as Record<string, unknown>;
-      if (looksLikeVehicleObj(obj)) return obj;
-      // One level deeper (e.g. {rc: {data: {...}}})
-      for (const inner of ['data','rcData','vehicleData','details','result']) {
-        const w = obj[inner];
-        if (w && typeof w === 'object' && !Array.isArray(w) && looksLikeVehicleObj(w as Record<string, unknown>)) {
-          return w as Record<string, unknown>;
-        }
+      const child = v as Record<string, unknown>;
+      if (looksLikeVehicleObj(child)) return child;
+      const deeper = findVehicleObject(child, depth + 1);
+      if (deeper) return deeper;
+    }
+  }
+
+  // loaderData — Remix framework: all route loaders' return values keyed by route id
+  // e.g. { loaderData: { "routes/rc-details.$reg": { rc: {...} } } }
+  const loaderData = obj['loaderData'];
+  if (loaderData && typeof loaderData === 'object' && !Array.isArray(loaderData)) {
+    const ld = loaderData as Record<string, unknown>;
+    // Each value is a route's loader return — search all of them
+    for (const routeVal of Object.values(ld)) {
+      if (routeVal && typeof routeVal === 'object' && !Array.isArray(routeVal)) {
+        const found = findVehicleObject(routeVal as Record<string, unknown>, depth + 1);
+        if (found) return found;
       }
     }
   }
 
-  // Deep-search initialState (Redux store shape: {reducer: {rcData: {...}}})
-  const initialState = pageProps['initialState'];
+  // initialState — Redux / Zustand: {someReducer: {rcData: {...}}}
+  const initialState = obj['initialState'];
   if (initialState && typeof initialState === 'object' && !Array.isArray(initialState)) {
     for (const reducerVal of Object.values(initialState as Record<string, unknown>)) {
       if (reducerVal && typeof reducerVal === 'object' && !Array.isArray(reducerVal)) {
-        const inner = findVehicleObject(reducerVal as Record<string, unknown>);
-        if (inner) return inner;
+        const found = findVehicleObject(reducerVal as Record<string, unknown>, depth + 1);
+        if (found) return found;
       }
     }
   }
 
-  // Flat pageProps itself looks like vehicle data
-  if (looksLikeVehicleObj(pageProps)) return pageProps;
+  // Sweep all remaining keys at this level
+  for (const [k, v] of Object.entries(obj)) {
+    if (priorityKeys.includes(k) || k === 'loaderData' || k === 'initialState') continue;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const child = v as Record<string, unknown>;
+      if (looksLikeVehicleObj(child)) return child;
+    }
+  }
+
   return null;
 }
 
@@ -120,14 +146,43 @@ function findChallanArray(pageProps: Record<string, unknown>): unknown[] | null 
     'challanData', 'challans', 'challanList', 'data', 'challanDetails',
     'pendingChallans', 'challanInfo',
   ];
-  for (const k of candidates) {
-    const v = pageProps[k];
-    if (Array.isArray(v)) return v;
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      const inner = (v as Record<string, unknown>)['challans'] ?? (v as Record<string, unknown>)['data'];
-      if (Array.isArray(inner)) return inner;
+  const searchIn = (obj: Record<string, unknown>): unknown[] | null => {
+    for (const k of candidates) {
+      const v = obj[k];
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const inner = (v as Record<string,unknown>)['challans'] ?? (v as Record<string,unknown>)['data'];
+        if (Array.isArray(inner)) return inner;
+      }
+    }
+    return null;
+  };
+
+  const direct = searchIn(pageProps);
+  if (direct) return direct;
+
+  // Search inside loaderData (Remix)
+  const ld = pageProps['loaderData'];
+  if (ld && typeof ld === 'object' && !Array.isArray(ld)) {
+    for (const routeVal of Object.values(ld as Record<string,unknown>)) {
+      if (routeVal && typeof routeVal === 'object' && !Array.isArray(routeVal)) {
+        const found = searchIn(routeVal as Record<string,unknown>);
+        if (found) return found;
+      }
     }
   }
+
+  // Search inside initialState
+  const is = pageProps['initialState'];
+  if (is && typeof is === 'object' && !Array.isArray(is)) {
+    for (const reducerVal of Object.values(is as Record<string,unknown>)) {
+      if (reducerVal && typeof reducerVal === 'object' && !Array.isArray(reducerVal)) {
+        const found = searchIn(reducerVal as Record<string,unknown>);
+        if (found) return found;
+      }
+    }
+  }
+
   return null;
 }
 
