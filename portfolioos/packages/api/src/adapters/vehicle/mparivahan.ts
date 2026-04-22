@@ -1,16 +1,16 @@
 /**
- * §7.2 mParivahan API adapter — Gate G6 cleared by user on 2026-04-22.
+ * §7.2 mParivahan / VAHAN adapter — Gate G6 cleared 2026-04-22.
  *
- * Tries three endpoints in order; each returns a flat key→value object
- * which parseMparivahanPayload converts into a VehicleRecord.
+ * Endpoint chain (tried in order, first success wins):
+ *  1. VAHAN citizen RC service  — session-primed JSON/XML
+ *  2. VAHAN vahanservice rcDetails — session-primed JSON/XML
+ *  3. mParivahan Android app endpoint — may be IP-restricted
  *
- * Endpoint chain:
- *  1. VAHAN RC-details JSON  (vahanservice, JSON-first)
- *  2. VAHAN unregistered auth (vahanservice, returns XML — parsed inline)
- *  3. mParivahan app RC endpoint (may be IP-blocked outside mobile networks)
+ * All VAHAN service endpoints require a JSESSIONID cookie from the
+ * portal home page before they return data (otherwise they echo back
+ * a session-expired XML shell with no vehicle fields).
  *
- * Dev: fixture fast-path fires when the reg no is in dev.json so tests
- *      never hit the network.
+ * Set VAHAN_DEBUG=true to log raw response bodies when extraction fails.
  */
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -24,7 +24,7 @@ import type {
 } from './types.js';
 
 const ID = 'vahan.mparivahan.api';
-const VERSION = '3';
+const VERSION = '4';
 
 const BUILTIN_FIXTURE_PATH = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -33,18 +33,13 @@ const BUILTIN_FIXTURE_PATH = resolve(
 );
 
 const UA =
-  'Mozilla/5.0 (Linux; Android 12; SM-A526B Build/SP1A.210812.016) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36';
+  'Mozilla/5.0 (Linux; Android 12; SM-A526B Build/SP1A.210812.016) ' +
+  'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36';
 
 // ─── XML helper ──────────────────────────────────────────────────────────────
 
-/**
- * Flat XML-to-object extractor. Handles predictable single-depth XML like
- * what vahan.parivahan.gov.in returns. Does not need an XML parser package.
- */
 function xmlToFlat(xml: string): Record<string, string> {
   const out: Record<string, string> = {};
-  // Match <tag>value</tag> — non-greedy, skips nested elements (uses innerText
-  // approach: last text content wins for nested tags which is fine here).
   const re = /<([A-Za-z_][A-Za-z0-9_.-]*)(?:\s[^>]*)?>([^<]*)<\/\1>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(xml)) !== null) {
@@ -54,34 +49,34 @@ function xmlToFlat(xml: string): Record<string, string> {
   return out;
 }
 
-// ─── payload parser ───────────────────────────────────────────────────────────
+// ─── parser ───────────────────────────────────────────────────────────────────
 
 export function parseMparivahanPayload(payload: unknown, regNo: string): VehicleRecord {
   const raw = (payload ?? {}) as Record<string, unknown>;
-  // Unwrap common wrapper keys
-  const p: Record<string, unknown> =
-    (raw['vehicleData'] && typeof raw['vehicleData'] === 'object'
-      ? raw['vehicleData']
-      : raw['rcVehicleData'] && typeof raw['rcVehicleData'] === 'object'
-        ? raw['rcVehicleData']
-        : raw['result'] && typeof raw['result'] === 'object'
-          ? raw['result']
-          : raw) as Record<string, unknown>;
+  const unwrapKeys = ['vehicleData', 'rcVehicleData', 'result', 'data', 'rcData', 'rcDetails'];
+  let p: Record<string, unknown> = raw;
+  for (const k of unwrapKeys) {
+    if (raw[k] && typeof raw[k] === 'object' && !Array.isArray(raw[k])) {
+      p = raw[k] as Record<string, unknown>;
+      break;
+    }
+  }
 
   const get = (...keys: string[]): string | undefined => {
     for (const k of keys) {
       const v = p[k];
-      if (typeof v === 'string' && v.trim() && v.trim().toUpperCase() !== 'NA') return v.trim();
+      if (typeof v === 'string' && v.trim() && !/^(NA|N\/A|-)$/i.test(v.trim())) return v.trim();
     }
     return undefined;
   };
   const toYear = (v: unknown): number | undefined => {
     if (typeof v === 'number' && v >= 1900 && v <= 2100) return v;
-    if (typeof v === 'string') {
-      const m = v.match(/\b(19\d{2}|20\d{2})\b/);
-      return m ? Number(m[1]) : undefined;
-    }
+    if (typeof v === 'string') { const m = v.match(/\b(19\d{2}|20\d{2})\b/); return m ? Number(m[1]) : undefined; }
     return undefined;
+  };
+  const MONTHS: Record<string, string> = {
+    jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
+    jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12',
   };
   const toIso = (v: unknown): string | undefined => {
     if (typeof v !== 'string') return undefined;
@@ -92,58 +87,37 @@ export function parseMparivahanPayload(payload: unknown, regNo: string): Vehicle
     if (dmy) return `${dmy[3]}-${dmy[2]!.padStart(2,'0')}-${dmy[1]!.padStart(2,'0')}`;
     const ymd = s.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
     if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
-    // "31 Jan 2026" / "31-Jan-2026"
-    const MONTHS: Record<string, string> = {
-      jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
-      jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12',
-    };
-    const dmon = s.match(/^(\d{1,2})[-\s]([A-Za-z]{3})[-\s](\d{4})$/);
-    if (dmon) {
-      const mon = MONTHS[dmon[2]!.toLowerCase()];
-      if (mon) return `${dmon[3]}-${mon}-${dmon[1]!.padStart(2,'0')}`;
-    }
+    const dmon = s.match(/^(\d{1,2})[-\s]([A-Za-z]{3})[-\s,.](\d{4})$/);
+    if (dmon) { const mon = MONTHS[dmon[2]!.toLowerCase()]; if (mon) return `${dmon[3]}-${mon}-${dmon[1]!.padStart(2,'0')}`; }
     return undefined;
   };
 
-  let make = get('make','maker_desc','maker','makerDesc','vehicleMake','reg_maker_desc');
-  let model = get('model','vehicleModel','vchnum','reg_vch_class_desc','vehicleClass');
-  // "MARUTI SUZUKI/SWIFT VXI" compound field
-  const compound = get('maker_model','makerModel','reg_maker_model');
+  let make = get('make','maker_desc','maker','makerDesc','vehicleMake','reg_maker_desc','mfr_name');
+  let model = get('model','vehicleModel','vchnum','reg_vch_class_desc','vehicleClass','model_name');
+  const compound = get('maker_model','makerModel','reg_maker_model','vehicle_class');
   if (!make && !model && compound) {
     const slash = compound.indexOf('/');
-    if (slash > 0) {
-      make = compound.slice(0, slash).trim().toUpperCase();
-      model = compound.slice(slash + 1).trim().toUpperCase();
-    } else {
-      make = compound.toUpperCase();
-    }
+    if (slash > 0) { make = compound.slice(0,slash).trim().toUpperCase(); model = compound.slice(slash+1).trim().toUpperCase(); }
+    else { make = compound.toUpperCase(); }
   }
 
-  const chassis = get('chassisNo','chassis','chasisNo','chassisno','reg_chassis_no','rcChassisNo');
+  const chassis = get('chassisNo','chassis','chasisNo','chassisno','reg_chassis_no','rcChassisNo','chassis_no');
   return {
     registrationNo: regNo.replace(/\s+/g,'').toUpperCase(),
-    make: make?.toUpperCase(),
+    make:  make?.toUpperCase(),
     model: model?.toUpperCase(),
-    variant: get('variant','reg_vch_class')?.toUpperCase(),
-    manufacturingYear: toYear(
-      p['mfgYear'] ?? p['manufacturingYear'] ?? p['yearOfMfg'] ??
-      p['manufacturing_year'] ?? p['reg_manufacturing_year'] ?? p['mfg_month_yr'],
-    ),
-    fuelType: get('fuelType','fuel','fuel_desc','reg_fuel_desc','rcFuelDesc')?.toUpperCase(),
-    color:    get('color','colour','vehicleColor','vehicle_color','reg_color_desc','rcColorDesc')?.toUpperCase(),
+    variant: get('variant','reg_vch_class','bodytype')?.toUpperCase(),
+    manufacturingYear: toYear(p['mfgYear']??p['manufacturingYear']??p['yearOfMfg']??p['manufacturing_year']??p['reg_manufacturing_year']??p['mfg_month_yr']??p['mfd_year']),
+    fuelType: get('fuelType','fuel','fuel_desc','reg_fuel_desc','rcFuelDesc','fuel_type')?.toUpperCase(),
+    color:    get('color','colour','vehicleColor','vehicle_color','reg_color_desc','rcColorDesc','color_desc')?.toUpperCase(),
     chassisLast4: chassis ? chassis.replace(/\s+/g,'').slice(-4).toUpperCase() : undefined,
-    rtoCode:  get('rtoCode','rto','rto_code','reg_office_code','rcOfficeCode'),
-    ownerName: get('ownerName','owner','owner_name','reg_owner_name','rcOwnerName')?.toUpperCase(),
-    insuranceExpiry: toIso(p['insuranceExpiry'] ?? p['insExpiry'] ?? p['insuranceUpto'] ??
-      p['insurance_upto'] ?? p['reg_insurance_upto'] ?? p['rcInsuranceUpto']),
-    pucExpiry:      toIso(p['pucExpiry'] ?? p['pucUpto'] ?? p['pucc_upto'] ??
-      p['reg_pucc_upto'] ?? p['rcPuccUpto']),
-    fitnessExpiry:  toIso(p['fitnessExpiry'] ?? p['fitnessUpto'] ?? p['fit_upto'] ??
-      p['reg_fit_upto'] ?? p['rcFitUpto']),
-    roadTaxExpiry:  toIso(p['taxExpiry'] ?? p['taxUpto'] ?? p['roadTaxUpto'] ??
-      p['tax_upto'] ?? p['reg_tax_upto'] ?? p['rcTaxUpto']),
-    permitExpiry:   toIso(p['permitExpiry'] ?? p['permitUpto'] ?? p['permit_upto'] ??
-      p['reg_permit_upto'] ?? p['rcPermitUpto']),
+    rtoCode:  get('rtoCode','rto','rto_code','reg_office_code','rcOfficeCode','office_code'),
+    ownerName: get('ownerName','owner','owner_name','reg_owner_name','rcOwnerName','owner_full_name')?.toUpperCase(),
+    insuranceExpiry: toIso(p['insuranceExpiry']??p['insExpiry']??p['insuranceUpto']??p['insurance_upto']??p['reg_insurance_upto']??p['rcInsuranceUpto']??p['insurance_expiry']),
+    pucExpiry:       toIso(p['pucExpiry']??p['pucUpto']??p['pucc_upto']??p['reg_pucc_upto']??p['rcPuccUpto']??p['pucc_validity_upto']),
+    fitnessExpiry:   toIso(p['fitnessExpiry']??p['fitnessUpto']??p['fit_upto']??p['reg_fit_upto']??p['rcFitUpto']??p['fit_valid_upto']),
+    roadTaxExpiry:   toIso(p['taxExpiry']??p['taxUpto']??p['roadTaxUpto']??p['tax_upto']??p['reg_tax_upto']??p['rcTaxUpto']??p['tax_valid_upto']),
+    permitExpiry:    toIso(p['permitExpiry']??p['permitUpto']??p['permit_upto']??p['reg_permit_upto']??p['rcPermitUpto']),
     metadata: { raw: p, source: 'mparivahan' },
   };
 }
@@ -159,19 +133,89 @@ function tryFixture(regNo: string): unknown | null {
   } catch { return null; }
 }
 
-// ─── endpoint helpers ─────────────────────────────────────────────────────────
+// ─── session establishment ────────────────────────────────────────────────────
+
+interface Session { cookie: string }
+
+async function primeCitizenSession(): Promise<Session | null> {
+  try {
+    const res = await fetch(
+      'https://vahan.parivahan.gov.in/vahanservice/vahan/ui/citizenVahanService/citizenRcDetails.xhtml',
+      { headers: { 'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(8_000) },
+    );
+    const sc = res.headers.get('set-cookie') ?? '';
+    const m = sc.match(/JSESSIONID=([^;,\s]+)/i);
+    return m ? { cookie: `JSESSIONID=${m[1]}` } : null;
+  } catch { return null; }
+}
+
+async function primeVahanSession(): Promise<Session | null> {
+  try {
+    const res = await fetch(
+      'https://vahan.parivahan.gov.in/vahanservice/',
+      { headers: { 'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(8_000) },
+    );
+    const sc = res.headers.get('set-cookie') ?? '';
+    const m = sc.match(/JSESSIONID=([^;,\s]+)/i);
+    return m ? { cookie: `JSESSIONID=${m[1]}` } : null;
+  } catch { return null; }
+}
+
+// ─── response body handling ───────────────────────────────────────────────────
+
+function tryParseBody(text: string, label: string): Record<string,unknown> {
+  const t = text.trimStart();
+  let obj: Record<string,unknown>;
+  if (t.startsWith('{') || t.startsWith('[')) {
+    try { obj = JSON.parse(text) as Record<string,unknown>; }
+    catch (e) { throw new Error(`API_CHANGED: bad JSON from ${label}: ${e}`); }
+  } else if (t.startsWith('<')) {
+    const flat = xmlToFlat(text);
+    if (Object.keys(flat).length === 0) throw new Error(`API_CHANGED: empty XML from ${label}: ${text.slice(0,200)}`);
+    obj = flat;
+  } else {
+    throw new Error(`API_CHANGED: unrecognised body from ${label}: ${text.slice(0,200)}`);
+  }
+  if (process.env['VAHAN_DEBUG'] === 'true') {
+    logger.debug({ label, keys: Object.keys(obj), snippet: text.slice(0,300) }, '[vahan] raw response');
+  }
+  return obj;
+}
+
+function looksLikeVehicleData(obj: Record<string,unknown>): boolean {
+  const keys = Object.keys(obj).map(k => k.toLowerCase());
+  const vehicleKeys = [
+    'make','maker','model','fuel','fueltype','owner','ownername','rto','chassis',
+    'color','colour','insurance','pucc','fitness','tax','permit','mfg','manufacturer',
+    'vehicle','registration','regno','reg_no',
+  ];
+  return vehicleKeys.some(vk => keys.some(k => k.includes(vk)));
+}
+
+function isErrorResponse(obj: Record<string,unknown>): string | null {
+  const errorKeys = ['errormsg','error','message','msg','errMsg','errorMessage','status'];
+  for (const k of errorKeys) {
+    const v = String(obj[k] ?? obj[k.toLowerCase()] ?? '').trim();
+    if (v && /session|expired|invalid|login|unauthori|access.denied|not.found|failure/i.test(v)) {
+      return v;
+    }
+  }
+  return null;
+}
+
+// ─── endpoints ───────────────────────────────────────────────────────────────
 
 async function postForm(
   url: string,
   fields: Record<string,string>,
   extraHeaders: Record<string,string> = {},
-): Promise<{ text: string; ct: string }> {
+): Promise<string> {
   const body = new URLSearchParams(fields);
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'Accept': 'application/json, text/xml, */*; q=0.01',
       'User-Agent': UA,
       'X-Requested-With': 'XMLHttpRequest',
       ...extraHeaders,
@@ -179,83 +223,96 @@ async function postForm(
     body: body.toString(),
     signal: AbortSignal.timeout(12_000),
   });
-  if (!res.ok) throw new Error(`HTTP_${res.status}: ${url}`);
-  const text = await res.text();
-  return { text, ct: res.headers.get('content-type') ?? '' };
+  if (!res.ok) throw new Error(`HTTP_${res.status} from ${url}`);
+  return res.text();
 }
 
-function tryParseBody(text: string, url: string): Record<string,unknown> {
-  const t = text.trimStart();
-  if (t.startsWith('{') || t.startsWith('[')) {
-    try {
-      return JSON.parse(text) as Record<string,unknown>;
-    } catch (e) {
-      throw new Error(`API_CHANGED: bad JSON from ${url}: ${e}`);
-    }
-  }
-  if (t.startsWith('<')) {
-    const flat = xmlToFlat(text);
-    if (Object.keys(flat).length === 0) {
-      throw new Error(`API_CHANGED: empty XML from ${url}: ${text.slice(0,200)}`);
-    }
-    return flat;
-  }
-  throw new Error(`API_CHANGED: unrecognised body from ${url}: ${text.slice(0,200)}`);
-}
-
-/** Detect a "not found / invalid" response vs actual data */
-function isNotFound(obj: Record<string,unknown>): boolean {
-  const msg = String(obj['msg'] ?? obj['message'] ?? obj['status'] ?? obj['error'] ?? '').toUpperCase();
-  return /INVALID|NOT FOUND|NO RECORD|NO DATA|FAILURE/.test(msg) && !obj['make'] && !obj['maker_desc'] && !obj['vehicleData'];
-}
-
-// ─── three-endpoint chain ─────────────────────────────────────────────────────
-
-/**
- * Endpoint 1 — VAHAN RC-details service (returns JSON or XML, handles both).
- * This is the most stable government endpoint.
- */
-async function tryVahanRcDetails(regNo: string): Promise<Record<string,unknown>> {
-  const { text } = await postForm(
-    'https://vahan.parivahan.gov.in/vahanservice/vahan/ui/loginManager/rcDetails.do',
-    { regNo, regnNo: regNo },
-    {
-      'Referer': 'https://vahan.parivahan.gov.in/vahanservice/',
-      'Origin': 'https://vahan.parivahan.gov.in',
+async function getUrl(
+  url: string,
+  extraHeaders: Record<string,string> = {},
+): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      'Accept': 'application/json, text/xml, */*; q=0.01',
+      'User-Agent': UA,
+      'X-Requested-With': 'XMLHttpRequest',
+      ...extraHeaders,
     },
-  );
-  return tryParseBody(text, 'rcDetails');
+    signal: AbortSignal.timeout(12_000),
+  });
+  if (!res.ok) throw new Error(`HTTP_${res.status} from ${url}`);
+  return res.text();
 }
 
-/**
- * Endpoint 2 — VAHAN unregistered-auth service (returns XML typically).
- */
-async function tryVahanUnregistered(regNo: string): Promise<Record<string,unknown>> {
-  const { text } = await postForm(
-    'https://vahan.parivahan.gov.in/vahanservice/vahan/ui/loginManager/unRegistered/getAuthReg.do',
-    { reg_no: regNo, regNo },
-    {
-      'Referer': 'https://vahan.parivahan.gov.in/vahanservice/',
-      'Origin': 'https://vahan.parivahan.gov.in',
-    },
-  );
-  return tryParseBody(text, 'unregistered');
+interface Attempt {
+  name: string;
+  run: () => Promise<Record<string,unknown>>;
 }
 
-/**
- * Endpoint 3 — mParivahan Android app RC-status endpoint.
- * May be IP-restricted to mobile/BSNL networks.
- */
-async function tryMparivahanApp(regNo: string): Promise<Record<string,unknown>> {
-  const { text } = await postForm(
-    'https://app.parivahan.gov.in/RCStatus/checkrcstatusaction/getRCDetail.do',
-    { reg_no: regNo },
+function buildAttempts(regNo: string, vahanSess: Session | null, citizenSess: Session | null): Attempt[] {
+  const vs: Record<string, string> = vahanSess ? { 'Cookie': vahanSess.cookie } : {};
+  const cs: Record<string, string> = citizenSess ? { 'Cookie': citizenSess.cookie } : {};
+  return [
+    // 1. Citizen RC service (GET, session-primed)
     {
-      'Origin': 'https://app.parivahan.gov.in',
-      'Referer': 'https://app.parivahan.gov.in/RCStatus/',
+      name: 'citizen-get',
+      run: async () => {
+        const text = await getUrl(
+          `https://vahan.parivahan.gov.in/vahanservice/vahan/ui/citizenVahanService/getCitizenRCDetails.do?regNo=${encodeURIComponent(regNo)}`,
+          { 'Referer': 'https://vahan.parivahan.gov.in/vahanservice/vahan/ui/citizenVahanService/citizenRcDetails.xhtml', ...cs },
+        );
+        return tryParseBody(text, 'citizen-get');
+      },
     },
-  );
-  return tryParseBody(text, 'mparivahan-app');
+    // 2. Citizen RC service (POST, session-primed)
+    {
+      name: 'citizen-post',
+      run: async () => {
+        const text = await postForm(
+          'https://vahan.parivahan.gov.in/vahanservice/vahan/ui/citizenVahanService/getCitizenRCDetails.do',
+          { regNo, regnNo: regNo },
+          { 'Referer': 'https://vahan.parivahan.gov.in/vahanservice/vahan/ui/citizenVahanService/citizenRcDetails.xhtml', ...cs },
+        );
+        return tryParseBody(text, 'citizen-post');
+      },
+    },
+    // 3. VAHAN rcDetails (session-primed)
+    {
+      name: 'rcDetails',
+      run: async () => {
+        const text = await postForm(
+          'https://vahan.parivahan.gov.in/vahanservice/vahan/ui/loginManager/rcDetails.do',
+          { regNo, regnNo: regNo },
+          { 'Referer': 'https://vahan.parivahan.gov.in/vahanservice/', 'Origin': 'https://vahan.parivahan.gov.in', ...vs },
+        );
+        return tryParseBody(text, 'rcDetails');
+      },
+    },
+    // 4. VAHAN unregistered (session-primed)
+    {
+      name: 'unregistered',
+      run: async () => {
+        const text = await postForm(
+          'https://vahan.parivahan.gov.in/vahanservice/vahan/ui/loginManager/unRegistered/getAuthReg.do',
+          { reg_no: regNo, regNo },
+          { 'Referer': 'https://vahan.parivahan.gov.in/vahanservice/', 'Origin': 'https://vahan.parivahan.gov.in', ...vs },
+        );
+        return tryParseBody(text, 'unregistered');
+      },
+    },
+    // 5. mParivahan Android app (may be IP-gated to mobile networks)
+    {
+      name: 'mparivahan-app',
+      run: async () => {
+        const text = await postForm(
+          'https://app.parivahan.gov.in/RCStatus/checkrcstatusaction/getRCDetail.do',
+          { reg_no: regNo },
+          { 'Origin': 'https://app.parivahan.gov.in', 'Referer': 'https://app.parivahan.gov.in/RCStatus/' },
+        );
+        return tryParseBody(text, 'mparivahan-app');
+      },
+    },
+  ];
 }
 
 // ─── adapter ──────────────────────────────────────────────────────────────────
@@ -276,39 +333,53 @@ export const mparivahanAdapter: VehicleAdapter = {
       return { ok: true, record: parseMparivahanPayload(hit, clean) };
     }
 
-    const attempts: Array<[string, () => Promise<Record<string,unknown>>]> = [
-      ['rcDetails',     () => tryVahanRcDetails(clean)],
-      ['unregistered',  () => tryVahanUnregistered(clean)],
-      ['mparivahan-app',() => tryMparivahanApp(clean)],
-    ];
+    // Prime sessions in parallel — failures are silent (each endpoint degrades gracefully)
+    const [vahanSess, citizenSess] = await Promise.all([
+      primeVahanSession(),
+      primeCitizenSession(),
+    ]);
+    logger.debug({ vahanSess: !!vahanSess, citizenSess: !!citizenSess }, '[vahan.mparivahan] sessions');
 
     const errors: string[] = [];
-    for (const [name, fn] of attempts) {
+    for (const { name, run } of buildAttempts(clean, vahanSess, citizenSess)) {
       try {
-        const obj = await fn();
-        if (isNotFound(obj)) {
-          return { ok: false, error: `Vehicle ${clean} not found in government records`, retryable: false };
-        }
-        const record = parseMparivahanPayload(obj, clean);
-        // Require at least make or owner to be present — otherwise the API
-        // returned data but it's empty/garbage.
-        if (!record.make && !record.ownerName && !record.fuelType) {
-          errors.push(`${name}: response parsed but no vehicle fields extracted`);
+        const obj = await run();
+
+        // Detect error/session responses before spending time on parse
+        const errMsg = isErrorResponse(obj);
+        if (errMsg) { errors.push(`${name}: server error — ${errMsg}`); continue; }
+
+        if (!looksLikeVehicleData(obj)) {
+          const keys = Object.keys(obj).slice(0,8).join(', ');
+          logger.debug({ name, keys }, '[vahan.mparivahan] no vehicle fields');
+          errors.push(`${name}: no vehicle fields (keys: ${keys || 'none'})`);
           continue;
         }
+
+        // Detect "vehicle not found" before parsing
+        const allVals = Object.values(obj).map(v => String(v ?? '').toUpperCase()).join(' ');
+        if (/INVALID\s+VEHICLE|NOT\s+FOUND|NO\s+RECORD|VEHICLE\s+NOT/.test(allVals) &&
+            !allVals.includes('MARUTI') && !allVals.includes('HYUNDAI') && !allVals.includes('HONDA')) {
+          return { ok: false, error: `Vehicle ${clean} not found in government records`, retryable: false };
+        }
+
+        const record = parseMparivahanPayload(obj, clean);
+        if (!record.make && !record.ownerName && !record.fuelType && !record.registrationNo) {
+          errors.push(`${name}: parsed but all fields empty`);
+          continue;
+        }
+
         logger.info({ regNo: clean, endpoint: name }, '[vahan.mparivahan] OK');
         return { ok: true, record };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.warn({ err: msg, regNo: clean, endpoint: name }, `[vahan.mparivahan] ${name} failed`);
-        // API_CHANGED → stop trying this adapter entirely
-        if (msg.startsWith('API_CHANGED')) {
-          return { ok: false, error: msg, retryable: false, rawPayload: null };
-        }
+        if (msg.startsWith('API_CHANGED')) return { ok: false, error: msg, retryable: false, rawPayload: null };
         errors.push(`${name}: ${msg}`);
       }
     }
 
+    logger.warn({ regNo: clean, errors }, '[vahan.mparivahan] all endpoints failed');
     return {
       ok: false,
       error: `All endpoints failed — ${errors.join(' · ')}`,
