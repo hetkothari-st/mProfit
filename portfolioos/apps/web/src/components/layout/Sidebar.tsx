@@ -7,7 +7,7 @@ import {
   BarChart3,
   Landmark,
   PiggyBank,
-  ShieldCheck,
+  // ShieldCheck — unused while NPS nav item is disabled
   Boxes,
   Car,
   Building2,
@@ -58,7 +58,8 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Fixed Deposits', to: '/fds', icon: PiggyBank },
       { label: 'Gold & Silver', to: '/gold', icon: Coins },
       { label: 'EPF', to: '/epf', icon: Wallet },
-      { label: 'NPS', to: '/nps', icon: ShieldCheck },
+      // NPS — disabled until NSDL CRA adapter lands (§10.2)
+      // { label: 'NPS', to: '/nps', icon: ShieldCheck },
       { label: 'PPF', to: '/ppf', icon: BookOpen },
       { label: 'Vehicles', to: '/vehicles', icon: Car },
       { label: 'Rental', to: '/rental', icon: Building2 },

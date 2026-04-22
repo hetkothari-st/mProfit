@@ -36,6 +36,7 @@ import { EpfPage } from './pages/assetClasses/EpfPage';
 import { NpsPage } from './pages/assetClasses/NpsPage';
 import { PpfPage } from './pages/assetClasses/PpfPage';
 import { OtherAssetsPage } from './pages/assetClasses/OtherAssetsPage';
+import { AccountingPage } from './pages/accounting/AccountingPage';
 
 export function App() {
   return (
@@ -63,7 +64,8 @@ export function App() {
         <Route path="/fds" element={<FixedDepositsPage />} />
         <Route path="/gold" element={<GoldPage />} />
         <Route path="/epf" element={<EpfPage />} />
-        <Route path="/nps" element={<NpsPage />} />
+        {/* NPS — disabled until NSDL CRA adapter lands (§10.2) */}
+        {/* <Route path="/nps" element={<NpsPage />} /> */}
         <Route path="/ppf" element={<PpfPage />} />
         <Route path="/others" element={<OtherAssetsPage />} />
         <Route path="/vehicles" element={<VehicleListPage />} />
@@ -85,7 +87,7 @@ export function App() {
         <Route path="/ingestion/history" element={<ReviewPage />} />
         <Route path="/ingestion/review" element={<Navigate to="/ingestion" replace />} />
         <Route path="/ingestion/discovery" element={<Navigate to="/ingestion" replace />} />
-        <Route path="/accounting" element={<PlaceholderPage title="Accounting" />} />
+        <Route path="/accounting" element={<AccountingPage />} />
         <Route path="/alerts" element={<PlaceholderPage title="Alerts & Reminders" />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
