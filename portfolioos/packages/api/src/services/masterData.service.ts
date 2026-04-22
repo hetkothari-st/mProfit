@@ -170,3 +170,93 @@ export async function searchAssets(query: string, limit = 15): Promise<AssetSear
   ]);
   return [...stocks, ...funds].slice(0, limit);
 }
+
+/**
+ * Resolve a StockMaster id from whatever identifier we happen to have on a
+ * row. Manual entries and older parser output sometimes landed with
+ * `stockId=null` but a populated `isin` / `assetName` — in which case the
+ * price router can't return a quote and the Stocks page displays "—" for
+ * LTP / value / P&L until we re-link the row.
+ *
+ * Conservative matching only: exact ISIN first (that's the globally unique
+ * identifier), then exact symbol, then exact name. We deliberately don't
+ * fuzzy-match on name — "RELIANCE" could be Reliance Industries, Reliance
+ * Power, or Reliance Capital, and silently picking the wrong one would
+ * corrupt valuations. Ambiguous or missing → return null.
+ */
+export async function resolveStockMasterId(input: {
+  stockId?: string | null;
+  isin?: string | null;
+  symbol?: string | null;
+  assetName?: string | null;
+}): Promise<string | null> {
+  if (input.stockId) return input.stockId;
+
+  if (input.isin) {
+    const byIsin = await prisma.stockMaster.findFirst({
+      where: { isin: input.isin.trim().toUpperCase(), isActive: true },
+      select: { id: true },
+    });
+    if (byIsin) return byIsin.id;
+  }
+
+  const sym = input.symbol?.trim().toUpperCase();
+  if (sym) {
+    const bySymbol = await prisma.stockMaster.findUnique({
+      where: { symbol: sym },
+      select: { id: true, isActive: true },
+    });
+    if (bySymbol?.isActive) return bySymbol.id;
+  }
+
+  const name = input.assetName?.trim();
+  if (name) {
+    const byName = await prisma.stockMaster.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' }, isActive: true },
+      select: { id: true },
+    });
+    if (byName) return byName.id;
+  }
+
+  return null;
+}
+
+/**
+ * Same idea for mutual funds: resolve a MutualFundMaster id from whatever we
+ * have. schemeCode and ISIN are unique; name is a last-resort exact match.
+ */
+export async function resolveMutualFundId(input: {
+  fundId?: string | null;
+  schemeCode?: string | null;
+  isin?: string | null;
+  schemeName?: string | null;
+}): Promise<string | null> {
+  if (input.fundId) return input.fundId;
+
+  if (input.schemeCode) {
+    const byCode = await prisma.mutualFundMaster.findUnique({
+      where: { schemeCode: input.schemeCode.trim() },
+      select: { id: true, isActive: true },
+    });
+    if (byCode?.isActive) return byCode.id;
+  }
+
+  if (input.isin) {
+    const byIsin = await prisma.mutualFundMaster.findFirst({
+      where: { isin: input.isin.trim().toUpperCase(), isActive: true },
+      select: { id: true },
+    });
+    if (byIsin) return byIsin.id;
+  }
+
+  const name = input.schemeName?.trim();
+  if (name) {
+    const byName = await prisma.mutualFundMaster.findFirst({
+      where: { schemeName: { equals: name, mode: 'insensitive' }, isActive: true },
+      select: { id: true },
+    });
+    if (byName) return byName.id;
+  }
+
+  return null;
+}

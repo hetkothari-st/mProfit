@@ -49,7 +49,9 @@ export function App() {
         <Route path="/fo" element={<PlaceholderPage title="Futures & Options" />} />
         <Route path="/bonds" element={<PlaceholderPage title="Bonds" />} />
         <Route path="/fds" element={<PlaceholderPage title="Fixed Deposits" />} />
-        <Route path="/nps" element={<PlaceholderPage title="NPS" />} />
+        {/* NPS — temporarily disabled (user request 2026-04-22). Re-enable
+            when §10.2 NSDL CRA Playwright adapter lands. */}
+        {/* <Route path="/nps" element={<PlaceholderPage title="NPS" />} /> */}
         <Route path="/others" element={<PlaceholderPage title="Other Assets" />} />
         <Route path="/vehicles" element={<VehicleListPage />} />
         <Route path="/vehicles/:id" element={<VehicleDetailPage />} />

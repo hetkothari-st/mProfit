@@ -7,7 +7,7 @@ import {
   BarChart3,
   Landmark,
   PiggyBank,
-  ShieldCheck,
+  // ShieldCheck — unused while NPS nav item is disabled (see below).
   Boxes,
   Car,
   FileText,
@@ -49,7 +49,9 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'F & O', to: '/fo', icon: BarChart3 },
       { label: 'Bonds', to: '/bonds', icon: Landmark },
       { label: 'Fixed Deposits', to: '/fds', icon: PiggyBank },
-      { label: 'NPS', to: '/nps', icon: ShieldCheck },
+      // NPS — temporarily hidden (user request 2026-04-22). Re-enable when
+      // §10.2 NSDL CRA Playwright adapter lands.
+      // { label: 'NPS', to: '/nps', icon: ShieldCheck },
       { label: 'Vehicles', to: '/vehicles', icon: Car },
       { label: 'Others', to: '/others', icon: Boxes },
     ],

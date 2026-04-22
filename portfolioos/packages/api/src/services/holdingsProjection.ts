@@ -3,6 +3,46 @@ import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/c
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';
 import { assetKeyFromTransaction } from './assetKey.js';
+import { resolveMutualFundId, resolveStockMasterId } from './masterData.service.js';
+
+const STOCK_ASSET_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
+  'EQUITY',
+  'ETF',
+  'FUTURES',
+  'OPTIONS',
+]);
+
+/**
+ * If a projection / transaction landed with no master-data link but carries
+ * an ISIN or exact name we can match against StockMaster / MutualFundMaster,
+ * resolve it and return the patched ids. Used by the recompute + refresh
+ * paths so price lookups stop returning null on legacy rows that were
+ * entered without using the asset picker.
+ */
+async function resolveMasterIds(meta: {
+  assetClass: AssetClass;
+  stockId: string | null;
+  fundId: string | null;
+  isin: string | null;
+  assetName: string | null;
+}): Promise<{ stockId: string | null; fundId: string | null }> {
+  if (STOCK_ASSET_CLASSES.has(meta.assetClass) && !meta.stockId) {
+    const resolved = await resolveStockMasterId({
+      isin: meta.isin,
+      symbol: meta.assetName,
+      assetName: meta.assetName,
+    });
+    return { stockId: resolved, fundId: meta.fundId };
+  }
+  if (meta.assetClass === 'MUTUAL_FUND' && !meta.fundId) {
+    const resolved = await resolveMutualFundId({
+      isin: meta.isin,
+      schemeName: meta.assetName,
+    });
+    return { stockId: meta.stockId, fundId: resolved };
+  }
+  return { stockId: meta.stockId, fundId: meta.fundId };
+}
 
 /**
  * HoldingProjection is the source of truth for portfolio state (§3.1). It is
@@ -175,10 +215,18 @@ export async function recomputeForAsset(
     return;
   }
 
-  const price = await currentPriceFor({
+  const resolved = await resolveMasterIds({
     assetClass: meta.assetClass,
     stockId: meta.stockId,
     fundId: meta.fundId,
+    isin: meta.isin,
+    assetName: meta.assetName,
+  });
+
+  const price = await currentPriceFor({
+    assetClass: meta.assetClass,
+    stockId: resolved.stockId,
+    fundId: resolved.fundId,
   });
   const currentValue = price ? agg.quantity.times(price) : null;
   const unrealisedPnL = currentValue ? currentValue.minus(agg.totalCost) : null;
@@ -187,8 +235,8 @@ export async function recomputeForAsset(
     portfolioId,
     assetKey,
     assetClass: meta.assetClass,
-    stockId: meta.stockId,
-    fundId: meta.fundId,
+    stockId: resolved.stockId,
+    fundId: resolved.fundId,
     assetName: meta.assetName,
     isin: meta.isin,
     quantity: agg.quantity.toString(),
@@ -277,31 +325,53 @@ async function refreshPricesForRows(rows: Array<{
   assetClass: AssetClass;
   stockId: string | null;
   fundId: string | null;
+  isin: string | null;
+  assetName: string | null;
   quantity: Prisma.Decimal;
   totalCost: Prisma.Decimal;
 }>): Promise<number> {
   let updated = 0;
   for (const row of rows) {
-    const price = await currentPriceFor({
+    // Legacy rows may have null stockId/fundId — try to re-link via
+    // ISIN/name before asking the price router. If we succeed, stamp the
+    // resolved id back onto the projection so future refreshes skip the
+    // lookup and the /holdings endpoint can join to StockMaster for the
+    // symbol display on the Stocks page.
+    const resolved = await resolveMasterIds({
       assetClass: row.assetClass,
       stockId: row.stockId,
       fundId: row.fundId,
+      isin: row.isin,
+      assetName: row.assetName,
     });
-    if (!price) continue;
-    const qty = new Decimal(row.quantity.toString());
-    const totalCost = new Decimal(row.totalCost.toString());
-    const currentValue = qty.times(price);
-    const pnl = currentValue.minus(totalCost);
-    await prisma.holdingProjection.update({
-      where: { id: row.id },
-      data: {
-        currentPrice: price.toString(),
-        currentValue: currentValue.toString(),
-        unrealisedPnL: pnl.toString(),
-        computedAt: new Date(),
-      },
+    const price = await currentPriceFor({
+      assetClass: row.assetClass,
+      stockId: resolved.stockId,
+      fundId: resolved.fundId,
     });
-    updated += 1;
+    const patch: Prisma.HoldingProjectionUpdateInput = { computedAt: new Date() };
+    let didPatch = false;
+    if (resolved.stockId !== row.stockId) {
+      patch.stockId = resolved.stockId;
+      didPatch = true;
+    }
+    if (resolved.fundId !== row.fundId) {
+      patch.fundId = resolved.fundId;
+      didPatch = true;
+    }
+    if (price) {
+      const qty = new Decimal(row.quantity.toString());
+      const totalCost = new Decimal(row.totalCost.toString());
+      const currentValue = qty.times(price);
+      const pnl = currentValue.minus(totalCost);
+      patch.currentPrice = price.toString();
+      patch.currentValue = currentValue.toString();
+      patch.unrealisedPnL = pnl.toString();
+      didPatch = true;
+    }
+    if (!didPatch) continue;
+    await prisma.holdingProjection.update({ where: { id: row.id }, data: patch });
+    if (price) updated += 1;
   }
   return updated;
 }
@@ -313,6 +383,8 @@ export async function refreshAllProjectionPrices(): Promise<{ updated: number }>
       assetClass: true,
       stockId: true,
       fundId: true,
+      isin: true,
+      assetName: true,
       quantity: true,
       totalCost: true,
     },
@@ -330,6 +402,8 @@ export async function refreshPortfolioProjectionPrices(
       assetClass: true,
       stockId: true,
       fundId: true,
+      isin: true,
+      assetName: true,
       quantity: true,
       totalCost: true,
     },

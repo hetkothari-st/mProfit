@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../services/jwt.service.js';
 import { UnauthorizedError } from '../lib/errors.js';
-import { userContext } from '../lib/requestContext.js';
+import { enterUserContext } from '../lib/requestContext.js';
 import type { UserRole } from '@prisma/client';
 
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
@@ -18,11 +18,16 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
       role: payload.role as UserRole,
       plan: payload.plan as never,
     };
-    // Run the rest of the request chain inside the ambient user context so
-    // Prisma's $allOperations hook can set Postgres session variable
-    // `app.current_user_id` before each user-scoped query — matching the RLS
-    // policies from migration 20260421140000_phase_4_5_rls.
-    userContext.run({ userId: payload.sub }, () => next());
+    // Bind the ambient user context to the current request's async resource so
+    // Prisma's $allOperations hook sees the same userId for every downstream
+    // query — including those scheduled by callback-based middleware like
+    // multer's DiskStorage. Using `enterWith` (not `run(cb)`) is critical
+    // because `run(fn)` unwinds once its synchronous callback returns, and
+    // some downstream stream/callback chains don't propagate the ALS store.
+    // `enterWith` sets the store on this async resource and every descendant,
+    // which matches the lifetime of the HTTP request.
+    enterUserContext(payload.sub);
+    next();
   } catch (err) {
     next(err);
   }
