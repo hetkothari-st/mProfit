@@ -22,6 +22,8 @@ import { ReportsPage } from './pages/reports/ReportsPage';
 import { IngestionPage } from './pages/ingestion/IngestionPage';
 import { SendersPage } from './pages/ingestion/SendersPage';
 import { ReviewPage } from './pages/ingestion/ReviewPage';
+import { VehicleListPage } from './pages/vehicles/VehicleListPage';
+import { VehicleDetailPage } from './pages/vehicles/VehicleDetailPage';
 
 export function App() {
   return (
@@ -49,6 +51,8 @@ export function App() {
         <Route path="/fds" element={<PlaceholderPage title="Fixed Deposits" />} />
         <Route path="/nps" element={<PlaceholderPage title="NPS" />} />
         <Route path="/others" element={<PlaceholderPage title="Other Assets" />} />
+        <Route path="/vehicles" element={<VehicleListPage />} />
+        <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/import" element={<ImportPage />} />
         <Route path="/import/failures" element={<FailuresPage />} />
