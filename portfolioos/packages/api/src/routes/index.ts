@@ -13,6 +13,7 @@ import { casRouter } from './cas.routes.js';
 import { canonicalEventsRouter } from './canonicalEvents.routes.js';
 import { monitoredSendersRouter } from './monitoredSenders.routes.js';
 import { ingestionRouter } from './ingestion.routes.js';
+import { vehiclesRouter } from './vehicles.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -29,4 +30,5 @@ export function registerRoutes(app: Express): void {
   app.use('/api/canonical-events', canonicalEventsRouter);
   app.use('/api/monitored-senders', monitoredSendersRouter);
   app.use('/api/ingestion', ingestionRouter);
+  app.use('/api/vehicles', vehiclesRouter);
 }
