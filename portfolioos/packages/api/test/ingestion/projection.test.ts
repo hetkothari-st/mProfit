@@ -199,7 +199,7 @@ describe('projectCanonicalEvent', () => {
     expect(cf?.type).toBe('OUTFLOW');
   });
 
-  it('marks deferred event types as PROJECTED without creating a domain row', async () => {
+  it('projects PREMIUM_PAID as an OUTFLOW cashflow (§9.1)', async () => {
     const eventId = await makeEvent(scope, {
       eventType: 'PREMIUM_PAID',
       amount: '18000',
@@ -207,16 +207,19 @@ describe('projectCanonicalEvent', () => {
     });
 
     const outcome = await scope.runAs(() => projectCanonicalEvent(eventId));
-    expect(outcome.kind).toBe('projected_no_op');
-    if (outcome.kind !== 'projected_no_op') return;
-    expect(outcome.reason).toBe('premium_paid_deferred');
+    expect(outcome.kind).toBe('projected_cashflow');
+    if (outcome.kind !== 'projected_cashflow') return;
+
+    const cf = await runAsSystem(() =>
+      prisma.cashFlow.findUnique({ where: { id: outcome.cashFlowId } }),
+    );
+    expect(cf?.type).toBe('OUTFLOW');
 
     const event = await runAsSystem(() =>
       prisma.canonicalEvent.findUnique({ where: { id: eventId } }),
     );
     expect(event?.status).toBe('PROJECTED');
-    expect(event?.projectedTransactionId).toBeNull();
-    expect(event?.projectedCashFlowId).toBeNull();
+    expect(event?.projectedCashFlowId).toBe(outcome.cashFlowId);
   });
 
   it('returns no-op for already-projected events (idempotent on retry)', async () => {

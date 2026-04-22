@@ -27,6 +27,8 @@ import { VehicleDetailPage } from './pages/vehicles/VehicleDetailPage';
 import { CashFlowsPage } from './pages/cashflows/CashFlowsPage';
 import { RentalListPage } from './pages/rental/RentalListPage';
 import { RentalDetailPage } from './pages/rental/RentalDetailPage';
+import { InsuranceListPage } from './pages/insurance/InsuranceListPage';
+import { InsuranceDetailPage } from './pages/insurance/InsuranceDetailPage';
 
 export function App() {
   return (
@@ -60,6 +62,8 @@ export function App() {
         <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
         <Route path="/rental" element={<RentalListPage />} />
         <Route path="/rental/:id" element={<RentalDetailPage />} />
+        <Route path="/insurance" element={<InsuranceListPage />} />
+        <Route path="/insurance/:id" element={<InsuranceDetailPage />} />
         <Route path="/cashflows" element={<CashFlowsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/import" element={<ImportPage />} />

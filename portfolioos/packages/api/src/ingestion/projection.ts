@@ -45,6 +45,7 @@ import { logger } from '../lib/logger.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
 import { computeAssetKey } from '../services/assetKey.js';
 import { hookAutoMatchRentalCredit } from '../services/rental.service.js';
+import { hookAutoMatchPremiumPayment } from '../services/insurance.service.js';
 
 export type ProjectionOutcome =
   | { kind: 'projected_transaction'; eventId: string; transactionId: string }
@@ -313,7 +314,25 @@ export async function projectCanonicalEvent(eventId: string): Promise<Projection
     case 'NEFT_DEBIT':
       return projectCashFlow(event, 'OUTFLOW');
 
-    case 'PREMIUM_PAID':
+    case 'PREMIUM_PAID': {
+      // §9.1 — project as OUTFLOW cashflow then attempt to link to a
+      // matching InsurancePolicy via the auto-match hook.
+      const outcome = await projectCashFlow(event, 'OUTFLOW');
+      if (outcome.kind === 'projected_cashflow') {
+        void hookAutoMatchPremiumPayment(
+          {
+            id: event.id,
+            userId: event.userId,
+            amount: event.amount ? new Prisma.Decimal(event.amount.toString()) : null,
+            counterparty: event.counterparty,
+            metadata: event.metadata as Record<string, unknown> | null,
+          },
+          outcome.cashFlowId,
+        );
+      }
+      return outcome;
+    }
+
     case 'RENT_RECEIVED':
     case 'RENT_PAID':
     case 'VEHICLE_CHALLAN':
@@ -322,10 +341,8 @@ export async function projectCanonicalEvent(eventId: string): Promise<Projection
     case 'SIP_INSTALLMENT':
     case 'VALUATION_SNAPSHOT':
       // Domain-specific projection belongs to the respective Phase 5
-      // sub-feature (5-B vehicles, 5-C rental, 5-D insurance, 5-E FDs).
-      // Flip to PROJECTED so the event leaves the review queue — the
-      // original CanonicalEvent row is the audit trail the sub-feature
-      // will use when it lands.
+      // sub-feature. Flip to PROJECTED so the event leaves the review
+      // queue — the original CanonicalEvent row is the audit trail.
       return markProjectedNoOp(event, `${event.eventType.toLowerCase()}_deferred`);
 
     case 'OTHER':
