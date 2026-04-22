@@ -29,6 +29,13 @@ import { RentalListPage } from './pages/rental/RentalListPage';
 import { RentalDetailPage } from './pages/rental/RentalDetailPage';
 import { InsuranceListPage } from './pages/insurance/InsuranceListPage';
 import { InsuranceDetailPage } from './pages/insurance/InsuranceDetailPage';
+import { FixedDepositsPage } from './pages/assetClasses/FixedDepositsPage';
+import { BondsPage } from './pages/assetClasses/BondsPage';
+import { GoldPage } from './pages/assetClasses/GoldPage';
+import { EpfPage } from './pages/assetClasses/EpfPage';
+import { NpsPage } from './pages/assetClasses/NpsPage';
+import { PpfPage } from './pages/assetClasses/PpfPage';
+import { OtherAssetsPage } from './pages/assetClasses/OtherAssetsPage';
 
 export function App() {
   return (
@@ -52,12 +59,13 @@ export function App() {
         <Route path="/stocks" element={<StocksPage />} />
         <Route path="/mutual-funds" element={<MutualFundsPage />} />
         <Route path="/fo" element={<PlaceholderPage title="Futures & Options" />} />
-        <Route path="/bonds" element={<PlaceholderPage title="Bonds" />} />
-        <Route path="/fds" element={<PlaceholderPage title="Fixed Deposits" />} />
-        {/* NPS — temporarily disabled (user request 2026-04-22). Re-enable
-            when §10.2 NSDL CRA Playwright adapter lands. */}
-        {/* <Route path="/nps" element={<PlaceholderPage title="NPS" />} /> */}
-        <Route path="/others" element={<PlaceholderPage title="Other Assets" />} />
+        <Route path="/bonds" element={<BondsPage />} />
+        <Route path="/fds" element={<FixedDepositsPage />} />
+        <Route path="/gold" element={<GoldPage />} />
+        <Route path="/epf" element={<EpfPage />} />
+        <Route path="/nps" element={<NpsPage />} />
+        <Route path="/ppf" element={<PpfPage />} />
+        <Route path="/others" element={<OtherAssetsPage />} />
         <Route path="/vehicles" element={<VehicleListPage />} />
         <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
         <Route path="/rental" element={<RentalListPage />} />

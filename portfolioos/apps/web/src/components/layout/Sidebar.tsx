@@ -7,7 +7,7 @@ import {
   BarChart3,
   Landmark,
   PiggyBank,
-  // ShieldCheck — unused while NPS nav item is disabled (see below).
+  ShieldCheck,
   Boxes,
   Car,
   Building2,
@@ -25,6 +25,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ArrowLeftRight,
+  Coins,
+  Wallet,
+  BookOpen,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -53,9 +56,10 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'F & O', to: '/fo', icon: BarChart3 },
       { label: 'Bonds', to: '/bonds', icon: Landmark },
       { label: 'Fixed Deposits', to: '/fds', icon: PiggyBank },
-      // NPS — temporarily hidden (user request 2026-04-22). Re-enable when
-      // §10.2 NSDL CRA Playwright adapter lands.
-      // { label: 'NPS', to: '/nps', icon: ShieldCheck },
+      { label: 'Gold & Silver', to: '/gold', icon: Coins },
+      { label: 'EPF', to: '/epf', icon: Wallet },
+      { label: 'NPS', to: '/nps', icon: ShieldCheck },
+      { label: 'PPF', to: '/ppf', icon: BookOpen },
       { label: 'Vehicles', to: '/vehicles', icon: Car },
       { label: 'Rental', to: '/rental', icon: Building2 },
       { label: 'Insurance', to: '/insurance', icon: Shield },
@@ -157,7 +161,7 @@ export function Sidebar() {
         <BudgetGauge collapsed={collapsed} />
         {!collapsed && (
           <div className="px-4 py-2 text-xs text-sidebar-foreground/60">
-            v0.5.0 · Phase 5-A
+            v0.5.0 · Phase 5-E
           </div>
         )}
       </div>
