@@ -9,6 +9,7 @@ import {
   refreshVehicle,
   applyVahanSms,
 } from '../services/vehicles.service.js';
+import { scanChallansForVehicle } from '../services/challans.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 
@@ -100,5 +101,11 @@ export async function smsPaste(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const body = smsPasteBodySchema.parse(req.body ?? {});
   const result = await applyVahanSms(req.user.id, body.registrationNo, body.smsBody);
+  ok(res, result);
+}
+
+export async function scanChallans(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const result = await scanChallansForVehicle(req.user.id, req.params.id!);
   ok(res, result);
 }

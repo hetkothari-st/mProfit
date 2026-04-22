@@ -102,6 +102,17 @@ export interface SmsPasteResult {
   };
 }
 
+export interface ChallanScanResult {
+  ok: boolean;
+  source: string;
+  sourceVersion: string;
+  newChallans: number;
+  updatedChallans: number;
+  unchangedChallans: number;
+  totalReturned: number;
+  error?: string;
+}
+
 export const vehiclesApi = {
   async list(): Promise<VehicleDTO[]> {
     const { data } = await api.get<ApiResponse<VehicleDTO[]>>('/api/vehicles');
@@ -139,6 +150,12 @@ export const vehiclesApi = {
     const { data } = await api.post<ApiResponse<SmsPasteResult>>(
       '/api/vehicles/sms-paste',
       input,
+    );
+    return unwrap(data);
+  },
+  async scanChallans(id: string): Promise<ChallanScanResult> {
+    const { data } = await api.post<ApiResponse<ChallanScanResult>>(
+      `/api/vehicles/${id}/challans/scan`,
     );
     return unwrap(data);
   },

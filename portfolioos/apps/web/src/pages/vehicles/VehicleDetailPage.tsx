@@ -12,6 +12,7 @@ import {
   Loader2,
   Receipt,
   Info,
+  ScanLine,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -98,6 +99,23 @@ export function VehicleDetailPage() {
       }
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Refresh failed')),
+  });
+
+  const challanScanMutation = useMutation({
+    mutationFn: () => vehiclesApi.scanChallans(id),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      if (result.ok) {
+        const parts: string[] = [];
+        if (result.newChallans > 0) parts.push(`${result.newChallans} new`);
+        if (result.updatedChallans > 0) parts.push(`${result.updatedChallans} updated`);
+        if (parts.length === 0) parts.push('no changes');
+        toast.success(`Challan scan: ${parts.join(', ')}`);
+      } else {
+        toast.error(result.error ?? 'Challan scan failed', { duration: 6000 });
+      }
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Challan scan failed')),
   });
 
   if (isLoading || !vehicle) {
@@ -220,9 +238,24 @@ export function VehicleDetailPage() {
 
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="h-4 w-4" /> Challans
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Receipt className="h-4 w-4" /> Challans
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => challanScanMutation.mutate()}
+                disabled={challanScanMutation.isPending}
+              >
+                {challanScanMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ScanLine className="h-4 w-4" />
+                )}
+                Check challans
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {(vehicle.challans ?? []).length === 0 ? (

@@ -13,6 +13,7 @@ import { startPriceJobs } from './jobs/priceJobs.js';
 import { startImportWorker } from './jobs/importWorker.js';
 import { runStartupSync } from './jobs/startupSync.js';
 import { startMailboxPoller, stopMailboxPoller } from './jobs/mailboxPoller.js';
+import { startVehicleJobs } from './jobs/vehicleJobs.js';
 import { closeQueues } from './lib/queue.js';
 
 const app = express();
@@ -57,6 +58,7 @@ const server = app.listen(env.PORT, () => {
   startPriceJobs();
   startImportWorker();
   startMailboxPoller();
+  startVehicleJobs();
   // Fire-and-forget: run initial data sync in background so server stays responsive
   runStartupSync().catch((err) => logger.error({ err }, 'Startup sync failed'));
 });

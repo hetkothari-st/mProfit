@@ -18,6 +18,7 @@ import { writeIngestionFailure } from '../../services/ingestionFailures.service.
 import { logger } from '../../lib/logger.js';
 import { smsVehicleAdapter } from './sms.js';
 import { mparivahanAdapter } from './mparivahan.js';
+import { parivahanPortalAdapter } from './portal.js';
 import type {
   VehicleAdapter,
   VehicleAdapterContext,
@@ -27,11 +28,15 @@ import type {
 export type VehicleFetchMode = 'auto' | 'interactive';
 
 /**
- * Default chain order. mParivahan first (free, fastest when available),
- * portal (Playwright, §7.3) will slot between mparivahan and sms once
- * built, sms last as the guaranteed human-in-the-loop fallback.
+ * Default chain order per §7.1: mParivahan first (free, fastest when
+ * available), parivahan portal second (interactive OTP), SMS last as
+ * the guaranteed human-in-the-loop fallback.
  */
-const DEFAULT_CHAIN: VehicleAdapter[] = [mparivahanAdapter, smsVehicleAdapter];
+const DEFAULT_CHAIN: VehicleAdapter[] = [
+  mparivahanAdapter,
+  parivahanPortalAdapter,
+  smsVehicleAdapter,
+];
 
 export interface RunVehicleChainInput {
   userId: string;
