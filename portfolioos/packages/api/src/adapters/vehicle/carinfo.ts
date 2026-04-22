@@ -69,13 +69,52 @@ function extractNextData(html: string): Record<string, unknown> | null {
 // HTML tag names — if obj keys are mostly these, it's an HTML parse, not data
 const HTML_KEYS = new Set(['title','div','span','a','body','html','head','marquee','h1','h2','h3','p','ul','li','table','tr','td','th','form','input','button','script','style','header','footer','nav','section','article','main']);
 
+/**
+ * Exact known vehicle-data keys from VAHAN / CarInfo / mParivahan responses.
+ * Using exact key names avoids false positives from unrelated keys that happen
+ * to contain short substrings like "color" (e.g. "customBackgroundColor").
+ * At least 2 must be present to consider the object vehicle-shaped.
+ */
+const VEHICLE_DATA_KEYS = new Set([
+  // Owner / registration
+  'owner_name','ownerName','owner','registered_owner_name','reg_owner_name','vehicle_owner_name',
+  'reg_no','regNo','registration_no','regnNo','vehicleRegNo',
+  // Make / model
+  'maker_desc','make','manufacturer','mfr_name','makerDesc',
+  'model','vehicleModel','vehicle_model','model_name','vchnum',
+  'maker_model','makerModel',
+  // Fuel / color / chassis
+  'fuel_desc','fuelType','fuel_type','vehicle_fuel_type','fuel',
+  'color_desc','colour','color','vehicle_color','vehicle_colour','color_code',
+  'chassis_no','chassisNo','chassis','chasisNo','vehicle_chassis_number',
+  // Expiry dates
+  'insurance_upto','insuranceExpiry','insExpiry','insurance_valid_upto','insurance_expiry',
+  'pucc_upto','pucExpiry','pucc_validity_upto','puc_valid_upto',
+  'fit_upto','fitnessExpiry','fitness_upto','fitness_valid_upto','fit_valid_upto',
+  'tax_upto','taxExpiry','road_tax_upto','roadTaxExpiry','tax_valid_upto',
+  'permit_upto','permitExpiry','permit_valid_upto',
+  // Other RC fields
+  'mfg_year','mfgYear','manufacturingYear','yearOfMfg','manufacturing_year','mfg_month_yr',
+  'rto_code','rtoCode','office_code','registering_authority',
+  'engine_no','engineNo','engine_number',
+  'rc_status','vehicle_status','registration_status',
+  'body_type','bodytype','vehicle_class','vehicle_class_desc',
+  'hypothecation','hp_status','financier',
+  'norms_type','emission_norms','emission_standard',
+  'seating_capacity','seatingCapacity',
+  'reg_date','registration_date','regn_dt',
+]);
+
 function looksLikeVehicleObj(obj: Record<string, unknown>): boolean {
-  const keys = Object.keys(obj).map(k => k.toLowerCase());
+  const keys = Object.keys(obj);
   if (keys.length === 0) return false;
-  const htmlCount = keys.filter(k => HTML_KEYS.has(k)).length;
-  if (htmlCount >= 3 || htmlCount / keys.length > 0.4) return false;
-  const vehicleStems = ['make','model','fuel','owner','chassis','insurance','puc','fitness','tax','permit','reg','rto','color','colour','mfg','vehicle','manufacturer'];
-  return vehicleStems.some(stem => keys.some(k => k.includes(stem)));
+  // Reject HTML-shaped objects
+  const lowerKeys = keys.map(k => k.toLowerCase());
+  const htmlCount = lowerKeys.filter(k => HTML_KEYS.has(k)).length;
+  if (htmlCount >= 3) return false;
+  // Need at least 2 exact known vehicle-data keys
+  const exactMatches = keys.filter(k => VEHICLE_DATA_KEYS.has(k)).length;
+  return exactMatches >= 2;
 }
 
 /**
@@ -109,7 +148,9 @@ function findVehicleObject(obj: Record<string, unknown>, depth = 0): Record<stri
   const loaderData = obj['loaderData'];
   if (loaderData && typeof loaderData === 'object' && !Array.isArray(loaderData)) {
     const ld = loaderData as Record<string, unknown>;
-    // Each value is a route's loader return — search all of them
+    // If loaderData itself is a flat vehicle data dict, return it directly
+    if (looksLikeVehicleObj(ld)) return ld;
+    // Otherwise treat as Remix route map: each value is a route's loader return
     for (const routeVal of Object.values(ld)) {
       if (routeVal && typeof routeVal === 'object' && !Array.isArray(routeVal)) {
         const found = findVehicleObject(routeVal as Record<string, unknown>, depth + 1);
