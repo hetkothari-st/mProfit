@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import {
   Plus,
   Car,
@@ -8,6 +9,8 @@ import {
   MessageSquareShare,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -114,6 +117,16 @@ function ExpiryRow({ label, iso }: { label: string; iso: string | null }) {
 }
 
 function VehicleCard({ vehicle }: { vehicle: VehicleDTO }) {
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: () => vehiclesApi.remove(vehicle.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      toast.success(`Vehicle ${vehicle.registrationNo} deleted`);
+    },
+    onError: () => toast.error('Failed to delete vehicle'),
+  });
+
   const title = [vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'Unknown vehicle';
   const anyExpiringSoon = [
     vehicle.insuranceExpiry,
@@ -142,11 +155,30 @@ function VehicleCard({ vehicle }: { vehicle: VehicleDTO }) {
               <p className="text-xs text-muted-foreground">{vehicle.ownerName}</p>
             )}
           </div>
-          <Button asChild variant="ghost" size="sm">
-            <Link to={`/vehicles/${vehicle.id}`}>
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-negative"
+              onClick={() => {
+                if (window.confirm(`Delete vehicle ${vehicle.registrationNo}?`)) {
+                  deleteMutation.mutate();
+                }
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link to={`/vehicles/${vehicle.id}`}>
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
 
         <div className="mt-4 pt-3 border-t space-y-1">

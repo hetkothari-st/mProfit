@@ -8,9 +8,15 @@ import { resolveMutualFundId, resolveStockMasterId } from './masterData.service.
 const STOCK_ASSET_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
   'EQUITY',
   'ETF',
-  'FUTURES',
-  'OPTIONS',
 ]);
+
+/**
+ * F&O lives in `DerivativePosition` — a separate aggregate. WAVG cost
+ * across multiple option strikes makes no sense (each contract is a
+ * distinct instrument). Equity-style holdings projection skips these
+ * outright; the F&O page reads from `DerivativePosition`.
+ */
+const SKIP_PROJECTION: ReadonlySet<AssetClass> = new Set<AssetClass>(['FUTURES', 'OPTIONS']);
 
 /**
  * If a projection / transaction landed with no master-data link but carries
@@ -203,6 +209,16 @@ export async function recomputeForAsset(
     await prisma.holdingProjection.deleteMany({
       where: { portfolioId, assetKey },
     });
+    return;
+  }
+
+  // F&O — delegate to the derivative-position aggregate (separate model).
+  // Removing any HoldingProjection row that may exist as a stale legacy
+  // artefact is harmless here.
+  if (SKIP_PROJECTION.has(meta.assetClass)) {
+    await prisma.holdingProjection.deleteMany({ where: { portfolioId, assetKey } });
+    const { recomputeDerivativePosition } = await import('./derivativePosition.service.js');
+    await recomputeDerivativePosition(portfolioId, assetKey);
     return;
   }
 

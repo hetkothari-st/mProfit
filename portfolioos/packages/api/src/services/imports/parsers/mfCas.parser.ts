@@ -93,9 +93,26 @@ export const mfCasParser: Parser = {
       throw err;
     }
 
-    const { transactions, warnings } = parseMfCasText(text);
+    let { transactions, warnings } = parseMfCasText(text);
+    
+    // AI Fallback: If regex parsing found no trades, try the Gemini-powered AI parser
+    if (transactions.length === 0 && process.env.GEMINI_API_KEY) {
+      logger.info({ fileName: ctx.fileName }, '[mf-cas] Regex parsed 0 trades, falling back to AI parser');
+      try {
+        const aiResult = await aiMfCasParser.parse(ctx);
+        if (aiResult.transactions.length > 0) {
+          return aiResult;
+        }
+        // If AI also found nothing, combine warnings
+        warnings = [...warnings, ...aiResult.warnings];
+      } catch (err) {
+        logger.error({ err, fileName: ctx.fileName }, '[mf-cas] AI fallback failed');
+        warnings.push(`AI fallback failed: ${(err as Error).message}`);
+      }
+    }
+
     if (transactions.length === 0) {
-      logger.warn({ fileName: ctx.fileName }, '[mf-cas] no trades parsed');
+      logger.warn({ fileName: ctx.fileName }, '[mf-cas] no trades parsed even after fallback');
     }
 
     return {
@@ -107,6 +124,8 @@ export const mfCasParser: Parser = {
     };
   },
 };
+
+import { aiMfCasParser } from './aiMfCas.parser.js';
 
 /**
  * Pure text-parsing entry point — used by the PDF path after text
@@ -133,6 +152,7 @@ export function parseMfCasText(text: string): {
 
   const txs: ParsedTransaction[] = [];
   const warnings: string[] = [];
+  let sawValidCasStructure = false; // true once we see a folio or ISIN — confirms it's a real CAS
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
@@ -141,12 +161,14 @@ export function parseMfCasText(text: string): {
     const folioMatch = line.match(FOLIO_RE);
     if (folioMatch) {
       currentScheme.folio = folioMatch[1]!.trim();
+      sawValidCasStructure = true;
       continue;
     }
 
     const isinMatch = line.match(ISIN_RE);
     if (isinMatch && line.length < 200 && line.toLowerCase().includes('isin')) {
       currentScheme.isin = isinMatch[1]!;
+      sawValidCasStructure = true;
       const nameBefore = line.split(/ISIN/i)[0]?.trim();
       if (nameBefore) {
         currentScheme.name = nameBefore;
@@ -217,9 +239,17 @@ export function parseMfCasText(text: string): {
   }
 
   if (txs.length === 0) {
-    warnings.push(
-      'No MF transactions detected in CAS PDF — if your CAS is password-protected, remove the password and re-upload',
-    );
+    if (sawValidCasStructure) {
+      // Valid CAS recognised (has folio/ISIN headers) but no transactions in
+      // the requested period. This is correct when the user has no MF activity.
+      // Return empty warnings so processImportJob marks the job COMPLETED (not
+      // FAILED) and the UI can surface a friendly "no transactions" message.
+      warnings.push('__EMPTY_CAS__');
+    } else {
+      warnings.push(
+        'No MF transactions detected in CAS PDF — if your CAS is password-protected, remove the password and re-upload',
+      );
+    }
   }
 
   return { transactions: txs, warnings };

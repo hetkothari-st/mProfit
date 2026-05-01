@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   TrendingUp, Wallet, LineChart as LineChartIcon, Percent, Briefcase,
   RefreshCw, Loader2, ArrowRight, Car, Home, Shield,
-  AlertTriangle, Bell, CheckCircle2, XCircle,
+  AlertTriangle, Bell, CheckCircle2, XCircle, CalendarDays, Layers,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -14,6 +14,7 @@ import {
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Money } from '@/components/ui/money';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -38,10 +39,20 @@ const PERIOD_OPTIONS = [
   { label: 'All', days: 0 },
 ];
 
+// Editorial chart palette — refined, restrained, never neon
 const PIE_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444',
-  '#06b6d4', '#f97316', '#ec4899', '#84cc16', '#14b8a6',
-  '#6366f1', '#a855f7',
+  'hsl(213 53% 22%)',   // ink
+  'hsl(36 60% 48%)',    // gold
+  'hsl(130 35% 34%)',   // forest
+  'hsl(12 50% 44%)',    // terracotta
+  'hsl(260 28% 42%)',   // plum
+  'hsl(195 40% 34%)',   // slate teal
+  'hsl(28 70% 54%)',    // amber
+  'hsl(340 35% 40%)',   // rosewood
+  'hsl(80 28% 38%)',    // moss
+  'hsl(220 25% 50%)',   // dust blue
+  'hsl(50 55% 45%)',    // mustard
+  'hsl(165 30% 36%)',   // pine
 ];
 
 function urgencyColor(urgency: 'HIGH' | 'MEDIUM' | 'LOW') {
@@ -211,10 +222,11 @@ export function DashboardPage() {
   const alerts = nw?.alerts ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <PageHeader
-        title="Dashboard"
-        description="Your complete financial picture"
+        eyebrow="Dashboard"
+        title="Your financial portrait"
+        description="A complete, hand-curated view of every asset, liability, and signal — engineered for investors who read between the lines."
         actions={
           <div className="flex items-center gap-2">
             <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} className="w-52">
@@ -229,33 +241,83 @@ export function DashboardPage() {
         }
       />
 
-      {/* Net Worth Banner */}
+      {/* Net Worth Hero — editorial */}
       {nw && (
-        <Card className="border-primary/20 overflow-hidden">
-          <div className="bg-gradient-to-br from-primary/8 via-primary/4 to-transparent px-6 py-5">
-            {/* Total */}
-            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-1">Total Net Worth</p>
-            <p className="text-4xl font-bold tracking-tight tabular-nums">{formatINR(nw.totalNetWorth)}</p>
+        <Card tone="hero" className="reveal">
+          <div className="relative px-7 py-7 sm:px-9 sm:py-8">
+            <div className="flex items-start justify-between gap-6 flex-wrap">
+              <div className="min-w-0">
+                <p className="text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85 mb-2">
+                  Total Net Worth · Consolidated
+                </p>
+                <Money
+                  hero
+                  className="numeric-display-lg text-[clamp(2.4rem,5.6vw,4rem)] leading-[1.02] text-foreground"
+                  symbolClassName="text-[0.6em] -translate-y-[0.18em] text-accent"
+                >
+                  {formatINR(nw.totalNetWorth)}
+                </Money>
+                <div className="mt-5 flex flex-wrap items-stretch gap-3 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-accent-ink/70" strokeWidth={1.7} />
+                    <span className="tracking-tight">
+                      {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </span>
+                  </span>
+                  <span className="w-px self-stretch bg-border/80" />
+                  <span className="inline-flex items-baseline gap-1.5">
+                    <span className="numeric text-[12px] font-medium text-foreground/90 tabular-nums">{totals.holdingCount}</span>
+                    <span className="uppercase tracking-kerned text-[9.5px]">
+                      {totals.holdingCount === 1 ? 'Holding' : 'Holdings'}
+                    </span>
+                  </span>
+                  <span className="w-px self-stretch bg-border/80" />
+                  <span className="inline-flex items-baseline gap-1.5">
+                    <span className="numeric text-[12px] font-medium text-foreground/90 tabular-nums">{portfolios.length}</span>
+                    <span className="uppercase tracking-kerned text-[9.5px]">
+                      {portfolios.length === 1 ? 'Portfolio' : 'Portfolios'}
+                    </span>
+                  </span>
+                  <span className="w-px self-stretch bg-border/80" />
+                  <span className="inline-flex items-center gap-1.5">
+                    <Layers className="h-3.5 w-3.5 text-accent-ink/70" strokeWidth={1.7} />
+                    <span className="uppercase tracking-kerned text-[9.5px]">
+                      {selectedId === 'ALL' ? 'All accounts' : 'Filtered'}
+                    </span>
+                  </span>
+                </div>
+              </div>
+              <div className="hidden md:flex flex-col items-end gap-2 text-right max-w-[280px]">
+                <span className="text-[10px] uppercase tracking-kerned text-muted-foreground">Composition</span>
+                <p className="font-display-italic text-[18px] leading-[1.25] text-foreground/85">
+                  &ldquo;Diversification is the only free lunch.&rdquo;
+                </p>
+                <span className="text-[10px] uppercase tracking-kerned text-muted-foreground/80">— Harry Markowitz</span>
+              </div>
+            </div>
+
+            {/* Ornamental divider */}
+            <div className="my-6 rule-ornament"><span /></div>
 
             {/* Breakdown row */}
-            <div className="mt-4 pt-4 border-t border-border/60 flex flex-wrap gap-x-0 gap-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-0 gap-y-5">
               {[
-                { label: 'Investments', value: nw.portfolio.currentValue, color: '#3b82f6', show: true },
-                { label: 'Real Estate', value: nw.realEstate.totalValue, color: '#10b981', show: toDecimal(nw.realEstate.totalValue).greaterThan(0) },
-                { label: 'Vehicles', value: nw.vehicles.totalValue, color: '#f59e0b', show: toDecimal(nw.vehicles.totalValue).greaterThan(0) },
-                { label: 'Sum Assured', value: nw.insurance.totalSumAssured, color: '#8b5cf6', show: nw.insurance.activePoliciesCount > 0 },
+                { label: 'Investments', value: nw.portfolio.currentValue, color: 'hsl(213 53% 22%)', show: true },
+                { label: 'Real Estate', value: nw.realEstate.totalValue, color: 'hsl(130 35% 34%)', show: toDecimal(nw.realEstate.totalValue).greaterThan(0) },
+                { label: 'Vehicles', value: nw.vehicles.totalValue, color: 'hsl(36 60% 48%)', show: toDecimal(nw.vehicles.totalValue).greaterThan(0) },
+                { label: 'Sum Assured', value: nw.insurance.totalSumAssured, color: 'hsl(260 28% 42%)', show: nw.insurance.activePoliciesCount > 0 },
               ]
                 .filter((item) => item.show)
                 .map((item, i, arr) => (
                   <div
                     key={item.label}
-                    className={`flex flex-col min-w-[140px] flex-1 px-5 ${i < arr.length - 1 ? 'border-r border-border/60' : ''} ${i === 0 ? 'pl-0' : ''}`}
+                    className={`min-w-0 px-5 ${i === 0 ? 'pl-0' : ''} ${i < arr.length - 1 ? 'md:border-r md:border-border/60' : ''}`}
                   >
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="inline-block h-2 w-2 rounded-full flex-shrink-0" style={{ background: item.color }} />
-                      <span className="text-xs text-muted-foreground">{item.label}</span>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="inline-block h-2 w-2 rounded-[1px] rotate-45 flex-shrink-0" style={{ background: item.color }} />
+                      <span className="text-[10px] uppercase tracking-kerned text-muted-foreground">{item.label}</span>
                     </div>
-                    <span className="text-lg font-semibold tabular-nums">{formatINR(item.value)}</span>
+                    <Money className="numeric-display text-[19px] text-foreground">{formatINR(item.value)}</Money>
                   </div>
                 ))}
             </div>
@@ -285,52 +347,63 @@ export function DashboardPage() {
 
       {/* Investment metric cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          label="Portfolio value"
-          value={formatINR(totals.currentValue)}
-          icon={Wallet}
-          hint={`${totals.holdingCount} holdings`}
-        />
-        <MetricCard
-          label="Total invested"
-          value={formatINR(totals.totalInvestment)}
-          icon={TrendingUp}
-          hint={totals.xirr != null ? `XIRR ${formatPercent(totals.xirr * 100, 1)}` : undefined}
-        />
-        <MetricCard
-          label="Unrealised P&L"
-          value={formatINR(totals.unrealisedPnL, { showSign: true })}
-          icon={LineChartIcon}
-          trend={{
-            direction: totals.unrealisedPnLD.greaterThan(0) ? 'up' : totals.unrealisedPnLD.isNegative() ? 'down' : 'flat',
-            value: formatPercent(totals.unrealisedPct, 2, true),
-          }}
-        />
-        <MetricCard
-          label="Today's change"
-          value={formatINR(totals.todaysChange, { showSign: true })}
-          icon={Percent}
-          trend={{
-            direction: totals.todaysChangeD.greaterThan(0) ? 'up' : totals.todaysChangeD.isNegative() ? 'down' : 'flat',
-            value: totals.todaysChangePct != null ? formatPercent(totals.todaysChangePct, 2, true) : '—',
-          }}
-        />
+        <div className="reveal reveal-delay-1">
+          <MetricCard
+            label="Portfolio value"
+            value={formatINR(totals.currentValue)}
+            icon={Wallet}
+            hint={`${totals.holdingCount} holdings`}
+          />
+        </div>
+        <div className="reveal reveal-delay-2">
+          <MetricCard
+            label="Total invested"
+            value={formatINR(totals.totalInvestment)}
+            icon={TrendingUp}
+            hint={totals.xirr != null ? `XIRR ${formatPercent(totals.xirr * 100, 1)}` : undefined}
+          />
+        </div>
+        <div className="reveal reveal-delay-3">
+          <MetricCard
+            label="Unrealised P&L"
+            value={formatINR(totals.unrealisedPnL, { showSign: true })}
+            icon={LineChartIcon}
+            trend={{
+              direction: totals.unrealisedPnLD.greaterThan(0) ? 'up' : totals.unrealisedPnLD.isNegative() ? 'down' : 'flat',
+              value: formatPercent(totals.unrealisedPct, 2, true),
+            }}
+          />
+        </div>
+        <div className="reveal reveal-delay-4">
+          <MetricCard
+            label="Today's change"
+            value={formatINR(totals.todaysChange, { showSign: true })}
+            icon={Percent}
+            trend={{
+              direction: totals.todaysChangeD.greaterThan(0) ? 'up' : totals.todaysChangeD.isNegative() ? 'down' : 'flat',
+              value: totals.todaysChangePct != null ? formatPercent(totals.todaysChangePct, 2, true) : '—',
+            }}
+          />
+        </div>
       </div>
 
       {/* Chart + Full Allocation Pie */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle>Portfolio value</CardTitle>
-            <div className="flex gap-1">
+            <div>
+              <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Trajectory</p>
+              <CardTitle className="text-[16px]">Portfolio value over time</CardTitle>
+            </div>
+            <div className="flex gap-0.5 rounded-md border border-border/70 bg-background/40 p-0.5">
               {PERIOD_OPTIONS.map((opt) => (
                 <button
                   key={opt.label}
                   onClick={() => setPeriod(opt.days)}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                  className={`px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all ${
                     period === opt.days
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      ? 'bg-foreground text-background shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {opt.label}
@@ -347,21 +420,31 @@ export function DashboardPage() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="gradValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      <stop offset="0%"  stopColor="hsl(var(--foreground))" stopOpacity={0.22} />
+                      <stop offset="55%" stopColor="hsl(var(--foreground))" stopOpacity={0.06} />
+                      <stop offset="100%" stopColor="hsl(var(--foreground))" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gradInvested" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.15} />
+                      <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.10} />
                       <stop offset="95%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                    minTickGap={64}
+                    dy={6}
+                    padding={{ left: 8, right: 8 }}
+                  />
                   <YAxis
-                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
                     axisLine={false} tickLine={false} width={72}
                     tickFormatter={(v: number) =>
                       v >= 10_000_000 ? `₹${(v / 10_000_000).toFixed(1)}Cr`
@@ -370,12 +453,13 @@ export function DashboardPage() {
                             : `₹${v.toFixed(0)}`}
                   />
                   <Tooltip
-                    contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12 }}
+                    cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3', strokeOpacity: 0.4 }}
+                    contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12, padding: '10px 12px', boxShadow: '0 12px 28px -16px hsl(var(--shadow-color) / 0.35)' }}
                     formatter={(v: number, name: string) => [formatINR(v.toFixed(4)), name === 'value' ? 'Market value' : 'Invested']}
-                    labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: 4 }}
+                    labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: 4, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}
                   />
-                  <Area type="monotone" dataKey="invested" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} strokeDasharray="4 4" fill="url(#gradInvested)" dot={false} />
-                  <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#gradValue)" dot={chartData.length <= 10} activeDot={{ r: 4 }} />
+                  <Area type="monotone" dataKey="invested" stroke="hsl(var(--muted-foreground))" strokeWidth={1.25} strokeDasharray="4 4" fill="url(#gradInvested)" dot={false} />
+                  <Area type="monotone" dataKey="value" stroke="hsl(var(--foreground))" strokeWidth={2} fill="url(#gradValue)" dot={chartData.length <= 10 ? { r: 2.5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 1.5 } : false} activeDot={{ r: 5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 2 }} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -402,7 +486,9 @@ export function DashboardPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12 }}
+                      contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12, padding: '10px 12px', boxShadow: '0 12px 28px -16px hsl(var(--shadow-color) / 0.35)' }}
+                      itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
+                      labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: 4, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}
                       formatter={(v: number, _n: string, p: { payload?: { percent?: number; label?: string } }) => [
                         `${formatINR(v.toFixed(4))} (${(p.payload?.percent ?? 0).toFixed(1)}%)`,
                         p.payload?.label ?? _n,

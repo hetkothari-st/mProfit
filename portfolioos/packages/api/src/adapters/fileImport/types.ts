@@ -43,6 +43,12 @@ export interface TransactionEventMetadata extends Record<string, unknown> {
   tradeNo?: string;
   narration?: string;
   settlementDate?: string;
+
+  // F&O — populated when assetClass is FUTURES or OPTIONS.
+  strikePrice?: string;
+  expiryDate?: string; // YYYY-MM-DD
+  optionType?: 'CALL' | 'PUT';
+  lotSize?: number;
 }
 
 export type FileImportAdapter = Adapter<FileImportInput, TransactionEvent>;

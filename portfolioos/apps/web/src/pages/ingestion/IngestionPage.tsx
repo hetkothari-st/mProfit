@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   AlertTriangle,
@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { mailboxesApi, type MailboxDTO } from '@/api/mailboxes.api';
+import { gmailApi } from '@/api/gmail.api';
 import {
   ingestionApi,
   type DiscoveredSenderDTO,
@@ -54,6 +55,8 @@ import { apiErrorMessage } from '@/api/client';
 export function IngestionPage() {
   const qc = useQueryClient();
   const [detail, setDetail] = useState<CanonicalEventDTO | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoDiscover = searchParams.get('auto-discover') === '1';
 
   const mailboxesQuery = useQuery({
     queryKey: ['mailboxes'],
@@ -194,6 +197,12 @@ export function IngestionPage() {
             gmailMailboxes={gmailMailboxes}
             senders={senders}
             onChange={invalidate}
+            autoDiscover={autoDiscover}
+            onAutoDiscoverConsumed={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete('auto-discover');
+              setSearchParams(next, { replace: true });
+            }}
           />
         )}
 
@@ -307,6 +316,20 @@ function ConnectStep({
   mailboxes: MailboxDTO[];
   loading: boolean;
 }) {
+  const connectMut = useMutation({
+    mutationFn: () => gmailApi.authUrl(),
+    onSuccess: (r) => {
+      window.location.href = r.url;
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to start Google sign-in')),
+  });
+
+  const disconnectMut = useMutation({
+    mutationFn: (id: string) => gmailApi.remove(id),
+    onSuccess: () => toast.success('Gmail disconnected'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to disconnect')),
+  });
+
   if (loading) {
     return (
       <Card>
@@ -334,10 +357,13 @@ function ConnectStep({
             title="No Gmail connected yet"
             description="PortfolioOS scans Gmail for financial emails (read-only) and turns them into transactions. Connect once — we never scan anything except the senders you explicitly allow."
             action={
-              <Button asChild>
-                <Link to="/mailboxes">
-                  <Chrome className="h-4 w-4" /> Connect Gmail
-                </Link>
+              <Button onClick={() => connectMut.mutate()} disabled={connectMut.isPending}>
+                {connectMut.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Chrome className="h-4 w-4" />
+                )}
+                Connect Gmail
               </Button>
             }
           />
@@ -355,10 +381,14 @@ function ConnectStep({
           </span>
           Email accounts
         </CardTitle>
-        <Button variant="outline" size="sm" asChild>
-          <Link to="/mailboxes">
-            <Chrome className="h-3 w-3" /> Manage
-          </Link>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => connectMut.mutate()}
+          disabled={connectMut.isPending}
+        >
+          {connectMut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Chrome className="h-3 w-3" />}
+          Add another
         </Button>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -381,15 +411,30 @@ function ConnectStep({
                 </div>
               </div>
             </div>
-            <span
-              className={
-                m.isActive
-                  ? 'text-[11px] text-positive'
-                  : 'text-[11px] text-muted-foreground'
-              }
-            >
-              {m.isActive ? 'Active' : 'Paused'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className={
+                  m.isActive
+                    ? 'text-[11px] text-positive'
+                    : 'text-[11px] text-muted-foreground'
+                }
+              >
+                {m.isActive ? 'Active' : 'Paused'}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                onClick={() => {
+                  if (confirm(`Disconnect ${m.googleEmail ?? m.label ?? 'this Gmail'}?`)) {
+                    disconnectMut.mutate(m.id);
+                  }
+                }}
+                disabled={disconnectMut.isPending}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
         ))}
       </CardContent>
@@ -401,10 +446,14 @@ function SendersStep({
   gmailMailboxes,
   senders,
   onChange,
+  autoDiscover,
+  onAutoDiscoverConsumed,
 }: {
   gmailMailboxes: MailboxDTO[];
   senders: MonitoredSenderDTO[];
   onChange: () => void;
+  autoDiscover?: boolean;
+  onAutoDiscoverConsumed?: () => void;
 }) {
   return (
     <Card>
@@ -421,12 +470,14 @@ function SendersStep({
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        {gmailMailboxes.map((m) => (
+        {gmailMailboxes.map((m, idx) => (
           <DiscoveryCard
             key={m.id}
             mailbox={m}
             existingAddresses={new Set(senders.map((s) => s.address.toLowerCase()))}
             onAdded={onChange}
+            autoTrigger={Boolean(autoDiscover) && idx === 0}
+            onAutoTriggered={onAutoDiscoverConsumed}
           />
         ))}
 
@@ -462,13 +513,18 @@ function DiscoveryCard({
   mailbox,
   existingAddresses,
   onAdded,
+  autoTrigger,
+  onAutoTriggered,
 }: {
   mailbox: MailboxDTO;
   existingAddresses: Set<string>;
   onAdded: () => void;
+  autoTrigger?: boolean;
+  onAutoTriggered?: () => void;
 }) {
   const [results, setResults] = useState<DiscoveredSenderDTO[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const autoFiredRef = useRef(false);
 
   const scanMut = useMutation({
     mutationFn: () => ingestionApi.discover(mailbox.id),
@@ -513,6 +569,26 @@ function DiscoveryCard({
     },
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not add senders')),
   });
+
+  // Auto-fire scan once when prompted (e.g. just after Gmail OAuth callback).
+  // Also auto-selects all unpicked seed-matched senders so the user can hit
+  // "Add" with one click after the scan completes.
+  useEffect(() => {
+    if (!autoTrigger || autoFiredRef.current) return;
+    autoFiredRef.current = true;
+    scanMut.mutate(undefined, {
+      onSuccess: (r) => {
+        const preselect = new Set<string>();
+        for (const s of r) {
+          if (existingAddresses.has(s.address.toLowerCase())) continue;
+          if (s.seedMatch || s.score >= 4) preselect.add(s.address);
+        }
+        setSelected(preselect);
+        onAutoTriggered?.();
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoTrigger]);
 
   const unpickedResults = (results ?? []).filter(
     (s) => !existingAddresses.has(s.address.toLowerCase()),
@@ -1017,6 +1093,17 @@ function EventDetailDialog({
                 mono
               />
             </div>
+
+            {event.sourceAdapter.startsWith('gmail') && event.sourceRef && (
+              <a
+                href={`https://mail.google.com/mail/u/0/#inbox/${event.sourceRef}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
+              >
+                <Mail className="h-3 w-3" /> View original in Gmail
+              </a>
+            )}
 
             {event.parserNotes && (
               <div>

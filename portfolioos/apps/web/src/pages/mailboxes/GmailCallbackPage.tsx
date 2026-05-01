@@ -28,14 +28,19 @@ export function GmailCallbackPage() {
       return;
     }
     (async () => {
+      let success = false;
       try {
         const r = await gmailApi.callback(code);
         toast.success(`Connected ${r.email}`);
-        setMsg(`Connected ${r.email} — redirecting…`);
+        setMsg(`Connected ${r.email} — discovering financial senders…`);
+        success = true;
       } catch (e) {
         toast.error(apiErrorMessage(e));
       } finally {
-        setTimeout(() => nav('/mailboxes', { replace: true }), 500);
+        setTimeout(
+          () => nav(success ? '/ingestion?auto-discover=1' : '/mailboxes', { replace: true }),
+          500,
+        );
       }
     })();
   }, [params, nav]);

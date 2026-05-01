@@ -51,6 +51,11 @@ export function projectTransactionEvent(
     tradeNo: m.tradeNo,
     narration: m.narration,
 
+    strikePrice: m.strikePrice,
+    expiryDate: m.expiryDate,
+    optionType: m.optionType,
+    lotSize: m.lotSize,
+
     sourceAdapter: event.sourceAdapter,
     sourceAdapterVer: event.sourceAdapterVer,
     sourceHash: event.sourceHash,

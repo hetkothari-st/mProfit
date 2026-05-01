@@ -18,6 +18,8 @@ export interface CreateImportJobInput {
   fileName: string;
   filePath: string;
   broker?: string | null;
+  contentHash?: string | null;
+  gmailMessageId?: string | null;
 }
 
 export async function createImportJob(input: CreateImportJobInput) {
@@ -32,6 +34,34 @@ export async function createImportJob(input: CreateImportJobInput) {
       if (p.userId !== input.userId) throw new ForbiddenError();
     }
 
+    // Phase C: content-hash dedup. If a prior job for this user already
+    // imported the same bytes (or same Gmail message), short-circuit and
+    // return that job — re-uploads / re-pulls are no-ops.
+    if (input.contentHash) {
+      const existing = await prisma.importJob.findFirst({
+        where: { userId: input.userId, contentHash: input.contentHash },
+      });
+      if (existing) {
+        logger.info(
+          { jobId: existing.id, contentHash: input.contentHash },
+          '[import] content-hash dedup: returning existing job',
+        );
+        return existing;
+      }
+    }
+    if (input.gmailMessageId) {
+      const existing = await prisma.importJob.findFirst({
+        where: { userId: input.userId, gmailMessageId: input.gmailMessageId },
+      });
+      if (existing) {
+        logger.info(
+          { jobId: existing.id, gmailMessageId: input.gmailMessageId },
+          '[import] gmail message-id dedup: returning existing job',
+        );
+        return existing;
+      }
+    }
+
     const job = await prisma.importJob.create({
       data: {
         userId: input.userId,
@@ -41,6 +71,8 @@ export async function createImportJob(input: CreateImportJobInput) {
         fileName: input.fileName,
         filePath: input.filePath,
         broker: input.broker ?? null,
+        contentHash: input.contentHash ?? null,
+        gmailMessageId: input.gmailMessageId ?? null,
       },
     });
 
@@ -269,18 +301,24 @@ export async function processImportJob(importJobId: string): Promise<{
     }
   }
 
-  // If 0 transactions were parsed and the parser emitted warnings (e.g. "no
-  // adapter matched" or "no transactions found"), surface it as FAILED so the
-  // user can see immediately that something went wrong rather than seeing
-  // "Completed" with 0 rows and having to hunt for the warnings button.
+  // __EMPTY_CAS__ is a sentinel emitted by mfCas.parser when the PDF is a
+  // valid CAS but has no transactions in the requested period. Strip it from
+  // the stored warnings (no need to show the sentinel to users) and mark the
+  // job COMPLETED so the UI shows "0 rows — CAS confirmed empty" instead of
+  // FAILED which implies something broke.
+  const isEmptyCas = warnings.includes('__EMPTY_CAS__');
+  const displayWarnings = warnings.filter((w) => w !== '__EMPTY_CAS__');
+
   const finalStatus =
-    total === 0 && warnings.length > 0
-      ? 'FAILED'
-      : failed === 0
-        ? 'COMPLETED'
-        : success === 0 && skipped === 0
-          ? 'FAILED'
-          : 'COMPLETED_WITH_ERRORS';
+    isEmptyCas
+      ? 'COMPLETED'
+      : total === 0 && warnings.length > 0
+        ? 'FAILED'
+        : failed === 0
+          ? 'COMPLETED'
+          : success === 0 && skipped === 0
+            ? 'FAILED'
+            : 'COMPLETED_WITH_ERRORS';
 
   await prisma.importJob.update({
     where: { id: importJobId },
@@ -291,7 +329,9 @@ export async function processImportJob(importJobId: string): Promise<{
       failedRows: failed,
       errorLog: {
         parser: adapterId,
-        parserWarnings: warnings,
+        parserWarnings: isEmptyCas
+          ? ['CAS statement confirmed — no mutual fund transactions in the requested period. This is correct if you had no MF activity.']
+          : displayWarnings,
         rowErrors: errors,
         skippedAsDuplicates: skipped,
       },

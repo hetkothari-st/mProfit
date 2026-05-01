@@ -50,6 +50,14 @@ export interface ParsedTransaction {
    * that neither of those capture (e.g. a CAS folio/transaction-id pair).
    */
   sourceHash?: string;
+
+  // F&O fields — populated when assetClass is FUTURES or OPTIONS. The
+  // import service stamps these onto the Transaction row so derivative
+  // position recompute and assetKey both work.
+  strikePrice?: number | string;
+  expiryDate?: string; // YYYY-MM-DD
+  optionType?: 'CALL' | 'PUT';
+  lotSize?: number;
 }
 
 export interface ParserResult {

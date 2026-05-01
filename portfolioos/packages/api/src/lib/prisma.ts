@@ -42,6 +42,8 @@ const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'InsuranceClaim',
   'AuditLog',
   'LlmSpend',
+  'MFCentralSyncJob',
+  'MFCasMailbackJob',
 ]);
 
 const basePrisma =

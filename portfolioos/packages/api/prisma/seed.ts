@@ -1,8 +1,12 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
 import { SEED_STOCKS } from '../src/priceFeeds/nseSeed.js';
 
-const prisma = new PrismaClient();
+// Use the direct (superuser) URL so the seed bypasses Row-Level Security policies.
+// The app runtime still uses the restricted portfolioos_app role via DATABASE_URL.
+const prisma = new PrismaClient({
+  datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '' } },
+});
 
 async function main() {
   const email = 'demo@portfolioos.in';

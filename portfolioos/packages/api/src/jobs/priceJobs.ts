@@ -10,6 +10,9 @@ import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.
 import { syncAllCommodities } from '../priceFeeds/commodity.service.js';
 import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates } from '../priceFeeds/fx.service.js';
+import { loadNseFoMaster } from '../priceFeeds/nseFoMaster.service.js';
+import { loadNseFoBhavcopy } from '../priceFeeds/nseFoBhavcopy.service.js';
+import { refreshAllDerivativePositionPrices } from '../services/derivativePosition.service.js';
 
 const TZ = 'Asia/Kolkata';
 
@@ -21,6 +24,8 @@ const running = {
   commodities: false,
   crypto: false,
   fx: false,
+  foMaster: false,
+  foBhavcopy: false,
 };
 
 async function runGuarded<K extends keyof typeof running>(
@@ -104,6 +109,18 @@ async function runFxJob(): Promise<void> {
   await runGuarded('fx', 'FX sync', syncFxRates);
 }
 
+async function runFoMasterJob(): Promise<void> {
+  await runGuarded('foMaster', 'NSE F&O master sync', loadNseFoMaster);
+}
+
+async function runFoBhavcopyJob(): Promise<void> {
+  await runGuarded('foBhavcopy', 'NSE F&O bhavcopy', async () => {
+    const r = await loadNseFoBhavcopy();
+    await refreshAllDerivativePositionPrices();
+    return r;
+  });
+}
+
 export function startPriceJobs(): void {
   if (process.env.ENABLE_PRICE_CRONS === 'false') {
     logger.info('[cron] price jobs disabled via ENABLE_PRICE_CRONS=false');
@@ -134,8 +151,14 @@ export function startPriceJobs(): void {
   // FX rates every hour
   cron.schedule('0 * * * *', runFxJob, { timezone: TZ });
 
+  // F&O master (lot sizes) — Sunday 03:30 IST weekly
+  cron.schedule('30 3 * * 0', runFoMasterJob, { timezone: TZ });
+
+  // F&O EOD bhavcopy at 16:45 IST Mon–Fri (NSE publishes ~16:30; +15min buffer)
+  cron.schedule('45 16 * * 1-5', runFoBhavcopyJob, { timezone: TZ });
+
   logger.info(
-    '[cron] scheduled: AMFI@22:00, stockEOD@16:30 MF, intraday 15-min MF, universe Sun 03:00, CA@20:00, commodities@23:30, crypto 30-min, FX hourly — all IST',
+    '[cron] scheduled: AMFI@22:00, stockEOD@16:30 MF, intraday 15-min MF, universe Sun 03:00, CA@20:00, commodities@23:30, crypto 30-min, FX hourly, F&O master Sun 03:30, F&O bhavcopy@16:45 MF — all IST',
   );
 }
 
@@ -148,4 +171,6 @@ export {
   runCommoditiesJob,
   runCryptoJob,
   runFxJob,
+  runFoMasterJob,
+  runFoBhavcopyJob,
 };

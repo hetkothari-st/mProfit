@@ -9,9 +9,11 @@ import {
   refreshVehicle,
   applyVahanSms,
 } from '../services/vehicles.service.js';
+import { initiateCarInfoScrape, verifyCarInfoOtp } from '../adapters/vehicle/carinfoPlaywright.js';
 import { scanChallansForVehicle } from '../services/challans.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
+import { logger } from '../lib/logger.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.string().regex(/^-?\d+(\.\d+)?$/, 'Expected decimal string');
@@ -108,4 +110,37 @@ export async function scanChallans(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const result = await scanChallansForVehicle(req.user.id, req.params.id!);
   ok(res, result);
+}
+
+const carInfoInitSchema = z.object({
+  registrationNo: z.string().min(5).max(20),
+  mobileNo: z.string().length(10),
+});
+
+const carInfoVerifySchema = z.object({
+  sessionId: z.string(),
+  otp: z.string().min(4).max(6),
+});
+
+export async function carInfoInit(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const body = carInfoInitSchema.parse(req.body ?? {});
+  const sessionId = await initiateCarInfoScrape(body.registrationNo, body.mobileNo);
+  ok(res, { sessionId });
+}
+
+export async function carInfoVerify(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const body = carInfoVerifySchema.parse(req.body ?? {});
+  
+  try {
+    const data = await verifyCarInfoOtp(body.sessionId, body.otp);
+    ok(res, data);
+  } catch (error: any) {
+    logger.error({ error, sessionId: body.sessionId }, 'CarInfo verification failed');
+    res.status(400).json({ 
+      success: false, 
+      message: error.message || 'Verification failed' 
+    });
+  }
 }

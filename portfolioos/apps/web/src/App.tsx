@@ -36,6 +36,7 @@ import { EpfPage } from './pages/assetClasses/EpfPage';
 import { NpsPage } from './pages/assetClasses/NpsPage';
 import { PpfPage } from './pages/assetClasses/PpfPage';
 import { OtherAssetsPage } from './pages/assetClasses/OtherAssetsPage';
+import { FuturesOptionsPage } from './pages/assetClasses/FuturesOptionsPage';
 import { AccountingPage } from './pages/accounting/AccountingPage';
 import { AlertsPage } from './pages/alerts/AlertsPage';
 import { OnboardingWizard } from './pages/onboarding/OnboardingWizard';
@@ -69,7 +70,7 @@ export function App() {
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/stocks" element={<StocksPage />} />
         <Route path="/mutual-funds" element={<MutualFundsPage />} />
-        <Route path="/fo" element={<PlaceholderPage title="Futures & Options" />} />
+        <Route path="/fo" element={<FuturesOptionsPage />} />
         <Route path="/bonds" element={<BondsPage />} />
         <Route path="/fds" element={<FixedDepositsPage />} />
         <Route path="/gold" element={<GoldPage />} />
@@ -89,7 +90,9 @@ export function App() {
         <Route path="/import" element={<ImportPage />} />
         <Route path="/import/failures" element={<FailuresPage />} />
         <Route path="/connectors" element={<ConnectorsPage />} />
-        <Route path="/mailboxes" element={<MailboxesPage />} />
+        {/* /mailboxes consolidated into /ingestion. Old route preserved
+            as a redirect so bookmarked URLs don't 404. */}
+        <Route path="/mailboxes" element={<Navigate to="/ingestion" replace />} />
         <Route path="/gmail/callback" element={<GmailCallbackPage />} />
         <Route path="/cas" element={<CasPage />} />
         <Route path="/ingestion" element={<IngestionPage />} />

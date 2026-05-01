@@ -4,9 +4,9 @@ import type { AssetClass, Exchange, Prisma, TransactionType } from '@prisma/clie
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
-import { ensureStockMaster, ensureMutualFundMaster } from './masterData.service.js';
+import { ensureStockMaster, ensureMutualFundMaster, resolveMutualFundId } from './masterData.service.js';
 import { recomputeForAsset } from './holdingsProjection.js';
-import { computeAssetKey } from './assetKey.js';
+import { computeAssetKey, extractUnderlyingFromAssetName } from './assetKey.js';
 import { naturalKeyHash } from './sourceHash.js';
 import { persistCapitalGainsForAsset } from './capitalGains.service.js';
 import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
@@ -97,20 +97,25 @@ async function resolveAssetRefs(
     return { stockId: stock.id, fundId: null, assetName: stock.name, isin: stock.isin ?? input.isin ?? null };
   }
 
-  if (isFund && input.schemeCode) {
-    const fund = await ensureMutualFundMaster({
+  if (isFund) {
+    const fundId = await resolveMutualFundId({
       schemeCode: input.schemeCode,
-      schemeName: input.schemeName,
-      amcName: input.amcName,
       isin: input.isin,
+      schemeName: input.schemeName || input.assetName
     });
-    return { stockId: null, fundId: fund.id, assetName: fund.schemeName, isin: fund.isin ?? input.isin ?? null };
+
+    if (fundId) {
+      const fund = await prisma.mutualFundMaster.findUnique({ where: { id: fundId } });
+      if (fund) {
+        return { stockId: null, fundId: fund.id, assetName: fund.schemeName, isin: fund.isin ?? input.isin ?? null };
+      }
+    }
   }
 
-  if (!input.assetName) {
+  if (!input.assetName && !input.schemeName && !input.stockSymbol) {
     throw new BadRequestError('Asset name or symbol is required');
   }
-  return { stockId: null, fundId: null, assetName: input.assetName, isin: input.isin ?? null };
+  return { stockId: null, fundId: null, assetName: input.schemeName || input.assetName || null, isin: input.isin ?? null };
 }
 
 function computeGrossAndNet(
@@ -177,7 +182,24 @@ export async function createTransaction(userId: string, input: CreateTransaction
 
   const refs = await resolveAssetRefs(input);
   const { gross, net } = computeGrossAndNet(input);
-  const assetKey = computeAssetKey(refs);
+  // F&O assetKey requires underlying + type + strike + expiry. For
+  // FUTURES/OPTIONS we derive these from the input (stockSymbol or
+  // stockName as the underlying source). Falls through to equity scheme
+  // for everything else.
+  const isFno = input.assetClass === 'FUTURES' || input.assetClass === 'OPTIONS';
+  const assetKey = isFno && input.expiryDate
+    ? computeAssetKey({
+        foUnderlying:
+          input.stockSymbol ??
+          extractUnderlyingFromAssetName(input.assetName) ??
+          input.assetName ??
+          'UNKNOWN',
+        foInstrumentType:
+          input.assetClass === 'FUTURES' ? 'FUTURES' : input.optionType ?? 'CALL',
+        foStrikePrice: input.strikePrice ? String(input.strikePrice) : null,
+        foExpiryDate: input.expiryDate,
+      })
+    : computeAssetKey(refs);
 
   const data: Prisma.TransactionUncheckedCreateInput = {
     portfolioId: input.portfolioId,

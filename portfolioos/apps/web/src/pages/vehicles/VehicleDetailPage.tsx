@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -13,6 +13,7 @@ import {
   Receipt,
   Info,
   ScanLine,
+  Trash2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -72,6 +73,7 @@ function DetailField({ label, value }: { label: string; value: string | number |
 
 export function VehicleDetailPage() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [smsOpen, setSmsOpen] = useState(false);
@@ -100,6 +102,22 @@ export function VehicleDetailPage() {
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Refresh failed')),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => vehiclesApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      toast.success('Vehicle deleted');
+      navigate('/vehicles');
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Delete failed')),
+  });
+
+  const handleDelete = () => {
+    if (!vehicle) return;
+    if (!window.confirm(`Delete vehicle ${vehicle.registrationNo}?`)) return;
+    deleteMutation.mutate();
+  };
 
   const challanScanMutation = useMutation({
     mutationFn: () => vehiclesApi.scanChallans(id),
@@ -179,6 +197,18 @@ export function VehicleDetailPage() {
             </Button>
             <Button onClick={() => setEditOpen(true)}>
               <Edit className="h-4 w-4" /> Edit
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Delete
             </Button>
           </div>
         }

@@ -159,4 +159,18 @@ export const vehiclesApi = {
     );
     return unwrap(data);
   },
+  async carInfoInit(input: { registrationNo: string; mobileNo: string }): Promise<{ sessionId: string }> {
+    const { data } = await api.post<ApiResponse<{ sessionId: string }>>(
+      '/api/vehicles/carinfo/init',
+      input,
+    );
+    return unwrap(data);
+  },
+  async carInfoVerify(input: { sessionId: string; otp: string }): Promise<any> {
+    const { data } = await api.post<ApiResponse<any>>(
+      '/api/vehicles/carinfo/verify',
+      input,
+    );
+    return unwrap(data);
+  },
 };

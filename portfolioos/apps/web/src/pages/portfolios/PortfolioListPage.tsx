@@ -27,8 +27,9 @@ export function PortfolioListPage() {
   return (
     <div>
       <PageHeader
+        eyebrow="Allocation"
         title="Portfolios"
-        description="Group your holdings by goal, strategy, or account"
+        description="Group holdings by goal, strategy, or account. Each portfolio rolls up into your consolidated net worth."
         actions={
           <Button onClick={handleCreate}>
             <Plus className="h-4 w-4" /> New portfolio
@@ -89,42 +90,41 @@ function PortfolioCard({
   onEdit: () => void;
 }) {
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="group relative overflow-hidden hover:shadow-elev-lg transition-all duration-200 hover:-translate-y-0.5">
+      <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h3 className="font-semibold truncate">{portfolio.name}</h3>
-              {portfolio.isDefault && <Star className="h-3.5 w-3.5 fill-accent text-accent" />}
+            <div className="text-[10px] uppercase tracking-kerned text-muted-foreground">{portfolio.type}</div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <h3 className="font-display text-[18px] font-medium tracking-tight truncate">{portfolio.name}</h3>
+              {portfolio.isDefault && <Star className="h-3.5 w-3.5 fill-accent text-accent shrink-0" />}
             </div>
             {portfolio.description && (
-              <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
+              <p className="text-[12.5px] text-muted-foreground mt-1 line-clamp-2">
                 {portfolio.description}
               </p>
             )}
-            <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
-              <span>{portfolio.type}</span>
-              <span>·</span>
-              <span>{portfolio.currency}</span>
-              <span>·</span>
-              <span>{portfolio.holdingCount} holdings</span>
+            <div className="flex items-center gap-2 mt-3 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center rounded-full border border-border/70 px-2 py-0.5 bg-background/40">{portfolio.currency}</span>
+              <span className="inline-flex items-center rounded-full border border-border/70 px-2 py-0.5 bg-background/40">{portfolio.holdingCount} holdings</span>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={onEdit}>
+          <Button variant="ghost" size="sm" onClick={onEdit} className="opacity-60 group-hover:opacity-100 transition-opacity">
             Edit
           </Button>
         </div>
 
-        <div className="mt-4 pt-4 border-t flex items-center justify-between">
+        <div className="mt-5 pt-4 border-t border-border/60 flex items-end justify-between">
           <div>
-            <div className="text-xs text-muted-foreground">Current value</div>
-            <div className="font-semibold text-lg tabular-nums">
+            <div className="text-[10px] uppercase tracking-kerned text-muted-foreground">Current value</div>
+            <div className="numeric-display text-[22px] mt-1 text-foreground">
               {portfolio.holdingCount > 0 ? formatINR(portfolio.currentValue) : '—'}
             </div>
           </div>
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="ghost" size="sm" className="text-accent-ink hover:text-accent">
             <Link to={`/portfolios/${portfolio.id}`}>
-              View <ArrowUpRight className="h-4 w-4" />
+              Inspect <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </Button>
         </div>

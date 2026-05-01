@@ -151,9 +151,11 @@ export const nsdlCdslCasParser: Parser = {
   async parse(ctx): Promise<ParserResult> {
     const passwords = await getUserPdfPasswords(ctx.userId);
     let text: string;
+    let usedPassword: string | null = null;
     try {
       const r = await readPdfText(ctx.filePath, passwords);
       text = r.text;
+      usedPassword = r.usedPassword;
     } catch (err) {
       if (isPdfPasswordError(err)) {
         return {
@@ -162,17 +164,38 @@ export const nsdlCdslCasParser: Parser = {
           warnings: [
             passwords.length === 0
               ? 'Depository PDF is password-protected. Set your PAN in Settings — NSDL/CDSL statements are typically encrypted with your PAN.'
-              : 'Depository PDF is password-protected and your saved PAN did not unlock it. Some CDSL statements use BO-ID or DOB; decrypt manually and re-upload.',
+              : 'Depository PDF is password-protected and your saved PAN/DOB candidates did not unlock it. Some CDSL statements use BO-ID. Decrypt manually and re-upload.',
           ],
         };
       }
       throw err;
     }
 
-    const { transactions, warnings, depository, isTxnOnly } =
-      parseNsdlCdslText(text);
+    logger.info(
+      { fileName: ctx.fileName, decrypted: !!usedPassword, textLen: text.length },
+      '[nsdl-cdsl-cas] PDF text extracted',
+    );
+
+    const { transactions, warnings, depository, isTxnOnly } = parseNsdlCdslText(text);
+
+    // If parser already concluded the file is legitimately empty (no
+    // holdings, no activity), it returns warnings=[]. Don't add a fake
+    // "couldn't recognize" warning that would flip status to FAILED.
+    // Only surface the "unsupported layout" hint when txns=0 AND the parser
+    // emitted at least one warning of its own (real ambiguity).
+    const adjustedWarnings =
+      transactions.length === 0 && text.length > 100 && warnings.length > 0
+        ? [
+            `PDF decrypted${usedPassword ? ' (using your saved PAN)' : ''} but parser couldn't recognize any transactions or holdings in this layout. The file may use an unsupported variant. Please share the file with support so we can extend the parser.`,
+            ...warnings.filter((w) => !w.includes('password-protected')),
+          ]
+        : warnings;
+
     if (transactions.length === 0) {
-      logger.warn({ fileName: ctx.fileName, depository, isTxnOnly }, '[nsdl-cdsl-cas] nothing parsed');
+      logger.warn(
+        { fileName: ctx.fileName, depository, isTxnOnly, textLen: text.length },
+        '[nsdl-cdsl-cas] nothing parsed',
+      );
     }
 
     return {
@@ -180,7 +203,7 @@ export const nsdlCdslCasParser: Parser = {
       adapter: 'cas.depository.nsdl_cdsl',
       adapterVer: '1',
       transactions,
-      warnings,
+      warnings: adjustedWarnings,
     };
   },
 };
@@ -293,8 +316,10 @@ export function parseNsdlCdslText(text: string): {
   // current market price, not purchase price), so users get a warning to
   // fix cost basis manually.
   const holdingsBefore = txs.length;
+  // Match both "HOLDINGS AS ON 31-03-2026" (NSDL/Zerodha format) and
+  // "HOLDING STATEMENT AS ON 31-03-2026" (CDSL eCAS format).
   const holdingsAsOnMatch = text.match(
-    /holdings?\s+as\s+on[:\s]*([0-9]{1,2}[-/][A-Za-z]{3}[-/][0-9]{2,4}|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{2,4})/i,
+    /holding(?:s|\s+statement)?\s+as\s+on[:\s]*([0-9]{1,2}[-/][A-Za-z]{3}[-/][0-9]{2,4}|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{2,4})/i,
   );
   const holdingsDate = holdingsAsOnMatch ? parseDate(holdingsAsOnMatch[1]!) : null;
 
@@ -332,13 +357,20 @@ export function parseNsdlCdslText(text: string): {
       const line = lines[i]!.trim();
       if (!line) continue;
 
-      if (/holdings?\s+as\s+on/i.test(line)) {
+      if (/holding(?:s|\s+statement)?\s+as\s+on/i.test(line)) {
         inHoldingsSection = true;
         continue;
       }
       if (!inHoldingsSection) continue;
 
-      if (/^total[:\s]/i.test(line) || /system\s+generated/i.test(line) || /^messages?[:\s-]/i.test(line)) {
+      if (
+        /^total[:\s]/i.test(line) ||
+        /system\s+generated/i.test(line) ||
+        /^messages?[:\s-]/i.test(line) ||
+        /portfolio\s+value\s*[`₹\d]/i.test(line) ||
+        /notes\s+to\s+cas/i.test(line) ||
+        /for\s+any\s+queries/i.test(line)
+      ) {
         flushHolding();
         inHoldingsSection = false;
         continue;
@@ -377,7 +409,24 @@ export function parseNsdlCdslText(text: string): {
 
   const holdingsAdded = txs.length - holdingsBefore;
 
-  if (txs.length === 0) {
+  // Detect legitimately empty statement: parser reached the holdings section
+  // (or saw a "Closing balance: None" / "Total: 0.000" pattern) but found no
+  // actual rows. This means the user had no positions / no activity in the
+  // statement period — NOT a parser failure. Don't surface as a warning so
+  // processImportJob marks the job COMPLETED rather than FAILED.
+  const looksEmpty =
+    txs.length === 0 &&
+    (
+      /\btotal[:\s]+0\.0+\s+0\.0+/i.test(text) ||
+      /closing\s+balance[:\s]+none/i.test(text) ||
+      (holdingsDate !== null && holdingsAdded === 0) ||
+      // Empty CDSL summary
+      /no\s+(?:demat\s+account|mf\s+folios)\s+for\s+this\s+pan/i.test(text)
+    );
+
+  if (looksEmpty) {
+    // Empty period — no warning, no error.
+  } else if (txs.length === 0) {
     warnings.push(
       `No transactions or holdings detected in ${depository ?? 'depository'} statement — if the PDF is password-protected, remove the password and re-upload. If it is a scanned image, depository statements are not yet OCR-supported.`,
     );

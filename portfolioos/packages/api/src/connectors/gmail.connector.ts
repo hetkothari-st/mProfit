@@ -2,7 +2,7 @@ import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import type { ImportType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
@@ -41,8 +41,49 @@ const ACCEPT_FILENAME_PATTERNS: RegExp[] = [
   /\.(csv|tsv|xlsx|xls|html?|htm)$/i,
 ];
 
+/**
+ * Regulatory/compliance docs that brokers are legally required to send but
+ * contain no importable transaction or holding data. Blocked even from trusted
+ * (monitored) senders so they don't pollute the import history.
+ */
+const REGULATORY_SKIP_PATTERNS: RegExp[] = [
+  /retention[-_\s]?(?:statement|account[-_\s]?statement)/i, // SEBI broker fund-retention report
+  /\bmargin[-_\s]?statement\b/i,      // Daily margin utilisation report
+  /\bmargin[-_\s]?pledge\b/i,
+  /\bclient[-_\s]?reporting\b/i,
+  /\bsebi[-_\s]?circular\b/i,
+  /\bregulatory[-_\s]?disclosure\b/i,
+  /\bannual[-_\s]?report\b/i,         // Company annual reports forwarded by broker
+  /\bwelcome[-_\s]?kit\b/i,
+  /\bonboarding\b/i,
+];
+
 function shouldSkipAttachment(fileName: string): boolean {
   return !ACCEPT_FILENAME_PATTERNS.some((re) => re.test(fileName));
+}
+
+function isRegulatoryDoc(fileName: string): boolean {
+  return REGULATORY_SKIP_PATTERNS.some((re) => re.test(fileName));
+}
+
+/**
+ * Trust attachments from approved senders. If FROM matches a MonitoredSender
+ * address (full email or `@domain.com`), accept any parseable attachment
+ * regardless of its filename pattern. This is what makes "approve once →
+ * auto-import everything" actually work for CAS PDFs whose filenames don't
+ * match the curated regex list (e.g. KFintech/CASParser-delivered files).
+ */
+function isFromMonitoredSender(
+  fromHeader: string,
+  monitoredAddresses: Set<string>,
+): boolean {
+  const m = fromHeader.match(/<([^>]+)>/);
+  const addr = (m && m[1] ? m[1] : fromHeader).toLowerCase().trim();
+  if (monitoredAddresses.has(addr)) return true;
+  for (const a of monitoredAddresses) {
+    if (a.startsWith('@') && addr.endsWith(a)) return true;
+  }
+  return false;
 }
 
 const BROKER_SENDERS =
@@ -212,6 +253,19 @@ function inferBroker(subject: string, from: string): string | null {
 function inferType(fileName: string, subject: string): ImportType {
   const s = `${subject} ${fileName}`.toLowerCase();
   const ext = extname(fileName).toLowerCase();
+  // Depository statements first — Zerodha "transaction-with-holding-statement"
+  // and CDSL/NSDL TXN files are not bank statements. They share the MF_CAS_PDF
+  // type because the depository CAS parser handles them.
+  if (
+    /transaction[-_\s]?with[-_\s]?holding/.test(s) ||
+    /transaction[-_\s]?cum[-_\s]?holding/.test(s) ||
+    /_txn(?:\.|$)/.test(s) ||
+    /\bnsdl\b/.test(s) ||
+    /\bcdsl\b/.test(s) ||
+    s.includes('depository statement')
+  ) {
+    return ext === '.pdf' ? 'MF_CAS_PDF' : 'MF_CAS_EXCEL';
+  }
   if (s.includes('cas') || s.includes('consolidated account')) {
     return ext === '.pdf' ? 'MF_CAS_PDF' : 'MF_CAS_EXCEL';
   }
@@ -220,7 +274,8 @@ function inferType(fileName: string, subject: string): ImportType {
     if (ext === '.html' || ext === '.htm') return 'CONTRACT_NOTE_HTML';
     return 'CONTRACT_NOTE_EXCEL';
   }
-  if (s.includes('bank') || s.includes('statement')) {
+  // Bank/statement match LAST — depository statements caught above
+  if (s.includes('bank statement') || s.includes('account statement')) {
     return ext === '.pdf' ? 'BANK_STATEMENT_PDF' : 'BANK_STATEMENT_CSV';
   }
   if (s.includes('nps')) return 'NPS_STATEMENT';
@@ -263,7 +318,26 @@ function collectAttachmentParts(part: GmailPart | undefined, out: GmailPart[]): 
   for (const sub of part.parts ?? []) collectAttachmentParts(sub, out);
 }
 
+// Per-account lock: prevents concurrent syncGmailAccount calls from the
+// auto-poller + manual scan racing each other and duplicating imports.
+const syncInProgress = new Set<string>();
+
 export async function syncGmailAccount(
+  accountId: string,
+): Promise<{ processed: number; imported: number; errors: number }> {
+  if (syncInProgress.has(accountId)) {
+    logger.info({ accountId }, '[gmail] sync already in progress — skipping');
+    return { processed: 0, imported: 0, errors: 0 };
+  }
+  syncInProgress.add(accountId);
+  try {
+    return await _syncGmailAccount(accountId);
+  } finally {
+    syncInProgress.delete(accountId);
+  }
+}
+
+async function _syncGmailAccount(
   accountId: string,
 ): Promise<{ processed: number; imported: number; errors: number }> {
   const acc = await prisma.mailboxAccount.findUnique({ where: { id: accountId } });
@@ -283,6 +357,16 @@ export async function syncGmailAccount(
     if (acc.fromFilter) filterParts.push(`from:${acc.fromFilter}`);
     if (acc.subjectFilter) filterParts.push(`subject:(${acc.subjectFilter})`);
     const q = filterParts.join(' ');
+
+    // Load this user's monitored senders once — used to relax the filename
+    // filter when the FROM is already trusted.
+    const monitoredRows = await prisma.monitoredSender.findMany({
+      where: { userId: acc.userId, isActive: true },
+      select: { address: true },
+    });
+    const monitoredAddresses = new Set(
+      monitoredRows.map((r) => r.address.toLowerCase()),
+    );
 
     let pageToken: string | undefined;
     const messageIds: string[] = [];
@@ -314,21 +398,34 @@ export async function syncGmailAccount(
         const atts: GmailPart[] = [];
         collectAttachmentParts(payload as GmailPart | undefined, atts);
 
+        const fromTrusted = isFromMonitoredSender(from, monitoredAddresses);
+
         for (const att of atts) {
           const fileName = att.filename ?? `attachment-${id}`;
           const ext = extname(fileName).toLowerCase();
           if (!ALLOWED_EXT.has(ext)) continue;
-          if (shouldSkipAttachment(fileName)) {
+          // Regulatory compliance docs (retention statements, margin reports,
+          // etc.) have no importable data — skip even from trusted senders.
+          if (isRegulatoryDoc(fileName)) {
+            logger.debug({ fileName, accountId }, '[gmail] skipping regulatory doc');
+            continue;
+          }
+          // For untrusted senders we still apply the curated filename filter
+          // to avoid pulling random PDFs. Approved senders skip the filter so
+          // CAS files with unusual names still land.
+          if (!fromTrusted && shouldSkipAttachment(fileName)) {
             logger.debug({ fileName, accountId }, '[gmail] skipping non-parseable attachment');
             continue;
           }
           if (!att.body?.attachmentId) continue;
 
-          const already = await prisma.importJob.findFirst({
-            where: { userId: acc.userId, fileName },
+          // Skip if we've already pulled this exact Gmail message before —
+          // catches re-syncs and partial-failure replays without re-downloading.
+          const messageAlready = await prisma.importJob.findFirst({
+            where: { userId: acc.userId, gmailMessageId: id },
             select: { id: true },
           });
-          if (already) continue;
+          if (messageAlready) continue;
 
           const a = await gmail.users.messages.attachments.get({
             userId: 'me',
@@ -338,6 +435,15 @@ export async function syncGmailAccount(
           const b64 = a.data.data;
           if (!b64) continue;
           const buf = Buffer.from(b64, 'base64');
+
+          // Content-hash dedup — replaces the old filename-only check that
+          // silently dropped same-named PDFs (e.g. weekly "Contract Note.pdf").
+          const contentHash = createHash('sha256').update(buf).digest('hex');
+          const hashAlready = await prisma.importJob.findFirst({
+            where: { userId: acc.userId, contentHash },
+            select: { id: true },
+          });
+          if (hashAlready) continue;
 
           const filePath = await saveAttachment(buf, fileName);
           const type = inferType(fileName, subject);
@@ -350,6 +456,8 @@ export async function syncGmailAccount(
             fileName,
             filePath,
             broker,
+            contentHash,
+            gmailMessageId: id,
           });
           imported++;
         }

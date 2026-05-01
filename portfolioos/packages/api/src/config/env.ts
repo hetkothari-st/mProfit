@@ -33,7 +33,10 @@ const EnvSchema = z.object({
   KITE_REDIRECT_URL: z.string().optional(),
 
   ENABLE_MAILBOX_POLLER: z.enum(['true', 'false']).default('true'),
-  MAILBOX_POLL_INTERVAL_MIN: z.coerce.number().default(10),
+  // Lowered from 10 → 3 minutes. CAS emails arrive 5–60 min after a request;
+  // 3-min cadence gives near-real-time auto-import without crushing Gmail
+  // quota.
+  MAILBOX_POLL_INTERVAL_MIN: z.coerce.number().default(3),
 
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
@@ -50,6 +53,11 @@ const EnvSchema = z.object({
   // per-request header. This env var is advisory — if set to 'true' we
   // log the assumption so ops can double-check the Anthropic console.
   ANTHROPIC_ZERO_RETENTION_CONFIRMED: z.enum(['true', 'false']).default('false'),
+
+  // CASParser API (https://casparser.in) — paid, credit-limited.
+  // CDSL OTP fetch + KFintech mailback + smart parse all use this key.
+  CASPARSER_API_KEY: z.string().optional(),
+  CASPARSER_BASE_URL: z.string().url().default('https://api.casparser.in'),
 });
 
 function loadEnv() {

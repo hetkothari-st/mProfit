@@ -51,11 +51,25 @@ api.interceptors.response.use(
   },
 );
 
+// Strips ANSI escape sequences ("[2m...") and condenses whitespace.
+// Server-side Playwright stack traces leak these — they render as wall-of-text
+// in the dialog without this filter.
+function sanitizeMsg(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\[[0-9;]*m/g, '').replace(/\s+/g, ' ').trim();
+}
+
 export function apiErrorMessage(err: unknown, fallback = 'Something went wrong'): string {
+  let raw: string | undefined;
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as { error?: string; message?: string } | undefined;
-    return data?.error ?? data?.message ?? err.message ?? fallback;
+    raw = data?.error ?? data?.message ?? err.message;
+  } else if (err instanceof Error) {
+    raw = err.message;
   }
-  if (err instanceof Error) return err.message;
-  return fallback;
+  const msg = raw ? sanitizeMsg(raw) : fallback;
+  // Trim Playwright "Call log: ..." tail — it's noise for end users.
+  const cut = msg.split(/\s*Call log:/i)[0]!;
+  // Cap to a reasonable length so a stack trace doesn't blow up the dialog.
+  return cut.length > 400 ? `${cut.slice(0, 400)}…` : cut;
 }

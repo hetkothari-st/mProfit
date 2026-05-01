@@ -17,6 +17,7 @@ import { startVehicleJobs } from './jobs/vehicleJobs.js';
 import { startRentalJobs } from './jobs/rentalJobs.js';
 import { startInsuranceJobs } from './jobs/insuranceJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
+import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
 import { closeQueues } from './lib/queue.js';
 
 const app = express();
@@ -65,6 +66,7 @@ const server = app.listen(env.PORT, () => {
   startRentalJobs();
   startInsuranceJobs();
   startAlertJobs();
+  startFoExpiryJob();
   // Fire-and-forget: run initial data sync in background so server stays responsive
   runStartupSync().catch((err) => logger.error({ err }, 'Startup sync failed'));
 });

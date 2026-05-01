@@ -48,6 +48,7 @@ import {
 } from '../llm/client.js';
 import { extractEmailBody } from './bodyExtract.js';
 import type { ParsedEvent } from '../llm/schema.js';
+import { projectCanonicalEvent } from '../projection.js';
 import {
   applyRecipe,
   findPromotedTemplate,
@@ -114,6 +115,22 @@ function canonicalRowFromParsed(
   },
   ev: ParsedEvent,
 ): Prisma.CanonicalEventCreateInput {
+  // F&O event metadata is forwarded via the JSON `metadata` column so the
+  // projection step (ingestion/projection.ts projectFnoTrade) can rebuild
+  // the contract identity (underlying, type, strike, expiry, side).
+  const fnoMetadata =
+    ev.event_type === 'FNO_TRADE'
+      ? {
+          fno_trading_symbol: ev.fno_trading_symbol ?? null,
+          fno_underlying: ev.fno_underlying ?? null,
+          fno_instrument_type: ev.fno_instrument_type ?? null,
+          fno_strike_price: ev.fno_strike_price ?? null,
+          fno_expiry_date: ev.fno_expiry_date ?? null,
+          fno_lot_size: ev.fno_lot_size ?? null,
+          fno_quantity_contracts: ev.fno_quantity_contracts ?? null,
+          fno_side: ev.fno_side ?? null,
+        }
+      : undefined;
   return {
     user: { connect: { id: base.userId } },
     sourceAdapter: base.sourceAdapter,
@@ -134,6 +151,7 @@ function canonicalRowFromParsed(
     currency: ev.currency,
     confidence: ev.confidence,
     parserNotes: ev.notes,
+    metadata: fnoMetadata as Prisma.InputJsonValue | undefined,
     // Auto-commit means "trust future events from this sender". A
     // confirmed auto-commit sender skips the review step and lands
     // directly in PARSED; otherwise the event waits for manual
@@ -233,7 +251,7 @@ export async function processEmail(
   if (promoted) {
     const recipeEvent = applyRecipe(promoted.fields, body);
     if (recipeEvent) {
-      return persistEvents({
+      const persisted = await persistEvents({
         input,
         sourceHash,
         events: [recipeEvent],
@@ -243,6 +261,8 @@ export async function processEmail(
           template: { id: promoted.templateId, version: promoted.version },
         },
       });
+      await maybeAutoProject(persisted, input);
+      return persisted;
     }
     await recordRecipeMiss({ userId: input.userId, templateId: promoted.templateId });
     logger.info(
@@ -289,6 +309,11 @@ export async function processEmail(
     sourceAdapter: GMAIL_LLM_ADAPTER_ID,
     sourceAdapterVer: GMAIL_LLM_ADAPTER_VER,
   });
+
+  // 6b. Phase B auto-project: when sender is trusted (autoCommitEnabled),
+  // events skip the manual review queue and project straight into
+  // Transaction/CashFlow rows.
+  await maybeAutoProject(outcome, input);
 
   // 7. Feed the template learner. We only learn from successful,
   //    single-event LLM parses — the sample threshold (§6.4) will
@@ -442,4 +467,46 @@ async function handleLlmFailure(
     } satisfies Prisma.InputJsonValue,
   });
   return { kind: 'failed', reason: llm.reason };
+}
+
+/**
+ * Phase B: when the sender has autoCommitEnabled, immediately flip newly
+ * persisted events from PARSED → CONFIRMED and project them into
+ * Transaction/CashFlow rows. This is the "approve sender once → fully auto"
+ * UX. Skips review queue entirely.
+ */
+async function maybeAutoProject(
+  outcome: ProcessEmailOutcome,
+  input: ProcessEmailInput,
+): Promise<void> {
+  if (!input.autoCommitEnabled) return;
+  if (outcome.kind !== 'created' || outcome.eventIds.length === 0) return;
+
+  for (const id of outcome.eventIds) {
+    try {
+      await prisma.canonicalEvent.update({
+        where: { id },
+        data: { status: 'CONFIRMED', reviewedAt: new Date(), reviewedById: input.userId },
+      });
+      const result = await projectCanonicalEvent(id);
+      if (result.kind === 'failed') {
+        logger.warn(
+          { userId: input.userId, eventId: id, reason: result.reason, message: result.message },
+          'gmail.pipeline.auto_project_failed',
+        );
+        // Roll back to PENDING_REVIEW so the user can manually approve/edit.
+        await prisma.canonicalEvent
+          .update({
+            where: { id },
+            data: { status: 'PENDING_REVIEW', reviewedAt: null, reviewedById: null },
+          })
+          .catch(() => undefined);
+      }
+    } catch (err) {
+      logger.warn(
+        { err, userId: input.userId, eventId: id },
+        'gmail.pipeline.auto_project_threw',
+      );
+    }
+  }
 }

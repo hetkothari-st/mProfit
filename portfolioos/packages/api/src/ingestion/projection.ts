@@ -46,6 +46,8 @@ import { recomputeForAsset } from '../services/holdingsProjection.js';
 import { computeAssetKey } from '../services/assetKey.js';
 import { hookAutoMatchRentalCredit } from '../services/rental.service.js';
 import { hookAutoMatchPremiumPayment } from '../services/insurance.service.js';
+import { ensureFoInstrument } from '../priceFeeds/nseFoMaster.service.js';
+import { recomputeDerivativePosition } from '../services/derivativePosition.service.js';
 
 export type ProjectionOutcome =
   | { kind: 'projected_transaction'; eventId: string; transactionId: string }
@@ -259,6 +261,113 @@ async function projectCashFlow(
   return { kind: 'projected_cashflow', eventId: event.id, cashFlowId: created.id };
 }
 
+async function projectFnoTrade(event: CanonicalEvent): Promise<ProjectionOutcome> {
+  const md = (event.metadata ?? {}) as Record<string, unknown>;
+  const underlying = (md.fno_underlying as string | undefined)?.toUpperCase();
+  const instrumentTypeRaw = md.fno_instrument_type as string | undefined;
+  const expiryStr = md.fno_expiry_date as string | undefined;
+  const sideRaw = md.fno_side as string | undefined;
+  const lotSize = (md.fno_lot_size as number | undefined) ?? 1;
+  const strikeStr = md.fno_strike_price as string | null | undefined;
+
+  if (!underlying || !instrumentTypeRaw || !expiryStr || !sideRaw) {
+    return {
+      kind: 'failed',
+      eventId: event.id,
+      reason: 'fno_missing_metadata',
+      message: 'FNO_TRADE requires underlying, instrument_type, expiry_date, side',
+    };
+  }
+  if (!event.amount || !event.quantity || !event.price) {
+    return {
+      kind: 'failed',
+      eventId: event.id,
+      reason: 'fno_missing_amounts',
+      message: 'FNO_TRADE requires amount, quantity, price',
+    };
+  }
+
+  const portfolio = await resolveTargetPortfolio(event);
+  if (!portfolio) {
+    return {
+      kind: 'failed',
+      eventId: event.id,
+      reason: 'no_portfolio',
+      message: 'User has no portfolio to project this event into',
+    };
+  }
+
+  const instrumentType = instrumentTypeRaw === 'FUTURES'
+    ? 'FUTURES'
+    : instrumentTypeRaw === 'CALL'
+      ? 'CALL'
+      : 'PUT';
+  const expiryDate = new Date(`${expiryStr}T00:00:00.000Z`);
+
+  // Ensure FoInstrument exists so DerivativePosition.recompute can resolve it.
+  await ensureFoInstrument({
+    underlying,
+    instrumentType,
+    strikePrice: strikeStr ?? null,
+    expiryDate,
+    lotSize,
+  });
+
+  const assetKey = computeAssetKey({
+    foUnderlying: underlying,
+    foInstrumentType: instrumentType,
+    foStrikePrice: strikeStr ?? null,
+    foExpiryDate: expiryStr,
+  });
+
+  const result = await prisma.$transaction(async (tx) => {
+    const created = await tx.transaction.create({
+      data: {
+        portfolioId: portfolio.portfolioId,
+        assetClass: instrumentType === 'FUTURES' ? 'FUTURES' : 'OPTIONS',
+        transactionType: sideRaw === 'BUY' ? 'BUY' : 'SELL',
+        assetName: (md.fno_trading_symbol as string | undefined) ?? underlying,
+        tradeDate: event.eventDate,
+        quantity: event.quantity!,
+        price: event.price!,
+        grossAmount: event.amount!,
+        netAmount: event.amount!,
+        strikePrice: strikeStr ?? null,
+        expiryDate,
+        optionType: instrumentType === 'CALL' ? 'CALL' : instrumentType === 'PUT' ? 'PUT' : null,
+        lotSize,
+        exchange: 'NFO',
+        sourceAdapter: event.sourceAdapter,
+        sourceAdapterVer: event.sourceAdapterVer,
+        sourceHash: event.sourceHash,
+        assetKey,
+        canonicalEventId: event.id,
+      },
+      select: { id: true, portfolioId: true, assetKey: true },
+    });
+    await tx.canonicalEvent.update({
+      where: { id: event.id },
+      data: {
+        status: 'PROJECTED',
+        projectedTransactionId: created.id,
+        portfolioId: portfolio.portfolioId,
+      },
+    });
+    return created;
+  });
+
+  try {
+    await recomputeDerivativePosition(result.portfolioId, result.assetKey!);
+  } catch (err) {
+    logger.error(
+      { err, eventId: event.id, assetKey: result.assetKey },
+      'projection.fno_recompute_failed',
+    );
+  }
+
+  return { kind: 'projected_transaction', eventId: event.id, transactionId: result.id };
+}
+
 async function markProjectedNoOp(event: CanonicalEvent, reason: string): Promise<ProjectionOutcome> {
   await prisma.canonicalEvent.update({
     where: { id: event.id },
@@ -298,6 +407,19 @@ export async function projectCanonicalEvent(eventId: string): Promise<Projection
     case 'BUY':
     case 'SELL':
       return projectBuySell(event);
+
+    case 'FNO_TRADE':
+      return projectFnoTrade(event);
+
+    case 'FNO_EXPIRY_CLOSE':
+    case 'FNO_EXERCISE':
+    case 'FNO_ASSIGNMENT':
+    case 'FNO_ROLLOVER':
+      // Lifecycle events drive DerivativePosition state changes via the
+      // expiry/exercise services. Mark PROJECTED here so they leave the
+      // review queue; the actual state transition is handled when the
+      // lifecycle service consumes the event.
+      return markProjectedNoOp(event, `${event.eventType.toLowerCase()}_lifecycle`);
 
     case 'DIVIDEND':
     case 'INTEREST_CREDIT':

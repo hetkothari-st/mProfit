@@ -55,6 +55,18 @@ model User {
   // Anthropic API call writes a row here so the monthly budget check
   // can aggregate exactly what this user has spent.
   llmSpend LlmSpend[]
+
+  sipPlans SipPlan[]
+
+  // Phase 5-MFCentral — OTP-driven CAS sync (mProfit-style flow).
+  mfCentralSyncJobs MFCentralSyncJob[]
+
+  // CAMS + KFintech mailback jobs — free PAN+email driven flow.
+  mfCasMailbackJobs MFCasMailbackJob[]
+
+  // F&O (Futures & Options) — broker API credentials + margin snapshots.
+  brokerCredentials BrokerCredential[]
+  marginSnapshots   MarginSnapshot[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -215,6 +227,15 @@ model Portfolio {
   // Phase 4.5 hardening
   holdingProjections HoldingProjection[]
   canonicalEvents    CanonicalEvent[]
+
+  // F&O (Futures & Options)
+  derivativePositions DerivativePosition[]
+  expiryCloseJobs     ExpiryCloseJob[]
+  portfolioSetting    PortfolioSetting?
+
+  // F&O delivery-equity tax treatment default. Per-transaction override
+  // lives on Transaction.equityTaxOverride (null = use this default).
+  defaultEquityTaxTreatment EquityTaxTreatment @default(CAPITAL_GAINS)
 
   @@index([userId])
   @@index([clientId])
@@ -541,6 +562,11 @@ model Transaction {
   canonicalEventId String?
   canonicalEvent   CanonicalEvent? @relation("CanonicalEventToTransaction", fields: [canonicalEventId], references: [id])
 
+  // F&O — per-transaction override of Portfolio.defaultEquityTaxTreatment.
+  // null = inherit from portfolio. Only meaningful for delivery EQUITY/ETF;
+  // F&O is always BUSINESS_INCOME via foPnl.service (intraday=speculative).
+  equityTaxOverride EquityTaxTreatment?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -733,12 +759,22 @@ model ImportJob {
   successRows Int?
   failedRows  Int?
   errorLog    Json?
+  // Phase C: content-hash dedup. SHA-256 of file bytes — replaces the
+  // filename-only check that silently dropped same-named PDFs from
+  // different emails (e.g. `Contract Note.pdf` daily).
+  contentHash    String?
+  // Source-of-fetch lineage. For Gmail-pulled attachments, the message id
+  // these bytes came from. Lets us link Reports / DLQ entries back to the
+  // original email and skip re-processing if poller revisits the message.
+  gmailMessageId String?
   createdAt   DateTime     @default(now())
   completedAt DateTime?
 
   transactions Transaction[]
 
   @@index([userId, createdAt])
+  @@index([userId, contentHash])
+  @@index([userId, gmailMessageId])
 }
 
 enum ImportType {
@@ -792,6 +828,9 @@ enum AlertType {
   DIVIDEND_RECEIVED
   CORPORATE_ACTION
   PRICE_TARGET
+  FO_EXPIRY_TODAY
+  FO_EXPIRY_SOON
+  FO_MARGIN_CALL
   CUSTOM
 }
 
@@ -870,6 +909,11 @@ enum CanonicalEventType {
   NEFT_DEBIT
   VALUATION_SNAPSHOT
   VEHICLE_CHALLAN
+  FNO_TRADE
+  FNO_EXPIRY_CLOSE
+  FNO_EXERCISE
+  FNO_ASSIGNMENT
+  FNO_ROLLOVER
   OTHER
 }
 
@@ -1248,4 +1292,338 @@ model LlmSpend {
 
   @@index([userId, createdAt])
   @@index([createdAt])
+}
+
+// ─── SIP PLAN REGISTRY ────────────────────────────────────────────
+//
+// Manual registry of Systematic Investment Plans (SIPs). Allows the user
+// to track active SIP mandates — amount, frequency, fund/asset — for
+// reminder alerts and expected-vs-actual reconciliation against imported
+// MF CAS transactions. Not auto-populated; user enters and maintains
+// these records.
+
+model SipPlan {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fundId     String?
+  assetName  String?
+  amount     Decimal  @db.Decimal(12, 2)
+  frequency  String   // MONTHLY | QUARTERLY | ANNUAL
+  dayOfMonth Int?
+  startDate  DateTime @db.Date
+  isActive   Boolean  @default(true)
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, isActive])
+}
+
+// ─── MFCENTRAL OTP-DRIVEN CAS SYNC ───────────────────────────────
+//
+// User-initiated mProfit-style flow:
+//   1. POST /api/mf-central/request-otp with PAN + phone/email →
+//      backend Playwright opens MFCentral, fills form, requests OTP.
+//      A row is inserted with status=OTP_PENDING, sessionId is held in
+//      memory only (mfCentralSessionManager).
+//   2. POST /api/mf-central/submit-otp with jobId + otp →
+//      same Playwright session submits OTP, downloads CAS PDF,
+//      decrypts with PAN, runs through existing parseMfCasText, then
+//      createTransaction loop. Status → COMPLETED / FAILED.
+//
+// PAN is stored as panLast4 only (display). The full PAN never lands
+// in the DB; it lives in the in-memory session for the duration of
+// the OTP flow and is then discarded.
+
+model MFCentralSyncJob {
+  id                  String                @id @default(cuid())
+  userId              String
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId         String?
+  panLast4            String                // display only; full PAN not persisted
+  otpMethod           MFCentralOtpMethod
+  contactMasked       String                // "XXXXXXX1234" — shown in UI
+  periodFrom          DateTime?             @db.Date
+  periodTo            DateTime?             @db.Date
+  nickname            String?
+  status              MFCentralSyncStatus   @default(OTP_PENDING)
+  playwrightSessionId String?               // = id of in-mem session; cleared on completion
+  txnsCreated         Int?
+  fundsFound          Int?
+  warningLog          Json?                 // string[] from parser
+  errorMessage        String?
+  completedAt         DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, status])
+}
+
+enum MFCentralOtpMethod {
+  PHONE
+  EMAIL
+}
+
+enum MFCentralSyncStatus {
+  OTP_PENDING       // OTP requested, awaiting user input
+  OTP_SUBMITTED     // OTP entered, Playwright verifying
+  DOWNLOADING       // MFCentral processing download
+  PARSING           // PDF downloaded, decrypting + parsing
+  COMPLETED         // All transactions upserted
+  FAILED            // See errorMessage
+  EXPIRED           // OTP timeout (5 min)
+}
+
+// ─── CAMS + KFINTECH MAILBACK CAS ────────────────────────────────
+//
+// Free path: Playwright submits CAS-by-email request to CAMS and KFintech
+// portals on behalf of the user. The PDFs land in the user's inbox 5–60 min
+// later (RTA generates async + emails). The Phase 5-A Gmail integration
+// then auto-imports them via existing mfCas.parser.
+//
+// Two providers because CAMS and KFintech each service ~half the AMCs in
+// India; both must be hit for full coverage. We can ship CAMS-only first
+// and add KFintech later — the model supports either.
+
+model MFCasMailbackJob {
+  id                  String                 @id @default(cuid())
+  userId              String
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId         String?
+  panLast4            String                 // display only; full PAN never persisted
+  emailMasked         String                 // "abcXXX@gmail.com" for UI
+  periodFrom          DateTime?              @db.Date
+  periodTo            DateTime?              @db.Date
+  nickname            String?
+
+  camsStatus          MFMailbackProviderStatus @default(NOT_REQUESTED)
+  camsRequestRef      String?                // ref no returned by CAMS portal
+  camsErrorMessage    String?
+
+  kfintechStatus      MFMailbackProviderStatus @default(NOT_REQUESTED)
+  kfintechRequestRef  String?
+  kfintechErrorMessage String?
+
+  status              MFMailbackJobStatus    @default(PENDING)
+  errorMessage        String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  submittedAt         DateTime?
+
+  @@index([userId, createdAt])
+  @@index([userId, status])
+}
+
+enum MFMailbackProviderStatus {
+  NOT_REQUESTED
+  PENDING            // Playwright in flight
+  SUBMITTED          // Mailback request accepted by portal
+  FAILED             // Portal rejected or Playwright failed
+}
+
+enum MFMailbackJobStatus {
+  PENDING            // not yet submitted
+  CAPTCHA_REQUIRED   // captcha image fetched, awaiting user solve
+  SUBMITTING         // submitting form(s) to portal(s)
+  SUBMITTED          // both providers attempted; check per-provider status
+  FAILED             // both providers failed
+}
+
+// ─── F&O (Futures & Options) ─────────────────────────────────────
+//
+// HoldingProjection's WAVG cost replay is wrong for derivatives — each
+// contract has its own entry price; no averaging across lots; expiry,
+// exercise and rollover have no equivalent in equity. F&O therefore lives
+// in a separate aggregate `DerivativePosition`, computed by
+// `derivativePosition.service`. Equity HoldingProjection ignores
+// FUTURES/OPTIONS rows and the price router dispatches them to
+// FoContractPrice instead of stock close.
+
+model FoInstrument {
+  id                 String           @id @default(cuid())
+  symbol             String           // underlying root, e.g. NIFTY, RELIANCE
+  underlying         String           // canonical underlying name (=symbol most cases)
+  instrumentType     FoInstrumentType
+  strikePrice        Decimal?         @db.Decimal(12, 2)
+  expiryDate         DateTime         @db.Date
+  lotSize            Int
+  tickSize           Decimal          @db.Decimal(8, 4)
+  contractMultiplier Decimal          @default(1) @db.Decimal(8, 4)
+  settlementType     String // CASH | PHYSICAL
+  isinCode           String?
+  exchangeToken      String?
+  tradingSymbol      String           @unique // e.g. NIFTY24N28C24500
+  isActive           Boolean          @default(true)
+  exchange           Exchange         @default(NFO)
+  lastUpdated        DateTime         @default(now())
+
+  prices FoContractPrice[]
+
+  @@index([underlying, expiryDate, instrumentType])
+  @@index([symbol, expiryDate])
+}
+
+enum FoInstrumentType {
+  FUTURES
+  CALL
+  PUT
+}
+
+model FoContractPrice {
+  id                String       @id @default(cuid())
+  instrumentId      String
+  instrument        FoInstrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+  tradeDate         DateTime     @db.Date
+  openPrice         Decimal      @db.Decimal(12, 4)
+  highPrice         Decimal      @db.Decimal(12, 4)
+  lowPrice          Decimal      @db.Decimal(12, 4)
+  closePrice        Decimal      @db.Decimal(12, 4)
+  settlementPrice   Decimal      @db.Decimal(12, 4)
+  openInterest      Decimal      @db.Decimal(18, 0)
+  volume            Decimal      @db.Decimal(18, 0)
+  impliedVolatility Decimal?     @db.Decimal(8, 6)
+  delta             Decimal?     @db.Decimal(8, 6)
+  gamma             Decimal?     @db.Decimal(10, 8)
+  theta             Decimal?     @db.Decimal(10, 6)
+  vega              Decimal?     @db.Decimal(8, 6)
+
+  @@unique([instrumentId, tradeDate])
+  @@index([tradeDate])
+}
+
+model DerivativePosition {
+  id          String    @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  userId      String // denormalized for RLS; required since DerivativePosition has its own RLS policy
+  assetKey    String // matches Transaction.assetKey for the same instrument
+
+  underlying     String
+  instrumentType FoInstrumentType
+  strikePrice    Decimal?         @db.Decimal(12, 2)
+  expiryDate     DateTime         @db.Date
+  lotSize        Int
+
+  status        DerivativePositionStatus @default(OPEN)
+  netQuantity   Decimal                  @db.Decimal(18, 6) // contracts; negative = net short
+  openLots      Json // [{qty, price, tradeDate, txId, side}]
+  avgEntryPrice Decimal                  @db.Decimal(12, 4)
+  totalCost     Decimal                  @db.Decimal(18, 4)
+
+  realizedPnl   Decimal  @default(0) @db.Decimal(18, 4)
+  unrealizedPnl Decimal? @db.Decimal(18, 4)
+  mtmPrice      Decimal? @db.Decimal(12, 4)
+
+  closedAt        DateTime?
+  closeReason     DerivativeCloseReason?
+  settlementPrice Decimal?               @db.Decimal(12, 4)
+
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  marginSnapshots MarginSnapshot[]
+
+  @@unique([portfolioId, assetKey])
+  @@index([portfolioId, status, expiryDate])
+  @@index([userId, status])
+}
+
+enum DerivativePositionStatus {
+  OPEN
+  CLOSED
+  PENDING_EXPIRY_APPROVAL
+  EXPIRED_WORTHLESS
+  EXERCISED
+}
+
+enum DerivativeCloseReason {
+  TRADED_OUT
+  EXPIRY
+  EXERCISE
+  ASSIGNMENT
+  ROLLOVER
+}
+
+model BrokerCredential {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brokerId            String // "zerodha" | "upstox" | "angel"
+  apiKey              String // ENCRYPTED — persistent OAuth client id
+  apiSecret           String? // ENCRYPTED — Kite api_secret / Upstox client secret
+  clientCode          String? // Angel SmartAPI clientCode (plain — not a secret on its own)
+  totpSecret          String? // ENCRYPTED — Angel TOTP base32 seed
+  redirectUri         String? // OAuth redirect URI registered with broker
+  accessToken         String? // ENCRYPTED — null until first OAuth completes; rotates
+  refreshToken        String? // ENCRYPTED — Upstox/Angel only; Kite has none
+  tokenExpiresAt      DateTime?
+  loginState          String? // OAuth CSRF state (transient)
+  loginStateExpiresAt DateTime?
+  isActive            Boolean   @default(true)
+  lastSyncedAt        DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([userId, brokerId])
+  @@unique([loginState])
+  @@index([userId, isActive])
+}
+
+model MarginSnapshot {
+  id               String              @id @default(cuid())
+  userId           String
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId      String
+  positionId       String?
+  position         DerivativePosition? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  snapshotDate     DateTime            @db.Date
+  spanMargin       Decimal             @db.Decimal(18, 4)
+  exposureMargin   Decimal             @db.Decimal(18, 4)
+  totalRequired    Decimal             @db.Decimal(18, 4)
+  availableBalance Decimal             @db.Decimal(18, 4)
+  utilizationPct   Decimal             @db.Decimal(6, 4)
+  source           String // "broker_api" | "manual" | "computed"
+  createdAt        DateTime            @default(now())
+
+  @@index([userId, snapshotDate])
+  @@index([portfolioId, snapshotDate])
+}
+
+model ExpiryCloseJob {
+  id               String            @id @default(cuid())
+  portfolioId      String
+  portfolio        Portfolio         @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  positionId       String
+  assetKey         String
+  expiryDate       DateTime          @db.Date
+  openQty          Decimal           @db.Decimal(18, 6)
+  settlementPrice  Decimal?          @db.Decimal(18, 4)
+  status           ExpiryCloseStatus @default(PENDING_REVIEW)
+  canonicalEventId String?
+  createdAt        DateTime          @default(now())
+  reviewedAt       DateTime?
+
+  @@index([portfolioId, status])
+  @@index([expiryDate, status])
+}
+
+enum ExpiryCloseStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model PortfolioSetting {
+  portfolioId               String    @id
+  portfolio                 Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  autoApproveExpiryClose    Boolean   @default(false)
+  defaultBrokerCredentialId String?
+  updatedAt                 DateTime  @updatedAt
+}
+
+enum EquityTaxTreatment {
+  CAPITAL_GAINS
+  BUSINESS_INCOME
 }

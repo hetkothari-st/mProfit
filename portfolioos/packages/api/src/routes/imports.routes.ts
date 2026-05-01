@@ -5,6 +5,7 @@ import {
   get,
   remove,
   reprocess,
+  download,
 } from '../controllers/imports.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
@@ -24,3 +25,4 @@ importsRouter.get('/', asyncHandler(list));
 importsRouter.get('/:id', asyncHandler(get));
 importsRouter.delete('/:id', asyncHandler(remove));
 importsRouter.post('/:id/reprocess', asyncHandler(reprocess));
+importsRouter.get('/:id/download', asyncHandler(download));

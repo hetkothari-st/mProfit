@@ -26,6 +26,7 @@ export interface CreateMonitoredSenderInput {
   address: string;
   displayLabel?: string | null;
   autoCommitAfter?: number;
+  autoCommitEnabled?: boolean;
 }
 
 export interface UpdateMonitoredSenderInput {
@@ -92,12 +93,18 @@ export async function createMonitoredSender(
     if (seed) displayLabel = seed.suggestedDisplayLabel;
   }
 
+  // Per Phase B UX: when the user explicitly approves a sender, treat it as
+  // "trusted from now on". Future events from this sender skip the per-event
+  // review queue and auto-project. Caller can override via `autoCommitEnabled`.
+  const autoCommitEnabled = input.autoCommitEnabled ?? true;
+
   return prisma.monitoredSender.create({
     data: {
       userId,
       address,
       displayLabel,
       autoCommitAfter,
+      autoCommitEnabled,
     },
   });
 }

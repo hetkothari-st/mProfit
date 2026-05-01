@@ -32,6 +32,11 @@ const ALIASES: Record<string, string[]> = {
   broker: ['broker', 'brokername'],
   orderno: ['orderno', 'ordernumber', 'orderid'],
   tradeno: ['tradeno', 'tradenumber', 'tradeid'],
+  // F&O column aliases — broker back-office CSVs often emit these.
+  strikeprice: ['strikeprice', 'strike', 'strk'],
+  expirydate: ['expirydate', 'expiry', 'xpryd', 'xpry'],
+  optiontype: ['optiontype', 'optiontyp', 'optntyp', 'callput', 'cporpt'],
+  lotsize: ['lotsize', 'lot', 'mktlot', 'marketlot'],
 };
 
 function pick(row: Record<string, string>, key: keyof typeof ALIASES): string | undefined {
@@ -167,8 +172,26 @@ export const genericCsvParser: Parser = {
         continue;
       }
 
+      const assetClass = inferAssetClass(row);
+      const isFno = assetClass === 'FUTURES' || assetClass === 'OPTIONS';
+      let strikePrice: string | undefined;
+      let expiryDate: string | undefined;
+      let optionType: 'CALL' | 'PUT' | undefined;
+      let lotSize: number | undefined;
+      if (isFno) {
+        strikePrice = pick(row, 'strikeprice');
+        expiryDate = parseDate(pick(row, 'expirydate')) ?? undefined;
+        const otRaw = pick(row, 'optiontype')?.toUpperCase();
+        optionType =
+          otRaw === 'CE' || otRaw === 'CALL' ? 'CALL'
+          : otRaw === 'PE' || otRaw === 'PUT' ? 'PUT'
+          : undefined;
+        const ls = pick(row, 'lotsize');
+        if (ls) lotSize = Number(ls.replace(/[^\d]/g, ''));
+      }
+
       txs.push({
-        assetClass: inferAssetClass(row),
+        assetClass,
         transactionType: inferTransactionType(row),
         symbol: pick(row, 'symbol'),
         isin: pick(row, 'isin'),
@@ -191,6 +214,10 @@ export const genericCsvParser: Parser = {
         broker: pick(row, 'broker'),
         orderNo: pick(row, 'orderno'),
         tradeNo: pick(row, 'tradeno'),
+        strikePrice,
+        expiryDate,
+        optionType,
+        lotSize,
       });
     }
 

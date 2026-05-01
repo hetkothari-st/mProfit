@@ -56,6 +56,10 @@ function toTransactionEvent(
     tradeNo: pt.tradeNo,
     narration: pt.narration,
     settlementDate: pt.settlementDate,
+    strikePrice: toStr(pt.strikePrice),
+    expiryDate: pt.expiryDate,
+    optionType: pt.optionType,
+    lotSize: pt.lotSize,
   };
 
   return {

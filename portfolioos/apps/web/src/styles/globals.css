@@ -2,74 +2,119 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────────
+   PortfolioOS — Editorial Finance theme
+   Light: warm parchment paper · deep ink · old gold
+   Dark : midnight ink · ivory foreground · brass accent
+   ───────────────────────────────────────────────────────────────────────── */
+
 @layer base {
   :root {
-    /* PortfolioOS tokens (Section 7 of spec) */
-    --background: 210 33% 98%;           /* #F8FAFC */
-    --foreground: 215 30% 12%;
+    /* Surfaces */
+    --background: 38 35% 95%;            /* warm parchment */
+    --foreground: 213 38% 12%;           /* deep ink */
+    --card: 40 50% 98%;                  /* cream surface */
+    --card-foreground: 213 38% 12%;
+    --card-highlight: 0 0% 100%;
+    --popover: 40 50% 98%;
+    --popover-foreground: 213 38% 12%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 215 30% 12%;
+    /* Brand */
+    --primary: 213 53% 11%;              /* deep navy ink */
+    --primary-foreground: 40 50% 97%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 215 30% 12%;
+    --secondary: 38 25% 90%;
+    --secondary-foreground: 213 38% 12%;
 
-    --primary: 210 93% 17%;              /* #022B54 deep blue */
-    --primary-foreground: 0 0% 100%;
+    --accent: 36 60% 41%;                /* old gold / brass */
+    --accent-foreground: 40 50% 97%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 215 30% 12%;
+    --muted: 38 22% 88%;
+    --muted-foreground: 215 14% 38%;
 
-    --accent: 137 64% 37%;               /* #219C48 green */
-    --accent-foreground: 0 0% 100%;
+    --destructive: 0 58% 39%;            /* oxblood */
+    --destructive-foreground: 40 50% 97%;
 
-    --muted: 210 30% 94%;
-    --muted-foreground: 215 15% 40%;
+    --border: 38 18% 82%;                /* warm hairline */
+    --input: 38 18% 82%;
+    --ring: 36 60% 41%;
 
-    --destructive: 0 70% 55%;            /* #D93C3C */
-    --destructive-foreground: 0 0% 100%;
+    --positive: 130 38% 32%;             /* deep forest */
+    --negative: 0 58% 39%;                /* oxblood */
+    --warning: 32 75% 45%;
 
-    --border: 214 30% 91%;
-    --input: 214 30% 91%;
-    --ring: 210 93% 17%;
+    /* Sidebar — refined parchment tier */
+    --sidebar: 40 30% 92%;
+    --sidebar-foreground: 213 38% 14%;
+    --sidebar-accent: 38 25% 86%;
+    --sidebar-accent-foreground: 213 53% 11%;
+    --sidebar-border: 38 18% 80%;
 
-    --positive: 137 64% 37%;
-    --negative: 0 70% 55%;
+    --shadow-color: 215 30% 15%;
 
-    --sidebar: 210 93% 17%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-accent: 210 93% 23%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 210 70% 25%;
+    --radius: 0.625rem;
 
-    --radius: 0.5rem;
+    /* Chart palette — refined editorial */
+    --chart-1: 213 53% 18%;   /* ink */
+    --chart-2: 36 60% 45%;    /* gold */
+    --chart-3: 130 35% 32%;   /* forest */
+    --chart-4: 12 50% 42%;    /* terracotta */
+    --chart-5: 260 28% 38%;   /* plum */
+    --chart-6: 195 40% 32%;   /* slate teal */
+    --chart-7: 28 70% 52%;    /* amber */
+    --chart-8: 340 35% 38%;   /* rosewood */
   }
 
   .dark {
-    --background: 215 30% 8%;
-    --foreground: 210 40% 96%;
-    --card: 215 30% 11%;
-    --card-foreground: 210 40% 96%;
-    --popover: 215 30% 11%;
-    --popover-foreground: 210 40% 96%;
-    --primary: 210 60% 70%;
-    --primary-foreground: 215 30% 10%;
-    --secondary: 215 25% 18%;
-    --secondary-foreground: 210 40% 96%;
-    --accent: 137 50% 45%;
-    --accent-foreground: 0 0% 100%;
-    --muted: 215 25% 18%;
-    --muted-foreground: 215 15% 65%;
-    --destructive: 0 60% 55%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 215 25% 22%;
-    --input: 215 25% 22%;
-    --ring: 210 60% 70%;
-    --sidebar: 215 35% 10%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-accent: 215 30% 16%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 215 25% 22%;
+    /* Refined gunmetal — warm cool slate, not pitch black.
+       Surface ladder: bg 12 → card 14.5 → popover 17 → muted 18 → secondary 19 */
+    --background: 217 19% 12%;           /* deep slate, lifted */
+    --foreground: 38 22% 89%;            /* warm ivory */
+    --card: 217 17% 14.5%;               /* lifted surface */
+    --card-foreground: 38 22% 89%;
+    --card-highlight: 38 25% 75%;
+    --popover: 217 18% 17%;
+    --popover-foreground: 38 22% 89%;
+
+    --primary: 38 24% 88%;               /* ivory inverse */
+    --primary-foreground: 217 24% 10%;
+
+    --secondary: 217 14% 19%;
+    --secondary-foreground: 38 22% 89%;
+
+    --accent: 38 62% 60%;                /* brass, refined */
+    --accent-foreground: 217 28% 8%;
+
+    --muted: 217 14% 18%;
+    --muted-foreground: 217 10% 64%;
+
+    --destructive: 0 52% 60%;
+    --destructive-foreground: 38 24% 95%;
+
+    --border: 217 12% 22%;
+    --input: 217 12% 22%;
+    --ring: 38 62% 60%;
+
+    --positive: 142 36% 62%;             /* sage */
+    --negative: 4 58% 67%;                /* clay rose */
+    --warning: 36 78% 64%;
+
+    --sidebar: 217 22% 9.5%;             /* deeper than bg, refined */
+    --sidebar-foreground: 38 18% 82%;
+    --sidebar-accent: 217 16% 15%;
+    --sidebar-accent-foreground: 38 62% 64%;
+    --sidebar-border: 217 14% 16%;
+
+    --shadow-color: 217 30% 4%;
+
+    --chart-1: 38 26% 82%;     /* ivory */
+    --chart-2: 38 70% 64%;     /* brass */
+    --chart-3: 142 38% 62%;    /* sage */
+    --chart-4: 14 62% 64%;     /* terracotta */
+    --chart-5: 260 38% 72%;    /* lavender plum */
+    --chart-6: 195 42% 62%;    /* slate teal */
+    --chart-7: 28 82% 66%;     /* amber */
+    --chart-8: 340 52% 68%;    /* rose */
   }
 }
 
@@ -77,28 +122,253 @@
   * {
     @apply border-border;
   }
+
   html {
-    font-feature-settings: 'cv11', 'ss01';
+    font-feature-settings: 'cv11', 'ss01', 'ss03', 'liga', 'kern';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    background-image:
+      radial-gradient(at 0% 0%, hsl(var(--accent) / 0.04) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, hsl(var(--primary) / 0.04) 0px, transparent 60%);
+    background-attachment: fixed;
   }
-  .numeric {
-    @apply font-numeric tabular-nums;
+
+  ::selection {
+    background: hsl(var(--accent) / 0.30);
+    color: hsl(var(--foreground));
+  }
+
+  /* Kill browser autofill blue/yellow tint — use card surface instead */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px hsl(var(--card)) inset !important;
+    -webkit-text-fill-color: hsl(var(--foreground)) !important;
+    caret-color: hsl(var(--foreground));
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
+  /* Refined scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+
+  h1, h2, h3, h4, h5 {
+    font-feature-settings: 'ss01', 'ss03', 'liga', 'kern';
   }
 }
 
 @layer utilities {
-  .text-positive {
-    color: hsl(var(--positive));
+  /* Title typography — Instrument Serif, modern editorial */
+  .font-display {
+    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-feature-settings: 'liga', 'kern';
+    letter-spacing: -0.012em;
+    font-weight: 400;
   }
-  .text-negative {
-    color: hsl(var(--negative));
+  .font-display-italic {
+    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-style: italic;
+    letter-spacing: -0.005em;
   }
-  .bg-positive\/10 {
-    background-color: hsl(var(--positive) / 0.1);
+  /* Brand wordmark — Geist, sans, distinct from content titles */
+  .font-brand {
+    font-family: 'Geist', 'Inter Tight', system-ui, sans-serif;
+    font-feature-settings: 'ss01', 'ss03', 'liga', 'kern', 'cv11';
+    letter-spacing: -0.035em;
+    font-weight: 600;
   }
-  .bg-negative\/10 {
-    background-color: hsl(var(--negative) / 0.1);
+
+  .numeric {
+    @apply font-numeric tabular-nums;
+    font-feature-settings: 'tnum', 'lnum';
   }
+  /* Hero / metric figures — clean grotesque, tabular, refined.
+     Serif numerals were too ornate for financial display. */
+  .numeric-display {
+    font-family: 'Inter Tight', 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'tnum', 'lnum', 'ss01', 'cv11';
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: -0.022em;
+    font-weight: 500;
+  }
+  .numeric-display-lg {
+    font-family: 'Inter Tight', 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'tnum', 'lnum', 'ss01', 'cv11';
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: -0.035em;
+    font-weight: 500;
+  }
+
+  /* Money digits — letterpress in light, raised metallic in dark.
+     `.money-digits` is the default (calibrated for 18–32px figures);
+     `.money-hero-digits` is the dialed-up version for the net-worth hero. */
+  .money-digits {
+    color: hsl(var(--foreground));
+    text-shadow:
+      0 1px 0 hsl(0 0% 100% / 0.75),
+      0 1px 1px hsl(var(--shadow-color) / 0.20),
+      0 3px 8px hsl(var(--shadow-color) / 0.12);
+  }
+  .dark .money-digits {
+    color: hsl(38 26% 90%);
+    text-shadow:
+      0 -0.5px 0 hsl(38 30% 95% / 0.15),
+      0 1px 0 hsl(0 0% 0% / 0.75),
+      0 2px 1px hsl(0 0% 0% / 0.45),
+      0 6px 14px hsl(var(--accent) / 0.18);
+  }
+
+  .money-hero-digits {
+    color: hsl(var(--foreground));
+    text-shadow:
+      0 1px 0 hsl(0 0% 100% / 0.55),
+      0 2px 1px hsl(var(--shadow-color) / 0.12),
+      0 6px 14px hsl(var(--shadow-color) / 0.10);
+  }
+  .dark .money-hero-digits {
+    color: hsl(38 26% 90%);
+    text-shadow:
+      0 -1px 0 hsl(38 30% 95% / 0.12),
+      0 1px 0 hsl(0 0% 0% / 0.7),
+      0 2px 1px hsl(0 0% 0% / 0.5),
+      0 8px 22px hsl(var(--accent) / 0.20);
+  }
+
+  .text-balance { text-wrap: balance; }
+  .text-pretty  { text-wrap: pretty; }
+
+  /* Brand color utilities */
+  .text-positive  { color: hsl(var(--positive)); }
+  .text-negative  { color: hsl(var(--negative)); }
+  .text-warning   { color: hsl(var(--warning)); }
+  .text-accent-ink { color: hsl(var(--accent)); }
+  .bg-positive\/10 { background-color: hsl(var(--positive) / 0.1); }
+  .bg-negative\/10 { background-color: hsl(var(--negative) / 0.1); }
+  .bg-warning\/10  { background-color: hsl(var(--warning) / 0.12); }
+  .bg-accent\/8    { background-color: hsl(var(--accent) / 0.08); }
+  .ring-accent\/30 { --tw-ring-color: hsl(var(--accent) / 0.3); }
+
+  /* Hairlines & paper texture */
+  .hairline-b { box-shadow: inset 0 -1px 0 hsl(var(--border)); }
+  .hairline-t { box-shadow: inset 0 1px 0 hsl(var(--border)); }
+
+  .paper {
+    background-color: hsl(var(--card));
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.04 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    background-size: 220px 220px;
+  }
+
+  /* Decorative ornament — centered diamond rule */
+  .rule-ornament {
+    position: relative;
+    height: 1px;
+    background: linear-gradient(to right, transparent, hsl(var(--border)) 20%, hsl(var(--border)) 80%, transparent);
+  }
+  .rule-ornament::before,
+  .rule-ornament::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    transform: translateY(-50%) rotate(45deg);
+    background: hsl(var(--accent));
+    opacity: 0.5;
+  }
+  .rule-ornament::before { left: calc(50% - 22px); }
+  .rule-ornament::after  { left: calc(50% + 18px); }
+  .rule-ornament > span {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(45deg);
+    width: 6px;
+    height: 6px;
+    background: hsl(var(--accent));
+  }
+
+  /* Hero gradient mesh + grain layer */
+  .hero-canvas {
+    position: relative;
+    isolation: isolate;
+    background:
+      radial-gradient(120% 90% at 0% 0%, hsl(var(--accent) / 0.18) 0px, transparent 55%),
+      radial-gradient(100% 80% at 100% 0%, hsl(var(--primary) / 0.10) 0px, transparent 55%),
+      radial-gradient(140% 100% at 50% 130%, hsl(var(--accent) / 0.06) 0px, transparent 60%),
+      linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--card) / 0.92) 100%);
+  }
+  .hero-canvas::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    background-size: 220px;
+    mix-blend-mode: overlay;
+    opacity: 0.55;
+  }
+  .dark .hero-canvas::before { mix-blend-mode: soft-light; opacity: 0.35; }
+
+  /* Subtle entrance reveal */
+  .reveal { animation: reveal-up 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+  .reveal-delay-1 { animation-delay: 60ms; }
+  .reveal-delay-2 { animation-delay: 120ms; }
+  .reveal-delay-3 { animation-delay: 180ms; }
+  .reveal-delay-4 { animation-delay: 240ms; }
+  .reveal-delay-5 { animation-delay: 300ms; }
+
+  /* Active rail for sidebar nav */
+  .nav-rail {
+    position: relative;
+  }
+  .nav-rail[data-active='true']::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 25%;
+    bottom: 25%;
+    width: 2px;
+    background: hsl(var(--accent));
+    border-radius: 2px;
+  }
+
+  /* Refined focus ring */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Recharts cosmetic overrides */
+  .recharts-default-tooltip {
+    background: hsl(var(--popover)) !important;
+    border: 1px solid hsl(var(--border)) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 12px 28px -16px hsl(var(--shadow-color) / 0.35) !important;
+    font-family: 'Inter Tight', sans-serif !important;
+    font-size: 12px !important;
+  }
+  .recharts-cartesian-axis-tick-value { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .recharts-legend-item-text { font-size: 12px !important; }
 }

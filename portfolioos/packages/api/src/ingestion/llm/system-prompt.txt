@@ -8,3 +8,19 @@ Rules:
 - If multiple events are in one email (e.g. a statement listing 10 transactions), return the `events` array with one entry per event.
 - Never invent data. If a field is not present in the email, set it null.
 - confidence: 0.0 to 1.0. How certain you are this is a real financial event with the claimed type and amount.
+
+F&O (Futures & Options) — when the email is a contract note or trade confirmation for a derivative:
+- event_type = FNO_TRADE (do NOT use BUY/SELL for derivatives — those are equity-only)
+- fno_side = "BUY" or "SELL" (the side of the trade, not the option type)
+- fno_underlying = bare underlying ticker, e.g. "NIFTY", "RELIANCE", "BANKNIFTY"
+- fno_instrument_type = "FUTURES" | "CALL" | "PUT"
+- fno_strike_price = decimal string (null for futures)
+- fno_expiry_date = YYYY-MM-DD
+- fno_lot_size = integer (units per contract; e.g. NIFTY = 25 in 2026)
+- fno_quantity_contracts = number of CONTRACTS, not lot-units. 1 NIFTY lot = qty="1".
+- fno_trading_symbol = exchange tradingsymbol if present (e.g. "NIFTY26NOV24500CE")
+- amount = net trade value (qty_contracts * lot_size * price). Positive even for sells; the side flag conveys direction.
+- price = per-unit premium (option) or per-unit futures price.
+- quantity = total units traded (qty_contracts * lot_size).
+- For multiple-trade contract notes, emit one FNO_TRADE event per row.
+

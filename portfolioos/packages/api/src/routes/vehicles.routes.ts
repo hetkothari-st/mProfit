@@ -8,6 +8,8 @@ import {
   refresh,
   smsPaste,
   scanChallans,
+  carInfoInit,
+  carInfoVerify,
 } from '../controllers/vehicles.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
@@ -24,3 +26,5 @@ vehiclesRouter.patch('/:id', asyncHandler(update));
 vehiclesRouter.delete('/:id', asyncHandler(remove));
 vehiclesRouter.post('/:id/refresh', asyncHandler(refresh));
 vehiclesRouter.post('/:id/challans/scan', asyncHandler(scanChallans));
+vehiclesRouter.post('/carinfo/init', asyncHandler(carInfoInit));
+vehiclesRouter.post('/carinfo/verify', asyncHandler(carInfoVerify));

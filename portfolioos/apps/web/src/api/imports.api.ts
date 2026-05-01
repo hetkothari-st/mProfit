@@ -34,8 +34,18 @@ export const importsApi = {
   async remove(id: string): Promise<void> {
     await api.delete(`/api/imports/${id}`);
   },
-  async reprocess(id: string): Promise<unknown> {
-    const { data } = await api.post<ApiResponse<unknown>>(`/api/imports/${id}/reprocess`);
+  async reprocess(id: string, password?: string): Promise<unknown> {
+    const { data } = await api.post<ApiResponse<unknown>>(`/api/imports/${id}/reprocess`, password ? { password } : {});
     return unwrap(data);
+  },
+  async download(id: string, fileName: string): Promise<void> {
+    const { data } = await api.get(`/api/imports/${id}/download`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   },
 };

@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, CheckCheck, Trash2, Plus, RefreshCw } from 'lucide-react';
+import {
+  Bell, CheckCheck, Trash2, Plus, RefreshCw, CalendarDays, Filter,
+  AlertTriangle, Inbox, Clock,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -25,16 +28,17 @@ const TYPE_LABELS: Record<AlertType, string> = {
   CUSTOM: 'Custom',
 };
 
-const TYPE_COLORS: Record<AlertType, string> = {
-  FD_MATURITY: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-  BOND_MATURITY: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
-  MF_LOCK_IN_EXPIRY: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300',
-  SIP_DUE: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
-  INSURANCE_PREMIUM: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
-  DIVIDEND_RECEIVED: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-  CORPORATE_ACTION: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
-  PRICE_TARGET: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300',
-  CUSTOM: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+// Editorial palette tones — refined HSL chips, not raw tailwind
+const TYPE_TONES: Record<AlertType, { dot: string; text: string; ring: string; bg: string }> = {
+  FD_MATURITY:        { dot: 'hsl(213 53% 32%)',  text: 'text-foreground/85', ring: 'border-[hsl(213_53%_32%/0.25)]', bg: 'bg-[hsl(213_53%_32%/0.06)]' },
+  BOND_MATURITY:      { dot: 'hsl(260 28% 42%)',  text: 'text-foreground/85', ring: 'border-[hsl(260_28%_42%/0.25)]', bg: 'bg-[hsl(260_28%_42%/0.06)]' },
+  MF_LOCK_IN_EXPIRY:  { dot: 'hsl(195 40% 34%)',  text: 'text-foreground/85', ring: 'border-[hsl(195_40%_34%/0.25)]', bg: 'bg-[hsl(195_40%_34%/0.06)]' },
+  SIP_DUE:            { dot: 'hsl(36 60% 48%)',   text: 'text-foreground/85', ring: 'border-[hsl(36_60%_48%/0.30)]',  bg: 'bg-[hsl(36_60%_48%/0.08)]'  },
+  INSURANCE_PREMIUM:  { dot: 'hsl(12 50% 44%)',   text: 'text-foreground/85', ring: 'border-[hsl(12_50%_44%/0.25)]',  bg: 'bg-[hsl(12_50%_44%/0.06)]'  },
+  DIVIDEND_RECEIVED:  { dot: 'hsl(130 35% 32%)',  text: 'text-foreground/85', ring: 'border-[hsl(130_35%_32%/0.25)]', bg: 'bg-[hsl(130_35%_32%/0.06)]' },
+  CORPORATE_ACTION:   { dot: 'hsl(28 70% 52%)',   text: 'text-foreground/85', ring: 'border-[hsl(28_70%_52%/0.30)]',  bg: 'bg-[hsl(28_70%_52%/0.08)]'  },
+  PRICE_TARGET:       { dot: 'hsl(340 35% 38%)',  text: 'text-foreground/85', ring: 'border-[hsl(340_35%_38%/0.25)]', bg: 'bg-[hsl(340_35%_38%/0.06)]' },
+  CUSTOM:             { dot: 'hsl(215 14% 38%)',  text: 'text-foreground/85', ring: 'border-border',                  bg: 'bg-muted/40'                },
 };
 
 const ALL_TYPES: AlertType[] = [
@@ -42,52 +46,122 @@ const ALL_TYPES: AlertType[] = [
   'INSURANCE_PREMIUM', 'DIVIDEND_RECEIVED', 'CORPORATE_ACTION', 'PRICE_TARGET', 'CUSTOM',
 ];
 
+function daysUntil(iso: string): number {
+  const t = new Date(iso).getTime();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((t - today.getTime()) / 86_400_000);
+}
+
+function formatTriggerDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 function AlertRow({ alert, onMarkRead, onDelete }: {
   alert: AlertDTO;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const isUrgent = !alert.isRead && new Date(alert.triggerDate) <= new Date();
+  const tone = TYPE_TONES[alert.type];
+  const days = daysUntil(alert.triggerDate);
+  const isOverdue = days < 0;
+  const isUrgent = days >= 0 && days <= 7;
+  const railColor = !alert.isRead
+    ? (isOverdue ? 'hsl(var(--negative))' : isUrgent ? 'hsl(var(--accent))' : 'hsl(var(--accent))')
+    : 'transparent';
+
   return (
     <div
       className={cn(
-        'flex items-start gap-4 px-4 py-3.5 border-b last:border-0 transition-colors',
-        alert.isRead ? 'bg-transparent' : 'bg-primary/[0.03]',
-        isUrgent && !alert.isRead && 'bg-orange-50/60 dark:bg-orange-950/20',
+        'group relative flex items-stretch gap-0 border-b border-border/60 last:border-0 transition-colors',
+        alert.isRead ? 'bg-transparent hover:bg-muted/20' : 'bg-card hover:bg-muted/15',
       )}
     >
-      <div className="mt-0.5 flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', TYPE_COLORS[alert.type])}>
-            {TYPE_LABELS[alert.type]}
-          </span>
+      {/* Urgency rail */}
+      <span
+        aria-hidden="true"
+        className="w-[3px] shrink-0 transition-colors"
+        style={{ background: railColor }}
+      />
+
+      <div className="flex flex-1 items-start gap-4 px-5 py-4">
+        {/* Tone marker */}
+        <div className="mt-0.5 flex flex-col items-center gap-1.5 pt-1">
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 rounded-[1px] rotate-45 shrink-0"
+            style={{ background: tone.dot }}
+          />
           {!alert.isRead && (
-            <span className="h-2 w-2 rounded-full bg-primary shrink-0" aria-label="Unread" />
+            <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_0_3px_hsl(var(--accent)/0.18)]" />
           )}
         </div>
-        <p className={cn('text-sm mt-1', alert.isRead ? 'text-muted-foreground' : 'font-medium')}>{alert.title}</p>
-        {alert.description && <p className="text-xs text-muted-foreground mt-0.5">{alert.description}</p>}
-        <p className="text-xs text-muted-foreground mt-1">{alert.triggerDate}</p>
-      </div>
-      <div className="flex gap-1 shrink-0 mt-1">
-        {!alert.isRead && (
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={cn(
+              'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned',
+              tone.ring, tone.bg, tone.text,
+            )}>
+              {TYPE_LABELS[alert.type]}
+            </span>
+            {isOverdue && !alert.isRead && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-negative/30 bg-negative/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned text-negative">
+                <AlertTriangle className="h-3 w-3" strokeWidth={2.2} />
+                Overdue
+              </span>
+            )}
+            {isUrgent && !alert.isRead && !isOverdue && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned text-accent-ink">
+                <Clock className="h-3 w-3" strokeWidth={2.2} />
+                {days === 0 ? 'Today' : `${days}d`}
+              </span>
+            )}
+          </div>
+
+          <p className={cn(
+            'mt-2 text-[15px] font-medium leading-tight tracking-[-0.012em] text-balance',
+            alert.isRead ? 'text-muted-foreground' : 'text-foreground',
+          )}>
+            {alert.title}
+          </p>
+          {alert.description && (
+            <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+              {alert.description}
+            </p>
+          )}
+          <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <CalendarDays className="h-3 w-3 text-muted-foreground/70" strokeWidth={1.7} />
+            <span className="numeric tabular-nums">{formatTriggerDate(alert.triggerDate)}</span>
+            {!isOverdue && !isUrgent && (
+              <>
+                <span className="h-1 w-1 rounded-full bg-border" />
+                <span className="numeric tabular-nums">in {days}d</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-1 shrink-0 mt-1 opacity-50 group-hover:opacity-100 transition-opacity">
+          {!alert.isRead && (
+            <button
+              type="button"
+              onClick={() => onMarkRead(alert.id)}
+              title="Mark as read"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-positive hover:bg-positive/10 transition-colors focus-ring"
+            >
+              <CheckCheck className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => onMarkRead(alert.id)}
-            title="Mark as read"
-            className="p-1.5 rounded text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+            onClick={() => onDelete(alert.id)}
+            title="Dismiss"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-negative hover:bg-negative/10 transition-colors focus-ring"
           >
-            <CheckCheck className="h-3.5 w-3.5" />
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.7} />
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => onDelete(alert.id)}
-          title="Dismiss"
-          className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </div>
       </div>
     </div>
   );
@@ -174,12 +248,16 @@ export function AlertsPage() {
   });
 
   const unreadCount = data?.unreadCount ?? 0;
+  const totalCount = data?.total ?? 0;
+  const overdueCount = (data?.alerts ?? []).filter(a => !a.isRead && daysUntil(a.triggerDate) < 0).length;
+  const urgentCount = (data?.alerts ?? []).filter(a => !a.isRead && daysUntil(a.triggerDate) >= 0 && daysUntil(a.triggerDate) <= 7).length;
 
   return (
     <div>
       <PageHeader
+        eyebrow="Inbox"
         title="Alerts & Reminders"
-        description="Upcoming maturities, premium due dates, expiry reminders, and custom alerts"
+        description="Upcoming maturities, premium due dates, expiry reminders, and custom alerts — all curated in one ledger."
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => scanMut.mutate()} disabled={scanMut.isPending}>
@@ -193,46 +271,67 @@ export function AlertsPage() {
         }
       />
 
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 reveal">
+        <KpiTile icon={Inbox}        label="Total"   value={totalCount}   tone="default" />
+        <KpiTile icon={Bell}         label="Unread"  value={unreadCount}  tone={unreadCount > 0 ? 'accent' : 'default'} />
+        <KpiTile icon={Clock}        label="Due ≤ 7d" value={urgentCount} tone={urgentCount > 0 ? 'accent' : 'default'} />
+        <KpiTile icon={AlertTriangle} label="Overdue" value={overdueCount} tone={overdueCount > 0 ? 'negative' : 'positive'} />
+      </div>
+
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <Select value={filterType} onChange={(e) => { setFilterType(e.target.value as AlertType | ''); setPage(1); }} className="w-44">
-          <option value="">All types</option>
-          {ALL_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
-        </Select>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative inline-flex items-center">
+          <Filter className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-muted-foreground z-10" strokeWidth={1.7} />
+          <Select
+            value={filterType}
+            onChange={(e) => { setFilterType(e.target.value as AlertType | ''); setPage(1); }}
+            className="h-9 w-52 pl-9 pr-9 text-[13px] border-border/70 bg-card/50"
+          >
+            <option value="">All types</option>
+            {ALL_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
+          </Select>
+        </div>
+
+        <label className="inline-flex items-center gap-2 cursor-pointer rounded-md border border-border/70 bg-card/50 px-3.5 h-9 text-[13px] hover:border-accent/40 transition-colors">
           <input
             type="checkbox"
             checked={unreadOnly}
             onChange={(e) => { setUnreadOnly(e.target.checked); setPage(1); }}
-            className="rounded"
+            className="h-3.5 w-3.5 rounded border-border accent-accent"
           />
           Unread only
           {unreadCount > 0 && (
-            <span className="bg-primary text-primary-foreground text-xs rounded-full px-1.5 py-0.5 font-medium">
+            <span className="numeric tabular-nums text-[10.5px] font-medium rounded-full bg-accent text-accent-foreground px-1.5 py-0.5 ml-0.5">
               {unreadCount}
             </span>
           )}
         </label>
+
         {unreadCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => markAllMut.mutate()} disabled={markAllMut.isPending}>
+          <Button variant="ghost" size="sm" onClick={() => markAllMut.mutate()} disabled={markAllMut.isPending} className="text-accent-ink hover:text-accent h-9">
             <CheckCheck className="h-4 w-4" /> Mark all read
           </Button>
         )}
       </div>
 
       {isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => <Card key={i} className="h-16 animate-pulse bg-muted/60" />)}
-        </div>
+        <Card>
+          <div className="divide-y divide-border/60">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-[110px] animate-pulse bg-muted/30" />
+            ))}
+          </div>
+        </Card>
       ) : (data?.alerts.length ?? 0) === 0 ? (
         <EmptyState
           icon={Bell}
-          title="No alerts"
-          description="You're all caught up. Alerts appear here for maturities, premium due dates, vehicle expiries, and rent reminders."
+          title="All clear"
+          description="You're caught up. Alerts appear here for maturities, premium due dates, vehicle expiries, and rent reminders."
           action={<Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> Create a reminder</Button>}
         />
       ) : (
-        <Card>
+        <Card className="overflow-hidden">
           <CardContent className="p-0">
             {data!.alerts.map((a) => (
               <AlertRow
@@ -247,14 +346,50 @@ export function AlertsPage() {
       )}
 
       {(data?.total ?? 0) > 30 && (
-        <div className="flex justify-center gap-2 mt-4">
+        <div className="flex items-center justify-center gap-3 mt-6 text-[13px]">
           <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-          <span className="text-sm text-muted-foreground py-2">{page} / {Math.ceil((data?.total ?? 1) / 30)}</span>
+          <span className="text-muted-foreground numeric tabular-nums">
+            Page {page} of {Math.ceil((data?.total ?? 1) / 30)}
+          </span>
           <Button variant="outline" size="sm" disabled={page >= Math.ceil((data?.total ?? 1) / 30)} onClick={() => setPage((p) => p + 1)}>Next</Button>
         </div>
       )}
 
       <CreateAlertDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
+  );
+}
+
+function KpiTile({ icon: Icon, label, value, tone }: {
+  icon: typeof Bell;
+  label: string;
+  value: number;
+  tone: 'default' | 'accent' | 'negative' | 'positive';
+}) {
+  const toneText =
+    tone === 'accent' ? 'text-accent' :
+    tone === 'negative' ? 'text-negative' :
+    tone === 'positive' ? 'text-positive' :
+    'text-muted-foreground';
+  const toneRing =
+    tone === 'accent' ? 'border-accent/25' :
+    tone === 'negative' ? 'border-negative/25' :
+    tone === 'positive' ? 'border-positive/25' :
+    'border-border/70';
+
+  return (
+    <Card className={cn('p-4 transition-shadow hover:shadow-elev-lg', toneRing)}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[10px] uppercase tracking-kerned text-muted-foreground">{label}</p>
+          <p className="numeric numeric-display mt-1.5 text-[24px] tracking-tight text-foreground money-digits">
+            {value}
+          </p>
+        </div>
+        <div className={cn('grid h-9 w-9 place-items-center rounded-md border', toneRing)}>
+          <Icon className={cn('h-4 w-4', toneText)} strokeWidth={1.6} />
+        </div>
+      </div>
+    </Card>
   );
 }

@@ -19,15 +19,24 @@ export interface PriceLookupInput {
   cryptoId?: string | null;
   commodity?: CommodityType | null;
   isin?: string | null;
+  // F&O — when provided, FUTURES/OPTIONS lookups dispatch to FoContractPrice
+  // instead of (incorrectly) returning the underlying spot.
+  assetKey?: string | null;
 }
 
 export async function routePriceLookup(input: PriceLookupInput): Promise<Decimal | null> {
   switch (input.assetClass) {
     case 'EQUITY':
     case 'ETF':
-    case 'FUTURES':
-    case 'OPTIONS':
       return input.stockId ? getLatestStockPrice(input.stockId) : null;
+
+    case 'FUTURES':
+    case 'OPTIONS': {
+      if (!input.assetKey) return null;
+      const { getLatestFoContractPrice } = await import('./nseFoMaster.service.js');
+      const r = await getLatestFoContractPrice(input.assetKey);
+      return r ? new Decimal(r.closePrice) : null;
+    }
 
     case 'MUTUAL_FUND':
       return input.fundId ? getLatestNavForFund(input.fundId) : null;

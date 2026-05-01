@@ -1,18 +1,72 @@
 import { useState } from 'react';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LineChart, RefreshCw, Plus, Loader2, Pencil } from 'lucide-react';
+import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, KeyRound } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import type { ImportJobDTO, ImportStatus } from '@portfolioos/shared';
+import { IMPORT_STATUS_LABELS } from '@portfolioos/shared';
+import { ImportErrorDialog } from '@/pages/imports/ImportErrorDialog';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/common/EmptyState';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { transactionsApi } from '@/api/transactions.api';
 import { apiErrorMessage } from '@/api/client';
+import { importsApi } from '@/api/imports.api';
+import { useScan } from '@/context/ScanContext';
+import { authApi } from '@/api/auth.api';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
+import { ImportDropzone } from '@/pages/imports/ImportDropzone';
+import { MFCasparserDialog } from '@/pages/mutualFunds/MFCasparserDialog';
+import { MFCasMailbackDialog } from '@/pages/mutualFunds/MFCasMailbackDialog';
 import { formatINR, formatPercent, Decimal, toDecimal } from '@portfolioos/shared';
 import type { HoldingRow, TransactionDTO } from '@portfolioos/shared';
+
+function PanInlinePrompt({ jobId, onDone }: { jobId: string; onDone: () => void }) {
+  const [pan, setPan] = useState('');
+  const queryClient = useQueryClient();
+  const mut = useMutation({
+    mutationFn: async () => {
+      const trimmed = pan.trim().toUpperCase();
+      if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(trimmed)) throw new Error('Invalid PAN format');
+      await authApi.updateProfile({ pan: trimmed });
+      await importsApi.reprocess(jobId);
+    },
+    onSuccess: () => {
+      toast.success('PAN saved — re-processing import');
+      queryClient.invalidateQueries({ queryKey: ['imports'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+      onDone();
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed')),
+  });
+
+  return (
+    <div className="flex items-center gap-2 mt-2 pl-7">
+      <KeyRound className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+      <span className="text-[11px] text-amber-600 shrink-0">PDF needs your PAN:</span>
+      <Input
+        className="h-7 text-xs w-36 font-mono uppercase"
+        placeholder="ABCDE1234F"
+        maxLength={10}
+        value={pan}
+        onChange={(e) => setPan(e.target.value.toUpperCase())}
+        onKeyDown={(e) => e.key === 'Enter' && mut.mutate()}
+      />
+      <Button
+        size="sm"
+        className="h-7 px-3 text-xs"
+        onClick={() => mut.mutate()}
+        disabled={mut.isPending || pan.length < 10}
+      >
+        {mut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save & retry'}
+      </Button>
+    </div>
+  );
+}
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   BUY: 'Buy', SELL: 'Sell / Redeem', DIVIDEND: 'Dividend',
@@ -23,7 +77,13 @@ export function MutualFundsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editTxn, setEditTxn] = useState<TransactionDTO | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [mailbackOpen, setMailbackOpen] = useState(false);
+  const [viewError, setViewError] = useState<ImportJobDTO | null>(null);
+  const [confirmDeleteImportId, setConfirmDeleteImportId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => authApi.me() });
 
   const { data: portfolios } = useQuery({
     queryKey: ['portfolios'],
@@ -66,6 +126,72 @@ export function MutualFundsPage() {
     onError: (err) => toast.error(apiErrorMessage(err, 'Failed to delete')),
   });
 
+  const deleteImportMutation = useMutation({
+    mutationFn: (id: string) => importsApi.remove(id),
+    onSuccess: () => {
+      toast.success('Import removed');
+      setConfirmDeleteImportId(null);
+      queryClient.invalidateQueries({ queryKey: ['imports'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to remove import')),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) =>
+      importsApi.upload({ file, portfolioId: null }),
+    onSuccess: () => {
+      toast.success('CAS uploaded — parsing in background. Status will update below.');
+      queryClient.invalidateQueries({ queryKey: ['imports'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Upload failed')),
+  });
+
+  const { scanning, triggerScan } = useScan();
+
+  const importsQuery = useQuery({
+    queryKey: ['imports'],
+    queryFn: () => importsApi.list(),
+    refetchInterval: (query) => {
+      const anyRunning = query.state.data?.some(
+        (j) => j.status === 'PENDING' || j.status === 'PROCESSING',
+      );
+      // On any terminal-state transition in the last 5s, invalidate holdings
+      // and transactions so the table updates regardless of success/failure.
+      const justFinished = query.state.data?.some(
+        (j) =>
+          (j.status === 'COMPLETED' ||
+            j.status === 'COMPLETED_WITH_ERRORS' ||
+            j.status === 'FAILED') &&
+          j.completedAt &&
+          Date.now() - new Date(j.completedAt).getTime() < 5000,
+      );
+      if (justFinished) {
+        queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
+        queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      }
+      return anyRunning ? 2000 : false;
+    },
+  });
+
+  const recentImports = (importsQuery.data ?? [])
+    .filter((j) => j.type === 'MF_CAS_PDF' || j.type === 'MF_CAS_EXCEL')
+    .slice(0, 5);
+
+  const STATUS_STYLES: Record<ImportStatus, string> = {
+    PENDING: 'bg-muted text-muted-foreground',
+    PROCESSING: 'bg-blue-500/10 text-blue-600',
+    COMPLETED: 'bg-positive/10 text-positive',
+    COMPLETED_WITH_ERRORS: 'bg-amber-500/10 text-amber-700',
+    FAILED: 'bg-negative/10 text-negative',
+  };
+  const STATUS_ICONS: Record<ImportStatus, typeof FileText> = {
+    PENDING: Loader2,
+    PROCESSING: Loader2,
+    COMPLETED: CheckCircle2,
+    COMPLETED_WITH_ERRORS: AlertTriangle,
+    FAILED: XCircle,
+  };
+
   const all = holdingsQueries.flatMap((q, idx) =>
     (q.data ?? []).map((h) => ({
       ...h,
@@ -91,6 +217,9 @@ export function MutualFundsPage() {
 
   function openEdit(txn: TransactionDTO) { setEditTxn(txn); setFormOpen(true); }
   function openAdd() { setEditTxn(null); setFormOpen(true); }
+  function scrollToUpload() {
+    document.getElementById('automated-cas-import')?.scrollIntoView({ behavior: 'smooth' });
+  }
 
   return (
     <div>
@@ -99,14 +228,173 @@ export function MutualFundsPage() {
         description="MF holdings across all portfolios, priced from AMFI NAV"
         actions={
           <div className="flex gap-2">
+            <Button onClick={() => setSyncDialogOpen(true)}>
+              <Download className="h-4 w-4" /> Sync MF via CASParser
+            </Button>
+            <Button variant="outline" onClick={() => setMailbackOpen(true)}>
+              <RefreshCw className="h-4 w-4" /> Sync via CAMS / KFintech
+            </Button>
+            <Button
+              variant="outline"
+              onClick={triggerScan}
+              disabled={scanning}
+              title="Check Gmail for new CAS emails now"
+            >
+              {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Scan inbox
+            </Button>
+            <Button variant="outline" onClick={scrollToUpload}><Upload className="h-4 w-4" /> Import CAS PDF</Button>
             <Button variant="outline" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
               {syncMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Sync AMFI NAV
             </Button>
-            <Button onClick={openAdd}><Plus className="h-4 w-4" /> Add transaction</Button>
+            <Button variant="outline" onClick={openAdd}><Plus className="h-4 w-4" /> Add transaction</Button>
           </div>
         }
       />
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6" id="automated-cas-import">
+        <Card className="lg:col-span-3">
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium mb-2">Automated CAS Import</h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Upload your CAMS or KFintech CAS PDF. We'll automatically extract all mutual fund transactions.
+            </p>
+            <ImportDropzone
+              onUpload={(file) => uploadMutation.mutate(file)}
+              uploading={uploadMutation.isPending}
+            />
+          </CardContent>
+        </Card>
+        <Card className="bg-muted/30 border-dashed">
+          <CardContent className="p-4 text-xs space-y-2">
+            <p className="font-semibold">Pro Tips:</p>
+            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+              <li>Ensure PDF is not password protected.</li>
+              <li>Consolidated CAS (Demat + MF) is supported.</li>
+              <li>Only MF transactions will be extracted.</li>
+              <li>New transactions append to your history.</li>
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
+
+      {recentImports.length > 0 && (
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium">Recent imports</h3>
+              <Link to="/import" className="text-xs text-primary hover:underline">
+                View all
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {recentImports.map((j) => {
+                const status = j.status as ImportStatus;
+                const Icon = STATUS_ICONS[status];
+                const isRunning = status === 'PENDING' || status === 'PROCESSING';
+                const hasError =
+                  status === 'FAILED' ||
+                  (j.failedRows ?? 0) > 0 ||
+                  (j.errorLog?.parserWarnings?.length ?? 0) > 0;
+                const isConfirmingDelete = confirmDeleteImportId === j.id;
+                const isDeletingThis = deleteImportMutation.isPending && confirmDeleteImportId === j.id;
+                const firstWarning = j.errorLog?.parserWarnings?.[0] ?? j.errorLog?.general ?? null;
+                const isPasswordErr = firstWarning?.toLowerCase().includes('password');
+                const needsPan = isPasswordErr && !me?.pan;
+                const isEmptyCas =
+                  status === 'COMPLETED' &&
+                  (j.totalRows ?? 0) === 0 &&
+                  firstWarning?.toLowerCase().includes('no mutual fund transactions');
+                return (
+                  <div
+                    key={j.id}
+                    className="rounded border bg-muted/20 px-3 py-2 text-sm"
+                  >
+                    <div className="flex items-center gap-3">
+                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate font-medium">{j.fileName}</span>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status]}`}
+                    >
+                      <Icon className={`h-3 w-3 ${isRunning ? 'animate-spin' : ''}`} />
+                      {IMPORT_STATUS_LABELS[status]}
+                    </span>
+                    {!isRunning && (
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {j.totalRows != null ? `${j.successRows ?? 0}/${j.totalRows} rows` : '—'}
+                      </span>
+                    )}
+                    {hasError && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setViewError(j)}
+                        className="h-7 px-2 text-xs"
+                      >
+                        <AlertTriangle className="h-3 w-3" /> View
+                      </Button>
+                    )}
+                    {isConfirmingDelete ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">Remove?</span>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={isDeletingThis}
+                          onClick={() => deleteImportMutation.mutate(j.id)}
+                        >
+                          {isDeletingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setConfirmDeleteImportId(null)}
+                        >
+                          No
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setConfirmDeleteImportId(j.id)}
+                        title="Remove from list"
+                        disabled={isRunning}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                    </div>
+                    {isEmptyCas && (
+                      <p className="text-[11px] text-muted-foreground mt-1.5 pl-7">
+                        CAS confirmed — no MF transactions in this period. If you have holdings, request a wider date range.
+                      </p>
+                    )}
+                    {needsPan && <PanInlinePrompt jobId={j.id} onDone={() => setConfirmDeleteImportId(null)} />}
+                    {isPasswordErr && !needsPan && (
+                      <p className="text-[11px] text-amber-600 mt-1.5 pl-7">
+                        PDF is password-protected — PAN on file didn't unlock it. Try re-uploading with the correct PAN in <a href="/settings" className="underline">Settings</a>.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {recentImports.some((j) => j.status === 'PROCESSING' || j.status === 'PENDING') && (
+              <p className="text-[10px] text-muted-foreground mt-3">
+                Parsing in progress — this can take 10-30 seconds for large CAS files.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {mfs.length === 0 ? (
         <EmptyState
@@ -188,10 +476,10 @@ export function MutualFundsPage() {
       {allTransactions.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Transactions</h3>
-          <div className="rounded-md border overflow-x-auto">
+          <div className="rounded-md border overflow-x-auto overflow-y-auto max-h-[600px]">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/40">
+              <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-sm">
+                <tr className="border-b">
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Date</th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Scheme</th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground hidden sm:table-cell">Type</th>
@@ -255,6 +543,38 @@ export function MutualFundsPage() {
         onOpenChange={(open) => { setFormOpen(open); if (!open) setEditTxn(null); }}
         initial={editTxn}
       />
+
+      {/* Old Playwright-driven CAMS + KFin dialog — kept as fallback when
+          casparser credits are exhausted. To re-enable, swap the dialog
+          below with MFCasMailbackDialog and uncomment the import above.
+      <MFCasMailbackDialog
+        open={syncDialogOpen}
+        onOpenChange={setSyncDialogOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
+          queryClient.invalidateQueries({ queryKey: ['transactions', 'MUTUAL_FUND'] });
+        }}
+      /> */}
+
+      <MFCasparserDialog
+        open={syncDialogOpen}
+        onOpenChange={setSyncDialogOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
+          queryClient.invalidateQueries({ queryKey: ['transactions', 'MUTUAL_FUND'] });
+        }}
+      />
+
+      <MFCasMailbackDialog
+        open={mailbackOpen}
+        onOpenChange={setMailbackOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
+          queryClient.invalidateQueries({ queryKey: ['transactions', 'MUTUAL_FUND'] });
+        }}
+      />
+
+      <ImportErrorDialog job={viewError} onClose={() => setViewError(null)} />
     </div>
   );
 }

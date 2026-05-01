@@ -1,0 +1,14 @@
+Zerodha Broking Limited
+SEBI Registration No: INZ000031633
+CONTRACT NOTE - cum - TAX INVOICE
+
+Trade Date: 12-Nov-2026
+Settlement Date: 13-Nov-2026
+Trading Member: ZERODHA BROKING LIMITED
+
+Equity Futures and Options
+NIFTY26N1324500CE  B  50  124.50  6225.00
+NIFTY26N1324500CE  S  50  138.20  6910.00
+BANKNIFTY26N12 52000PE  B  15  410.00  6150.00
+
+End of Contract Note

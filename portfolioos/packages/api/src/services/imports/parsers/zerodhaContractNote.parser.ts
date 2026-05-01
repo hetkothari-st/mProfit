@@ -15,6 +15,28 @@ import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../l
 const ISIN_RE = /\b(IN[EF][0-9A-Z]{9})\b/;
 const DATE_RE = /Trade Date[:\s]*([0-9]{1,2}[-/][A-Za-z]{3}[-/][0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{4})/i;
 
+// F&O tradingsymbol patterns. Zerodha contract notes list F&O trades in a
+// separate section labelled "Equity Futures and Options" / "F&O" with
+// tradingsymbol as the leading identifier (no ISIN).
+const FNO_FUT_RE = /^([A-Z][A-Z0-9&\-]+?)(\d{2})([A-Z]{3})FUT$/;
+const FNO_OPT_MO_RE = /^([A-Z][A-Z0-9&\-]+?)(\d{2})([A-Z]{3})(\d+(?:\.\d+)?)(CE|PE)$/;
+const FNO_OPT_WK_RE = /^([A-Z][A-Z0-9&\-]+?)(\d{2})([1-9OND])(\d{2})(\d+(?:\.\d+)?)(CE|PE)$/;
+const MONTH_IDX: Record<string, number> = {
+  JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+  JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+};
+const WK_MONTH: Record<string, number> = {
+  '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5,
+  '7': 6, '8': 7, '9': 8, 'O': 9, 'N': 10, 'D': 11,
+};
+
+function lastThursday(year: number, monthIdx0: number): Date {
+  const lastDay = new Date(Date.UTC(year, monthIdx0 + 1, 0));
+  const dow = lastDay.getUTCDay();
+  const offset = (dow - 4 + 7) % 7;
+  return new Date(Date.UTC(year, monthIdx0 + 1, 0 - offset));
+}
+
 function toIsoDate(raw: string): string | null {
   const s = raw.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
@@ -127,10 +149,22 @@ export function parseZerodhaContractNoteText(text: string): {
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
+
+    // F&O row: leading token matches FUT/CE/PE pattern. F&O sections in
+    // Zerodha contract notes do NOT carry an ISIN — that's the discriminator.
+    const parts = line.split(/\s+/);
+    const fnoCandidate = parts[0];
+    if (fnoCandidate && (FNO_FUT_RE.test(fnoCandidate) || FNO_OPT_MO_RE.test(fnoCandidate) || FNO_OPT_WK_RE.test(fnoCandidate))) {
+      const fnoTx = tryParseFnoLine(line, tradeDate);
+      if (fnoTx) {
+        txs.push(fnoTx);
+        continue;
+      }
+    }
+
     const isinMatch = line.match(ISIN_RE);
     if (!isinMatch) continue;
 
-    const parts = line.split(/\s+/);
     const isinIdx = parts.findIndex((p) => ISIN_RE.test(p));
     if (isinIdx < 0) continue;
 
@@ -167,4 +201,59 @@ export function parseZerodhaContractNoteText(text: string): {
   }
 
   return { transactions: txs, warnings };
+}
+
+function tryParseFnoLine(line: string, tradeDate: string | null): ParsedTransaction | null {
+  const parts = line.split(/\s+/);
+  const sym = parts[0]!.toUpperCase();
+  const side = parts.find((p) => /^[BS]$/i.test(p) || /^BUY$/i.test(p) || /^SELL$/i.test(p));
+  const numericStrs = parts.filter((p) => /^-?[\d,]+(?:\.\d+)?$/.test(p)).map(cleanNumString);
+  if (!side || numericStrs.length < 2) return null;
+
+  let underlying: string | null = null;
+  let instrumentType: 'FUTURES' | 'CALL' | 'PUT' | null = null;
+  let strikePrice: string | null = null;
+  let expiryDate: Date | null = null;
+
+  const fut = sym.match(FNO_FUT_RE);
+  const optMo = sym.match(FNO_OPT_MO_RE);
+  const optWk = sym.match(FNO_OPT_WK_RE);
+  if (fut) {
+    underlying = fut[1]!;
+    instrumentType = 'FUTURES';
+    expiryDate = lastThursday(2000 + Number(fut[2]), MONTH_IDX[fut[3]!]!);
+  } else if (optMo) {
+    underlying = optMo[1]!;
+    instrumentType = optMo[5] === 'CE' ? 'CALL' : 'PUT';
+    strikePrice = optMo[4]!;
+    expiryDate = lastThursday(2000 + Number(optMo[2]), MONTH_IDX[optMo[3]!]!);
+  } else if (optWk) {
+    underlying = optWk[1]!;
+    instrumentType = optWk[6] === 'CE' ? 'CALL' : 'PUT';
+    strikePrice = optWk[5]!;
+    expiryDate = new Date(Date.UTC(2000 + Number(optWk[2]), WK_MONTH[optWk[3]!]!, Number(optWk[4])));
+  }
+  if (!underlying || !instrumentType || !expiryDate) return null;
+
+  const qty = numericStrs[numericStrs.length - 3] ?? numericStrs[numericStrs.length - 2]!;
+  const rate = numericStrs[numericStrs.length - 2]!;
+  const qtyD = new Decimal(qty);
+  const rateD = new Decimal(rate);
+  if (qtyD.isZero()) return null;
+
+  const isSell = /^S/i.test(side);
+  return {
+    assetClass: instrumentType === 'FUTURES' ? 'FUTURES' : 'OPTIONS',
+    transactionType: isSell ? 'SELL' : 'BUY',
+    symbol: underlying,
+    assetName: sym,
+    exchange: 'NFO',
+    tradeDate: tradeDate ?? new Date().toISOString().slice(0, 10),
+    quantity: qtyD.abs().toString(),
+    price: rateD.abs().toString(),
+    broker: 'Zerodha',
+    strikePrice: strikePrice ?? undefined,
+    expiryDate: expiryDate.toISOString().slice(0, 10),
+    optionType: instrumentType === 'FUTURES' ? undefined : instrumentType,
+  };
 }

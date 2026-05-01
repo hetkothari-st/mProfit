@@ -20,6 +20,10 @@ import { insuranceRouter } from './insurance.routes.js';
 import { accountingRouter } from './accounting.routes.js';
 import { alertsRouter } from './alerts.routes.js';
 import { dashboardRouter } from './dashboard.routes.js';
+import { mfCentralRouter } from './mfCentral.routes.js';
+import { mfCasMailbackRouter } from './mfCasMailback.routes.js';
+import { mfCasparserRouter } from './mfCasparser.routes.js';
+import { foRouter } from './fo.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -43,4 +47,8 @@ export function registerRoutes(app: Express): void {
   app.use('/api/accounting', accountingRouter);
   app.use('/api/alerts', alertsRouter);
   app.use('/api/dashboard', dashboardRouter);
+  app.use('/api/mf-central', mfCentralRouter);
+  app.use('/api/mf-cas-mailback', mfCasMailbackRouter);
+  app.use('/api/mf-casparser', mfCasparserRouter);
+  app.use('/api/fo', foRouter);
 }

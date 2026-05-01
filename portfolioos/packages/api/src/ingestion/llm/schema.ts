@@ -46,6 +46,7 @@ export const LLM_EVENT_TYPES = [
   'UPI_DEBIT',
   'NEFT_CREDIT',
   'NEFT_DEBIT',
+  'FNO_TRADE',
   'OTHER',
 ] as const;
 
@@ -71,6 +72,17 @@ export const ParsedEventSchema = z.object({
   currency: z.string().default('INR'),
   confidence: z.number().min(0).max(1),
   notes: z.string().nullable(),
+  // F&O extensions — only populated for FNO_TRADE events. Buy/Sell side
+  // for F&O is encoded as event_type=FNO_TRADE plus side="BUY"|"SELL" in
+  // a follow-up field; dropped into the metadata blob on CanonicalEvent.
+  fno_trading_symbol: z.string().nullable().optional(),
+  fno_underlying: z.string().nullable().optional(),
+  fno_instrument_type: z.enum(['FUTURES', 'CALL', 'PUT']).nullable().optional(),
+  fno_strike_price: z.string().nullable().optional(),
+  fno_expiry_date: z.string().nullable().optional(), // YYYY-MM-DD
+  fno_lot_size: z.number().nullable().optional(),
+  fno_quantity_contracts: z.string().nullable().optional(),
+  fno_side: z.enum(['BUY', 'SELL']).nullable().optional(),
 });
 
 export type ParsedEvent = z.infer<typeof ParsedEventSchema>;
@@ -117,6 +129,14 @@ export const ANTHROPIC_TOOL_JSON_SCHEMA = {
           currency: { type: 'string', default: 'INR' },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
           notes: { type: ['string', 'null'] },
+          fno_trading_symbol: { type: ['string', 'null'] },
+          fno_underlying: { type: ['string', 'null'] },
+          fno_instrument_type: { type: ['string', 'null'], enum: ['FUTURES', 'CALL', 'PUT', null] },
+          fno_strike_price: { type: ['string', 'null'] },
+          fno_expiry_date: { type: ['string', 'null'] },
+          fno_lot_size: { type: ['number', 'null'] },
+          fno_quantity_contracts: { type: ['string', 'null'] },
+          fno_side: { type: ['string', 'null'], enum: ['BUY', 'SELL', null] },
         },
       },
     },

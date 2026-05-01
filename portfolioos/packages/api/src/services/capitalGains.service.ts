@@ -71,7 +71,17 @@ function sameDay(a: Date, b: Date): boolean {
 }
 
 function isEquityLike(ac: AssetClass): boolean {
-  return ac === 'EQUITY' || ac === 'ETF' || ac === 'FUTURES' || ac === 'OPTIONS';
+  return ac === 'EQUITY' || ac === 'ETF';
+}
+
+/**
+ * F&O bypasses the capital-gains FIFO engine — its tax treatment is
+ * §43(5) business income (intraday equity = speculative; F&O = non-
+ * speculative), computed by `foPnl.service`. Returning true here means
+ * "skip this row entirely from CG computation".
+ */
+function isFnoSkipped(ac: AssetClass): boolean {
+  return ac === 'FUTURES' || ac === 'OPTIONS';
 }
 
 function isEquityMF(ac: AssetClass): boolean {
@@ -224,7 +234,11 @@ function groupByAsset(txs: Transaction[]): Map<string, { key: AssetKey; txs: Tra
 }
 
 export function computeFIFOGains(txs: Transaction[]): CapitalGainRow[] {
-  const groups = groupByAsset(txs);
+  // F&O is §43(5) business income, not capital gains — strip those rows
+  // upstream of the FIFO engine so an accidental future asset-class addition
+  // can never silently get bucketed as STCG/LTCG.
+  const cgEligible = txs.filter((t) => !isFnoSkipped(t.assetClass));
+  const groups = groupByAsset(cgEligible);
   const rows: CapitalGainRow[] = [];
 
   for (const { key, txs: list } of groups.values()) {
