@@ -19,6 +19,7 @@ RUN pnpm --filter @portfolioos/api build
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
+RUN apk add --no-cache openssl
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
