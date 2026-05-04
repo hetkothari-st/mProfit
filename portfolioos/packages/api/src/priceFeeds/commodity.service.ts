@@ -159,30 +159,50 @@ export async function syncCommodityPrice(
 }
 
 export async function syncAllCommodities(): Promise<CommoditySyncResult[]> {
-  const commodities: CommodityType[] = ['GOLD', 'SILVER', 'PLATINUM'];
-  const symbols = commodities.map((c) => PROXIES[c].yahooInr);
-  const arr = await yahooQuoteRaw(symbols);
-  const bySym = new Map<string, any>();
-  for (const q of arr) if (q?.symbol) bySym.set(q.symbol, q);
-
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const out: CommoditySyncResult[] = [];
 
-  for (const c of commodities) {
-    const q = bySym.get(PROXIES[c].yahooInr);
-    if (!q || typeof q.regularMarketPrice !== 'number') {
-      out.push({ commodity: c, price: null, stored: false });
-      continue;
-    }
-    const price = new Decimal(q.regularMarketPrice);
+  // Primary: metals.live (cloud-friendly, no auth)
+  const { GOLD: liveGold, SILVER: liveSilver } = await fetchGoldApiInr();
+
+  if (liveGold) {
     await prisma.commodityPrice.upsert({
-      where: { commodity_date_unit: { commodity: c, date: today, unit: 'PROXY_ETF' } },
-      update: { price },
-      create: { commodity: c, date: today, price, unit: 'PROXY_ETF', source: 'YAHOO_ETF_PROXY' },
+      where: { commodity_date_unit: { commodity: 'GOLD', date: today, unit: 'PROXY_ETF' } },
+      update: { price: liveGold },
+      create: { commodity: 'GOLD', date: today, price: liveGold, unit: 'PROXY_ETF', source: 'METALS_LIVE' },
     });
-    out.push({ commodity: c, price: price.toFixed(4), stored: true });
+    out.push({ commodity: 'GOLD', price: liveGold.toFixed(4), stored: true });
+  } else {
+    out.push({ commodity: 'GOLD', price: null, stored: false });
   }
+
+  if (liveSilver) {
+    await prisma.commodityPrice.upsert({
+      where: { commodity_date_unit: { commodity: 'SILVER', date: today, unit: 'PROXY_ETF' } },
+      update: { price: liveSilver },
+      create: { commodity: 'SILVER', date: today, price: liveSilver, unit: 'PROXY_ETF', source: 'METALS_LIVE' },
+    });
+    out.push({ commodity: 'SILVER', price: liveSilver.toFixed(4), stored: true });
+  } else {
+    out.push({ commodity: 'SILVER', price: null, stored: false });
+  }
+
+  // Platinum: Yahoo only (not on metals.live)
+  const platArr = await yahooQuoteRaw([PROXIES.PLATINUM.yahooInr]);
+  const platQ = platArr[0];
+  if (platQ && typeof platQ.regularMarketPrice === 'number') {
+    const price = new Decimal(platQ.regularMarketPrice);
+    await prisma.commodityPrice.upsert({
+      where: { commodity_date_unit: { commodity: 'PLATINUM', date: today, unit: 'PROXY_ETF' } },
+      update: { price },
+      create: { commodity: 'PLATINUM', date: today, price, unit: 'PROXY_ETF', source: 'YAHOO_ETF_PROXY' },
+    });
+    out.push({ commodity: 'PLATINUM', price: price.toFixed(4), stored: true });
+  } else {
+    out.push({ commodity: 'PLATINUM', price: null, stored: false });
+  }
+
   logger.info({ out }, '[commodity] all commodities synced');
   return out;
 }
