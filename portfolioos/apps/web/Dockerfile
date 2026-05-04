@@ -12,7 +12,10 @@ FROM base AS build
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY . .
+RUN pnpm --filter @portfolioos/shared build
 RUN pnpm --filter @portfolioos/web build
 
 FROM nginx:alpine AS runtime
