@@ -10,8 +10,9 @@ RUN pnpm install --frozen-lockfile || pnpm install
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
 COPY . .
-RUN node_modules/.bin/prisma generate --schema packages/api/prisma/schema.prisma
+RUN cd packages/api && node_modules/.bin/prisma generate
 RUN pnpm --filter @portfolioos/api build
 
 FROM node:20-alpine AS runtime

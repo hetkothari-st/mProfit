@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+.git
+.env
+.env.*
+!packages/api/.env.example
+uploads/
+packages/api/uploads/
