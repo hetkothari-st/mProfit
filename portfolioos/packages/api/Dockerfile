@@ -16,6 +16,9 @@ COPY . .
 RUN cd packages/api && node_modules/.bin/prisma generate
 RUN pnpm --filter @portfolioos/shared build
 RUN pnpm --filter @portfolioos/api build
+RUN mkdir -p packages/api/dist/ingestion/llm packages/api/dist/adapters/vehicle/fixtures && \
+    cp packages/api/src/ingestion/llm/system-prompt.txt packages/api/dist/ingestion/llm/ && \
+    cp packages/api/src/adapters/vehicle/fixtures/dev.json packages/api/dist/adapters/vehicle/fixtures/
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
