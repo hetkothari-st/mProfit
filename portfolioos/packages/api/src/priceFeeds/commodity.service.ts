@@ -30,42 +30,39 @@ const LIVE_CACHE_TTL_MS = 60_000;
 const TROY_OZ_TO_GRAMS = 31.1035;
 
 async function fetchGoldApiInr(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null }> {
-  // Frankfurter.app — ECB data, globally accessible from all cloud regions, no auth
+  // Use Yahoo gold/silver futures (GC=F, SI=F) + exchangerate-api for USD→INR.
+  // GC=F and SI=F are US CME futures — different rate-limit bucket from Indian ETFs.
+  // exchangerate-api.com is a major platform accessible from all cloud regions.
   try {
-    const [goldRes, fxRes] = await Promise.all([
-      fetch('https://api.frankfurter.app/latest?from=XAU&to=INR', { signal: AbortSignal.timeout(5000) }),
-      fetch('https://api.frankfurter.app/latest?from=USD&to=INR', { signal: AbortSignal.timeout(5000) }),
+    const [fxRes, quotesArr] = await Promise.all([
+      fetch('https://api.exchangerate-api.com/v4/latest/USD', { signal: AbortSignal.timeout(8000) }),
+      yahooQuoteRaw(['GC=F', 'SI=F']).catch(() => [] as any[]),
     ]);
-    const [goldData, fxData] = await Promise.all([
-      goldRes.json() as Promise<{ rates?: { INR?: number } }>,
-      fxRes.json() as Promise<{ rates?: { INR?: number } }>,
-    ]);
-    const xauInr = goldData?.rates?.INR;   // INR per troy oz of gold
+
+    const fxData = await fxRes.json() as { rates?: Record<string, number> };
     const usdInr = fxData?.rates?.INR;
 
-    let GOLD: Decimal | null = null;
-    let SILVER: Decimal | null = null;
-
-    if (xauInr) {
-      GOLD = new Decimal(xauInr).div(TROY_OZ_TO_GRAMS);
+    if (!usdInr) {
+      logger.warn('[commodity] USD/INR rate unavailable');
+      return { GOLD: null, SILVER: null };
     }
 
-    // Silver from Yahoo (XAG/USD futures) × USD/INR
-    if (usdInr) {
-      const arr = await yahooQuoteRaw(['SI=F']).catch(() => []);
-      const q = arr[0];
-      if (q && typeof q.regularMarketPrice === 'number') {
-        SILVER = new Decimal(q.regularMarketPrice).div(TROY_OZ_TO_GRAMS).times(usdInr);
-      }
-    }
+    const bySym = new Map<string, any>(quotesArr.map((q: any) => [q?.symbol, q]));
+    const gcq = bySym.get('GC=F');
+    const siq = bySym.get('SI=F');
 
-    if (GOLD || SILVER) return { GOLD, SILVER };
-  } catch {
-    // fall through
+    return {
+      GOLD: gcq && typeof gcq.regularMarketPrice === 'number'
+        ? new Decimal(gcq.regularMarketPrice).div(TROY_OZ_TO_GRAMS).times(usdInr)
+        : null,
+      SILVER: siq && typeof siq.regularMarketPrice === 'number'
+        ? new Decimal(siq.regularMarketPrice).div(TROY_OZ_TO_GRAMS).times(usdInr)
+        : null,
+    };
+  } catch (err) {
+    logger.warn({ err }, '[commodity] gold price fetch failed');
+    return { GOLD: null, SILVER: null };
   }
-
-  logger.warn('[commodity] all gold price sources failed');
-  return { GOLD: null, SILVER: null };
 }
 
 export async function fetchLivePrices(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null; fetchedAt: Date }> {
