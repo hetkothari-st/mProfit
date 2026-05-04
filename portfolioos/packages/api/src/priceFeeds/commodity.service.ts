@@ -34,12 +34,13 @@ async function fetchGoldApiInr(): Promise<{ GOLD: Decimal | null; SILVER: Decima
   // GC=F and SI=F are US CME futures — different rate-limit bucket from Indian ETFs.
   // exchangerate-api.com is a major platform accessible from all cloud regions.
   try {
-    const [fxRes, quotesArr] = await Promise.all([
-      fetch('https://api.exchangerate-api.com/v4/latest/USD', { signal: AbortSignal.timeout(8000) }),
+    const [fxData, quotesArr] = await Promise.all([
+      fetch('https://api.exchangerate-api.com/v4/latest/USD', { signal: AbortSignal.timeout(8000) })
+        .then((r) => r.json() as Promise<{ rates?: Record<string, number> }>)
+        .catch(() => null as null),
       yahooQuoteRaw(['GC=F', 'SI=F']).catch(() => [] as any[]),
     ]);
 
-    const fxData = await fxRes.json() as { rates?: Record<string, number> };
     const usdInr = fxData?.rates?.INR;
 
     if (!usdInr) {
