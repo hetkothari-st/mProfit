@@ -18,7 +18,7 @@ import {
 } from '../services/loans.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import { serializeMoney } from '@portfolioos/shared';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');

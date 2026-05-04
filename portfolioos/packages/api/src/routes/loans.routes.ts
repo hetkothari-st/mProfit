@@ -27,10 +27,13 @@ loansRouter.get('/:id', asyncHandler(getLoanHandler));
 loansRouter.patch('/:id', asyncHandler(updateLoanHandler));
 loansRouter.delete('/:id', asyncHandler(deleteLoanHandler));
 
+// Payments — must be registered BEFORE /:id to avoid Express swallowing
+// DELETE /payments/:paymentId as DELETE /:id with id="payments".
+loansRouter.delete('/payments/:paymentId', asyncHandler(deletePaymentHandler));
+
 // Computed views
 loansRouter.get('/:id/summary', asyncHandler(getLoanSummaryHandler));
 loansRouter.get('/:id/amortization', asyncHandler(getAmortizationHandler));
 
 // Payments (scoped under loan)
 loansRouter.post('/:id/payments', asyncHandler(addPaymentHandler));
-loansRouter.delete('/payments/:paymentId', asyncHandler(deletePaymentHandler));

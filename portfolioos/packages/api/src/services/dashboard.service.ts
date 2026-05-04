@@ -318,7 +318,7 @@ export async function getDashboardNetWorth(userId: string) {
     alerts.push({
       type: 'INSURANCE_RENEWAL',
       title: `${r.insurer} ${r.type} premium due`,
-      description: `₹${parseFloat(r.amount).toLocaleString('en-IN')} due ${r.nextPremiumDue}`,
+      description: `₹${new Decimal(r.amount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} due ${r.nextPremiumDue}`,
       urgency: r.daysUntil <= 7 ? 'HIGH' : r.daysUntil <= 15 ? 'MEDIUM' : 'LOW',
       daysUntil: r.daysUntil,
     });
@@ -359,7 +359,7 @@ export async function getDashboardNetWorth(userId: string) {
     alerts.push({
       type: 'LOAN_EMI_DUE',
       title: `${emi.lenderName} EMI due in ${emi.daysUntil} day${emi.daysUntil !== 1 ? 's' : ''}`,
-      description: `EMI of ₹${parseFloat(emi.emiAmount).toLocaleString('en-IN')} due on ${emi.emiDate}`,
+      description: `EMI of ₹${new Decimal(emi.emiAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} due on ${emi.emiDate}`,
       urgency: emi.daysUntil <= 7 ? 'HIGH' : emi.daysUntil <= 15 ? 'MEDIUM' : 'LOW',
       daysUntil: emi.daysUntil,
     });

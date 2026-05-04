@@ -5,7 +5,7 @@
  * Money math uses decimal.js throughout per §3.2.
  */
 
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError } from '../lib/errors.js';
@@ -191,8 +191,8 @@ export async function addStatement(
     },
   });
 
-  // Update card's outstanding balance to reflect the statement amount if no manual value set
-  if (!card.outstandingBalance && input.status !== 'PAID') {
+  // Keep outstandingBalance in sync: always update for non-PAID statements
+  if (input.status !== 'PAID') {
     await prisma.creditCard.update({
       where: { id: cardId },
       data: { outstandingBalance: new Prisma.Decimal(input.statementAmount) },
@@ -370,7 +370,7 @@ export async function generateCreditCardAlerts(userId?: string): Promise<number>
     if (existing) continue;
 
     const cardLabel = `${stmt.card.issuerBank} ${stmt.card.cardName} ••••${stmt.card.last4}`;
-    const amtDisplay = `₹${parseFloat(stmt.statementAmount.toString()).toLocaleString('en-IN')}`;
+    const amtDisplay = `₹${new Decimal(stmt.statementAmount.toString()).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 
     const title = isOverdue
       ? `${cardLabel} payment overdue by ${daysLabel} day${daysLabel !== 1 ? 's' : ''}`

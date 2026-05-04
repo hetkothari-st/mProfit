@@ -8,7 +8,7 @@
  * Money math uses decimal.js throughout (never JS Number) per §3.2.
  */
 
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError } from '../lib/errors.js';
@@ -730,7 +730,8 @@ export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
       ? `${loan.lenderName} EMI overdue by ${daysLabel} day${daysLabel !== 1 ? 's' : ''}`
       : `${loan.lenderName} EMI due in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
 
-    const description = `EMI of ₹${parseFloat(nextUnpaid.emiAmount).toLocaleString('en-IN')} ${isOverdue ? 'was due on' : 'due on'} ${nextUnpaid.date}`;
+    const emiDisplay = new Decimal(nextUnpaid.emiAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const description = `EMI of ₹${emiDisplay} ${isOverdue ? 'was due on' : 'due on'} ${nextUnpaid.date}`;
 
     await prisma.alert.create({
       data: {

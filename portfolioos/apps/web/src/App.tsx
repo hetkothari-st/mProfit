@@ -31,6 +31,10 @@ import { RentalListPage } from './pages/rental/RentalListPage';
 import { RentalDetailPage } from './pages/rental/RentalDetailPage';
 import { InsuranceListPage } from './pages/insurance/InsuranceListPage';
 import { InsuranceDetailPage } from './pages/insurance/InsuranceDetailPage';
+import { LoanListPage } from './pages/loans/LoanListPage';
+import { LoanDetailPage } from './pages/loans/LoanDetailPage';
+import { CreditCardListPage } from './pages/creditCards/CreditCardListPage';
+import { CreditCardDetailPage } from './pages/creditCards/CreditCardDetailPage';
 import { FixedDepositsPage } from './pages/assetClasses/FixedDepositsPage';
 import { BondsPage } from './pages/assetClasses/BondsPage';
 import { GoldPage } from './pages/assetClasses/GoldPage';
@@ -93,6 +97,10 @@ export function App() {
         <Route path="/rental/:id" element={<RentalDetailPage />} />
         <Route path="/insurance" element={<InsuranceListPage />} />
         <Route path="/insurance/:id" element={<InsuranceDetailPage />} />
+        <Route path="/loans" element={<LoanListPage />} />
+        <Route path="/loans/:id" element={<LoanDetailPage />} />
+        <Route path="/credit-cards" element={<CreditCardListPage />} />
+        <Route path="/credit-cards/:id" element={<CreditCardDetailPage />} />
         <Route path="/cashflows" element={<CashFlowsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/import" element={<ImportPage />} />

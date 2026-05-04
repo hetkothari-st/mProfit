@@ -104,7 +104,7 @@ function SummaryStrip({ loans }: { loans: LoanDTO[] }) {
   return (
     <div className="grid grid-cols-3 gap-3 mb-6">
       {[
-        { label: 'Total outstanding', value: formatINR(totalOutstanding.toString()), sub: 'principal (active loans)' },
+        { label: 'Total disbursed', value: formatINR(totalOutstanding.toString()), sub: 'original principal (active loans)' },
         { label: 'Monthly EMI', value: formatINR(monthlyEmi.toString()), sub: 'combined across active loans' },
         { label: 'Active loans', value: String(active.length), sub: `of ${loans.length} total` },
       ].map((m) => (
@@ -446,12 +446,12 @@ function CreateLoanDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Disbursement date *</Label>
-              <Input type="date" {...inp('disbursementDate')} />
+              <Input {...inp('disbursementDate', 'date')} />
               {errors['disbursementDate'] && <p className="text-xs text-negative mt-1">{errors['disbursementDate']}</p>}
             </div>
             <div>
               <Label>First EMI date *</Label>
-              <Input type="date" {...inp('firstEmiDate')} />
+              <Input {...inp('firstEmiDate', 'date')} />
               {errors['firstEmiDate'] && <p className="text-xs text-negative mt-1">{errors['firstEmiDate']}</p>}
             </div>
           </div>

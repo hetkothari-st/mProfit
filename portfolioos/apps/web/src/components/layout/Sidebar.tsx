@@ -29,6 +29,8 @@ import {
   Coins,
   Wallet,
   BookOpen,
+  CreditCard,
+  HandCoins,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -67,6 +69,8 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Vehicles', to: '/vehicles', icon: Car },
       { label: 'Rental', to: '/rental', icon: Building2 },
       { label: 'Insurance', to: '/insurance', icon: Shield },
+      { label: 'Loans', to: '/loans', icon: HandCoins },
+      { label: 'Credit Cards', to: '/credit-cards', icon: CreditCard },
       { label: 'Others', to: '/others', icon: Boxes },
     ],
   },
