@@ -42,3 +42,15 @@ uploads/
 
 # Test corpus (locally generated financial samples)
 dev-corpus/
+
+# Playwright MCP session snapshots
+.playwright-mcp/
+
+# Root-level scratch / research files
+FnO_task.md
+MF_Data_Providers_Research.html
+find_key.js
+rc_details.js
+scratch.html
+scratch/
+scratch_*.json

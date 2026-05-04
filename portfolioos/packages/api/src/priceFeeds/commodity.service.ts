@@ -18,6 +18,72 @@ const PROXIES: Record<CommodityType, { yahooInr: string; yahooUsd: string }> = {
   PLATINUM: { yahooInr: 'PL=F', yahooUsd: 'PL=F' },
 };
 
+// In-memory cache for live price endpoint — prevents hammering external APIs on every frontend poll.
+// TTL: 60s. Primary: gold-api.com (no key) + exchangerate-api.com. Fallback: Yahoo ETF proxy.
+interface LiveCache {
+  GOLD: Decimal | null;
+  SILVER: Decimal | null;
+  fetchedAt: Date;
+}
+let liveCache: LiveCache | null = null;
+const LIVE_CACHE_TTL_MS = 60_000;
+const TROY_OZ_TO_GRAMS = 31.1035;
+
+async function fetchGoldApiInr(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null }> {
+  try {
+    const [goldRes, silverRes, fxRes] = await Promise.all([
+      fetch('https://api.gold-api.com/price/XAU', { signal: AbortSignal.timeout(5000) }),
+      fetch('https://api.gold-api.com/price/XAG', { signal: AbortSignal.timeout(5000) }),
+      fetch('https://api.exchangerate-api.com/v4/latest/USD', { signal: AbortSignal.timeout(5000) }),
+    ]);
+    const [goldData, silverData, fxData] = await Promise.all([
+      goldRes.json() as Promise<{ price?: number }>,
+      silverRes.json() as Promise<{ price?: number }>,
+      fxRes.json() as Promise<{ rates?: Record<string, number> }>,
+    ]);
+    const usdInr = fxData?.rates?.INR;
+    if (!usdInr) return { GOLD: null, SILVER: null };
+
+    const goldInr = goldData?.price
+      ? new Decimal(goldData.price).div(TROY_OZ_TO_GRAMS).times(usdInr)
+      : null;
+    const silverInr = silverData?.price
+      ? new Decimal(silverData.price).div(TROY_OZ_TO_GRAMS).times(usdInr)
+      : null;
+
+    return { GOLD: goldInr, SILVER: silverInr };
+  } catch (err) {
+    logger.warn({ err }, '[commodity] gold-api fetch failed, will try Yahoo fallback');
+    return { GOLD: null, SILVER: null };
+  }
+}
+
+export async function fetchLivePrices(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null; fetchedAt: Date }> {
+  const now = new Date();
+  if (liveCache && now.getTime() - liveCache.fetchedAt.getTime() < LIVE_CACHE_TTL_MS) {
+    return liveCache;
+  }
+
+  // Primary: gold-api.com (free, no key, returns real-time USD spot)
+  let { GOLD, SILVER } = await fetchGoldApiInr();
+
+  // Fallback: Yahoo ETF proxy (GOLDBEES.NS / SILVERBEES.NS)
+  if (!GOLD || !SILVER) {
+    const arr = await yahooQuoteRaw([PROXIES.GOLD.yahooInr, PROXIES.SILVER.yahooInr]);
+    const bySymbol = new Map<string, any>();
+    for (const q of arr) if (q?.symbol) bySymbol.set(q.symbol, q);
+    const goldQ = bySymbol.get(PROXIES.GOLD.yahooInr);
+    const silverQ = bySymbol.get(PROXIES.SILVER.yahooInr);
+    if (!GOLD && goldQ && typeof goldQ.regularMarketPrice === 'number')
+      GOLD = new Decimal(goldQ.regularMarketPrice);
+    if (!SILVER && silverQ && typeof silverQ.regularMarketPrice === 'number')
+      SILVER = new Decimal(silverQ.regularMarketPrice);
+  }
+
+  liveCache = { GOLD, SILVER, fetchedAt: now };
+  return liveCache;
+}
+
 export async function fetchCommoditySpotInr(
   commodity: CommodityType,
 ): Promise<Decimal | null> {

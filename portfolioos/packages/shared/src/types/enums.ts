@@ -64,6 +64,14 @@ export const AssetClass = {
   ART_COLLECTIBLES: 'ART_COLLECTIBLES',
   CASH: 'CASH',
   OTHER: 'OTHER',
+  NSC: 'NSC',
+  KVP: 'KVP',
+  SCSS: 'SCSS',
+  SSY: 'SSY',
+  POST_OFFICE_MIS: 'POST_OFFICE_MIS',
+  POST_OFFICE_RD: 'POST_OFFICE_RD',
+  POST_OFFICE_TD: 'POST_OFFICE_TD',
+  POST_OFFICE_SAVINGS: 'POST_OFFICE_SAVINGS',
 } as const;
 export type AssetClass = (typeof AssetClass)[keyof typeof AssetClass];
 
@@ -131,6 +139,8 @@ export const AlertType = {
   DIVIDEND_RECEIVED: 'DIVIDEND_RECEIVED',
   CORPORATE_ACTION: 'CORPORATE_ACTION',
   PRICE_TARGET: 'PRICE_TARGET',
+  LOAN_EMI_DUE: 'LOAN_EMI_DUE',
+  CREDIT_CARD_DUE: 'CREDIT_CARD_DUE',
   CUSTOM: 'CUSTOM',
 } as const;
 export type AlertType = (typeof AlertType)[keyof typeof AlertType];

@@ -19,6 +19,7 @@
  * Set CARINFO_DEBUG=true to log raw pageProps keys for debugging.
  */
 
+import crypto from 'crypto';
 import { logger } from '../../lib/logger.js';
 import { parseChallanRow, type ChallanRow } from './challan.js';
 import type {
@@ -26,6 +27,102 @@ import type {
   VehicleFetchResult,
   VehicleRecord,
 } from './types.js';
+
+// Static AES key found in CarInfo's Next.js bundle (module 81354 decrypt fn).
+// CarInfo uses CryptoJS.AES.decrypt(xdataprops, CARINFO_AES_KEY) on the client.
+// The key is the same for all users — auth only changes the xdataprops payload.
+const CARINFO_AES_KEY = 'Gx!7m$9zK@qW2vP';
+
+function evpBytesToKey(password: string, salt: Buffer, keyLen: number, ivLen: number) {
+  const derived: number[] = [];
+  let block = Buffer.alloc(0);
+  while (derived.length < keyLen + ivLen) {
+    const h = crypto.createHash('md5');
+    h.update(block); h.update(Buffer.from(password)); h.update(salt);
+    block = h.digest();
+    derived.push(...block);
+  }
+  return { key: Buffer.from(derived.slice(0, keyLen)), iv: Buffer.from(derived.slice(keyLen, keyLen + ivLen)) };
+}
+
+export function decryptXdataprops(ciphertext: string): Record<string, unknown> | null {
+  try {
+    const raw = Buffer.from(ciphertext, 'base64');
+    if (raw.slice(0, 8).toString('ascii') !== 'Salted__') return null;
+    const salt = raw.slice(8, 16);
+    const ct = raw.slice(16);
+    const { key, iv } = evpBytesToKey(CARINFO_AES_KEY, salt, 32, 16);
+    const d = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    const plain = Buffer.concat([d.update(ct), d.final()]).toString('utf8');
+    return JSON.parse(plain) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+// Parse VehicleRecord from decrypted CarInfo webSections structure.
+export function parseWebSections(sections: unknown[], regNo: string): VehicleRecord | null {
+  const msgs: Record<string, string> = {};
+  for (const s of sections) {
+    const sec = s as any;
+    // Top-level messages (RTO Details)
+    if (Array.isArray(sec.messages)) {
+      for (const m of sec.messages) {
+        if (m.title && m.subtitle) msgs[String(m.title).toLowerCase()] = String(m.subtitle);
+      }
+    }
+    // RC Details section with elements (Ownership, Important Dates, Other Info)
+    if (Array.isArray(sec.elements)) {
+      for (const el of sec.elements) {
+        if (Array.isArray(el.messages)) {
+          for (const m of el.messages) {
+            if (m.title && m.subtitle) msgs[String(m.title).toLowerCase()] = String(m.subtitle);
+          }
+        }
+      }
+    }
+  }
+
+  if (Object.keys(msgs).length === 0) return null;
+
+  const get = (...keys: string[]) => {
+    for (const k of keys) { const v = msgs[k.toLowerCase()]; if (v && v.trim()) return v.trim(); }
+    return undefined;
+  };
+
+  // Parse "20-Jul-2023" → "2023-07-20"
+  const parseDate = (s?: string): string | undefined => {
+    if (!s) return undefined;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const months: Record<string, string> = { jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12' };
+    const m = s.match(/^(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{4})$/);
+    if (m) { const mo = months[m[2]!.toLowerCase()]; if (mo) return `${m[3]}-${mo}-${m[1]!.padStart(2,'0')}`; }
+    const m2 = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (m2) return `${m2[3]}-${m2[2]!.padStart(2,'0')}-${m2[1]!.padStart(2,'0')}`;
+    return undefined;
+  };
+
+  const rtoRaw = get('number', 'registered rto');
+  const rtoCode = rtoRaw?.match(/^[A-Z]{2}[-\s]?\d{1,2}/i)?.[0]?.replace(/[\s-]/g,'').toUpperCase();
+  const seatsRaw = get('number of seats');
+  const weightRaw = get('unloaded weight (kg)', 'unloaded weight');
+
+  return {
+    registrationNo: regNo,
+    ownerName: get('owner name', 'registered owner name'),
+    vehicleClass: get('vehicle class'),
+    fuelType: get('fuel type'),
+    normsType: get('fuel norms', 'emission norms'),
+    rtoCode,
+    registrationDate: parseDate(get('registration date')),
+    fitnessExpiry: parseDate(get('fitness upto', 'fitness validity')),
+    pucExpiry: parseDate(get('pollution upto', 'puc upto', 'pucc upto')),
+    insuranceExpiry: parseDate(get('insurance upto', 'insurance expiry')),
+    rcStatus: get('rc status'),
+    seatingCapacity: seatsRaw && !isNaN(Number(seatsRaw)) ? Number(seatsRaw) : undefined,
+    unloadedWeight: weightRaw && !isNaN(Number(weightRaw)) ? Number(weightRaw) : undefined,
+  };
+}
 
 export const CARINFO_ADAPTER_ID = 'vahan.carinfo.scraper';
 export const CARINFO_VERSION = '1';
@@ -322,7 +419,7 @@ export function mapToVehicleRecord(raw: Record<string, unknown>, regNo: string):
 
 // ─── HTTP fetch helper ────────────────────────────────────────────────────────
 
-async function fetchPage(url: string): Promise<string> {
+async function fetchPage(url: string, extraHeaders?: Record<string, string>): Promise<string> {
   const res = await fetch(url, {
     headers: {
       'User-Agent': UA,
@@ -330,6 +427,7 @@ async function fetchPage(url: string): Promise<string> {
       'Accept-Language': 'en-IN,en;q=0.9',
       'Cache-Control': 'no-cache',
       'Referer': BASE,
+      ...extraHeaders,
     },
     signal: AbortSignal.timeout(15_000),
   });
@@ -339,10 +437,10 @@ async function fetchPage(url: string): Promise<string> {
 
 // ─── Public fetch functions ───────────────────────────────────────────────────
 
-export async function fetchCarInfoRC(regNo: string): Promise<VehicleRecord> {
+export async function fetchCarInfoRC(regNo: string, extraHeaders?: Record<string, string>): Promise<VehicleRecord> {
   const clean = regNo.replace(/\s+/g,'').toUpperCase();
   const url = `${BASE}/rc-details/${encodeURIComponent(clean)}`;
-  const html = await fetchPage(url);
+  const html = await fetchPage(url, extraHeaders);
 
   const pageProps = extractNextData(html);
   if (!pageProps) throw new Error('CarInfo: could not find __NEXT_DATA__ or embedded JSON in RC page');
@@ -355,6 +453,22 @@ export async function fetchCarInfoRC(regNo: string): Promise<VehicleRecord> {
   const notFound = pageProps['notFound'] === true || pageProps['error'] || pageProps['statusCode'] === 404;
   if (notFound) throw new Error(`CarInfo: vehicle ${clean} not found`);
 
+  // PRIMARY: Decrypt xdataprops using the static AES key found in the bundle.
+  // Authenticated requests return a larger payload with full vehicle details.
+  const xdata = pageProps['xdataprops'];
+  if (typeof xdata === 'string' && xdata.length > 100) {
+    const decrypted = decryptXdataprops(xdata);
+    const sections = decrypted && (decrypted as any).data?.webSections;
+    if (Array.isArray(sections)) {
+      const record = parseWebSections(sections, clean);
+      if (record && (record.fuelType || record.insuranceExpiry || record.pucExpiry || record.rcStatus)) {
+        logger.info({ regNo: clean, fields: Object.keys(record).filter(k => (record as any)[k]) }, '[carinfo] extracted from xdataprops decryption');
+        return record;
+      }
+    }
+  }
+
+  // FALLBACK: old __NEXT_DATA__ vehicle object search (for backwards compat)
   const vehicleObj = findVehicleObject(pageProps);
   if (!vehicleObj) throw new Error(`CarInfo: no vehicle object in pageProps (keys: ${Object.keys(pageProps).slice(0,10).join(', ')})`);
 

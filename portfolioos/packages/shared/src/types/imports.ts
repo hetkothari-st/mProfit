@@ -19,6 +19,8 @@ export interface ImportJobDTO {
     skippedAsDuplicates?: number;
     general?: string;
   } | null;
+  contentHash: string | null;
+  gmailMessageId: string | null;
   createdAt: string;
   completedAt: string | null;
   _count?: { transactions: number };

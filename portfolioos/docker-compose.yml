@@ -29,6 +29,32 @@ services:
       timeout: 5s
       retries: 10
 
+  # OnlyOffice DocumentServer — in-browser .docx/.xlsx/.pptx editing.
+  # Browser hits this on port 8083 directly; the API talks to it on the same
+  # host port (in dev). JWT_SECRET must match the API's ONLYOFFICE_JWT_SECRET.
+  # Note: first boot pulls a ~2GB image, then ~30s warmup.
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: portfolioos-onlyoffice
+    ports:
+      - "8083:80"
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-dev-onlyoffice-secret-change-me}
+      # Allow the host machine to reach the API at host.docker.internal:3001
+      # so DocServer can pull the source file and POST the saved bytes back.
+      USE_UNAUTHORIZED_STORAGE: "true"
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+      - onlyoffice_log:/var/log/onlyoffice
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/healthcheck || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   api:
     build:
       context: .
@@ -67,3 +93,5 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  onlyoffice_data:
+  onlyoffice_log:

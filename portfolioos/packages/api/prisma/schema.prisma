@@ -70,6 +70,13 @@ model User {
 
   // Phase 5-B — vehicle valuation log (per-user audit of saved quotes).
   valuationLogs VehicleValuationLog[]
+
+  // Generic document vault (rental agreements, vehicle RC scans, insurance
+  // policy PDFs, …). Reusable across modules via {ownerType, ownerId}.
+  documents Document[]
+
+  loans        Loan[]
+  creditCards  CreditCard[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -500,6 +507,14 @@ enum AssetClass {
   ART_COLLECTIBLES
   CASH
   OTHER
+  NSC
+  KVP
+  SCSS
+  SSY
+  POST_OFFICE_MIS
+  POST_OFFICE_RD
+  POST_OFFICE_TD
+  POST_OFFICE_SAVINGS
 }
 
 // ─── TRANSACTIONS ─────────────────────────────────────────────────
@@ -575,6 +590,7 @@ model Transaction {
 
   capitalGains   CapitalGain[]
   voucherEntries VoucherEntry[]
+  photos         TransactionPhoto[]
 
   @@index([portfolioId, tradeDate])
   @@index([stockId])
@@ -582,6 +598,20 @@ model Transaction {
   @@index([importJobId])
   @@index([portfolioId, assetKey])
   @@index([sourceAdapter, sourceAdapterVer])
+}
+
+model TransactionPhoto {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  fileName      String
+  filePath      String
+  mimeType      String
+  sizeBytes     Int
+
+  createdAt DateTime @default(now())
+
+  @@index([transactionId])
 }
 
 enum TransactionType {
@@ -834,6 +864,8 @@ enum AlertType {
   FO_EXPIRY_TODAY
   FO_EXPIRY_SOON
   FO_MARGIN_CALL
+  LOAN_EMI_DUE
+  CREDIT_CARD_DUE
   CUSTOM
 }
 
@@ -1108,6 +1140,7 @@ model Vehicle {
   challans          Challan[]
   insurancePolicies InsurancePolicy[] @relation("VehicleInsurance")
   valuationLogs     VehicleValuationLog[]
+  loans             Loan[]
 
   @@unique([userId, registrationNo])
   @@index([userId, insuranceExpiry])
@@ -1250,6 +1283,7 @@ model RentalProperty {
 
   tenancies Tenancy[]
   expenses  PropertyExpense[]
+  loans     Loan[]
 }
 
 model Tenancy {
@@ -1744,4 +1778,146 @@ model PortfolioSetting {
 enum EquityTaxTreatment {
   CAPITAL_GAINS
   BUSINESS_INCOME
+}
+
+// ─── DOCUMENT VAULT ────────────────────────────────────────────────
+//
+// Generic per-user document store, polymorphically attached to any owning
+// module via (ownerType, ownerId). Files live on disk under
+// ${UPLOAD_DIR}/user_${userId}/${storageKey}.${ext} per BUG-015. Access is
+// always proxied through an authenticated download endpoint that verifies
+// userId — files are never served via static path.
+//
+// `externalEditKey` is opaque to the rest of the system: it's the document
+// identifier passed to OnlyOffice DocumentServer. Bumped every time the
+// stored bytes change so OnlyOffice's internal cache invalidates.
+
+model Document {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ownerType       DocumentOwnerType
+  ownerId         String
+  category        String?          // free-text label, e.g. "agreement", "receipt"
+  fileName        String           // original-or-edited display name
+  mimeType        String
+  sizeBytes       Int
+  storageKey      String           @unique // uuid filename relative to user dir
+  externalEditKey String           @unique // OnlyOffice "key" — bump on save
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([userId, ownerType, ownerId])
+  @@index([userId, createdAt])
+}
+
+enum DocumentOwnerType {
+  RENTAL_PROPERTY
+  TENANCY
+  VEHICLE
+  INSURANCE_POLICY
+  PORTFOLIO
+  OTHER
+}
+
+// ─── LOANS ────────────────────────────────────────────────────────
+
+model Loan {
+  id                 String          @id @default(cuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId        String?
+
+  lenderName         String
+  accountNumber      String?
+  loanType           String          // HOME | CAR | PERSONAL | EDUCATION | BUSINESS | GOLD | LAS | OTHER
+  borrowerName       String
+
+  principalAmount    Decimal         @db.Decimal(14, 2)
+  interestRate       Decimal         @db.Decimal(6, 4)
+  tenureMonths       Int
+  emiAmount          Decimal         @db.Decimal(12, 2)
+  emiDueDay          Int             @default(1)
+  disbursementDate   DateTime        @db.Date
+  firstEmiDate       DateTime        @db.Date
+
+  prepaymentOption   String          @default("REDUCE_TENURE")
+
+  vehicleId          String?
+  vehicle            Vehicle?        @relation(fields: [vehicleId], references: [id])
+  rentalPropertyId   String?
+  rentalProperty     RentalProperty? @relation(fields: [rentalPropertyId], references: [id])
+
+  taxBenefitSection  String?
+  status             String          @default("ACTIVE")
+  closedDate         DateTime?       @db.Date
+  lenderMatchKey     String?
+
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  payments           LoanPayment[]
+
+  @@index([userId, status])
+  @@index([userId, lenderName])
+}
+
+model LoanPayment {
+  id               String   @id @default(cuid())
+  loanId           String
+  loan             Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  paymentType      String   // EMI | PREPAYMENT | FORECLOSURE | PROCESSING_FEE
+  paidOn           DateTime @db.Date
+  amount           Decimal  @db.Decimal(12, 2)
+  principalPart    Decimal? @db.Decimal(12, 2)
+  interestPart     Decimal? @db.Decimal(12, 2)
+  forMonth         String?
+  canonicalEventId String?
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  @@index([loanId, paidOn])
+}
+
+// ─── CREDIT CARDS ─────────────────────────────────────────────────
+
+model CreditCard {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  issuerBank         String
+  cardName           String
+  last4              String
+  network            String?
+  creditLimit        Decimal   @db.Decimal(12, 2)
+  outstandingBalance Decimal?  @db.Decimal(12, 2)
+  statementDay       Int
+  dueDay             Int
+  interestRate       Decimal?  @db.Decimal(6, 4)
+  annualFee          Decimal?  @db.Decimal(10, 2)
+  status             String    @default("ACTIVE")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  statements         CreditCardStatement[]
+
+  @@index([userId, status])
+}
+
+model CreditCardStatement {
+  id              String     @id @default(cuid())
+  cardId          String
+  card            CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  forMonth        String
+  statementAmount Decimal    @db.Decimal(12, 2)
+  minimumDue      Decimal?   @db.Decimal(12, 2)
+  dueDate         DateTime   @db.Date
+  paidAmount      Decimal?   @db.Decimal(12, 2)
+  paidOn          DateTime?  @db.Date
+  status          String
+  canonicalEventId String?
+  createdAt       DateTime   @default(now())
+
+  @@unique([cardId, forMonth])
+  @@index([dueDate, status])
 }

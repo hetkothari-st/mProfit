@@ -7,6 +7,7 @@ import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { PortfolioListPage } from './pages/portfolios/PortfolioListPage';
 import { PortfolioDetailPage } from './pages/portfolios/PortfolioDetailPage';
+import { PortfolioGroupDetailPage } from './pages/portfolios/PortfolioGroupDetailPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
@@ -33,10 +34,12 @@ import { InsuranceDetailPage } from './pages/insurance/InsuranceDetailPage';
 import { FixedDepositsPage } from './pages/assetClasses/FixedDepositsPage';
 import { BondsPage } from './pages/assetClasses/BondsPage';
 import { GoldPage } from './pages/assetClasses/GoldPage';
+import { GoldAssetDetailPage } from './pages/assetClasses/GoldAssetDetailPage';
 import { EpfPage } from './pages/assetClasses/EpfPage';
 import { NpsPage } from './pages/assetClasses/NpsPage';
 import { PpfPage } from './pages/assetClasses/PpfPage';
 import { OtherAssetsPage } from './pages/assetClasses/OtherAssetsPage';
+import { PostOfficePage } from './pages/assetClasses/PostOfficePage';
 import { FuturesOptionsPage } from './pages/assetClasses/FuturesOptionsPage';
 import { AccountingPage } from './pages/accounting/AccountingPage';
 import { AlertsPage } from './pages/alerts/AlertsPage';
@@ -68,6 +71,7 @@ export function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/portfolios" element={<PortfolioListPage />} />
         <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
+        <Route path="/portfolio-groups/:id" element={<PortfolioGroupDetailPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/stocks" element={<StocksPage />} />
         <Route path="/mutual-funds" element={<MutualFundsPage />} />
@@ -75,10 +79,12 @@ export function App() {
         <Route path="/bonds" element={<BondsPage />} />
         <Route path="/fds" element={<FixedDepositsPage />} />
         <Route path="/gold" element={<GoldPage />} />
+        <Route path="/gold/:holdingId" element={<GoldAssetDetailPage />} />
         <Route path="/epf" element={<EpfPage />} />
         {/* NPS — disabled until NSDL CRA adapter lands (§10.2) */}
         {/* <Route path="/nps" element={<NpsPage />} /> */}
         <Route path="/ppf" element={<PpfPage />} />
+        <Route path="/post-office" element={<PostOfficePage />} />
         <Route path="/others" element={<OtherAssetsPage />} />
         <Route path="/vehicles" element={<VehicleListPage />} />
         <Route path="/vehicles/value" element={<VehicleValuePage />} />

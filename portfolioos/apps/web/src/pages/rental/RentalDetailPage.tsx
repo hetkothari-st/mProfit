@@ -41,6 +41,7 @@ import {
   type MarkReceivedInput,
   type CreateExpenseInput,
 } from '@/api/rental.api';
+import { DocumentVault } from '@/components/documents/DocumentVault';
 
 // ── Status badge ──────────────────────────────────────────────────────
 
@@ -866,6 +867,21 @@ export function RentalDetailPage() {
             </CardContent>
           )}
         </Card>
+      </section>
+
+      {/* Documents */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <Calendar className="h-4 w-4" /> Documents
+          </h2>
+        </div>
+        <DocumentVault
+          ownerType="RENTAL_PROPERTY"
+          ownerId={property.id}
+          title="Agreements & receipts"
+          defaultCategory="agreement"
+        />
       </section>
 
       {/* Dialogs */}

@@ -41,6 +41,29 @@ packages/api/uploads/
 # Scraper debug dumps
 packages/api/extraction_*.html
 packages/api/extraction_*.txt
+packages/api/error_*.html
+packages/api/error_*.png
+packages/api/cams_submit_debug_*
+packages/api/carinfo_debug.html
+packages/api/carinfo_screenshot.png
+packages/api/api_capture_*.json
+packages/api/*-checkpoint.json
+packages/api/next_data.json
+packages/api/scratch.html
+packages/api/all_text.txt
+packages/api/xdataprops_test.txt
+packages/api/dump_text.cjs
+packages/api/extract_next.cjs
+packages/api/test_otp.ts
+packages/api/test_parse.cjs
+packages/api/test_screenshot.ts
+
+# Root-level scratch files
+find_key.js
+rc_details.js
+scratch.html
+scratch/
+scratch_*.json
 
 # Stray test PDFs in repo root
 /*.pdf

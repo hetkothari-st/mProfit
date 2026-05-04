@@ -6,6 +6,12 @@ function unwrap<T>(data: ApiResponse<T>): T {
   return data.data;
 }
 
+export interface LiveCommodityPrices {
+  GOLD: string | null;
+  SILVER: string | null;
+  fetchedAt: string;
+}
+
 export const assetsApi = {
   async search(q: string, kind: 'all' | 'stock' | 'mf' = 'all', limit = 15): Promise<AssetSearchHit[]> {
     const { data } = await api.get<ApiResponse<AssetSearchHit[]>>('/api/assets/search', {
@@ -33,6 +39,10 @@ export const assetsApi = {
   },
   async amfiSync(): Promise<{ fetchedRows: number; mastersCreated: number; mastersUpdated: number; navsUpserted: number }> {
     const { data } = await api.post<ApiResponse<any>>('/api/assets/amfi/sync');
+    return unwrap(data);
+  },
+  async commoditiesLive(): Promise<LiveCommodityPrices> {
+    const { data } = await api.get<ApiResponse<LiveCommodityPrices>>('/api/assets/commodities/live');
     return unwrap(data);
   },
 };

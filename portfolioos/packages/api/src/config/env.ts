@@ -58,6 +58,26 @@ const EnvSchema = z.object({
   // CDSL OTP fetch + KFintech mailback + smart parse all use this key.
   CASPARSER_API_KEY: z.string().optional(),
   CASPARSER_BASE_URL: z.string().url().default('https://api.casparser.in'),
+
+  // OnlyOffice DocumentServer integration. Two URLs because the browser and
+  // the API talk to it across different network paths:
+  //   PUBLIC_URL  — what the user's browser sees (host machine), e.g.
+  //                 http://localhost:8083
+  //   INTERNAL_URL — what the API container sees from inside the docker
+  //                 network, e.g. http://onlyoffice
+  // JWT secret must match the one set on the DocumentServer container
+  // (JWT_SECRET env var on its side). Disable JWT only in dev.
+  ONLYOFFICE_PUBLIC_URL: z.string().url().default('http://localhost:8083'),
+  ONLYOFFICE_INTERNAL_URL: z.string().url().default('http://localhost:8083'),
+  ONLYOFFICE_JWT_SECRET: z.string().min(8).default('dev-onlyoffice-secret-change-me'),
+  ONLYOFFICE_JWT_ENABLED: z.enum(['true', 'false']).default('true'),
+  // Public base URL the DocumentServer uses to download/save files via the
+  // API. In dev we run the API on the host (port 3001), so DocServer (in
+  // Docker) reaches it through host.docker.internal.
+  API_PUBLIC_URL_FOR_ONLYOFFICE: z
+    .string()
+    .url()
+    .default('http://host.docker.internal:3001'),
 });
 
 function loadEnv() {

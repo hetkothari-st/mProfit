@@ -9,11 +9,17 @@ COPY packages/shared/package.json packages/shared/
 RUN pnpm install --frozen-lockfile || pnpm install
 
 FROM base AS build
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm --filter @portfolioos/web build
 
 FROM nginx:alpine AS runtime
+RUN apk add --no-cache gettext
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf.template
+COPY apps/web/start.sh /start.sh
+RUN chmod +x /start.sh
 EXPOSE 3000
+CMD ["/start.sh"]

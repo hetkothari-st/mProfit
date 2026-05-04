@@ -16,7 +16,7 @@ import { getLatestNavForFund, loadAmfiNavToDb } from '../priceFeeds/amfi.service
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
 import { loadBseEquityUniverse } from '../priceFeeds/bseUniverse.service.js';
 import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.js';
-import { syncAllCommodities, getLatestCommodityPrice } from '../priceFeeds/commodity.service.js';
+import { syncAllCommodities, getLatestCommodityPrice, fetchLivePrices } from '../priceFeeds/commodity.service.js';
 import { syncCryptoPrices, searchCrypto } from '../priceFeeds/crypto.service.js';
 import { syncFxRates, getLatestFxRate } from '../priceFeeds/fx.service.js';
 import { runMasterSync, runPriceSync } from '../priceFeeds/router.service.js';
@@ -147,6 +147,23 @@ export async function listCommodityPrices(_req: Request, res: Response) {
     GOLD: gold ? serializeMoney(gold) : null,
     SILVER: silver ? serializeMoney(silver) : null,
     PLATINUM: platinum ? serializeMoney(platinum) : null,
+  });
+}
+
+export async function liveCommodityPrices(_req: Request, res: Response) {
+  const { GOLD: liveGold, SILVER: liveSilver, fetchedAt } = await fetchLivePrices();
+
+  // Fall back to DB-cached price when Yahoo rate-limits
+  const [gold, silver] = await Promise.all([
+    liveGold ?? getLatestCommodityPrice('GOLD'),
+    liveSilver ?? getLatestCommodityPrice('SILVER'),
+  ]);
+
+  ok(res, {
+    GOLD: gold ? serializeMoney(gold) : null,
+    SILVER: silver ? serializeMoney(silver) : null,
+    fetchedAt: fetchedAt.toISOString(),
+    source: liveGold ? 'live' : 'cached',
   });
 }
 

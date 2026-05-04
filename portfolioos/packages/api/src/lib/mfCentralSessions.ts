@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { Browser, BrowserContext, Page, chromium } from 'playwright';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from './logger.js';
@@ -47,7 +48,7 @@ class MFCentralSessionManager {
     // Remove webdriver flag
     await context.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      (window as Record<string, unknown>).chrome = { runtime: {} };
+      (window as unknown as Record<string, unknown>).chrome = { runtime: {} };
     });
     const page = await context.newPage();
 

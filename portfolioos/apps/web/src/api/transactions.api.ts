@@ -47,4 +47,21 @@ export const transactionsApi = {
   async remove(id: string): Promise<void> {
     await api.delete(`/api/transactions/${id}`);
   },
+  async uploadPhoto(txnId: string, file: File): Promise<{ id: string; fileName: string }> {
+    const form = new FormData();
+    form.append('photo', file);
+    const { data } = await api.post<ApiResponse<{ id: string; fileName: string }>>(
+      `/api/transactions/${txnId}/photos`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return unwrap(data);
+  },
+  async deletePhoto(txnId: string, photoId: string): Promise<void> {
+    await api.delete(`/api/transactions/${txnId}/photos/${photoId}`);
+  },
+  photoUrl(txnId: string, photoId: string): string {
+    const base = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3001';
+    return `${base}/api/transactions/${txnId}/photos/${photoId}`;
+  },
 };

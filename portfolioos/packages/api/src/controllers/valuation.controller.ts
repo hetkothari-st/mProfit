@@ -56,12 +56,19 @@ export async function listYears(req: Request, res: Response) {
     },
     select: { yearFrom: true, yearTo: true },
   });
-  // Expand year ranges to discrete years
+  // Expand year ranges to discrete years.
+  // For active models (yearTo IS NULL) we also surface up to 7 prior years so
+  // users can value an older example — used-car adapters have data going back
+  // ~7-10 years; the catalog crawler can only know the *current* MSRP.
   const years = new Set<number>();
   const currentYear = new Date().getFullYear();
+  const HISTORY_YEARS = 7;
   for (const r of rows) {
     const end = r.yearTo ?? currentYear;
-    for (let y = r.yearFrom; y <= end; y++) years.add(y);
+    const start = r.yearTo === null
+      ? Math.min(r.yearFrom, currentYear - HISTORY_YEARS)
+      : r.yearFrom;
+    for (let y = start; y <= end; y++) years.add(y);
   }
   ok(res, Array.from(years).sort((a, b) => b - a));
 }
@@ -73,13 +80,25 @@ export async function listTrims(req: Request, res: Response) {
   if (!make || !model || !yearStr) return ok(res, []);
   const year = Number(yearStr);
   if (!Number.isFinite(year)) return ok(res, []);
+  const HISTORY_YEARS = 7;
+  // For active models (yearTo IS NULL) we accept years up to 7 years before
+  // launch — used-car adapters can still resolve a price even though the
+  // catalog only has current trims/MSRP.
   const rows = await prisma.vehicleCatalog.findMany({
     where: {
       isActive: true,
       make: { equals: make, mode: 'insensitive' },
       model: { equals: model, mode: 'insensitive' },
-      yearFrom: { lte: year },
-      OR: [{ yearTo: null }, { yearTo: { gte: year } }],
+      OR: [
+        {
+          yearFrom: { lte: year },
+          OR: [{ yearTo: null }, { yearTo: { gte: year } }],
+        },
+        {
+          yearTo: null,
+          yearFrom: { lte: year + HISTORY_YEARS },
+        },
+      ],
     },
     select: {
       trim: true,

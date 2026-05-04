@@ -7,6 +7,7 @@ interface ScrapeSession {
   page: Page;
   expiresAt: number;
   regNo: string;
+  [key: string]: unknown;
 }
 
 class PlaywrightSessionManager {
@@ -19,8 +20,26 @@ class PlaywrightSessionManager {
   }
 
   async createSession(regNo: string): Promise<ScrapeSession> {
-    const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
+    const browser = await chromium.launch({
+      headless: true,
+      args: [
+        '--disable-blink-features=AutomationControlled',
+        '--no-sandbox',
+        '--disable-dev-shm-usage',
+      ],
+    });
+    const context = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+        '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 720 },
+      locale: 'en-IN',
+    });
+    // Hide webdriver fingerprint
+    await context.addInitScript(
+      'Object.defineProperty(navigator, "webdriver", { get: () => undefined })',
+    );
+    const page = await context.newPage();
     const id = uuidv4();
     
     const session: ScrapeSession = {

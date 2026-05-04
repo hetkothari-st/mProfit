@@ -18,6 +18,66 @@ const STOCK_ASSET_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
  */
 const SKIP_PROJECTION: ReadonlySet<AssetClass> = new Set<AssetClass>(['FUTURES', 'OPTIONS']);
 
+// Post Office schemes where interest accrues (not paid out) — we compute
+// compounded current value from principal + stored interestRate.
+const PO_COMPOUNDING_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
+  'NSC', 'KVP', 'POST_OFFICE_TD', 'SSY', 'POST_OFFICE_RD',
+]);
+
+// Schemes within PO_COMPOUNDING_CLASSES that use quarterly compounding (not annual).
+const PO_QUARTERLY_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
+  'POST_OFFICE_TD', 'POST_OFFICE_RD',
+]);
+
+// Post Office schemes where interest is paid out — principal stays constant,
+// currentValue = totalCost.
+const PO_PAYOUT_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
+  'SCSS', 'POST_OFFICE_MIS', 'POST_OFFICE_SAVINGS',
+]);
+
+/**
+ * For PO compounding schemes: sum principal × (1 + r/100)^years for each
+ * DEPOSIT/BUY that carries an interestRate. Caps at maturityDate if passed.
+ * Returns null if no interest rates are recorded (will show invested only).
+ */
+function computePoAccruedValue(txs: Transaction[], assetClass: AssetClass): Decimal | null {
+  const today = new Date();
+  const deposits = txs.filter(
+    (t) =>
+      ['DEPOSIT', 'BUY', 'OPENING_BALANCE'].includes(t.transactionType) &&
+      t.interestRate != null,
+  );
+  if (deposits.length === 0) return null;
+
+  // Quarterly-compounding schemes: P × (1 + r/4)^(4t)
+  // Annual-compounding schemes: P × (1 + r)^t
+  const periodsPerYear = PO_QUARTERLY_CLASSES.has(assetClass) ? 4 : 1;
+
+  let total = new Decimal(0);
+  for (const dep of deposits) {
+    const principal = new Decimal(dep.price.toString()).times(
+      new Decimal(dep.quantity.toString()),
+    );
+    const annualRate = new Decimal(dep.interestRate!.toString()).div(100);
+    const valuationDate = dep.maturityDate && dep.maturityDate < today
+      ? dep.maturityDate
+      : today;
+    const yearsElapsed = new Decimal(
+      (valuationDate.getTime() - dep.tradeDate.getTime()) /
+      (365.25 * 24 * 60 * 60 * 1000),
+    ).toDP(6);
+    if (yearsElapsed.lte(0)) {
+      total = total.plus(principal);
+      continue;
+    }
+    const periodRate = annualRate.div(periodsPerYear);
+    const periods = yearsElapsed.times(periodsPerYear);
+    const factor = new Decimal(1).plus(periodRate).pow(periods);
+    total = total.plus(principal.times(factor));
+  }
+  return total.isZero() ? null : total.toDP(4);
+}
+
 /**
  * If a projection / transaction landed with no master-data link but carries
  * an ISIN or exact name we can match against StockMaster / MutualFundMaster,
@@ -69,6 +129,7 @@ const BUY_TYPES = new Set<TransactionType>([
   'RIGHTS_ISSUE',
   'DIVIDEND_REINVEST',
   'OPENING_BALANCE',
+  'DEPOSIT',
 ]);
 
 const SELL_TYPES = new Set<TransactionType>([
@@ -78,6 +139,7 @@ const SELL_TYPES = new Set<TransactionType>([
   'DEMERGER_OUT',
   'REDEMPTION',
   'MATURITY',
+  'WITHDRAWAL',
 ]);
 
 export interface ProjectionAggregate {
@@ -239,12 +301,24 @@ export async function recomputeForAsset(
     assetName: meta.assetName,
   });
 
-  const price = await currentPriceFor({
-    assetClass: meta.assetClass,
-    stockId: resolved.stockId,
-    fundId: resolved.fundId,
-  });
-  const currentValue = price ? agg.quantity.times(price) : null;
+  let price: Decimal | null = null;
+  let currentValue: Decimal | null = null;
+
+  if (PO_COMPOUNDING_CLASSES.has(meta.assetClass)) {
+    // Compute accrued value from stored interest rates; no market price feed.
+    currentValue = computePoAccruedValue(meta.txs, meta.assetClass);
+  } else if (PO_PAYOUT_CLASSES.has(meta.assetClass)) {
+    // Interest paid out — principal unchanged; show invested as current value.
+    currentValue = agg.totalCost;
+  } else {
+    price = await currentPriceFor({
+      assetClass: meta.assetClass,
+      stockId: resolved.stockId,
+      fundId: resolved.fundId,
+    });
+    currentValue = price ? agg.quantity.times(price) : null;
+  }
+
   const unrealisedPnL = currentValue ? currentValue.minus(agg.totalCost) : null;
 
   const data: Prisma.HoldingProjectionUncheckedCreateInput = {

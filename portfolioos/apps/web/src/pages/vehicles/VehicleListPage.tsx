@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Trash2,
   Loader2,
+  Calculator,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,11 @@ export function VehicleListPage() {
         description="Registration, insurance, PUC, fitness — all expiries in one place"
         actions={
           <div className="flex gap-2">
+            <Button asChild variant="outline">
+              <Link to="/vehicles/value">
+                <Calculator className="h-4 w-4" /> Get valuation
+              </Link>
+            </Button>
             <Button variant="outline" onClick={() => setSmsOpen(true)}>
               <MessageSquareShare className="h-4 w-4" /> Paste SMS
             </Button>

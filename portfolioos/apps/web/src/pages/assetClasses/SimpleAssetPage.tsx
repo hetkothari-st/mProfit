@@ -4,10 +4,10 @@
  * Shows HoldingProjection rows (aggregate) + individual transaction history
  * with edit and delete actions per row.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
-import { Plus, Pencil, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Loader2, ImageIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatINR, Decimal, type HoldingRow } from '@portfolioos/shared';
@@ -18,7 +18,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { transactionsApi } from '@/api/transactions.api';
-import { apiErrorMessage } from '@/api/client';
+import { api, apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
 import type { FormDialogProps } from './FDFormDialog';
 
@@ -29,6 +29,9 @@ interface Props {
   assetClasses: AssetClass[];
   defaultAssetClass: AssetClass;
   FormComponent?: React.ComponentType<FormDialogProps>;
+  computeLiveValue?: (h: HoldingRow & { portfolioName: string }) => string | null;
+  liveIndicator?: React.ReactNode;
+  onHoldingClick?: (h: HoldingRow & { portfolioName: string }) => void;
 }
 
 const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
@@ -41,6 +44,9 @@ const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
   CRYPTOCURRENCY: 'Crypto', REIT: 'REIT', INVIT: 'InvIT',
   PMS: 'PMS', AIF: 'AIF', ULIP: 'ULIP',
   REAL_ESTATE: 'Real Estate', ART_COLLECTIBLES: 'Art', CASH: 'Cash', OTHER: 'Other',
+  NSC: 'NSC', KVP: 'KVP', SCSS: 'SCSS', SSY: 'SSY',
+  POST_OFFICE_MIS: 'PO MIS', POST_OFFICE_RD: 'PO RD',
+  POST_OFFICE_TD: 'PO TD', POST_OFFICE_SAVINGS: 'PO Savings',
 };
 
 const TXN_TYPE_LABELS: Record<string, string> = {
@@ -58,6 +64,9 @@ export function SimpleAssetPage({
   assetClasses,
   defaultAssetClass,
   FormComponent,
+  computeLiveValue,
+  liveIndicator,
+  onHoldingClick,
 }: Props) {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
@@ -107,13 +116,23 @@ export function SimpleAssetPage({
 
   // Flatten + filter holdings by asset class
   const classSet = new Set<string>(assetClasses);
-  const allHoldings: Array<HoldingRow & { portfolioName: string }> = [];
+  const rawHoldings: Array<HoldingRow & { portfolioName: string }> = [];
   (portfolios ?? []).forEach((p, i) => {
     const rows: HoldingRow[] = holdingsQueries[i]?.data ?? [];
     rows
       .filter((h) => classSet.has(h.assetClass))
-      .forEach((h) => allHoldings.push({ ...h, portfolioName: p.name }));
+      .forEach((h) => rawHoldings.push({ ...h, portfolioName: p.name }));
   });
+
+  // Enrich with live prices when provided
+  const allHoldings = computeLiveValue
+    ? rawHoldings.map((h) => {
+        const liveVal = computeLiveValue(h);
+        if (!liveVal) return h;
+        const livePnL = new Decimal(liveVal).minus(new Decimal(h.totalCost)).toFixed(4);
+        return { ...h, currentValue: liveVal, unrealisedPnL: livePnL };
+      })
+    : rawHoldings;
 
   // Merge + sort transactions newest-first
   const allTransactions: TransactionDTO[] = txnQueries
@@ -165,19 +184,23 @@ export function SimpleAssetPage({
       {!isLoading && allHoldings.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">
           {[
-            { label: 'Invested', value: formatINR(totalInvested.toString()) },
-            { label: 'Current value', value: formatINR(totalValue.toString()) },
+            { label: 'Invested', value: formatINR(totalInvested.toString()), extra: null },
+            { label: 'Current value', value: formatINR(totalValue.toString()), extra: liveIndicator ?? null },
             {
               label: 'Unrealised P&L',
               value: `${totalPnL.gte(0) ? '+' : ''}${formatINR(totalPnL.toString())}${pnlPct != null ? ` (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : ''}`,
               className: totalPnL.gte(0) ? 'text-positive' : 'text-negative',
+              extra: null,
             },
           ].map((m) => (
             <Card key={m.label}>
               <CardContent className="px-4 py-3">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-                  {m.label}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+                    {m.label}
+                  </p>
+                  {m.extra}
+                </div>
                 <p className={`text-xl font-semibold tabular-nums mt-1 ${m.className ?? ''}`}>
                   {m.value}
                 </p>
@@ -231,7 +254,11 @@ export function SimpleAssetPage({
                     ? new Decimal(h.currentValue).minus(new Decimal(h.totalCost))
                     : null;
                 return (
-                  <tr key={h.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                  <tr
+                    key={h.id}
+                    className={`border-b last:border-0 hover:bg-muted/20 transition-colors ${onHoldingClick ? 'cursor-pointer' : ''}`}
+                    onClick={() => onHoldingClick?.(h)}
+                  >
                     <td className="px-4 py-3">
                       <p className="font-medium truncate max-w-[180px]">{h.assetName}</p>
                       {h.isin && <p className="text-xs text-muted-foreground">{h.isin}</p>}
@@ -305,6 +332,18 @@ export function SimpleAssetPage({
                         </p>
                         {txn.isin && (
                           <p className="text-xs text-muted-foreground">{txn.isin}</p>
+                        )}
+                        {txn.photos && txn.photos.length > 0 && (
+                          <div className="flex gap-1 mt-1">
+                            {txn.photos.slice(0, 3).map((p) => (
+                              <PhotoThumb key={p.id} txnId={txn.id} photoId={p.id} />
+                            ))}
+                            {txn.photos.length > 3 && (
+                              <div className="h-8 w-8 rounded border bg-muted/40 flex items-center justify-center text-[10px] text-muted-foreground">
+                                +{txn.photos.length - 3}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
@@ -390,4 +429,25 @@ export function SimpleAssetPage({
       />
     </div>
   );
+}
+
+function PhotoThumb({ txnId, photoId }: { txnId: string; photoId: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    api.get(`/api/transactions/${txnId}/photos/${photoId}`, { responseType: 'blob' })
+      .then(({ data }) => { objectUrl = URL.createObjectURL(data); setSrc(objectUrl); })
+      .catch(() => {});
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [txnId, photoId]);
+
+  if (!src) {
+    return (
+      <div className="h-8 w-8 rounded border bg-muted/40 flex items-center justify-center">
+        <ImageIcon className="h-3 w-3 text-muted-foreground" />
+      </div>
+    );
+  }
+  return <img src={src} alt="" className="h-8 w-8 rounded border object-cover" />;
 }

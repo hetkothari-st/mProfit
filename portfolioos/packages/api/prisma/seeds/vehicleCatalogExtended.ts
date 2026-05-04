@@ -10,8 +10,9 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { fileURLToPath } from 'node:url';
 
-const prisma = new PrismaClient({
+const standalonePrisma = new PrismaClient({
   datasources: { db: { url: process.env['DIRECT_URL'] ?? process.env['DATABASE_URL'] ?? '' } },
 });
 
@@ -191,7 +192,7 @@ const SEEDS: Seed[] = [
   { category: 'Scooter', make: 'ATHER',         model: '450X',          yearFrom: 2022, yearTo: null, trim: 'Gen 3',       baseMsrp: '146000', fuelType: 'ELECTRIC', bodyType: 'scooter', seatingCap: 2 },
 ];
 
-async function main() {
+export async function seedVehicleCatalogExtended(prisma: PrismaClient): Promise<number> {
   let count = 0;
   for (const seed of SEEDS) {
     await prisma.vehicleCatalog.upsert({
@@ -231,9 +232,13 @@ async function main() {
     });
     count++;
   }
-  console.log(`✓ Seeded ${count} additional vehicle catalog rows`);
+  return count;
 }
 
-main()
-  .catch((e) => { console.error(e); process.exit(1); })
-  .finally(async () => { await prisma.$disconnect(); });
+const isMainModule = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMainModule) {
+  seedVehicleCatalogExtended(standalonePrisma)
+    .then((count) => console.log(`✓ Seeded ${count} additional vehicle catalog rows`))
+    .catch((e) => { console.error(e); process.exit(1); })
+    .finally(async () => { await standalonePrisma.$disconnect(); });
+}

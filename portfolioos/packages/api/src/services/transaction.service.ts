@@ -353,6 +353,7 @@ export async function getTransaction(userId: string, id: string) {
     include: {
       stock: { select: { symbol: true, name: true, isin: true, exchange: true } },
       fund: { select: { schemeCode: true, schemeName: true, amcName: true, isin: true } },
+      photos: { select: { id: true, fileName: true, mimeType: true, sizeBytes: true }, orderBy: { createdAt: 'asc' } },
     },
   });
   if (!tx) throw new NotFoundError('Transaction not found');
@@ -396,6 +397,7 @@ export async function listTransactions(userId: string, q: ListTransactionsQuery)
       include: {
         stock: { select: { symbol: true, name: true, isin: true, exchange: true } },
         fund: { select: { schemeCode: true, schemeName: true, amcName: true, isin: true } },
+        photos: { select: { id: true, fileName: true, mimeType: true, sizeBytes: true }, orderBy: { createdAt: 'asc' } },
       },
     }),
     prisma.transaction.count({ where }),
@@ -460,6 +462,12 @@ export function toTransactionDTO(tx: TransactionWithRefs | Prisma.TransactionGet
     orderNo: tx.orderNo,
     tradeNo: tx.tradeNo,
     narration: tx.narration,
+    photos: (anyTx.photos ?? []).map((p: { id: string; fileName: string; mimeType: string; sizeBytes: number }) => ({
+      id: p.id,
+      fileName: p.fileName,
+      mimeType: p.mimeType,
+      sizeBytes: p.sizeBytes,
+    })),
     createdAt: tx.createdAt.toISOString(),
     updatedAt: tx.updatedAt.toISOString(),
   };

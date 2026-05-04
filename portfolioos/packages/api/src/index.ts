@@ -14,6 +14,7 @@ import { startImportWorker } from './jobs/importWorker.js';
 import { runStartupSync } from './jobs/startupSync.js';
 import { startMailboxPoller, stopMailboxPoller } from './jobs/mailboxPoller.js';
 import { startVehicleJobs } from './jobs/vehicleJobs.js';
+import { startCatalogJobs } from './jobs/catalogJobs.js';
 import { startRentalJobs } from './jobs/rentalJobs.js';
 import { startInsuranceJobs } from './jobs/insuranceJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
@@ -63,6 +64,7 @@ const server = app.listen(env.PORT, () => {
   startImportWorker();
   startMailboxPoller();
   startVehicleJobs();
+  startCatalogJobs();
   startRentalJobs();
   startInsuranceJobs();
   startAlertJobs();

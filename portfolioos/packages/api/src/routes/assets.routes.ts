@@ -16,6 +16,7 @@ import {
   syncCrypto,
   syncFx,
   listCommodityPrices,
+  liveCommodityPrices,
   listFxRates,
   searchCryptoController,
 } from '../controllers/assets.controller.js';
@@ -32,6 +33,7 @@ assetsRouter.get('/quote/:symbol', asyncHandler(liveQuote));
 assetsRouter.get('/stocks/:id/price', asyncHandler(latestStockPrice));
 assetsRouter.get('/funds/:id/nav', asyncHandler(latestFundNav));
 assetsRouter.get('/commodities/latest', asyncHandler(listCommodityPrices));
+assetsRouter.get('/commodities/live', asyncHandler(liveCommodityPrices));
 assetsRouter.get('/fx/latest', asyncHandler(listFxRates));
 
 // Price refreshes — per asset class + bulk

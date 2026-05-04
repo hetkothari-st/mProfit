@@ -84,3 +84,40 @@ export interface CashFlowEntry {
   amount: Money;
   description?: string | null;
 }
+
+export interface PortfolioGroup {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string | null;
+  createdAt: string;
+}
+
+export interface PortfolioGroupMemberRef {
+  id: string;
+  name: string;
+  currency: string;
+  type: PortfolioType;
+  holdingCount: number;
+  currentValue: Money;
+}
+
+export interface PortfolioGroupListItem extends PortfolioGroup {
+  members: PortfolioGroupMemberRef[];
+  currency: string;
+  currentValue: Money;
+  totalCost: Money;
+  holdingCount: number;
+}
+
+export interface CreatePortfolioGroupRequest {
+  name: string;
+  description?: string;
+  memberIds?: string[];
+}
+
+export interface UpdatePortfolioGroupRequest {
+  name?: string;
+  description?: string | null;
+  memberIds?: string[];
+}

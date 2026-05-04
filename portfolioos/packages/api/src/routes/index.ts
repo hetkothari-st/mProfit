@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import { authRouter } from './auth.routes.js';
 import { portfoliosRouter } from './portfolios.routes.js';
+import { portfolioGroupsRouter } from './portfolioGroups.routes.js';
 import { transactionsRouter } from './transactions.routes.js';
 import { assetsRouter } from './assets.routes.js';
 import { importsRouter } from './imports.routes.js';
@@ -25,10 +26,14 @@ import { mfCasMailbackRouter } from './mfCasMailback.routes.js';
 import { mfCasparserRouter } from './mfCasparser.routes.js';
 import { foRouter } from './fo.routes.js';
 import { catalogRouter, valuationRouter } from './valuation.routes.js';
+import { documentsRouter } from './documents.routes.js';
+import { loansRouter } from './loans.routes.js';
+import { creditCardsRouter } from './creditCards.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
   app.use('/api/portfolios', portfoliosRouter);
+  app.use('/api/portfolio-groups', portfolioGroupsRouter);
   app.use('/api/transactions', transactionsRouter);
   app.use('/api/assets', assetsRouter);
   app.use('/api/imports', importsRouter);
@@ -54,4 +59,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/fo', foRouter);
   app.use('/api/catalog', catalogRouter);
   app.use('/api/valuations', valuationRouter);
+  app.use('/api/documents', documentsRouter);
+  app.use('/api/loans', loansRouter);
+  app.use('/api/credit-cards', creditCardsRouter);
 }

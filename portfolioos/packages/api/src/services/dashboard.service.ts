@@ -1,6 +1,8 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { serializeMoney } from '@portfolioos/shared';
+import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
+import { computeCardSummary } from './creditCards.service.js';
 
 const ZERO = new Decimal(0);
 
@@ -156,7 +158,95 @@ export async function getDashboardNetWorth(userId: string) {
       amount: serializeMoney(d(p.premiumAmount)),
     }));
 
-  // ── 5. Expanded allocation (all tangible assets) ─────────────────────
+  // ── 5. Loans & Liabilities ───────────────────────────────────────────
+  const activeLoans = await prisma.loan.findMany({
+    where: { userId, status: 'ACTIVE' },
+    include: { payments: { orderBy: { paidOn: 'asc' } } },
+  });
+
+  const activeCards = await prisma.creditCard.findMany({
+    where: { userId, status: 'ACTIVE' },
+    include: { statements: { orderBy: { dueDate: 'desc' } } },
+  });
+
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  let totalOutstanding = ZERO;
+  let monthlyEmiTotal = ZERO;
+  const upcomingEmis: Array<{
+    loanId: string;
+    lenderName: string;
+    emiDate: string;
+    emiAmount: string;
+    daysUntil: number;
+  }> = [];
+  const overdueEmis: Array<{
+    loanId: string;
+    lenderName: string;
+    daysOverdue: number;
+  }> = [];
+
+  for (const loan of activeLoans) {
+    monthlyEmiTotal = monthlyEmiTotal.plus(d(loan.emiAmount));
+
+    let schedule: ReturnType<typeof buildAmortizationSchedule>;
+    try {
+      schedule = buildAmortizationSchedule(loan as unknown as StoredLoan);
+    } catch {
+      // If schedule fails (e.g. bad data), use principal as outstanding
+      totalOutstanding = totalOutstanding.plus(d(loan.principalAmount));
+      continue;
+    }
+
+    // Outstanding balance: opening balance of first unpaid EMI
+    const firstUnpaid = schedule.find((r) => !r.isPaid);
+    if (firstUnpaid) {
+      totalOutstanding = totalOutstanding.plus(new Decimal(firstUnpaid.openingBalance));
+
+      const emiDateMs = new Date(firstUnpaid.date + 'T00:00:00Z').getTime();
+      const daysDiff = Math.ceil((emiDateMs - today.getTime()) / 86_400_000);
+
+      if (daysDiff < 0) {
+        overdueEmis.push({
+          loanId: loan.id,
+          lenderName: loan.lenderName,
+          daysOverdue: Math.abs(daysDiff),
+        });
+      } else if (daysDiff <= 30) {
+        upcomingEmis.push({
+          loanId: loan.id,
+          lenderName: loan.lenderName,
+          emiDate: firstUnpaid.date,
+          emiAmount: firstUnpaid.emiAmount,
+          daysUntil: daysDiff,
+        });
+      }
+    } else {
+      // All EMIs paid — loan effectively zero outstanding
+      // (status should be CLOSED but handle gracefully)
+    }
+  }
+
+  upcomingEmis.sort((a, b) => a.daysUntil - b.daysUntil);
+
+  // Credit card outstanding
+  let totalCreditCardOutstanding = ZERO;
+  for (const card of activeCards) {
+    if (card.outstandingBalance) {
+      totalCreditCardOutstanding = totalCreditCardOutstanding.plus(d(card.outstandingBalance));
+    } else {
+      // Sum PENDING/PARTIAL statements as proxy for outstanding
+      const cardSummary = computeCardSummary(card);
+      totalCreditCardOutstanding = totalCreditCardOutstanding.plus(
+        new Decimal(cardSummary.outstanding),
+      );
+    }
+  }
+
+  const totalLiabilities = totalOutstanding.plus(totalCreditCardOutstanding);
+
+  // ── 6. Expanded allocation (all tangible assets) ─────────────────────
   const totalTangible = portfolioValue.plus(vehicleValue).plus(rentalValue);
   const allocationBreakdown: Array<{
     key: string;
@@ -254,6 +344,27 @@ export async function getDashboardNetWorth(userId: string) {
     });
   }
 
+  // Loan EMI alerts
+  for (const emi of overdueEmis) {
+    alerts.push({
+      type: 'LOAN_EMI_OVERDUE',
+      title: `${emi.lenderName} EMI overdue`,
+      description: `EMI is ${emi.daysOverdue} day${emi.daysOverdue !== 1 ? 's' : ''} overdue`,
+      urgency: 'HIGH',
+      daysUntil: -emi.daysOverdue,
+    });
+  }
+
+  for (const emi of upcomingEmis) {
+    alerts.push({
+      type: 'LOAN_EMI_DUE',
+      title: `${emi.lenderName} EMI due in ${emi.daysUntil} day${emi.daysUntil !== 1 ? 's' : ''}`,
+      description: `EMI of ₹${parseFloat(emi.emiAmount).toLocaleString('en-IN')} due on ${emi.emiDate}`,
+      urgency: emi.daysUntil <= 7 ? 'HIGH' : emi.daysUntil <= 15 ? 'MEDIUM' : 'LOW',
+      daysUntil: emi.daysUntil,
+    });
+  }
+
   alerts.sort((a, b) => {
     const urgencyOrder = { HIGH: 0, MEDIUM: 1, LOW: 2 };
     if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
@@ -263,11 +374,16 @@ export async function getDashboardNetWorth(userId: string) {
     return 0;
   });
 
-  // ── 7. Net worth total ────────────────────────────────────────────────
+  // ── 7. Net worth totals ──────────────────────────────────────────────
+  // totalNetWorth = gross assets (unchanged for backward compat)
+  // netWorthAfterLiabilities = assets − all outstanding loans & CC balances
   const totalNetWorth = portfolioValue.plus(vehicleValue).plus(rentalValue);
+  const netWorthAfterLiabilities = totalNetWorth.minus(totalLiabilities);
 
   return {
     totalNetWorth: serializeMoney(totalNetWorth),
+    totalLiabilities: serializeMoney(totalLiabilities),
+    netWorthAfterLiabilities: serializeMoney(netWorthAfterLiabilities),
 
     portfolio: {
       currentValue: serializeMoney(portfolioValue),
@@ -298,6 +414,16 @@ export async function getDashboardNetWorth(userId: string) {
       totalSumAssured: serializeMoney(totalSumAssured),
       annualPremiumTotal: serializeMoney(annualPremium),
       upcomingRenewals,
+    },
+
+    liabilities: {
+      totalOutstanding: serializeMoney(totalOutstanding),
+      monthlyEmiTotal: serializeMoney(monthlyEmiTotal),
+      loanCount: activeLoans.length,
+      creditCardCount: activeCards.length,
+      totalCreditCardOutstanding: serializeMoney(totalCreditCardOutstanding),
+      upcomingEmis,
+      overdueEmis,
     },
 
     allocationBreakdown,

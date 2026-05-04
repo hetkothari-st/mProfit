@@ -42,6 +42,7 @@ export interface TransactionDTO {
   orderNo: string | null;
   tradeNo: string | null;
   narration: string | null;
+  photos: Array<{ id: string; fileName: string; mimeType: string; sizeBytes: number }>;
   createdAt: string;
   updatedAt: string;
 }

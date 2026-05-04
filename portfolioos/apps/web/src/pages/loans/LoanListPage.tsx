@@ -1,0 +1,642 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import {
+  Landmark,
+  Plus,
+  ArrowUpRight,
+  AlertTriangle,
+  Loader2,
+  Trash2,
+  Pencil,
+  Calculator,
+} from 'lucide-react';
+import { Decimal, formatINR } from '@portfolioos/shared';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/common/EmptyState';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import {
+  loansApi,
+  type LoanDTO,
+  type CreateLoanInput,
+} from '@/api/loans.api';
+
+// ── Helpers ───────────────────────────────────────────────────────────
+
+const LOAN_TYPE_LABELS: Record<string, string> = {
+  HOME: 'Home',
+  CAR: 'Car',
+  PERSONAL: 'Personal',
+  EDUCATION: 'Education',
+  BUSINESS: 'Business',
+  GOLD: 'Gold',
+  LAS: 'LAS',
+  OTHER: 'Other',
+};
+
+const LOAN_TYPE_COLORS: Record<string, string> = {
+  HOME: 'bg-blue-100 text-blue-700',
+  CAR: 'bg-purple-100 text-purple-700',
+  PERSONAL: 'bg-orange-100 text-orange-700',
+  EDUCATION: 'bg-green-100 text-green-700',
+  BUSINESS: 'bg-yellow-100 text-yellow-700',
+  GOLD: 'bg-amber-100 text-amber-700',
+  LAS: 'bg-indigo-100 text-indigo-700',
+  OTHER: 'bg-muted text-muted-foreground',
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  ACTIVE: 'text-positive',
+  CLOSED: 'text-muted-foreground',
+  FORECLOSED: 'text-muted-foreground',
+  DEFAULT: 'text-negative',
+};
+
+function formatDate(iso: string | null | undefined) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function daysUntil(isoDate: string): number {
+  const due = new Date(isoDate).getTime();
+  return Math.ceil((due - Date.now()) / (1000 * 60 * 60 * 24));
+}
+
+function emiCountdownBadge(nextEmiDate: string | null | undefined) {
+  if (!nextEmiDate) return null;
+  const days = daysUntil(nextEmiDate);
+  let cls = 'bg-muted text-muted-foreground';
+  let label = `in ${days}d`;
+  if (days < 0) { cls = 'bg-negative/10 text-negative'; label = 'Overdue'; }
+  else if (days === 0) { cls = 'bg-negative/10 text-negative'; label = 'Today'; }
+  else if (days <= 7) { cls = 'bg-amber-100 text-amber-700'; label = `in ${days}d`; }
+  return (
+    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${cls}`}>
+      EMI {label}
+    </span>
+  );
+}
+
+// ── Summary strip ─────────────────────────────────────────────────────
+
+function SummaryStrip({ loans }: { loans: LoanDTO[] }) {
+  const active = loans.filter((l) => l.status === 'ACTIVE');
+  const totalOutstanding = active.reduce(
+    (s, l) => s.plus(new Decimal(l.principalAmount)),
+    new Decimal(0),
+  );
+  const monthlyEmi = active.reduce(
+    (s, l) => s.plus(new Decimal(l.emiAmount)),
+    new Decimal(0),
+  );
+
+  return (
+    <div className="grid grid-cols-3 gap-3 mb-6">
+      {[
+        { label: 'Total outstanding', value: formatINR(totalOutstanding.toString()), sub: 'principal (active loans)' },
+        { label: 'Monthly EMI', value: formatINR(monthlyEmi.toString()), sub: 'combined across active loans' },
+        { label: 'Active loans', value: String(active.length), sub: `of ${loans.length} total` },
+      ].map((m) => (
+        <Card key={m.label}>
+          <CardContent className="px-4 py-3">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{m.label}</p>
+            <p className="text-xl font-semibold tabular-nums mt-1">{m.value}</p>
+            <p className="text-xs text-muted-foreground">{m.sub}</p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ── Loan card ─────────────────────────────────────────────────────────
+
+function LoanCard({
+  loan,
+  onEdit,
+  onDelete,
+  isDeleting,
+}: {
+  loan: LoanDTO;
+  onEdit: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
+}) {
+  const principal = new Decimal(loan.principalAmount);
+  // Outstanding approximation: principal (server provides full summary separately)
+  const progressPct = 0; // list page doesn't fetch summary per-card for perf; just show 0 progress bar as placeholder
+
+  const nextEmiDateStr: string | null = (() => {
+    // Compute a rough next EMI date from first EMI date and payments count
+    if (loan.status !== 'ACTIVE') return null;
+    try {
+      const base = new Date(loan.firstEmiDate);
+      const paid = loan.payments.filter((p) => p.paymentType === 'EMI').length;
+      base.setMonth(base.getMonth() + paid);
+      return base.toISOString().slice(0, 10);
+    } catch {
+      return null;
+    }
+  })();
+
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold truncate">{loan.lenderName}</h3>
+              <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${LOAN_TYPE_COLORS[loan.loanType] ?? 'bg-muted text-muted-foreground'}`}>
+                {LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType}
+              </span>
+            </div>
+            {loan.accountNumber && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ●●●● {loan.accountNumber.slice(-4)}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground mt-0.5">{loan.borrowerName}</p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+              onClick={onDelete}
+              disabled={isDeleting}
+              title="Delete"
+            >
+              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            </Button>
+            <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
+              <Link to={`/loans/${loan.id}`}>
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-3 border-t space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Principal</span>
+            <span className="font-medium tabular-nums">{formatINR(loan.principalAmount)}</span>
+          </div>
+          <div>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-muted-foreground">Repaid</span>
+              <span className="font-medium tabular-nums text-positive">
+                {loan.payments.filter((p) => p.paymentType === 'EMI').length} EMIs recorded
+              </span>
+            </div>
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-positive rounded-full transition-all"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Rate / Tenure</span>
+            <span className="font-medium tabular-nums">
+              {loan.interestRate}% p.a. · {loan.tenureMonths}m
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">EMI</span>
+            <span className="font-medium tabular-nums">{formatINR(loan.emiAmount)}/mo</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Status</span>
+            <span className={`font-medium capitalize ${STATUS_COLORS[loan.status] ?? ''}`}>
+              {loan.status.toLowerCase()}
+            </span>
+          </div>
+          {nextEmiDateStr && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Next EMI</span>
+              <div className="flex items-center gap-1.5">
+                <span className="tabular-nums">{formatDate(nextEmiDateStr)}</span>
+                {emiCountdownBadge(nextEmiDateStr)}
+              </div>
+            </div>
+          )}
+          {loan.status === 'DEFAULT' && (
+            <div className="mt-2 rounded-md bg-negative/10 px-3 py-1.5 text-xs text-negative font-medium flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Loan in default
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Create / Edit dialog ──────────────────────────────────────────────
+
+function calcEmi(principal: string, rate: string, tenure: string): string {
+  try {
+    const p = new Decimal(principal);
+    const r = new Decimal(rate).div(12).div(100);
+    const n = new Decimal(tenure);
+    if (r.isZero()) return p.div(n).toFixed(2);
+    // EMI = P * r * (1+r)^n / ((1+r)^n - 1)
+    const onePlusR = r.plus(1);
+    const pow = onePlusR.pow(n.toNumber());
+    const emi = p.mul(r).mul(pow).div(pow.minus(1));
+    return emi.toFixed(2);
+  } catch {
+    return '';
+  }
+}
+
+function CreateLoanDialog({
+  open,
+  onOpenChange,
+  initial,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  initial?: LoanDTO | null;
+}) {
+  const qc = useQueryClient();
+  const isEdit = !!initial;
+
+  const [form, setForm] = useState<CreateLoanInput>({
+    lenderName: initial?.lenderName ?? '',
+    loanType: initial?.loanType ?? 'HOME',
+    borrowerName: initial?.borrowerName ?? '',
+    accountNumber: initial?.accountNumber ?? '',
+    principalAmount: initial?.principalAmount ?? '',
+    interestRate: initial?.interestRate ?? '',
+    tenureMonths: initial?.tenureMonths ?? 0,
+    emiAmount: initial?.emiAmount ?? '',
+    emiDueDay: initial?.emiDueDay ?? 1,
+    disbursementDate: initial?.disbursementDate ?? '',
+    firstEmiDate: initial?.firstEmiDate ?? '',
+    prepaymentOption: initial?.prepaymentOption ?? 'REDUCE_TENURE',
+    taxBenefitSection: initial?.taxBenefitSection ?? null,
+    status: initial?.status ?? 'ACTIVE',
+  });
+
+  const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+
+  const mutation = useMutation({
+    mutationFn: (input: CreateLoanInput) =>
+      isEdit ? loansApi.update(initial!.id, input) : loansApi.create(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loans'] });
+      toast.success(isEdit ? 'Loan updated' : 'Loan added');
+      onOpenChange(false);
+    },
+    onError: () => toast.error(isEdit ? 'Failed to update loan' : 'Failed to add loan'),
+  });
+
+  function set<K extends keyof CreateLoanInput>(key: K, value: CreateLoanInput[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function handleCalcEmi() {
+    const emi = calcEmi(form.principalAmount, form.interestRate, String(form.tenureMonths));
+    if (emi) set('emiAmount', emi);
+  }
+
+  function validate(): boolean {
+    const errs: Record<string, string> = {};
+    if (!form.lenderName.trim()) errs['lenderName'] = 'Required';
+    if (!form.borrowerName.trim()) errs['borrowerName'] = 'Required';
+    if (!form.principalAmount || isNaN(Number(form.principalAmount))) errs['principalAmount'] = 'Required';
+    if (!form.interestRate || isNaN(Number(form.interestRate))) errs['interestRate'] = 'Required';
+    if (!form.tenureMonths || form.tenureMonths <= 0) errs['tenureMonths'] = 'Required';
+    if (!form.emiAmount || isNaN(Number(form.emiAmount))) errs['emiAmount'] = 'Required';
+    if (!form.disbursementDate) errs['disbursementDate'] = 'Required';
+    if (!form.firstEmiDate) errs['firstEmiDate'] = 'Required';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  function handleSubmit() {
+    if (!validate()) return;
+    mutation.mutate({
+      ...form,
+      lenderName: form.lenderName.trim(),
+      borrowerName: form.borrowerName.trim(),
+      accountNumber: form.accountNumber?.trim() || null,
+      taxBenefitSection: form.taxBenefitSection || null,
+    });
+  }
+
+  const inp = (key: keyof CreateLoanInput, type = 'text') => ({
+    type,
+    value: String(form[key] ?? ''),
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+      set(key, (type === 'number' ? (e.target.value === '' ? 0 : Number(e.target.value)) : e.target.value) as CreateLoanInput[typeof key]),
+    className: `w-full${errors[key] ? ' border-negative' : ''}`,
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Edit loan' : 'Add loan'}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Lender name *</Label>
+              <Input placeholder="HDFC Bank, SBI…" {...inp('lenderName')} />
+              {errors['lenderName'] && <p className="text-xs text-negative mt-1">{errors['lenderName']}</p>}
+            </div>
+            <div>
+              <Label>Loan type</Label>
+              <select
+                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.loanType}
+                onChange={(e) => set('loanType', e.target.value)}
+              >
+                {Object.entries(LOAN_TYPE_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Borrower name *</Label>
+              <Input placeholder="Full name" {...inp('borrowerName')} />
+              {errors['borrowerName'] && <p className="text-xs text-negative mt-1">{errors['borrowerName']}</p>}
+            </div>
+            <div>
+              <Label>Account number</Label>
+              <Input placeholder="Optional" {...inp('accountNumber')} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Principal amount (₹) *</Label>
+              <Input placeholder="1000000" {...inp('principalAmount')} />
+              {errors['principalAmount'] && <p className="text-xs text-negative mt-1">{errors['principalAmount']}</p>}
+            </div>
+            <div>
+              <Label>Interest rate (% p.a.) *</Label>
+              <Input placeholder="8.50" step="0.01" {...inp('interestRate')} />
+              {errors['interestRate'] && <p className="text-xs text-negative mt-1">{errors['interestRate']}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Tenure (months) *</Label>
+              <Input placeholder="240" type="number" min="1"
+                value={form.tenureMonths || ''}
+                onChange={(e) => set('tenureMonths', Number(e.target.value))}
+                className={errors['tenureMonths'] ? 'border-negative' : ''} />
+              {errors['tenureMonths'] && <p className="text-xs text-negative mt-1">{errors['tenureMonths']}</p>}
+            </div>
+            <div>
+              <Label>EMI amount (₹) *</Label>
+              <div className="flex gap-1.5">
+                <Input placeholder="9000" {...inp('emiAmount')}
+                  className={`flex-1${errors['emiAmount'] ? ' border-negative' : ''}`} />
+                <Button type="button" variant="outline" size="sm" className="shrink-0 px-2" onClick={handleCalcEmi} title="Auto-calculate">
+                  <Calculator className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {errors['emiAmount'] && <p className="text-xs text-negative mt-1">{errors['emiAmount']}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>EMI due day (1-28)</Label>
+              <Input type="number" min="1" max="28"
+                value={form.emiDueDay}
+                onChange={(e) => set('emiDueDay', Number(e.target.value))} />
+            </div>
+            <div>
+              <Label>Prepayment option</Label>
+              <select
+                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.prepaymentOption}
+                onChange={(e) => set('prepaymentOption', e.target.value)}
+              >
+                <option value="REDUCE_TENURE">Reduce tenure</option>
+                <option value="REDUCE_EMI">Reduce EMI</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Disbursement date *</Label>
+              <Input type="date" {...inp('disbursementDate')} />
+              {errors['disbursementDate'] && <p className="text-xs text-negative mt-1">{errors['disbursementDate']}</p>}
+            </div>
+            <div>
+              <Label>First EMI date *</Label>
+              <Input type="date" {...inp('firstEmiDate')} />
+              {errors['firstEmiDate'] && <p className="text-xs text-negative mt-1">{errors['firstEmiDate']}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Tax benefit section</Label>
+              <select
+                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.taxBenefitSection ?? ''}
+                onChange={(e) => set('taxBenefitSection', e.target.value || null)}
+              >
+                <option value="">None</option>
+                <option value="80C+24B">80C + 24B (Home loan)</option>
+                <option value="80E">80E (Education loan)</option>
+              </select>
+            </div>
+            <div>
+              <Label>Status</Label>
+              <select
+                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.status}
+                onChange={(e) => set('status', e.target.value)}
+              >
+                {['ACTIVE', 'CLOSED', 'FORECLOSED', 'DEFAULT'].map((s) => (
+                  <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {mutation.isError && (
+          <p className="text-sm text-negative">
+            {mutation.error instanceof Error ? mutation.error.message : 'Failed to save loan'}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={mutation.isPending}>
+            {mutation.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────
+
+export function LoanListPage() {
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editLoan, setEditLoan] = useState<LoanDTO | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const qc = useQueryClient();
+
+  const { data: loans, isLoading } = useQuery({
+    queryKey: ['loans'],
+    queryFn: () => loansApi.list(),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => loansApi.remove(id),
+    onSuccess: () => {
+      toast.success('Loan deleted');
+      setConfirmDeleteId(null);
+      qc.invalidateQueries({ queryKey: ['loans'] });
+    },
+    onError: () => toast.error('Failed to delete loan'),
+  });
+
+  const list = loans ?? [];
+  const active = list.filter((l) => l.status === 'ACTIVE');
+  const inactive = list.filter((l) => l.status !== 'ACTIVE');
+
+  return (
+    <div>
+      <PageHeader
+        title="Loans"
+        description="Track home, car, personal, and other loans"
+        actions={
+          <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
+            <Plus className="h-4 w-4" /> Add loan
+          </Button>
+        }
+      />
+
+      {!isLoading && list.length > 0 && <SummaryStrip loans={list} />}
+
+      {isLoading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="h-44 animate-pulse bg-muted/60" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && list.length === 0 && (
+        <EmptyState
+          icon={Landmark}
+          title="No loans yet"
+          description="Track your home, car, personal, and education loans — payments, amortization, and tax benefits."
+          action={
+            <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add first loan
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && active.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {active.map((loan) =>
+            confirmDeleteId === loan.id ? (
+              <Card key={loan.id} className="border-destructive">
+                <CardContent className="p-5 flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium truncate">Delete "{loan.lenderName}" loan?</p>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate(loan.id)}
+                    >
+                      {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <LoanCard
+                key={loan.id}
+                loan={loan}
+                onEdit={() => { setEditLoan(loan); setCreateOpen(true); }}
+                onDelete={() => setConfirmDeleteId(loan.id)}
+                isDeleting={deleteMutation.isPending && confirmDeleteId === loan.id}
+              />
+            )
+          )}
+        </div>
+      )}
+
+      {!isLoading && inactive.length > 0 && (
+        <>
+          <h2 className="text-sm font-medium text-muted-foreground mt-8 mb-3">Closed / Foreclosed</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 opacity-60">
+            {inactive.map((loan) =>
+              confirmDeleteId === loan.id ? (
+                <Card key={loan.id} className="border-destructive">
+                  <CardContent className="p-5 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium truncate">Delete "{loan.lenderName}"?</p>
+                    <div className="flex gap-2 shrink-0">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate(loan.id)}
+                      >
+                        {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <LoanCard
+                  key={loan.id}
+                  loan={loan}
+                  onEdit={() => { setEditLoan(loan); setCreateOpen(true); }}
+                  onDelete={() => setConfirmDeleteId(loan.id)}
+                  isDeleting={deleteMutation.isPending && confirmDeleteId === loan.id}
+                />
+              )
+            )}
+          </div>
+        </>
+      )}
+
+      <CreateLoanDialog
+        open={createOpen}
+        onOpenChange={(v) => { setCreateOpen(v); if (!v) setEditLoan(null); }}
+        initial={editLoan}
+      />
+    </div>
+  );
+}
