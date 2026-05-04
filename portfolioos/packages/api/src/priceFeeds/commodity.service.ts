@@ -30,40 +30,28 @@ const LIVE_CACHE_TTL_MS = 60_000;
 const TROY_OZ_TO_GRAMS = 31.1035;
 
 async function fetchGoldApiInr(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null }> {
-  // Use Yahoo gold/silver futures (GC=F, SI=F) + exchangerate-api for USD→INR.
-  // GC=F and SI=F are US CME futures — different rate-limit bucket from Indian ETFs.
-  // exchangerate-api.com is a major platform accessible from all cloud regions.
+  // CoinGecko public API — major platform, global CDN, no auth, no Yahoo dependency.
+  // PAXG (Paxos Gold) = 1 troy oz of physical gold. Price tracks XAU very closely.
   try {
-    const [fxData, quotesArr] = await Promise.all([
-      fetch('https://api.exchangerate-api.com/v4/latest/USD', { signal: AbortSignal.timeout(8000) })
-        .then((r) => r.json() as Promise<{ rates?: Record<string, number> }>)
-        .catch(() => null as null),
-      yahooQuoteRaw(['GC=F', 'SI=F']).catch(() => [] as any[]),
-    ]);
+    const res = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=inr',
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+    const data = await res.json() as Record<string, { inr?: number }>;
+    const paxgInr = data['pax-gold']?.inr;
 
-    const usdInr = fxData?.rates?.INR;
-
-    if (!usdInr) {
-      logger.warn('[commodity] USD/INR rate unavailable');
-      return { GOLD: null, SILVER: null };
+    if (paxgInr) {
+      logger.info({ paxgInr }, '[commodity] gold price from CoinGecko PAXG');
+      return {
+        GOLD: new Decimal(paxgInr).div(TROY_OZ_TO_GRAMS),
+        SILVER: null, // silver fetched separately via Yahoo when rate limit clears
+      };
     }
-
-    const bySym = new Map<string, any>(quotesArr.map((q: any) => [q?.symbol, q]));
-    const gcq = bySym.get('GC=F');
-    const siq = bySym.get('SI=F');
-
-    return {
-      GOLD: gcq && typeof gcq.regularMarketPrice === 'number'
-        ? new Decimal(gcq.regularMarketPrice).div(TROY_OZ_TO_GRAMS).times(usdInr)
-        : null,
-      SILVER: siq && typeof siq.regularMarketPrice === 'number'
-        ? new Decimal(siq.regularMarketPrice).div(TROY_OZ_TO_GRAMS).times(usdInr)
-        : null,
-    };
   } catch (err) {
-    logger.warn({ err }, '[commodity] gold price fetch failed');
-    return { GOLD: null, SILVER: null };
+    logger.warn({ err }, '[commodity] CoinGecko gold fetch failed');
   }
+  return { GOLD: null, SILVER: null };
 }
 
 export async function fetchLivePrices(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null; fetchedAt: Date }> {
