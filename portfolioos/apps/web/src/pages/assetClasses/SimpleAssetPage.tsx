@@ -125,12 +125,12 @@ export function SimpleAssetPage({
   });
 
   // Enrich with live prices when provided
-  const allHoldings = computeLiveValue
+  const allHoldings: Array<HoldingRow & { portfolioName: string }> = computeLiveValue
     ? rawHoldings.map((h) => {
         const liveVal = computeLiveValue(h);
         if (!liveVal) return h;
         const livePnL = new Decimal(liveVal).minus(new Decimal(h.totalCost)).toFixed(4);
-        return { ...h, currentValue: liveVal, unrealisedPnL: livePnL };
+        return { ...h, currentValue: liveVal, unrealisedPnL: livePnL } as HoldingRow & { portfolioName: string };
       })
     : rawHoldings;
 

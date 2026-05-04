@@ -2,5 +2,6 @@
 set -e
 PORT=${PORT:-3000}
 API_URL=${API_URL:-http://api:3001}
-envsubst '$PORT $API_URL' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
+sed -e "s|\${PORT}|$PORT|g" -e "s|\${API_URL}|$API_URL|g" \
+    /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
 exec nginx -g 'daemon off;'

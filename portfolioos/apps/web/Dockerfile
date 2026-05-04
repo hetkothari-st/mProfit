@@ -19,7 +19,6 @@ RUN pnpm --filter @portfolioos/shared build
 RUN pnpm --filter @portfolioos/web build
 
 FROM nginx:alpine AS runtime
-RUN apk add --no-cache gettext
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf.template
 COPY apps/web/start.sh /start.sh
