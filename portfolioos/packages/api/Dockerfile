@@ -13,6 +13,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
 COPY . .
 RUN cd packages/api && node_modules/.bin/prisma generate
+RUN pnpm --filter @portfolioos/shared build
 RUN pnpm --filter @portfolioos/api build
 
 FROM node:20-alpine AS runtime
