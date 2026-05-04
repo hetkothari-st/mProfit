@@ -58,7 +58,7 @@ registerRoutes(app);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(env.PORT, '0.0.0.0', () => {
+const server = app.listen(env.PORT, '::', () => {
   logger.info(`PortfolioOS API listening on http://localhost:${env.PORT}`);
   startPriceJobs();
   startImportWorker();
