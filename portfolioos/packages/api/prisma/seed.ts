@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import * as bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { SEED_STOCKS } from '../src/priceFeeds/nseSeed.js';
 
 // Use the direct (superuser) URL so the seed bypasses Row-Level Security policies.
