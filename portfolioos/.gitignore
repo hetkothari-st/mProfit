@@ -37,3 +37,10 @@ packages/api/uploads/
 
 # Misc
 *.tsbuildinfo
+
+# Scraper debug dumps
+packages/api/extraction_*.html
+packages/api/extraction_*.txt
+
+# Stray test PDFs in repo root
+/*.pdf
