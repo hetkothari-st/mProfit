@@ -29,56 +29,43 @@ let liveCache: LiveCache | null = null;
 const LIVE_CACHE_TTL_MS = 60_000;
 const TROY_OZ_TO_GRAMS = 31.1035;
 
-async function fetchFxUsdInr(): Promise<number | null> {
-  try {
-    const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD', { signal: AbortSignal.timeout(5000) });
-    const data = await res.json() as { rates?: Record<string, number> };
-    return data?.rates?.INR ?? null;
-  } catch {
-    return null;
-  }
-}
-
 async function fetchGoldApiInr(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null }> {
-  // metals.live — cloud-friendly, no auth, widely reachable
+  // Frankfurter.app — ECB data, globally accessible from all cloud regions, no auth
   try {
-    const [metalsRes, usdInr] = await Promise.all([
-      fetch('https://api.metals.live/v1/spot', { signal: AbortSignal.timeout(5000) }),
-      fetchFxUsdInr(),
+    const [goldRes, fxRes] = await Promise.all([
+      fetch('https://api.frankfurter.app/latest?from=XAU&to=INR', { signal: AbortSignal.timeout(5000) }),
+      fetch('https://api.frankfurter.app/latest?from=USD&to=INR', { signal: AbortSignal.timeout(5000) }),
     ]);
-    if (metalsRes.ok && usdInr) {
-      const d = await metalsRes.json() as Record<string, number>;
-      if (d.gold && d.silver) {
-        return {
-          GOLD: new Decimal(d.gold).div(TROY_OZ_TO_GRAMS).times(usdInr),
-          SILVER: new Decimal(d.silver).div(TROY_OZ_TO_GRAMS).times(usdInr),
-        };
+    const [goldData, fxData] = await Promise.all([
+      goldRes.json() as Promise<{ rates?: { INR?: number } }>,
+      fxRes.json() as Promise<{ rates?: { INR?: number } }>,
+    ]);
+    const xauInr = goldData?.rates?.INR;   // INR per troy oz of gold
+    const usdInr = fxData?.rates?.INR;
+
+    let GOLD: Decimal | null = null;
+    let SILVER: Decimal | null = null;
+
+    if (xauInr) {
+      GOLD = new Decimal(xauInr).div(TROY_OZ_TO_GRAMS);
+    }
+
+    // Silver from Yahoo (XAG/USD futures) × USD/INR
+    if (usdInr) {
+      const arr = await yahooQuoteRaw(['SI=F']).catch(() => []);
+      const q = arr[0];
+      if (q && typeof q.regularMarketPrice === 'number') {
+        SILVER = new Decimal(q.regularMarketPrice).div(TROY_OZ_TO_GRAMS).times(usdInr);
       }
     }
+
+    if (GOLD || SILVER) return { GOLD, SILVER };
   } catch {
     // fall through
   }
 
-  // gold-api.com fallback
-  try {
-    const [goldRes, silverRes, usdInr] = await Promise.all([
-      fetch('https://api.gold-api.com/price/XAU', { signal: AbortSignal.timeout(5000) }),
-      fetch('https://api.gold-api.com/price/XAG', { signal: AbortSignal.timeout(5000) }),
-      fetchFxUsdInr(),
-    ]);
-    const [goldData, silverData] = await Promise.all([
-      goldRes.json() as Promise<{ price?: number }>,
-      silverRes.json() as Promise<{ price?: number }>,
-    ]);
-    if (!usdInr) return { GOLD: null, SILVER: null };
-    return {
-      GOLD: goldData?.price ? new Decimal(goldData.price).div(TROY_OZ_TO_GRAMS).times(usdInr) : null,
-      SILVER: silverData?.price ? new Decimal(silverData.price).div(TROY_OZ_TO_GRAMS).times(usdInr) : null,
-    };
-  } catch (err) {
-    logger.warn({ err }, '[commodity] gold-api fetch failed, will try Yahoo fallback');
-    return { GOLD: null, SILVER: null };
-  }
+  logger.warn('[commodity] all gold price sources failed');
+  return { GOLD: null, SILVER: null };
 }
 
 export async function fetchLivePrices(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null; fetchedAt: Date }> {
