@@ -1,4 +1,5 @@
 import { api } from './client';
+import { getApiBaseUrl } from './baseUrl';
 import type {
   ApiResponse,
   DocumentDTO,
@@ -43,8 +44,7 @@ export const documentsApi = {
     await api.delete(`/api/documents/${id}`);
   },
   downloadUrl(id: string): string {
-    const base =
-      (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3001';
+    const base = getApiBaseUrl();
     return `${base}/api/documents/${id}/download`;
   },
   async openDownload(id: string, fileName: string): Promise<void> {

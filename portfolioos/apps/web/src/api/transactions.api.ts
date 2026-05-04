@@ -1,4 +1,5 @@
 import { api } from './client';
+import { getApiBaseUrl } from './baseUrl';
 import type {
   ApiResponse,
   CreateTransactionRequest,
@@ -61,7 +62,7 @@ export const transactionsApi = {
     await api.delete(`/api/transactions/${txnId}/photos/${photoId}`);
   },
   photoUrl(txnId: string, photoId: string): string {
-    const base = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3001';
+    const base = getApiBaseUrl();
     return `${base}/api/transactions/${txnId}/photos/${photoId}`;
   },
 };

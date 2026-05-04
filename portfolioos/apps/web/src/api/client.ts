@@ -1,8 +1,8 @@
 import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '@/stores/auth.store';
+import { getApiBaseUrl } from './baseUrl';
 
-const baseURL =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3001';
+const baseURL = getApiBaseUrl();
 
 export const api: AxiosInstance = axios.create({
   baseURL,

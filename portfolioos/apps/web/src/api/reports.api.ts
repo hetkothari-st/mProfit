@@ -1,4 +1,5 @@
 import { api } from './client';
+import { getApiBaseUrl } from './baseUrl';
 import type { ApiResponse } from '@portfolioos/shared';
 
 function unwrap<T>(r: ApiResponse<T>): T {
@@ -185,7 +186,7 @@ export const reportsApi = {
     format: 'xlsx' | 'pdf',
     fy?: string,
   ): string => {
-    const base = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3001';
+    const base = getApiBaseUrl();
     return `${base}/api/reports/${endpoint}${qs({ portfolioId, fy, format })}`;
   },
 };
