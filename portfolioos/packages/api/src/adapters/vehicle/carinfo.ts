@@ -44,7 +44,7 @@ interface NextData {
   };
 }
 
-function extractNextData(html: string): Record<string, unknown> | null {
+export function extractNextData(html: string): Record<string, unknown> | null {
   // Standard Next.js page-router __NEXT_DATA__ tag
   const m = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([^<]+)<\/script>/i);
   if (m) {
@@ -121,7 +121,7 @@ function looksLikeVehicleObj(obj: Record<string, unknown>): boolean {
  * Recursively searches an object for a sub-object that looks like vehicle data.
  * Depth-limited to 4 levels to avoid runaway recursion on large state trees.
  */
-function findVehicleObject(obj: Record<string, unknown>, depth = 0): Record<string, unknown> | null {
+export function findVehicleObject(obj: Record<string, unknown>, depth = 0): Record<string, unknown> | null {
   if (depth > 4) return null;
 
   // Direct match
@@ -234,7 +234,7 @@ const MONTHS: Record<string, string> = {
   jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12',
 };
 
-function toIso(v: unknown): string | undefined {
+export function toIso(v: unknown): string | undefined {
   if (typeof v !== 'string') return undefined;
   const s = v.trim();
   if (!s || /^(NA|N\/A|null|undefined|-)$/i.test(s)) return undefined;
@@ -248,13 +248,13 @@ function toIso(v: unknown): string | undefined {
   return undefined;
 }
 
-function toYear(v: unknown): number | undefined {
+export function toYear(v: unknown): number | undefined {
   if (typeof v === 'number' && v >= 1900 && v <= 2100) return v;
   if (typeof v === 'string') { const m = v.match(/\b(19\d{2}|20\d{2})\b/); return m ? Number(m[1]) : undefined; }
   return undefined;
 }
 
-function get(obj: Record<string, unknown>, ...keys: string[]): string | undefined {
+export function get(obj: Record<string, unknown>, ...keys: string[]): string | undefined {
   for (const k of keys) {
     const v = obj[k];
     if (typeof v === 'string' && v.trim() && !/^(NA|N\/A|null|undefined|-)$/i.test(v.trim())) return v.trim();
@@ -262,7 +262,7 @@ function get(obj: Record<string, unknown>, ...keys: string[]): string | undefine
   return undefined;
 }
 
-function mapToVehicleRecord(raw: Record<string, unknown>, regNo: string): VehicleRecord {
+export function mapToVehicleRecord(raw: Record<string, unknown>, regNo: string): VehicleRecord {
   let make = get(raw,
     'maker_desc','make','manufacturer','vehicleMake','reg_maker_desc',
     'vehicle_manufacturer_name',
@@ -305,18 +305,18 @@ function mapToVehicleRecord(raw: Record<string, unknown>, regNo: string): Vehicl
     fitnessExpiry:  toIso(raw['fit_upto'] ?? raw['fitnessExpiry'] ?? raw['fitness_upto'] ?? raw['fitness_valid_upto']),
     roadTaxExpiry:  toIso(raw['tax_upto'] ?? raw['taxExpiry'] ?? raw['road_tax_upto'] ?? raw['roadTaxExpiry']),
     permitExpiry:   toIso(raw['permit_upto'] ?? raw['permitExpiry'] ?? raw['permit_valid_upto']),
-    metadata: {
-      raw,
-      source: 'carinfo',
-      // Extra fields CarInfo exposes that we surface in metadata
-      registrationDate:  toIso(raw['reg_date'] ?? raw['registration_date'] ?? raw['regn_dt']),
-      engineNo:          get(raw,'engine_no','engineNo','engine_number'),
-      hypothecation:     get(raw,'hypothecation','hp_status','financier'),
-      rcStatus:          get(raw,'rc_status','status','vehicle_status'),
-      vehicleClass:      get(raw,'vehicle_class','vehicle_class_desc'),
-      normsType:         get(raw,'norms_type','emission_norms','emission_standard'),
-      seatingCapacity:   raw['seating_capacity'] != null ? Number(raw['seating_capacity']) : undefined,
-    },
+    // ── Promoted to top-level: surfaced in dashboard, also written to columns ──
+    rcStatus:         get(raw,'rc_status','status','vehicle_status','registration_status')?.toUpperCase(),
+    vehicleClass:     get(raw,'vehicle_class','vehicle_class_desc')?.toUpperCase(),
+    normsType:        get(raw,'norms_type','emission_norms','emission_standard')?.toUpperCase(),
+    seatingCapacity:  raw['seating_capacity'] != null && !Number.isNaN(Number(raw['seating_capacity'])) ? Number(raw['seating_capacity']) : undefined,
+    unloadedWeight:   raw['unladen_weight'] != null && !Number.isNaN(Number(raw['unladen_weight'])) ? Number(raw['unladen_weight'])
+                       : raw['ulw'] != null && !Number.isNaN(Number(raw['ulw'])) ? Number(raw['ulw'])
+                       : raw['unloaded_weight'] != null && !Number.isNaN(Number(raw['unloaded_weight'])) ? Number(raw['unloaded_weight']) : undefined,
+    engineNo:         get(raw,'engine_no','engineNo','engine_number'),
+    hypothecation:    get(raw,'hypothecation','hp_status','financier','financer'),
+    registrationDate: toIso(raw['reg_date'] ?? raw['registration_date'] ?? raw['regn_dt']),
+    metadata: { raw, source: 'carinfo' },
   };
 }
 

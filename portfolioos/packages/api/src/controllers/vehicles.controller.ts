@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import { prisma } from '../lib/prisma.js';
+import { resolveVehiclePhoto } from '../adapters/vehicle/photo.js';
 import {
   listVehicles,
   getVehicle,
@@ -7,6 +9,7 @@ import {
   updateVehicle,
   deleteVehicle,
   refreshVehicle,
+  refreshVehiclePhoto,
   applyVahanSms,
 } from '../services/vehicles.service.js';
 import { initiateCarInfoScrape, verifyCarInfoOtp } from '../adapters/vehicle/carinfoPlaywright.js';
@@ -112,6 +115,12 @@ export async function scanChallans(req: Request, res: Response) {
   ok(res, result);
 }
 
+export async function refreshPhoto(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const result = await refreshVehiclePhoto(req.user.id, req.params.id!);
+  ok(res, result);
+}
+
 const carInfoInitSchema = z.object({
   registrationNo: z.string().min(5).max(20),
   mobileNo: z.string().length(10),
@@ -132,15 +141,112 @@ export async function carInfoInit(req: Request, res: Response) {
 export async function carInfoVerify(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const body = carInfoVerifySchema.parse(req.body ?? {});
-  
+  const userId = req.user.id;
+
   try {
     const data = await verifyCarInfoOtp(body.sessionId, body.otp);
-    ok(res, data);
+    const parsed = (data?.parsed ?? null) as
+      | (typeof data extends { parsed: infer P } ? P : null)
+      | null;
+    const regNo = (data?.regNo as string | undefined) ?? '';
+
+    // Build the Vehicle row directly from the parsed VehicleRecord — no form
+    // step. Falls back to a minimal row with just the registration number if
+    // the parser couldn't extract anything (rare; chain refresh fills gaps).
+    const cleanRegNo = regNo.replace(/\s+/g, '').toUpperCase();
+    if (!cleanRegNo) {
+      res.status(400).json({ success: false, message: 'No registration number returned by CarInfo' });
+      return;
+    }
+
+    const existing = await prisma.vehicle.findUnique({
+      where: { userId_registrationNo: { userId, registrationNo: cleanRegNo } },
+    });
+
+    type ParsedRecord = {
+      make?: string;
+      model?: string;
+      variant?: string;
+      manufacturingYear?: number;
+      fuelType?: string;
+      color?: string;
+      chassisLast4?: string;
+      rtoCode?: string;
+      ownerName?: string;
+      insuranceExpiry?: string;
+      pucExpiry?: string;
+      fitnessExpiry?: string;
+      roadTaxExpiry?: string;
+      permitExpiry?: string;
+      rcStatus?: string;
+      vehicleClass?: string;
+      normsType?: string;
+      seatingCapacity?: number;
+      unloadedWeight?: number;
+      engineNo?: string;
+      hypothecation?: string;
+      registrationDate?: string;
+    };
+    const p = (parsed ?? {}) as ParsedRecord;
+    const isoDate = (s?: string) => (s ? new Date(`${s}T00:00:00.000Z`) : null);
+    const rtoFromReg = cleanRegNo.match(/^([A-Z]{2}[0-9]{1,2})/)?.[1] ?? null;
+
+    const photo = await resolveVehiclePhoto(p.make, p.model, p.vehicleClass, p.fuelType);
+
+    const data_ = {
+      make: p.make ?? null,
+      model: p.model ?? null,
+      variant: p.variant ?? null,
+      manufacturingYear: p.manufacturingYear ?? null,
+      fuelType: p.fuelType ?? null,
+      color: p.color ?? null,
+      chassisLast4: p.chassisLast4 ?? null,
+      rtoCode: p.rtoCode ?? rtoFromReg,
+      ownerName: p.ownerName ?? null,
+      insuranceExpiry: isoDate(p.insuranceExpiry),
+      pucExpiry: isoDate(p.pucExpiry),
+      fitnessExpiry: isoDate(p.fitnessExpiry),
+      roadTaxExpiry: isoDate(p.roadTaxExpiry),
+      permitExpiry: isoDate(p.permitExpiry),
+      rcStatus: p.rcStatus ?? null,
+      vehicleClass: p.vehicleClass ?? null,
+      normsType: p.normsType ?? null,
+      seatingCapacity: p.seatingCapacity ?? null,
+      unloadedWeight: p.unloadedWeight ?? null,
+      engineNo: p.engineNo ?? null,
+      hypothecation: p.hypothecation ?? null,
+      registrationDate: isoDate(p.registrationDate),
+      photoUrl: photo?.url ?? null,
+      photoSource: photo?.source ?? null,
+      refreshSource: 'carinfo-playwright',
+      lastRefreshedAt: new Date(),
+    };
+
+    let vehicle;
+    if (existing) {
+      // Don't clobber existing user-edited fields with nulls
+      const patch: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(data_)) {
+        if (v !== null && v !== undefined) patch[k] = v;
+      }
+      vehicle = await prisma.vehicle.update({
+        where: { id: existing.id },
+        data: patch,
+        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: true },
+      });
+    } else {
+      vehicle = await prisma.vehicle.create({
+        data: { userId, registrationNo: cleanRegNo, ...data_ },
+        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: true },
+      });
+    }
+
+    ok(res, { vehicle, parsed, source: data?.source });
   } catch (error: any) {
     logger.error({ error, sessionId: body.sessionId }, 'CarInfo verification failed');
-    res.status(400).json({ 
-      success: false, 
-      message: error.message || 'Verification failed' 
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Verification failed',
     });
   }
 }

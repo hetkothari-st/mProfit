@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" fill="none">
+  <rect width="240" height="120" fill="#f1f5f9"/>
+  <path d="M30 80 L50 55 L100 55 L120 40 L170 40 L195 55 L210 55 L210 80 L30 80 Z"
+        fill="#94a3b8" stroke="#475569" stroke-width="2"/>
+  <circle cx="65" cy="85" r="10" fill="#1e293b"/>
+  <circle cx="65" cy="85" r="4" fill="#94a3b8"/>
+  <circle cx="180" cy="85" r="10" fill="#1e293b"/>
+  <circle cx="180" cy="85" r="4" fill="#94a3b8"/>
+  <rect x="105" y="45" width="40" height="15" fill="#cbd5e1"/>
+  <text x="120" y="105" font-family="sans-serif" font-size="9" fill="#64748b" text-anchor="middle">SEDAN</text>
+</svg>

@@ -38,6 +38,15 @@ export interface VehicleRecord {
   fitnessExpiry?: string;
   roadTaxExpiry?: string;
   permitExpiry?: string;
+  // ── Promoted from metadata so service layer can write to first-class columns ──
+  rcStatus?: string;
+  vehicleClass?: string;
+  normsType?: string;
+  seatingCapacity?: number;
+  unloadedWeight?: number;
+  engineNo?: string;
+  hypothecation?: string;
+  registrationDate?: string; // ISO YYYY-MM-DD
   /** Adapter-specific extras (raw API response, evidence). */
   metadata?: Record<string, unknown>;
 }

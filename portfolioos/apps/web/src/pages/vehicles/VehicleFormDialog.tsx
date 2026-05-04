@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Loader2, Trash2, Smartphone, Key, CheckCircle, Car, User, Calendar, FileText, ChevronLeft } from 'lucide-react';
+import { Loader2, Trash2, Smartphone, Key, Calendar, FileText, ChevronLeft, Car, User } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -63,7 +64,10 @@ interface Props {
 
 export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const isEdit = Boolean(initial);
+  // Add flow: registration → mobile → otp → (server creates vehicle, dialog closes)
+  // Edit flow: skips wizard, goes straight to the form on the existing vehicle.
   const [step, setStep] = useState<'registration' | 'mobile' | 'otp' | 'details'>(
     isEdit ? 'details' : 'registration',
   );
@@ -126,7 +130,14 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
       }
       return vehiclesApi.create(body as { registrationNo: string });
     },
-    onSuccess: () => {
+    onSuccess: async (vehicle) => {
+      // Best-effort: pull the rest of the RC metadata + photo via the
+      // free CarInfo/mParivahan/Rahastas chain. Errors here are non-fatal.
+      if (!isEdit && vehicle?.id) {
+        try {
+          await vehiclesApi.refresh(vehicle.id, { mode: 'auto' });
+        } catch { /* non-fatal */ }
+      }
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
       toast.success(isEdit ? 'Vehicle updated' : 'Vehicle added');
       onOpenChange(false);
@@ -172,78 +183,23 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
       if (!sessionId) return;
       return vehiclesApi.carInfoVerify({ sessionId, otp });
     },
-    onSuccess: (data) => {
-      // Map CarInfo data to form
-      const raw = data?.raw || {};
-      const sc = raw.scraped || {};
-      
-      // Flatten all captured API JSON responses to find hidden vehicle details
-      const flattenObj = (ob: any): any => {
-        let result: any = {};
-        if (!ob) return result;
-        for (const i in ob) {
-            if (typeof ob[i] === 'object' && !Array.isArray(ob[i]) && ob[i] !== null) {
-                const temp = flattenObj(ob[i]);
-                for (const j in temp) {
-                    result[j] = temp[j];
-                }
-            } else {
-                result[i] = ob[i];
-            }
-        }
-        return result;
-      };
-
-      let flatApi = {};
-      if (Array.isArray(raw.apiResponses)) {
-          for (const res of raw.apiResponses) {
-              if (res.json) {
-                  flatApi = { ...flatApi, ...flattenObj(res.json) };
-              }
-          }
+    onSuccess: async (data: any) => {
+      // Server now creates the Vehicle row directly from parsed CarInfo data.
+      // No verify-form step. Trigger an auto-mode chain refresh (mParivahan +
+      // Rahastas) to backfill any fields the OTP-flow missed (norms, seating,
+      // weight, hypothecation), then close + navigate to detail page.
+      const vehicle = data?.vehicle;
+      if (!vehicle?.id) {
+        toast.error('Vehicle creation failed — try again or use SMS paste');
+        return;
       }
-
-      const rc = { ...(raw.rcData || raw.rc || raw.data || {}), ...flatApi };
-      
-      console.log('CarInfo Data received:', { raw, rc, sc });
-
-      const parseDate = (d?: string) => {
-        if (!d) return '';
-        // If already YYYY-MM-DD
-        if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
-        // Handle DD-MMM-YYYY or DD MMM YYYY
-        const months: Record<string, string> = { 
-          jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
-          jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
-        };
-        const parts = d.split(/[- ]/);
-        if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
-          const day = parts[0].padStart(2, '0');
-          const month = months[parts[1].toLowerCase().slice(0, 3)];
-          const year = parts[2];
-          if (day && month && year) return `${year}-${month}-${day}`;
-        }
-        return d;
-      };
-
-      // Also look for common variants in the flattened API data
-      reset({
-        registrationNo: rc.regNo || rc.registration_no || rc.registrationNumber || sc.registrationNo || watch('registrationNo'),
-        ownerName: sc.ownerName || rc.owner_name || rc.owner || rc.ownerName || rc.ownerName1 || '',
-        make: sc.make || rc.maker_desc || rc.make || rc.maker_name || rc.brand || '',
-        model: sc.model || rc.model_name || rc.model || rc.maker_model || '',
-        variant: sc.variant || rc.variant || rc.variant_name || '',
-        manufacturingYear: parseInt(rc.mfg_year || rc.manufacturingYear || rc.manufacturing_year || sc.registrationDate?.slice(-4) || '0') || undefined,
-        fuelType: (sc.fuelType || rc.fuel_type || rc.fuelType || rc.fuel || '').toUpperCase(),
-        color: sc.color || rc.color || rc.colour || '',
-        chassisLast4: (sc.chassisNo || rc.chassis_no || rc.chassis || '').slice(-4),
-        insuranceExpiry: parseDate(sc.insuranceExpiry || rc.insurance_upto || rc.insurance_expiry || rc.insuranceUpto),
-        pucExpiry: parseDate(sc.pucExpiry || rc.pucc_upto || rc.puc_expiry || rc.puccUpto || rc.pucUpto),
-        fitnessExpiry: parseDate(sc.fitnessExpiry || rc.fit_upto || rc.fitness_expiry || rc.fitnessUpto),
-        roadTaxExpiry: parseDate(sc.roadTaxExpiry || rc.tax_upto || rc.tax_expiry || rc.taxUpto),
-      });
-      setStep('details');
-      toast.success('Vehicle details fetched');
+      try {
+        await vehiclesApi.refresh(vehicle.id, { mode: 'auto' });
+      } catch { /* non-fatal — minimum row already in DB */ }
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      toast.success('Vehicle added');
+      onOpenChange(false);
+      navigate(`/vehicles/${vehicle.id}`);
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || err.message || 'Verification failed');

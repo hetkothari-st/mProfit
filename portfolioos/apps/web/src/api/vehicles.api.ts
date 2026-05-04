@@ -43,6 +43,17 @@ export interface VehicleDTO {
   fitnessExpiry: string | null;
   roadTaxExpiry: string | null;
   permitExpiry: string | null;
+  // Promoted dashboard fields
+  rcStatus: string | null;
+  vehicleClass: string | null;
+  normsType: string | null;
+  seatingCapacity: number | null;
+  unloadedWeight: number | null;
+  engineNo: string | null;
+  hypothecation: string | null;
+  registrationDate: string | null;
+  photoUrl: string | null;
+  photoSource: string | null;
   lastRefreshedAt: string | null;
   refreshSource: string | null;
   createdAt: string;
@@ -156,6 +167,12 @@ export const vehiclesApi = {
   async scanChallans(id: string): Promise<ChallanScanResult> {
     const { data } = await api.post<ApiResponse<ChallanScanResult>>(
       `/api/vehicles/${id}/challans/scan`,
+    );
+    return unwrap(data);
+  },
+  async refreshPhoto(id: string): Promise<{ vehicle: VehicleDTO; photo: { url: string; source: string } | null }> {
+    const { data } = await api.post<ApiResponse<{ vehicle: VehicleDTO; photo: { url: string; source: string } | null }>>(
+      `/api/vehicles/${id}/refresh-photo`,
     );
     return unwrap(data);
   },

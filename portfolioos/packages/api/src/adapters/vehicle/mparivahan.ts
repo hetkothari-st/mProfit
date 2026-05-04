@@ -118,6 +118,18 @@ export function parseMparivahanPayload(payload: unknown, regNo: string): Vehicle
     fitnessExpiry:   toIso(p['fitnessExpiry']??p['fitnessUpto']??p['fit_upto']??p['reg_fit_upto']??p['rcFitUpto']??p['fit_valid_upto']),
     roadTaxExpiry:   toIso(p['taxExpiry']??p['taxUpto']??p['roadTaxUpto']??p['tax_upto']??p['reg_tax_upto']??p['rcTaxUpto']??p['tax_valid_upto']),
     permitExpiry:    toIso(p['permitExpiry']??p['permitUpto']??p['permit_upto']??p['reg_permit_upto']??p['rcPermitUpto']),
+    // ── Promoted fields (surfaced in dashboard) ──
+    rcStatus:         get('rc_status','status','vehicle_status','registration_status','rcStatus')?.toUpperCase(),
+    vehicleClass:     get('vehicle_class','vehicle_class_desc','vehicleClass','rcVchClassDesc','reg_vch_class_desc')?.toUpperCase(),
+    normsType:        get('norms_type','emission_norms','emission_standard','normsType','rcNormsDesc')?.toUpperCase(),
+    seatingCapacity:  p['seating_capacity'] != null && !Number.isNaN(Number(p['seating_capacity'])) ? Number(p['seating_capacity'])
+                       : p['seatingCapacity'] != null && !Number.isNaN(Number(p['seatingCapacity'])) ? Number(p['seatingCapacity']) : undefined,
+    unloadedWeight:   p['unladen_weight'] != null && !Number.isNaN(Number(p['unladen_weight'])) ? Number(p['unladen_weight'])
+                       : p['ulw'] != null && !Number.isNaN(Number(p['ulw'])) ? Number(p['ulw'])
+                       : p['unloadedWeight'] != null && !Number.isNaN(Number(p['unloadedWeight'])) ? Number(p['unloadedWeight']) : undefined,
+    engineNo:         get('engine_no','engineNo','engine_number','rcEngineNo','reg_engine_no'),
+    hypothecation:    get('hypothecation','hp_status','financier','financer','rcFinancier','reg_financier'),
+    registrationDate: toIso(p['reg_date'] ?? p['registration_date'] ?? p['regn_dt'] ?? p['rcRegnDt'] ?? p['regDate']),
     metadata: { raw: p, source: 'mparivahan' },
   };
 }

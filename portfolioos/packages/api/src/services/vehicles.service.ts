@@ -25,6 +25,7 @@ import {
   type VehicleFetchMode,
 } from '../adapters/vehicle/chain.js';
 import type { VehicleRecord } from '../adapters/vehicle/types.js';
+import { resolveVehiclePhoto } from '../adapters/vehicle/photo.js';
 
 // Indian RC pattern: 2-char state + 1-2 digit RTO + 1-3 alpha series +
 // 4-digit number. Covers MH47BT5950, DL01AB1234, KA05MP9999, etc. We
@@ -254,6 +255,24 @@ function mergeRecord(
   const permit = dateField(record.permitExpiry);
   if (permit) d.permitExpiry = permit;
 
+  // ── Promoted fields ──
+  if (record.rcStatus !== undefined)
+    d.rcStatus = prefer(record.rcStatus, existing.rcStatus);
+  if (record.vehicleClass !== undefined)
+    d.vehicleClass = prefer(record.vehicleClass, existing.vehicleClass);
+  if (record.normsType !== undefined)
+    d.normsType = prefer(record.normsType, existing.normsType);
+  if (record.seatingCapacity !== undefined)
+    d.seatingCapacity = prefer(record.seatingCapacity, existing.seatingCapacity);
+  if (record.unloadedWeight !== undefined)
+    d.unloadedWeight = prefer(record.unloadedWeight, existing.unloadedWeight);
+  if (record.engineNo !== undefined)
+    d.engineNo = prefer(record.engineNo, existing.engineNo);
+  if (record.hypothecation !== undefined)
+    d.hypothecation = prefer(record.hypothecation, existing.hypothecation);
+  const regDt = dateField(record.registrationDate);
+  if (regDt) d.registrationDate = regDt;
+
   return d;
 }
 
@@ -286,6 +305,19 @@ export async function refreshVehicle(
   data.lastRefreshedAt = new Date();
   data.refreshSource = outcome.source ?? null;
 
+  // ── Photo lookup: only if vehicle has no photo yet AND make/model now known ──
+  if (!existing.photoUrl) {
+    const make = (data.make as string | null | undefined) ?? existing.make;
+    const model = (data.model as string | null | undefined) ?? existing.model;
+    const vehicleClass = (data.vehicleClass as string | null | undefined) ?? existing.vehicleClass;
+    const fuelType = (data.fuelType as string | null | undefined) ?? existing.fuelType;
+    const photo = await resolveVehiclePhoto(make, model, vehicleClass, fuelType);
+    if (photo) {
+      data.photoUrl = photo.url;
+      data.photoSource = photo.source;
+    }
+  }
+
   const updated = await prisma.vehicle.update({
     where: { id },
     data,
@@ -296,6 +328,33 @@ export async function refreshVehicle(
   });
 
   return { vehicle: updated, outcome };
+}
+
+/**
+ * Force-refresh photo only (no RC chain run). Useful when seeded photos
+ * are added later or user clicks "Refresh photo" without wanting a full
+ * VAHAN re-fetch.
+ */
+export async function refreshVehiclePhoto(userId: string, id: string) {
+  const existing = await getVehicle(userId, id);
+  const photo = await resolveVehiclePhoto(
+    existing.make,
+    existing.model,
+    existing.vehicleClass,
+    existing.fuelType,
+  );
+  if (!photo) {
+    return { vehicle: existing, photo: null };
+  }
+  const updated = await prisma.vehicle.update({
+    where: { id },
+    data: { photoUrl: photo.url, photoSource: photo.source },
+    include: {
+      challans: { orderBy: { offenceDate: 'desc' } },
+      insurancePolicies: true,
+    },
+  });
+  return { vehicle: updated, photo };
 }
 
 /**
@@ -337,6 +396,12 @@ export async function applyVahanSms(
     return { vehicle: updated, outcome, created: false };
   }
 
+  const photo = await resolveVehiclePhoto(
+    outcome.record.make,
+    outcome.record.model,
+    outcome.record.vehicleClass,
+    outcome.record.fuelType,
+  );
   const created = await prisma.vehicle.create({
     data: {
       userId,
@@ -365,6 +430,18 @@ export async function applyVahanSms(
       permitExpiry: outcome.record.permitExpiry
         ? new Date(`${outcome.record.permitExpiry}T00:00:00.000Z`)
         : null,
+      rcStatus: outcome.record.rcStatus ?? null,
+      vehicleClass: outcome.record.vehicleClass ?? null,
+      normsType: outcome.record.normsType ?? null,
+      seatingCapacity: outcome.record.seatingCapacity ?? null,
+      unloadedWeight: outcome.record.unloadedWeight ?? null,
+      engineNo: outcome.record.engineNo ?? null,
+      hypothecation: outcome.record.hypothecation ?? null,
+      registrationDate: outcome.record.registrationDate
+        ? new Date(`${outcome.record.registrationDate}T00:00:00.000Z`)
+        : null,
+      photoUrl: photo?.url ?? null,
+      photoSource: photo?.source ?? null,
       refreshSource: outcome.source ?? null,
       lastRefreshedAt: new Date(),
     },
