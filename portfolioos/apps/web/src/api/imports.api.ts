@@ -10,14 +10,16 @@ export interface UploadImportParams {
   file: File;
   portfolioId?: string | null;
   broker?: string;
+  password?: string;
 }
 
 export const importsApi = {
-  async upload({ file, portfolioId, broker }: UploadImportParams): Promise<ImportCreateResponse> {
+  async upload({ file, portfolioId, broker, password }: UploadImportParams): Promise<ImportCreateResponse> {
     const form = new FormData();
     form.append('file', file);
     if (portfolioId) form.append('portfolioId', portfolioId);
     if (broker) form.append('broker', broker);
+    if (password) form.append('password', password);
     const { data } = await api.post<ApiResponse<ImportCreateResponse>>('/api/imports', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

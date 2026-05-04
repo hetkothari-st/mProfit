@@ -20,6 +20,8 @@ export interface CreateImportJobInput {
   broker?: string | null;
   contentHash?: string | null;
   gmailMessageId?: string | null;
+  /** Optional user-supplied PDF password (forwarded to the PDF reader). */
+  pdfPassword?: string | null;
 }
 
 export async function createImportJob(input: CreateImportJobInput) {
@@ -79,7 +81,7 @@ export async function createImportJob(input: CreateImportJobInput) {
     // Enqueue for async processing
     try {
       const q = getImportQueue();
-      await q.add({ importJobId: job.id, userId: input.userId });
+      await q.add({ importJobId: job.id, userId: input.userId, pdfPassword: input.pdfPassword ?? null });
       logger.info({ jobId: job.id }, '[import] enqueued');
     } catch (err) {
       logger.warn({ err, jobId: job.id }, '[import] enqueue failed — will need manual retry');
@@ -129,7 +131,7 @@ export async function deleteImportJob(userId: string, id: string) {
   try { await unlink(job.filePath); } catch { /* ignore */ }
 }
 
-export async function processImportJob(importJobId: string): Promise<{
+export async function processImportJob(importJobId: string, pdfPassword?: string | null): Promise<{
   parser: string;
   total: number;
   success: number;
@@ -144,11 +146,14 @@ export async function processImportJob(importJobId: string): Promise<{
     data: { status: 'PROCESSING' },
   });
 
+  const extraPasswords = pdfPassword ? [pdfPassword] : undefined;
+
   const { adapter, result } = await runFileImportAdapter({
     filePath: job.filePath,
     fileName: job.fileName,
     portfolioId: job.portfolioId,
     userId: job.userId,
+    extraPasswords,
   });
 
   // A hard parse failure (e.g. truncated PDF, parser threw) is both an

@@ -22,12 +22,12 @@ export function startImportWorker(): void {
 
   const q = getImportQueue();
   q.process(2, async (job) => {
-    const { importJobId, userId } = job.data as { importJobId: string; userId: string };
+    const { importJobId, userId, pdfPassword } = job.data as { importJobId: string; userId: string; pdfPassword?: string | null };
     const t0 = Date.now();
     logger.info({ bullJobId: job.id, importJobId }, '[worker] processing import job');
     // Each import belongs to exactly one user — run under their tenant
     // context so Prisma + RLS enforce isolation even inside the worker.
-    const result = await runAsUser(userId, () => processImportJob(importJobId));
+    const result = await runAsUser(userId, () => processImportJob(importJobId, pdfPassword));
     const durationMs = Date.now() - t0;
     if (durationMs > SLOW_JOB_WARN_MS) {
       logger.warn(

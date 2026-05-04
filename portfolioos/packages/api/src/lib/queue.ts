@@ -5,6 +5,7 @@ import { logger } from './logger.js';
 export interface ImportJobPayload {
   importJobId: string;
   userId: string;
+  pdfPassword?: string | null;
 }
 
 /**

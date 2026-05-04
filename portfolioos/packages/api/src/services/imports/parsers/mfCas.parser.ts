@@ -73,7 +73,8 @@ export const mfCasParser: Parser = {
   },
 
   async parse(ctx): Promise<ParserResult> {
-    const passwords = await getUserPdfPasswords(ctx.userId);
+    const autoPasswords = await getUserPdfPasswords(ctx.userId);
+    const passwords = [...(ctx.extraPasswords ?? []), ...autoPasswords];
     let text: string;
     try {
       const r = await readPdfText(ctx.filePath, passwords);

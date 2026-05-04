@@ -6,6 +6,8 @@ export interface FileImportInput {
   portfolioId: string | null;
   filePath: string;
   fileName: string;
+  /** User-supplied PDF passwords to try before auto-detected ones. */
+  extraPasswords?: string[];
 }
 
 /**

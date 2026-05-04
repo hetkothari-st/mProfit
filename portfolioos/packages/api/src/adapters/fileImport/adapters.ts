@@ -151,6 +151,7 @@ function makeAdapter(
           fileName: input.fileName,
           portfolioId: input.portfolioId,
           userId: input.userId,
+          extraPasswords: input.extraPasswords,
         });
         const adapterId = result.adapter ?? fallbackId;
         const adapterVer = result.adapterVer ?? fallbackVer;

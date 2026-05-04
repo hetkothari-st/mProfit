@@ -31,6 +31,7 @@ const createSchema = z.object({
   portfolioId: z.string().min(1).nullable().optional(),
   type: ImportTypeEnum.optional(),
   broker: z.string().min(1).max(100).optional(),
+  password: z.string().min(1).max(200).optional(),
 });
 
 function inferTypeFromFileName(fileName: string): ImportType {
@@ -83,6 +84,7 @@ export async function upload(req: Request, res: Response) {
     fileName: req.file.originalname,
     filePath: req.file.path,
     broker: body.broker ?? null,
+    pdfPassword: body.password ?? null,
   });
 
   created(res, {
@@ -134,7 +136,7 @@ export async function reprocess(req: Request, res: Response) {
     }
   }
 
-  const result = await processImportJob(job.id);
+  const result = await processImportJob(job.id, password);
   ok(res, result);
 }
 
