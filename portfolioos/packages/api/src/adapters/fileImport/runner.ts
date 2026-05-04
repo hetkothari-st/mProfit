@@ -30,7 +30,8 @@ async function buildSample(
     }
   }
 
-  const passwords = await getUserPdfPasswords(ctx.userId);
+  const autoPasswords = await getUserPdfPasswords(ctx.userId);
+  const passwords = [...(ctx.extraPasswords ?? []), ...autoPasswords];
   try {
     const { text } = await readPdfText(ctx.filePath, passwords);
     const stripped = text.replace(/\s+/g, '');
@@ -67,6 +68,7 @@ export async function runFileImportAdapter(
     fileName: input.fileName,
     portfolioId: input.portfolioId,
     userId: input.userId,
+    extraPasswords: input.extraPasswords,
   };
 
   const sample = await buildSample(ctx);

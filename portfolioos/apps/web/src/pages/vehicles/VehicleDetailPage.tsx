@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -14,11 +14,13 @@ import {
   Info,
   ScanLine,
   Trash2,
+  Image as ImageIcon,
+  Calculator,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { vehiclesApi } from '@/api/vehicles.api';
+import { vehiclesApi, type ChallanDTO } from '@/api/vehicles.api';
 import { apiErrorMessage } from '@/api/client';
 import { VehicleFormDialog } from './VehicleFormDialog';
 import { SmsPasteDialog } from './SmsPasteDialog';
@@ -28,6 +30,20 @@ function daysUntil(iso: string | null): number | null {
   const then = new Date(iso).getTime();
   const now = Date.now();
   return Math.floor((then - now) / (1000 * 60 * 60 * 24));
+}
+
+function formatYearsAndMonths(fromDate: Date): string {
+  const now = new Date();
+  let years = now.getFullYear() - fromDate.getFullYear();
+  let months = now.getMonth() - fromDate.getMonth();
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  if (years <= 0 && months <= 0) return 'Less than 1 month';
+  if (years <= 0) return `${months} month${months > 1 ? 's' : ''}`;
+  if (months === 0) return `${years} year${years > 1 ? 's' : ''}`;
+  return `${years} year${years > 1 ? 's' : ''} ${months} month${months > 1 ? 's' : ''}`;
 }
 
 function ExpiryRow({ label, iso }: { label: string; iso: string | null }) {
@@ -62,13 +78,44 @@ function ExpiryRow({ label, iso }: { label: string; iso: string | null }) {
   );
 }
 
-function DetailField({ label, value }: { label: string; value: string | number | null }) {
+function DetailField({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
     <div>
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-sm font-medium">{value ?? '—'}</div>
+      <div className="text-sm font-medium">{value !== null && value !== undefined && value !== '' ? value : '—'}</div>
     </div>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const s = status.toUpperCase();
+  let cls = 'bg-slate-100 text-slate-700';
+  if (s === 'PENDING' || s === 'UNPAID') cls = 'bg-amber-100 text-amber-700';
+  else if (s === 'PAID' || s === 'DISPOSED') cls = 'bg-emerald-100 text-emerald-700';
+  else if (s === 'CONTESTED' || s === 'COURT') cls = 'bg-blue-100 text-blue-700';
+  else if (s === 'CANCELLED') cls = 'bg-slate-200 text-slate-600';
+  return (
+    <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${cls}`}>
+      {status}
+    </span>
+  );
+}
+
+type ChallanTab = 'ALL' | 'PENDING' | 'PAID' | 'CONTESTED';
+
+function challanMatches(c: ChallanDTO, tab: ChallanTab): boolean {
+  const s = c.status.toUpperCase();
+  if (tab === 'ALL') return true;
+  if (tab === 'PENDING') return s === 'PENDING' || s === 'UNPAID';
+  if (tab === 'PAID') return s === 'PAID' || s === 'DISPOSED';
+  if (tab === 'CONTESTED') return s === 'CONTESTED' || s === 'COURT';
+  return false;
+}
+
+function sumAmount(rows: ChallanDTO[]): string {
+  let total = 0;
+  for (const r of rows) total += Number(r.amount);
+  return total.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 }
 
 export function VehicleDetailPage() {
@@ -77,6 +124,7 @@ export function VehicleDetailPage() {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [smsOpen, setSmsOpen] = useState(false);
+  const [challanTab, setChallanTab] = useState<ChallanTab>('ALL');
 
   const { data: vehicle, isLoading } = useQuery({
     queryKey: ['vehicles', id],
@@ -101,6 +149,16 @@ export function VehicleDetailPage() {
       }
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Refresh failed')),
+  });
+
+  const refreshPhotoMutation = useMutation({
+    mutationFn: () => vehiclesApi.refreshPhoto(id),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      if (result.photo) toast.success('Photo updated');
+      else toast.error('No matching stock photo for this make/model.');
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Photo refresh failed')),
   });
 
   const deleteMutation = useMutation({
@@ -136,6 +194,33 @@ export function VehicleDetailPage() {
     onError: (err) => toast.error(apiErrorMessage(err, 'Challan scan failed')),
   });
 
+  const ageInfo = useMemo(() => {
+    if (!vehicle) return null;
+    const fromMfg = vehicle.manufacturingYear
+      ? formatYearsAndMonths(new Date(vehicle.manufacturingYear, 0, 1))
+      : null;
+    const fromReg = vehicle.registrationDate
+      ? formatYearsAndMonths(new Date(vehicle.registrationDate))
+      : null;
+    return { fromMfg, fromReg };
+  }, [vehicle]);
+
+  const challanRows = vehicle?.challans ?? [];
+  const filteredChallans = useMemo(
+    () => challanRows.filter((c) => challanMatches(c, challanTab)),
+    [challanRows, challanTab],
+  );
+  const challanCounts = useMemo(() => {
+    const counts: Record<ChallanTab, number> = { ALL: challanRows.length, PENDING: 0, PAID: 0, CONTESTED: 0 };
+    const sums: Record<ChallanTab, string> = { ALL: sumAmount(challanRows), PENDING: '0', PAID: '0', CONTESTED: '0' };
+    for (const tab of ['PENDING', 'PAID', 'CONTESTED'] as ChallanTab[]) {
+      const filtered = challanRows.filter((c) => challanMatches(c, tab));
+      counts[tab] = filtered.length;
+      sums[tab] = sumAmount(filtered);
+    }
+    return { counts, sums };
+  }, [challanRows]);
+
   if (isLoading || !vehicle) {
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">Loading…</div>
@@ -152,6 +237,9 @@ export function VehicleDetailPage() {
     const d = daysUntil(iso);
     return d !== null && d <= 30;
   });
+
+  const showBothAges =
+    ageInfo?.fromMfg && ageInfo?.fromReg && ageInfo.fromMfg !== ageInfo.fromReg;
 
   return (
     <div>
@@ -179,7 +267,12 @@ export function VehicleDetailPage() {
           'Vehicle details'
         }
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button asChild variant="outline">
+              <Link to={`/vehicles/value?vehicleId=${vehicle.id}`}>
+                <Calculator className="h-4 w-4" /> Get valuation
+              </Link>
+            </Button>
             <Button variant="outline" onClick={() => setSmsOpen(true)}>
               <MessageSquareShare className="h-4 w-4" /> SMS
             </Button>
@@ -215,6 +308,60 @@ export function VehicleDetailPage() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Photo card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ImageIcon className="h-4 w-4" /> Photo
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="aspect-video bg-slate-100 rounded-md overflow-hidden flex items-center justify-center">
+              {vehicle.photoUrl ? (
+                <img
+                  src={vehicle.photoUrl}
+                  alt={[vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'Vehicle'}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="text-xs text-muted-foreground text-center p-4">
+                  No photo available.
+                  <br />
+                  Refresh RC data to fetch a stock photo.
+                </div>
+              )}
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {vehicle.photoUrl
+                  ? `Stock photo · ${vehicle.photoSource ?? 'source'}`
+                  : ''}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => refreshPhotoMutation.mutate()}
+                disabled={refreshPhotoMutation.isPending}
+              >
+                {refreshPhotoMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {vehicle.photoUrl ? 'Refresh' : 'Find photo'}
+              </Button>
+            </div>
+            {vehicle.photoUrl && (
+              <p className="mt-1 text-[10px] text-muted-foreground italic">
+                RTO does not publish vehicle-specific photos. Stock image keyed by make+model.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">Registration &amp; owner</CardTitle>
@@ -227,6 +374,34 @@ export function VehicleDetailPage() {
               <DetailField label="Color" value={vehicle.color} />
               <DetailField label="Manufacturing year" value={vehicle.manufacturingYear} />
               <DetailField label="Chassis (last 4)" value={vehicle.chassisLast4} />
+              <DetailField
+                label="Registration date"
+                value={vehicle.registrationDate?.slice(0, 10) ?? null}
+              />
+              <DetailField label="RC status" value={vehicle.rcStatus} />
+              <DetailField label="Vehicle class" value={vehicle.vehicleClass} />
+              <DetailField label="Emission norms" value={vehicle.normsType} />
+              <DetailField
+                label="Vehicle age"
+                value={
+                  showBothAges
+                    ? `${ageInfo?.fromMfg} (mfg) · ${ageInfo?.fromReg} (reg)`
+                    : (ageInfo?.fromMfg ?? ageInfo?.fromReg ?? null)
+                }
+              />
+              <DetailField
+                label="Seating capacity"
+                value={vehicle.seatingCapacity}
+              />
+              <DetailField
+                label="Unloaded weight"
+                value={vehicle.unloadedWeight ? `${vehicle.unloadedWeight} kg` : null}
+              />
+              <DetailField label="Engine no." value={vehicle.engineNo} />
+              <DetailField
+                label="Hypothecation"
+                value={vehicle.hypothecation && vehicle.hypothecation !== 'NONE' ? vehicle.hypothecation : 'Clear'}
+              />
               <DetailField
                 label="Purchase date"
                 value={vehicle.purchaseDate?.slice(0, 10) ?? null}
@@ -253,16 +428,18 @@ export function VehicleDetailPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle className="text-base">Expiries</CardTitle>
           </CardHeader>
           <CardContent>
-            <ExpiryRow label="Insurance" iso={vehicle.insuranceExpiry} />
-            <ExpiryRow label="PUC" iso={vehicle.pucExpiry} />
-            <ExpiryRow label="Fitness" iso={vehicle.fitnessExpiry} />
-            <ExpiryRow label="Road tax" iso={vehicle.roadTaxExpiry} />
-            <ExpiryRow label="Permit" iso={vehicle.permitExpiry} />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <ExpiryRow label="Insurance" iso={vehicle.insuranceExpiry} />
+              <ExpiryRow label="PUC" iso={vehicle.pucExpiry} />
+              <ExpiryRow label="Fitness" iso={vehicle.fitnessExpiry} />
+              <ExpiryRow label="Road tax" iso={vehicle.roadTaxExpiry} />
+              <ExpiryRow label="Permit" iso={vehicle.permitExpiry} />
+            </div>
           </CardContent>
         </Card>
 
@@ -288,10 +465,51 @@ export function VehicleDetailPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {(vehicle.challans ?? []).length === 0 ? (
+            {/* Tabs */}
+            <div className="flex flex-wrap gap-2 mb-3 border-b pb-3">
+              {(['ALL', 'PENDING', 'PAID', 'CONTESTED'] as ChallanTab[]).map((tab) => {
+                const active = tab === challanTab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setChallanTab(tab)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition ${
+                      active
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                    }`}
+                  >
+                    {tab.charAt(0) + tab.slice(1).toLowerCase()} ({challanCounts.counts[tab]})
+                  </button>
+                );
+              })}
+            </div>
+            {/* Totals card */}
+            {challanRows.length > 0 && (
+              <div className="mb-3 rounded-md bg-muted/50 p-3 text-xs">
+                <div className="flex items-center gap-3">
+                  <span className="font-medium">
+                    {challanCounts.counts[challanTab]} challan{challanCounts.counts[challanTab] !== 1 ? 's' : ''}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="numeric">
+                    Total: ₹{challanCounts.sums[challanTab]}
+                  </span>
+                  {challanTab === 'ALL' && challanRows.length > 0 && (
+                    <span className="text-muted-foreground ml-2">
+                      (Pending: {challanCounts.counts.PENDING} · ₹{challanCounts.sums.PENDING}
+                      {' · '}Paid: {challanCounts.counts.PAID} · ₹{challanCounts.sums.PAID})
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {filteredChallans.length === 0 ? (
               <div className="text-sm text-muted-foreground py-4">
-                No challans on record. Challan scanning runs monthly per §7.5 — the real
-                adapter ships after Gate G6.
+                {challanRows.length === 0
+                  ? 'No challans on record. Click "Check challans" to scan.'
+                  : `No challans in "${challanTab.toLowerCase()}" tab.`}
               </div>
             ) : (
               <table className="w-full text-sm">
@@ -306,14 +524,16 @@ export function VehicleDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(vehicle.challans ?? []).map((c) => (
+                  {filteredChallans.map((c) => (
                     <tr key={c.id} className="border-b last:border-b-0">
-                      <td className="py-2 font-mono">{c.challanNo}</td>
+                      <td className="py-2 font-mono text-xs">{c.challanNo}</td>
                       <td className="py-2">{c.offenceType ?? '—'}</td>
                       <td className="py-2">{c.offenceDate.slice(0, 10)}</td>
                       <td className="py-2">{c.location ?? '—'}</td>
                       <td className="py-2 text-right numeric">₹{c.amount}</td>
-                      <td className="py-2 text-right">{c.status}</td>
+                      <td className="py-2 text-right">
+                        <StatusBadge status={c.status} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

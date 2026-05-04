@@ -81,6 +81,8 @@ export interface ParserContext {
   fileName: string;
   portfolioId: string | null;
   userId: string;
+  /** User-supplied PDF passwords to try before falling back to PAN/DOB. */
+  extraPasswords?: string[];
 }
 
 export interface Parser {

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" fill="none">
+  <rect width="240" height="120" fill="#f1f5f9"/>
+  <path d="M30 85 L40 50 L80 35 L170 35 L195 50 L210 60 L210 85 L30 85 Z"
+        fill="#64748b" stroke="#334155" stroke-width="2"/>
+  <circle cx="65" cy="90" r="11" fill="#1e293b"/>
+  <circle cx="65" cy="90" r="4" fill="#94a3b8"/>
+  <circle cx="180" cy="90" r="11" fill="#1e293b"/>
+  <circle cx="180" cy="90" r="4" fill="#94a3b8"/>
+  <rect x="80" y="42" width="35" height="18" fill="#cbd5e1"/>
+  <rect x="120" y="42" width="35" height="18" fill="#cbd5e1"/>
+  <text x="120" y="110" font-family="sans-serif" font-size="9" fill="#64748b" text-anchor="middle">SUV</text>
+</svg>

@@ -67,6 +67,9 @@ model User {
   // F&O (Futures & Options) — broker API credentials + margin snapshots.
   brokerCredentials BrokerCredential[]
   marginSnapshots   MarginSnapshot[]
+
+  // Phase 5-B — vehicle valuation log (per-user audit of saved quotes).
+  valuationLogs VehicleValuationLog[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -1085,6 +1088,18 @@ model Vehicle {
   fitnessExpiry      DateTime? @db.Date
   roadTaxExpiry      DateTime? @db.Date
   permitExpiry       DateTime? @db.Date
+  // ── Promoted from metadata blob: surfaced in UI dashboard ──
+  rcStatus           String?   // ACTIVE | SUSPENDED | CANCELLED
+  vehicleClass       String?   // "M-CYCLE/SCOOTER" | "LMV" | etc.
+  normsType          String?   // "BS-VI" | etc.
+  seatingCapacity    Int?
+  unloadedWeight     Int?      // kg
+  engineNo           String?
+  hypothecation      String?   // financier name or "NONE"
+  registrationDate   DateTime? @db.Date
+  // ── Stock photo (make+model lookup) ──
+  photoUrl           String?
+  photoSource        String?   // "carDekho" | "catalog" | "user-upload" | "stock-generic"
   lastRefreshedAt    DateTime?
   refreshSource      String?
   createdAt          DateTime  @default(now())
@@ -1092,10 +1107,28 @@ model Vehicle {
 
   challans          Challan[]
   insurancePolicies InsurancePolicy[] @relation("VehicleInsurance")
+  valuationLogs     VehicleValuationLog[]
 
   @@unique([userId, registrationNo])
   @@index([userId, insuranceExpiry])
   @@index([userId, pucExpiry])
+}
+
+// Stock vehicle photos keyed by (make, model). Seeded once from CarDekho.
+// Looked up at refresh time to populate Vehicle.photoUrl.
+model VehiclePhotoSeed {
+  id                String   @id @default(cuid())
+  make              String
+  model             String
+  variant           String?
+  bodyType          String?  // sedan | suv | hatchback | mpv | bike | scooter
+  photoUrl          String
+  sourceAttribution String   @default("carDekho")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([make, model, variant])
+  @@index([make, model])
 }
 
 model Challan {
@@ -1112,6 +1145,91 @@ model Challan {
   fetchedAt   DateTime @default(now())
 
   @@unique([vehicleId, challanNo])
+}
+
+// ─── §7-VALUATION — OBV-style used-vehicle valuation ─────────────────
+
+// Master catalog of (category, make, model, year, trim). Seeded from
+// Kaggle dataset, refreshed monthly from CarDekho/CarWale scrape.
+// Shared across users — not user-scoped.
+model VehicleCatalog {
+  id            String   @id @default(cuid())
+  category      String   // Hatchback | Sedan | SUV | MUV | Coupe | Convertible | Bike | Scooter
+  make          String
+  model         String
+  yearFrom      Int
+  yearTo        Int?
+  trim          String
+  baseMsrp      Decimal? @db.Decimal(14, 2)
+  fuelType      String?
+  bodyType      String?
+  displacement  Int?
+  seatingCap    Int?
+  photoUrl      String?
+  catalogSource String   // cardekho | carwale | kaggle | manual
+  isActive      Boolean  @default(true)
+  lastSyncedAt  DateTime @default(now())
+
+  @@unique([make, model, trim, yearFrom])
+  @@index([category, make])
+  @@index([make, model])
+}
+
+// 24h cache of valuation quote per (make+model+year+trim+kmsBucket+txnType+partyType).
+// Result is shared across users — cacheKey is deterministic.
+model VehicleValuation {
+  id             String   @id @default(cuid())
+  cacheKey       String   @unique
+  make           String
+  model          String
+  year           Int
+  trim           String
+  kmsBucket      Int      // kms rounded to nearest 5000
+  txnType        String   // BUY | SELL
+  partyType      String   // INDIVIDUAL | DEALER
+
+  priceBad       Decimal  @db.Decimal(14, 2)
+  priceFair      Decimal  @db.Decimal(14, 2)
+  priceGood      Decimal  @db.Decimal(14, 2)
+  priceVeryGood  Decimal  @db.Decimal(14, 2)
+  priceExcellent Decimal  @db.Decimal(14, 2)
+
+  future1y       Decimal  @db.Decimal(14, 2)
+  future3y       Decimal  @db.Decimal(14, 2)
+  future5y       Decimal  @db.Decimal(14, 2)
+  residualValue  Decimal  @db.Decimal(14, 2)
+  salvageValue   Decimal  @db.Decimal(14, 2)
+  clunkerValue   Decimal  @db.Decimal(14, 2)
+
+  sources        Json
+  isEstimated    Boolean  @default(false)
+  computedAt     DateTime @default(now())
+  expiresAt      DateTime
+
+  logs           VehicleValuationLog[]
+
+  @@index([make, model, year])
+  @@index([expiresAt])
+}
+
+// Per-user audit trail of saved quotes + slider snapshot.
+model VehicleValuationLog {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleId      String?
+  vehicle        Vehicle?         @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  valuationId    String
+  valuation      VehicleValuation @relation(fields: [valuationId], references: [id], onDelete: Cascade)
+  sliderSnapshot Json
+  adjustedPrice  Decimal          @db.Decimal(14, 2)
+  txnType        String
+  partyType      String
+  savedToVehicle Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  @@index([userId, createdAt])
+  @@index([vehicleId])
 }
 
 // ─── §4.7 RENTAL ─────────────────────────────────────────────────

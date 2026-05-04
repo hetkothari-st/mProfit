@@ -90,10 +90,12 @@ export async function getUserPdfPasswords(userId: string | null | undefined): Pr
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { pan: true, dob: true },
+      select: { pan: true, dob: true, email: true, phone: true },
     });
     const pan = user?.pan?.trim().toUpperCase() ?? '';
     const dob = user?.dob ?? null;
+    const email = user?.email?.trim().toLowerCase() ?? '';
+    const phone = user?.phone?.trim().replace(/\D/g, '') ?? '';
 
     const candidates: string[] = [];
     if (pan) candidates.push(pan);
@@ -105,11 +107,27 @@ export async function getUserPdfPasswords(userId: string | null | undefined): Pr
       const ddmmyyyy = `${dd}${mm}${yyyy}`;
       const ddmm = `${dd}${mm}`;
 
+      const MON_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const mon = MON_NAMES[dob.getUTCMonth()]!;
+
       if (pan) {
         candidates.push(`${pan}${ddmmyyyy}`);
         candidates.push(`${pan}${ddmm}`);
       }
       candidates.push(ddmmyyyy);
+      // Some older CAS files use DD/MM/YYYY or DDMonYYYY
+      candidates.push(`${dd}/${mm}/${yyyy}`);
+      candidates.push(`${dd}${mon}${yyyy}`);
+    }
+
+    // Some CAMS/KFintech CAS PDFs use email as password
+    if (email) candidates.push(email);
+
+    // Some providers use phone number as password
+    if (phone) {
+      candidates.push(phone);
+      // If international format, also try last 10 digits
+      if (phone.length > 10) candidates.push(phone.slice(-10));
     }
 
     return candidates;

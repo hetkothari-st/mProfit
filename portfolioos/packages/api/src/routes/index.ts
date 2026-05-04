@@ -24,6 +24,7 @@ import { mfCentralRouter } from './mfCentral.routes.js';
 import { mfCasMailbackRouter } from './mfCasMailback.routes.js';
 import { mfCasparserRouter } from './mfCasparser.routes.js';
 import { foRouter } from './fo.routes.js';
+import { catalogRouter, valuationRouter } from './valuation.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -51,4 +52,6 @@ export function registerRoutes(app: Express): void {
   app.use('/api/mf-cas-mailback', mfCasMailbackRouter);
   app.use('/api/mf-casparser', mfCasparserRouter);
   app.use('/api/fo', foRouter);
+  app.use('/api/catalog', catalogRouter);
+  app.use('/api/valuations', valuationRouter);
 }

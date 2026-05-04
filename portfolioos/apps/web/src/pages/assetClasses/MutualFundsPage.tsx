@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, KeyRound } from 'lucide-react';
+import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, KeyRound, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ImportJobDTO, ImportStatus } from '@portfolioos/shared';
 import { IMPORT_STATUS_LABELS } from '@portfolioos/shared';
@@ -81,6 +81,7 @@ export function MutualFundsPage() {
   const [mailbackOpen, setMailbackOpen] = useState(false);
   const [viewError, setViewError] = useState<ImportJobDTO | null>(null);
   const [confirmDeleteImportId, setConfirmDeleteImportId] = useState<string | null>(null);
+  const [pdfPassword, setPdfPassword] = useState('');
   const queryClient = useQueryClient();
 
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => authApi.me() });
@@ -138,9 +139,10 @@ export function MutualFundsPage() {
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) =>
-      importsApi.upload({ file, portfolioId: null }),
+      importsApi.upload({ file, portfolioId: null, password: pdfPassword || undefined }),
     onSuccess: () => {
       toast.success('CAS uploaded — parsing in background. Status will update below.');
+      setPdfPassword('');
       queryClient.invalidateQueries({ queryKey: ['imports'] });
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Upload failed')),
@@ -264,13 +266,28 @@ export function MutualFundsPage() {
               onUpload={(file) => uploadMutation.mutate(file)}
               uploading={uploadMutation.isPending}
             />
+            <div className="flex items-center gap-2 mt-3">
+              <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <Input
+                className="h-8 text-xs w-56 font-mono"
+                placeholder="PDF password (optional — e.g. your PAN)"
+                maxLength={200}
+                type="password"
+                value={pdfPassword}
+                onChange={(e) => setPdfPassword(e.target.value)}
+              />
+              {pdfPassword && (
+                <span className="text-[10px] text-muted-foreground">Will be used to unlock the PDF</span>
+              )}
+            </div>
           </CardContent>
         </Card>
         <Card className="bg-muted/30 border-dashed">
           <CardContent className="p-4 text-xs space-y-2">
             <p className="font-semibold">Pro Tips:</p>
             <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-              <li>Ensure PDF is not password protected.</li>
+              <li>Password-protected PDFs: enter your PAN below.</li>
+              <li>We auto-try your PAN, email & phone from Settings.</li>
               <li>Consolidated CAS (Demat + MF) is supported.</li>
               <li>Only MF transactions will be extracted.</li>
               <li>New transactions append to your history.</li>

@@ -20,6 +20,7 @@ import { smsVehicleAdapter } from './sms.js';
 import { mparivahanAdapter } from './mparivahan.js';
 import { parivahanPortalAdapter } from './portal.js';
 import { carinfoAdapter } from './carinfo.js';
+import { rahastasAdapter } from './rahastas.js';
 import type {
   VehicleAdapter,
   VehicleAdapterContext,
@@ -32,12 +33,14 @@ export type VehicleFetchMode = 'auto' | 'interactive';
  * Default chain order:
  *  1. CarInfo.app scraper — no key, no CAPTCHA, works for any reg number
  *  2. mParivahan / VAHAN API — session-primed government endpoints
- *  3. Parivahan portal (Playwright, headed, OTP) — interactive only
- *  4. SMS fallback — guaranteed human-in-the-loop
+ *  3. Rahastas.in scraper — third independent free source for RC data
+ *  4. Parivahan portal (Playwright, headed, OTP) — interactive only
+ *  5. SMS fallback — guaranteed human-in-the-loop
  */
 const DEFAULT_CHAIN: VehicleAdapter[] = [
   carinfoAdapter,
   mparivahanAdapter,
+  rahastasAdapter,
   parivahanPortalAdapter,
   smsVehicleAdapter,
 ];

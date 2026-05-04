@@ -84,24 +84,30 @@ const extended = basePrisma.$extends({
         // / constraint errors. This is the fail-closed guarantee.
         return query(args);
       }
-      return await basePrisma.$transaction(async (tx) => {
-        if (system) {
-          await tx.$executeRaw(
-            Prisma.sql`SELECT set_config('app.bypass_rls', 'on', true)`,
-          );
-        } else {
-          await tx.$executeRaw(
-            Prisma.sql`SELECT set_config('app.current_user_id', ${userId}, true)`,
-          );
-        }
-        // Re-dispatch the operation onto the transaction client. Prisma's
-        // delegate interfaces are structurally identical on `tx`, but not
-        // typed generically — cast to `any` locally for the reflective
-        // invocation.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const delegate = (tx as any)[modelToDelegate(model)];
-        return delegate[operation](args);
-      });
+      // Neon serverless can stall briefly on cold pool checkouts. Default
+      // `$transaction` waits 2s for a slot and 5s for tx execution — too
+      // tight for Neon free-tier under concurrent page loads. Bump both.
+      return await basePrisma.$transaction(
+        async (tx) => {
+          if (system) {
+            await tx.$executeRaw(
+              Prisma.sql`SELECT set_config('app.bypass_rls', 'on', true)`,
+            );
+          } else {
+            await tx.$executeRaw(
+              Prisma.sql`SELECT set_config('app.current_user_id', ${userId}, true)`,
+            );
+          }
+          // Re-dispatch the operation onto the transaction client. Prisma's
+          // delegate interfaces are structurally identical on `tx`, but not
+          // typed generically — cast to `any` locally for the reflective
+          // invocation.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const delegate = (tx as any)[modelToDelegate(model)];
+          return delegate[operation](args);
+        },
+        { maxWait: 15_000, timeout: 30_000 },
+      );
     },
   },
 });

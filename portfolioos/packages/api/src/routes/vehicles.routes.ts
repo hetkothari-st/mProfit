@@ -6,6 +6,7 @@ import {
   update,
   remove,
   refresh,
+  refreshPhoto,
   smsPaste,
   scanChallans,
   carInfoInit,
@@ -25,6 +26,7 @@ vehiclesRouter.get('/:id', asyncHandler(get));
 vehiclesRouter.patch('/:id', asyncHandler(update));
 vehiclesRouter.delete('/:id', asyncHandler(remove));
 vehiclesRouter.post('/:id/refresh', asyncHandler(refresh));
+vehiclesRouter.post('/:id/refresh-photo', asyncHandler(refreshPhoto));
 vehiclesRouter.post('/:id/challans/scan', asyncHandler(scanChallans));
 vehiclesRouter.post('/carinfo/init', asyncHandler(carInfoInit));
 vehiclesRouter.post('/carinfo/verify', asyncHandler(carInfoVerify));
