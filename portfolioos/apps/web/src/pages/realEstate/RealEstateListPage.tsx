@@ -11,7 +11,17 @@ import {
   Trash2,
   Loader2,
   TrendingUp,
+  Building2,
+  Castle,
+  Map as MapIcon,
+  Briefcase,
+  Store,
+  Sprout,
+  Car,
+  Construction,
+  Building,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   Decimal,
   formatINR,
@@ -19,7 +29,28 @@ import {
   PROPERTY_TYPE_LABELS,
   PROPERTY_STATUS_LABELS,
 } from '@portfolioos/shared';
-import type { OwnedPropertyDTO } from '@portfolioos/shared';
+import type { OwnedPropertyDTO, PropertyType } from '@portfolioos/shared';
+
+interface TypeStyle {
+  icon: LucideIcon;
+  /** Tailwind classes for the icon badge container (bg + text). */
+  badge: string;
+  /** Tailwind class for the card's left accent border. */
+  accent: string;
+}
+
+const PROPERTY_TYPE_STYLES: Record<PropertyType, TypeStyle> = {
+  APARTMENT:          { icon: Building2,    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',           accent: 'border-l-blue-500' },
+  INDEPENDENT_HOUSE:  { icon: Home,         badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', accent: 'border-l-emerald-500' },
+  VILLA:              { icon: Castle,       badge: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',   accent: 'border-l-purple-500' },
+  PLOT_LAND:          { icon: MapIcon,      badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',       accent: 'border-l-amber-500' },
+  COMMERCIAL_OFFICE:  { icon: Briefcase,    badge: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200',          accent: 'border-l-slate-600' },
+  COMMERCIAL_SHOP:    { icon: Store,        badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',   accent: 'border-l-orange-500' },
+  AGRICULTURAL:       { icon: Sprout,       badge: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',       accent: 'border-l-green-600' },
+  PARKING_GARAGE:     { icon: Car,          badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',           accent: 'border-l-cyan-500' },
+  UNDER_CONSTRUCTION: { icon: Construction, badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',   accent: 'border-l-yellow-500' },
+  OTHER:              { icon: Building,     badge: 'bg-muted text-muted-foreground',                                              accent: 'border-l-muted-foreground/40' },
+};
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,35 +82,45 @@ function PropertyCard({
   const gainPositive = gain.greaterThan(0);
   const gainColor = gainPositive ? 'text-positive' : gain.isZero() ? 'text-muted-foreground' : 'text-negative';
   const isSold = property.status === 'SOLD';
+  const typeStyle = PROPERTY_TYPE_STYLES[property.propertyType] ?? PROPERTY_TYPE_STYLES.OTHER;
+  const TypeIcon = typeStyle.icon;
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className={`hover:shadow-md transition-shadow border-l-4 ${typeStyle.accent}`}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <h3 className="font-semibold truncate">{property.name}</h3>
-              {isSold && (
-                <span className="text-[10px] font-semibold uppercase tracking-wider rounded bg-muted px-1.5 py-0.5">
-                  Sold
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <div
+              className={`shrink-0 h-11 w-11 rounded-lg flex items-center justify-center ${typeStyle.badge}`}
+              title={PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType}
+            >
+              <TypeIcon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="font-semibold truncate">{property.name}</h3>
+                {isSold && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider rounded bg-muted px-1.5 py-0.5">
+                    Sold
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="text-xs text-muted-foreground">
+                  {PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType}
                 </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="text-xs text-muted-foreground">
+                  {PROPERTY_STATUS_LABELS[property.status] ?? property.status}
+                </span>
+              </div>
+              {(property.city || property.address) && (
+                <div className="flex items-center gap-1 mt-1.5 text-xs text-muted-foreground">
+                  <MapPin className="h-3 w-3" />
+                  <span className="truncate">{property.city ?? property.address}</span>
+                </div>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              <span className="text-xs text-muted-foreground">
-                {PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType}
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="text-xs text-muted-foreground">
-                {PROPERTY_STATUS_LABELS[property.status] ?? property.status}
-              </span>
-            </div>
-            {(property.city || property.address) && (
-              <div className="flex items-center gap-1 mt-1.5 text-xs text-muted-foreground">
-                <MapPin className="h-3 w-3" />
-                <span className="truncate">{property.city ?? property.address}</span>
-              </div>
-            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
