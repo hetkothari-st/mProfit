@@ -384,24 +384,28 @@ export function SimpleAssetPage({
                         {txn.tradeDate}
                       </td>
                       <td className="px-4 py-3">
-                        <p className="font-medium truncate max-w-[160px]">
-                          {txn.assetName ?? txn.symbol ?? '—'}
-                        </p>
-                        {txn.isin && (
-                          <p className="text-xs text-muted-foreground">{txn.isin}</p>
-                        )}
-                        {txn.photos && txn.photos.length > 0 && (
-                          <div className="flex gap-1.5 mt-2">
-                            {txn.photos.slice(0, 3).map((p) => (
-                              <PhotoThumb key={p.id} txnId={txn.id} photoId={p.id} />
-                            ))}
-                            {txn.photos.length > 3 && (
-                              <div className="h-14 w-14 rounded-md border bg-muted/40 flex items-center justify-center text-xs text-muted-foreground">
-                                +{txn.photos.length - 3}
-                              </div>
+                        <div className="flex items-center gap-3">
+                          {txn.photos && txn.photos.length > 0 && (
+                            <div className="flex gap-1.5 shrink-0">
+                              {txn.photos.slice(0, 3).map((p) => (
+                                <PhotoThumb key={p.id} txnId={txn.id} photoId={p.id} />
+                              ))}
+                              {txn.photos.length > 3 && (
+                                <div className="h-14 w-14 rounded-md border bg-muted/40 flex items-center justify-center text-xs text-muted-foreground">
+                                  +{txn.photos.length - 3}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-medium truncate max-w-[200px]">
+                              {txn.assetName ?? txn.symbol ?? '—'}
+                            </p>
+                            {txn.isin && (
+                              <p className="text-xs text-muted-foreground">{txn.isin}</p>
                             )}
                           </div>
-                        )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
