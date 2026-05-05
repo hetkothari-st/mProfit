@@ -19,6 +19,10 @@ import {
   Undo2,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  PieChart, Pie, Cell, Legend,
+} from 'recharts';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -675,6 +679,239 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
   );
 }
 
+// ── Charts ────────────────────────────────────────────────────────────
+
+const INR_COMPACT = (v: number): string => {
+  if (v >= 1e7) return `₹${(v / 1e7).toFixed(2)}Cr`;
+  if (v >= 1e5) return `₹${(v / 1e5).toFixed(2)}L`;
+  if (v >= 1e3) return `₹${(v / 1e3).toFixed(1)}K`;
+  return `₹${v.toFixed(0)}`;
+};
+
+function shortMonthLabel(date: string): string {
+  const d = new Date(date);
+  return d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+}
+
+const TOOLTIP_STYLE = {
+  background: 'hsl(var(--popover))',
+  border: '1px solid hsl(var(--border))',
+  borderRadius: '8px',
+  fontSize: 12,
+  padding: '10px 12px',
+  boxShadow: '0 12px 28px -16px hsl(var(--shadow-color) / 0.35)',
+};
+
+const TOOLTIP_LABEL_STYLE = {
+  color: 'hsl(var(--muted-foreground))',
+  marginBottom: 4,
+  fontSize: 10,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.1em',
+};
+
+function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: LoanSummaryDTO | undefined }) {
+  // Downsample for long tenures so axis stays readable.
+  const stride = rows.length > 60 ? Math.ceil(rows.length / 60) : 1;
+  const sampled = rows.filter((_, i) => i % stride === 0 || i === rows.length - 1);
+
+  const balanceData = sampled.map((r) => ({
+    label: shortMonthLabel(r.date),
+    balance: Number(r.closingBalance),
+  }));
+
+  const splitData = sampled.map((r) => ({
+    label: shortMonthLabel(r.date),
+    principal: Number(r.principalPart),
+    interest: Number(r.interestPart),
+  }));
+
+  const totalPrincipal = rows.reduce((s, r) => s + Number(r.principalPart), 0);
+  const totalInterest = summary
+    ? Number(summary.totalInterestPayable)
+    : rows.reduce((s, r) => s + Number(r.interestPart), 0);
+  const totalCost = totalPrincipal + totalInterest;
+  const interestPct = totalCost > 0 ? (totalInterest / totalCost) * 100 : 0;
+
+  const pieData = [
+    { name: 'Principal', value: totalPrincipal },
+    { name: 'Interest', value: totalInterest },
+  ];
+  const pieColors = ['hsl(var(--positive))', 'hsl(var(--negative))'];
+
+  return (
+    <div className="space-y-3 mb-4">
+      {/* Outstanding balance trajectory */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">Outstanding balance over time</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={balanceData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradBalance" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="hsl(var(--foreground))" stopOpacity={0.22} />
+                  <stop offset="55%" stopColor="hsl(var(--foreground))" stopOpacity={0.06} />
+                  <stop offset="100%" stopColor="hsl(var(--foreground))" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={30}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={INR_COMPACT}
+                width={60}
+              />
+              <Tooltip
+                cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3', strokeOpacity: 0.4 }}
+                contentStyle={TOOLTIP_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                formatter={(v: number) => [formatINR(v.toFixed(2)), 'Balance']}
+              />
+              <Area
+                type="monotone"
+                dataKey="balance"
+                stroke="hsl(var(--foreground))"
+                strokeWidth={2}
+                fill="url(#gradBalance)"
+                dot={false}
+                activeDot={{ r: 4, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 2 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Principal vs Interest stacked area */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">EMI split — principal vs interest</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={splitData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }} stackOffset="none">
+                <defs>
+                  <linearGradient id="gradPrincipal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--positive))" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="hsl(var(--positive))" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="gradInterest" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--negative))" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="hsl(var(--negative))" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={30}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={INR_COMPACT}
+                  width={60}
+                />
+                <Tooltip
+                  cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3', strokeOpacity: 0.4 }}
+                  contentStyle={TOOLTIP_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  formatter={(v: number, name: string) => [formatINR(v.toFixed(2)), name]}
+                />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                <Area
+                  type="monotone"
+                  dataKey="interest"
+                  stackId="1"
+                  stroke="hsl(var(--negative))"
+                  strokeWidth={1.5}
+                  fill="url(#gradInterest)"
+                  name="Interest"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="principal"
+                  stackId="1"
+                  stroke="hsl(var(--positive))"
+                  strokeWidth={1.5}
+                  fill="url(#gradPrincipal)"
+                  name="Principal"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Total cost donut */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Total cost</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={180}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={45}
+                  outerRadius={75}
+                  paddingAngle={2}
+                  stroke="hsl(var(--card))"
+                  strokeWidth={2}
+                >
+                  {pieData.map((_, i) => (
+                    <Cell key={i} fill={pieColors[i]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  formatter={(v: number, name: string) => [formatINR(v.toFixed(2)), name]}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-1.5 text-xs mt-2">
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <span className="h-2 w-2 rounded-full bg-positive" /> Principal
+                </span>
+                <span className="font-medium tabular-nums">{formatINR(totalPrincipal.toFixed(2))}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <span className="h-2 w-2 rounded-full bg-negative" /> Interest
+                </span>
+                <span className="font-medium tabular-nums">{formatINR(totalInterest.toFixed(2))}</span>
+              </div>
+              <div className="flex justify-between items-center border-t pt-1.5 mt-1">
+                <span className="text-muted-foreground">Interest as % of cost</span>
+                <span className="font-semibold tabular-nums text-negative">{interestPct.toFixed(1)}%</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 // ── Tax benefit section ───────────────────────────────────────────────
 
 function TaxBenefitPanel({ summary }: { summary: LoanSummaryDTO }) {
@@ -897,6 +1134,11 @@ export function LoanDetailPage() {
             </Card>
           )}
         </div>
+      )}
+
+      {/* Charts */}
+      {amortization && amortization.length > 0 && (
+        <LoanCharts rows={amortization} summary={summary} />
       )}
 
       {/* Payment history */}

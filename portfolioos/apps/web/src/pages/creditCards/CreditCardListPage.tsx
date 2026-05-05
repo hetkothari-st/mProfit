@@ -30,15 +30,9 @@ import {
   type CreditCardDTO,
   type CreateCardInput,
 } from '@/api/creditCards.api';
+import { CreditCardVisual } from '@/components/creditCards/CreditCardVisual';
 
 // ── Helpers ───────────────────────────────────────────────────────────
-
-const NETWORK_COLORS: Record<string, string> = {
-  VISA: 'bg-blue-100 text-blue-700',
-  MASTERCARD: 'bg-red-100 text-red-700',
-  AMEX: 'bg-sky-100 text-sky-700',
-  RUPAY: 'bg-orange-100 text-orange-700',
-};
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: 'text-positive',
@@ -104,7 +98,7 @@ function SummaryStrip({ cards }: { cards: CreditCardDTO[] }) {
   );
 }
 
-// ── Card card ─────────────────────────────────────────────────────────
+// ── Card tile (credit-card visual + stats) ────────────────────────────
 
 function CardCard({
   card,
@@ -122,7 +116,6 @@ function CardCard({
   const utilizationPct = limit.isZero() ? 0 : outstanding.div(limit).mul(100).toNumber();
   const isHighUtilization = utilizationPct >= 80;
 
-  // Next due statement
   const pendingStatements = card.statements
     .filter((s) => s.status === 'PENDING' || s.status === 'OVERDUE' || s.status === 'PARTIAL')
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -130,101 +123,98 @@ function CardCard({
   const nextDueDays = nextDue ? daysUntil(nextDue.dueDate) : null;
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold truncate">{card.issuerBank}</h3>
-              {card.network && (
-                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${NETWORK_COLORS[card.network] ?? 'bg-muted text-muted-foreground'}`}>
-                  {card.network}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{card.cardName}</p>
-            <p className="text-sm font-mono tracking-wider mt-1 text-muted-foreground">
-              ●●●● ●●●● ●●●● {card.last4}
-            </p>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-              onClick={onDelete}
-              disabled={isDeleting}
-              title="Delete"
-            >
-              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            </Button>
-            <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
-              <Link to={`/credit-cards/${card.id}`}>
-                <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        </div>
+    <div className="group relative">
+      {/* Action overlay (top-right, hover-reveal) */}
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          onClick={onEdit}
+          title="Edit"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-negative/80 hover:text-white"
+          onClick={onDelete}
+          disabled={isDeleting}
+          title="Delete"
+        >
+          {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+        </Button>
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          title="Open"
+        >
+          <Link to={`/credit-cards/${card.id}`}>
+            <ArrowUpRight className="h-4 w-4" />
+          </Link>
+        </Button>
+      </div>
 
-        <div className="mt-4 pt-3 border-t space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Credit limit</span>
-            <span className="font-medium tabular-nums">{formatINR(card.creditLimit)}</span>
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-muted-foreground">Outstanding</span>
-              <span className={`font-medium tabular-nums ${isHighUtilization ? 'text-negative' : ''}`}>
-                {formatINR(outstanding.toString())} ({utilizationPct.toFixed(0)}%)
-              </span>
-            </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${utilizationClass(utilizationPct)}`}
-                style={{ width: `${Math.min(100, utilizationPct)}%` }}
-              />
-            </div>
-          </div>
+      {/* The credit-card visual itself */}
+      <Link to={`/credit-cards/${card.id}`} className="block hover:-translate-y-0.5 transition-transform">
+        <CreditCardVisual card={card} />
+      </Link>
 
-          {nextDue && (
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Next due</span>
-              <div className="flex items-center gap-1.5">
-                <span className="tabular-nums">{formatINR(nextDue.statementAmount)}</span>
-                <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
-                  nextDueDays !== null && nextDueDays < 0
-                    ? 'bg-negative/10 text-negative'
-                    : nextDueDays !== null && nextDueDays <= 5
-                    ? 'bg-amber-100 text-amber-700'
-                    : 'bg-muted text-muted-foreground'
-                }`}>
-                  {nextDueDays !== null && nextDueDays < 0 ? 'Overdue' :
-                   nextDueDays === 0 ? 'Today' :
-                   nextDueDays !== null ? `${nextDueDays}d` : formatDate(nextDue.dueDate)}
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Status</span>
-            <span className={`font-medium capitalize ${STATUS_COLORS[card.status] ?? ''}`}>
-              {card.status.toLowerCase()}
+      {/* Stats panel below */}
+      <div className="mt-3 px-1 space-y-2">
+        <div>
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="text-muted-foreground">Outstanding</span>
+            <span className={`font-medium tabular-nums ${isHighUtilization ? 'text-negative' : ''}`}>
+              {formatINR(outstanding.toString())} <span className="text-muted-foreground">({utilizationPct.toFixed(0)}%)</span>
             </span>
           </div>
-
-          {isHighUtilization && card.status === 'ACTIVE' && (
-            <div className="mt-1 rounded-md bg-negative/10 px-3 py-1.5 text-xs text-negative font-medium flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              High utilization — may impact credit score
-            </div>
-          )}
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${utilizationClass(utilizationPct)}`}
+              style={{ width: `${Math.min(100, utilizationPct)}%` }}
+            />
+          </div>
         </div>
-      </CardContent>
-    </Card>
+
+        {nextDue && (
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Next due</span>
+            <div className="flex items-center gap-1.5">
+              <span className="tabular-nums">{formatINR(nextDue.statementAmount)}</span>
+              <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
+                nextDueDays !== null && nextDueDays < 0
+                  ? 'bg-negative/10 text-negative'
+                  : nextDueDays !== null && nextDueDays <= 5
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-muted text-muted-foreground'
+              }`}>
+                {nextDueDays !== null && nextDueDays < 0 ? 'Overdue' :
+                 nextDueDays === 0 ? 'Today' :
+                 nextDueDays !== null ? `${nextDueDays}d` : formatDate(nextDue.dueDate)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Status</span>
+          <span className={`font-medium capitalize ${STATUS_COLORS[card.status] ?? ''}`}>
+            {card.status.toLowerCase()}
+          </span>
+        </div>
+
+        {isHighUtilization && card.status === 'ACTIVE' && (
+          <div className="mt-1 rounded-md bg-negative/10 px-3 py-1.5 text-xs text-negative font-medium flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            High utilization — may impact credit score
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

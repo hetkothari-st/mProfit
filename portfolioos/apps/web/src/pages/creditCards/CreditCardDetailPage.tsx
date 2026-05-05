@@ -30,6 +30,7 @@ import {
   type AddStatementInput,
   type MarkStatementPaidInput,
 } from '@/api/creditCards.api';
+import { CreditCardVisual } from '@/components/creditCards/CreditCardVisual';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -45,13 +46,6 @@ const STATEMENT_STATUS_BG: Record<string, string> = {
   PAID: 'bg-positive/5 border-positive/10',
   PARTIAL: 'bg-blue-50 border-blue-100',
   OVERDUE: 'bg-negative/5 border-negative/10',
-};
-
-const NETWORK_COLORS: Record<string, string> = {
-  VISA: 'bg-blue-100 text-blue-700',
-  MASTERCARD: 'bg-red-100 text-red-700',
-  AMEX: 'bg-sky-100 text-sky-700',
-  RUPAY: 'bg-orange-100 text-orange-700',
 };
 
 function formatDate(iso: string | null | undefined) {
@@ -449,13 +443,18 @@ export function CreditCardDetailPage() {
     <div>
       <PageHeader
         title={`${card.issuerBank} — ${card.cardName}`}
-        description={`●●●● ●●●● ●●●● ${card.last4}${card.network ? ` · ${card.network}` : ''} · ${card.status.toLowerCase()}`}
+        description={`${card.network ? `${card.network} · ` : ''}${card.status.toLowerCase()}`}
         actions={
           <Button asChild variant="outline" size="sm">
             <Link to="/credit-cards"><ArrowLeft className="h-4 w-4" /> Back</Link>
           </Button>
         }
       />
+
+      {/* Card visual */}
+      <div className="mb-4 max-w-md">
+        <CreditCardVisual card={card} size="lg" />
+      </div>
 
       {/* Summary metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
