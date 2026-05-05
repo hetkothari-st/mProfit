@@ -36,6 +36,9 @@ import {
   type UpdateClaimInput,
   type UpdatePolicyInput,
 } from '@/api/insurance.api';
+import { DocumentVault } from '@/components/documents/DocumentVault';
+import { CatalogBrief, inferCatalogId } from '@/components/insurance/InsuranceCatalogPicker';
+import { findCatalogProduct } from '@/data/insuranceCatalog';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -490,6 +493,17 @@ export function InsuranceDetailPage() {
         }
       />
 
+      {/* Catalog brief — shown when policy maps to a known product */}
+      {(() => {
+        const catalogId = inferCatalogId(policy.insurer, policy.planName);
+        const product = findCatalogProduct(catalogId);
+        return product ? (
+          <div className="mb-6">
+            <CatalogBrief product={product} />
+          </div>
+        ) : null;
+      })()}
+
       {/* Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
@@ -550,6 +564,16 @@ export function InsuranceDetailPage() {
         policyId={policy.id}
         onAdd={() => setClaimOpen(true)}
       />
+
+      {/* Document vault — uploaded brochures & supporting documents */}
+      <div className="mt-6">
+        <DocumentVault
+          ownerType="INSURANCE_POLICY"
+          ownerId={policy.id}
+          title="Policy documents"
+          defaultCategory="policy_document"
+        />
+      </div>
 
       <AddPremiumDialog policyId={policy.id} open={premiumOpen} onOpenChange={setPremiumOpen} />
       <AddClaimDialog policyId={policy.id} open={claimOpen} onOpenChange={setClaimOpen} />

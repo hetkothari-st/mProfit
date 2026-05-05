@@ -17,6 +17,7 @@ import {
   Pencil,
   Trash2,
   Loader2,
+  Upload as UploadIcon,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -37,6 +38,13 @@ import {
   type InsurancePolicyDTO,
   type CreatePolicyInput,
 } from '@/api/insurance.api';
+import { documentsApi } from '@/api/documents.api';
+import {
+  InsuranceCatalogPicker,
+  CatalogBrief,
+  inferCatalogId,
+} from '@/components/insurance/InsuranceCatalogPicker';
+import { findCatalogProduct, type CatalogProduct } from '@/data/insuranceCatalog';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -236,19 +244,59 @@ function CreatePolicyDialog({
     nextPremiumDue: initial?.nextPremiumDue ?? '',
   });
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+  const [catalogId, setCatalogId] = useState<string | null>(
+    initial ? inferCatalogId(initial.insurer, initial.planName) : null,
+  );
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const selectedCatalog = findCatalogProduct(catalogId);
+
+  function applyCatalogProduct(product: CatalogProduct | null) {
+    setCatalogId(product?.id ?? null);
+    if (product) {
+      setForm((f) => ({
+        ...f,
+        insurer: product.insurer,
+        planName: product.planName,
+        type: product.type,
+      }));
+    }
+  }
 
   const mutation = useMutation({
-    mutationFn: (input: CreatePolicyInput) =>
-      isEdit ? insuranceApi.updatePolicy(initial!.id, input) : insuranceApi.createPolicy(input),
+    mutationFn: async (input: CreatePolicyInput) => {
+      const policy = isEdit
+        ? await insuranceApi.updatePolicy(initial!.id, input)
+        : await insuranceApi.createPolicy(input);
+      // If user attached a file, upload it after policy save so we have a valid ownerId.
+      if (pendingFile) {
+        try {
+          await documentsApi.upload({
+            file: pendingFile,
+            ownerType: 'INSURANCE_POLICY',
+            ownerId: policy.id,
+            category: 'policy_document',
+          });
+        } catch (err) {
+          // Surface but don't block save — policy itself is created.
+          toast.error(`Policy saved, but document upload failed: ${err instanceof Error ? err.message : 'unknown'}`);
+        }
+      }
+      return policy;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['insurance-policies'] });
+      qc.invalidateQueries({ queryKey: ['documents'] });
+      toast.success(isEdit ? 'Policy updated' : 'Policy added');
       onOpenChange(false);
       setForm({
         insurer: '', policyNumber: '', type: 'TERM',
         policyHolder: '', sumAssured: '', premiumAmount: '',
         premiumFrequency: 'ANNUAL', startDate: '',
       });
+      setCatalogId(null);
+      setPendingFile(null);
     },
+    onError: () => toast.error(isEdit ? 'Failed to update policy' : 'Failed to add policy'),
   });
 
   function validate(): boolean {
@@ -283,12 +331,36 @@ function CreatePolicyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit insurance policy' : 'Add insurance policy'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Catalog picker */}
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+              Quick pick from catalog
+            </Label>
+            <InsuranceCatalogPicker
+              selectedId={catalogId}
+              onSelect={applyCatalogProduct}
+            />
+            {selectedCatalog && (
+              <div className="pt-1">
+                <CatalogBrief product={selectedCatalog} />
+              </div>
+            )}
+            {!selectedCatalog && (
+              <p className="text-xs text-muted-foreground">
+                Pick a product to auto-fill insurer, plan name and type, plus see coverage at a glance.
+                Not in the list? Fill manually below — you can also upload your own brochure.
+              </p>
+            )}
+          </div>
+
+          <div className="border-t pt-4" />
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Insurer *</Label>
@@ -371,6 +443,48 @@ function CreatePolicyDialog({
               <Label>Next premium due</Label>
               <Input type="date" {...field('nextPremiumDue')} />
             </div>
+          </div>
+
+          {/* Manual brochure upload */}
+          <div className="border-t pt-4">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+              Policy document (optional)
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1 mb-2">
+              Upload your actual policy PDF for safekeeping — kept in your encrypted document vault.
+            </p>
+            {pendingFile ? (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm font-medium truncate flex-1">{pendingFile.name}</span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {(pendingFile.size / 1024).toFixed(0)} KB
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => setPendingFile(null)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2 rounded-md border border-dashed bg-background hover:bg-accent/40 transition-colors px-4 py-4 cursor-pointer text-sm text-muted-foreground">
+                <UploadIcon className="h-4 w-4" />
+                <span>Click to attach a PDF</span>
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) setPendingFile(f);
+                  }}
+                />
+              </label>
+            )}
           </div>
         </div>
 
