@@ -221,7 +221,7 @@ function PolicyCard({
                 rel="noopener noreferrer"
                 download
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-accent-foreground hover:underline"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground hover:text-accent hover:underline"
                 title="Download official policy brochure PDF"
               >
                 <Download className="h-3 w-3" /> Brochure
