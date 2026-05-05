@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import {
   INSURANCE_CATALOG,
   findCatalogProduct,
-  brochureSearchUrl,
   type CatalogProduct,
 } from '@/data/insuranceCatalog';
 
@@ -171,11 +170,12 @@ export function CatalogBrief({ product, compact = false }: BriefProps) {
         </div>
         <div className="shrink-0 flex items-center gap-1.5">
           <a
-            href={brochureSearchUrl(product)}
+            href={product.brochureUrl}
             target="_blank"
             rel="noopener noreferrer"
+            download
             className="inline-flex items-center gap-1.5 rounded-md border bg-background hover:bg-accent transition-colors px-3 py-1.5 text-xs font-medium"
-            title="Find the official PDF brochure (opens Google search restricted to PDFs)"
+            title="Download official policy brochure PDF"
           >
             <Download className="h-3.5 w-3.5" />
             Brochure

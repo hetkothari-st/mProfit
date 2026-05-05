@@ -46,7 +46,7 @@ import {
   CatalogBrief,
   inferCatalogId,
 } from '@/components/insurance/InsuranceCatalogPicker';
-import { findCatalogProduct, brochureSearchUrl, type CatalogProduct } from '@/data/insuranceCatalog';
+import { findCatalogProduct, type CatalogProduct } from '@/data/insuranceCatalog';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -180,20 +180,49 @@ function PolicyCard({
           </div>
         </div>
 
-        {/* Catalog-driven description + brochure link */}
+        {/* Catalog-driven facts + coverage chips + brochure download */}
         {product && (
-          <div className="mt-3 rounded-md border bg-gradient-to-br from-accent/30 to-muted/30 px-3 py-2.5">
-            <p className="text-xs leading-snug text-foreground/80 line-clamp-2">
-              {product.description}
-            </p>
-            <div className="flex items-center gap-2 mt-2">
+          <div className="mt-3 rounded-md border bg-gradient-to-br from-accent/20 to-muted/20 px-3 py-2.5 space-y-2">
+            {/* Facts row */}
+            <div className="grid grid-cols-2 gap-2">
+              {product.sumAssuredRange && (
+                <div>
+                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Cover range</p>
+                  <p className="text-xs font-semibold tabular-nums truncate">{product.sumAssuredRange}</p>
+                </div>
+              )}
+              {product.ageBand && (
+                <div>
+                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Age</p>
+                  <p className="text-xs font-semibold truncate">{product.ageBand}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Coverage chips */}
+            {product.coverageTags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {product.coverageTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-positive/10 text-positive border border-positive/15"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Action links */}
+            <div className="flex items-center gap-2 pt-1">
               <a
-                href={brochureSearchUrl(product)}
+                href={product.brochureUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                download
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1 text-[11px] font-medium text-accent-foreground hover:underline"
-                title="Find official brochure PDF"
+                title="Download official policy brochure PDF"
               >
                 <Download className="h-3 w-3" /> Brochure
               </a>
