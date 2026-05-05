@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import { apiErrorMessage } from '@/api/client';
 import { realEstateApi } from '@/api/realEstate.api';
+import { INDIA_STATES, citiesForState } from '@/data/indiaLocations';
 import type {
   CreateOwnedPropertyInput,
   OwnedPropertyDTO,
@@ -295,12 +296,39 @@ export function PropertyFormDialog({ open, onOpenChange, initial }: Props) {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
               <div>
-                <Label>City</Label>
-                <Input value={form.city ?? ''} onChange={(e) => set('city', e.target.value)} />
+                <Label>State</Label>
+                <select
+                  className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={form.state ?? ''}
+                  onChange={(e) => {
+                    const newState = e.target.value || null;
+                    setForm((f) => {
+                      const cities = citiesForState(newState);
+                      const keepCity = f.city && cities.some((c) => c.toLowerCase() === f.city!.toLowerCase());
+                      return { ...f, state: newState, city: keepCity ? f.city : null };
+                    });
+                  }}
+                >
+                  <option value="">— select state —</option>
+                  {INDIA_STATES.map((s) => (
+                    <option key={s.code} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <Label>State</Label>
-                <Input value={form.state ?? ''} onChange={(e) => set('state', e.target.value)} />
+                <Label>City</Label>
+                <Input
+                  list="city-suggestions"
+                  placeholder={form.state ? 'Pick or type' : 'Select state first'}
+                  value={form.city ?? ''}
+                  onChange={(e) => set('city', e.target.value || null)}
+                  disabled={!form.state}
+                />
+                <datalist id="city-suggestions">
+                  {citiesForState(form.state).map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <Label>Pincode</Label>
