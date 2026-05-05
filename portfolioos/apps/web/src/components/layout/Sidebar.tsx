@@ -28,9 +28,9 @@ import {
   ArrowLeftRight,
   Coins,
   Wallet,
-  BookOpen,
   CreditCard,
   HandCoins,
+  Home,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -61,11 +61,11 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Bonds', to: '/bonds', icon: Landmark },
       { label: 'Fixed Deposits', to: '/fds', icon: PiggyBank },
       { label: 'Gold & Silver', to: '/gold', icon: Coins },
-      { label: 'EPF', to: '/epf', icon: Wallet },
+      { label: 'PPF & EPF', to: '/provident-fund', icon: Wallet },
       // NPS — disabled until NSDL CRA adapter lands (§10.2)
       // { label: 'NPS', to: '/nps', icon: ShieldCheck },
-      { label: 'PPF', to: '/ppf', icon: BookOpen },
       { label: 'Post Office', to: '/post-office', icon: MailOpen },
+      { label: 'Real Estate', to: '/real-estate', icon: Home },
       { label: 'Vehicles', to: '/vehicles', icon: Car },
       { label: 'Rental', to: '/rental', icon: Building2 },
       { label: 'Insurance', to: '/insurance', icon: Shield },

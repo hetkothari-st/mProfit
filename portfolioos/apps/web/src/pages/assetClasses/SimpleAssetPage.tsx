@@ -4,10 +4,10 @@
  * Shows HoldingProjection rows (aggregate) + individual transaction history
  * with edit and delete actions per row.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
-import { Plus, Pencil, Loader2, ImageIcon } from 'lucide-react';
+import { Plus, Pencil, Loader2, ImageIcon, ChevronDown } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatINR, Decimal, type HoldingRow } from '@portfolioos/shared';
@@ -22,6 +22,12 @@ import { api, apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
 import type { FormDialogProps } from './FDFormDialog';
 
+interface FormOption {
+  label: string;
+  assetClass: AssetClass;
+  FormComponent: React.ComponentType<FormDialogProps>;
+}
+
 interface Props {
   title: string;
   description: string;
@@ -29,6 +35,10 @@ interface Props {
   assetClasses: AssetClass[];
   defaultAssetClass: AssetClass;
   FormComponent?: React.ComponentType<FormDialogProps>;
+  /** When provided, "Add" becomes a dropdown letting the user pick which form to open.
+   *  Each option's FormComponent is also used when editing a transaction whose
+   *  assetClass matches. Falls back to FormComponent (or TransactionFormDialog) if no match. */
+  formOptions?: FormOption[];
   computeLiveValue?: (h: HoldingRow & { portfolioName: string }) => string | null;
   liveIndicator?: React.ReactNode;
   onHoldingClick?: (h: HoldingRow & { portfolioName: string }) => void;
@@ -64,6 +74,7 @@ export function SimpleAssetPage({
   assetClasses,
   defaultAssetClass,
   FormComponent,
+  formOptions,
   computeLiveValue,
   liveIndicator,
   onHoldingClick,
@@ -72,8 +83,27 @@ export function SimpleAssetPage({
   const [formOpen, setFormOpen] = useState(false);
   const [editTxn, setEditTxn] = useState<TransactionDTO | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [activeFormAssetClass, setActiveFormAssetClass] = useState<AssetClass>(defaultAssetClass);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement>(null);
 
-  const ActiveForm = FormComponent ?? TransactionFormDialog;
+  // Close add-menu on outside click
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    function handler(e: MouseEvent) {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) {
+        setAddMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [addMenuOpen]);
+
+  // Choose the form component: per-class match from formOptions, else FormComponent, else default.
+  const ActiveForm =
+    formOptions?.find((o) => o.assetClass === activeFormAssetClass)?.FormComponent
+    ?? FormComponent
+    ?? TransactionFormDialog;
 
   const { data: portfolios } = useQuery({
     queryKey: ['portfolios'],
@@ -153,12 +183,16 @@ export function SimpleAssetPage({
     ? null
     : totalPnL.div(totalInvested).times(100).toNumber();
 
-  function openAdd() {
+  function openAdd(assetClass?: AssetClass) {
+    if (assetClass) setActiveFormAssetClass(assetClass);
+    else setActiveFormAssetClass(defaultAssetClass);
     setEditTxn(null);
     setFormOpen(true);
+    setAddMenuOpen(false);
   }
 
   function openEdit(txn: TransactionDTO) {
+    setActiveFormAssetClass(txn.assetClass as AssetClass);
     setEditTxn(txn);
     setFormOpen(true);
   }
@@ -174,9 +208,31 @@ export function SimpleAssetPage({
         title={title}
         description={description}
         actions={
-          <Button onClick={openAdd}>
-            <Plus className="h-4 w-4" /> Add
-          </Button>
+          formOptions && formOptions.length > 0 ? (
+            <div className="relative" ref={addMenuRef}>
+              <Button onClick={() => setAddMenuOpen((v) => !v)}>
+                <Plus className="h-4 w-4" /> Add <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
+              </Button>
+              {addMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-44 rounded-md border bg-popover text-popover-foreground shadow-md z-20 py-1">
+                  {formOptions.map((opt) => (
+                    <button
+                      key={opt.assetClass}
+                      type="button"
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                      onClick={() => openAdd(opt.assetClass)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <Button onClick={() => openAdd()}>
+              <Plus className="h-4 w-4" /> Add
+            </Button>
+          )
         }
       />
 
@@ -224,7 +280,7 @@ export function SimpleAssetPage({
           title={`No ${title.toLowerCase()} yet`}
           description="Add a transaction to start tracking this asset class."
           action={
-            <Button onClick={openAdd}>
+            <Button onClick={() => openAdd()}>
               <Plus className="h-4 w-4" /> Add first entry
             </Button>
           }

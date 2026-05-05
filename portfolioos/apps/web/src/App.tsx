@@ -35,13 +35,14 @@ import { LoanListPage } from './pages/loans/LoanListPage';
 import { LoanDetailPage } from './pages/loans/LoanDetailPage';
 import { CreditCardListPage } from './pages/creditCards/CreditCardListPage';
 import { CreditCardDetailPage } from './pages/creditCards/CreditCardDetailPage';
+import { RealEstateListPage } from './pages/realEstate/RealEstateListPage';
+import { RealEstateDetailPage } from './pages/realEstate/RealEstateDetailPage';
 import { FixedDepositsPage } from './pages/assetClasses/FixedDepositsPage';
 import { BondsPage } from './pages/assetClasses/BondsPage';
 import { GoldPage } from './pages/assetClasses/GoldPage';
 import { GoldAssetDetailPage } from './pages/assetClasses/GoldAssetDetailPage';
-import { EpfPage } from './pages/assetClasses/EpfPage';
 import { NpsPage } from './pages/assetClasses/NpsPage';
-import { PpfPage } from './pages/assetClasses/PpfPage';
+import { ProvidentFundPage } from './pages/assetClasses/ProvidentFundPage';
 import { OtherAssetsPage } from './pages/assetClasses/OtherAssetsPage';
 import { PostOfficePage } from './pages/assetClasses/PostOfficePage';
 import { FuturesOptionsPage } from './pages/assetClasses/FuturesOptionsPage';
@@ -84,10 +85,12 @@ export function App() {
         <Route path="/fds" element={<FixedDepositsPage />} />
         <Route path="/gold" element={<GoldPage />} />
         <Route path="/gold/:holdingId" element={<GoldAssetDetailPage />} />
-        <Route path="/epf" element={<EpfPage />} />
+        <Route path="/provident-fund" element={<ProvidentFundPage />} />
+        {/* PPF + EPF merged into /provident-fund. Old paths redirect for back-compat. */}
+        <Route path="/ppf" element={<Navigate to="/provident-fund" replace />} />
+        <Route path="/epf" element={<Navigate to="/provident-fund" replace />} />
         {/* NPS — disabled until NSDL CRA adapter lands (§10.2) */}
         {/* <Route path="/nps" element={<NpsPage />} /> */}
-        <Route path="/ppf" element={<PpfPage />} />
         <Route path="/post-office" element={<PostOfficePage />} />
         <Route path="/others" element={<OtherAssetsPage />} />
         <Route path="/vehicles" element={<VehicleListPage />} />
@@ -101,6 +104,8 @@ export function App() {
         <Route path="/loans/:id" element={<LoanDetailPage />} />
         <Route path="/credit-cards" element={<CreditCardListPage />} />
         <Route path="/credit-cards/:id" element={<CreditCardDetailPage />} />
+        <Route path="/real-estate" element={<RealEstateListPage />} />
+        <Route path="/real-estate/:id" element={<RealEstateDetailPage />} />
         <Route path="/cashflows" element={<CashFlowsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/import" element={<ImportPage />} />
