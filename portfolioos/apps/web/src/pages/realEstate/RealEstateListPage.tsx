@@ -33,23 +33,21 @@ import type { OwnedPropertyDTO, PropertyType } from '@portfolioos/shared';
 
 interface TypeStyle {
   icon: LucideIcon;
-  /** Tailwind classes for the icon badge container (bg + text). */
-  badge: string;
-  /** Tailwind class for the card's left accent border. */
-  accent: string;
+  /** Tailwind gradient classes for the card's hero banner. */
+  gradient: string;
 }
 
 const PROPERTY_TYPE_STYLES: Record<PropertyType, TypeStyle> = {
-  APARTMENT:          { icon: Building2,    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',           accent: 'border-l-blue-500' },
-  INDEPENDENT_HOUSE:  { icon: Home,         badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', accent: 'border-l-emerald-500' },
-  VILLA:              { icon: Castle,       badge: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',   accent: 'border-l-purple-500' },
-  PLOT_LAND:          { icon: MapIcon,      badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',       accent: 'border-l-amber-500' },
-  COMMERCIAL_OFFICE:  { icon: Briefcase,    badge: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200',          accent: 'border-l-slate-600' },
-  COMMERCIAL_SHOP:    { icon: Store,        badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',   accent: 'border-l-orange-500' },
-  AGRICULTURAL:       { icon: Sprout,       badge: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',       accent: 'border-l-green-600' },
-  PARKING_GARAGE:     { icon: Car,          badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',           accent: 'border-l-cyan-500' },
-  UNDER_CONSTRUCTION: { icon: Construction, badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',   accent: 'border-l-yellow-500' },
-  OTHER:              { icon: Building,     badge: 'bg-muted text-muted-foreground',                                              accent: 'border-l-muted-foreground/40' },
+  APARTMENT:          { icon: Building2,    gradient: 'from-blue-500 via-blue-600 to-indigo-700' },
+  INDEPENDENT_HOUSE:  { icon: Home,         gradient: 'from-emerald-500 via-emerald-600 to-teal-700' },
+  VILLA:              { icon: Castle,       gradient: 'from-purple-500 via-fuchsia-600 to-pink-700' },
+  PLOT_LAND:          { icon: MapIcon,      gradient: 'from-amber-500 via-orange-500 to-red-600' },
+  COMMERCIAL_OFFICE:  { icon: Briefcase,    gradient: 'from-slate-600 via-slate-700 to-zinc-800' },
+  COMMERCIAL_SHOP:    { icon: Store,        gradient: 'from-orange-500 via-red-500 to-rose-700' },
+  AGRICULTURAL:       { icon: Sprout,       gradient: 'from-lime-500 via-green-600 to-emerald-700' },
+  PARKING_GARAGE:     { icon: Car,          gradient: 'from-cyan-500 via-sky-600 to-blue-700' },
+  UNDER_CONSTRUCTION: { icon: Construction, gradient: 'from-yellow-500 via-amber-600 to-orange-700' },
+  OTHER:              { icon: Building,     gradient: 'from-stone-500 via-stone-600 to-neutral-700' },
 };
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -84,72 +82,83 @@ function PropertyCard({
   const isSold = property.status === 'SOLD';
   const typeStyle = PROPERTY_TYPE_STYLES[property.propertyType] ?? PROPERTY_TYPE_STYLES.OTHER;
   const TypeIcon = typeStyle.icon;
+  const typeLabel = PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType;
+  const statusLabel = PROPERTY_STATUS_LABELS[property.status] ?? property.status;
 
   return (
-    <Card className={`hover:shadow-md transition-shadow border-l-4 ${typeStyle.accent}`}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start gap-3 min-w-0 flex-1">
-            <div
-              className={`shrink-0 h-11 w-11 rounded-lg flex items-center justify-center ${typeStyle.badge}`}
-              title={PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType}
-            >
-              <TypeIcon className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h3 className="font-semibold truncate">{property.name}</h3>
-                {isSold && (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider rounded bg-muted px-1.5 py-0.5">
-                    Sold
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                <span className="text-xs text-muted-foreground">
-                  {PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType}
-                </span>
-                <span className="text-muted-foreground/40">·</span>
-                <span className="text-xs text-muted-foreground">
-                  {PROPERTY_STATUS_LABELS[property.status] ?? property.status}
-                </span>
-              </div>
-              {(property.city || property.address) && (
-                <div className="flex items-center gap-1 mt-1.5 text-xs text-muted-foreground">
-                  <MapPin className="h-3 w-3" />
+    <Card className="overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 p-0">
+      {/* Hero banner: gradient + giant decorative icon + type chip */}
+      <div className={`relative h-28 bg-gradient-to-br ${typeStyle.gradient}`}>
+        {/* Decorative oversized icon, washed out */}
+        <TypeIcon
+          className="absolute -right-3 -bottom-3 h-32 w-32 text-white/15"
+          strokeWidth={1.25}
+        />
+        {/* Subtle radial highlight */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-white/10" />
+        {/* Top-right floating icon chip */}
+        <div className="absolute top-3 right-3 h-9 w-9 rounded-lg bg-white/15 backdrop-blur-sm border border-white/25 flex items-center justify-center">
+          <TypeIcon className="h-5 w-5 text-white" />
+        </div>
+        {/* Type label top-left */}
+        <div className="absolute top-3 left-4 flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/95">
+            {typeLabel}
+          </span>
+          {isSold && (
+            <span className="text-[10px] font-semibold uppercase tracking-wider rounded bg-white/90 text-black px-1.5 py-0.5">
+              Sold
+            </span>
+          )}
+        </div>
+        {/* Name overlay bottom */}
+        <div className="absolute bottom-3 left-4 right-4">
+          <h3 className="font-semibold text-lg text-white truncate drop-shadow-sm">
+            {property.name}
+          </h3>
+          <div className="flex items-center gap-2 mt-0.5 text-xs text-white/85">
+            <span className="truncate">{statusLabel}</span>
+            {(property.city || property.address) && (
+              <>
+                <span className="text-white/50">·</span>
+                <span className="flex items-center gap-1 truncate">
+                  <MapPin className="h-3 w-3 shrink-0" />
                   <span className="truncate">{property.city ?? property.address}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-              onClick={onDelete}
-              disabled={isDeleting}
-              title="Delete"
-            >
-              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            </Button>
-            <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
-              <Link to={`/real-estate/${property.id}`}>
-                <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            </Button>
+                </span>
+              </>
+            )}
           </div>
         </div>
+      </div>
 
-        <div className="mt-4 pt-3 border-t space-y-2">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-end gap-1 -mt-1 mb-3">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+            disabled={isDeleting}
+            title="Delete"
+          >
+            {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </Button>
+          <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
+            <Link to={`/real-estate/${property.id}`} title="Open">
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+
+        <div className="space-y-2">
           {property.currentValue ? (
             <>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Current value</span>
-                <span className="font-medium tabular-nums">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Current value</span>
+                <span className="font-semibold tabular-nums text-base">
                   {formatINR(property.currentValue)}
                 </span>
               </div>
