@@ -46,7 +46,7 @@ const addStatementSchema = z.object({
   dueDate: isoDate,
   paidAmount: moneyString.nullable().optional(),
   paidOn: isoDate.nullable().optional(),
-  status: z.enum(STATEMENT_STATUSES),
+  status: z.enum(STATEMENT_STATUSES).optional().default('PENDING'),
   canonicalEventId: z.string().nullable().optional(),
 });
 
