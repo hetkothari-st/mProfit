@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
-import { Plus, Pencil, Loader2, ImageIcon, ChevronDown } from 'lucide-react';
+import { Plus, Pencil, Loader2, ImageIcon, ChevronDown, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatINR, Decimal, type HoldingRow } from '@portfolioos/shared';
@@ -15,6 +15,7 @@ import type { AssetClass, TransactionDTO } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { transactionsApi } from '@/api/transactions.api';
@@ -390,12 +391,12 @@ export function SimpleAssetPage({
                           <p className="text-xs text-muted-foreground">{txn.isin}</p>
                         )}
                         {txn.photos && txn.photos.length > 0 && (
-                          <div className="flex gap-1 mt-1">
+                          <div className="flex gap-1.5 mt-2">
                             {txn.photos.slice(0, 3).map((p) => (
                               <PhotoThumb key={p.id} txnId={txn.id} photoId={p.id} />
                             ))}
                             {txn.photos.length > 3 && (
-                              <div className="h-8 w-8 rounded border bg-muted/40 flex items-center justify-center text-[10px] text-muted-foreground">
+                              <div className="h-14 w-14 rounded-md border bg-muted/40 flex items-center justify-center text-xs text-muted-foreground">
                                 +{txn.photos.length - 3}
                               </div>
                             )}
@@ -489,6 +490,7 @@ export function SimpleAssetPage({
 
 function PhotoThumb({ txnId, photoId }: { txnId: string; photoId: string }) {
   const [src, setSrc] = useState<string | null>(null);
+  const [zoomOpen, setZoomOpen] = useState(false);
 
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -500,10 +502,31 @@ function PhotoThumb({ txnId, photoId }: { txnId: string; photoId: string }) {
 
   if (!src) {
     return (
-      <div className="h-8 w-8 rounded border bg-muted/40 flex items-center justify-center">
-        <ImageIcon className="h-3 w-3 text-muted-foreground" />
+      <div className="h-14 w-14 rounded-md border bg-muted/40 flex items-center justify-center">
+        <ImageIcon className="h-4 w-4 text-muted-foreground" />
       </div>
     );
   }
-  return <img src={src} alt="" className="h-8 w-8 rounded border object-cover" />;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setZoomOpen(true)}
+        className="h-14 w-14 rounded-md border bg-white dark:bg-muted overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-primary/40 transition"
+        title="View photo"
+      >
+        <img src={src} alt="" className="max-h-full max-w-full object-contain" />
+      </button>
+      <Dialog open={zoomOpen} onOpenChange={setZoomOpen}>
+        <DialogContent className="max-w-3xl p-2 bg-background">
+          <DialogClose className="absolute right-3 top-3 z-10 rounded-full bg-background/80 p-1.5 hover:bg-background border">
+            <X className="h-4 w-4" />
+          </DialogClose>
+          <div className="flex items-center justify-center p-2">
+            <img src={src} alt="" className="max-h-[80vh] max-w-full object-contain rounded" />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
