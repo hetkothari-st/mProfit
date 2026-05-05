@@ -15,6 +15,8 @@ import {
   Calculator,
   Loader2,
   Pencil,
+  Check,
+  Undo2,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -424,7 +426,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
     return (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Payment history</CardTitle>
+          <CardTitle className="text-lg">Payment history</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">No payments recorded yet</p>
@@ -436,7 +438,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm">
+        <CardTitle className="text-lg">
           Payment history
           <span className="ml-2 text-xs font-normal text-muted-foreground">
             {loan.payments.length} records
@@ -506,16 +508,57 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
 
 // ── Amortization table ────────────────────────────────────────────────
 
-function AmortizationTable({ rows }: { rows: AmortizationRowDTO[] }) {
+function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRowDTO[] }) {
+  const qc = useQueryClient();
   const [showAll, setShowAll] = useState(false);
+  const [pendingMonth, setPendingMonth] = useState<number | null>(null);
   const INITIAL_SHOW = 12;
   const displayed = showAll ? rows : rows.slice(0, INITIAL_SHOW);
   const today = new Date().toISOString().slice(0, 10);
 
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['loan', loan.id] });
+    qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
+    qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
+  };
+
+  const markPaid = useMutation({
+    mutationFn: (input: AddPaymentInput) => loansApi.addPayment(loan.id, input),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Marked paid');
+      setPendingMonth(null);
+    },
+    onError: () => {
+      toast.error('Failed to mark paid');
+      setPendingMonth(null);
+    },
+  });
+
+  const undoPaid = useMutation({
+    mutationFn: (paymentId: string) => loansApi.deletePayment(paymentId),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Payment undone');
+      setPendingMonth(null);
+    },
+    onError: () => {
+      toast.error('Failed to undo');
+      setPendingMonth(null);
+    },
+  });
+
+  function findEmiPaymentId(forMonth: string): string | null {
+    const p = loan.payments.find(
+      (x) => x.paymentType === 'EMI' && x.forMonth === forMonth,
+    );
+    return p?.id ?? null;
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-sm">
+        <CardTitle className="text-lg">
           Amortization schedule
           <span className="ml-2 text-xs font-normal text-muted-foreground">{rows.length} months</span>
         </CardTitle>
@@ -541,7 +584,8 @@ function AmortizationTable({ rows }: { rows: AmortizationRowDTO[] }) {
                 <th className="text-right py-2 pr-3 text-muted-foreground font-medium">Principal</th>
                 <th className="text-right py-2 pr-3 text-muted-foreground font-medium">Interest</th>
                 <th className="text-right py-2 pr-3 text-muted-foreground font-medium">Closing</th>
-                <th className="text-left py-2 text-muted-foreground font-medium">Status</th>
+                <th className="text-left py-2 pr-3 text-muted-foreground font-medium">Status</th>
+                <th className="text-right py-2 text-muted-foreground font-medium w-32">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -552,6 +596,9 @@ function AmortizationTable({ rows }: { rows: AmortizationRowDTO[] }) {
                   : isOverdue
                   ? 'bg-negative/5'
                   : '';
+                const forMonth = row.date.slice(0, 7);
+                const isPending =
+                  pendingMonth === row.month && (markPaid.isPending || undoPaid.isPending);
                 return (
                   <tr key={row.month} className={`border-b last:border-0 ${rowCls}`}>
                     <td className="py-1.5 pr-3 tabular-nums text-muted-foreground">{row.month}</td>
@@ -561,13 +608,55 @@ function AmortizationTable({ rows }: { rows: AmortizationRowDTO[] }) {
                     <td className="py-1.5 pr-3 text-right tabular-nums text-positive">{formatINR(row.principalPart)}</td>
                     <td className="py-1.5 pr-3 text-right tabular-nums text-muted-foreground">{formatINR(row.interestPart)}</td>
                     <td className="py-1.5 pr-3 text-right tabular-nums">{formatINR(row.closingBalance)}</td>
-                    <td className="py-1.5">
+                    <td className="py-1.5 pr-3">
                       {row.isPaid ? (
                         <span className="text-positive font-medium">Paid {row.paidOn ? formatDate(row.paidOn) : ''}</span>
                       ) : isOverdue ? (
                         <span className="text-negative font-medium">Overdue</span>
                       ) : (
                         <span className="text-muted-foreground">Upcoming</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 text-right">
+                      {row.isPaid ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-xs text-muted-foreground hover:text-negative"
+                          disabled={isPending}
+                          onClick={() => {
+                            const paymentId = findEmiPaymentId(forMonth);
+                            if (!paymentId) {
+                              toast.error('Payment not found');
+                              return;
+                            }
+                            setPendingMonth(row.month);
+                            undoPaid.mutate(paymentId);
+                          }}
+                        >
+                          {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Undo2 className="h-3 w-3 mr-1" /> Undo</>}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-xs"
+                          disabled={isPending}
+                          onClick={() => {
+                            setPendingMonth(row.month);
+                            markPaid.mutate({
+                              paymentType: 'EMI',
+                              paidOn: row.date,
+                              amount: row.emiAmount,
+                              forMonth,
+                              principalPart: row.principalPart,
+                              interestPart: row.interestPart,
+                              notes: null,
+                            });
+                          }}
+                        >
+                          {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Check className="h-3 w-3 mr-1" /> Mark paid</>}
+                        </Button>
                       )}
                     </td>
                   </tr>
@@ -817,7 +906,7 @@ export function LoanDetailPage() {
 
       {/* Amortization schedule */}
       {amortization && amortization.length > 0 && (
-        <AmortizationTable rows={amortization} />
+        <AmortizationTable loan={loan} rows={amortization} />
       )}
       {amortization && amortization.length === 0 && (
         <Card>
