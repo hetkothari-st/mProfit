@@ -85,8 +85,17 @@ function PropertyCard({
   const typeLabel = PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType;
   const statusLabel = PROPERTY_STATUS_LABELS[property.status] ?? property.status;
 
+  const stop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   return (
-    <Card className="overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 p-0">
+    <Link
+      to={`/real-estate/${property.id}`}
+      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
+    >
+      <Card className="overflow-hidden group-hover:shadow-lg group-hover:-translate-y-0.5 transition-all duration-200 p-0 cursor-pointer">
       {/* Hero banner: gradient + giant decorative icon + type chip */}
       <div className={`relative h-28 bg-gradient-to-br ${typeStyle.gradient}`}>
         {/* Decorative oversized icon, washed out */}
@@ -133,24 +142,26 @@ function PropertyCard({
 
       <CardContent className="p-5">
         <div className="flex items-center justify-end gap-1 -mt-1 mb-3">
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={(e) => { stop(e); onEdit(); }}
+            title="Edit"
+          >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-            onClick={onDelete}
+            onClick={(e) => { stop(e); onDelete(); }}
             disabled={isDeleting}
             title="Delete"
           >
             {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           </Button>
-          <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
-            <Link to={`/real-estate/${property.id}`} title="Open">
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
         </div>
 
         <div className="space-y-2">
@@ -181,7 +192,8 @@ function PropertyCard({
           )}
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </Link>
   );
 }
 
