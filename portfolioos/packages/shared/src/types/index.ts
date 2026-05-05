@@ -6,3 +6,4 @@ export * from './enums.js';
 export * from './imports.js';
 export * from './ingestionFailures.js';
 export * from './documents.js';
+export * from './realEstate.js';

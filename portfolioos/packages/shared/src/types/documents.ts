@@ -4,6 +4,7 @@ export type DocumentOwnerType =
   | 'VEHICLE'
   | 'INSURANCE_POLICY'
   | 'PORTFOLIO'
+  | 'OWNED_PROPERTY'
   | 'OTHER';
 
 export interface DocumentDTO {

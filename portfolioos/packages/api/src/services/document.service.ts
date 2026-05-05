@@ -76,6 +76,14 @@ async function assertOwnerAccessible(
       if (!row) throw new ForbiddenError('Portfolio not owned by user');
       return;
     }
+    case 'OWNED_PROPERTY': {
+      const row = await prisma.ownedProperty.findFirst({
+        where: { id: ownerId, userId },
+        select: { id: true },
+      });
+      if (!row) throw new ForbiddenError('Owned property not owned by user');
+      return;
+    }
     case 'OTHER':
       // free-form; userId on Document is the only guard
       return;

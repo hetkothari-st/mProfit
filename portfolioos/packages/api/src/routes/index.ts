@@ -29,6 +29,7 @@ import { catalogRouter, valuationRouter } from './valuation.routes.js';
 import { documentsRouter } from './documents.routes.js';
 import { loansRouter } from './loans.routes.js';
 import { creditCardsRouter } from './creditCards.routes.js';
+import { realEstateRouter } from './realEstate.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -62,4 +63,5 @@ export function registerRoutes(app: Express): void {
   app.use('/api/documents', documentsRouter);
   app.use('/api/loans', loansRouter);
   app.use('/api/credit-cards', creditCardsRouter);
+  app.use('/api/real-estate', realEstateRouter);
 }

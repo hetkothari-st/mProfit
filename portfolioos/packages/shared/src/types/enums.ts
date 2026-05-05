@@ -141,6 +141,8 @@ export const AlertType = {
   PRICE_TARGET: 'PRICE_TARGET',
   LOAN_EMI_DUE: 'LOAN_EMI_DUE',
   CREDIT_CARD_DUE: 'CREDIT_CARD_DUE',
+  PROPERTY_TAX_DUE: 'PROPERTY_TAX_DUE',
+  PROPERTY_POSSESSION_DUE: 'PROPERTY_POSSESSION_DUE',
   CUSTOM: 'CUSTOM',
 } as const;
 export type AlertType = (typeof AlertType)[keyof typeof AlertType];

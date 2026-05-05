@@ -78,6 +78,11 @@ model User {
 
   loans        Loan[]
   creditCards  CreditCard[]
+
+  // Phase 5-RealEstate — owned properties (self-occupied / second home / plot / etc).
+  // Distinct from RentalProperty (which models the tenancy/receipts side);
+  // see §Property docs.
+  ownedProperties OwnedProperty[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -234,6 +239,7 @@ model Portfolio {
   cashFlows      CashFlow[]
   alerts         Alert[]
   brokerAccounts BrokerAccount[]
+  ownedProperties OwnedProperty[]
 
   // Phase 4.5 hardening
   holdingProjections HoldingProjection[]
@@ -867,6 +873,8 @@ enum AlertType {
   FO_MARGIN_CALL
   LOAN_EMI_DUE
   CREDIT_CARD_DUE
+  PROPERTY_TAX_DUE
+  PROPERTY_POSSESSION_DUE
   CUSTOM
 }
 
@@ -1285,6 +1293,7 @@ model RentalProperty {
   tenancies Tenancy[]
   expenses  PropertyExpense[]
   loans     Loan[]
+  ownedProperties OwnedProperty[]
 }
 
 model Tenancy {
@@ -1363,6 +1372,7 @@ model InsurancePolicy {
 
   premiumHistory PremiumPayment[]
   claims         InsuranceClaim[]
+  ownedProperties OwnedProperty[]
 
   @@unique([userId, insurer, policyNumber])
   @@index([userId, nextPremiumDue])
@@ -1818,6 +1828,7 @@ enum DocumentOwnerType {
   VEHICLE
   INSURANCE_POLICY
   PORTFOLIO
+  OWNED_PROPERTY
   OTHER
 }
 
@@ -1858,6 +1869,7 @@ model Loan {
   updatedAt          DateTime        @updatedAt
 
   payments           LoanPayment[]
+  ownedProperties    OwnedProperty[]
 
   @@index([userId, status])
   @@index([userId, lenderName])
@@ -1921,4 +1933,107 @@ model CreditCardStatement {
 
   @@unique([cardId, forMonth])
   @@index([dueDate, status])
+}
+
+// ─── REAL ESTATE — Owned properties ─────────────────────────────────────
+//
+// Tracks properties the user owns (self-occupied / second home / vacant
+// plot / commercial / under-construction / sold). Distinct from
+// `RentalProperty` which models the tenancy/receipts side. The same
+// physical property may exist as both rows when it's both owned and
+// rented out — link via `rentalPropertyId`.
+//
+// Capital gains on sale (LTCG with CII indexation under section 112)
+// are computed on demand from the stored sale fields; no separate
+// CapitalGain row is written until the accounting flow integrates.
+
+model OwnedProperty {
+  id                     String     @id @default(cuid())
+  userId                 String
+  user                   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId            String?
+  portfolio              Portfolio? @relation(fields: [portfolioId], references: [id])
+
+  // Identity
+  name                   String
+  address                String?
+  city                   String?
+  state                  String?
+  pincode                String?
+  country                String     @default("IN")
+
+  propertyType           String     // APARTMENT|INDEPENDENT_HOUSE|VILLA|PLOT_LAND|COMMERCIAL_OFFICE|COMMERCIAL_SHOP|AGRICULTURAL|PARKING_GARAGE|UNDER_CONSTRUCTION|OTHER
+  status                 String     @default("SELF_OCCUPIED")  // SELF_OCCUPIED|SECOND_HOME|VACANT|RENTED_OUT|UNDER_CONSTRUCTION|SOLD
+
+  // Specs
+  builtUpSqft            Decimal?   @db.Decimal(12, 2)
+  carpetSqft             Decimal?   @db.Decimal(12, 2)
+  plotAreaSqft           Decimal?   @db.Decimal(12, 2)
+  floors                 Int?
+
+  // Ownership
+  ownershipType          String     @default("SOLE")   // SOLE|JOINT|HUF|COMPANY
+  ownershipPercent       Decimal    @default(100) @db.Decimal(5, 2)
+  coOwners               String?
+
+  // Purchase cost components — total cost basis = sum
+  purchaseDate           DateTime?  @db.Date
+  purchasePrice          Decimal?   @db.Decimal(14, 2)
+  stampDuty              Decimal?   @db.Decimal(14, 2)
+  registrationFee        Decimal?   @db.Decimal(14, 2)
+  brokerage              Decimal?   @db.Decimal(14, 2)
+  otherCosts             Decimal?   @db.Decimal(14, 2)
+
+  // Current value (manual; refresh prompt in UI when stale)
+  currentValue           Decimal?   @db.Decimal(14, 2)
+  currentValueSource     String?    @default("manual")
+  currentValueAsOf       DateTime?
+
+  // Linkages — proper FKs (fixes loans pattern of bare string IDs)
+  loanId                 String?
+  loan                   Loan?              @relation(fields: [loanId], references: [id])
+  insurancePolicyId      String?
+  insurancePolicy        InsurancePolicy?   @relation(fields: [insurancePolicyId], references: [id])
+  rentalPropertyId       String?
+  rentalProperty         RentalProperty?    @relation(fields: [rentalPropertyId], references: [id])
+
+  // Property tax + society
+  annualPropertyTax      Decimal?   @db.Decimal(12, 2)
+  propertyTaxDueMonth    Int?       // 1-12
+  societyName            String?
+  monthlyMaintenance     Decimal?   @db.Decimal(10, 2)
+  maintenanceFrequency   String?    @default("MONTHLY")  // MONTHLY|QUARTERLY|ANNUAL
+
+  // Identifiers
+  ownerName              String?
+  electricityConsumerNo  String?
+  waterConnectionNo      String?
+  gasConnectionNo        String?
+  khataNo                String?
+  surveyNo               String?
+
+  // Under construction
+  builderName            String?
+  projectName            String?
+  reraRegNo              String?
+  expectedPossessionDate DateTime?  @db.Date
+  paymentSchedulePaidPct Decimal?   @db.Decimal(5, 2)
+
+  // Lease
+  leaseholdEndDate       DateTime?  @db.Date
+
+  // Sale
+  saleDate               DateTime?  @db.Date
+  salePrice              Decimal?   @db.Decimal(14, 2)
+  saleBrokerage          Decimal?   @db.Decimal(14, 2)
+
+  notes                  String?
+  isActive               Boolean    @default(true)
+
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, propertyTaxDueMonth])
+  @@index([userId, expectedPossessionDate])
 }

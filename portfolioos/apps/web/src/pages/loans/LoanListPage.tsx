@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import {
   loansApi,
   type LoanDTO,
@@ -291,6 +292,7 @@ function CreateLoanDialog({
     prepaymentOption: initial?.prepaymentOption ?? 'REDUCE_TENURE',
     taxBenefitSection: initial?.taxBenefitSection ?? null,
     status: initial?.status ?? 'ACTIVE',
+    portfolioId: initial?.portfolioId ?? null,
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
@@ -481,6 +483,17 @@ function CreateLoanDialog({
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <Label>Portfolio</Label>
+            <PortfolioSelect
+              value={form.portfolioId ?? null}
+              onChange={(v) => set('portfolioId', v)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Optional — assign this loan to a portfolio to group it with related assets.
+            </p>
           </div>
         </div>
 

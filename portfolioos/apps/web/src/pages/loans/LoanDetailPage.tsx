@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import {
   loansApi,
   type LoanDTO,
@@ -266,6 +267,7 @@ function EditLoanDialog({
     prepaymentOption: loan.prepaymentOption,
     taxBenefitSection: loan.taxBenefitSection ?? null,
     status: loan.status,
+    portfolioId: loan.portfolioId ?? null,
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
@@ -390,6 +392,17 @@ function EditLoanDialog({
                 <option value="80E">80E (Education loan)</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <Label>Portfolio</Label>
+            <PortfolioSelect
+              value={form.portfolioId ?? null}
+              onChange={(v) => set('portfolioId', v)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Optional — re-assign this loan to a different portfolio.
+            </p>
           </div>
         </div>
         {mutation.isError && (

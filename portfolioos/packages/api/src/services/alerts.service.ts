@@ -3,6 +3,7 @@ import { NotFoundError } from '../lib/errors.js';
 import type { AlertType, AssetClass } from '@prisma/client';
 import { generateLoanEmiAlerts } from './loans.service.js';
 import { generateCreditCardAlerts } from './creditCards.service.js';
+import { generateRealEstateAlerts } from './realEstateAlerts.js';
 
 const EXPIRY_THRESHOLDS = [30, 15, 7, 1] as const;
 
@@ -300,13 +301,15 @@ export async function runAllAlertScans(userId?: string): Promise<{
   poMaturity: number;
   loan: number;
   creditCard: number;
+  realEstate: number;
 }> {
-  const [vehicle, rent, poMaturity, loan, creditCard] = await Promise.all([
+  const [vehicle, rent, poMaturity, loan, creditCard, realEstate] = await Promise.all([
     generateVehicleExpiryAlerts(userId),
     generateRentOverdueAlerts(userId),
     generatePoMaturityAlerts(userId),
     generateLoanEmiAlerts(userId),
     generateCreditCardAlerts(userId),
+    generateRealEstateAlerts(userId),
   ]);
-  return { vehicle, rent, poMaturity, loan, creditCard };
+  return { vehicle, rent, poMaturity, loan, creditCard, realEstate };
 }

@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import { vehiclesApi, type VehicleDTO } from '@/api/vehicles.api';
 import { apiErrorMessage } from '@/api/client';
 
@@ -52,6 +53,7 @@ const schema = z.object({
   fitnessExpiry: isoDateOrEmpty,
   roadTaxExpiry: isoDateOrEmpty,
   permitExpiry: isoDateOrEmpty,
+  portfolioId: z.string().nullable().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -75,7 +77,7 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
   const [mobileNo, setMobileNo] = useState('');
   const [otp, setOtp] = useState('');
 
-  const { register, handleSubmit, reset, formState, watch } = useForm<FormValues>({
+  const { register, handleSubmit, reset, formState, watch, setValue } = useForm<FormValues>({
     resolver: zodResolver(schema),
   });
 
@@ -107,6 +109,7 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
         fitnessExpiry: initial?.fitnessExpiry?.slice(0, 10) ?? '',
         roadTaxExpiry: initial?.roadTaxExpiry?.slice(0, 10) ?? '',
         permitExpiry: initial?.permitExpiry?.slice(0, 10) ?? '',
+        portfolioId: initial?.portfolioId ?? null,
       });
     }
   }, [open, initial, isEdit, reset]);
@@ -425,6 +428,18 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Portfolio assignment — optional */}
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase text-muted-foreground">Portfolio</Label>
+              <PortfolioSelect
+                value={watch('portfolioId') ?? null}
+                onChange={(v) => setValue('portfolioId', v)}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Optional — group this vehicle under a portfolio.
+              </p>
             </div>
 
             {/* Disclaimer */}
