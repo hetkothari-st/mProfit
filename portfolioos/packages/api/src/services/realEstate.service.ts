@@ -345,6 +345,111 @@ export async function refreshValue(
   return toDTO(row);
 }
 
+// ── Rental promotion ─────────────────────────────────────────────────────────
+//
+// "Promote to rental" copies the basics into a `RentalProperty` row so the
+// user can start tracking tenancies + receipts. The OwnedProperty keeps the
+// authoritative cost-basis / sale-side view; the RentalProperty owns the
+// income-side view. Linked via `rentalPropertyId`. Idempotent — promoting
+// twice returns the same rental row.
+//
+// Undo (`unlinkFromRental`) is only safe while the rental side has no
+// children (tenancies / expenses); otherwise we'd lose user-entered data.
+
+const PROPERTY_TYPE_TO_RENTAL_TYPE: Record<string, string> = {
+  APARTMENT: 'RESIDENTIAL',
+  INDEPENDENT_HOUSE: 'RESIDENTIAL',
+  VILLA: 'RESIDENTIAL',
+  COMMERCIAL_OFFICE: 'COMMERCIAL',
+  COMMERCIAL_SHOP: 'COMMERCIAL',
+  PLOT_LAND: 'LAND',
+  AGRICULTURAL: 'LAND',
+  PARKING_GARAGE: 'PARKING',
+  UNDER_CONSTRUCTION: 'RESIDENTIAL',
+  OTHER: 'RESIDENTIAL',
+};
+
+export async function promoteToRental(
+  userId: string,
+  id: string,
+): Promise<OwnedPropertyDTO> {
+  const property = await prisma.ownedProperty.findFirst({ where: { id, userId } });
+  if (!property) throw new NotFoundError(`Property ${id} not found`);
+
+  // Idempotent: if already linked, return as-is
+  if (property.rentalPropertyId) {
+    return toDTO(property);
+  }
+
+  const rentalType =
+    PROPERTY_TYPE_TO_RENTAL_TYPE[property.propertyType] ?? 'RESIDENTIAL';
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const rental = await tx.rentalProperty.create({
+      data: {
+        userId,
+        portfolioId: property.portfolioId,
+        name: property.name,
+        address: property.address,
+        propertyType: rentalType,
+        purchaseDate: property.purchaseDate,
+        purchasePrice: property.purchasePrice,
+        currentValue: property.currentValue,
+        isActive: true,
+      },
+    });
+    return tx.ownedProperty.update({
+      where: { id, userId },
+      data: {
+        rentalPropertyId: rental.id,
+        status: 'RENTED_OUT',
+      },
+    });
+  });
+
+  return toDTO(updated);
+}
+
+export async function unlinkFromRental(
+  userId: string,
+  id: string,
+): Promise<OwnedPropertyDTO> {
+  const property = await prisma.ownedProperty.findFirst({ where: { id, userId } });
+  if (!property) throw new NotFoundError(`Property ${id} not found`);
+  if (!property.rentalPropertyId) return toDTO(property);
+
+  // Refuse undo if user has already added tenancies/expenses — that'd lose data.
+  const rentalId = property.rentalPropertyId;
+  const childCount = await prisma.rentalProperty.findFirst({
+    where: { id: rentalId, userId },
+    select: {
+      _count: { select: { tenancies: true, expenses: true } },
+    },
+  });
+  if (
+    childCount &&
+    (childCount._count.tenancies > 0 || childCount._count.expenses > 0)
+  ) {
+    throw new Error(
+      'Cannot unlink rental — tenancies or expenses already exist. Delete those first.',
+    );
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const next = await tx.ownedProperty.update({
+      where: { id, userId },
+      data: {
+        rentalPropertyId: null,
+        status: property.status === 'RENTED_OUT' ? 'SELF_OCCUPIED' : property.status,
+      },
+    });
+    await tx.rentalProperty.deleteMany({ where: { id: rentalId, userId } });
+    return next;
+  });
+
+  return toDTO(updated);
+}
+
 // ── Capital gain (read-side) ─────────────────────────────────────────────────
 
 export async function getCapitalGain(

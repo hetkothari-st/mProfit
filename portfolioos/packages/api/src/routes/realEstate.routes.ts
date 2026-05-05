@@ -9,7 +9,9 @@ import {
   getSummaryHandler,
   listPropertiesHandler,
   markSoldHandler,
+  promoteToRentalHandler,
   refreshValueHandler,
+  unlinkFromRentalHandler,
   updatePropertyHandler,
 } from '../controllers/realEstate.controller.js';
 
@@ -29,4 +31,6 @@ realEstateRouter.delete('/properties/:id', asyncHandler(deletePropertyHandler));
 // Lifecycle / read-side
 realEstateRouter.post('/properties/:id/mark-sold', asyncHandler(markSoldHandler));
 realEstateRouter.post('/properties/:id/refresh-value', asyncHandler(refreshValueHandler));
+realEstateRouter.post('/properties/:id/promote-to-rental', asyncHandler(promoteToRentalHandler));
+realEstateRouter.post('/properties/:id/unlink-rental', asyncHandler(unlinkFromRentalHandler));
 realEstateRouter.get('/properties/:id/capital-gain', asyncHandler(getCapitalGainHandler));

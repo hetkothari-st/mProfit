@@ -6,8 +6,10 @@ import {
   getProperty,
   listProperties,
   markSold,
+  promoteToRental,
   refreshValue,
   computeSummary,
+  unlinkFromRental,
   updateProperty,
 } from '../services/realEstate.service.js';
 import {
@@ -63,6 +65,18 @@ export async function refreshValueHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const body = refreshValueSchema.parse(req.body);
   const row = await refreshValue(req.user.id, req.params['id']!, body);
+  ok(res, row);
+}
+
+export async function promoteToRentalHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const row = await promoteToRental(req.user.id, req.params['id']!);
+  ok(res, row);
+}
+
+export async function unlinkFromRentalHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const row = await unlinkFromRental(req.user.id, req.params['id']!);
   ok(res, row);
 }
 

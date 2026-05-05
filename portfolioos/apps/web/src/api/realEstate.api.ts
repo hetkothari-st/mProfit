@@ -69,6 +69,18 @@ export const realEstateApi = {
     );
     return unwrap(data);
   },
+  async promoteToRental(id: string): Promise<OwnedPropertyDTO> {
+    const { data } = await api.post<ApiResponse<OwnedPropertyDTO>>(
+      `/api/real-estate/properties/${id}/promote-to-rental`,
+    );
+    return unwrap(data);
+  },
+  async unlinkFromRental(id: string): Promise<OwnedPropertyDTO> {
+    const { data } = await api.post<ApiResponse<OwnedPropertyDTO>>(
+      `/api/real-estate/properties/${id}/unlink-rental`,
+    );
+    return unwrap(data);
+  },
   async getCapitalGain(id: string): Promise<PropertyCapitalGainDTO | null> {
     const { data } = await api.get<ApiResponse<PropertyCapitalGainDTO | null>>(
       `/api/real-estate/properties/${id}/capital-gain`,

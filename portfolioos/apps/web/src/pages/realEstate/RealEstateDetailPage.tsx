@@ -12,6 +12,8 @@ import {
   Shield,
   HandCoins,
   Home,
+  KeyRound,
+  Undo2,
 } from 'lucide-react';
 import {
   Decimal,
@@ -55,6 +57,7 @@ function fmtDate(iso: string | null): string {
 
 export function RealEstateDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const qc = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [soldOpen, setSoldOpen] = useState(false);
   const [refreshOpen, setRefreshOpen] = useState(false);
@@ -63,6 +66,54 @@ export function RealEstateDetailPage() {
     queryKey: ['real-estate', id],
     queryFn: () => realEstateApi.getProperty(id!),
     enabled: !!id,
+  });
+
+  // Invalidate everything that could be affected by promote/unlink:
+  // owned-property + the rental list/detail caches.
+  function invalidateAll() {
+    qc.invalidateQueries({ queryKey: ['real-estate'] });
+    qc.invalidateQueries({ queryKey: ['real-estate', id] });
+    qc.invalidateQueries({ queryKey: ['real-estate-summary'] });
+    qc.invalidateQueries({ queryKey: ['rental-properties'] });
+  }
+
+  const unlinkMutation = useMutation({
+    mutationFn: () => realEstateApi.unlinkFromRental(id!),
+    onSuccess: () => {
+      toast.success('Removed from rentals');
+      invalidateAll();
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Undo failed')),
+  });
+
+  const promoteMutation = useMutation({
+    mutationFn: () => realEstateApi.promoteToRental(id!),
+    onSuccess: (updated) => {
+      invalidateAll();
+      // Custom toast with inline Undo button. react-hot-toast accepts a
+      // function returning JSX; we close it manually after the user picks.
+      toast.success(
+        (t) => (
+          <span className="flex items-center gap-3">
+            <span className="text-sm">
+              "{updated.name}" added to Rentals
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                toast.dismiss(t.id);
+                unlinkMutation.mutate();
+              }}
+            >
+              <Undo2 className="h-3.5 w-3.5" /> Undo
+            </Button>
+          </span>
+        ),
+        { duration: 8000 },
+      );
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Promote failed')),
   });
 
   if (isLoading) {
@@ -103,6 +154,16 @@ export function RealEstateDetailPage() {
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4" /> Edit
             </Button>
+            {!isSold && !property.rentalPropertyId && (
+              <Button
+                variant="outline"
+                onClick={() => promoteMutation.mutate()}
+                disabled={promoteMutation.isPending}
+              >
+                <KeyRound className="h-4 w-4" />
+                {promoteMutation.isPending ? 'Adding…' : 'Make rental'}
+              </Button>
+            )}
             {!isSold && (
               <>
                 <Button variant="outline" onClick={() => setRefreshOpen(true)}>
@@ -116,6 +177,42 @@ export function RealEstateDetailPage() {
           </>
         }
       />
+
+      {/* Permanent banner: this property is mirrored in the Rentals module */}
+      {property.rentalPropertyId && (
+        <Card className="mb-6 border-accent/40 bg-accent/5">
+          <CardContent className="p-4 flex items-start gap-3">
+            <KeyRound className="h-5 w-5 text-accent shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">
+                This property is also tracked in Rentals.
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Tenancies, rent receipts, and rental P&amp;L are managed under the
+                Rentals tab. Cost basis and capital-gain stay here.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button asChild size="sm" variant="outline">
+                <Link to={`/rental/${property.rentalPropertyId}`}>
+                  Open rental record <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+              {!isSold && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => unlinkMutation.mutate()}
+                  disabled={unlinkMutation.isPending}
+                  title="Remove from rentals (only if no tenancies/expenses exist)"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
