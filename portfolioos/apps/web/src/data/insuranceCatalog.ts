@@ -1,9 +1,11 @@
-// Catalog of widely-sold Indian insurance products. Each entry's `brochureUrl`
-// points to the insurer's official product page where the latest brochure can
-// be downloaded — direct PDF URLs change frequently, the product page is more
-// stable. Coverage / exclusions text is summarised from publicly published
-// product brochures and IRDAI filings; verify against the live brochure for
-// exact contractual terms.
+// Catalog of widely-sold Indian insurance products. Insurer URLs rot quickly,
+// so we deliberately don't hardcode a per-product PDF link. Instead:
+//   - `insurerSite`  is the insurer's stable home/products page (rarely changes).
+//   - `brochureSearchUrl(product)` builds a Google search URL that targets the
+//     real brochure PDF — robust to URL changes and lets the user pick the
+//     latest version directly from the insurer.
+// Coverage / exclusions text is summarised from publicly published brochures
+// and IRDAI filings; the actual policy document is contractually authoritative.
 
 export type CatalogPolicyType =
   | 'TERM'
@@ -35,8 +37,18 @@ export interface CatalogProduct {
   ageBand?: string;
   /** Policy term band, if applicable. */
   policyTermYears?: string;
-  /** Insurer's official product page (preferred over direct PDF — survives URL changes). */
-  brochureUrl: string;
+  /** Insurer's stable home/products page — used for the "Insurer site" link. */
+  insurerSite: string;
+}
+
+/**
+ * Builds a Google search URL that targets the official brochure PDF for a given
+ * product. Lands the user on the actual insurer-hosted PDF in one click and
+ * always works even when the insurer reshuffles their URL structure.
+ */
+export function brochureSearchUrl(product: CatalogProduct): string {
+  const q = `${product.insurer} ${product.planName} policy brochure filetype:pdf`;
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 }
 
 export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
@@ -61,7 +73,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     sumAssuredRange: '₹50 lakh – ₹40 crore',
     ageBand: '18–65 years',
     policyTermYears: '10–40',
-    brochureUrl: 'https://licindia.in/products/insurance-plan/lic-s-tech-term',
+    insurerSite: 'https://licindia.in',
   },
   {
     id: 'hdfc-life-click2protect-super',
@@ -82,8 +94,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     sumAssuredRange: '₹50 lakh – ₹20 crore',
     ageBand: '18–65 years',
     policyTermYears: '5–85 minus age',
-    brochureUrl:
-      'https://www.hdfclife.com/term-insurance-plans/click-2-protect-super-term-plan',
+    insurerSite: 'https://www.hdfclife.com',
   },
   {
     id: 'icici-pru-iprotect-smart',
@@ -103,7 +114,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     sumAssuredRange: '₹25 lakh – above',
     ageBand: '18–65 years',
     policyTermYears: '5–40',
-    brochureUrl: 'https://www.iciciprulife.com/term-insurance-plans/iprotect-smart.html',
+    insurerSite: 'https://www.iciciprulife.com',
   },
   {
     id: 'max-life-smart-secure-plus',
@@ -122,7 +133,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     sumAssuredRange: '₹25 lakh and above',
     ageBand: '18–65 years',
     policyTermYears: '10–67 minus age',
-    brochureUrl: 'https://www.maxlifeinsurance.com/term-insurance-plans/smart-secure-plus-plan',
+    insurerSite: 'https://www.maxlifeinsurance.com',
   },
   {
     id: 'bajaj-allianz-etouch-life',
@@ -140,7 +151,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     sumAssuredRange: '₹50 lakh – ₹20 crore',
     ageBand: '18–65 years',
     policyTermYears: '10–40',
-    brochureUrl: 'https://www.bajajallianzlife.com/life-insurance-plans/term-insurance/etouch-ii.html',
+    insurerSite: 'https://www.bajajallianzlife.com',
   },
 
   // ── Health ───────────────────────────────────────────────────────────
@@ -167,7 +178,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     ],
     sumAssuredRange: '₹5 lakh – ₹2 crore',
     ageBand: 'Adult 18–65 (lifelong renewal); Child 91 days–25 years',
-    brochureUrl: 'https://www.hdfcergo.com/health-insurance/optima-secure',
+    insurerSite: 'https://www.hdfcergo.com',
   },
   {
     id: 'niva-bupa-reassure-2',
@@ -191,7 +202,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     ],
     sumAssuredRange: '₹3 lakh – ₹1 crore',
     ageBand: '18+ (lifelong renewal)',
-    brochureUrl: 'https://www.nivabupa.com/health-insurance-plans/reassure-2-0.html',
+    insurerSite: 'https://www.nivabupa.com',
   },
   {
     id: 'star-health-comprehensive',
@@ -215,7 +226,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     ],
     sumAssuredRange: '₹5 lakh – ₹1 crore',
     ageBand: '18–65 years (renewal lifelong)',
-    brochureUrl: 'https://www.starhealth.in/health-insurance/star-comprehensive-insurance-policy',
+    insurerSite: 'https://www.starhealth.in',
   },
   {
     id: 'care-health-care-plus',
@@ -237,7 +248,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Conditions excluded by policy terms (e.g. cosmetic)',
     ],
     sumAssuredRange: '₹3 lakh – ₹6 crore',
-    brochureUrl: 'https://www.careinsurance.com/health-insurance-plans/care-health-insurance.html',
+    insurerSite: 'https://www.careinsurance.com',
   },
   {
     id: 'icici-lombard-complete-health',
@@ -255,7 +266,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     ],
     exclusions: ['Pre-existing waiting period', 'Specified illness waiting period (varies)'],
     sumAssuredRange: '₹3 lakh – ₹50 lakh',
-    brochureUrl: 'https://www.icicilombard.com/health-insurance/complete-health-insurance',
+    insurerSite: 'https://www.icicilombard.com',
   },
 
   // ── Motor ────────────────────────────────────────────────────────────
@@ -278,7 +289,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Consequential losses, mechanical / electrical breakdown',
       'Damage outside India',
     ],
-    brochureUrl: 'https://www.icicilombard.com/motor-insurance/car-insurance',
+    insurerSite: 'https://www.icicilombard.com',
   },
   {
     id: 'bajaj-allianz-car-comprehensive',
@@ -293,7 +304,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Personal accident cover for owner-driver up to ₹15 lakh',
       'Optional NCB protect, depreciation shield, key replacement',
     ],
-    brochureUrl: 'https://www.bajajallianz.com/motor-insurance-online/car-insurance.html',
+    insurerSite: 'https://www.bajajallianz.com',
   },
   {
     id: 'hdfc-ergo-private-car',
@@ -308,7 +319,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Add-ons: zero-dep, engine, RTI, NCB protect, consumables',
       'Cashless claim at network garages',
     ],
-    brochureUrl: 'https://www.hdfcergo.com/motor-insurance/car-insurance',
+    insurerSite: 'https://www.hdfcergo.com',
   },
   {
     id: 'tata-aig-auto-secure',
@@ -323,7 +334,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Owner-driver personal accident cover',
       'Add-ons including engine secure, depreciation reimbursement, daily allowance',
     ],
-    brochureUrl: 'https://www.tataaig.com/car-insurance',
+    insurerSite: 'https://www.tataaig.com',
   },
 
   // ── Travel ───────────────────────────────────────────────────────────
@@ -343,7 +354,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Optional adventure-sports cover',
     ],
     exclusions: ['Pre-existing conditions (except life-threatening)', 'War / nuclear', 'Self-inflicted injury'],
-    brochureUrl: 'https://www.icicilombard.com/travel-insurance',
+    insurerSite: 'https://www.icicilombard.com',
   },
   {
     id: 'hdfc-ergo-international-travel',
@@ -359,7 +370,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Trip cancellation / delay',
       'Hijack distress allowance',
     ],
-    brochureUrl: 'https://www.hdfcergo.com/travel-insurance',
+    insurerSite: 'https://www.hdfcergo.com',
   },
 
   // ── Home ─────────────────────────────────────────────────────────────
@@ -377,7 +388,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Earthquake and terrorism cover (with extension)',
       'Optional jewellery and valuables endorsement',
     ],
-    brochureUrl: 'https://www.hdfcergo.com/home-insurance',
+    insurerSite: 'https://www.hdfcergo.com',
   },
   {
     id: 'bajaj-allianz-my-home-insurance',
@@ -392,8 +403,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Public liability for tenants',
       'Burglary and home loss',
     ],
-    brochureUrl:
-      'https://www.bajajallianz.com/home-insurance/my-home-all-risk-insurance-policy.html',
+    insurerSite: 'https://www.bajajallianz.com',
   },
 
   // ── Endowment / ULIP ─────────────────────────────────────────────────
@@ -414,7 +424,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     sumAssuredRange: '₹1 lakh and above',
     ageBand: '18–50 years',
     policyTermYears: '15–35',
-    brochureUrl: 'https://licindia.in/products/insurance-plan/lic-s-new-jeevan-anand',
+    insurerSite: 'https://licindia.in',
   },
   {
     id: 'lic-jeevan-labh',
@@ -431,7 +441,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     ],
     ageBand: '8–59 years',
     policyTermYears: '16, 21 or 25',
-    brochureUrl: 'https://licindia.in/products/insurance-plan/lic-s-jeevan-labh',
+    insurerSite: 'https://licindia.in',
   },
   {
     id: 'hdfc-life-sanchay-plus',
@@ -448,8 +458,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     ],
     ageBand: '5–60 years (depending on option)',
     policyTermYears: 'Up to 25 (or whole life)',
-    brochureUrl:
-      'https://www.hdfclife.com/savings-plans/sanchay-plus-non-participating-life-insurance-plan',
+    insurerSite: 'https://www.hdfclife.com',
   },
   {
     id: 'icici-pru-signature-ulip',
@@ -467,7 +476,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
     ],
     ageBand: '0–60 years',
     policyTermYears: '10–30',
-    brochureUrl: 'https://www.iciciprulife.com/savings-plans/signature.html',
+    insurerSite: 'https://www.iciciprulife.com',
   },
 
   // ── Personal accident ────────────────────────────────────────────────
@@ -486,7 +495,7 @@ export const INSURANCE_CATALOG: readonly CatalogProduct[] = [
       'Children education benefit on death of insured',
     ],
     exclusions: ['Self-inflicted injury, intoxication, war, hazardous sports (unless covered)'],
-    brochureUrl: 'https://www.icicilombard.com/personal-accident-insurance',
+    insurerSite: 'https://www.icicilombard.com',
   },
 ] as const;
 

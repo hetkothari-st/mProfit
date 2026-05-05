@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Search, ExternalLink, Sparkles, X, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Search, ExternalLink, Sparkles, X, ShieldCheck, AlertTriangle, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   INSURANCE_CATALOG,
   findCatalogProduct,
+  brochureSearchUrl,
   type CatalogProduct,
 } from '@/data/insuranceCatalog';
 
@@ -168,16 +169,27 @@ export function CatalogBrief({ product, compact = false }: BriefProps) {
           </div>
           <h3 className="font-semibold text-base mt-1 truncate">{product.planName}</h3>
         </div>
-        <a
-          href={product.brochureUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-md border bg-background hover:bg-accent transition-colors px-3 py-1.5 text-xs font-medium"
-          title="Open insurer's official product page"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-          Brochure
-        </a>
+        <div className="shrink-0 flex items-center gap-1.5">
+          <a
+            href={brochureSearchUrl(product)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border bg-background hover:bg-accent transition-colors px-3 py-1.5 text-xs font-medium"
+            title="Find the official PDF brochure (opens Google search restricted to PDFs)"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Brochure
+          </a>
+          <a
+            href={product.insurerSite}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border bg-background hover:bg-accent transition-colors px-2 py-1.5 text-xs font-medium"
+            title="Open insurer's website"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
       </div>
 
       <div className="px-4 py-3 space-y-3 text-sm">

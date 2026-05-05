@@ -18,6 +18,8 @@ import {
   Trash2,
   Loader2,
   Upload as UploadIcon,
+  Download,
+  ExternalLink,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -44,7 +46,7 @@ import {
   CatalogBrief,
   inferCatalogId,
 } from '@/components/insurance/InsuranceCatalogPicker';
-import { findCatalogProduct, type CatalogProduct } from '@/data/insuranceCatalog';
+import { findCatalogProduct, brochureSearchUrl, type CatalogProduct } from '@/data/insuranceCatalog';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -144,6 +146,8 @@ function PolicyCard({
   isDeleting: boolean;
 }) {
   const statusMeta = getStatusMeta(policy);
+  const catalogId = inferCatalogId(policy.insurer, policy.planName);
+  const product = findCatalogProduct(catalogId);
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -175,6 +179,38 @@ function PolicyCard({
             </Button>
           </div>
         </div>
+
+        {/* Catalog-driven description + brochure link */}
+        {product && (
+          <div className="mt-3 rounded-md border bg-gradient-to-br from-accent/30 to-muted/30 px-3 py-2.5">
+            <p className="text-xs leading-snug text-foreground/80 line-clamp-2">
+              {product.description}
+            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <a
+                href={brochureSearchUrl(product)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-accent-foreground hover:underline"
+                title="Find official brochure PDF"
+              >
+                <Download className="h-3 w-3" /> Brochure
+              </a>
+              <span className="h-3 w-px bg-border" />
+              <a
+                href={product.insurerSite}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:underline"
+                title="Insurer website"
+              >
+                <ExternalLink className="h-3 w-3" /> Insurer site
+              </a>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 pt-3 border-t space-y-2">
           <div className="flex items-center justify-between text-xs">
