@@ -443,7 +443,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
     return (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Payment history</CardTitle>
+          <CardTitle className="text-2xl">Payment history</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">No payments recorded yet</p>
@@ -455,7 +455,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">
+        <CardTitle className="text-2xl">
           Payment history
           <span className="ml-2 text-xs font-normal text-muted-foreground">
             {loan.payments.length} records
@@ -575,7 +575,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-lg">
+        <CardTitle className="text-2xl">
           Amortization schedule
           <span className="ml-2 text-xs font-normal text-muted-foreground">{rows.length} months</span>
         </CardTitle>
@@ -757,7 +757,7 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
       {/* Outstanding balance trajectory */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg">Outstanding balance over time</CardTitle>
+          <CardTitle className="text-2xl">Outstanding balance over time</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={240}>
@@ -809,7 +809,7 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
         {/* Principal vs Interest stacked area */}
         <Card className="md:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">EMI split — principal vs interest</CardTitle>
+            <CardTitle className="text-2xl">EMI split — principal vs interest</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
@@ -873,7 +873,7 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
         {/* Total cost donut */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Total cost</CardTitle>
+            <CardTitle className="text-2xl">Total cost</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={180}>
