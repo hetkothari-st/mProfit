@@ -510,3 +510,78 @@ async function maybeAutoProject(
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Retry helper — callable from DLQ service
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-run the pipeline for a Gmail failure row.
+ *
+ * Strategy:
+ *   1. Look up the user's MonitoredSender for the `sourceRef` (messageId).
+ *   2. Re-fetch the message from Gmail using the first active mailbox.
+ *   3. Re-run processEmail (idempotency guard will skip if already exists).
+ *
+ * Returns { ok: true, eventsInserted } on success or { ok: false, error }.
+ */
+export async function retryGmailFailure(
+  userId: string,
+  row: { id: string; sourceRef: string; sourceAdapter: string },
+): Promise<{ ok: true; eventsInserted: number } | { ok: false; error: string }> {
+  // Find an active Gmail mailbox for this user
+  const mailbox = await prisma.mailboxAccount.findFirst({
+    where: { userId, provider: 'GMAIL_OAUTH', isActive: true },
+    select: { id: true },
+  });
+  if (!mailbox) {
+    return { ok: false, error: 'No active Gmail mailbox found for this user.' };
+  }
+
+  // Re-fetch the message
+  let message: gmail_v1.Schema$Message;
+  try {
+    const { getAuthorizedClientFor } = await import('../../connectors/gmail.connector.js');
+    const { google } = await import('googleapis');
+    const auth = await getAuthorizedClientFor(mailbox.id);
+    const gmail = google.gmail({ version: 'v1', auth });
+    const res = await gmail.users.messages.get({
+      userId: 'me',
+      id: row.sourceRef,
+      format: 'full',
+    });
+    message = res.data;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Failed to re-fetch Gmail message: ${msg}` };
+  }
+
+  // Find the sender address from the From header
+  const from = message.payload?.headers?.find((h) => h.name?.toLowerCase() === 'from')?.value ?? '';
+  // Find monitoring config (optional — use defaults if sender not found)
+  const monitored = await prisma.monitoredSender.findFirst({
+    where: { userId, isActive: true },
+    orderBy: { confirmedEventCount: 'desc' },
+    select: { address: true, autoCommitEnabled: true },
+  });
+
+  const outcome = await processEmail({
+    userId,
+    senderAddress: from || monitored?.address || '',
+    autoCommitEnabled: monitored?.autoCommitEnabled ?? false,
+    messageId: row.sourceRef,
+    message,
+  });
+
+  if (outcome.kind === 'created') {
+    return { ok: true, eventsInserted: outcome.eventIds.length };
+  }
+  if (outcome.kind === 'skipped_duplicate') {
+    // Already processed — that's fine, idempotency working as intended
+    return { ok: true, eventsInserted: 0 };
+  }
+  return {
+    ok: false,
+    error: `Pipeline outcome: ${outcome.kind}${'reason' in outcome ? ` (${outcome.reason})` : ''}`,
+  };
+}

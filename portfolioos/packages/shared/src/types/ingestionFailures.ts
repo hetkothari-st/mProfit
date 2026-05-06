@@ -11,6 +11,7 @@ export const INGESTION_RESOLVE_ACTIONS = [
   'manual_entry',
   'retry_succeeded',
   'ignored',
+  'fixed_externally',
   'data_corrected',
 ] as const;
 
@@ -34,5 +35,6 @@ export const INGESTION_RESOLVE_ACTION_LABELS: Record<IngestionResolveAction, str
   manual_entry: 'Entered manually',
   retry_succeeded: 'Retried successfully',
   ignored: 'Ignored',
+  fixed_externally: 'Fixed externally',
   data_corrected: 'Data corrected & re-uploaded',
 };

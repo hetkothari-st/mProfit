@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { NotFoundError, ForbiddenError, BadRequestError } from '../lib/errors.js';
+import type { IngestionFailure } from '@prisma/client';
 
 /**
  * Dead-letter queue for ingestion — §3.5, §5.1 task 8. Any ingestion path
@@ -61,23 +62,45 @@ export async function writeIngestionFailure(input: WriteIngestionFailureInput) {
 
 export interface ListIngestionFailuresQuery {
   resolved?: boolean;
+  adapter?: string;
+  since?: Date;
+  cursor?: string;
   limit?: number;
 }
 
-export async function listIngestionFailures(userId: string, q: ListIngestionFailuresQuery = {}) {
+export interface ListIngestionFailuresResult {
+  data: IngestionFailure[];
+  nextCursor: string | null;
+}
+
+export async function listIngestionFailures(
+  userId: string,
+  q: ListIngestionFailuresQuery = {},
+): Promise<ListIngestionFailuresResult> {
+  const take = Math.min(q.limit ?? 50, 200);
+
   const where: Prisma.IngestionFailureWhereInput = { userId };
   if (q.resolved === true) where.resolvedAt = { not: null };
   if (q.resolved === false) where.resolvedAt = null;
+  if (q.adapter) where.sourceAdapter = q.adapter;
+  if (q.since) where.createdAt = { gte: q.since };
 
-  return prisma.ingestionFailure.findMany({
+  const rows = await prisma.ingestionFailure.findMany({
     where,
     orderBy: [
       // Unresolved first, newest within each bucket.
       { resolvedAt: { sort: 'asc', nulls: 'first' } },
       { createdAt: 'desc' },
     ],
-    take: Math.min(q.limit ?? 100, 500),
+    take: take + 1,  // fetch one extra to determine if there is a next page
+    ...(q.cursor ? { cursor: { id: q.cursor }, skip: 1 } : {}),
   });
+
+  const hasNext = rows.length > take;
+  const data = hasNext ? rows.slice(0, take) : rows;
+  const nextCursor = hasNext ? (data[data.length - 1]?.id ?? null) : null;
+
+  return { data, nextCursor };
 }
 
 export async function getIngestionFailure(userId: string, id: string) {
@@ -91,6 +114,7 @@ const ALLOWED_RESOLVE_ACTIONS = [
   'manual_entry',
   'retry_succeeded',
   'ignored',
+  'fixed_externally',
   'data_corrected',
 ] as const;
 export type ResolveAction = (typeof ALLOWED_RESOLVE_ACTIONS)[number];
@@ -113,4 +137,74 @@ export async function resolveIngestionFailure(
     where: { id },
     data: { resolvedAt: new Date(), resolvedAction: action },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Retry — attempt to re-parse the stored raw payload via the same adapter.
+// Returns the number of canonical events successfully created, or throws on
+// adapter error (without modifying the failure row on failure).
+// ---------------------------------------------------------------------------
+
+export interface RetryIngestionFailureResult {
+  eventsInserted: number;
+}
+
+/**
+ * Retry parsing a failure row using its stored rawPayload.
+ *
+ * Supported adapters (those that store enough in rawPayload to re-parse):
+ *   - pf.*      — re-scrape via pfFetchSessions flow — NOT supported here;
+ *                  these require a live browser session. Users must use the
+ *                  PF refresh UI instead.
+ *   - vehicle.* — rawPayload has {attempts, mode}; not re-parseable without
+ *                  a live scraping run.
+ *   - gmail.*   — rawPayload contains the email body; re-parseable.
+ *
+ * For adapters that cannot be retried, this function throws BadRequestError
+ * so the UI can surface "Retry not available for this failure type."
+ *
+ * On success: marks the failure row resolved with action='retry_succeeded'.
+ * On parse failure: returns { ok: false, error } without touching the row.
+ */
+export async function retryIngestionFailure(
+  userId: string,
+  id: string,
+): Promise<RetryIngestionFailureResult> {
+  const row = await getIngestionFailure(userId, id);
+
+  if (!row.rawPayload) {
+    throw new BadRequestError('No raw payload stored — retry not available for this failure.');
+  }
+
+  const adapter = row.sourceAdapter;
+
+  // Gmail adapters store the email body in rawPayload — re-run through LLM pipeline.
+  if (adapter.startsWith('gmail.') || adapter.startsWith('email.')) {
+    // Lazy-import to avoid circular deps
+    const { retryGmailFailure } = await import('../ingestion/gmail/pipeline.js');
+    const result = await retryGmailFailure(userId, row);
+    if (result.ok) {
+      await prisma.ingestionFailure.update({
+        where: { id: row.id },
+        data: { resolvedAt: new Date(), resolvedAction: 'retry_succeeded' },
+      });
+      return { eventsInserted: result.eventsInserted };
+    }
+    // Return the parse error without modifying the row
+    throw new BadRequestError(`Retry failed: ${result.error}`);
+  }
+
+  // PF, vehicle, valuation adapters — cannot be retried without live sessions
+  if (
+    adapter.startsWith('pf.') ||
+    adapter.startsWith('vehicle.') ||
+    adapter.startsWith('valuation.')
+  ) {
+    throw new BadRequestError(
+      `Retry not available for adapter "${adapter}". Use the dedicated refresh UI for this asset type.`,
+    );
+  }
+
+  // Unknown adapter
+  throw new BadRequestError(`Retry not implemented for adapter "${adapter}".`);
 }
