@@ -8,6 +8,7 @@ import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates } from '../priceFeeds/fx.service.js';
 import { refreshAllHoldingPrices } from '../services/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
+import { startPfFetchWorker } from './pfFetchWorker.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -89,5 +90,8 @@ async function runStartupSyncInner(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, '[startup] holdings refresh failed');
   }
+  // Start PF headless fetch worker (SSE-driven Playwright scrape for EPFO)
+  startPfFetchWorker();
+
   logger.info('[startup] initial data sync complete');
 }
