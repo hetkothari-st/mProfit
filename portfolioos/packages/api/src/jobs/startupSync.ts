@@ -9,6 +9,9 @@ import { syncFxRates } from '../priceFeeds/fx.service.js';
 import { refreshAllHoldingPrices } from '../services/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
 import { startPfFetchWorker } from './pfFetchWorker.js';
+// Self-registering PF adapters — import side-effects call registerPfAdapter()
+import '../adapters/pf/epf/epfo.v1.js';
+import '../adapters/pf/ppf/sbi.v1.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
