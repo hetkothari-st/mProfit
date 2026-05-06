@@ -79,11 +79,11 @@ export function pfEventHash(opts: {
   institution: string;
   identifier: string;
   eventDate: string;        // YYYY-MM-DD
-  amount?: string;          // Decimal as string
+  amount: string;           // Decimal as string
   type: string;             // CanonicalEventType
   sequence: number;
 }): string {
   return sha256Hex(
-    `pf:${opts.userId}:${opts.institution}:${opts.identifier}:${opts.eventDate}:${opts.amount ?? ''}:${opts.type}:${opts.sequence}`,
+    `pf:${opts.userId}:${opts.institution}:${opts.identifier}:${opts.eventDate}:${opts.amount}:${opts.type}:${opts.sequence}`,
   );
 }
