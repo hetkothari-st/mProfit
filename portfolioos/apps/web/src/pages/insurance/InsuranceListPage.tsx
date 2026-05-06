@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -314,6 +314,28 @@ function CreatePolicyDialog({
   );
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const selectedCatalog = findCatalogProduct(catalogId);
+
+  // Re-sync form when dialog opens with a different initial policy
+  useEffect(() => {
+    if (open) {
+      setForm({
+        insurer: initial?.insurer ?? '',
+        policyNumber: initial?.policyNumber ?? '',
+        type: (initial?.type as CreatePolicyInput['type']) ?? 'TERM',
+        planName: initial?.planName ?? '',
+        policyHolder: initial?.policyHolder ?? '',
+        sumAssured: initial?.sumAssured ?? '',
+        premiumAmount: initial?.premiumAmount ?? '',
+        premiumFrequency: (initial?.premiumFrequency as CreatePolicyInput['premiumFrequency']) ?? 'ANNUAL',
+        startDate: initial?.startDate ?? '',
+        maturityDate: initial?.maturityDate ?? '',
+        nextPremiumDue: initial?.nextPremiumDue ?? '',
+      });
+      setErrors({});
+      setCatalogId(initial ? inferCatalogId(initial.insurer, initial.planName) : null);
+      setPendingFile(null);
+    }
+  }, [open, initial]);
 
   function applyCatalogProduct(product: CatalogProduct | null) {
     setCatalogId(product?.id ?? null);

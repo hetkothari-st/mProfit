@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -246,6 +246,25 @@ function CreateCardDialog({
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+
+  // Re-sync form when dialog opens with a different initial card
+  useEffect(() => {
+    if (open) {
+      setForm({
+        issuerBank: initial?.issuerBank ?? '',
+        cardName: initial?.cardName ?? '',
+        last4: initial?.last4 ?? '',
+        network: initial?.network ?? null,
+        creditLimit: initial?.creditLimit ?? '',
+        statementDay: initial?.statementDay ?? 1,
+        dueDay: initial?.dueDay ?? 20,
+        interestRate: initial?.interestRate ?? null,
+        annualFee: initial?.annualFee ?? null,
+        status: initial?.status ?? 'ACTIVE',
+      });
+      setErrors({});
+    }
+  }, [open, initial]);
 
   const mutation = useMutation({
     mutationFn: (input: CreateCardInput) =>

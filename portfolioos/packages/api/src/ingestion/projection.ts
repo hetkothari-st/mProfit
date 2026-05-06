@@ -467,6 +467,20 @@ export async function projectCanonicalEvent(eventId: string): Promise<Projection
       // queue — the original CanonicalEvent row is the audit trail.
       return markProjectedNoOp(event, `${event.eventType.toLowerCase()}_deferred`);
 
+    case 'PF_EMPLOYER_CONTRIBUTION':
+    case 'PF_EMPLOYEE_CONTRIBUTION':
+    case 'PF_VPF_CONTRIBUTION':
+    case 'PF_INTEREST_CREDIT':
+    case 'PF_WITHDRAWAL':
+    case 'PF_TRANSFER_IN':
+    case 'PF_TRANSFER_OUT':
+    case 'PF_OPENING_BALANCE':
+      // Phase 5-PF — passbook rows projected by the PF canonicalize service
+      // (Task 11). Mark PROJECTED here so they leave the review queue;
+      // ProvidentFundAccount.currentBalance is updated by the PF service
+      // after all passbook rows are ingested.
+      return markProjectedNoOp(event, `${event.eventType.toLowerCase()}_deferred`);
+
     case 'OTHER':
       return markProjectedNoOp(event, 'other_no_projection');
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -271,6 +271,30 @@ function EditLoanDialog({
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+
+  // Re-sync form when dialog reopens or the underlying loan changes
+  useEffect(() => {
+    if (open) {
+      setForm({
+        lenderName: loan.lenderName,
+        loanType: loan.loanType,
+        borrowerName: loan.borrowerName,
+        accountNumber: loan.accountNumber ?? '',
+        principalAmount: loan.principalAmount,
+        interestRate: loan.interestRate,
+        tenureMonths: loan.tenureMonths,
+        emiAmount: loan.emiAmount,
+        emiDueDay: loan.emiDueDay,
+        disbursementDate: loan.disbursementDate,
+        firstEmiDate: loan.firstEmiDate,
+        prepaymentOption: loan.prepaymentOption,
+        taxBenefitSection: loan.taxBenefitSection ?? null,
+        status: loan.status,
+        portfolioId: loan.portfolioId ?? null,
+      });
+      setErrors({});
+    }
+  }, [open, loan]);
 
   const mutation = useMutation({
     mutationFn: (input: CreateLoanInput) => loansApi.update(loan.id, input),
