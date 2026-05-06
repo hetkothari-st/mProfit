@@ -12,23 +12,22 @@ import { createImportJob } from '../services/imports/import.service.js';
 import { syncGmailAccount } from '../connectors/gmail.connector.js';
 import { pollMonitoredSendersForAccount } from '../ingestion/gmail/poller.js';
 import { runAsSystem, runAsUser } from '../lib/requestContext.js';
+import { detectBrokerFromEmail } from '../data/brokers.js';
 
 const ALLOWED_EXT = new Set(['.pdf', '.csv', '.tsv', '.xlsx', '.xls', '.html', '.htm']);
 
+/**
+ * Match incoming email to a broker. Top 25 brokers are looked up via the
+ * registry in `data/brokers.ts`. Two non-broker registrars (CAMS, KFintech)
+ * still ship MF CAS attachments and need to be tagged separately so the
+ * adapter dispatcher routes them to the CAS parser, not the contract-note
+ * one.
+ */
 function inferBroker(subject: string, from: string): string | null {
   const s = `${subject} ${from}`.toLowerCase();
-  if (s.includes('zerodha') || s.includes('kite')) return 'Zerodha';
-  if (s.includes('icicidirect') || s.includes('icici direct')) return 'ICICI Direct';
-  if (s.includes('hdfc sec')) return 'HDFC Securities';
-  if (s.includes('upstox')) return 'Upstox';
-  if (s.includes('angel')) return 'Angel One';
-  if (s.includes('groww')) return 'Groww';
-  if (s.includes('5paisa')) return '5paisa';
-  if (s.includes('kotak')) return 'Kotak Securities';
-  if (s.includes('axis direct')) return 'Axis Direct';
   if (s.includes('cams')) return 'CAMS';
   if (s.includes('kfintech') || s.includes('karvy')) return 'KFintech';
-  return null;
+  return detectBrokerFromEmail(from, subject)?.label ?? null;
 }
 
 function inferType(fileName: string, subject: string): ImportType {

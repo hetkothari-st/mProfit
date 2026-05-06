@@ -7,7 +7,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { pfApi } from '@/api/pf';
 import { apiErrorMessage } from '@/api/client';
@@ -155,10 +154,12 @@ export function PfRefreshDialog({ accountId, onClose }: Props) {
               />
             </div>
             <div className="flex items-center gap-2">
-              <Checkbox
+              <input
+                type="checkbox"
                 id="save-creds"
                 checked={save}
-                onCheckedChange={(v) => setSave(Boolean(v))}
+                onChange={(e) => setSave(e.target.checked)}
+                className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
               />
               <Label htmlFor="save-creds" className="text-sm font-normal cursor-pointer">
                 Save credentials (encrypted)
