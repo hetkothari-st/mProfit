@@ -1,4 +1,5 @@
 import { pfEventHash } from './sourceHash.js';
+import { CanonicalEventType } from '@prisma/client';
 import type { PfCanonicalEventInput } from '../adapters/pf/types.js';
 
 export interface CanonicalizeInput {
@@ -20,7 +21,7 @@ export interface BuiltCanonicalEvent {
   sourceAdapterVer: string;
   sourceRef: string;
   sourceHash: string;
-  eventType: string;
+  eventType: CanonicalEventType;
   eventDate: Date;
   amount: string;
   metadata: Record<string, unknown>;
@@ -42,7 +43,7 @@ export function buildCanonicalEvents(input: CanonicalizeInput): BuiltCanonicalEv
       type: ev.type,
       sequence: ev.sequence,
     }),
-    eventType: ev.type,
+    eventType: ev.type as CanonicalEventType,
     eventDate: new Date(ev.eventDate),
     amount: ev.amount,
     metadata: {
