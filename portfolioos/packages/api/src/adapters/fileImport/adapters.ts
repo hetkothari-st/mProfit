@@ -12,6 +12,7 @@
 
 import type { Parser, ParsedTransaction } from '../../services/imports/parsers/types.js';
 import { zerodhaContractNoteParser } from '../../services/imports/parsers/zerodhaContractNote.parser.js';
+import { genericBrokerContractNoteParser } from '../../services/imports/parsers/genericBrokerContractNote.parser.js';
 import { nsdlCdslCasParser } from '../../services/imports/parsers/nsdlCdslCas.parser.js';
 import { mfCasParser } from '../../services/imports/parsers/mfCas.parser.js';
 import { genericExcelParser } from '../../services/imports/parsers/genericExcel.parser.js';
@@ -175,6 +176,11 @@ export const zerodhaContractNoteAdapter = makeAdapter(
   'zerodha.contract_note',
   '1',
 );
+export const genericBrokerContractNoteAdapter = makeAdapter(
+  genericBrokerContractNoteParser,
+  'broker.contract_note.generic',
+  '1',
+);
 export const nsdlCdslCasAdapter = makeAdapter(
   nsdlCdslCasParser,
   'cas.depository.nsdl_cdsl',
@@ -189,9 +195,17 @@ export const genericCsvAdapter = makeAdapter(genericCsvParser, 'generic.csv', '1
  * underlying Parser via `PARSER_OF` so the shared buildSample + canHandle
  * loop (which already handles password-protected / scanned PDFs correctly)
  * can drive adapter selection.
+ *
+ * Order matters:
+ *   1. zerodha — specific regex parser, deterministic + free.
+ *   2. genericBrokerContractNote — LLM-backed, covers the other 24 brokers.
+ *      Sits AFTER zerodha so a Zerodha PDF never burns LLM budget.
+ *   3. CAS adapters — NSDL/CDSL + CAMS/KFintech.
+ *   4. Generic Excel / CSV — last-resort spreadsheet handlers.
  */
 export const FILE_IMPORT_ADAPTERS: readonly FileImportAdapter[] = [
   zerodhaContractNoteAdapter,
+  genericBrokerContractNoteAdapter,
   nsdlCdslCasAdapter,
   mfCasAdapter,
   genericExcelAdapter,
@@ -200,6 +214,7 @@ export const FILE_IMPORT_ADAPTERS: readonly FileImportAdapter[] = [
 
 export const PARSER_OF = new Map<FileImportAdapter, Parser>([
   [zerodhaContractNoteAdapter, zerodhaContractNoteParser],
+  [genericBrokerContractNoteAdapter, genericBrokerContractNoteParser],
   [nsdlCdslCasAdapter, nsdlCdslCasParser],
   [mfCasAdapter, mfCasParser],
   [genericExcelAdapter, genericExcelParser],
