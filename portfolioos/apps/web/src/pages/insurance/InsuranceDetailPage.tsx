@@ -1,18 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Shield,
   ArrowLeft,
   Plus,
   Trash2,
   Car,
   CheckCircle2,
-  XCircle,
   Clock,
-  ChevronDown,
-  ChevronUp,
-  Edit2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -31,10 +27,9 @@ import {
   insuranceApi,
   type InsurancePolicyDTO,
   type InsuranceClaimDTO,
+  type PremiumPaymentDTO,
   type AddPremiumInput,
   type AddClaimInput,
-  type UpdateClaimInput,
-  type UpdatePolicyInput,
 } from '@/api/insurance.api';
 import { DocumentVault } from '@/components/documents/DocumentVault';
 import { CatalogBrief, inferCatalogId } from '@/components/insurance/InsuranceCatalogPicker';
@@ -61,19 +56,33 @@ function AddPremiumDialog({
   policyId,
   open,
   onOpenChange,
+  initial,
 }: {
   policyId: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  initial?: Partial<AddPremiumInput> | null;
 }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<AddPremiumInput>({
-    paidOn: '',
-    amount: '',
-    periodFrom: '',
-    periodTo: '',
+    paidOn: initial?.paidOn ?? '',
+    amount: initial?.amount ?? '',
+    periodFrom: initial?.periodFrom ?? '',
+    periodTo: initial?.periodTo ?? '',
   });
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+
+  useEffect(() => {
+    if (open) {
+      setForm({
+        paidOn: initial?.paidOn ?? new Date().toISOString().slice(0, 10),
+        amount: initial?.amount ?? '',
+        periodFrom: initial?.periodFrom ?? '',
+        periodTo: initial?.periodTo ?? '',
+      });
+      setErrors({});
+    }
+  }, [open, initial]);
 
   const mutation = useMutation({
     mutationFn: (input: AddPremiumInput) => insuranceApi.addPremium(policyId, input),
@@ -248,7 +257,7 @@ function HealthCoverPanel({ policy }: { policy: InsurancePolicyDTO }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm">Health coverage details</CardTitle>
+        <CardTitle className="text-2xl">Health coverage details</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         {hc.members && hc.members.length > 0 && (
@@ -314,7 +323,7 @@ function ClaimsTable({
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-sm">Claims</CardTitle>
+        <CardTitle className="text-2xl">Claims</CardTitle>
         <Button size="sm" variant="outline" onClick={onAdd}>
           <Plus className="h-3.5 w-3.5 mr-1" /> Add
         </Button>
@@ -360,69 +369,213 @@ function ClaimsTable({
 
 // ── Premium history ───────────────────────────────────────────────────
 
+const FREQUENCY_MONTHS: Record<string, number> = {
+  MONTHLY: 1,
+  QUARTERLY: 3,
+  HALF_YEARLY: 6,
+  ANNUAL: 12,
+};
+
+interface ScheduleRow {
+  index: number;
+  periodFrom: Date;
+  periodTo: Date;
+  dueDate: Date;
+  payment: PremiumPaymentDTO | null;
+  status: 'PAID' | 'OVERDUE' | 'UPCOMING';
+}
+
+function addMonths(d: Date, months: number): Date {
+  const next = new Date(d);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function buildSchedule(policy: InsurancePolicyDTO): ScheduleRow[] {
+  const freq = FREQUENCY_MONTHS[policy.premiumFrequency];
+  const history = policy.premiumHistory ?? [];
+
+  // SINGLE premium → no schedule, just show what's recorded.
+  if (!freq) {
+    return history.map((p, i) => ({
+      index: i + 1,
+      periodFrom: new Date(p.periodFrom),
+      periodTo: new Date(p.periodTo),
+      dueDate: new Date(p.periodFrom),
+      payment: p,
+      status: 'PAID' as const,
+    }));
+  }
+
+  const start = new Date(policy.startDate);
+  const today = new Date();
+  const maturity = policy.maturityDate ? new Date(policy.maturityDate) : null;
+  // Show schedule up to 12 periods past today, capped at maturity.
+  const horizon = addMonths(today, freq * 12);
+  const end = maturity && maturity < horizon ? maturity : horizon;
+
+  const rows: ScheduleRow[] = [];
+  let cursor = new Date(start);
+  let i = 1;
+  while (cursor <= end && i <= 240) {
+    const next = addMonths(cursor, freq);
+    const periodFromStr = isoDate(cursor);
+    // Match payment whose periodFrom falls in same calendar month.
+    const matched = history.find((p) => p.periodFrom.slice(0, 7) === periodFromStr.slice(0, 7));
+    const status: ScheduleRow['status'] = matched
+      ? 'PAID'
+      : cursor <= today
+        ? 'OVERDUE'
+        : 'UPCOMING';
+    rows.push({
+      index: i,
+      periodFrom: new Date(cursor),
+      periodTo: new Date(next),
+      dueDate: new Date(cursor),
+      payment: matched ?? null,
+      status,
+    });
+    cursor = next;
+    i += 1;
+  }
+  return rows;
+}
+
 function PremiumHistory({
   policy,
-  onAdd,
+  onMarkPaid,
 }: {
   policy: InsurancePolicyDTO;
-  onAdd: () => void;
+  onMarkPaid: (initial: Partial<AddPremiumInput>) => void;
 }) {
   const qc = useQueryClient();
-  const history = policy.premiumHistory ?? [];
+  const schedule = buildSchedule(policy);
+  const paidRows = schedule.filter((r) => r.status === 'PAID');
+  const overdueRows = schedule.filter((r) => r.status === 'OVERDUE');
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => insuranceApi.removePremium(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['insurance-policy', policy.id] }),
   });
 
-  const totalPaid = history.reduce(
-    (s, p) => s.plus(new Decimal(p.amount)),
+  const totalPaid = paidRows.reduce(
+    (s, r) => (r.payment ? s.plus(new Decimal(r.payment.amount)) : s),
     new Decimal(0),
   );
 
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-sm">
+        <CardTitle className="text-2xl">
           Premium history
-          {history.length > 0 && (
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
+          {paidRows.length > 0 && (
+            <span className="ml-3 text-xs font-normal text-muted-foreground">
               Total paid: {formatINR(totalPaid.toString())}
             </span>
           )}
+          {overdueRows.length > 0 && (
+            <span className="ml-3 text-xs font-medium text-negative">
+              {overdueRows.length} overdue
+            </span>
+          )}
         </CardTitle>
-        <Button size="sm" variant="outline" onClick={onAdd}>
+        <Button size="sm" variant="outline" onClick={() => onMarkPaid({})}>
           <Plus className="h-3.5 w-3.5 mr-1" /> Record
         </Button>
       </CardHeader>
       <CardContent>
-        {history.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No premiums recorded</p>
+        {schedule.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No premium schedule (single-premium or no start date).</p>
         ) : (
-          <div className="space-y-1.5">
-            {history.map((p) => (
-              <div key={p.id} className="flex items-center justify-between text-xs group">
-                <div className="flex gap-4 text-muted-foreground">
-                  <span>{formatDate(p.paidOn)}</span>
-                  <span>{formatDate(p.periodFrom)} → {formatDate(p.periodTo)}</span>
-                  {p.canonicalEventId && (
-                    <span className="text-positive">auto-matched</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium tabular-nums">{formatINR(p.amount)}</span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-negative"
-                    onClick={() => deleteMutation.mutate(p.id)}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="text-left font-medium py-2 px-2 w-8">#</th>
+                  <th className="text-left font-medium py-2 px-2">Period</th>
+                  <th className="text-left font-medium py-2 px-2">Due date</th>
+                  <th className="text-right font-medium py-2 px-2">Amount</th>
+                  <th className="text-left font-medium py-2 px-2">Status</th>
+                  <th className="text-right font-medium py-2 px-2">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schedule.map((row) => {
+                  const periodFromIso = isoDate(row.periodFrom);
+                  const periodToIso = isoDate(row.periodTo);
+                  return (
+                    <tr key={row.index} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="py-2 px-2 text-muted-foreground tabular-nums">{row.index}</td>
+                      <td className="py-2 px-2">
+                        {formatDate(periodFromIso)} → {formatDate(periodToIso)}
+                      </td>
+                      <td className="py-2 px-2 text-muted-foreground">
+                        {formatDate(periodFromIso)}
+                      </td>
+                      <td className="py-2 px-2 text-right font-medium tabular-nums">
+                        {row.payment
+                          ? formatINR(row.payment.amount)
+                          : <span className="text-muted-foreground">{formatINR(policy.premiumAmount)}</span>}
+                      </td>
+                      <td className="py-2 px-2">
+                        {row.status === 'PAID' && (
+                          <span className="inline-flex items-center gap-1 text-positive">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Paid {row.payment ? formatDate(row.payment.paidOn) : ''}
+                          </span>
+                        )}
+                        {row.status === 'OVERDUE' && (
+                          <span className="inline-flex items-center gap-1 text-negative">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Overdue
+                          </span>
+                        )}
+                        {row.status === 'UPCOMING' && (
+                          <span className="inline-flex items-center gap-1 text-muted-foreground">
+                            <Clock className="h-3.5 w-3.5" />
+                            Upcoming
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        {row.payment ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-muted-foreground hover:text-negative"
+                            onClick={() => deleteMutation.mutate(row.payment!.id)}
+                            disabled={deleteMutation.isPending}
+                            title="Remove payment"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant={row.status === 'OVERDUE' ? 'default' : 'outline'}
+                            className="h-7 px-3 text-xs"
+                            onClick={() =>
+                              onMarkPaid({
+                                paidOn: isoDate(new Date()),
+                                amount: policy.premiumAmount,
+                                periodFrom: periodFromIso,
+                                periodTo: periodToIso,
+                              })
+                            }
+                          >
+                            Mark paid
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </CardContent>
@@ -436,6 +589,7 @@ export function InsuranceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const [premiumOpen, setPremiumOpen] = useState(false);
+  const [premiumInitial, setPremiumInitial] = useState<Partial<AddPremiumInput> | null>(null);
   const [claimOpen, setClaimOpen] = useState(false);
 
   const { data: policy, isLoading } = useQuery({
@@ -555,7 +709,13 @@ export function InsuranceDetailPage() {
 
       {/* Premium history */}
       <div className="mb-4">
-        <PremiumHistory policy={policy} onAdd={() => setPremiumOpen(true)} />
+        <PremiumHistory
+          policy={policy}
+          onMarkPaid={(initial) => {
+            setPremiumInitial(initial);
+            setPremiumOpen(true);
+          }}
+        />
       </div>
 
       {/* Claims */}
@@ -575,7 +735,15 @@ export function InsuranceDetailPage() {
         />
       </div>
 
-      <AddPremiumDialog policyId={policy.id} open={premiumOpen} onOpenChange={setPremiumOpen} />
+      <AddPremiumDialog
+        policyId={policy.id}
+        open={premiumOpen}
+        onOpenChange={(v) => {
+          setPremiumOpen(v);
+          if (!v) setPremiumInitial(null);
+        }}
+        initial={premiumInitial}
+      />
       <AddClaimDialog policyId={policy.id} open={claimOpen} onOpenChange={setClaimOpen} />
     </div>
   );
