@@ -396,8 +396,8 @@ function PropertyCard({
                 {property.name}
               </h3>
               {property.address && (
-                <div className="flex items-center gap-1 mt-1.5 text-xs text-muted-foreground">
-                  <MapPin className="h-3 w-3 shrink-0 text-accent/70" />
+                <div className="flex items-center gap-1.5 mt-2 text-sm text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-accent/70" />
                   <span className="truncate">{property.address}</span>
                 </div>
               )}

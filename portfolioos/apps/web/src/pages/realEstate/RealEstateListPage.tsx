@@ -678,7 +678,7 @@ function PropertyCard({
               <h3 className="font-sans font-semibold text-[28px] leading-[1.1] tracking-[-0.02em] text-foreground truncate">
                 {property.name}
               </h3>
-              <p className="font-display-italic text-xs text-muted-foreground mt-1.5">
+              <p className="font-display-italic text-sm text-muted-foreground mt-2">
                 {statusLabel}
               </p>
             </div>
