@@ -13,6 +13,14 @@ import {
 } from '../../../data/brokers.js';
 import { parseEmailWithLlm, checkLlmGate } from '../../../ingestion/llm/client.js';
 import type { ParsedEvent } from '../../../ingestion/llm/schema.js';
+import { bodyStructureHash } from '../../../ingestion/hash.js';
+import {
+  findActiveContractNoteRecipe,
+  recordContractNoteSample,
+  recordContractNoteRecipeMiss,
+  applyContractNoteRecipe,
+  type CnSampleTrade,
+} from '../../../ingestion/contractNoteTemplates.js';
 
 /**
  * Generic Indian-broker contract-note parser.
@@ -119,7 +127,59 @@ export const genericBrokerContractNoteParser: Parser = {
       };
     }
 
-    // 3. LLM gate. Out-of-budget / API-key-missing falls back to a
+    // 3. Recipe-cache fast path. Promoted templates skip the LLM
+    // entirely — deterministic regex extraction, zero cost.
+    const structureHash = bodyStructureHash(pdfText);
+    const cached = await findActiveContractNoteRecipe({
+      userId: ctx.userId,
+      brokerId: broker.id,
+      structureHash,
+    });
+    if (cached) {
+      // Still need a trade date for the row — sniff a date from the PDF.
+      // Falls back to today if not found; downstream the user can edit.
+      const tradeDate = sniffTradeDate(pdfText) ?? new Date().toISOString().slice(0, 10);
+      const recipeTrades = applyContractNoteRecipe({
+        recipe: cached.recipe,
+        broker,
+        pdfText,
+        tradeDate,
+      });
+      if (recipeTrades && recipeTrades.length > 0) {
+        logger.info(
+          {
+            fileName: ctx.fileName,
+            brokerId: broker.id,
+            templateId: cached.templateId,
+            templateVersion: cached.version,
+            tradeCount: recipeTrades.length,
+          },
+          '[broker-cn] recipe hit',
+        );
+        return {
+          broker: broker.label,
+          adapter: ADAPTER_ID,
+          adapterVer: `${ADAPTER_VER}.${broker.id}.r${cached.version}`,
+          transactions: recipeTrades,
+          warnings: [],
+        };
+      }
+      // Recipe miss — record it so confidence decays, fall through to LLM.
+      logger.warn(
+        {
+          fileName: ctx.fileName,
+          brokerId: broker.id,
+          templateId: cached.templateId,
+        },
+        '[broker-cn] recipe miss — falling back to LLM',
+      );
+      await recordContractNoteRecipeMiss({
+        userId: ctx.userId,
+        templateId: cached.templateId,
+      });
+    }
+
+    // 4. LLM gate. Out-of-budget / API-key-missing falls back to a
     // user-visible warning rather than silent failure.
     const gate = checkLlmGate();
     if (!gate.ok) {
@@ -162,7 +222,7 @@ export const genericBrokerContractNoteParser: Parser = {
       };
     }
 
-    // 4. Event → Transaction projection.
+    // 5. Event → Transaction projection.
     const transactions = llmResult.events
       .map((event) => mapEventToTransaction(event, broker))
       .filter((tx): tx is ParsedTransaction => tx !== null);
@@ -180,6 +240,19 @@ export const genericBrokerContractNoteParser: Parser = {
       );
     }
 
+    // 6. Sample recording — fire-and-forget. Recipe synthesis happens
+    // inside `recordContractNoteSample` once the threshold is hit.
+    const cnTrades = collectCnTrades(transactions);
+    if (cnTrades.length > 0) {
+      void recordContractNoteSample({
+        userId: ctx.userId,
+        brokerId: broker.id,
+        fileName: ctx.fileName,
+        pdfText,
+        trades: cnTrades,
+      });
+    }
+
     return {
       broker: broker.label,
       adapter: ADAPTER_ID,
@@ -191,6 +264,54 @@ export const genericBrokerContractNoteParser: Parser = {
     };
   },
 };
+
+/**
+ * Look for a "Trade Date" / "Date" header line in the PDF and return its
+ * value as YYYY-MM-DD. Best-effort — recipe-extracted trades don't carry
+ * a per-row date, so we use a single document-level date for all rows.
+ */
+function sniffTradeDate(text: string): string | null {
+  const m = text.match(
+    /(?:Trade\s*Date|Date\s+of\s+Trade|Trade\s*Dt)[\s:.]+([0-9]{1,2}[-/][A-Za-z]{3}[-/][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{4})/i,
+  );
+  if (!m) return null;
+  return parseFlexibleDate(m[1]!);
+}
+
+function parseFlexibleDate(raw: string): string | null {
+  const s = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const monAlpha = s.match(/^(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{2}|\d{4})$/);
+  if (monAlpha) {
+    const months: Record<string, string> = {
+      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+    };
+    const mo = months[monAlpha[2]!.toLowerCase()];
+    if (!mo) return null;
+    const yy = monAlpha[3]!;
+    const yyyy = yy.length === 2 ? `20${yy}` : yy;
+    return `${yyyy}-${mo}-${monAlpha[1]!.padStart(2, '0')}`;
+  }
+  const dmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2]!.padStart(2, '0')}-${dmy[1]!.padStart(2, '0')}`;
+  }
+  return null;
+}
+
+/** Filter to equity rows only — F&O recipe synthesis is out of scope for v1. */
+function collectCnTrades(transactions: ParsedTransaction[]): CnSampleTrade[] {
+  return transactions
+    .filter((t) => t.assetClass === 'EQUITY')
+    .map((t) => ({
+      isin: t.isin ?? null,
+      symbol: t.symbol ?? null,
+      side: t.transactionType === 'BUY' ? 'BUY' : 'SELL',
+      quantity: typeof t.quantity === 'string' ? t.quantity : String(t.quantity),
+      price: typeof t.price === 'string' ? t.price : String(t.price),
+    }));
+}
 
 /**
  * Map one LLM-emitted ParsedEvent to a ParsedTransaction. Returns null
