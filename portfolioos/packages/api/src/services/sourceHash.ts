@@ -60,3 +60,30 @@ export function positionalHash(opts: {
 export function hashBytes(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
+
+/**
+ * PF passbook event hash. Re-fetching the same passbook MUST hash identically
+ * for every row, so duplicates land on the @@unique(userId, sourceHash) index
+ * and are silently rejected (CLAUDE.md §3.3).
+ *
+ * `sequence` disambiguates same-day rows (e.g. employer + employee credit on
+ * 1 Apr at the same amount). It is the position of the row within the same
+ * (memberId, eventDate, type, amount) bucket and is set by the parser layer.
+ *
+ * `identifier` is the plaintext UAN / PPF acct number — never logged. The
+ * caller is responsible for handling it appropriately (decrypted only inside
+ * the worker process; never returned in API responses).
+ */
+export function pfEventHash(opts: {
+  userId: string;
+  institution: string;
+  identifier: string;
+  eventDate: string;        // YYYY-MM-DD
+  amount?: string;          // Decimal as string
+  type: string;             // CanonicalEventType
+  sequence: number;
+}): string {
+  return sha256Hex(
+    `pf:${opts.userId}:${opts.institution}:${opts.identifier}:${opts.eventDate}:${opts.amount ?? ''}:${opts.type}:${opts.sequence}`,
+  );
+}
