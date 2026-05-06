@@ -38,6 +38,10 @@ export interface PfAccount {
   lastFetchSource: string | null;
   currentBalance: string | null;
   memberIds: PfMemberIdDTO[];
+  /** ISO datetime — last time a PF_REFRESH_DUE alert was emitted */
+  lastNudgedAt: string | null;
+  /** ISO datetime — snooze nudge until this time */
+  nudgeSnoozedUntil: string | null;
 }
 
 export const pfApi = {
@@ -116,6 +120,19 @@ export const pfApi = {
     api
       .delete<{ success: true; data: { revoked: boolean } }>(
         `/api/epfppf/extension/pairings/${id}`,
+      )
+      .then((r) => r.data.data),
+
+  /**
+   * Snooze the refresh nudge for a PF account.
+   * The server dismisses any open PF_REFRESH_DUE alerts and sets
+   * nudgeSnoozedUntil = now + days.
+   */
+  snoozeNudge: (id: string, days = 30) =>
+    api
+      .post<{ success: true; data: { snoozed: boolean } }>(
+        `/api/epfppf/accounts/${id}/snooze-nudge`,
+        { days },
       )
       .then((r) => r.data.data),
 };

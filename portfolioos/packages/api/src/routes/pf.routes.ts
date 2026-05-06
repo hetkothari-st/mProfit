@@ -4,6 +4,7 @@ import {
   listAccountsHandler,
   createAccountHandler,
   forgetCredentialsHandler,
+  snoozeNudgeHandler,
   startSessionHandler,
   sseEventsHandler,
   captchaRespondHandler,
@@ -58,6 +59,7 @@ pfRouter.use(authenticate);
 pfRouter.get('/accounts', listAccountsHandler);
 pfRouter.post('/accounts', createAccountHandler);
 pfRouter.delete('/accounts/:id/credentials', forgetCredentialsHandler);
+pfRouter.post('/accounts/:id/snooze-nudge', snoozeNudgeHandler);
 pfRouter.post('/accounts/:id/passbook', upload.single('file'), uploadManualPassbookHandler);
 
 // Sessions

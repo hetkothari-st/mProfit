@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Wallet, RefreshCw, Upload, Plus, PlugZap } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Wallet, RefreshCw, Upload, Plus, PlugZap, BellOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { SimpleAssetPage } from './SimpleAssetPage';
@@ -13,6 +13,26 @@ import type { PfAccount } from '@/api/pf';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
+
+// ---------------------------------------------------------------------------
+// Nudge banner helpers
+// ---------------------------------------------------------------------------
+
+const STALE_DAYS = 30;
+
+function isNudgeable(a: PfAccount): boolean {
+  const now = Date.now();
+  // Skip if snoozed
+  if (a.nudgeSnoozedUntil && new Date(a.nudgeSnoozedUntil).getTime() > now) return false;
+  if (!a.lastRefreshedAt) return true;
+  const daysSince = Math.floor((now - new Date(a.lastRefreshedAt).getTime()) / (24 * 60 * 60 * 1000));
+  return daysSince >= STALE_DAYS;
+}
+
+function daysSinceRefresh(a: PfAccount): number | null {
+  if (!a.lastRefreshedAt) return null;
+  return Math.floor((Date.now() - new Date(a.lastRefreshedAt).getTime()) / (24 * 60 * 60 * 1000));
+}
 
 // ---------------------------------------------------------------------------
 // Auto-fetch accounts section
@@ -28,6 +48,15 @@ function AutoFetchSection() {
     queryKey: ['pf-accounts'],
     queryFn: () => pfApi.list(),
     retry: 1,
+  });
+
+  const snoozeMutation = useMutation({
+    mutationFn: (accountId: string) => pfApi.snoozeNudge(accountId, 30),
+    onSuccess: () => {
+      toast.success('Nudge snoozed for 30 days');
+      void queryClient.invalidateQueries({ queryKey: ['pf-accounts'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to snooze')),
   });
 
   function handleRefreshClose() {
@@ -91,54 +120,87 @@ function AutoFetchSection() {
       ) : (
         <div className="space-y-2">
           {accounts.map((a: PfAccount) => (
-            <Card key={a.id} className="hover:shadow-sm transition-shadow">
-              <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {a.holderName}{' '}
-                    <span className="text-muted-foreground font-normal">
-                      ···{a.identifierLast4}
-                    </span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {a.type} · {a.institution}
-                    {a.currentBalance != null && (
-                      <> · ₹{parseFloat(a.currentBalance).toLocaleString('en-IN')}</>
-                    )}
-                    {a.lastRefreshedAt && (
-                      <>
-                        {' '}
-                        · refreshed{' '}
-                        {new Date(a.lastRefreshedAt).toLocaleDateString('en-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: '2-digit',
-                        })}
-                      </>
-                    )}
-                  </p>
+            <div key={a.id} className="space-y-1">
+              {/* Nudge banner — shown when balance is stale and not snoozed */}
+              {isNudgeable(a) && (
+                <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm flex items-center justify-between gap-3">
+                  <span className="text-yellow-800 dark:text-yellow-300">
+                    {daysSinceRefresh(a) != null
+                      ? `Last refreshed ${daysSinceRefresh(a)} days ago — refresh to keep data current.`
+                      : 'Balance has never been refreshed — tap to fetch now.'}
+                  </span>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-yellow-500/50 text-yellow-800 dark:text-yellow-300 hover:bg-yellow-500/20"
+                      disabled={snoozeMutation.isPending}
+                      onClick={() => snoozeMutation.mutate(a.id)}
+                      title="Snooze this reminder for 30 days"
+                    >
+                      <BellOff className="h-3 w-3 mr-1" />
+                      Snooze 30d
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                      onClick={() => setRefreshFor(a.id)}
+                    >
+                      Refresh now
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setUploadFor(a.id)}
-                    title="Upload passbook PDF"
-                  >
-                    <Upload className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setRefreshFor(a.id)}
-                    title="Fetch from EPFO portal"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    <span className="ml-1 hidden sm:inline">Refresh</span>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+              )}
+
+              <Card className="hover:shadow-sm transition-shadow">
+                <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {a.holderName}{' '}
+                      <span className="text-muted-foreground font-normal">
+                        ···{a.identifierLast4}
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {a.type} · {a.institution}
+                      {a.currentBalance != null && (
+                        <> · ₹{parseFloat(a.currentBalance).toLocaleString('en-IN')}</>
+                      )}
+                      {a.lastRefreshedAt && (
+                        <>
+                          {' '}
+                          · refreshed{' '}
+                          {new Date(a.lastRefreshedAt).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: '2-digit',
+                          })}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setUploadFor(a.id)}
+                      title="Upload passbook PDF"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setRefreshFor(a.id)}
+                      title="Fetch from EPFO portal"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span className="ml-1 hidden sm:inline">Refresh</span>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           ))}
         </div>
       )}

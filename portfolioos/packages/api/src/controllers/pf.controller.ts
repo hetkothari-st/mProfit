@@ -39,6 +39,7 @@ import {
   revokePairingByBearer,
   PairingError,
 } from '../services/extensionPairing.service.js';
+import { snoozeNudge } from '../services/pfNudges.service.js';
 import { enterUserContext } from '../lib/requestContext.js';
 import type { CanonicalEventType } from '@prisma/client';
 
@@ -88,6 +89,10 @@ const StartSessionSchema = z.object({
 const PromptResponseSchema = z.object({
   promptId: z.string(),
   value: z.string().min(1).max(64),
+});
+
+const SnoozeNudgeSchema = z.object({
+  days: z.number().int().min(1).max(365).default(30),
 });
 
 // ---------------------------------------------------------------------------
@@ -234,6 +239,17 @@ export async function forgetCredentialsHandler(req: Request, res: Response) {
 
   await forgetPfCredentials(userId, id);
   ok(res, { forgotten: true });
+}
+
+export async function snoozeNudgeHandler(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const { id } = req.params as { id: string };
+  const parsed = SnoozeNudgeSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return error(res, 400, parsed.error.issues.map((i) => i.message).join('; '), 'VALIDATION_ERROR');
+  }
+  await snoozeNudge({ userId, accountId: id, days: parsed.data.days });
+  ok(res, { snoozed: true });
 }
 
 export async function uploadManualPassbookHandler(req: Request, res: Response) {
