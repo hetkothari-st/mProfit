@@ -43,18 +43,19 @@ import {
 
 // ── Property type theming ─────────────────────────────────────────────
 
-const PROPERTY_TYPE_THEME: Record<
-  string,
-  {
-    label: string;
-    icon: typeof Home;
-    iconBg: string;
-    iconText: string;
-    badgeBg: string;
-    badgeText: string;
-    cardAccent: string;
-  }
-> = {
+type PropertyTypeKey = 'RESIDENTIAL' | 'COMMERCIAL' | 'LAND' | 'PARKING';
+
+interface PropertyTheme {
+  label: string;
+  icon: typeof Home;
+  iconBg: string;
+  iconText: string;
+  badgeBg: string;
+  badgeText: string;
+  cardAccent: string;
+}
+
+const PROPERTY_TYPE_THEME: Record<PropertyTypeKey, PropertyTheme> = {
   RESIDENTIAL: {
     label: 'Residential',
     icon: Home,
@@ -93,8 +94,12 @@ const PROPERTY_TYPE_THEME: Record<
   },
 };
 
-function getPropertyTheme(type: string) {
-  return PROPERTY_TYPE_THEME[type] ?? PROPERTY_TYPE_THEME.RESIDENTIAL;
+function getPropertyTheme(type: string): PropertyTheme {
+  const key: PropertyTypeKey =
+    type === 'COMMERCIAL' || type === 'LAND' || type === 'PARKING'
+      ? type
+      : 'RESIDENTIAL';
+  return PROPERTY_TYPE_THEME[key];
 }
 
 // ── Status helpers ────────────────────────────────────────────────────
