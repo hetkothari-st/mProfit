@@ -87,6 +87,9 @@ model User {
   // Phase 5-PF — EPF / PPF auto-fetch accounts (§6 EPF/PPF spec).
   pfAccounts      ProvidentFundAccount[]
   pfFetchSessions PfFetchSession[]
+
+  // Plan C — browser extension pairing tokens.
+  extensionPairings ExtensionPairing[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -2172,4 +2175,43 @@ model PfFetchSession {
 
   @@index([providentFundAccountId, startedAt])
   @@index([userId, status])
+}
+
+// ─── §Plan-C EXTENSION PAIRING ───────────────────────────────────────────────
+//
+// Links a browser extension install to a user account via a short-lived pairing
+// code. After exchange, the extension holds a long-lived bearer token; the server
+// stores only SHA-256(bearer) for indexed verification — the plaintext is never
+// stored server-side (bearer is opaque random bytes; we only need to verify).
+// `bearerLast8` stores the last 8 hex chars of the bearer for display in the
+// pairings list without revealing the full secret.
+//
+// Decision (per plan §C1): store only `bearerHash` (SHA-256), not an encrypted
+// copy. This is cleaner and sufficient because we never need to recover the
+// bearer plaintext on the server.
+
+model ExtensionPairing {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Short-lived 8-char human-readable code, e.g. "XK7-9MQ2". Unique + TTL-checked.
+  pairingCode          String   @unique
+  pairingCodeExpiresAt DateTime
+
+  /// SHA-256(bearer) — used for O(1) bearer lookup. Never stores plaintext.
+  bearerHash String?  @unique
+  /// Last 8 hex chars of the bearer for display purposes.
+  bearerLast8 String?
+
+  paired    Boolean   @default(false)
+  pairedAt  DateTime?
+  lastUsedAt DateTime?
+  revoked   Boolean   @default(false)
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, paired])
+  @@index([userId, revoked])
 }

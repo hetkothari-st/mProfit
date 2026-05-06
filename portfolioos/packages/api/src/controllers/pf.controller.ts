@@ -3,10 +3,10 @@
  *
  * Handlers for /api/epfppf/* endpoints.
  * Covers: account CRUD, session lifecycle, SSE event stream,
- * CAPTCHA/OTP response relay, manual PDF upload.
+ * CAPTCHA/OTP response relay, manual PDF upload, browser extension pairing.
  */
 
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { prisma } from '../lib/prisma.js';
@@ -29,6 +29,17 @@ import { recomputeForAsset } from '../services/holdingsProjection.js';
 import { tokenizePassbookPdf } from '../adapters/pf/shared/pdfPassbookParser.js';
 import { parseEpfoPassbook } from '../adapters/pf/epf/epfo.v1.parse.js';
 import { pfFetchQueue } from '../jobs/pfFetchWorker.js';
+import { findPfAdapter } from '../adapters/pf/chain.js';
+import {
+  initPairing,
+  completePairing,
+  authenticateExtension,
+  listPairings,
+  revokePairingById,
+  revokePairingByBearer,
+  PairingError,
+} from '../services/extensionPairing.service.js';
+import { enterUserContext } from '../lib/requestContext.js';
 import type { CanonicalEventType } from '@prisma/client';
 
 // ---------------------------------------------------------------------------
@@ -310,4 +321,275 @@ export async function uploadManualPassbookHandler(req: Request, res: Response) {
   });
 
   ok(res, { inserted });
+}
+
+// ===========================================================================
+// EXTENSION PAIRING ENDPOINTS (Plan C)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Middleware: authenticate extension bearer token
+// ---------------------------------------------------------------------------
+
+/**
+ * Express middleware that reads `Authorization: Bearer <token>`, looks up the
+ * ExtensionPairing row via SHA-256(token), and attaches the userId to req.user.
+ *
+ * Note: populates req.user with a minimal shape {id, email: '', role, plan}
+ * sufficient for the pf endpoints. Also calls enterUserContext so Prisma RLS
+ * middleware receives the correct userId.
+ */
+export async function authenticateExtensionMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const header = req.header('Authorization') ?? req.header('authorization');
+    if (!header || !header.startsWith('Bearer ')) {
+      error(res, 401, 'Missing or invalid Authorization header', 'UNAUTHORIZED');
+      return;
+    }
+    const bearer = header.slice('Bearer '.length).trim();
+    const pairing = await authenticateExtension(bearer);
+    // Satisfy req.user type — extension bearer only needs userId
+    req.user = {
+      id: pairing.userId,
+      email: '',
+      role: 'INVESTOR',
+      plan: 'FREE',
+    };
+    enterUserContext(pairing.userId);
+    next();
+  } catch (err) {
+    if (err instanceof PairingError) {
+      error(res, 401, err.message, err.code);
+    } else {
+      next(err);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /epfppf/extension/pair-init  (requires normal JWT auth)
+ * Generates an 8-char pairing code with 5-min TTL.
+ */
+export async function extensionPairInitHandler(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const { id, code, expiresAt } = await initPairing(userId);
+  ok(res, { id, code, expiresAt: expiresAt.toISOString() });
+}
+
+/**
+ * POST /epfppf/extension/pair-complete  (NO auth — extension-initiated)
+ * Exchanges pairing code for a long-lived bearer token.
+ */
+export async function extensionPairCompleteHandler(req: Request, res: Response): Promise<void> {
+  const schema = z.object({ code: z.string().min(1).max(12) });
+  const parsed = schema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    error(res, 400, 'code is required', 'VALIDATION_ERROR');
+    return;
+  }
+  try {
+    const { bearer, userId } = await completePairing(parsed.data.code.toUpperCase());
+    ok(res, { bearer, userId });
+  } catch (err) {
+    if (err instanceof PairingError) {
+      const statusMap: Record<string, number> = {
+        INVALID_CODE: 404,
+        EXPIRED: 410,
+        ALREADY_PAIRED: 409,
+        REVOKED: 403,
+      };
+      error(res, statusMap[err.code] ?? 400, err.message, err.code);
+    } else {
+      throw err;
+    }
+  }
+}
+
+/**
+ * GET /epfppf/extension/me  (extension bearer auth)
+ * Returns basic info for the paired user.
+ */
+export async function extensionMeHandler(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  ok(res, { userId, paired: true });
+}
+
+/**
+ * GET /epfppf/extension/pairings  (normal JWT auth)
+ * Lists all pairings for the authenticated user (for the web UI).
+ */
+export async function extensionListPairingsHandler(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const pairings = await listPairings(userId);
+  // Strip bearerHash from API response — never expose the hash externally
+  const safe = pairings.map(({ bearerHash: _bh, ...rest }) => rest);
+  ok(res, safe);
+}
+
+/**
+ * POST /epfppf/extension/raw-payload  (extension bearer auth)
+ * Accepts a RawScrapePayload from the extension, runs the parse pipeline,
+ * upserts CanonicalEvents, recomputes holdings, returns { sessionId, eventsCreated }.
+ *
+ * Note: Since the extension already scraped the data, we run the parse
+ * synchronously in the HTTP request (no Bull queue needed). The adapter is
+ * resolved by (institution, type) looked up from the account.
+ */
+export async function extensionRawPayloadHandler(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+
+  const schema = z.object({
+    accountId: z.string().min(1),
+    sessionId: z.string().optional(),
+    payload: z.record(z.unknown()),
+  });
+  const parsed = schema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    error(res, 400, parsed.error.issues.map((i) => i.message).join('; '), 'VALIDATION_ERROR');
+    return;
+  }
+
+  const { accountId, payload } = parsed.data;
+  let { sessionId } = parsed.data;
+
+  // Verify account ownership
+  const account = await getPfAccountById(userId, accountId);
+  if (!account) {
+    error(res, 404, 'PF account not found', 'NOT_FOUND');
+    return;
+  }
+
+  // Create or reuse a PfFetchSession
+  if (!sessionId) {
+    const session = await startSession({ userId, accountId: account.id, source: 'EXTENSION' });
+    sessionId = session.id;
+  }
+
+  // Find the adapter for this account
+  const adapter = findPfAdapter({ institution: account.institution, type: account.type });
+  if (!adapter) {
+    error(res, 422, `No adapter for ${account.institution}/${account.type}`, 'NO_ADAPTER');
+    return;
+  }
+
+  // Parse the raw payload (extension already scraped; we just parse)
+  let parseResult;
+  try {
+    parseResult = await adapter.parse(payload as unknown as Parameters<typeof adapter.parse>[0]);
+  } catch (parseErr) {
+    const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+    logger.warn({ accountId, err: parseErr }, '[pf-ext] parse error');
+    error(res, 422, `Parse failed: ${msg}`, 'PARSE_FAIL');
+    return;
+  }
+
+  if (!parseResult.ok) {
+    error(res, 422, parseResult.error, 'PARSE_FAIL');
+    return;
+  }
+
+  // Decrypt identifier for canonical event source ref
+  let identifierPlain: string;
+  try {
+    identifierPlain = await decryptIdentifier(account.identifierCipher.toString('base64'));
+  } catch {
+    identifierPlain = account.identifierLast4;
+  }
+
+  const adapterId =
+    (payload as { adapterId?: string }).adapterId ?? `pf.${account.institution.toLowerCase()}.ext.v1`;
+  const adapterVersion =
+    (payload as { adapterVersion?: string }).adapterVersion ?? adapter.version;
+
+  const built = buildCanonicalEvents({
+    userId,
+    account: {
+      id: account.id,
+      institution: account.institution,
+      type: account.type,
+      identifierPlain,
+    },
+    adapterId,
+    adapterVersion,
+    events: parseResult.events,
+  });
+
+  let eventsCreated = 0;
+  await prisma.$transaction(async (tx) => {
+    for (const e of built) {
+      try {
+        await tx.canonicalEvent.upsert({
+          where: { userId_sourceHash: { userId: e.userId, sourceHash: e.sourceHash } },
+          create: { ...e, eventType: e.eventType as CanonicalEventType, status: 'CONFIRMED' },
+          update: {},
+        });
+        eventsCreated++;
+      } catch {
+        // P2002 unique — duplicate, skip
+      }
+    }
+  });
+
+  // Recompute holdings (non-fatal)
+  if (account.portfolioId && account.assetKey) {
+    try {
+      await recomputeForAsset(account.portfolioId, account.assetKey);
+    } catch (recomputeErr) {
+      logger.warn({ portfolioId: account.portfolioId, assetKey: account.assetKey, err: recomputeErr }, '[pf-ext] holding recompute failed — non-fatal');
+    }
+  }
+
+  // Update account metadata
+  await prisma.providentFundAccount.update({
+    where: { id: account.id },
+    data: { lastRefreshedAt: new Date(), lastFetchSource: 'EXTENSION' },
+  });
+
+  // Mark session complete
+  await prisma.pfFetchSession.update({
+    where: { id: sessionId },
+    data: { status: 'COMPLETED', completedAt: new Date(), eventsCreated },
+  });
+
+  ok(res, { sessionId, eventsCreated });
+}
+
+/**
+ * POST /epfppf/extension/revoke  (extension bearer auth)
+ * Extension calls this on uninstall / manual disconnect.
+ */
+export async function extensionRevokeHandler(req: Request, res: Response): Promise<void> {
+  const header = req.header('Authorization') ?? req.header('authorization') ?? '';
+  const bearer = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
+  if (bearer) {
+    await revokePairingByBearer(bearer);
+  }
+  ok(res, { revoked: true });
+}
+
+/**
+ * DELETE /epfppf/extension/pairings/:id  (normal JWT auth)
+ * User-initiated revoke from web UI.
+ */
+export async function extensionRevokePairingHandler(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const { id } = req.params as { id: string };
+  try {
+    await revokePairingById(userId, id);
+    ok(res, { revoked: true });
+  } catch (err) {
+    if (err instanceof PairingError) {
+      error(res, 404, err.message, err.code);
+    } else {
+      throw err;
+    }
+  }
 }
