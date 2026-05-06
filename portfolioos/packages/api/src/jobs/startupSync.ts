@@ -12,6 +12,12 @@ import { startPfFetchWorker } from './pfFetchWorker.js';
 // Self-registering PF adapters — import side-effects call registerPfAdapter()
 import '../adapters/pf/epf/epfo.v1.js';
 import '../adapters/pf/ppf/sbi.v1.js';
+import '../adapters/pf/ppf/indiapost.v1.js';
+import '../adapters/pf/ppf/hdfc.v1.js';
+import '../adapters/pf/ppf/icici.v1.js';
+import '../adapters/pf/ppf/axis.v1.js';
+import '../adapters/pf/ppf/pnb.v1.js';
+import '../adapters/pf/ppf/bob.v1.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
