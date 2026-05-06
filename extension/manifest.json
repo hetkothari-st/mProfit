@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "PortfolioOS Auto-Fetch",
+  "version": "0.1.0",
+  "description": "Auto-fetch EPF and PPF data from Indian government and bank portals.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://passbook.epfindia.gov.in/*",
+    "https://unifiedportal-mem.epfindia.gov.in/*",
+    "https://retail.onlinesbi.sbi/*",
+    "https://onlinesbi.sbi/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://passbook.epfindia.gov.in/*",
+        "https://unifiedportal-mem.epfindia.gov.in/*"
+      ],
+      "js": ["content-epfo.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://retail.onlinesbi.sbi/*",
+        "https://onlinesbi.sbi/*"
+      ],
+      "js": ["content-sbi.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}
