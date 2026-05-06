@@ -15,6 +15,10 @@ import {
   Pencil,
   Trash2,
   Loader2,
+  Home,
+  Store,
+  Trees,
+  ParkingCircle,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -36,6 +40,62 @@ import {
   type RentalPropertyDTO,
   type CreatePropertyInput,
 } from '@/api/rental.api';
+
+// ── Property type theming ─────────────────────────────────────────────
+
+const PROPERTY_TYPE_THEME: Record<
+  string,
+  {
+    label: string;
+    icon: typeof Home;
+    iconBg: string;
+    iconText: string;
+    badgeBg: string;
+    badgeText: string;
+    cardAccent: string;
+  }
+> = {
+  RESIDENTIAL: {
+    label: 'Residential',
+    icon: Home,
+    iconBg: 'bg-blue-100 dark:bg-blue-950/40',
+    iconText: 'text-blue-600 dark:text-blue-400',
+    badgeBg: 'bg-blue-100 dark:bg-blue-950/40',
+    badgeText: 'text-blue-700 dark:text-blue-300',
+    cardAccent: 'border-l-4 border-l-blue-500',
+  },
+  COMMERCIAL: {
+    label: 'Commercial',
+    icon: Store,
+    iconBg: 'bg-amber-100 dark:bg-amber-950/40',
+    iconText: 'text-amber-600 dark:text-amber-400',
+    badgeBg: 'bg-amber-100 dark:bg-amber-950/40',
+    badgeText: 'text-amber-700 dark:text-amber-300',
+    cardAccent: 'border-l-4 border-l-amber-500',
+  },
+  LAND: {
+    label: 'Land',
+    icon: Trees,
+    iconBg: 'bg-emerald-100 dark:bg-emerald-950/40',
+    iconText: 'text-emerald-600 dark:text-emerald-400',
+    badgeBg: 'bg-emerald-100 dark:bg-emerald-950/40',
+    badgeText: 'text-emerald-700 dark:text-emerald-300',
+    cardAccent: 'border-l-4 border-l-emerald-500',
+  },
+  PARKING: {
+    label: 'Parking',
+    icon: ParkingCircle,
+    iconBg: 'bg-purple-100 dark:bg-purple-950/40',
+    iconText: 'text-purple-600 dark:text-purple-400',
+    badgeBg: 'bg-purple-100 dark:bg-purple-950/40',
+    badgeText: 'text-purple-700 dark:text-purple-300',
+    cardAccent: 'border-l-4 border-l-purple-500',
+  },
+};
+
+function getPropertyTheme(type: string) {
+  return PROPERTY_TYPE_THEME[type] ?? PROPERTY_TYPE_THEME.RESIDENTIAL;
+}
 
 // ── Status helpers ────────────────────────────────────────────────────
 
@@ -241,34 +301,32 @@ function PropertyCard({
     ? new Decimal(activeTenancy.monthlyRent)
     : null;
 
-  const typeLabel: Record<string, string> = {
-    RESIDENTIAL: 'Residential',
-    COMMERCIAL: 'Commercial',
-    LAND: 'Land',
-    PARKING: 'Parking',
-  };
+  const theme = getPropertyTheme(property.propertyType);
+  const TypeIcon = theme.icon;
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className={`hover:shadow-md transition-shadow ${theme.cardAccent}`}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <h3 className="font-semibold truncate">{property.name}</h3>
-              {statusIcon}
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <div className={`shrink-0 h-10 w-10 rounded-md grid place-items-center ${theme.iconBg}`}>
+              <TypeIcon className={`h-5 w-5 ${theme.iconText}`} />
             </div>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              <span className="text-xs text-muted-foreground">
-                {typeLabel[property.propertyType] ?? property.propertyType}
-              </span>
-              {property.address && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="font-semibold truncate">{property.name}</h3>
+                {statusIcon}
+              </div>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${theme.badgeBg} ${theme.badgeText}`}>
+                  {theme.label}
+                </span>
+                {property.address && (
                   <span className="text-xs text-muted-foreground truncate max-w-[200px]">
                     {property.address}
                   </span>
-                </>
-              )}
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
