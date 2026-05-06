@@ -62,12 +62,12 @@ interface LoanTypeStyle {
 
 const LOAN_TYPE_STYLES: Record<string, LoanTypeStyle> = {
   HOME:      { icon: Home,           gradient: 'from-blue-500 via-blue-600 to-indigo-700' },
-  CAR:       { icon: Car,            gradient: 'from-cyan-500 via-sky-600 to-blue-700' },
-  PERSONAL:  { icon: Wallet,         gradient: 'from-orange-500 via-red-500 to-rose-700' },
+  CAR:       { icon: Car,            gradient: 'from-rose-500 via-red-600 to-pink-700' },
+  PERSONAL:  { icon: Wallet,         gradient: 'from-orange-500 via-orange-600 to-amber-700' },
   EDUCATION: { icon: GraduationCap,  gradient: 'from-violet-500 via-purple-600 to-fuchsia-700' },
-  BUSINESS:  { icon: Briefcase,      gradient: 'from-amber-500 via-orange-600 to-red-700' },
+  BUSINESS:  { icon: Briefcase,      gradient: 'from-emerald-600 via-teal-700 to-cyan-800' },
   GOLD:      { icon: Coins,          gradient: 'from-yellow-500 via-amber-500 to-orange-600' },
-  LAS:       { icon: TrendingUp,     gradient: 'from-emerald-500 via-teal-600 to-cyan-700' },
+  LAS:       { icon: TrendingUp,     gradient: 'from-cyan-500 via-sky-600 to-teal-700' },
   OTHER:     { icon: Landmark,       gradient: 'from-slate-600 via-slate-700 to-zinc-800' },
 };
 
