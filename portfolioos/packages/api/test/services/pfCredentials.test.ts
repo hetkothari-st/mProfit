@@ -8,9 +8,8 @@ import {
 } from '../../src/services/pfCredentials.service.js';
 
 beforeAll(() => {
-  // 32-byte key, base64.
-  process.env.APP_ENCRYPTION_KEY =
-    'dGVzdC1rZXktMzItYnl0ZXMtZm9yLWVwZi1hZXMtZ2NtMTIzNDU=';
+  // 32 bytes of 0x01, base64-encoded — known-deterministic test key.
+  process.env.APP_ENCRYPTION_KEY = Buffer.alloc(32, 1).toString('base64');
 });
 
 describe('pfCredentials', () => {
@@ -70,10 +69,21 @@ describe('pfCredentials', () => {
     await expect(decryptIdentifier(tampered)).rejects.toThrow();
   });
 
-  it('rejects key that does not decode to 32 bytes', async () => {
+  it('rejects key that does not decode to exactly 32 bytes', async () => {
     const original = process.env.APP_ENCRYPTION_KEY;
-    process.env.APP_ENCRYPTION_KEY = Buffer.from('short').toString('base64');
-    await expect(encryptCredentialBlob({ username: 'u', password: 'p' })).rejects.toThrow(/32 bytes/);
+
+    // Too short
+    process.env.APP_ENCRYPTION_KEY = Buffer.alloc(16, 1).toString('base64');
+    await expect(encryptCredentialBlob({ username: 'u', password: 'p' })).rejects.toThrow(
+      /32 bytes/,
+    );
+
+    // Too long (this is the security regression we explicitly want to reject)
+    process.env.APP_ENCRYPTION_KEY = Buffer.alloc(64, 1).toString('base64');
+    await expect(encryptCredentialBlob({ username: 'u', password: 'p' })).rejects.toThrow(
+      /32 bytes/,
+    );
+
     process.env.APP_ENCRYPTION_KEY = original;
   });
 });

@@ -34,22 +34,14 @@ export interface CredentialBlob {
 
 function loadKey(): Buffer {
   const raw = process.env.APP_ENCRYPTION_KEY;
-  if (!raw) {
+  if (!raw) throw new Error('APP_ENCRYPTION_KEY env var not set');
+  const key = Buffer.from(raw, 'base64');
+  if (key.length !== 32) {
     throw new Error(
-      'APP_ENCRYPTION_KEY environment variable is not set. ' +
-        'Provide a base64-encoded 32-byte (or longer) random key.',
+      `APP_ENCRYPTION_KEY must decode to exactly 32 bytes (got ${key.length})`,
     );
   }
-  const decoded = Buffer.from(raw, 'base64');
-  if (decoded.length < 32) {
-    throw new Error(
-      `APP_ENCRYPTION_KEY must decode to at least 32 bytes (got ${decoded.length}). ` +
-        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"',
-    );
-  }
-  // Use exactly the first 32 bytes — allows keys encoded from >32-byte secrets
-  // (e.g. when derived from a longer Parameter Store value) without truncation errors.
-  return decoded.subarray(0, 32);
+  return key;
 }
 
 function encrypt(plaintext: Buffer): string {
