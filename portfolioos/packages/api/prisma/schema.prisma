@@ -885,6 +885,7 @@ enum AlertType {
   CREDIT_CARD_DUE
   PROPERTY_TAX_DUE
   PROPERTY_POSSESSION_DUE
+  PF_REFRESH_DUE
   CUSTOM
 }
 
@@ -2122,6 +2123,11 @@ model ProvidentFundAccount {
   status          PfAccountStatus @default(ACTIVE)
   lastRefreshedAt DateTime?
   lastFetchSource PfFetchSource?
+
+  /// When the most recent stale-account nudge alert was emitted (null = never).
+  lastNudgedAt      DateTime?
+  /// User-set future date until which nudges should be suppressed (null = no snooze).
+  nudgeSnoozedUntil DateTime?
 
   currentBalance Decimal? @db.Decimal(18, 4)
   assetKey       String
