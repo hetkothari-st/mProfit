@@ -4,7 +4,8 @@
  *
  * PPF mode has two tabs:
  *  - "Manual entry" — add individual transactions (existing behaviour)
- *  - "Auto-fetch (SBI)" — register an SBI PPF account for server-headless scraping
+ *  - "Auto-fetch" — register a PPF account at any of 7 supported banks for
+ *    server-headless scraping (SBI, India Post, HDFC, ICICI, Axis, PNB, BoB)
  */
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -51,35 +52,59 @@ interface Props extends FormDialogProps {
 }
 
 // ---------------------------------------------------------------------------
-// SBI auto-fetch sub-form (PPF only)
+// PPF auto-fetch sub-form — supports all 7 PPF institutions
 // ---------------------------------------------------------------------------
 
-const sbiSchema = z.object({
+/** Maps PfInstitution enum value → user-friendly display name */
+const PPF_INSTITUTIONS = [
+  { value: 'SBI',        label: 'SBI (State Bank of India)' },
+  { value: 'INDIA_POST', label: 'India Post (Post Office)' },
+  { value: 'HDFC',       label: 'HDFC Bank' },
+  { value: 'ICICI',      label: 'ICICI Bank' },
+  { value: 'AXIS',       label: 'Axis Bank' },
+  { value: 'PNB',        label: 'Punjab National Bank (PNB)' },
+  { value: 'BOB',        label: 'Bank of Baroda (BoB)' },
+] as const;
+
+type PpfInstitution = typeof PPF_INSTITUTIONS[number]['value'];
+
+const autoFetchSchema = z.object({
+  institution: z.enum(
+    PPF_INSTITUTIONS.map((i) => i.value) as [PpfInstitution, ...PpfInstitution[]],
+  ),
   pfAcct: z
     .string()
-    .regex(/^\d{8,16}$/, 'Enter 8–16 digit PPF account number'),
+    .regex(/^\d{8,17}$/, 'Enter 8–17 digit PPF account number'),
   holderName: z.string().min(1, 'Enter account holder name'),
 });
-type SbiFormValues = z.infer<typeof sbiSchema>;
+type AutoFetchFormValues = z.infer<typeof autoFetchSchema>;
 
-function SbiAutoFetchForm({ onClose }: { onClose: () => void }) {
+function PpfAutoFetchForm({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
-  } = useForm<SbiFormValues>({ resolver: zodResolver(sbiSchema) });
+  } = useForm<AutoFetchFormValues>({
+    resolver: zodResolver(autoFetchSchema),
+    defaultValues: { institution: 'SBI' },
+  });
+
+  const selectedInstitution = watch('institution');
+  const institutionLabel =
+    PPF_INSTITUTIONS.find((i) => i.value === selectedInstitution)?.label ?? selectedInstitution;
 
   const mutation = useMutation({
-    mutationFn: (v: SbiFormValues) =>
+    mutationFn: (v: AutoFetchFormValues) =>
       pfApi.create({
         type: 'PPF',
-        institution: 'SBI',
+        institution: v.institution,
         identifier: v.pfAcct,
         holderName: v.holderName,
       }),
     onSuccess: () => {
-      toast.success('SBI PPF account linked — click Refresh to fetch passbook');
+      toast.success(`${institutionLabel} PPF account linked — click Refresh to fetch passbook`);
       void queryClient.invalidateQueries({ queryKey: ['pf-accounts'] });
       onClose();
     },
@@ -94,10 +119,26 @@ function SbiAutoFetchForm({ onClose }: { onClose: () => void }) {
       <div className="rounded-lg border border-dashed border-border p-3 bg-muted/20 space-y-1">
         <p className="text-xs text-muted-foreground flex items-center gap-1">
           <RefreshCw className="h-3 w-3" />
-          Register your SBI PPF account. After linking, use the{' '}
+          Register your PPF account. After linking, use the{' '}
           <strong>Refresh</strong> button on the Provident Fund page to fetch
-          your passbook via the SBI net-banking portal.
+          your passbook via the bank&apos;s net-banking portal.
         </p>
+      </div>
+
+      <div className="space-y-1">
+        <Label>
+          Bank / Institution <span className="text-destructive">*</span>
+        </Label>
+        <Select {...register('institution')} className="w-full">
+          {PPF_INSTITUTIONS.map((inst) => (
+            <option key={inst.value} value={inst.value}>
+              {inst.label}
+            </option>
+          ))}
+        </Select>
+        {errors.institution && (
+          <p className="text-xs text-destructive">{errors.institution.message}</p>
+        )}
       </div>
 
       <div className="space-y-1">
@@ -120,7 +161,7 @@ function SbiAutoFetchForm({ onClose }: { onClose: () => void }) {
         </Label>
         <Input
           {...register('holderName')}
-          placeholder="Full name as per SBI records"
+          placeholder="Full name as per bank records"
         />
         {errors.holderName && (
           <p className="text-xs text-destructive">{errors.holderName.message}</p>
@@ -135,7 +176,7 @@ function SbiAutoFetchForm({ onClose }: { onClose: () => void }) {
           {mutation.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            'Link SBI PPF account'
+            'Link PPF account'
           )}
         </Button>
       </DialogFooter>
@@ -202,8 +243,8 @@ export function PPFNpsFormDialog({ open, onOpenChange, initial, defaultPortfolio
   const cfg = CONFIG[mode];
   const IconComp = cfg.icon;
 
-  // PPF-only: tab between manual entry and SBI auto-fetch
-  const [ppfTab, setPpfTab] = useState<'manual' | 'sbi'>('manual');
+  // PPF-only: tab between manual entry and auto-fetch (all 7 banks)
+  const [ppfTab, setPpfTab] = useState<'manual' | 'autofetch'>('manual');
   // Reset tab to manual when dialog closes or mode changes
   useEffect(() => {
     if (!open) setPpfTab('manual');
@@ -318,21 +359,21 @@ export function PPFNpsFormDialog({ open, onOpenChange, initial, defaultPortfolio
             </button>
             <button
               type="button"
-              onClick={() => setPpfTab('sbi')}
+              onClick={() => setPpfTab('autofetch')}
               className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                ppfTab === 'sbi'
+                ppfTab === 'autofetch'
                   ? 'bg-background shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Auto-fetch (SBI)
+              Auto-fetch
             </button>
           </div>
         )}
 
-        {/* SBI auto-fetch tab content */}
-        {mode === 'PPF' && !isEdit && ppfTab === 'sbi' && (
-          <SbiAutoFetchForm onClose={() => onOpenChange(false)} />
+        {/* Auto-fetch tab content (PPF-only, all 7 institutions) */}
+        {mode === 'PPF' && !isEdit && ppfTab === 'autofetch' && (
+          <PpfAutoFetchForm onClose={() => onOpenChange(false)} />
         )}
 
         {/* Manual entry form — shown for NPS, for PPF-edit, and for PPF manual tab */}
