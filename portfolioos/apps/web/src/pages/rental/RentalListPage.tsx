@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -60,7 +60,7 @@ const PROPERTY_TYPE_STYLES: Record<PropertyTypeKey, PropertyTypeStyle> = {
   COMMERCIAL: {
     label: 'Commercial',
     icon: Store,
-    gradient: 'from-orange-500 via-red-500 to-rose-700',
+    gradient: 'from-slate-600 via-slate-700 to-zinc-800',
   },
   LAND: {
     label: 'Land',
@@ -125,7 +125,7 @@ function CreatePropertyDialog({
   const [errors, setErrors] = useState<Partial<Record<keyof CreatePropertyInput, string>>>({});
 
   // Re-sync form when dialog opens with a different initial
-  useState(() => {
+  useEffect(() => {
     if (open) {
       setForm({
         name: initial?.name ?? '',
@@ -135,8 +135,9 @@ function CreatePropertyDialog({
         purchasePrice: initial?.purchasePrice ?? '',
         currentValue: initial?.currentValue ?? '',
       });
+      setErrors({});
     }
-  });
+  }, [open, initial]);
 
   const mutation = useMutation({
     mutationFn: (input: CreatePropertyInput) =>
