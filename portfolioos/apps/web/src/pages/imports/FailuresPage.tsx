@@ -8,11 +8,14 @@ import {
   Inbox,
   ChevronRight,
   ArrowLeft,
+  RotateCcw,
+  Filter,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/common/EmptyState';
 import {
   Dialog,
@@ -20,7 +23,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ingestionFailuresApi } from '@/api/ingestionFailures.api';
+import {
+  ingestionFailuresApi,
+} from '@/api/ingestionFailures.api';
+import type {
+  ListIngestionFailuresParams,
+} from '@/api/ingestionFailures.api';
 import { apiErrorMessage } from '@/api/client';
 import type {
   IngestionFailureDTO,
@@ -36,14 +44,21 @@ type Filter = 'unresolved' | 'resolved' | 'all';
 export function FailuresPage() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>('unresolved');
+  const [adapterFilter, setAdapterFilter] = useState('');
   const [detail, setDetail] = useState<IngestionFailureDTO | null>(null);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [pages, setPages] = useState<IngestionFailureDTO[][]>([]);
+
+  const params: ListIngestionFailuresParams = {
+    resolved: filter === 'all' ? undefined : filter === 'resolved',
+    adapter: adapterFilter || undefined,
+    cursor,
+    limit: 50,
+  };
 
   const listQuery = useQuery({
-    queryKey: ['ingestion-failures', filter],
-    queryFn: () =>
-      ingestionFailuresApi.list({
-        resolved: filter === 'all' ? undefined : filter === 'resolved',
-      }),
+    queryKey: ['ingestion-failures', filter, adapterFilter, cursor],
+    queryFn: () => ingestionFailuresApi.list(params),
   });
 
   const resolveMutation = useMutation({
@@ -52,18 +67,57 @@ export function FailuresPage() {
     onSuccess: (row) => {
       toast.success('Marked resolved');
       setDetail(null);
-      queryClient.invalidateQueries({ queryKey: ['ingestion-failures'] });
+      void queryClient.invalidateQueries({ queryKey: ['ingestion-failures'] });
       // Keep the updated row in view if the user stays on the page
-      queryClient.setQueryData<IngestionFailureDTO[] | undefined>(
-        ['ingestion-failures', filter],
-        (old) => old?.map((r) => (r.id === row.id ? row : r)),
+      setPages((prev) =>
+        prev.map((page) => page.map((r) => (r.id === row.id ? row : r))),
       );
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Failed to resolve')),
   });
 
-  const rows = listQuery.data ?? [];
-  const unresolvedCount = rows.filter((r) => !r.resolvedAt).length;
+  const retryMutation = useMutation({
+    mutationFn: (id: string) => ingestionFailuresApi.retry(id),
+    onSuccess: (result, id) => {
+      if (result.error) {
+        toast.error(`Retry failed: ${result.error}`);
+        return;
+      }
+      toast.success(`Retry succeeded — ${result.eventsInserted} event(s) inserted`);
+      setDetail(null);
+      void queryClient.invalidateQueries({ queryKey: ['ingestion-failures'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Retry failed')),
+  });
+
+  const currentRows = listQuery.data?.data ?? [];
+  const nextCursor = listQuery.data?.nextCursor ?? null;
+  const unresolvedCount = currentRows.filter((r) => !r.resolvedAt).length;
+
+  function resetPagination() {
+    setCursor(undefined);
+    setPages([]);
+  }
+
+  function handleFilterChange(f: Filter) {
+    setFilter(f);
+    resetPagination();
+  }
+
+  function handleAdapterFilterChange(v: string) {
+    setAdapterFilter(v);
+    resetPagination();
+  }
+
+  function handleLoadMore() {
+    if (nextCursor) {
+      setPages((prev) => [...prev, currentRows]);
+      setCursor(nextCursor);
+    }
+  }
+
+  // Show all previously loaded pages + current page
+  const allRows: IngestionFailureDTO[] = [...pages.flat(), ...currentRows];
 
   return (
     <div>
@@ -72,7 +126,7 @@ export function FailuresPage() {
         description="Rows that couldn't be parsed into a transaction. Review the payload, correct the file, and retry — or enter the transaction manually."
       />
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <Link
           to="/import"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -80,23 +134,38 @@ export function FailuresPage() {
           <ArrowLeft className="h-3 w-3" />
           Back to imports
         </Link>
-        <div className="flex gap-1">
+        <div className="flex gap-2 flex-wrap items-center">
+          {/* Adapter search */}
+          <div className="flex items-center gap-1.5">
+            <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <Input
+              placeholder="Adapter (e.g. gmail.generic.v1)"
+              className="h-8 text-xs w-48"
+              value={adapterFilter}
+              onChange={(e) => handleAdapterFilterChange(e.target.value)}
+            />
+          </div>
+
+          {/* Filter chips */}
           {(['unresolved', 'resolved', 'all'] as const).map((f) => (
             <Button
               key={f}
               variant={filter === f ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setFilter(f)}
+              onClick={() => handleFilterChange(f)}
             >
-              {f === 'unresolved' ? `Unresolved${unresolvedCount ? ` (${unresolvedCount})` : ''}` : f[0]!.toUpperCase() + f.slice(1)}
+              {f === 'unresolved'
+                ? `Unresolved${unresolvedCount ? ` (${unresolvedCount})` : ''}`
+                : f[0]!.toUpperCase() + f.slice(1)}
             </Button>
           ))}
           <Button
             variant="outline"
             size="sm"
-            onClick={() =>
-              queryClient.invalidateQueries({ queryKey: ['ingestion-failures'] })
-            }
+            onClick={() => {
+              resetPagination();
+              void queryClient.invalidateQueries({ queryKey: ['ingestion-failures'] });
+            }}
           >
             <RefreshCw className="h-3 w-3" />
           </Button>
@@ -108,9 +177,9 @@ export function FailuresPage() {
           <CardTitle>Dead-letter queue</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {listQuery.isLoading ? (
+          {listQuery.isLoading && allRows.length === 0 ? (
             <div className="p-6 text-sm text-muted-foreground">Loading failures…</div>
-          ) : rows.length === 0 ? (
+          ) : allRows.length === 0 ? (
             <div className="p-6">
               <EmptyState
                 icon={Inbox}
@@ -127,67 +196,84 @@ export function FailuresPage() {
               />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="text-left font-medium px-4 py-2">Adapter</th>
-                    <th className="text-left font-medium px-4 py-2">Source</th>
-                    <th className="text-left font-medium px-4 py-2">Error</th>
-                    <th className="text-left font-medium px-4 py-2">When</th>
-                    <th className="text-left font-medium px-4 py-2">Status</th>
-                    <th className="w-8" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {rows.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="hover:bg-muted/30 cursor-pointer"
-                      onClick={() => setDetail(r)}
-                    >
-                      <td className="px-4 py-2 font-mono text-xs">
-                        <div>{r.sourceAdapter}</div>
-                        <div className="text-muted-foreground">v{r.adapterVersion}</div>
-                      </td>
-                      <td className="px-4 py-2 text-xs text-muted-foreground max-w-[28ch] truncate">
-                        {r.sourceRef}
-                      </td>
-                      <td className="px-4 py-2 max-w-[40ch]">
-                        <div className="flex items-start gap-1.5">
-                          <AlertTriangle className="h-3 w-3 mt-0.5 text-negative shrink-0" />
-                          <span className="truncate">{r.errorMessage}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-xs text-muted-foreground">
-                        {new Date(r.createdAt).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-2">
-                        {r.resolvedAt ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-positive">
-                            <CheckCircle2 className="h-3 w-3" />
-                            {r.resolvedAction
-                              ? INGESTION_RESOLVE_ACTION_LABELS[r.resolvedAction]
-                              : 'Resolved'}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-amber-700">
-                            Unresolved
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-muted-foreground">
-                        <ChevronRight className="h-3 w-3" />
-                      </td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="text-left font-medium px-4 py-2">Adapter</th>
+                      <th className="text-left font-medium px-4 py-2">Source</th>
+                      <th className="text-left font-medium px-4 py-2">Error</th>
+                      <th className="text-left font-medium px-4 py-2">When</th>
+                      <th className="text-left font-medium px-4 py-2">Status</th>
+                      <th className="w-8" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y">
+                    {allRows.map((r) => (
+                      <tr
+                        key={r.id}
+                        className="hover:bg-muted/30 cursor-pointer"
+                        onClick={() => setDetail(r)}
+                      >
+                        <td className="px-4 py-2 font-mono text-xs">
+                          <div>{r.sourceAdapter}</div>
+                          <div className="text-muted-foreground">v{r.adapterVersion}</div>
+                        </td>
+                        <td className="px-4 py-2 text-xs text-muted-foreground max-w-[28ch] truncate">
+                          {r.sourceRef}
+                        </td>
+                        <td className="px-4 py-2 max-w-[40ch]">
+                          <div className="flex items-start gap-1.5">
+                            <AlertTriangle className="h-3 w-3 mt-0.5 text-negative shrink-0" />
+                            <span className="truncate">{r.errorMessage}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-xs text-muted-foreground">
+                          {new Date(r.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2">
+                          {r.resolvedAt ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-positive">
+                              <CheckCircle2 className="h-3 w-3" />
+                              {r.resolvedAction
+                                ? INGESTION_RESOLVE_ACTION_LABELS[r.resolvedAction]
+                                : 'Resolved'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+                              Unresolved
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-muted-foreground">
+                          <ChevronRight className="h-3 w-3" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Load more */}
+              {nextCursor && (
+                <div className="p-3 flex justify-center border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={listQuery.isFetching}
+                    onClick={handleLoadMore}
+                  >
+                    {listQuery.isFetching ? 'Loading…' : 'Load more'}
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
 
+      {/* Detail dialog */}
       <Dialog open={Boolean(detail)} onOpenChange={(o) => !o && setDetail(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -241,22 +327,42 @@ export function FailuresPage() {
               )}
 
               {!detail.resolvedAt && (
-                <div className="border-t pt-4">
-                  <div className="text-sm font-medium mb-2">Mark as resolved</div>
-                  <div className="flex flex-wrap gap-2">
-                    {INGESTION_RESOLVE_ACTIONS.map((action) => (
+                <div className="border-t pt-4 space-y-3">
+                  {/* Retry — available for gmail.* adapters */}
+                  {(detail.sourceAdapter.startsWith('gmail.') || detail.sourceAdapter.startsWith('email.')) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Retry</div>
                       <Button
-                        key={action}
                         variant="outline"
                         size="sm"
-                        disabled={resolveMutation.isPending}
-                        onClick={() =>
-                          resolveMutation.mutate({ id: detail.id, action })
-                        }
+                        disabled={retryMutation.isPending}
+                        onClick={() => retryMutation.mutate(detail.id)}
+                        className="flex items-center gap-1.5"
                       >
-                        {INGESTION_RESOLVE_ACTION_LABELS[action]}
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        {retryMutation.isPending ? 'Retrying…' : 'Retry parse'}
                       </Button>
-                    ))}
+                    </div>
+                  )}
+
+                  {/* Resolve actions */}
+                  <div>
+                    <div className="text-sm font-medium mb-2">Mark as resolved</div>
+                    <div className="flex flex-wrap gap-2">
+                      {INGESTION_RESOLVE_ACTIONS.map((action) => (
+                        <Button
+                          key={action}
+                          variant="outline"
+                          size="sm"
+                          disabled={resolveMutation.isPending}
+                          onClick={() =>
+                            resolveMutation.mutate({ id: detail.id, action })
+                          }
+                        >
+                          {INGESTION_RESOLVE_ACTION_LABELS[action]}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}

@@ -31,6 +31,7 @@ import {
   CreditCard,
   HandCoins,
   Home,
+  Bug,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -89,6 +90,7 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'CAS', to: '/cas', icon: FileDown },
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
+      { label: 'Failures (DLQ)', to: '/import/failures', icon: Bug },
       { label: 'Settings', to: '/settings', icon: Settings },
     ],
   },

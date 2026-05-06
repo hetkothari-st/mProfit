@@ -112,6 +112,8 @@ export function App() {
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/import" element={<ImportPage />} />
         <Route path="/import/failures" element={<FailuresPage />} />
+        {/* /ops/ingestion-failures is the plan-specified ops URL — alias to /import/failures */}
+        <Route path="/ops/ingestion-failures" element={<Navigate to="/import/failures" replace />} />
         <Route path="/connectors" element={<ConnectorsPage />} />
         {/* /mailboxes consolidated into /ingestion. Old route preserved
             as a redirect so bookmarked URLs don't 404. */}
