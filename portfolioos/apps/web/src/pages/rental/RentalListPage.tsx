@@ -8,18 +8,17 @@ import {
   ArrowUpRight,
   Users,
   Calendar,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
   TrendingUp,
   Pencil,
   Trash2,
   Loader2,
   Home,
   Store,
-  Trees,
-  ParkingCircle,
+  Map as MapIcon,
+  Car,
+  MapPin,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -45,61 +44,42 @@ import {
 
 type PropertyTypeKey = 'RESIDENTIAL' | 'COMMERCIAL' | 'LAND' | 'PARKING';
 
-interface PropertyTheme {
+interface PropertyTypeStyle {
   label: string;
-  icon: typeof Home;
-  iconBg: string;
-  iconText: string;
-  badgeBg: string;
-  badgeText: string;
-  cardAccent: string;
+  icon: LucideIcon;
+  /** Tailwind gradient classes for the card's hero banner. */
+  gradient: string;
 }
 
-const PROPERTY_TYPE_THEME: Record<PropertyTypeKey, PropertyTheme> = {
+const PROPERTY_TYPE_STYLES: Record<PropertyTypeKey, PropertyTypeStyle> = {
   RESIDENTIAL: {
     label: 'Residential',
     icon: Home,
-    iconBg: 'bg-blue-100 dark:bg-blue-950/40',
-    iconText: 'text-blue-600 dark:text-blue-400',
-    badgeBg: 'bg-blue-100 dark:bg-blue-950/40',
-    badgeText: 'text-blue-700 dark:text-blue-300',
-    cardAccent: 'border-l-4 border-l-blue-500',
+    gradient: 'from-blue-500 via-blue-600 to-indigo-700',
   },
   COMMERCIAL: {
     label: 'Commercial',
     icon: Store,
-    iconBg: 'bg-amber-100 dark:bg-amber-950/40',
-    iconText: 'text-amber-600 dark:text-amber-400',
-    badgeBg: 'bg-amber-100 dark:bg-amber-950/40',
-    badgeText: 'text-amber-700 dark:text-amber-300',
-    cardAccent: 'border-l-4 border-l-amber-500',
+    gradient: 'from-orange-500 via-red-500 to-rose-700',
   },
   LAND: {
     label: 'Land',
-    icon: Trees,
-    iconBg: 'bg-emerald-100 dark:bg-emerald-950/40',
-    iconText: 'text-emerald-600 dark:text-emerald-400',
-    badgeBg: 'bg-emerald-100 dark:bg-emerald-950/40',
-    badgeText: 'text-emerald-700 dark:text-emerald-300',
-    cardAccent: 'border-l-4 border-l-emerald-500',
+    icon: MapIcon,
+    gradient: 'from-amber-500 via-orange-500 to-red-600',
   },
   PARKING: {
     label: 'Parking',
-    icon: ParkingCircle,
-    iconBg: 'bg-purple-100 dark:bg-purple-950/40',
-    iconText: 'text-purple-600 dark:text-purple-400',
-    badgeBg: 'bg-purple-100 dark:bg-purple-950/40',
-    badgeText: 'text-purple-700 dark:text-purple-300',
-    cardAccent: 'border-l-4 border-l-purple-500',
+    icon: Car,
+    gradient: 'from-cyan-500 via-sky-600 to-blue-700',
   },
 };
 
-function getPropertyTheme(type: string): PropertyTheme {
+function getPropertyStyle(type: string): PropertyTypeStyle {
   const key: PropertyTypeKey =
     type === 'COMMERCIAL' || type === 'LAND' || type === 'PARKING'
       ? type
       : 'RESIDENTIAL';
-  return PROPERTY_TYPE_THEME[key];
+  return PROPERTY_TYPE_STYLES[key];
 }
 
 // ── Status helpers ────────────────────────────────────────────────────
@@ -293,110 +273,140 @@ function PropertyCard({
   const { activeTenancy, overdueCount, nextDue } = getPropertySummary(property);
 
   const statusColor = overdueCount > 0 ? 'text-negative' : 'text-positive';
-  const statusIcon =
-    overdueCount > 0 ? (
-      <AlertTriangle className="h-4 w-4 text-negative" />
-    ) : activeTenancy ? (
-      <CheckCircle2 className="h-4 w-4 text-positive" />
-    ) : (
-      <Clock className="h-4 w-4 text-muted-foreground" />
-    );
 
   const monthlyRent = activeTenancy
     ? new Decimal(activeTenancy.monthlyRent)
     : null;
 
-  const theme = getPropertyTheme(property.propertyType);
-  const TypeIcon = theme.icon;
+  const typeStyle = getPropertyStyle(property.propertyType);
+  const TypeIcon = typeStyle.icon;
+
+  const statusBadgeLabel = overdueCount > 0
+    ? `${overdueCount} overdue`
+    : activeTenancy
+      ? 'Occupied'
+      : 'Vacant';
+  const statusBadgeClass = overdueCount > 0
+    ? 'bg-red-500/90 text-white'
+    : activeTenancy
+      ? 'bg-emerald-500/90 text-white'
+      : 'bg-white/90 text-black';
+
+  const stop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   return (
-    <Card className={`hover:shadow-md transition-shadow ${theme.cardAccent}`}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start gap-3 min-w-0 flex-1">
-            <div className={`shrink-0 h-10 w-10 rounded-md grid place-items-center ${theme.iconBg}`}>
-              <TypeIcon className={`h-5 w-5 ${theme.iconText}`} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h3 className="font-semibold truncate">{property.name}</h3>
-                {statusIcon}
-              </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${theme.badgeBg} ${theme.badgeText}`}>
-                  {theme.label}
-                </span>
-                {property.address && (
-                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                    {property.address}
-                  </span>
-                )}
-              </div>
-            </div>
+    <Link
+      to={`/rental/${property.id}`}
+      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
+    >
+      <Card className="overflow-hidden group-hover:shadow-lg group-hover:-translate-y-0.5 transition-all duration-200 p-0 cursor-pointer">
+        {/* Hero banner: gradient + giant decorative icon + type chip */}
+        <div className={`relative h-28 bg-gradient-to-br ${typeStyle.gradient}`}>
+          <TypeIcon
+            className="absolute -right-3 -bottom-3 h-32 w-32 text-white/15"
+            strokeWidth={1.25}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-white/10" />
+          <div className="absolute top-3 right-3 h-9 w-9 rounded-lg bg-white/15 backdrop-blur-sm border border-white/25 flex items-center justify-center">
+            <TypeIcon className="h-5 w-5 text-white" />
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
+          <div className="absolute top-3 left-4 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/95">
+              {typeStyle.label}
+            </span>
+            <span className={`text-[10px] font-semibold uppercase tracking-wider rounded px-1.5 py-0.5 ${statusBadgeClass}`}>
+              {statusBadgeLabel}
+            </span>
+          </div>
+          <div className="absolute bottom-3 left-4 right-4">
+            <h3 className="font-semibold text-lg text-white truncate drop-shadow-sm">
+              {property.name}
+            </h3>
+            {property.address && (
+              <div className="flex items-center gap-1 mt-0.5 text-xs text-white/85 truncate">
+                <MapPin className="h-3 w-3 shrink-0" />
+                <span className="truncate">{property.address}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <CardContent className="p-5">
+          <div className="flex items-center justify-end gap-1 -mt-1 mb-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={(e) => { stop(e); onEdit(); }}
+              title="Edit"
+            >
               <Pencil className="h-3.5 w-3.5" />
             </Button>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={onDelete} disabled={isDeleting} title="Delete">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+              onClick={(e) => { stop(e); onDelete(); }}
+              disabled={isDeleting}
+              title="Delete"
+            >
               {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
             </Button>
-            <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
-              <Link to={`/rental/${property.id}`}>
-                <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
           </div>
-        </div>
 
-        <div className="mt-4 pt-3 border-t space-y-2">
-          {activeTenancy ? (
-            <>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5" />
-                  Tenant
-                </span>
-                <span className="font-medium">{activeTenancy.tenantName}</span>
+          <div className="space-y-2">
+            {activeTenancy ? (
+              <>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5" />
+                    Tenant
+                  </span>
+                  <span className="font-medium">{activeTenancy.tenantName}</span>
+                </div>
+                {monthlyRent && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      Monthly rent
+                    </span>
+                    <span className={`font-medium tabular-nums ${statusColor}`}>
+                      {formatINR(monthlyRent.toString())}
+                    </span>
+                  </div>
+                )}
+                {nextDue && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5" />
+                      Next due
+                    </span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {new Date(nextDue.dueDate).toLocaleDateString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                      })}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">No active tenancy</p>
+            )}
+
+            {overdueCount > 0 && (
+              <div className="mt-2 rounded-md bg-negative/10 px-3 py-1.5 text-xs text-negative font-medium">
+                {overdueCount} overdue receipt{overdueCount !== 1 ? 's' : ''}
               </div>
-              {monthlyRent && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    Monthly rent
-                  </span>
-                  <span className={`font-medium tabular-nums ${statusColor}`}>
-                    {formatINR(monthlyRent.toString())}
-                  </span>
-                </div>
-              )}
-              {nextDue && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5" />
-                    Next due
-                  </span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {new Date(nextDue.dueDate).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                    })}
-                  </span>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">No active tenancy</p>
-          )}
-
-          {overdueCount > 0 && (
-            <div className="mt-2 rounded-md bg-negative/10 px-3 py-1.5 text-xs text-negative font-medium">
-              {overdueCount} overdue receipt{overdueCount !== 1 ? 's' : ''}
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
