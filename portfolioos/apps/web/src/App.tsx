@@ -43,6 +43,7 @@ import { GoldPage } from './pages/assetClasses/GoldPage';
 import { GoldAssetDetailPage } from './pages/assetClasses/GoldAssetDetailPage';
 import { NpsPage } from './pages/assetClasses/NpsPage';
 import { ProvidentFundPage } from './pages/assetClasses/ProvidentFundPage';
+import { PfExtensionPairPage } from './pages/pf/PfExtensionPairPage';
 import { OtherAssetsPage } from './pages/assetClasses/OtherAssetsPage';
 import { PostOfficePage } from './pages/assetClasses/PostOfficePage';
 import { FuturesOptionsPage } from './pages/assetClasses/FuturesOptionsPage';
@@ -86,6 +87,7 @@ export function App() {
         <Route path="/gold" element={<GoldPage />} />
         <Route path="/gold/:holdingId" element={<GoldAssetDetailPage />} />
         <Route path="/provident-fund" element={<ProvidentFundPage />} />
+        <Route path="/provident-fund/extension" element={<PfExtensionPairPage />} />
         {/* PPF + EPF merged into /provident-fund. Old paths redirect for back-compat. */}
         <Route path="/ppf" element={<Navigate to="/provident-fund" replace />} />
         <Route path="/epf" element={<Navigate to="/provident-fund" replace />} />

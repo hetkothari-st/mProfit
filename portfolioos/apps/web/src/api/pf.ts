@@ -1,6 +1,25 @@
 import { api } from './client';
 import { getApiBaseUrl } from './baseUrl';
 
+// ---------------------------------------------------------------------------
+// Extension Pairing DTOs
+// ---------------------------------------------------------------------------
+
+export interface ExtensionPairingDTO {
+  id: string;
+  userId: string;
+  pairingCode: string;
+  pairingCodeExpiresAt: string;
+  /** bearerHash is stripped server-side — not present in API responses */
+  bearerLast8: string | null;
+  paired: boolean;
+  pairedAt: string | null;
+  lastUsedAt: string | null;
+  revoked: boolean;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
 export interface PfMemberIdDTO {
   id: string;
   memberIdLast4: string;
@@ -69,4 +88,34 @@ export const pfApi = {
       { withCredentials: true },
     );
   },
+
+  // ── Extension pairing ──────────────────────────────────────────────────
+
+  /**
+   * Initiate a new extension pairing: generates an 8-char code with 5-min TTL.
+   */
+  pairInit: () =>
+    api
+      .post<{ success: true; data: { id: string; code: string; expiresAt: string } }>(
+        '/api/epfppf/extension/pair-init',
+      )
+      .then((r) => r.data.data),
+
+  /**
+   * List all extension pairings for the authenticated user.
+   */
+  listPairings: () =>
+    api
+      .get<{ success: true; data: ExtensionPairingDTO[] }>('/api/epfppf/extension/pairings')
+      .then((r) => r.data.data),
+
+  /**
+   * Revoke an extension pairing by its ID (user-initiated from web UI).
+   */
+  revokePairing: (id: string) =>
+    api
+      .delete<{ success: true; data: { revoked: boolean } }>(
+        `/api/epfppf/extension/pairings/${id}`,
+      )
+      .then((r) => r.data.data),
 };

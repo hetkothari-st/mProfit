@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Wallet, RefreshCw, Upload, Plus } from 'lucide-react';
+import { Wallet, RefreshCw, Upload, Plus, PlugZap } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { SimpleAssetPage } from './SimpleAssetPage';
 import { PPFFormDialog } from './PPFNpsFormDialog';
@@ -54,14 +55,22 @@ function AutoFetchSection() {
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Auto-fetch accounts (EPFO portal)
         </h2>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setShowAddAccount(true)}
-        >
-          <Plus className="h-3.5 w-3.5 mr-1" />
-          Link account
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" asChild>
+            <Link to="/provident-fund/extension" className="flex items-center gap-1">
+              <PlugZap className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Browser extension</span>
+            </Link>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowAddAccount(true)}
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Link account
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
