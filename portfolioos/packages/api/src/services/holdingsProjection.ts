@@ -35,6 +35,57 @@ const PO_PAYOUT_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
   'SCSS', 'POST_OFFICE_MIS', 'POST_OFFICE_SAVINGS',
 ]);
 
+// Compounding periods per year keyed by Transaction.interestFrequency. AT_MATURITY
+// behaves like a single end-of-term compound for accrual-display purposes.
+const FREQ_PERIODS_PER_YEAR: Record<string, number> = {
+  MONTHLY: 12,
+  QUARTERLY: 4,
+  HALF_YEARLY: 2,
+  ANNUAL: 1,
+  AT_MATURITY: 1,
+};
+
+/**
+ * FDs and similar bank-deposit assets: compound each DEPOSIT row independently
+ * using its own interestRate + interestFrequency. Falls back to null (caller
+ * uses totalCost) when no rates are recorded so the column never shows blank
+ * for legacy entries.
+ */
+function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
+  const today = new Date();
+  const deposits = txs.filter(
+    (t) =>
+      ['DEPOSIT', 'BUY', 'OPENING_BALANCE'].includes(t.transactionType) &&
+      t.interestRate != null,
+  );
+  if (deposits.length === 0) return null;
+
+  let total = new Decimal(0);
+  for (const dep of deposits) {
+    const principal = new Decimal(dep.price.toString()).times(
+      new Decimal(dep.quantity.toString()),
+    );
+    const annualRate = new Decimal(dep.interestRate!.toString()).div(100);
+    const valuationDate =
+      dep.maturityDate && dep.maturityDate < today ? dep.maturityDate : today;
+    const yearsElapsed = new Decimal(
+      (valuationDate.getTime() - dep.tradeDate.getTime()) /
+        (365.25 * 24 * 60 * 60 * 1000),
+    ).toDP(6);
+    if (yearsElapsed.lte(0)) {
+      total = total.plus(principal);
+      continue;
+    }
+    const periodsPerYear =
+      FREQ_PERIODS_PER_YEAR[dep.interestFrequency ?? 'QUARTERLY'] ?? 4;
+    const periodRate = annualRate.div(periodsPerYear);
+    const periods = yearsElapsed.times(periodsPerYear);
+    const factor = new Decimal(1).plus(periodRate).pow(periods);
+    total = total.plus(principal.times(factor));
+  }
+  return total.isZero() ? null : total.toDP(4);
+}
+
 /**
  * For PO compounding schemes: sum principal × (1 + r/100)^years for each
  * DEPOSIT/BUY that carries an interestRate. Caps at maturityDate if passed.
@@ -310,6 +361,10 @@ export async function recomputeForAsset(
   } else if (PO_PAYOUT_CLASSES.has(meta.assetClass)) {
     // Interest paid out — principal unchanged; show invested as current value.
     currentValue = agg.totalCost;
+  } else if (meta.assetClass === 'FIXED_DEPOSIT') {
+    // FDs: accrue each deposit at its own rate + frequency. If no rate was
+    // captured, surface principal so the column isn't blank.
+    currentValue = computeFdAccruedValue(meta.txs) ?? agg.totalCost;
   } else {
     price = await currentPriceFor({
       assetClass: meta.assetClass,
@@ -466,6 +521,31 @@ async function refreshPricesForRows(rows: Array<{
   return updated;
 }
 
+// Asset classes whose currentValue is computed from interest accrual rather
+// than from a market-price feed. The price-refresh loop ignores them; we
+// recompute their projections directly so existing rows pick up new accrual
+// logic (e.g. the FD branch added later) without requiring the user to edit
+// every holding by hand.
+const ACCRUAL_RECOMPUTE_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
+  'FIXED_DEPOSIT', 'NSC', 'KVP', 'POST_OFFICE_TD', 'SSY', 'POST_OFFICE_RD',
+]);
+
+async function recomputeAccrualProjections(
+  where: Prisma.HoldingProjectionWhereInput,
+): Promise<number> {
+  const rows = await prisma.holdingProjection.findMany({
+    where: {
+      ...where,
+      assetClass: { in: Array.from(ACCRUAL_RECOMPUTE_CLASSES) },
+    },
+    select: { portfolioId: true, assetKey: true },
+  });
+  for (const r of rows) {
+    await recomputeForAsset(r.portfolioId, r.assetKey);
+  }
+  return rows.length;
+}
+
 export async function refreshAllProjectionPrices(): Promise<{ updated: number }> {
   const rows = await prisma.holdingProjection.findMany({
     select: {
@@ -479,7 +559,9 @@ export async function refreshAllProjectionPrices(): Promise<{ updated: number }>
       totalCost: true,
     },
   });
-  return { updated: await refreshPricesForRows(rows) };
+  const priced = await refreshPricesForRows(rows);
+  const accrued = await recomputeAccrualProjections({});
+  return { updated: priced + accrued };
 }
 
 export async function refreshPortfolioProjectionPrices(
@@ -498,5 +580,7 @@ export async function refreshPortfolioProjectionPrices(
       totalCost: true,
     },
   });
-  return { updated: await refreshPricesForRows(rows) };
+  const priced = await refreshPricesForRows(rows);
+  const accrued = await recomputeAccrualProjections({ portfolioId });
+  return { updated: priced + accrued };
 }
