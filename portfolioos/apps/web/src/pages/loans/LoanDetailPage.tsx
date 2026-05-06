@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -488,17 +488,17 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
           <table className="w-full text-xs">
-            <thead>
+            <thead className="sticky top-0 bg-card z-10">
               <tr className="border-b">
-                <th className="text-left py-2 pr-4 text-muted-foreground font-medium">Date</th>
-                <th className="text-left py-2 pr-4 text-muted-foreground font-medium">Type</th>
-                <th className="text-right py-2 pr-4 text-muted-foreground font-medium">Amount</th>
-                <th className="text-right py-2 pr-4 text-muted-foreground font-medium">Principal</th>
-                <th className="text-right py-2 pr-4 text-muted-foreground font-medium">Interest</th>
-                <th className="text-left py-2 pr-4 text-muted-foreground font-medium">Note</th>
-                <th className="w-8" />
+                <th className="text-left py-2 pr-4 text-muted-foreground font-medium bg-card">Date</th>
+                <th className="text-left py-2 pr-4 text-muted-foreground font-medium bg-card">Type</th>
+                <th className="text-right py-2 pr-4 text-muted-foreground font-medium bg-card">Amount</th>
+                <th className="text-right py-2 pr-4 text-muted-foreground font-medium bg-card">Principal</th>
+                <th className="text-right py-2 pr-4 text-muted-foreground font-medium bg-card">Interest</th>
+                <th className="text-left py-2 pr-4 text-muted-foreground font-medium bg-card">Note</th>
+                <th className="w-8 bg-card" />
               </tr>
             </thead>
             <tbody>
@@ -557,6 +557,25 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
   const INITIAL_SHOW = 12;
   const displayed = showAll ? rows : rows.slice(0, INITIAL_SHOW);
   const today = new Date().toISOString().slice(0, 10);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const paidCount = rows.filter((r) => r.isPaid).length;
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const firstUnpaidIdx = displayed.findIndex((r) => !r.isPaid);
+    if (firstUnpaidIdx <= 0) return;
+    const targetRow = container.querySelector<HTMLTableRowElement>(
+      `tr[data-month="${displayed[firstUnpaidIdx].month}"]`,
+    );
+    const headerEl = container.querySelector<HTMLElement>('thead');
+    if (!targetRow) return;
+    const headerH = headerEl?.offsetHeight ?? 0;
+    container.scrollTo({
+      top: targetRow.offsetTop - headerH,
+      behavior: 'smooth',
+    });
+  }, [paidCount, showAll]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['loan', loan.id] });
@@ -615,19 +634,19 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
         )}
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div ref={scrollRef} className="max-h-[600px] overflow-y-auto overflow-x-auto">
           <table className="w-full text-xs">
-            <thead>
+            <thead className="sticky top-0 bg-card z-10">
               <tr className="border-b">
-                <th className="text-left py-2 pr-3 text-muted-foreground font-medium w-12">#</th>
-                <th className="text-left py-2 pr-3 text-muted-foreground font-medium">Date</th>
-                <th className="text-right py-2 pr-3 text-muted-foreground font-medium">Opening</th>
-                <th className="text-right py-2 pr-3 text-muted-foreground font-medium">EMI</th>
-                <th className="text-right py-2 pr-3 text-muted-foreground font-medium">Principal</th>
-                <th className="text-right py-2 pr-3 text-muted-foreground font-medium">Interest</th>
-                <th className="text-right py-2 pr-3 text-muted-foreground font-medium">Closing</th>
-                <th className="text-left py-2 pr-3 text-muted-foreground font-medium">Status</th>
-                <th className="text-right py-2 text-muted-foreground font-medium w-32">Action</th>
+                <th className="text-left py-2 pr-3 text-muted-foreground font-medium w-12 bg-card">#</th>
+                <th className="text-left py-2 pr-3 text-muted-foreground font-medium bg-card">Date</th>
+                <th className="text-right py-2 pr-3 text-muted-foreground font-medium bg-card">Opening</th>
+                <th className="text-right py-2 pr-3 text-muted-foreground font-medium bg-card">EMI</th>
+                <th className="text-right py-2 pr-3 text-muted-foreground font-medium bg-card">Principal</th>
+                <th className="text-right py-2 pr-3 text-muted-foreground font-medium bg-card">Interest</th>
+                <th className="text-right py-2 pr-3 text-muted-foreground font-medium bg-card">Closing</th>
+                <th className="text-left py-2 pr-3 text-muted-foreground font-medium bg-card">Status</th>
+                <th className="text-right py-2 text-muted-foreground font-medium w-32 bg-card">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -642,7 +661,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
                 const isPending =
                   pendingMonth === row.month && (markPaid.isPending || undoPaid.isPending);
                 return (
-                  <tr key={row.month} className={`border-b last:border-0 ${rowCls}`}>
+                  <tr key={row.month} data-month={row.month} className={`border-b last:border-0 ${rowCls}`}>
                     <td className="py-1.5 pr-3 tabular-nums text-muted-foreground">{row.month}</td>
                     <td className="py-1.5 pr-3 tabular-nums">{formatDate(row.date)}</td>
                     <td className="py-1.5 pr-3 text-right tabular-nums">{formatINR(row.openingBalance)}</td>
