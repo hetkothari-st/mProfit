@@ -261,7 +261,7 @@ function LoanCard({
               <h3 className="font-sans font-semibold text-[28px] leading-[1.1] tracking-[-0.02em] text-foreground truncate">
                 {loan.lenderName}
               </h3>
-              <div className="flex items-center gap-1.5 mt-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1.5 mt-2.5 text-base text-muted-foreground">
                 {loan.accountNumber && (
                   <>
                     <span className="font-mono tabular-nums">●●●● {loan.accountNumber.slice(-4)}</span>
