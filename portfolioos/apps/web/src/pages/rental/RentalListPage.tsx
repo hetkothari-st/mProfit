@@ -6,9 +6,7 @@ import {
   Building2,
   Plus,
   ArrowUpRight,
-  Users,
   Calendar,
-  TrendingUp,
   Pencil,
   Trash2,
   Loader2,
@@ -47,30 +45,37 @@ type PropertyTypeKey = 'RESIDENTIAL' | 'COMMERCIAL' | 'LAND' | 'PARKING';
 interface PropertyTypeStyle {
   label: string;
   icon: LucideIcon;
-  /** Tailwind gradient classes for the card's hero banner. */
-  gradient: string;
+  /** Solid color for the type stripe — varColor maps to a CSS hsl var. */
+  stripe: string;
+  /** Foreground for stripe text. */
+  stripeText: string;
 }
 
+// Receipt-style cards: each type owns one solid color band, drawn from theme.
 const PROPERTY_TYPE_STYLES: Record<PropertyTypeKey, PropertyTypeStyle> = {
   RESIDENTIAL: {
     label: 'Residential',
     icon: Home,
-    gradient: 'from-blue-500 via-blue-600 to-indigo-700',
+    stripe: 'hsl(var(--positive))',
+    stripeText: 'hsl(40 50% 97%)',
   },
   COMMERCIAL: {
     label: 'Commercial',
     icon: Store,
-    gradient: 'from-slate-600 via-slate-700 to-zinc-800',
+    stripe: 'hsl(var(--primary))',
+    stripeText: 'hsl(var(--primary-foreground))',
   },
   LAND: {
     label: 'Land',
     icon: MapIcon,
-    gradient: 'from-amber-500 via-orange-500 to-red-600',
+    stripe: 'hsl(var(--accent))',
+    stripeText: 'hsl(var(--accent-foreground))',
   },
   PARKING: {
     label: 'Parking',
     icon: Car,
-    gradient: 'from-cyan-500 via-sky-600 to-blue-700',
+    stripe: 'hsl(215 18% 38%)',
+    stripeText: 'hsl(40 50% 97%)',
   },
 };
 
@@ -98,7 +103,55 @@ function getPropertySummary(property: RentalPropertyDTO) {
     .filter((r) => r.status === 'EXPECTED')
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
 
-  return { activeTenancy, overdueCount, expectedCount, nextDue };
+  return { activeTenancy, overdueCount, expectedCount, nextDue, allReceipts };
+}
+
+// ── 12-month receipt ledger strip ─────────────────────────────────────
+// Renders the trailing 12 months as small cells, color-coded by status.
+
+type ReceiptStatus = 'RECEIVED' | 'EXPECTED' | 'PARTIAL' | 'OVERDUE' | 'SKIPPED';
+interface MiniReceipt { forMonth: string; status: ReceiptStatus }
+
+function buildLast12(receipts: MiniReceipt[]) {
+  const map = new Map(receipts.map((r) => [r.forMonth, r.status]));
+  const cells: Array<{ month: string; label: string; status: ReceiptStatus | null }> = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    cells.push({
+      month: key,
+      label: d.toLocaleString('en-IN', { month: 'short' }).slice(0, 1),
+      status: map.get(key) ?? null,
+    });
+  }
+  return cells;
+}
+
+function ReceiptLedger({ receipts }: { receipts: MiniReceipt[] }) {
+  const cells = buildLast12(receipts);
+  const cls = (s: ReceiptStatus | null) => {
+    switch (s) {
+      case 'RECEIVED': return 'bg-positive border-positive';
+      case 'PARTIAL':  return 'bg-warning/60 border-warning';
+      case 'OVERDUE':  return 'bg-negative border-negative';
+      case 'EXPECTED': return 'bg-transparent border-muted-foreground/40';
+      case 'SKIPPED':  return 'bg-muted border-muted-foreground/30';
+      case null:
+      default:         return 'bg-transparent border-border/50';
+    }
+  };
+  return (
+    <div className="flex items-center gap-[3px]" aria-label="Last 12 months receipt status">
+      {cells.map((c, i) => (
+        <div
+          key={c.month}
+          title={`${c.month} · ${c.status ?? 'no record'}`}
+          className={`h-3.5 w-3.5 rounded-[2px] border transition-colors ${cls(c.status)} ${i === 11 ? 'ring-1 ring-accent/60 ring-offset-1 ring-offset-card' : ''}`}
+        />
+      ))}
+    </div>
+  );
 }
 
 // ── Create / Edit property dialog ─────────────────────────────────────
@@ -271,140 +324,160 @@ function PropertyCard({
   onDelete: () => void;
   isDeleting: boolean;
 }) {
-  const { activeTenancy, overdueCount, nextDue } = getPropertySummary(property);
-
-  const statusColor = overdueCount > 0 ? 'text-negative' : 'text-positive';
-
-  const monthlyRent = activeTenancy
-    ? new Decimal(activeTenancy.monthlyRent)
-    : null;
-
+  const { activeTenancy, overdueCount, nextDue, allReceipts } = getPropertySummary(property);
+  const monthlyRent = activeTenancy ? new Decimal(activeTenancy.monthlyRent) : null;
   const typeStyle = getPropertyStyle(property.propertyType);
-  const TypeIcon = typeStyle.icon;
 
-  const statusBadgeLabel = overdueCount > 0
-    ? `${overdueCount} overdue`
-    : activeTenancy
-      ? 'Occupied'
-      : 'Vacant';
-  const statusBadgeClass = overdueCount > 0
-    ? 'bg-red-500/90 text-white'
-    : activeTenancy
-      ? 'bg-emerald-500/90 text-white'
-      : 'bg-white/90 text-black';
+  const occupancyState: 'occupied' | 'vacant' | 'overdue' =
+    overdueCount > 0 ? 'overdue' : activeTenancy ? 'occupied' : 'vacant';
+  const stampLabel = occupancyState === 'overdue' ? 'OVERDUE' : occupancyState === 'occupied' ? 'OCCUPIED' : 'VACANT';
+  const stampColor =
+    occupancyState === 'overdue' ? 'text-negative border-negative'
+    : occupancyState === 'occupied' ? 'text-positive border-positive'
+    : 'text-muted-foreground border-muted-foreground/60';
+
+  // Receipt serial — paper-receipt feel.
+  const serial = property.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
 
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
   };
 
+  // Inline style for the type stripe (color from theme vars).
+  const stripeStyle: React.CSSProperties = {
+    backgroundColor: typeStyle.stripe,
+    color: typeStyle.stripeText,
+  };
+
   return (
     <Link
       to={`/rental/${property.id}`}
-      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
+      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg"
     >
-      <Card className="overflow-hidden group-hover:shadow-lg group-hover:-translate-y-0.5 transition-all duration-200 p-0 cursor-pointer">
-        {/* Hero banner: gradient + giant decorative icon + type chip */}
-        <div className={`relative h-28 bg-gradient-to-br ${typeStyle.gradient}`}>
-          <TypeIcon
-            className="absolute -right-3 -bottom-3 h-32 w-32 text-white/15"
-            strokeWidth={1.25}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-white/10" />
-          <div className="absolute top-3 right-3 h-9 w-9 rounded-lg bg-white/15 backdrop-blur-sm border border-white/25 flex items-center justify-center">
-            <TypeIcon className="h-5 w-5 text-white" />
-          </div>
-          <div className="absolute top-3 left-4 flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/95">
-              {typeStyle.label}
+      <Card className="overflow-hidden p-0 cursor-pointer transition-all duration-300 paper relative
+        group-hover:shadow-elev-lg group-hover:-translate-y-0.5">
+
+        {/* TICKET STUB — type label band */}
+        <div
+          className="relative px-5 py-2.5 flex items-center justify-between text-[10px] uppercase tracking-[0.22em] font-medium"
+          style={stripeStyle}
+        >
+          <span className="flex items-center gap-2">
+            <span className="opacity-90">{typeStyle.label}</span>
+            <span className="opacity-60">·</span>
+            <span className="font-mono normal-case tracking-normal opacity-80">№ {serial}</span>
+          </span>
+          {nextDue && (
+            <span className="opacity-80 normal-case tracking-normal text-[10px] font-mono">
+              Next · {new Date(nextDue.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
             </span>
-            <span className={`text-[10px] font-semibold uppercase tracking-wider rounded px-1.5 py-0.5 ${statusBadgeClass}`}>
-              {statusBadgeLabel}
-            </span>
-          </div>
-          <div className="absolute bottom-3 left-4 right-4">
-            <h3 className="font-semibold text-lg text-white truncate drop-shadow-sm">
-              {property.name}
-            </h3>
-            {property.address && (
-              <div className="flex items-center gap-1 mt-0.5 text-xs text-white/85 truncate">
-                <MapPin className="h-3 w-3 shrink-0" />
-                <span className="truncate">{property.address}</span>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        <CardContent className="p-5">
-          <div className="flex items-center justify-end gap-1 -mt-1 mb-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={(e) => { stop(e); onEdit(); }}
-              title="Edit"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-              onClick={(e) => { stop(e); onDelete(); }}
-              disabled={isDeleting}
-              title="Delete"
-            >
-              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            </Button>
-            <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-          </div>
+        {/* PERFORATED DIVIDER */}
+        <div className="relative h-3 bg-card">
+          <div className="absolute -top-1.5 -left-1.5 h-3 w-3 rounded-full bg-background border border-border/70" />
+          <div className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-background border border-border/70" />
+          <div
+            className="absolute inset-x-3 top-1/2 h-px"
+            style={{
+              backgroundImage: 'repeating-linear-gradient(to right, hsl(var(--border)) 0 6px, transparent 6px 12px)',
+            }}
+          />
+        </div>
 
-          <div className="space-y-2">
-            {activeTenancy ? (
-              <>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Users className="h-3.5 w-3.5" />
-                    Tenant
-                  </span>
-                  <span className="font-medium">{activeTenancy.tenantName}</span>
+        {/* BODY */}
+        <CardContent className="p-5 pt-1 relative">
+          {/* Top: name + actions + occupancy stamp */}
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-display text-2xl leading-tight tracking-tight text-foreground truncate">
+                {property.name}
+              </h3>
+              {property.address && (
+                <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                  <MapPin className="h-3 w-3 shrink-0 text-accent/70" />
+                  <span className="truncate">{property.address}</span>
                 </div>
-                {monthlyRent && (
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      Monthly rent
-                    </span>
-                    <span className={`font-medium tabular-nums ${statusColor}`}>
-                      {formatINR(monthlyRent.toString())}
-                    </span>
-                  </div>
-                )}
-                {nextDue && (
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5" />
-                      Next due
-                    </span>
-                    <span className="text-muted-foreground tabular-nums">
-                      {new Date(nextDue.dueDate).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                      })}
-                    </span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground">No active tenancy</p>
-            )}
-
-            {overdueCount > 0 && (
-              <div className="mt-2 rounded-md bg-negative/10 px-3 py-1.5 text-xs text-negative font-medium">
-                {overdueCount} overdue receipt{overdueCount !== 1 ? 's' : ''}
-              </div>
-            )}
+              )}
+            </div>
+            <div className="flex items-center gap-0.5 shrink-0 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={(e) => { stop(e); onEdit(); }}
+                title="Edit"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                onClick={(e) => { stop(e); onDelete(); }}
+                disabled={isDeleting}
+                title="Delete"
+              >
+                {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
           </div>
+
+          {/* Tenant + rent + stamp row */}
+          {activeTenancy ? (
+            <div className="grid grid-cols-[1fr_auto] gap-4 items-end">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
+                  Tenant
+                </p>
+                <p className="font-display-italic text-base text-foreground mt-0.5 truncate">
+                  {activeTenancy.tenantName}
+                </p>
+                {monthlyRent && (
+                  <div className="mt-2">
+                    <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
+                      Monthly rent
+                    </p>
+                    <p className="numeric-display-lg money-digits text-2xl mt-0.5">
+                      {formatINR(monthlyRent.toString())}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className={`shrink-0 -rotate-6 border-2 px-2.5 py-1 rounded-sm font-display text-sm tracking-[0.18em] ${stampColor}`}>
+                {stampLabel}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="font-display-italic text-base text-muted-foreground">
+                No active tenancy
+              </p>
+              <div className={`-rotate-6 border-2 px-2.5 py-1 rounded-sm font-display text-sm tracking-[0.18em] ${stampColor}`}>
+                {stampLabel}
+              </div>
+            </div>
+          )}
+
+          {/* 12-month ledger */}
+          <div className="mt-4 pt-3 border-t border-dashed border-border/70">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
+                Last 12 months
+              </p>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                {overdueCount > 0 && (
+                  <span className="text-negative font-medium">{overdueCount} overdue</span>
+                )}
+                <Calendar className="h-3 w-3" />
+              </div>
+            </div>
+            <ReceiptLedger receipts={allReceipts as MiniReceipt[]} />
+          </div>
+
+          <ArrowUpRight className="absolute bottom-4 right-5 h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-accent transition-colors" />
         </CardContent>
       </Card>
     </Link>

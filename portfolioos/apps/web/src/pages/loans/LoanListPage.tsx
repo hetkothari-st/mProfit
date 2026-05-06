@@ -11,6 +11,7 @@ import {
   Trash2,
   Pencil,
   Calculator,
+  Calendar,
   Home,
   Car,
   GraduationCap,
@@ -56,23 +57,35 @@ const LOAN_TYPE_LABELS: Record<string, string> = {
 
 interface LoanTypeStyle {
   icon: LucideIcon;
-  /** Tailwind gradient for the hero banner. */
-  gradient: string;
+  /** Engraved-tone label color, drawn from theme. */
+  accent: 'brass' | 'forest' | 'oxblood' | 'plum' | 'teal' | 'ink';
 }
 
 const LOAN_TYPE_STYLES: Record<string, LoanTypeStyle> = {
-  HOME:      { icon: Home,           gradient: 'from-blue-500 via-blue-600 to-indigo-700' },
-  CAR:       { icon: Car,            gradient: 'from-rose-500 via-red-600 to-pink-700' },
-  PERSONAL:  { icon: Wallet,         gradient: 'from-orange-500 via-orange-600 to-amber-700' },
-  EDUCATION: { icon: GraduationCap,  gradient: 'from-violet-500 via-purple-600 to-fuchsia-700' },
-  BUSINESS:  { icon: Briefcase,      gradient: 'from-emerald-600 via-teal-700 to-cyan-800' },
-  GOLD:      { icon: Coins,          gradient: 'from-yellow-500 via-amber-500 to-orange-600' },
-  LAS:       { icon: TrendingUp,     gradient: 'from-cyan-500 via-sky-600 to-teal-700' },
-  OTHER:     { icon: Landmark,       gradient: 'from-slate-600 via-slate-700 to-zinc-800' },
+  HOME:      { icon: Home,          accent: 'ink' },
+  CAR:       { icon: Car,           accent: 'oxblood' },
+  PERSONAL:  { icon: Wallet,        accent: 'brass' },
+  EDUCATION: { icon: GraduationCap, accent: 'plum' },
+  BUSINESS:  { icon: Briefcase,     accent: 'forest' },
+  GOLD:      { icon: Coins,         accent: 'brass' },
+  LAS:       { icon: TrendingUp,    accent: 'teal' },
+  OTHER:     { icon: Landmark,      accent: 'ink' },
 };
 
 function getLoanStyle(type: string): LoanTypeStyle {
   return LOAN_TYPE_STYLES[type] ?? LOAN_TYPE_STYLES.OTHER!;
+}
+
+function accentColor(a: LoanTypeStyle['accent']): string {
+  switch (a) {
+    case 'brass':   return 'hsl(var(--accent))';
+    case 'forest':  return 'hsl(var(--positive))';
+    case 'oxblood': return 'hsl(var(--negative))';
+    case 'plum':    return 'hsl(260 28% 38%)';
+    case 'teal':    return 'hsl(195 40% 32%)';
+    case 'ink':
+    default:        return 'hsl(var(--primary))';
+  }
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -141,6 +154,56 @@ function SummaryStrip({ loans }: { loans: LoanDTO[] }) {
 
 // ── Loan card ─────────────────────────────────────────────────────────
 
+// ── Amortization ring (SVG) ───────────────────────────────────────────
+
+function AmortizationRing({
+  pct, color, emiCount, tenure,
+}: { pct: number; color: string; emiCount: number; tenure: number }) {
+  const size = 96;
+  const stroke = 6;
+  const radius = (size - stroke) / 2;
+  const circ = 2 * Math.PI * radius;
+  const dash = (Math.min(100, Math.max(0, pct)) / 100) * circ;
+
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2} cy={size / 2} r={radius}
+          fill="none" stroke="hsl(var(--border))" strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius}
+          fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.22, 0.61, 0.36, 1)' }}
+        />
+        {/* Tick marks every 10% — engraved bezel feel */}
+        {Array.from({ length: 12 }).map((_, i) => {
+          const a = (i / 12) * 2 * Math.PI;
+          const x1 = size / 2 + (radius + stroke / 2 + 2) * Math.cos(a);
+          const y1 = size / 2 + (radius + stroke / 2 + 2) * Math.sin(a);
+          const x2 = size / 2 + (radius + stroke / 2 + 5) * Math.cos(a);
+          const y2 = size / 2 + (radius + stroke / 2 + 5) * Math.sin(a);
+          return (
+            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke="hsl(var(--muted-foreground))" strokeWidth="0.6" opacity="0.4" />
+          );
+        })}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <span className="font-display text-2xl leading-none tracking-tight" style={{ color }}>
+          {pct.toFixed(0)}%
+        </span>
+        <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground mt-0.5 font-mono">
+          {emiCount}/{tenure}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function LoanCard({
   loan,
   onEdit,
@@ -170,6 +233,12 @@ function LoanCard({
   const style = getLoanStyle(loan.loanType);
   const TypeIcon = style.icon;
   const typeLabel = LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType;
+  const ringColor = accentColor(style.accent);
+
+  // Bond serial — pseudo-certificate marker.
+  const serial = loan.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
+  const isClosed = loan.status === 'CLOSED' || loan.status === 'FORECLOSED';
+  const isDefault = loan.status === 'DEFAULT';
 
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -179,131 +248,125 @@ function LoanCard({
   return (
     <Link
       to={`/loans/${loan.id}`}
-      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
+      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg"
     >
-      <Card className="overflow-hidden group-hover:shadow-lg group-hover:-translate-y-0.5 transition-all duration-200 p-0 cursor-pointer">
-        {/* Hero banner */}
-        <div className={`relative h-28 bg-gradient-to-br ${style.gradient}`}>
-          <TypeIcon
-            className="absolute -right-3 -bottom-3 h-32 w-32 text-white/15"
-            strokeWidth={1.25}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-white/10" />
-          <div className="absolute top-3 right-3 h-9 w-9 rounded-lg bg-white/15 backdrop-blur-sm border border-white/25 flex items-center justify-center">
-            <TypeIcon className="h-5 w-5 text-white" />
-          </div>
-          <div className="absolute top-3 left-4 flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/95">
-              {typeLabel}
+      <Card
+        className={`overflow-hidden p-0 cursor-pointer transition-all duration-300 paper relative
+          group-hover:shadow-elev-lg group-hover:-translate-y-0.5
+          ${isClosed ? 'opacity-70' : ''}`}
+        style={{ borderTop: `3px solid ${ringColor}` }}
+      >
+        {/* Engraved bond header */}
+        <div className="relative px-5 pt-3 pb-2 border-b border-border/70">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.22em] font-medium">
+            <span className="flex items-center gap-1.5" style={{ color: ringColor }}>
+              <TypeIcon className="h-3 w-3" strokeWidth={1.8} />
+              {typeLabel} loan
             </span>
-            {loan.status === 'DEFAULT' && (
-              <span className="text-[10px] font-semibold uppercase tracking-wider rounded bg-red-500/90 text-white px-1.5 py-0.5">
-                Default
-              </span>
-            )}
-            {loan.status === 'CLOSED' && (
-              <span className="text-[10px] font-semibold uppercase tracking-wider rounded bg-white/90 text-black px-1.5 py-0.5">
-                Closed
-              </span>
-            )}
+            <span className="font-mono normal-case tracking-normal text-muted-foreground">
+              № {serial}
+            </span>
           </div>
-          <div className="absolute bottom-3 left-4 right-4">
-            <h3 className="font-semibold text-lg text-white truncate drop-shadow-sm">
-              {loan.lenderName}
-            </h3>
-            <div className="flex items-center gap-2 mt-0.5 text-xs text-white/85">
-              {loan.accountNumber && (
-                <span className="tabular-nums">●●●● {loan.accountNumber.slice(-4)}</span>
-              )}
-              {loan.accountNumber && <span className="text-white/50">·</span>}
-              <span className="truncate">{loan.borrowerName}</span>
+          {/* Lender + borrower */}
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-display text-2xl leading-tight tracking-tight text-foreground truncate">
+                {loan.lenderName}
+              </h3>
+              <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
+                {loan.accountNumber && (
+                  <>
+                    <span className="font-mono tabular-nums">●●●● {loan.accountNumber.slice(-4)}</span>
+                    <span className="text-accent/60">·</span>
+                  </>
+                )}
+                <span className="font-display-italic truncate">{loan.borrowerName}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-0.5 shrink-0 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+                onClick={(e) => { stop(e); onEdit(); }} title="Edit">
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                onClick={(e) => { stop(e); onDelete(); }} disabled={isDeleting} title="Delete">
+                {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </Button>
             </div>
           </div>
         </div>
 
-        <CardContent className="p-5">
-          <div className="flex items-center justify-end gap-1 -mt-1 mb-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={(e) => { stop(e); onEdit(); }}
-              title="Edit"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-              onClick={(e) => { stop(e); onDelete(); }}
-              disabled={isDeleting}
-              title="Delete"
-            >
-              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            </Button>
-            <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-muted-foreground">Principal</span>
-              <span className="font-semibold tabular-nums text-base">{formatINR(loan.principalAmount)}</span>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-muted-foreground">Repaid</span>
-                <span className="font-medium tabular-nums">
-                  {emiCount} / {tenure} EMIs <span className="text-muted-foreground">({progressPct.toFixed(0)}%)</span>
-                </span>
-              </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-positive rounded-full transition-all"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-1">
-              <div>
-                <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Rate</p>
-                <p className="font-medium tabular-nums">{loan.interestRate}% p.a.</p>
-              </div>
-              <div className="text-right">
-                <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Tenure</p>
-                <p className="font-medium tabular-nums">{loan.tenureMonths}m</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-[10px] uppercase tracking-wider">EMI</p>
-                <p className="font-medium tabular-nums">{formatINR(loan.emiAmount)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Status</p>
-                <p className={`font-medium capitalize ${STATUS_COLORS[loan.status] ?? ''}`}>
-                  {loan.status.toLowerCase()}
-                </p>
-              </div>
-            </div>
-
-            {nextEmiDateStr && (
-              <div className="flex items-center justify-between text-xs pt-1 border-t">
-                <span className="text-muted-foreground">Next EMI</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="tabular-nums">{formatDate(nextEmiDateStr)}</span>
-                  {emiCountdownBadge(nextEmiDateStr)}
+        {/* Body — ring + ledger grid */}
+        <CardContent className="p-5 relative">
+          <div className="grid grid-cols-[auto_1fr] gap-5 items-center">
+            <AmortizationRing
+              pct={progressPct} color={ringColor}
+              emiCount={emiCount} tenure={tenure}
+            />
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
+                Principal
+              </p>
+              <p className="numeric-display-lg money-digits text-2xl mt-0.5">
+                {formatINR(loan.principalAmount)}
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">EMI</p>
+                  <p className="font-medium tabular-nums">{formatINR(loan.emiAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">Rate</p>
+                  <p className="font-medium tabular-nums">{loan.interestRate}%</p>
+                </div>
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">Tenure</p>
+                  <p className="font-medium tabular-nums">{loan.tenureMonths}m</p>
+                </div>
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">Status</p>
+                  <p className={`font-medium capitalize ${STATUS_COLORS[loan.status] ?? ''}`}>
+                    {loan.status.toLowerCase()}
+                  </p>
                 </div>
               </div>
-            )}
-
-            {loan.status === 'DEFAULT' && (
-              <div className="rounded-md bg-negative/10 px-3 py-1.5 text-xs text-negative font-medium flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Loan in default
-              </div>
-            )}
+            </div>
           </div>
+
+          {/* Footer rule + next EMI / status */}
+          <div className="mt-4 pt-3 border-t border-dashed border-border/70 flex items-center justify-between text-xs">
+            {nextEmiDateStr ? (
+              <>
+                <span className="text-muted-foreground flex items-center gap-1.5">
+                  <Calendar className="h-3 w-3" />
+                  <span className="font-display-italic">Next EMI</span>
+                  <span className="tabular-nums text-foreground">{formatDate(nextEmiDateStr)}</span>
+                </span>
+                {emiCountdownBadge(nextEmiDateStr)}
+              </>
+            ) : (
+              <span className="text-muted-foreground font-display-italic">
+                {isClosed ? 'Loan closed' : isDefault ? 'In default' : '—'}
+              </span>
+            )}
+            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-accent transition-colors ml-auto" />
+          </div>
+
+          {/* DEFAULT stamp overlay */}
+          {isDefault && (
+            <div className="absolute top-3 right-3 -rotate-6 border-2 border-negative px-2 py-0.5 rounded-sm font-display text-xs tracking-[0.18em] text-negative pointer-events-none flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              DEFAULT
+            </div>
+          )}
+          {isClosed && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className="font-display text-3xl tracking-[0.25em] text-muted-foreground/50 -rotate-12 border-4 border-muted-foreground/40 px-3 py-1 rounded-sm">
+                CLOSED
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
     </Link>
