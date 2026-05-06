@@ -22,6 +22,7 @@ import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { PfInstitution, PfType, ProvidentFundAccount } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { NotFoundError } from '../lib/errors.js';
 import { encryptIdentifier, last4 } from './pfCredentials.service.js';
 
 // ---------------------------------------------------------------------------
@@ -114,7 +115,9 @@ export async function createPfAccount(
  * List all PF accounts for a user, most-recently-created first.
  * Includes nested `memberIds` (EPF member IDs under a UAN).
  */
-export async function listPfAccounts(userId: string): Promise<ProvidentFundAccount[]> {
+export async function listPfAccounts(
+  userId: string,
+): Promise<ProvidentFundAccount[]> {
   return prisma.providentFundAccount.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
@@ -151,7 +154,7 @@ export async function forgetPfCredentials(
     where: { id, userId },
   });
   if (!existing) {
-    throw new Error('PF account not found');
+    throw new NotFoundError('PF account not found');
   }
 
   return prisma.providentFundAccount.update({
