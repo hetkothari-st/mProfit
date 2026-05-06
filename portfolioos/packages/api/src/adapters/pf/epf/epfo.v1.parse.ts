@@ -1,4 +1,4 @@
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import type { PassbookTokens } from '../shared/pdfPassbookParser.js';
 import type { ParseResult, PfCanonicalEventInput } from '../types.js';
 
