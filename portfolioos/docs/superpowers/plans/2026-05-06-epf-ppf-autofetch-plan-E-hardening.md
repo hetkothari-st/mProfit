@@ -8,9 +8,64 @@
 
 ---
 
+## Input requirements summary (read first)
+
+Tracks ordered by what blocks each. Tracks marked **READY** can begin without external inputs.
+
+| Track | Status | Blocking inputs |
+|-------|--------|-----------------|
+| 1 — Real DOM selectors | BLOCKED | Live netbanking accounts × 8 institutions; UAN with passbook access; CAPTCHA samples; mobile + email for OTP |
+| 2 — Parser tuning | BLOCKED | ≥5 anonymized real passbook PDFs per institution (40 PDFs total); CII table |
+| 3 — Extension full + store | PARTIAL | Track 1 inputs (for content scripts); designer assets; Chrome WebStore $5 dev account; Firefox AMO account; privacy policy hosted; listing copy |
+| 4 — Bot-detection hardening | BLOCKED | Production telemetry baseline (≥100 fetches); residential proxy budget ($50–200/mo); DLQ telemetry from Track 6 |
+| 5 — Monthly nudge | **READY** | None — ships from existing primitives |
+| 6 — DLQ ops UI | **READY** | None — ships from existing primitives; access-control + retention decisions |
+| 7 — Account Aggregator | BLOCKED | TSP partnership; NBFC-AA license decision; legal review; per-fetch fee budget |
+| 8 — Performance + scale | BLOCKED | Production telemetry; APM tooling; 100+ concurrent active users |
+
+### Categorized procurement list
+
+**User actions (cannot be automated):**
+- Chrome Web Store dev account ($5)
+- Firefox AMO dev account (free)
+- Hosted privacy policy URL
+- Decision on TSP partnership for AA
+- Decision on access-control model for DLQ UI
+
+**Procurement (paid):**
+- Designer (icons + store hero/screenshots): one-shot ~$500–1500
+- Residential proxy pool (post-detection): ~$50–200/month ongoing
+- APM tooling (Sentry, Datadog, New Relic): free tier ok initially
+- TSP partnership (AA): per-fetch fees ~₹2–10 each, scale-dependent
+
+**Field collection (privacy-sensitive):**
+- ≥40 anonymized real passbook PDFs across 8 institutions
+- 20–50 CAPTCHA images per portal (8 portals)
+- HAR recordings of login → download flows per portal
+- ≥1 OTP-receivable mobile + email per institution test account
+
+**Compliance:**
+- Anonymization workflow for passbook PDFs (no real PII to staging/dev)
+- DPDPA 2023 review before AA work
+- RBI Master Direction on AA review (if pursuing FIU license)
+- PII redaction audit on `IngestionFailure.rawPayload` before opening DLQ to non-admins
+
+**No-input tracks (start anytime):** 5, 6.
+
+---
+
 ## Track 1: Real Playwright DOM selectors per bank
 
 Each scrape adapter currently uses placeholder selectors (`<login-url>`, `<username-selector>`, etc.) and runs only in `PF_SCRAPE_MOCK=1` mode. Real selectors must be discovered via live portal walks.
+
+### Required inputs
+
+- **Live netbanking accounts** at each of: SBI, India Post, HDFC, ICICI, Axis, PNB, Bank of Baroda. Test accounts ideal; real personal accounts work but limit to verified-non-destructive read-only flows.
+- **Live EPFO UAN** with passbook access enabled (mobile linked, KYC complete).
+- **Browser DevTools recording** of one full successful login → PPF/passbook → download cycle per portal. Save HAR files to `packages/api/test/portal-walks/<inst>/` for reference.
+- **CAPTCHA samples** — collect 20–50 CAPTCHA images per portal (saved as PNG) for OCR confidence tuning.
+- **Mobile + email** for OTP receipt on every test account.
+- **VPN if Railway egress IP gets blocked during discovery walks** — discovery should ideally happen from the Railway egress, not a developer laptop, to surface IP-based blocking early.
 
 ### Per-bank task (template)
 
@@ -53,6 +108,19 @@ For each of: `EPFO`, `SBI`, `INDIA_POST`, `HDFC`, `ICICI`, `AXIS`, `PNB`, `BOB`:
 
 Each parser uses a synthetic pdfkit-generated fixture. Real PDFs differ in column widths, header layout, and date formats. Parser regexes need tuning when real samples arrive.
 
+### Required inputs
+
+- **≥5 real anonymized passbook PDFs per institution** (8 × 5 = 40 PDFs minimum). Anonymization rules:
+  - Mask account number → keep last 4 digits only
+  - Mask name → "TEST USER"
+  - Mask PAN → "XXXXX" + last 4 chars
+  - Mask employer name (EPFO) → "TEST EMPLOYER PRIVATE LIMITED"
+  - Keep ALL dates, amounts, descriptions, transaction codes, balances unchanged
+  - Keep page layout, font, column widths intact (do NOT re-render from text — preserves true PDF structure)
+- **Anonymization tool** — `pdftk` + `qpdf` for in-place text edits, or rasterize-and-OCR-rewrite via `pdf2image` + Tesseract.
+- **Edge-case sample seeking:** PPF accounts opened pre-2014, EPFO multi-establishment passbooks, withdrawal entries, transfer-in/out rows.
+- **CII (Cost Inflation Index) table** — current CBDT-notified values, FY 2001-02 through current FY. Source: incometax.gov.in or NSDL.
+
 ### Per-bank task
 
 For each institution:
@@ -73,6 +141,18 @@ EPFO interest credit lines need year-specific interest rate validation (FY-aware
 ---
 
 ## Track 3: Browser extension full coverage + store packaging
+
+### Required inputs
+
+- **Live netbanking access** for content-script DOM walks (same accounts as Track 1)
+- **Designer-supplied icons:** 16/48/128 PNG (square, transparent bg, app-style) + source `.svg`
+- **Designer-supplied store assets:** hero (1280×800), small tile (440×280), marquee tile (1400×560 optional), 4–5 screenshots (1280×800)
+- **Privacy policy hosted at a stable URL.** Draft text in `CLAUDE.md` §15. Extract to `extension/PRIVACY.md`, host at `https://portfolio-os.up.railway.app/privacy`.
+- **Chrome Web Store dev account** — $5 one-time, Google account + 2FA. **User action.**
+- **Firefox AMO dev account** — free, Mozilla account. **User action.**
+- **Listing copy** — name (≤45 chars), short description (≤132 chars), detailed description (≤16k chars), 3–5 keywords. Localize EN-US + EN-IN if budget allows.
+- **Support email + website URL** for store listing.
+- **CSR / CRX signing** — Chrome auto-signs on submit; Firefox optionally signs via `web-ext sign`.
 
 ### Content scripts for remaining 6 banks
 
@@ -122,6 +202,14 @@ Once on stores, store distribution handles updates. For unpacked-dev installs, d
 
 Server-headless Playwright adapters can be detected by anti-bot WAFs (Cloudflare, Akamai, PerimeterX). Production telemetry will reveal which banks block.
 
+### Required inputs
+
+- **Production traffic baseline** — ≥100 real fetch attempts across the 8 institutions before deciding what to harden. Without telemetry, hardening is speculative.
+- **Per-institution detection threshold defined up front** — e.g. "rotate to residential proxies once block rate >20% over a rolling 7-day window."
+- **Residential proxy budget** — BrightData / Smartproxy / Oxylabs. Pricing ≈ $5–10 per GB; PPF fetch is ~2–5 MB per session, so budget ≈ $50–200/month for full 7-bank coverage at moderate frequency.
+- **DLQ telemetry** (depends on Track 6) — must be live before this track can be data-driven.
+- **Headed-browser fallback infra** — if WAFs catch headless even with stealth, may need Playwright in headed mode on a VNC-accessible Linux container. Cost + complexity higher; defer until evidence demands.
+
 ### Tasks
 
 - [ ] **Stealth plugin verification** — `playwright-extra` + `puppeteer-extra-plugin-stealth` already installed. Check version is current; many newer detection vectors patched in recent stealth releases.
@@ -147,6 +235,13 @@ Surface in DLQ ops UI for triage.
 
 Spec §12 milestone 11. Cadence per Q5 decision = on-demand + monthly nudge.
 
+### Required inputs
+
+- **None external.** Ships from existing schema + UI primitives. Can begin immediately.
+- **UX decision (low-stakes)** — confirm 30-day default cadence is right.
+- **Email digest opt-in flag** — needs `User.preferences.weeklyPfDigest: boolean` column or equivalent. Add if absent.
+- **Email template assets** — designer-supplied HTML if marketing wants branded; otherwise plaintext fine for v1.
+
 ### Tasks
 
 - [ ] **Nudge cron** — daily Bull job that scans `ProvidentFundAccount` rows where `lastRefreshedAt < now() - 30 days` AND `status = ACTIVE`. Emit `Alert` row of type `PF_REFRESH_DUE` per stale account.
@@ -160,6 +255,13 @@ Spec §12 milestone 11. Cadence per Q5 decision = on-demand + monthly nudge.
 ## Track 6: DLQ ops UI
 
 Currently `IngestionFailure` rows are written but no admin UI to triage them.
+
+### Required inputs
+
+- **None external.** Ships from existing schema + React components. Can begin immediately.
+- **Access-control decision** — admin-only? user-self-serve for own failures? Recommendation: per-user view of own failures + admin overlay gated behind `User.isAdmin` flag (add column if absent).
+- **Retention policy** — keep `IngestionFailure` rows forever, or auto-purge after N days? Recommendation: keep forever for own failures; admin-side purge job after 90 days for resolved entries.
+- **Sensitive payload redaction audit** — raw payloads stored in `IngestionFailure.rawPayload` may contain partial PII. Verify Plan A's PII redaction (`packages/api/src/ingestion/pii.ts`) is applied before write. Audit one production failure sample before opening UI to non-admins.
 
 ### Tasks
 
@@ -179,6 +281,15 @@ Currently `IngestionFailure` rows are written but no admin UI to triage them.
 
 Spec §1 mentioned AA as the strongest long-term path. Plan E does NOT cover this — separate planning cycle once Plans A–D + this Plan E's hardening tracks stabilize.
 
+### Required inputs
+
+- **TSP partnership decision** — pick one: Setu, Finvu, OneMoney, CAMS Finserv, NESL, Anumati. Each has different pricing + onboarding speed.
+- **NBFC-AA license decision** — become an FIU yourself (RBI license, 6+ months, ₹2 cr capital) OR consume via TSP white-label (faster, recurring fee).
+- **Per-fetch fee budget** — typical ₹2–10 per FI fetch via TSP. At 10k users × monthly fetch × 7 institutions ≈ ₹14–700/month at scale. Manageable.
+- **Pricing-model decision** — pass cost to user, eat as COGS, or gate behind paid tier?
+- **Compliance review** — RBI Master Direction on AA + DPDPA 2023 alignment. Engage fintech-compliance lawyer.
+- **Production cohort** — 50–100 beta users to validate AA UX before broad rollout.
+
 Touchpoints when ready:
 - Partnership with TSP (Setu / Finvu / OneMoney / CAMS Finserv)
 - New `AAConnection` model alongside `ProvidentFundAccount` for AA-sourced accounts
@@ -188,6 +299,13 @@ Touchpoints when ready:
 ---
 
 ## Track 8: Performance + scale
+
+### Required inputs
+
+- **Production telemetry** — query timing histogram on top 5 endpoints. Recommend `pino` request-duration logging or APM (Datadog, New Relic, Sentry tracing).
+- **Realistic user load** — 100+ concurrent active users with 1000+ transactions each before perf work matters.
+- **Database query plan visibility** — Postgres `pg_stat_statements` extension enabled (Neon supports this).
+- **Browser pool sizing target** — pick max concurrent fetches per worker (e.g. 5). Drives memory budget for Railway service plan.
 
 Once telemetry exists:
 
