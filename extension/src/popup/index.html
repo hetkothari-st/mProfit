@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PortfolioOS</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="root">
+      <h1>&#x26A1; PortfolioOS</h1>
+
+      <div id="status">Loading…</div>
+
+      <form id="pair-form" hidden>
+        <label for="code">Pairing code</label>
+        <input
+          id="code"
+          type="text"
+          placeholder="XK7-9MQ2"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="8"
+        />
+        <p class="hint">
+          Generate a code from the PortfolioOS web app under<br />
+          Provident Fund &rarr; Browser extension.
+        </p>
+        <button type="submit" class="primary" id="pair-btn">Pair</button>
+      </form>
+
+      <div id="paired-section" hidden>
+        <hr />
+        <button type="button" class="danger" id="revoke-btn">Disconnect</button>
+      </div>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
