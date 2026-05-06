@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -296,6 +296,30 @@ function CreateLoanDialog({
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+
+  // Re-sync form when dialog opens with a different initial loan
+  useEffect(() => {
+    if (open) {
+      setForm({
+        lenderName: initial?.lenderName ?? '',
+        loanType: initial?.loanType ?? 'HOME',
+        borrowerName: initial?.borrowerName ?? '',
+        accountNumber: initial?.accountNumber ?? '',
+        principalAmount: initial?.principalAmount ?? '',
+        interestRate: initial?.interestRate ?? '',
+        tenureMonths: initial?.tenureMonths ?? 0,
+        emiAmount: initial?.emiAmount ?? '',
+        emiDueDay: initial?.emiDueDay ?? 1,
+        disbursementDate: initial?.disbursementDate ?? '',
+        firstEmiDate: initial?.firstEmiDate ?? '',
+        prepaymentOption: initial?.prepaymentOption ?? 'REDUCE_TENURE',
+        taxBenefitSection: initial?.taxBenefitSection ?? null,
+        status: initial?.status ?? 'ACTIVE',
+        portfolioId: initial?.portfolioId ?? null,
+      });
+      setErrors({});
+    }
+  }, [open, initial]);
 
   const mutation = useMutation({
     mutationFn: (input: CreateLoanInput) =>
