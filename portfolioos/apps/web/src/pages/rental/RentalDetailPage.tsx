@@ -340,16 +340,16 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
       </button>
 
       {expanded && receipts.length > 0 && (
-        <div className="border-t overflow-x-auto">
+        <div className="border-t max-h-[400px] overflow-y-auto overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
-                <th className="text-left px-4 py-2 font-medium">Month</th>
-                <th className="text-right px-4 py-2 font-medium">Expected</th>
-                <th className="text-right px-4 py-2 font-medium">Received</th>
-                <th className="text-left px-4 py-2 font-medium">Due</th>
-                <th className="text-left px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2" />
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b text-xs text-muted-foreground">
+                <th className="text-left px-4 py-2 font-medium bg-muted">Month</th>
+                <th className="text-right px-4 py-2 font-medium bg-muted">Expected</th>
+                <th className="text-right px-4 py-2 font-medium bg-muted">Received</th>
+                <th className="text-left px-4 py-2 font-medium bg-muted">Due</th>
+                <th className="text-left px-4 py-2 font-medium bg-muted">Status</th>
+                <th className="px-4 py-2 bg-muted" />
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -799,7 +799,7 @@ export function RentalDetailPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
+          <div className="max-h-[600px] overflow-y-auto pr-1 space-y-3">
             {(property.tenancies ?? []).map((t) => (
               <TenancyCard key={t.id} tenancy={t} />
             ))}
