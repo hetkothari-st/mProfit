@@ -172,8 +172,21 @@ interface AddPfAccountDialogProps {
   onClose: () => void;
 }
 
+type PpfInstitution = 'SBI' | 'INDIA_POST' | 'HDFC' | 'ICICI' | 'AXIS' | 'PNB' | 'BOB';
+
+const PPF_BANKS: Array<{ value: PpfInstitution; label: string }> = [
+  { value: 'SBI', label: 'State Bank of India' },
+  { value: 'INDIA_POST', label: 'India Post' },
+  { value: 'HDFC', label: 'HDFC Bank' },
+  { value: 'ICICI', label: 'ICICI Bank' },
+  { value: 'AXIS', label: 'Axis Bank' },
+  { value: 'PNB', label: 'Punjab National Bank' },
+  { value: 'BOB', label: 'Bank of Baroda' },
+];
+
 function AddPfAccountDialog({ onClose }: AddPfAccountDialogProps) {
   const [type, setType] = useState<'EPF' | 'PPF'>('EPF');
+  const [ppfInstitution, setPpfInstitution] = useState<PpfInstitution>('SBI');
   const [identifier, setIdentifier] = useState('');
   const [holderName, setHolderName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -184,11 +197,15 @@ function AddPfAccountDialog({ onClose }: AddPfAccountDialogProps) {
       toast.error('UAN must be exactly 12 digits');
       return;
     }
+    if (type === 'PPF' && !/^\d{8,17}$/.test(identifier)) {
+      toast.error('PPF account number must be 8–17 digits');
+      return;
+    }
     setSaving(true);
     try {
       await pfApi.create({
         type,
-        institution: type === 'EPF' ? 'EPFO' : 'SBI',
+        institution: type === 'EPF' ? 'EPFO' : ppfInstitution,
         identifier,
         holderName,
       });
@@ -201,23 +218,34 @@ function AddPfAccountDialog({ onClose }: AddPfAccountDialogProps) {
     }
   }
 
-  // Using a simple card overlay instead of Dialog to avoid shadcn dep in this helper
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <Card className="w-full max-w-sm mx-4">
-        <CardContent className="pt-5 space-y-4">
-          <h3 className="font-semibold">Link PF Account</h3>
-
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <Card
+        className="w-full max-w-md mx-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CardContent className="p-6 space-y-5">
           <div className="space-y-1">
+            <h3 className="text-lg font-semibold">Link PF Account</h3>
+            <p className="text-xs text-muted-foreground">
+              Connect an EPFO UAN or PPF account for auto-fetch.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <label className="text-sm font-medium">Type</label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {(['EPF', 'PPF'] as const).map((t) => (
                 <button
                   key={t}
+                  type="button"
                   onClick={() => setType(t)}
-                  className={`px-3 py-1.5 rounded border text-sm font-medium transition-colors ${
+                  className={`px-3 py-2 rounded-md border text-sm font-medium transition-colors ${
                     type === t
-                      ? 'border-primary bg-primary/5 text-primary'
+                      ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border hover:bg-muted/40'
                   }`}
                 >
@@ -227,38 +255,56 @@ function AddPfAccountDialog({ onClose }: AddPfAccountDialogProps) {
             </div>
           </div>
 
-          <div className="space-y-1">
+          {type === 'PPF' && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Bank</label>
+              <select
+                className="w-full border rounded-md bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                value={ppfInstitution}
+                onChange={(e) => setPpfInstitution(e.target.value as PpfInstitution)}
+              >
+                {PPF_BANKS.map((b) => (
+                  <option key={b.value} value={b.value}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="space-y-2">
             <label className="text-sm font-medium">
               {type === 'EPF' ? 'UAN (12 digits)' : 'PPF Account Number'}
             </label>
             <input
-              className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full border rounded-md bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder={type === 'EPF' ? '100XXXXXXXXX' : 'Account number'}
+              inputMode="numeric"
+              autoFocus
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-2">
             <label className="text-sm font-medium">Holder Name</label>
             <input
-              className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full border rounded-md bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               value={holderName}
               onChange={(e) => setHolderName(e.target.value)}
-              placeholder="Full name as per EPFO records"
+              placeholder="Full name as per records"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={onClose} size="sm">
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button
               onClick={() => void handleSave()}
               disabled={saving || !identifier || !holderName}
-              size="sm"
             >
-              {saving ? 'Linking…' : 'Link'}
+              {saving ? 'Linking…' : 'Link Account'}
             </Button>
           </div>
         </CardContent>

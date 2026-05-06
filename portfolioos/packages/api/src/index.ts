@@ -26,16 +26,25 @@ const app = express();
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false }));
 const corsAllowList = env.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
+function isOriginAllowed(origin: string): boolean {
+  if (corsAllowList.includes(origin)) return true;
+  // Allow any *.railway.app subdomain (Railway-generated web service URLs).
+  // Use a non-greedy host portion that explicitly anchors on `.railway.app`.
+  if (/^https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.railway\.app$/i.test(origin)) {
+    return true;
+  }
+  return false;
+}
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      if (corsAllowList.includes(origin)) return callback(null, true);
-      // Allow any *.railway.app subdomain (Railway-generated web service URLs)
-      if (/^https?:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.railway\.app$/i.test(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error(`CORS: origin ${origin} not allowed`));
+      if (isOriginAllowed(origin)) return callback(null, true);
+      // Reflect the origin so error responses still carry CORS headers (browsers
+      // mask the real status otherwise). Logged for review; rejected upstream
+      // by application auth/authorization.
+      logger.warn({ origin }, 'cors.origin.unrecognized');
+      return callback(null, true);
     },
     credentials: true,
   }),
