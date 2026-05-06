@@ -179,18 +179,6 @@ function AmortizationRing({
           strokeLinecap="round"
           style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.22, 0.61, 0.36, 1)' }}
         />
-        {/* Tick marks every 10% — engraved bezel feel */}
-        {Array.from({ length: 12 }).map((_, i) => {
-          const a = (i / 12) * 2 * Math.PI;
-          const x1 = size / 2 + (radius + stroke / 2 + 2) * Math.cos(a);
-          const y1 = size / 2 + (radius + stroke / 2 + 2) * Math.sin(a);
-          const x2 = size / 2 + (radius + stroke / 2 + 5) * Math.cos(a);
-          const y2 = size / 2 + (radius + stroke / 2 + 5) * Math.sin(a);
-          return (
-            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
-              stroke="hsl(var(--muted-foreground))" strokeWidth="0.6" opacity="0.4" />
-          );
-        })}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
         <span className="font-display text-2xl leading-none tracking-tight" style={{ color }}>

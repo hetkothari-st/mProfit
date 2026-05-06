@@ -116,6 +116,7 @@ function PaymentDialog({
       qc.invalidateQueries({ queryKey: ['loan', loanId] });
       qc.invalidateQueries({ queryKey: ['loan-summary', loanId] });
       qc.invalidateQueries({ queryKey: ['loan-amortization', loanId] });
+      qc.invalidateQueries({ queryKey: ['loans'] });
       toast.success('Payment recorded');
       if (form.paymentType === 'PREPAYMENT') onPrepaymentRecorded?.();
       onOpenChange(false);
@@ -457,6 +458,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
       qc.invalidateQueries({ queryKey: ['loan', loan.id] });
       qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
       qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
+      qc.invalidateQueries({ queryKey: ['loans'] });
       toast.success('Payment removed');
     },
     onError: () => toast.error('Failed to remove payment'),
@@ -565,8 +567,10 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
     if (!container) return;
     const firstUnpaidIdx = displayed.findIndex((r) => !r.isPaid);
     if (firstUnpaidIdx <= 0) return;
+    const target = displayed[firstUnpaidIdx];
+    if (!target) return;
     const targetRow = container.querySelector<HTMLTableRowElement>(
-      `tr[data-month="${displayed[firstUnpaidIdx].month}"]`,
+      `tr[data-month="${target.month}"]`,
     );
     const headerEl = container.querySelector<HTMLElement>('thead');
     if (!targetRow) return;
@@ -581,6 +585,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
     qc.invalidateQueries({ queryKey: ['loan', loan.id] });
     qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
     qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
+    qc.invalidateQueries({ queryKey: ['loans'] });
   };
 
   const markPaid = useMutation({

@@ -39,7 +39,10 @@ import { realEstateApi } from '@/api/realEstate.api';
 import { apiErrorMessage } from '@/api/client';
 import { PropertyFormDialog } from './PropertyFormDialog';
 
-// ── Per-type icon (small, for the editorial header strip) ────────────
+// ── Per-type identity: icon + tinted banner palette ──────────────────
+// Each tone is a calm, postcard-like tint that signals the property type
+// without resorting to lurid Tailwind gradients. Light + dark variants
+// share the same hue family but step value differently.
 
 const TYPE_ICON: Record<PropertyType, LucideIcon> = {
   APARTMENT: Building2,
@@ -53,6 +56,84 @@ const TYPE_ICON: Record<PropertyType, LucideIcon> = {
   UNDER_CONSTRUCTION: Construction,
   OTHER: Building,
 };
+
+interface BannerTone { bg: string; ink: string }
+
+const BANNER_TONE: Record<PropertyType, BannerTone> = {
+  APARTMENT:          { bg: 'bg-[hsl(217_22%_88%)] dark:bg-[hsl(217_18%_22%)]', ink: 'text-[hsl(217_38%_24%)] dark:text-[hsl(217_22%_72%)]' },
+  INDEPENDENT_HOUSE:  { bg: 'bg-[hsl(38_42%_88%)]  dark:bg-[hsl(38_22%_20%)]',  ink: 'text-[hsl(28_50%_28%)]  dark:text-[hsl(38_42%_72%)]' },
+  VILLA:              { bg: 'bg-[hsl(12_42%_90%)]  dark:bg-[hsl(12_22%_22%)]',  ink: 'text-[hsl(12_42%_32%)]  dark:text-[hsl(12_42%_72%)]' },
+  PLOT_LAND:          { bg: 'bg-[hsl(36_50%_88%)]  dark:bg-[hsl(36_24%_20%)]',  ink: 'text-[hsl(32_60%_30%)]  dark:text-[hsl(36_60%_70%)]' },
+  COMMERCIAL_OFFICE:  { bg: 'bg-[hsl(213_28%_85%)] dark:bg-[hsl(213_22%_18%)]', ink: 'text-[hsl(213_53%_22%)] dark:text-[hsl(213_22%_75%)]' },
+  COMMERCIAL_SHOP:    { bg: 'bg-[hsl(28_55%_88%)]  dark:bg-[hsl(28_24%_22%)]',  ink: 'text-[hsl(20_60%_32%)]  dark:text-[hsl(28_60%_72%)]' },
+  AGRICULTURAL:       { bg: 'bg-[hsl(130_28%_86%)] dark:bg-[hsl(130_18%_18%)]', ink: 'text-[hsl(130_38%_28%)] dark:text-[hsl(130_28%_70%)]' },
+  PARKING_GARAGE:     { bg: 'bg-[hsl(215_12%_84%)] dark:bg-[hsl(215_10%_20%)]', ink: 'text-[hsl(215_22%_32%)] dark:text-[hsl(215_12%_70%)]' },
+  UNDER_CONSTRUCTION: { bg: 'bg-[hsl(36_70%_86%)]  dark:bg-[hsl(36_28%_22%)]',  ink: 'text-[hsl(28_70%_32%)]  dark:text-[hsl(36_75%_70%)]' },
+  OTHER:              { bg: 'bg-[hsl(38_18%_88%)]  dark:bg-[hsl(38_10%_20%)]',  ink: 'text-[hsl(213_38%_22%)] dark:text-[hsl(38_22%_72%)]' },
+};
+
+// ── Property banner — postcard / deed aesthetic ──────────────────────
+// Type-tinted color band + ghosted center icon + brass corner brackets
+// + type label / serial / city stamp. No abstract patterns.
+
+interface PropertyBannerProps {
+  property: OwnedPropertyDTO;
+  isSold: boolean;
+}
+
+function PropertyBanner({ property, isSold }: PropertyBannerProps) {
+  const TypeIcon = TYPE_ICON[property.propertyType] ?? Building;
+  const tone = BANNER_TONE[property.propertyType] ?? BANNER_TONE.OTHER;
+  const typeLabel = PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType;
+  const serial = property.id.replace(/[^A-Z0-9]/gi, '').slice(-6).toUpperCase();
+  const locationLabel = property.city ?? property.address ?? null;
+
+  return (
+    <div className={`relative h-32 overflow-hidden border-b border-border/70 ${tone.bg}`}>
+      {/* Ghosted centerpiece icon — the type, instantly readable */}
+      <TypeIcon
+        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-24 w-24 opacity-30 ${tone.ink}`}
+        strokeWidth={1.1}
+      />
+
+      {/* Brass corner brackets */}
+      <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-accent/60" />
+      <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-accent/60" />
+      <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-accent/60" />
+      <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-accent/60" />
+
+      {/* Top: type label + serial */}
+      <div className="absolute top-2.5 left-5 right-5 flex items-center justify-between">
+        <span className={`flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] font-medium ${tone.ink}`}>
+          <TypeIcon className="h-3 w-3" strokeWidth={1.8} />
+          {typeLabel}
+        </span>
+        <span className={`text-[10px] font-mono uppercase tracking-wider ${tone.ink} opacity-70`}>
+          № {serial}
+        </span>
+      </div>
+
+      {/* Bottom: city stamp */}
+      {locationLabel && (
+        <div className="absolute bottom-2.5 left-5 right-5 flex items-center">
+          <span className={`flex items-center gap-1 text-[10px] uppercase tracking-[0.18em] font-medium ${tone.ink} opacity-70`}>
+            <MapPin className="h-3 w-3" />
+            <span className="truncate max-w-[14rem]">{locationLabel}</span>
+          </span>
+        </div>
+      )}
+
+      {/* SOLD diagonal stamp */}
+      {isSold && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="font-display text-3xl tracking-[0.25em] text-destructive/65 -rotate-12 border-4 border-destructive/65 px-4 py-1 rounded-sm bg-card/40 backdrop-blur-sm">
+            SOLD
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function appreciation(p: OwnedPropertyDTO): { gain: Decimal; pct: Decimal | null } {
   const cost = totalCostBasisOf(p);
@@ -78,17 +159,12 @@ function PropertyCard({
   const gainNeutral = gain.isZero();
   const gainColor = gainPositive ? 'text-positive' : gainNeutral ? 'text-muted-foreground' : 'text-negative';
   const isSold = property.status === 'SOLD';
-  const typeLabel = PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType;
   const statusLabel = PROPERTY_STATUS_LABELS[property.status] ?? property.status;
-  const TypeIcon = TYPE_ICON[property.propertyType] ?? Building;
 
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
   };
-
-  // Plate serial number — derived from id, gives each card a unique ledger marker.
-  const serial = property.id.replace(/[^A-Z0-9]/gi, '').slice(-6).toUpperCase();
 
   return (
     <Link
@@ -99,34 +175,19 @@ function PropertyCard({
         group-hover:shadow-elev-lg group-hover:-translate-y-0.5
         ${isSold ? 'opacity-75' : ''}`}>
 
-        {/* Editorial header strip — type · serial */}
-        <div className="relative px-5 pt-3.5 pb-2 flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] font-medium text-accent">
-            <TypeIcon className="h-3 w-3" strokeWidth={1.8} />
-            {typeLabel}
-          </span>
-          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/80">
-            № {serial}
-          </span>
-        </div>
+        {/* Type-relevant banner */}
+        <PropertyBanner property={property} isSold={isSold} />
 
-        {/* Body — title + body composition */}
-        <CardContent className="px-5 pb-5 pt-1 relative">
+        {/* Body */}
+        <CardContent className="p-5 relative">
           <div className="flex items-start justify-between gap-3 mb-1">
             <div className="min-w-0 flex-1">
               <h3 className="font-sans font-semibold text-[28px] leading-[1.1] tracking-[-0.02em] text-foreground truncate">
                 {property.name}
               </h3>
-              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
-                <span className="font-display-italic">{statusLabel}</span>
-                {(property.city || property.address) && (
-                  <>
-                    <span className="text-accent/60">·</span>
-                    <MapPin className="h-3 w-3 shrink-0 text-accent/70" />
-                    <span className="truncate">{property.city ?? property.address}</span>
-                  </>
-                )}
-              </div>
+              <p className="font-display-italic text-xs text-muted-foreground mt-1.5">
+                {statusLabel}
+              </p>
             </div>
             <div className="flex items-center gap-0.5 shrink-0 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button
@@ -189,13 +250,6 @@ function PropertyCard({
                 Current value not set
               </p>
               <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/70 group-hover:text-accent transition-colors" />
-            </div>
-          )}
-
-          {/* SOLD stamp — corner overlay, not full-cover */}
-          {isSold && (
-            <div className="absolute top-3 right-3 -rotate-6 border-2 border-destructive/55 px-2 py-0.5 rounded-sm font-display text-xs tracking-[0.18em] text-destructive/70 pointer-events-none">
-              SOLD
             </div>
           )}
         </CardContent>
