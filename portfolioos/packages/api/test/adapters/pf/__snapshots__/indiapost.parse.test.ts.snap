@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseIndiaPostPpfPassbook > parses synthetic India Post PPF statement 1`] = `
+[
+  {
+    "amount": "200000.00",
+    "eventDate": "2023-04-01",
+    "memberIdLast4": "8901",
+    "notes": "Opening Balance",
+    "sequence": 0,
+    "type": "PF_OPENING_BALANCE",
+  },
+  {
+    "amount": "12000.00",
+    "eventDate": "2023-06-10",
+    "memberIdLast4": "8901",
+    "notes": "Self Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "18000.00",
+    "eventDate": "2023-11-15",
+    "memberIdLast4": "8901",
+    "notes": "PPF Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "16330.00",
+    "eventDate": "2024-03-31",
+    "memberIdLast4": "8901",
+    "notes": "Interest Credited",
+    "sequence": 0,
+    "type": "PF_INTEREST_CREDIT",
+  },
+]
+`;

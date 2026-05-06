@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseAxisPpfPassbook > parses synthetic Axis PPF statement 1`] = `
+[
+  {
+    "amount": "250000.00",
+    "eventDate": "2023-04-01",
+    "memberIdLast4": "2345",
+    "notes": "Opening Balance",
+    "sequence": 0,
+    "type": "PF_OPENING_BALANCE",
+  },
+  {
+    "amount": "25000.00",
+    "eventDate": "2023-07-01",
+    "memberIdLast4": "2345",
+    "notes": "Self Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "25000.00",
+    "eventDate": "2024-01-01",
+    "memberIdLast4": "2345",
+    "notes": "PPF Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "19875.00",
+    "eventDate": "2024-03-31",
+    "memberIdLast4": "2345",
+    "notes": "Interest Credited",
+    "sequence": 0,
+    "type": "PF_INTEREST_CREDIT",
+  },
+]
+`;

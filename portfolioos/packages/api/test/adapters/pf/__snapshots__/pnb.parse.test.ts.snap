@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parsePnbPpfPassbook > parses synthetic PNB PPF statement 1`] = `
+[
+  {
+    "amount": "80000.00",
+    "eventDate": "2023-04-01",
+    "memberIdLast4": "3456",
+    "notes": "Opening Balance",
+    "sequence": 0,
+    "type": "PF_OPENING_BALANCE",
+  },
+  {
+    "amount": "10000.00",
+    "eventDate": "2023-07-15",
+    "memberIdLast4": "3456",
+    "notes": "PPF Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "10000.00",
+    "eventDate": "2024-01-20",
+    "memberIdLast4": "3456",
+    "notes": "Self Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "6710.00",
+    "eventDate": "2024-03-31",
+    "memberIdLast4": "3456",
+    "notes": "Interest Credited",
+    "sequence": 0,
+    "type": "PF_INTEREST_CREDIT",
+  },
+]
+`;

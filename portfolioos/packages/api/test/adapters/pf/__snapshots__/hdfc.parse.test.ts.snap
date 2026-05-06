@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseHdfcPpfPassbook > parses synthetic HDFC PPF statement 1`] = `
+[
+  {
+    "amount": "175000.00",
+    "eventDate": "2023-04-01",
+    "memberIdLast4": "1234",
+    "notes": "Opening Balance",
+    "sequence": 0,
+    "type": "PF_OPENING_BALANCE",
+  },
+  {
+    "amount": "10000.00",
+    "eventDate": "2023-05-05",
+    "memberIdLast4": "1234",
+    "notes": "PPF Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "20000.00",
+    "eventDate": "2023-10-10",
+    "memberIdLast4": "1234",
+    "notes": "Self Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "14000.00",
+    "eventDate": "2024-03-31",
+    "memberIdLast4": "1234",
+    "notes": "Interest Credited",
+    "sequence": 0,
+    "type": "PF_INTEREST_CREDIT",
+  },
+]
+`;

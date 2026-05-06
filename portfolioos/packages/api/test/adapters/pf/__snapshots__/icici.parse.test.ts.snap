@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseIciciPpfPassbook > parses synthetic ICICI PPF statement 1`] = `
+[
+  {
+    "amount": "100000.00",
+    "eventDate": "2023-04-01",
+    "memberIdLast4": "9012",
+    "notes": "Opening Balance",
+    "sequence": 0,
+    "type": "PF_OPENING_BALANCE",
+  },
+  {
+    "amount": "15000.00",
+    "eventDate": "2023-06-20",
+    "memberIdLast4": "9012",
+    "notes": "Self Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "10000.00",
+    "eventDate": "2023-12-25",
+    "memberIdLast4": "9012",
+    "notes": "PPF Deposit",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "8875.00",
+    "eventDate": "2024-03-31",
+    "memberIdLast4": "9012",
+    "notes": "Interest Credited",
+    "sequence": 0,
+    "type": "PF_INTEREST_CREDIT",
+  },
+]
+`;
