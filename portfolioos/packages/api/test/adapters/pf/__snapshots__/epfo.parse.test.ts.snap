@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseEpfoPassbook > parses the synthetic fixture into canonical events 1`] = `
+[
+  {
+    "amount": "5000.00",
+    "eventDate": "2024-04-01",
+    "memberIdLast4": "2345",
+    "notes": "CR EMPLOYER SHARE",
+    "sequence": 0,
+    "type": "PF_EMPLOYER_CONTRIBUTION",
+  },
+  {
+    "amount": "5000.00",
+    "eventDate": "2024-04-01",
+    "memberIdLast4": "2345",
+    "notes": "CR EMPLOYEE SHARE",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+  {
+    "amount": "4800.00",
+    "eventDate": "2024-02-01",
+    "memberIdLast4": "2345",
+    "notes": "CR EMPLOYER SHARE",
+    "sequence": 0,
+    "type": "PF_EMPLOYER_CONTRIBUTION",
+  },
+  {
+    "amount": "4800.00",
+    "eventDate": "2024-02-01",
+    "memberIdLast4": "2345",
+    "notes": "CR EMPLOYEE SHARE",
+    "sequence": 0,
+    "type": "PF_EMPLOYEE_CONTRIBUTION",
+  },
+]
+`;
