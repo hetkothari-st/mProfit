@@ -265,14 +265,58 @@ export async function updateTransaction(
   if (!existing) throw new NotFoundError('Transaction not found');
   await assertPortfolio(userId, existing.portfolioId);
 
+  const targetPortfolioId = input.portfolioId ?? existing.portfolioId;
+  if (input.portfolioId && input.portfolioId !== existing.portfolioId) {
+    await assertPortfolio(userId, input.portfolioId);
+  }
+
   const merged: CreateTransactionInput = {
-    portfolioId: existing.portfolioId,
-    assetClass: existing.assetClass,
-    transactionType: existing.transactionType,
-    tradeDate: existing.tradeDate.toISOString().slice(0, 10),
-    quantity: existing.quantity.toString(),
-    price: existing.price.toString(),
-    ...input,
+    portfolioId: targetPortfolioId,
+    assetClass: input.assetClass ?? existing.assetClass,
+    transactionType: input.transactionType ?? existing.transactionType,
+    tradeDate: input.tradeDate ?? existing.tradeDate.toISOString().slice(0, 10),
+    settlementDate:
+      input.settlementDate ??
+      (existing.settlementDate ? existing.settlementDate.toISOString().slice(0, 10) : undefined),
+    quantity: input.quantity ?? existing.quantity.toString(),
+    price: input.price ?? existing.price.toString(),
+
+    stockSymbol: input.stockSymbol,
+    stockName: input.stockName,
+    exchange: input.exchange ?? existing.exchange ?? undefined,
+    schemeCode: input.schemeCode,
+    schemeName: input.schemeName,
+    amcName: input.amcName,
+    assetName: input.assetName ?? existing.assetName ?? undefined,
+    isin: input.isin ?? existing.isin ?? undefined,
+
+    brokerage: input.brokerage ?? existing.brokerage.toString(),
+    stt: input.stt ?? existing.stt.toString(),
+    stampDuty: input.stampDuty ?? existing.stampDuty.toString(),
+    exchangeCharges: input.exchangeCharges ?? existing.exchangeCharges.toString(),
+    gst: input.gst ?? existing.gst.toString(),
+    sebiCharges: input.sebiCharges ?? existing.sebiCharges.toString(),
+    otherCharges: input.otherCharges ?? existing.otherCharges.toString(),
+
+    strikePrice:
+      input.strikePrice ?? (existing.strikePrice ? existing.strikePrice.toString() : undefined),
+    expiryDate:
+      input.expiryDate ??
+      (existing.expiryDate ? existing.expiryDate.toISOString().slice(0, 10) : undefined),
+    optionType: input.optionType ?? existing.optionType ?? undefined,
+    lotSize: input.lotSize ?? existing.lotSize ?? undefined,
+    maturityDate:
+      input.maturityDate ??
+      (existing.maturityDate ? existing.maturityDate.toISOString().slice(0, 10) : undefined),
+    interestRate:
+      input.interestRate ??
+      (existing.interestRate ? existing.interestRate.toString() : undefined),
+    interestFrequency: input.interestFrequency ?? existing.interestFrequency ?? undefined,
+
+    broker: input.broker ?? existing.broker ?? undefined,
+    orderNo: input.orderNo ?? existing.orderNo ?? undefined,
+    tradeNo: input.tradeNo ?? existing.tradeNo ?? undefined,
+    narration: input.narration ?? existing.narration ?? undefined,
   };
 
   const qty = d(merged.quantity);
@@ -280,11 +324,36 @@ export async function updateTransaction(
   if (qty.lte(0)) throw new BadRequestError('Quantity must be > 0');
   if (price.lt(0)) throw new BadRequestError('Price cannot be negative');
 
+  // Re-resolve asset refs so changes to assetName/isin/symbol propagate to
+  // stockId/fundId and the computed assetKey.
+  const refs = await resolveAssetRefs(merged);
   const { gross, net } = computeGrossAndNet(merged);
 
+  const isFno = merged.assetClass === 'FUTURES' || merged.assetClass === 'OPTIONS';
+  const newAssetKey =
+    isFno && merged.expiryDate
+      ? computeAssetKey({
+          foUnderlying:
+            merged.stockSymbol ??
+            extractUnderlyingFromAssetName(merged.assetName) ??
+            merged.assetName ??
+            'UNKNOWN',
+          foInstrumentType:
+            merged.assetClass === 'FUTURES' ? 'FUTURES' : merged.optionType ?? 'CALL',
+          foStrikePrice: merged.strikePrice ? String(merged.strikePrice) : null,
+          foExpiryDate: merged.expiryDate,
+        })
+      : computeAssetKey(refs);
+
   const patch: Prisma.TransactionUncheckedUpdateInput = {
+    portfolioId: targetPortfolioId,
     transactionType: merged.transactionType,
     assetClass: merged.assetClass,
+    stockId: refs.stockId,
+    fundId: refs.fundId,
+    assetName: refs.assetName,
+    isin: refs.isin,
+    assetKey: newAssetKey,
     tradeDate: toDateOnly(merged.tradeDate),
     settlementDate: merged.settlementDate ? toDateOnly(merged.settlementDate) : null,
     quantity: qty.toString(),
@@ -298,6 +367,14 @@ export async function updateTransaction(
     sebiCharges: d(merged.sebiCharges).toString(),
     otherCharges: d(merged.otherCharges).toString(),
     netAmount: net.toString(),
+    strikePrice: merged.strikePrice ? d(merged.strikePrice).toString() : null,
+    expiryDate: merged.expiryDate ? toDateOnly(merged.expiryDate) : null,
+    optionType: merged.optionType ?? null,
+    lotSize: merged.lotSize ?? null,
+    maturityDate: merged.maturityDate ? toDateOnly(merged.maturityDate) : null,
+    interestRate: merged.interestRate ? d(merged.interestRate).toString() : null,
+    interestFrequency: merged.interestFrequency ?? null,
+    exchange: merged.exchange ?? null,
     broker: merged.broker ?? null,
     orderNo: merged.orderNo ?? null,
     tradeNo: merged.tradeNo ?? null,
@@ -306,21 +383,24 @@ export async function updateTransaction(
 
   const updated = await prisma.transaction.update({ where: { id }, data: patch });
 
-  // The current update endpoint doesn't mutate stockId/fundId/isin/assetName,
-  // so the assetKey is stable — but fall back to recompute if a row pre-dates
-  // the §4.10 backfill and is somehow still NULL.
-  const assetKey =
-    updated.assetKey ??
+  const oldAssetKey =
+    existing.assetKey ??
     computeAssetKey({
-      stockId: updated.stockId,
-      fundId: updated.fundId,
-      isin: updated.isin,
-      assetName: updated.assetName,
+      stockId: existing.stockId,
+      fundId: existing.fundId,
+      isin: existing.isin,
+      assetName: existing.assetName,
     });
-  await recomputeForAsset(updated.portfolioId, assetKey);
-  // Cascade FIFO recompute for this asset — §5.1 task 10 / BUG-004. Editing
-  // a matched BUY or SELL must not leave stale CapitalGain rows behind.
-  await persistCapitalGainsForAsset(updated.portfolioId, assetKey);
+  const movedAsset = oldAssetKey !== newAssetKey;
+  const movedPortfolio = existing.portfolioId !== updated.portfolioId;
+  if (movedAsset || movedPortfolio) {
+    // Old (portfolio, assetKey) bucket lost a row → recompute so its
+    // projection + capital-gains drop the moved transaction. §5.1 task 10.
+    await recomputeForAsset(existing.portfolioId, oldAssetKey);
+    await persistCapitalGainsForAsset(existing.portfolioId, oldAssetKey);
+  }
+  await recomputeForAsset(updated.portfolioId, newAssetKey);
+  await persistCapitalGainsForAsset(updated.portfolioId, newAssetKey);
 
   return toTransactionDTO(updated);
 }
