@@ -11,7 +11,15 @@ import {
   Trash2,
   Pencil,
   Calculator,
+  Home,
+  Car,
+  GraduationCap,
+  Briefcase,
+  Coins,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -46,16 +54,26 @@ const LOAN_TYPE_LABELS: Record<string, string> = {
   OTHER: 'Other',
 };
 
-const LOAN_TYPE_COLORS: Record<string, string> = {
-  HOME: 'bg-blue-100 text-blue-700',
-  CAR: 'bg-purple-100 text-purple-700',
-  PERSONAL: 'bg-orange-100 text-orange-700',
-  EDUCATION: 'bg-green-100 text-green-700',
-  BUSINESS: 'bg-yellow-100 text-yellow-700',
-  GOLD: 'bg-amber-100 text-amber-700',
-  LAS: 'bg-indigo-100 text-indigo-700',
-  OTHER: 'bg-muted text-muted-foreground',
+interface LoanTypeStyle {
+  icon: LucideIcon;
+  /** Tailwind gradient for the hero banner. */
+  gradient: string;
+}
+
+const LOAN_TYPE_STYLES: Record<string, LoanTypeStyle> = {
+  HOME:      { icon: Home,           gradient: 'from-blue-500 via-blue-600 to-indigo-700' },
+  CAR:       { icon: Car,            gradient: 'from-cyan-500 via-sky-600 to-blue-700' },
+  PERSONAL:  { icon: Wallet,         gradient: 'from-orange-500 via-red-500 to-rose-700' },
+  EDUCATION: { icon: GraduationCap,  gradient: 'from-violet-500 via-purple-600 to-fuchsia-700' },
+  BUSINESS:  { icon: Briefcase,      gradient: 'from-amber-500 via-orange-600 to-red-700' },
+  GOLD:      { icon: Coins,          gradient: 'from-yellow-500 via-amber-500 to-orange-600' },
+  LAS:       { icon: TrendingUp,     gradient: 'from-emerald-500 via-teal-600 to-cyan-700' },
+  OTHER:     { icon: Landmark,       gradient: 'from-slate-600 via-slate-700 to-zinc-800' },
 };
+
+function getLoanStyle(type: string): LoanTypeStyle {
+  return LOAN_TYPE_STYLES[type] ?? LOAN_TYPE_STYLES.OTHER!;
+}
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: 'text-positive',
@@ -134,116 +152,161 @@ function LoanCard({
   onDelete: () => void;
   isDeleting: boolean;
 }) {
-  const principal = new Decimal(loan.principalAmount);
-  // Outstanding approximation: principal (server provides full summary separately)
-  const progressPct = 0; // list page doesn't fetch summary per-card for perf; just show 0 progress bar as placeholder
+  const emiCount = loan.payments.filter((p) => p.paymentType === 'EMI').length;
+  const tenure = loan.tenureMonths || 1;
+  const progressPct = Math.min(100, Math.max(0, (emiCount / tenure) * 100));
 
   const nextEmiDateStr: string | null = (() => {
-    // Compute a rough next EMI date from first EMI date and payments count
     if (loan.status !== 'ACTIVE') return null;
     try {
       const base = new Date(loan.firstEmiDate);
-      const paid = loan.payments.filter((p) => p.paymentType === 'EMI').length;
-      base.setMonth(base.getMonth() + paid);
+      base.setMonth(base.getMonth() + emiCount);
       return base.toISOString().slice(0, 10);
     } catch {
       return null;
     }
   })();
 
+  const style = getLoanStyle(loan.loanType);
+  const TypeIcon = style.icon;
+  const typeLabel = LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType;
+
+  const stop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold truncate">{loan.lenderName}</h3>
-              <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${LOAN_TYPE_COLORS[loan.loanType] ?? 'bg-muted text-muted-foreground'}`}>
-                {LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType}
-              </span>
-            </div>
-            {loan.accountNumber && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                ●●●● {loan.accountNumber.slice(-4)}
-              </p>
-            )}
-            <p className="text-xs text-muted-foreground mt-0.5">{loan.borrowerName}</p>
+    <Link
+      to={`/loans/${loan.id}`}
+      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
+    >
+      <Card className="overflow-hidden group-hover:shadow-lg group-hover:-translate-y-0.5 transition-all duration-200 p-0 cursor-pointer">
+        {/* Hero banner */}
+        <div className={`relative h-28 bg-gradient-to-br ${style.gradient}`}>
+          <TypeIcon
+            className="absolute -right-3 -bottom-3 h-32 w-32 text-white/15"
+            strokeWidth={1.25}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-white/10" />
+          <div className="absolute top-3 right-3 h-9 w-9 rounded-lg bg-white/15 backdrop-blur-sm border border-white/25 flex items-center justify-center">
+            <TypeIcon className="h-5 w-5 text-white" />
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
+          <div className="absolute top-3 left-4 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/95">
+              {typeLabel}
+            </span>
+            {loan.status === 'DEFAULT' && (
+              <span className="text-[10px] font-semibold uppercase tracking-wider rounded bg-red-500/90 text-white px-1.5 py-0.5">
+                Default
+              </span>
+            )}
+            {loan.status === 'CLOSED' && (
+              <span className="text-[10px] font-semibold uppercase tracking-wider rounded bg-white/90 text-black px-1.5 py-0.5">
+                Closed
+              </span>
+            )}
+          </div>
+          <div className="absolute bottom-3 left-4 right-4">
+            <h3 className="font-semibold text-lg text-white truncate drop-shadow-sm">
+              {loan.lenderName}
+            </h3>
+            <div className="flex items-center gap-2 mt-0.5 text-xs text-white/85">
+              {loan.accountNumber && (
+                <span className="tabular-nums">●●●● {loan.accountNumber.slice(-4)}</span>
+              )}
+              {loan.accountNumber && <span className="text-white/50">·</span>}
+              <span className="truncate">{loan.borrowerName}</span>
+            </div>
+          </div>
+        </div>
+
+        <CardContent className="p-5">
+          <div className="flex items-center justify-end gap-1 -mt-1 mb-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={(e) => { stop(e); onEdit(); }}
+              title="Edit"
+            >
               <Pencil className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
               size="sm"
               className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-              onClick={onDelete}
+              onClick={(e) => { stop(e); onDelete(); }}
               disabled={isDeleting}
               title="Delete"
             >
               {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
             </Button>
-            <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
-              <Link to={`/loans/${loan.id}`}>
-                <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
           </div>
-        </div>
 
-        <div className="mt-4 pt-3 border-t space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Principal</span>
-            <span className="font-medium tabular-nums">{formatINR(loan.principalAmount)}</span>
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-muted-foreground">Repaid</span>
-              <span className="font-medium tabular-nums text-positive">
-                {loan.payments.filter((p) => p.paymentType === 'EMI').length} EMIs recorded
-              </span>
+          <div className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-muted-foreground">Principal</span>
+              <span className="font-semibold tabular-nums text-base">{formatINR(loan.principalAmount)}</span>
             </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-positive rounded-full transition-all"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Rate / Tenure</span>
-            <span className="font-medium tabular-nums">
-              {loan.interestRate}% p.a. · {loan.tenureMonths}m
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">EMI</span>
-            <span className="font-medium tabular-nums">{formatINR(loan.emiAmount)}/mo</span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Status</span>
-            <span className={`font-medium capitalize ${STATUS_COLORS[loan.status] ?? ''}`}>
-              {loan.status.toLowerCase()}
-            </span>
-          </div>
-          {nextEmiDateStr && (
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Next EMI</span>
-              <div className="flex items-center gap-1.5">
-                <span className="tabular-nums">{formatDate(nextEmiDateStr)}</span>
-                {emiCountdownBadge(nextEmiDateStr)}
+
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-muted-foreground">Repaid</span>
+                <span className="font-medium tabular-nums">
+                  {emiCount} / {tenure} EMIs <span className="text-muted-foreground">({progressPct.toFixed(0)}%)</span>
+                </span>
+              </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-positive rounded-full transition-all"
+                  style={{ width: `${progressPct}%` }}
+                />
               </div>
             </div>
-          )}
-          {loan.status === 'DEFAULT' && (
-            <div className="mt-2 rounded-md bg-negative/10 px-3 py-1.5 text-xs text-negative font-medium flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Loan in default
+
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-1">
+              <div>
+                <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Rate</p>
+                <p className="font-medium tabular-nums">{loan.interestRate}% p.a.</p>
+              </div>
+              <div className="text-right">
+                <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Tenure</p>
+                <p className="font-medium tabular-nums">{loan.tenureMonths}m</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-[10px] uppercase tracking-wider">EMI</p>
+                <p className="font-medium tabular-nums">{formatINR(loan.emiAmount)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Status</p>
+                <p className={`font-medium capitalize ${STATUS_COLORS[loan.status] ?? ''}`}>
+                  {loan.status.toLowerCase()}
+                </p>
+              </div>
             </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+
+            {nextEmiDateStr && (
+              <div className="flex items-center justify-between text-xs pt-1 border-t">
+                <span className="text-muted-foreground">Next EMI</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="tabular-nums">{formatDate(nextEmiDateStr)}</span>
+                  {emiCountdownBadge(nextEmiDateStr)}
+                </div>
+              </div>
+            )}
+
+            {loan.status === 'DEFAULT' && (
+              <div className="rounded-md bg-negative/10 px-3 py-1.5 text-xs text-negative font-medium flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Loan in default
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
@@ -300,6 +363,7 @@ function CreateLoanDialog({
   // Re-sync form when dialog opens with a different initial loan
   useEffect(() => {
     if (open) {
+      const toDateInput = (v: string | null | undefined) => (v ? v.slice(0, 10) : '');
       setForm({
         lenderName: initial?.lenderName ?? '',
         loanType: initial?.loanType ?? 'HOME',
@@ -310,8 +374,8 @@ function CreateLoanDialog({
         tenureMonths: initial?.tenureMonths ?? 0,
         emiAmount: initial?.emiAmount ?? '',
         emiDueDay: initial?.emiDueDay ?? 1,
-        disbursementDate: initial?.disbursementDate ?? '',
-        firstEmiDate: initial?.firstEmiDate ?? '',
+        disbursementDate: toDateInput(initial?.disbursementDate),
+        firstEmiDate: toDateInput(initial?.firstEmiDate),
         prepaymentOption: initial?.prepaymentOption ?? 'REDUCE_TENURE',
         taxBenefitSection: initial?.taxBenefitSection ?? null,
         status: initial?.status ?? 'ACTIVE',

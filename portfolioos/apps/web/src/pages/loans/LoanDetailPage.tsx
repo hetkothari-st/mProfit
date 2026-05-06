@@ -275,6 +275,7 @@ function EditLoanDialog({
   // Re-sync form when dialog reopens or the underlying loan changes
   useEffect(() => {
     if (open) {
+      const toDateInput = (v: string | null | undefined) => (v ? v.slice(0, 10) : '');
       setForm({
         lenderName: loan.lenderName,
         loanType: loan.loanType,
@@ -285,8 +286,8 @@ function EditLoanDialog({
         tenureMonths: loan.tenureMonths,
         emiAmount: loan.emiAmount,
         emiDueDay: loan.emiDueDay,
-        disbursementDate: loan.disbursementDate,
-        firstEmiDate: loan.firstEmiDate,
+        disbursementDate: toDateInput(loan.disbursementDate),
+        firstEmiDate: toDateInput(loan.firstEmiDate),
         prepaymentOption: loan.prepaymentOption,
         taxBenefitSection: loan.taxBenefitSection ?? null,
         status: loan.status,

@@ -318,6 +318,8 @@ function CreatePolicyDialog({
   // Re-sync form when dialog opens with a different initial policy
   useEffect(() => {
     if (open) {
+      // API returns dates as full ISO timestamps; <Input type="date"> needs YYYY-MM-DD
+      const toDateInput = (v: string | null | undefined) => (v ? v.slice(0, 10) : '');
       setForm({
         insurer: initial?.insurer ?? '',
         policyNumber: initial?.policyNumber ?? '',
@@ -327,9 +329,9 @@ function CreatePolicyDialog({
         sumAssured: initial?.sumAssured ?? '',
         premiumAmount: initial?.premiumAmount ?? '',
         premiumFrequency: (initial?.premiumFrequency as CreatePolicyInput['premiumFrequency']) ?? 'ANNUAL',
-        startDate: initial?.startDate ?? '',
-        maturityDate: initial?.maturityDate ?? '',
-        nextPremiumDue: initial?.nextPremiumDue ?? '',
+        startDate: toDateInput(initial?.startDate),
+        maturityDate: toDateInput(initial?.maturityDate),
+        nextPremiumDue: toDateInput(initial?.nextPremiumDue),
       });
       setErrors({});
       setCatalogId(initial ? inferCatalogId(initial.insurer, initial.planName) : null);
