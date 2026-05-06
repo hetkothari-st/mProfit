@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Loader2, Wallet, Info } from 'lucide-react';
+import { Loader2, Wallet, Info, Wifi } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -15,6 +15,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
+import { pfApi } from '@/api/pf';
 import { apiErrorMessage } from '@/api/client';
 import type { TransactionDTO } from '@portfolioos/shared';
 import type { FormDialogProps } from './FDFormDialog';
@@ -57,9 +58,92 @@ const AMOUNT_HINTS: Record<string, string> = {
   OPENING_BALANCE:   'Enter this once to start tracking',
 };
 
+// ---------------------------------------------------------------------------
+// Auto-fetch sub-form (link UAN to auto-fetch section)
+// ---------------------------------------------------------------------------
+
+function AutoFetchForm({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [uan, setUan] = useState('');
+  const [holderName, setHolderName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [uanError, setUanError] = useState('');
+
+  async function handleLink() {
+    setUanError('');
+    if (!/^\d{12}$/.test(uan)) {
+      setUanError('UAN must be exactly 12 digits');
+      return;
+    }
+    if (!holderName.trim()) return;
+    setSaving(true);
+    try {
+      await pfApi.create({
+        type: 'EPF',
+        institution: 'EPFO',
+        identifier: uan,
+        holderName: holderName.trim(),
+      });
+      toast.success('EPF account linked — use Refresh on the Provident Fund page to fetch data');
+      queryClient.invalidateQueries({ queryKey: ['pf-accounts'] });
+      onClose();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to link account'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4 pt-1">
+      <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3 text-xs text-muted-foreground">
+        <Wifi className="h-4 w-4 inline-block mr-1 text-primary" />
+        Auto-fetch pulls your passbook directly from the EPFO portal. You'll
+        be prompted for your password and any CAPTCHA/OTP the portal requires.
+      </div>
+
+      <div className="space-y-1">
+        <Label>UAN (12 digits) <span className="text-destructive">*</span></Label>
+        <Input
+          value={uan}
+          onChange={(e) => { setUan(e.target.value); setUanError(''); }}
+          placeholder="100XXXXXXXXX"
+          maxLength={12}
+        />
+        {uanError && <p className="text-xs text-destructive">{uanError}</p>}
+      </div>
+
+      <div className="space-y-1">
+        <Label>Holder Name <span className="text-destructive">*</span></Label>
+        <Input
+          value={holderName}
+          onChange={(e) => setHolderName(e.target.value)}
+          placeholder="Full name as per EPFO records"
+        />
+      </div>
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+        <Button
+          type="button"
+          disabled={saving || !uan || !holderName}
+          onClick={() => void handleLink()}
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Link & enable auto-fetch'}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main EPFFormDialog
+// ---------------------------------------------------------------------------
+
 export function EPFFormDialog({ open, onOpenChange, initial, defaultPortfolioId }: FormDialogProps) {
   const queryClient = useQueryClient();
   const isEdit = !!initial;
+  const [mode, setMode] = useState<'manual' | 'autofetch'>('manual');
 
   const { data: portfolios } = useQuery({ queryKey: ['portfolios'], queryFn: portfoliosApi.list });
 
@@ -151,6 +235,42 @@ export function EPFFormDialog({ open, onOpenChange, initial, defaultPortfolioId 
           </DialogTitle>
         </DialogHeader>
 
+        {/* Mode toggle — only show when not editing an existing transaction */}
+        {!isEdit && (
+          <div className="flex border rounded-md overflow-hidden text-sm">
+            <button
+              type="button"
+              className={`flex-1 py-1.5 text-center transition-colors ${
+                mode === 'manual'
+                  ? 'bg-primary text-primary-foreground font-medium'
+                  : 'hover:bg-muted/40'
+              }`}
+              onClick={() => setMode('manual')}
+            >
+              Manual entry
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-1.5 text-center transition-colors border-l ${
+                mode === 'autofetch'
+                  ? 'bg-primary text-primary-foreground font-medium'
+                  : 'hover:bg-muted/40'
+              }`}
+              onClick={() => setMode('autofetch')}
+            >
+              <Wifi className="h-3.5 w-3.5 inline mr-1" />
+              Auto-fetch (UAN)
+            </button>
+          </div>
+        )}
+
+        {/* Auto-fetch mode */}
+        {mode === 'autofetch' && !isEdit && (
+          <AutoFetchForm onClose={() => onOpenChange(false)} />
+        )}
+
+        {/* Manual entry form — existing code */}
+        {(mode === 'manual' || isEdit) && (
         <form onSubmit={handleSubmit((v) => mutation.mutate(v as FormOutput))} className="space-y-4 pt-1">
           {/* Portfolio */}
           <div className="space-y-1">
@@ -250,6 +370,7 @@ export function EPFFormDialog({ open, onOpenChange, initial, defaultPortfolioId 
             </div>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );
