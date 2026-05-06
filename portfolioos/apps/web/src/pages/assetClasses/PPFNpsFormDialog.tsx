@@ -1,6 +1,10 @@
 /**
  * Shared form dialog for PPF and NPS — both are government-backed
  * retirement/savings accounts with similar transaction patterns.
+ *
+ * PPF mode has two tabs:
+ *  - "Manual entry" — add individual transactions (existing behaviour)
+ *  - "Auto-fetch (SBI)" — register an SBI PPF account for server-headless scraping
  */
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -8,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Loader2, BookOpen, ShieldCheck, Info } from 'lucide-react';
+import { Loader2, BookOpen, ShieldCheck, Info, RefreshCw } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -19,6 +23,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
+import { pfApi } from '@/api/pf';
 import { apiErrorMessage } from '@/api/client';
 import type { TransactionDTO, AssetClass } from '@portfolioos/shared';
 import type { FormDialogProps } from './FDFormDialog';
@@ -43,6 +48,99 @@ type FormOutput = z.output<typeof schema>;
 
 interface Props extends FormDialogProps {
   mode: 'PPF' | 'NPS';
+}
+
+// ---------------------------------------------------------------------------
+// SBI auto-fetch sub-form (PPF only)
+// ---------------------------------------------------------------------------
+
+const sbiSchema = z.object({
+  pfAcct: z
+    .string()
+    .regex(/^\d{8,16}$/, 'Enter 8–16 digit PPF account number'),
+  holderName: z.string().min(1, 'Enter account holder name'),
+});
+type SbiFormValues = z.infer<typeof sbiSchema>;
+
+function SbiAutoFetchForm({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<SbiFormValues>({ resolver: zodResolver(sbiSchema) });
+
+  const mutation = useMutation({
+    mutationFn: (v: SbiFormValues) =>
+      pfApi.create({
+        type: 'PPF',
+        institution: 'SBI',
+        identifier: v.pfAcct,
+        holderName: v.holderName,
+      }),
+    onSuccess: () => {
+      toast.success('SBI PPF account linked — click Refresh to fetch passbook');
+      void queryClient.invalidateQueries({ queryKey: ['pf-accounts'] });
+      onClose();
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to link account')),
+  });
+
+  return (
+    <form
+      onSubmit={handleSubmit((v) => mutation.mutate(v))}
+      className="space-y-4 pt-1"
+    >
+      <div className="rounded-lg border border-dashed border-border p-3 bg-muted/20 space-y-1">
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <RefreshCw className="h-3 w-3" />
+          Register your SBI PPF account. After linking, use the{' '}
+          <strong>Refresh</strong> button on the Provident Fund page to fetch
+          your passbook via the SBI net-banking portal.
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <Label>
+          PPF Account Number <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          {...register('pfAcct')}
+          placeholder="e.g. 12345678901"
+          inputMode="numeric"
+        />
+        {errors.pfAcct && (
+          <p className="text-xs text-destructive">{errors.pfAcct.message}</p>
+        )}
+      </div>
+
+      <div className="space-y-1">
+        <Label>
+          Account Holder Name <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          {...register('holderName')}
+          placeholder="Full name as per SBI records"
+        />
+        {errors.holderName && (
+          <p className="text-xs text-destructive">{errors.holderName.message}</p>
+        )}
+      </div>
+
+      <DialogFooter className="pt-2">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            'Link SBI PPF account'
+          )}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
 }
 
 const CONFIG = {
@@ -103,6 +201,13 @@ export function PPFNpsFormDialog({ open, onOpenChange, initial, defaultPortfolio
   const isEdit = !!initial;
   const cfg = CONFIG[mode];
   const IconComp = cfg.icon;
+
+  // PPF-only: tab between manual entry and SBI auto-fetch
+  const [ppfTab, setPpfTab] = useState<'manual' | 'sbi'>('manual');
+  // Reset tab to manual when dialog closes or mode changes
+  useEffect(() => {
+    if (!open) setPpfTab('manual');
+  }, [open]);
 
   const { data: portfolios } = useQuery({ queryKey: ['portfolios'], queryFn: portfoliosApi.list });
 
@@ -197,6 +302,41 @@ export function PPFNpsFormDialog({ open, onOpenChange, initial, defaultPortfolio
           </DialogTitle>
         </DialogHeader>
 
+        {/* PPF-only tab bar — not shown when editing an existing entry */}
+        {mode === 'PPF' && !isEdit && (
+          <div className="flex gap-1 rounded-lg border border-border bg-muted/30 p-1">
+            <button
+              type="button"
+              onClick={() => setPpfTab('manual')}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                ppfTab === 'manual'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Manual entry
+            </button>
+            <button
+              type="button"
+              onClick={() => setPpfTab('sbi')}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                ppfTab === 'sbi'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Auto-fetch (SBI)
+            </button>
+          </div>
+        )}
+
+        {/* SBI auto-fetch tab content */}
+        {mode === 'PPF' && !isEdit && ppfTab === 'sbi' && (
+          <SbiAutoFetchForm onClose={() => onOpenChange(false)} />
+        )}
+
+        {/* Manual entry form — shown for NPS, for PPF-edit, and for PPF manual tab */}
+        {(mode === 'NPS' || isEdit || ppfTab === 'manual') && (
         <form onSubmit={handleSubmit((v) => mutation.mutate(v as FormOutput))} className="space-y-4 pt-1">
           {/* Portfolio */}
           <div className="space-y-1">
@@ -302,6 +442,7 @@ export function PPFNpsFormDialog({ open, onOpenChange, initial, defaultPortfolio
             </div>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );
