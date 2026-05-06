@@ -116,12 +116,5 @@ export async function decryptIdentifier(blob: string): Promise<string> {
  */
 export function last4(s: string): string {
   const digits = s.replace(/\D/g, '');
-  if (digits.length >= 4) {
-    return digits.slice(-4);
-  }
-  if (digits.length > 0) {
-    return digits.slice(-4);
-  }
-  // No digits — fall back to last 4 raw characters
-  return s.slice(-4);
+  return digits.slice(-4) || s.slice(-4);
 }
