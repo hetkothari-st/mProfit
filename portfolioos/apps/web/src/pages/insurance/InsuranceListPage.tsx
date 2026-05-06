@@ -149,36 +149,54 @@ function PolicyCard({
   const catalogId = inferCatalogId(policy.insurer, policy.planName);
   const product = findCatalogProduct(catalogId);
 
+  const stop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <TypeIcon type={policy.type} />
-              <h3 className="font-semibold truncate">{policy.insurer}</h3>
-              <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                {TYPE_LABELS[policy.type] ?? policy.type}
-              </span>
+    <Link
+      to={`/insurance/${policy.id}`}
+      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
+    >
+      <Card className="group-hover:shadow-lg group-hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <TypeIcon type={policy.type} />
+                <h3 className="font-semibold truncate">{policy.insurer}</h3>
+                <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                  {TYPE_LABELS[policy.type] ?? policy.type}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {policy.planName ?? policy.policyHolder} · {policy.policyNumber}
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {policy.planName ?? policy.policyHolder} · {policy.policyNumber}
-            </p>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={(e) => { stop(e); onEdit(); }}
+                title="Edit"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                onClick={(e) => { stop(e); onDelete(); }}
+                disabled={isDeleting}
+                title="Delete"
+              >
+                {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </Button>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} title="Edit">
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={onDelete} disabled={isDeleting} title="Delete">
-              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            </Button>
-            <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
-              <Link to={`/insurance/${policy.id}`}>
-                <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        </div>
 
         {/* Catalog-driven facts + coverage chips + brochure download */}
         {product && (
@@ -276,9 +294,10 @@ function PolicyCard({
               Premium renewal urgent
             </div>
           )}
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
