@@ -85,7 +85,8 @@ model User {
   ownedProperties OwnedProperty[]
 
   // Phase 5-PF — EPF / PPF auto-fetch accounts (§6 EPF/PPF spec).
-  pfAccounts ProvidentFundAccount[]
+  pfAccounts      ProvidentFundAccount[]
+  pfFetchSessions PfFetchSession[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -1081,6 +1082,8 @@ model IngestionFailure {
   resolvedAt     DateTime?
   resolvedAction String?
   createdAt      DateTime  @default(now())
+
+  pfFetchSessions PfFetchSession[]
 
   @@index([userId, resolvedAt])
 }
@@ -2107,6 +2110,9 @@ model ProvidentFundAccount {
   identifierLast4   String
   holderName        String
   branchCode        String?
+  /// Encrypted credential blob written by `pfCredentials.service.ts`.
+  /// Shape: { blob: string }  where `blob` is AES-256-GCM ciphertext (base64).
+  /// NEVER write plaintext credentials here. The application layer is responsible.
   storedCredentials Json?
   credentialsKeyId  String?
 
@@ -2149,18 +2155,20 @@ model PfFetchSession {
   providentFundAccountId String
   account                ProvidentFundAccount @relation(fields: [providentFundAccountId], references: [id], onDelete: Cascade)
   userId                 String
+  user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   source             PfFetchSource
-  status             PfFetchStatus @default(INITIATED)
-  startedAt          DateTime      @default(now())
+  status             PfFetchStatus     @default(INITIATED)
+  startedAt          DateTime          @default(now())
   completedAt        DateTime?
-  captchaAttempts    Int           @default(0)
-  ocrUsed            Boolean       @default(false)
+  captchaAttempts    Int               @default(0)
+  ocrUsed            Boolean           @default(false)
   ocrSucceeded       Boolean?
   rawPayloadRef      String?
-  eventsCreated      Int           @default(0)
+  eventsCreated      Int               @default(0)
   errorMessage       String?
   ingestionFailureId String?
+  ingestionFailure   IngestionFailure? @relation(fields: [ingestionFailureId], references: [id], onDelete: SetNull)
 
   @@index([providentFundAccountId, startedAt])
   @@index([userId, status])
