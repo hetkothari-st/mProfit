@@ -15,6 +15,7 @@ export function FixedDepositsPage() {
         { label: 'Fixed Deposit',     assetClass: 'FIXED_DEPOSIT',     FormComponent: FDFormDialog },
         { label: 'Recurring Deposit', assetClass: 'RECURRING_DEPOSIT', FormComponent: FDFormDialog },
       ]}
+      groupHoldingsByClass
     />
   );
 }

@@ -43,6 +43,11 @@ interface Props {
   computeLiveValue?: (h: HoldingRow & { portfolioName: string }) => string | null;
   liveIndicator?: React.ReactNode;
   onHoldingClick?: (h: HoldingRow & { portfolioName: string }) => void;
+  /** Render one holdings table per asset class (in `assetClasses` order)
+   *  instead of a single combined table. Useful when a section bundles
+   *  multiple distinct products (e.g. FD + RD) and the user wants them
+   *  visually separated. Ignored when only one asset class is present. */
+  groupHoldingsByClass?: boolean;
 }
 
 const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
@@ -79,6 +84,7 @@ export function SimpleAssetPage({
   computeLiveValue,
   liveIndicator,
   onHoldingClick,
+  groupHoldingsByClass,
 }: Props) {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
@@ -288,70 +294,33 @@ export function SimpleAssetPage({
         />
       )}
 
-      {/* Holdings table */}
+      {/* Holdings table — single combined OR one per asset class */}
       {!isLoading && allHoldings.length > 0 && (
-        <div className="rounded-md border overflow-x-auto mb-8">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40">
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Name</th>
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground hidden sm:table-cell">Type</th>
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground hidden md:table-cell">Portfolio</th>
-                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Qty / Units</th>
-                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden sm:table-cell">Avg cost</th>
-                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Invested</th>
-                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden lg:table-cell">Current</th>
-                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden lg:table-cell">P&L</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allHoldings.map((h) => {
-                const pnl =
-                  h.currentValue && h.totalCost
-                    ? new Decimal(h.currentValue).minus(new Decimal(h.totalCost))
-                    : null;
-                return (
-                  <tr
-                    key={h.id}
-                    className={`border-b last:border-0 hover:bg-muted/20 transition-colors ${onHoldingClick ? 'cursor-pointer' : ''}`}
-                    onClick={() => onHoldingClick?.(h)}
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-medium truncate max-w-[180px]">{h.assetName}</p>
-                      {h.isin && <p className="text-xs text-muted-foreground">{h.isin}</p>}
-                    </td>
-                    <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground text-xs">
-                      {ASSET_CLASS_LABELS[h.assetClass as AssetClass] ?? h.assetClass}
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell text-muted-foreground text-xs">
-                      {h.portfolioName}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {new Decimal(h.quantity).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell">
-                      {formatINR(h.avgCostPrice)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-medium">
-                      {formatINR(h.totalCost)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
-                      {h.currentValue ? formatINR(h.currentValue) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
-                      {pnl ? (
-                        <span className={pnl.gte(0) ? 'text-positive' : 'text-negative'}>
-                          {pnl.gte(0) ? '+' : ''}
-                          {formatINR(pnl.toString())}
-                        </span>
-                      ) : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        groupHoldingsByClass && assetClasses.length > 1 ? (
+          <div className="space-y-6 mb-8">
+            {assetClasses.map((ac) => {
+              const rows = allHoldings.filter((h) => h.assetClass === ac);
+              if (rows.length === 0) return null;
+              return (
+                <HoldingsSection
+                  key={ac}
+                  title={ASSET_CLASS_LABELS[ac] ?? ac}
+                  count={rows.length}
+                  holdings={rows}
+                  onHoldingClick={onHoldingClick}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mb-8">
+            <HoldingsSection
+              holdings={allHoldings}
+              onHoldingClick={onHoldingClick}
+              showTypeColumn
+            />
+          </div>
+        )
       )}
 
       {/* Transactions section */}
@@ -489,6 +458,101 @@ export function SimpleAssetPage({
         defaultPortfolioId={portfolios?.[0]?.id}
         defaultAssetClass={activeFormAssetClass}
       />
+    </div>
+  );
+}
+
+function HoldingsSection({
+  title,
+  count,
+  holdings,
+  onHoldingClick,
+  showTypeColumn,
+}: {
+  title?: string;
+  count?: number;
+  holdings: Array<HoldingRow & { portfolioName: string }>;
+  onHoldingClick?: (h: HoldingRow & { portfolioName: string }) => void;
+  showTypeColumn?: boolean;
+}) {
+  return (
+    <div>
+      {title && (
+        <div className="flex items-baseline gap-2 mb-2 px-1">
+          <h3 className="text-sm font-semibold text-foreground/90 uppercase tracking-wider">
+            {title}
+          </h3>
+          {count !== undefined && (
+            <span className="text-xs text-muted-foreground">({count})</span>
+          )}
+        </div>
+      )}
+      <div className="rounded-md border overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/40">
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Name</th>
+              {showTypeColumn && (
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground hidden sm:table-cell">Type</th>
+              )}
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground hidden md:table-cell">Portfolio</th>
+              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Qty / Units</th>
+              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden sm:table-cell">Avg cost</th>
+              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Invested</th>
+              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden lg:table-cell">Current</th>
+              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden lg:table-cell">P&L</th>
+            </tr>
+          </thead>
+          <tbody>
+            {holdings.map((h) => {
+              const pnl =
+                h.currentValue && h.totalCost
+                  ? new Decimal(h.currentValue).minus(new Decimal(h.totalCost))
+                  : null;
+              return (
+                <tr
+                  key={h.id}
+                  className={`border-b last:border-0 hover:bg-muted/20 transition-colors ${onHoldingClick ? 'cursor-pointer' : ''}`}
+                  onClick={() => onHoldingClick?.(h)}
+                >
+                  <td className="px-4 py-3">
+                    <p className="font-medium truncate max-w-[180px]">{h.assetName}</p>
+                    {h.isin && <p className="text-xs text-muted-foreground">{h.isin}</p>}
+                  </td>
+                  {showTypeColumn && (
+                    <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground text-xs">
+                      {ASSET_CLASS_LABELS[h.assetClass as AssetClass] ?? h.assetClass}
+                    </td>
+                  )}
+                  <td className="px-4 py-3 hidden md:table-cell text-muted-foreground text-xs">
+                    {h.portfolioName}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {new Decimal(h.quantity).toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell">
+                    {formatINR(h.avgCostPrice)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-medium">
+                    {formatINR(h.totalCost)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
+                    {h.currentValue ? formatINR(h.currentValue) : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
+                    {pnl ? (
+                      <span className={pnl.gte(0) ? 'text-positive' : 'text-negative'}>
+                        {pnl.gte(0) ? '+' : ''}
+                        {formatINR(pnl.toString())}
+                      </span>
+                    ) : '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
