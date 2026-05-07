@@ -3,9 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { Activity, AlertTriangle, RefreshCw, Loader2, Calendar, TrendingUp, TrendingDown, CheckCircle2, X, KeyRound } from 'lucide-react';
-import { formatINR, toDecimal } from '@portfolioos/shared';
-import { foApi, brokerApi, type FoPosition, type BrokerStatus } from '@/api/fo.api';
+import { Activity, AlertTriangle, RefreshCw, Loader2, Calendar, TrendingUp, TrendingDown, CheckCircle2, X, KeyRound, ChevronRight, ChevronDown } from 'lucide-react';
+import { formatINR, toDecimal, Decimal } from '@portfolioos/shared';
+import { foApi, brokerApi, type FoPosition, type FoTrade, type BrokerStatus } from '@/api/fo.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -328,8 +328,8 @@ export function FuturesOptionsPage() {
         </nav>
       </div>
 
-      {tab === 'open' && <PositionsTable rows={open} />}
-      {tab === 'closed' && <PositionsTable rows={closed} closedView />}
+      {tab === 'open' && <PositionsTable rows={open} trades={tradesQ.data ?? []} />}
+      {tab === 'closed' && <PositionsTable rows={closed} closedView trades={tradesQ.data ?? []} />}
 
       {tab === 'trades' && (
         <Card>
@@ -517,8 +517,82 @@ export function FuturesOptionsPage() {
   );
 }
 
-function PositionsTable({ rows, closedView }: { rows: FoPosition[]; closedView?: boolean }) {
-  if (rows.length === 0) {
+/**
+ * Best-effort underlying extractor for an F&O trade. Trades store the
+ * full instrument string in `assetName` (e.g. "NIFTY 25000 CE 28-APR-2026")
+ * — the leading whitespace-bounded token is the underlying for every
+ * Indian broker we've seen so far.
+ */
+function tradeUnderlying(t: FoTrade): string {
+  const name = (t.assetName ?? '').trim();
+  if (!name) return 'UNKNOWN';
+  return name.split(/\s+/)[0]!.toUpperCase();
+}
+
+interface UnderlyingGroup {
+  underlying: string;
+  positions: FoPosition[];
+  netRealizedPnl: Decimal;
+  netUnrealizedPnl: Decimal;
+  totalCost: Decimal;
+  openContracts: number;
+  closedContracts: number;
+}
+
+function groupByUnderlying(rows: FoPosition[]): UnderlyingGroup[] {
+  const map = new Map<string, UnderlyingGroup>();
+  for (const p of rows) {
+    let g = map.get(p.underlying);
+    if (!g) {
+      g = {
+        underlying: p.underlying,
+        positions: [],
+        netRealizedPnl: new Decimal(0),
+        netUnrealizedPnl: new Decimal(0),
+        totalCost: new Decimal(0),
+        openContracts: 0,
+        closedContracts: 0,
+      };
+      map.set(p.underlying, g);
+    }
+    g.positions.push(p);
+    if (p.realizedPnl) g.netRealizedPnl = g.netRealizedPnl.plus(toDecimal(p.realizedPnl));
+    if (p.unrealizedPnl) g.netUnrealizedPnl = g.netUnrealizedPnl.plus(toDecimal(p.unrealizedPnl));
+    if (p.totalCost) g.totalCost = g.totalCost.plus(toDecimal(p.totalCost));
+    if (p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') g.openContracts++;
+    else g.closedContracts++;
+  }
+  // Largest absolute exposure first, with open contracts breaking ties
+  return [...map.values()].sort((a, b) => {
+    const expDiff = b.totalCost.abs().comparedTo(a.totalCost.abs());
+    if (expDiff !== 0) return expDiff;
+    return b.openContracts - a.openContracts;
+  });
+}
+
+function PositionsTable({
+  rows,
+  closedView,
+  trades,
+}: {
+  rows: FoPosition[];
+  closedView?: boolean;
+  trades: FoTrade[];
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const groups = useMemo(() => groupByUnderlying(rows), [rows]);
+  const tradesByUnderlying = useMemo(() => {
+    const m = new Map<string, FoTrade[]>();
+    for (const t of trades) {
+      const u = tradeUnderlying(t);
+      const arr = m.get(u);
+      if (arr) arr.push(t);
+      else m.set(u, [t]);
+    }
+    return m;
+  }, [trades]);
+
+  if (groups.length === 0) {
     return (
       <EmptyState
         title={closedView ? 'No closed positions' : 'No open F&O positions'}
@@ -530,6 +604,16 @@ function PositionsTable({ rows, closedView }: { rows: FoPosition[]; closedView?:
       />
     );
   }
+
+  function toggle(underlying: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(underlying)) next.delete(underlying);
+      else next.add(underlying);
+      return next;
+    });
+  }
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -537,63 +621,242 @@ function PositionsTable({ rows, closedView }: { rows: FoPosition[]; closedView?:
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr className="text-xs uppercase text-muted-foreground">
+                <th className="w-8 px-2 py-2"></th>
                 <th className="text-left px-3 py-2">Underlying</th>
-                <th className="text-left px-3 py-2">Type</th>
-                <th className="text-right px-3 py-2">Strike</th>
-                <th className="text-left px-3 py-2">Expiry</th>
-                <th className="text-right px-3 py-2">Qty</th>
-                <th className="text-right px-3 py-2">Lot</th>
-                <th className="text-right px-3 py-2">Avg Entry</th>
-                <th className="text-right px-3 py-2">LTP</th>
+                <th className="text-right px-3 py-2">Contracts</th>
+                <th className="text-right px-3 py-2">Total Cost</th>
                 <th className="text-right px-3 py-2">Realized P&L</th>
-                <th className="text-right px-3 py-2">Unrealized</th>
-                <th className="text-left px-3 py-2">Status</th>
+                <th className="text-right px-3 py-2">Unrealized P&L</th>
+                <th className="text-right px-3 py-2">Net P&L</th>
+                <th className="text-right px-3 py-2">Trades</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((p) => (
-                <tr key={p.id} className="border-t">
-                  <td className="px-3 py-2 font-medium">{p.underlying}</td>
-                  <td className="px-3 py-2 text-xs">{p.instrumentType}</td>
-                  <td className="px-3 py-2 text-right">{p.strikePrice ?? '—'}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span>{p.expiryDate}</span>
-                      {p.status === 'OPEN' && <ExpiryBadge iso={p.expiryDate} />}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right">{p.netQuantity}</td>
-                  <td className="px-3 py-2 text-right">{p.lotSize}</td>
-                  <td className="px-3 py-2 text-right">{fmtINR(p.avgEntryPrice)}</td>
-                  <td className="px-3 py-2 text-right">{p.mtmPrice ? fmtINR(p.mtmPrice) : '—'}</td>
-                  <td className={`px-3 py-2 text-right ${pnlClass(p.realizedPnl)}`}>
-                    {fmtINR(p.realizedPnl)}
-                  </td>
-                  <td className={`px-3 py-2 text-right ${pnlClass(p.unrealizedPnl)}`}>
-                    {p.unrealizedPnl ? fmtINR(p.unrealizedPnl) : '—'}
-                  </td>
-                  <td className="px-3 py-2 text-xs">
-                    <span
-                      className={`px-1.5 py-0.5 rounded ${
-                        p.status === 'OPEN'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : p.status === 'PENDING_EXPIRY_APPROVAL'
-                            ? 'bg-amber-100 text-amber-700'
-                            : p.status === 'EXPIRED_WORTHLESS'
-                              ? 'bg-zinc-200 text-zinc-700'
-                              : 'bg-zinc-100 text-zinc-700'
-                      }`}
-                    >
-                      {p.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {groups.map((g) => {
+                const isOpen = expanded.has(g.underlying);
+                const tradesForU = tradesByUnderlying.get(g.underlying) ?? [];
+                const netPnl = g.netRealizedPnl.plus(g.netUnrealizedPnl);
+                return (
+                  <UnderlyingRows
+                    key={g.underlying}
+                    group={g}
+                    isOpen={isOpen}
+                    onToggle={() => toggle(g.underlying)}
+                    netPnl={netPnl}
+                    trades={tradesForU}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function UnderlyingRows({
+  group,
+  isOpen,
+  onToggle,
+  netPnl,
+  trades,
+}: {
+  group: UnderlyingGroup;
+  isOpen: boolean;
+  onToggle: () => void;
+  netPnl: Decimal;
+  trades: FoTrade[];
+}) {
+  const realizedClass = group.netRealizedPnl.isPositive()
+    ? 'text-emerald-600'
+    : group.netRealizedPnl.isNegative()
+      ? 'text-rose-600'
+      : '';
+  const unrealizedClass = group.netUnrealizedPnl.isPositive()
+    ? 'text-emerald-600'
+    : group.netUnrealizedPnl.isNegative()
+      ? 'text-rose-600'
+      : '';
+  const netClass = netPnl.isPositive()
+    ? 'text-emerald-600'
+    : netPnl.isNegative()
+      ? 'text-rose-600'
+      : '';
+
+  return (
+    <>
+      <tr
+        className={`border-t cursor-pointer hover:bg-muted/30 ${isOpen ? 'bg-muted/20' : ''}`}
+        onClick={onToggle}
+      >
+        <td className="px-2 py-2 text-muted-foreground">
+          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </td>
+        <td className="px-3 py-2 font-medium">{group.underlying}</td>
+        <td className="px-3 py-2 text-right text-xs">
+          <span className="text-emerald-700">{group.openContracts} open</span>
+          {group.closedContracts > 0 && (
+            <span className="text-muted-foreground"> · {group.closedContracts} closed</span>
+          )}
+        </td>
+        <td className="px-3 py-2 text-right tabular-nums">{fmtINR(group.totalCost.toString())}</td>
+        <td className={`px-3 py-2 text-right tabular-nums ${realizedClass}`}>
+          {fmtINR(group.netRealizedPnl.toString())}
+        </td>
+        <td className={`px-3 py-2 text-right tabular-nums ${unrealizedClass}`}>
+          {fmtINR(group.netUnrealizedPnl.toString())}
+        </td>
+        <td className={`px-3 py-2 text-right font-semibold tabular-nums ${netClass}`}>
+          {fmtINR(netPnl.toString())}
+        </td>
+        <td className="px-3 py-2 text-right text-xs text-muted-foreground tabular-nums">
+          {trades.length}
+        </td>
+      </tr>
+      {isOpen && (
+        <tr>
+          <td colSpan={8} className="bg-muted/10 p-0">
+            <div className="border-l-2 border-primary/40 ml-4 mr-2 my-2 pl-3 pr-1 py-2 space-y-4">
+              <UnderlyingContracts positions={group.positions} />
+              <UnderlyingTrades trades={trades} />
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function UnderlyingContracts({ positions }: { positions: FoPosition[] }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">
+        Contracts ({positions.length})
+      </div>
+      <div className="overflow-x-auto rounded border bg-background">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/40">
+            <tr className="text-[10px] uppercase text-muted-foreground">
+              <th className="text-left px-2 py-1.5">Type</th>
+              <th className="text-right px-2 py-1.5">Strike</th>
+              <th className="text-left px-2 py-1.5">Expiry</th>
+              <th className="text-right px-2 py-1.5">Net Qty</th>
+              <th className="text-right px-2 py-1.5">Lot</th>
+              <th className="text-right px-2 py-1.5">Avg Entry</th>
+              <th className="text-right px-2 py-1.5">LTP</th>
+              <th className="text-right px-2 py-1.5">Realized</th>
+              <th className="text-right px-2 py-1.5">Unrealized</th>
+              <th className="text-left px-2 py-1.5">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {positions.map((p) => (
+              <tr key={p.id} className="border-t">
+                <td className="px-2 py-1.5 font-medium">{p.instrumentType}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{p.strikePrice ?? '—'}</td>
+                <td className="px-2 py-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span>{p.expiryDate}</span>
+                    {p.status === 'OPEN' && <ExpiryBadge iso={p.expiryDate} />}
+                  </div>
+                </td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{p.netQuantity}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{p.lotSize}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{fmtINR(p.avgEntryPrice)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{p.mtmPrice ? fmtINR(p.mtmPrice) : '—'}</td>
+                <td className={`px-2 py-1.5 text-right tabular-nums ${pnlClass(p.realizedPnl)}`}>
+                  {fmtINR(p.realizedPnl)}
+                </td>
+                <td className={`px-2 py-1.5 text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
+                  {p.unrealizedPnl ? fmtINR(p.unrealizedPnl) : '—'}
+                </td>
+                <td className="px-2 py-1.5">
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      p.status === 'OPEN'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : p.status === 'PENDING_EXPIRY_APPROVAL'
+                          ? 'bg-amber-100 text-amber-700'
+                          : p.status === 'EXPIRED_WORTHLESS'
+                            ? 'bg-zinc-200 text-zinc-700'
+                            : 'bg-zinc-100 text-zinc-700'
+                    }`}
+                  >
+                    {p.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function UnderlyingTrades({ trades }: { trades: FoTrade[] }) {
+  if (trades.length === 0) {
+    return (
+      <div>
+        <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">
+          Transactions
+        </div>
+        <div className="text-xs text-muted-foreground italic">
+          No transactions on file for this underlying.
+        </div>
+      </div>
+    );
+  }
+  const sorted = [...trades].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">
+        Transactions ({trades.length})
+      </div>
+      <div className="overflow-x-auto rounded border bg-background">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/40">
+            <tr className="text-[10px] uppercase text-muted-foreground">
+              <th className="text-left px-2 py-1.5">Date</th>
+              <th className="text-left px-2 py-1.5">Side</th>
+              <th className="text-left px-2 py-1.5">Instrument</th>
+              <th className="text-right px-2 py-1.5">Strike</th>
+              <th className="text-left px-2 py-1.5">Expiry</th>
+              <th className="text-right px-2 py-1.5">Qty</th>
+              <th className="text-right px-2 py-1.5">Price</th>
+              <th className="text-right px-2 py-1.5">Net Amount</th>
+              <th className="text-left px-2 py-1.5">Broker</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((t) => (
+              <tr key={t.id} className="border-t">
+                <td className="px-2 py-1.5 whitespace-nowrap">{t.tradeDate}</td>
+                <td className="px-2 py-1.5">
+                  <span
+                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                      t.transactionType === 'BUY'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-rose-100 text-rose-700'
+                    }`}
+                  >
+                    {t.transactionType}
+                  </span>
+                </td>
+                <td className="px-2 py-1.5 truncate max-w-[260px]">{t.assetName ?? '—'}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
+                <td className="px-2 py-1.5 whitespace-nowrap">{t.expiryDate ?? '—'}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{t.quantity}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{fmtINR(t.price)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{fmtINR(t.netAmount)}</td>
+                <td className="px-2 py-1.5 text-xs text-muted-foreground">{t.broker ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
