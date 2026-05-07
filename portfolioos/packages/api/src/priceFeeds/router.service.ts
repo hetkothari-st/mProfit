@@ -56,6 +56,7 @@ export async function routePriceLookup(input: PriceLookupInput): Promise<Decimal
     case 'GOVT_BOND':
     case 'CORPORATE_BOND':
     case 'FIXED_DEPOSIT':
+    case 'RECURRING_DEPOSIT':
     case 'NPS':
     case 'PPF':
     case 'EPF':

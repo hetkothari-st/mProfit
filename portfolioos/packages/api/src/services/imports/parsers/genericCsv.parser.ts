@@ -94,7 +94,7 @@ function inferAssetClass(row: Record<string, string>): AssetClass {
   const explicit = pick(row, 'assetclass');
   if (explicit) {
     const u = explicit.toUpperCase().replace(/\s+/g, '_');
-    if (['EQUITY', 'FUTURES', 'OPTIONS', 'MUTUAL_FUND', 'ETF', 'BOND', 'FIXED_DEPOSIT', 'GOLD_BOND', 'GOLD_ETF', 'REIT', 'INVIT', 'CRYPTOCURRENCY', 'CASH', 'OTHER'].includes(u)) {
+    if (['EQUITY', 'FUTURES', 'OPTIONS', 'MUTUAL_FUND', 'ETF', 'BOND', 'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'GOLD_BOND', 'GOLD_ETF', 'REIT', 'INVIT', 'CRYPTOCURRENCY', 'CASH', 'OTHER'].includes(u)) {
       return u as AssetClass;
     }
   }

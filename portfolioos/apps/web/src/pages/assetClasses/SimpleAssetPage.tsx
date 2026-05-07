@@ -48,7 +48,7 @@ interface Props {
 const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
   EQUITY: 'Equity', MUTUAL_FUND: 'Mutual Fund', ETF: 'ETF',
   BOND: 'Bond', GOVT_BOND: 'Govt Bond', CORPORATE_BOND: 'Corp Bond',
-  FIXED_DEPOSIT: 'Fixed Deposit',
+  FIXED_DEPOSIT: 'Fixed Deposit', RECURRING_DEPOSIT: 'Recurring Deposit',
   NPS: 'NPS', PPF: 'PPF', EPF: 'EPF',
   PHYSICAL_GOLD: 'Physical Gold', GOLD_BOND: 'Gold Bond', GOLD_ETF: 'Gold ETF',
   PHYSICAL_SILVER: 'Silver',
@@ -487,6 +487,7 @@ export function SimpleAssetPage({
         onOpenChange={handleFormClose}
         initial={editTxn}
         defaultPortfolioId={portfolios?.[0]?.id}
+        defaultAssetClass={activeFormAssetClass}
       />
     </div>
   );

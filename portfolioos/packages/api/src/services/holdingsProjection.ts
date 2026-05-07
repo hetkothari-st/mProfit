@@ -361,9 +361,10 @@ export async function recomputeForAsset(
   } else if (PO_PAYOUT_CLASSES.has(meta.assetClass)) {
     // Interest paid out — principal unchanged; show invested as current value.
     currentValue = agg.totalCost;
-  } else if (meta.assetClass === 'FIXED_DEPOSIT') {
-    // FDs: accrue each deposit at its own rate + frequency. If no rate was
-    // captured, surface principal so the column isn't blank.
+  } else if (meta.assetClass === 'FIXED_DEPOSIT' || meta.assetClass === 'RECURRING_DEPOSIT') {
+    // FDs / RDs: accrue each deposit (or RD installment) at its own rate +
+    // frequency. RD installments are individual DEPOSIT rows; the same
+    // per-row compounding produces the correct maturity projection.
     currentValue = computeFdAccruedValue(meta.txs) ?? agg.totalCost;
   } else {
     price = await currentPriceFor({
@@ -527,7 +528,7 @@ async function refreshPricesForRows(rows: Array<{
 // logic (e.g. the FD branch added later) without requiring the user to edit
 // every holding by hand.
 const ACCRUAL_RECOMPUTE_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
-  'FIXED_DEPOSIT', 'NSC', 'KVP', 'POST_OFFICE_TD', 'SSY', 'POST_OFFICE_RD',
+  'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'NSC', 'KVP', 'POST_OFFICE_TD', 'SSY', 'POST_OFFICE_RD',
 ]);
 
 async function recomputeAccrualProjections(

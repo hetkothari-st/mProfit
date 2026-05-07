@@ -21,6 +21,7 @@ export const ASSET_CLASS_LABELS: Record<string, string> = {
   GOVT_BOND: 'Govt Bond',
   CORPORATE_BOND: 'Corporate Bond',
   FIXED_DEPOSIT: 'Fixed Deposit',
+  RECURRING_DEPOSIT: 'Recurring Deposit',
   NPS: 'NPS',
   PPF: 'PPF',
   EPF: 'EPF',

@@ -575,7 +575,7 @@ export async function suggestVoucherForTransaction(userId: string, transactionId
     const ac = txn.assetClass;
     if (ac === 'EQUITY' || ac === 'ETF') return equityAcct;
     if (ac === 'MUTUAL_FUND') return mfAcct;
-    if (ac === 'FIXED_DEPOSIT') return fdAcct;
+    if (ac === 'FIXED_DEPOSIT' || ac === 'RECURRING_DEPOSIT') return fdAcct;
     if (ac === 'BOND' || ac === 'GOVT_BOND' || ac === 'CORPORATE_BOND') return bondsAcct;
     if (ac === 'PHYSICAL_GOLD' || ac === 'GOLD_BOND' || ac === 'GOLD_ETF') return goldAcct;
     return null;
