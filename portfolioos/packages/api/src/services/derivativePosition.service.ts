@@ -330,7 +330,14 @@ export async function refreshAllDerivativePositionPrices(): Promise<{ updated: n
 export async function refreshLiveDerivativePositionPrices(opts?: {
   userId?: string;
   portfolioId?: string;
-}): Promise<{ updated: number; total: number }> {
+}): Promise<{
+  updated: number;
+  total: number;
+  /** Sample of position assetKeys for which NSE returned no live LTP — for UI diagnostics. */
+  missedKeys: string[];
+  /** Sample of (assetKey, ltp) pairs that did match — proves NSE is reachable. */
+  sampleHits: Array<{ assetKey: string; ltp: number }>;
+}> {
   const where: Prisma.DerivativePositionWhereInput = { status: 'OPEN' };
   if (opts?.userId) where.userId = opts.userId;
   if (opts?.portfolioId) where.portfolioId = opts.portfolioId;
@@ -339,17 +346,24 @@ export async function refreshLiveDerivativePositionPrices(opts?: {
     where,
     select: { id: true, assetKey: true, openLots: true },
   });
-  if (positions.length === 0) return { updated: 0, total: 0 };
+  if (positions.length === 0) {
+    return { updated: 0, total: 0, missedKeys: [], sampleHits: [] };
+  }
 
   // Pre-warm the NSE cache: one fetch per distinct underlying.
   const positionKeys = positions.map((p) => p.assetKey);
   const liveMap = await getLiveFoPricesBatch(positionKeys);
+  const missed = positionKeys.filter((k) => !liveMap.has(k));
+  const sampleHits = Array.from(liveMap.entries()).slice(0, 3).map(([assetKey, ltp]) => ({
+    assetKey,
+    ltp,
+  }));
   logger.info(
     {
       total: positions.length,
       liveHits: liveMap.size,
-      missed: positionKeys.filter((k) => !liveMap.has(k)).slice(0, 5),
-      sampleHit: Array.from(liveMap.entries()).slice(0, 3),
+      missed: missed.slice(0, 5),
+      sampleHits,
     },
     '[fno] live refresh — assetKey match summary',
   );
@@ -384,5 +398,10 @@ export async function refreshLiveDerivativePositionPrices(opts?: {
     });
     updated += 1;
   }
-  return { updated, total: positions.length };
+  return {
+    updated,
+    total: positions.length,
+    missedKeys: missed.slice(0, 10),
+    sampleHits,
+  };
 }

@@ -77,12 +77,37 @@ interface NseQuoteDerivativeResponse {
     metadata?: {
       instrumentType?: string; // 'Index Futures' | 'Stock Futures' | 'Index Options' | 'Stock Options'
       expiryDate?: string;     // 'DD-MMM-YYYY'
-      optionType?: string;     // 'Call' | 'Put'
+      optionType?: string;     // 'Call' | 'Put' | '-'
       strikePrice?: number;
       lastPrice?: number;
+      closePrice?: number;
+      prevClose?: number;
       identifier?: string;
     };
+    /** Some NSE deployments tuck the live trade in a sub-object instead of metadata. */
+    marketDeptOrderBook?: {
+      tradeInfo?: {
+        lastPrice?: number;
+        closePrice?: number;
+      };
+    };
   }>;
+}
+
+function pickLtp(s: NonNullable<NseQuoteDerivativeResponse['stocks']>[number]): number | null {
+  const md = s.metadata;
+  const order = s.marketDeptOrderBook?.tradeInfo;
+  const candidates = [
+    md?.lastPrice,
+    order?.lastPrice,
+    md?.closePrice,
+    order?.closePrice,
+    md?.prevClose,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c) && c > 0) return c;
+  }
+  return null;
 }
 
 const MONTH_TO_NUM: Record<string, string> = {
@@ -163,10 +188,12 @@ async function fetchUnderlyingSnapshot(underlying: string): Promise<UnderlyingSn
   if (res.statusCode === 401 || res.statusCode === 403) {
     session = null;
     await res.body.dump();
+    logger.warn({ underlying, statusCode: res.statusCode }, '[nseLiveFo] auth/forbidden — session reset');
     return null;
   }
   if (res.statusCode !== 200) {
     await res.body.dump();
+    logger.warn({ underlying, statusCode: res.statusCode }, '[nseLiveFo] unexpected status');
     return null;
   }
 
@@ -181,14 +208,28 @@ async function fetchUnderlyingSnapshot(underlying: string): Promise<UnderlyingSn
     if (!expiry) continue;
     const key = buildAssetKey(underlying, md.instrumentType, expiry, md.optionType, md.strikePrice);
     if (!key) continue;
-    const ltp = md.lastPrice;
-    if (typeof ltp !== 'number' || !Number.isFinite(ltp)) continue;
+    const ltp = pickLtp(s);
+    if (ltp == null) continue;
     // First non-zero wins; NSE often returns multiple rows for the same
     // contract (different segments), only one of which has a real LTP.
     const existing = byAssetKey.get(key);
     if (existing === undefined || (existing === 0 && ltp > 0)) {
       byAssetKey.set(key, ltp);
     }
+  }
+
+  if (byAssetKey.size === 0 && stocks.length > 0) {
+    // Diagnostic: parsed nothing despite NSE returning rows. Dump the first
+    // few raw metadata blocks so we can see exactly what the upstream
+    // shape is on this account / region.
+    logger.warn(
+      {
+        underlying,
+        stocksTotal: stocks.length,
+        sampleMetadata: stocks.slice(0, 2).map((s) => s.metadata),
+      },
+      '[nseLiveFo] zero contracts parsed — shape mismatch',
+    );
   }
 
   logger.debug(

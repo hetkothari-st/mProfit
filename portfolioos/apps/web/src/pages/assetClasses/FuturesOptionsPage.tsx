@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
@@ -155,16 +155,42 @@ export function FuturesOptionsPage() {
     updated: number;
     total: number;
     at: number;
+    missedKeys: string[];
+    sampleHits: Array<{ assetKey: string; ltp: number }>;
   } | null>(null);
 
   const liveRefreshMut = useMutation({
     mutationFn: () => foApi.refreshLive(portfolioId),
     onSuccess: (r) => {
-      setLiveStatus({ updated: r.updated, total: r.total, at: Date.now() });
+      setLiveStatus({
+        updated: r.updated,
+        total: r.total,
+        at: Date.now(),
+        missedKeys: r.missedKeys ?? [],
+        sampleHits: r.sampleHits ?? [],
+      });
       queryClient.invalidateQueries({ queryKey: ['fo', 'positions'] });
       queryClient.invalidateQueries({ queryKey: ['fo', 'summary'] });
     },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, 'Live refresh failed'));
+    },
   });
+
+  // Once per page lifetime tell the user when nothing matches — typical when
+  // NSE blocks the host or every assetKey shape diverges.
+  const reportedZeroRef = useRef(false);
+  useEffect(() => {
+    if (!liveStatus) return;
+    if (liveStatus.total > 0 && liveStatus.updated === 0 && !reportedZeroRef.current) {
+      reportedZeroRef.current = true;
+      const hint =
+        liveStatus.sampleHits.length === 0
+          ? 'NSE returned no live data — check API logs (host may be IP-blocked, or markets are closed).'
+          : 'AssetKey shape mismatch — open API logs to see missed keys.';
+      toast(`Live feed: 0/${liveStatus.total} matched. ${hint}`, { duration: 8000 });
+    }
+  }, [liveStatus]);
 
   useEffect(() => {
     if (!portfolioId) return;
