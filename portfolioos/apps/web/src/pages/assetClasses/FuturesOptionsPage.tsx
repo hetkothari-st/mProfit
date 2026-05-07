@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
@@ -695,7 +695,7 @@ function SplitFoTables({
  */
 function tradesForPosition(p: FoPosition, all: FoTrade[]): FoTrade[] {
   return all.filter((t) => {
-    const u = tradeUnderlying(t);
+    const u = tradeUnderlyingOf(t);
     if (u !== p.underlying) return false;
     if ((t.expiryDate ?? '') !== p.expiryDate) return false;
     if (p.instrumentType === 'FUTURES') {
@@ -1018,7 +1018,13 @@ function UnderlyingTrades({ trades }: { trades: FoTrade[] }) {
 
 /* ───────────────────────────── Futures Ledger ───────────────────────────── */
 
-function FuturesLedger({ positions }: { positions: FoPosition[] }) {
+function FuturesLedger({
+  positions,
+  trades,
+}: {
+  positions: FoPosition[];
+  trades: FoTrade[];
+}) {
   const sorted = useMemo(
     () =>
       [...positions].sort((a, b) => {
@@ -1028,6 +1034,15 @@ function FuturesLedger({ positions }: { positions: FoPosition[] }) {
       }),
     [positions],
   );
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  function toggle(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const totals = useMemo(() => {
     let cost = new Decimal(0);
@@ -1079,7 +1094,8 @@ function FuturesLedger({ positions }: { positions: FoPosition[] }) {
         <table className="w-full text-sm">
           <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-              <th className="text-left pl-4 pr-2 py-2 font-semibold">Contract</th>
+              <th className="w-8 pl-3 pr-1 py-2"></th>
+              <th className="text-left pl-1 pr-2 py-2 font-semibold">Contract</th>
               <th className="text-left px-3 py-2 font-semibold">Side</th>
               <th className="text-left px-3 py-2 font-semibold">Expiry</th>
               <th className="text-right px-3 py-2 font-semibold">Net Qty</th>
@@ -1097,12 +1113,18 @@ function FuturesLedger({ positions }: { positions: FoPosition[] }) {
               const qty = toDecimal(p.netQuantity);
               const long = qty.isPositive();
               const short = qty.isNegative();
+              const isOpen = expanded.has(p.id);
+              const tradesForThis = tradesForPosition(p, trades);
               return (
+                <Fragment key={p.id}>
                 <tr
-                  key={p.id}
-                  className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
+                  className={`border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors cursor-pointer ${isOpen ? 'bg-muted/30 dark:bg-muted/15' : ''}`}
+                  onClick={() => toggle(p.id)}
                 >
-                  <td className="relative pl-4 pr-2 py-2.5">
+                  <td className="pl-3 pr-1 py-2.5 text-muted-foreground">
+                    {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </td>
+                  <td className="relative pl-1 pr-2 py-2.5">
                     <span
                       className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
                         long
@@ -1166,6 +1188,17 @@ function FuturesLedger({ positions }: { positions: FoPosition[] }) {
                     <StatusPill status={p.status} />
                   </td>
                 </tr>
+                {isOpen && (
+                  <tr className="bg-muted/15 dark:bg-muted/10">
+                    <td colSpan={12} className="px-4 py-3 font-sans">
+                      <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
+                        Transactions ({tradesForThis.length})
+                      </div>
+                      <ContractTrades trades={tradesForThis} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -1177,7 +1210,13 @@ function FuturesLedger({ positions }: { positions: FoPosition[] }) {
 
 /* ─────────────────────────── Options Chain ──────────────────────────────── */
 
-function OptionsChain({ positions }: { positions: FoPosition[] }) {
+function OptionsChain({
+  positions,
+  trades,
+}: {
+  positions: FoPosition[];
+  trades: FoTrade[];
+}) {
   const sorted = useMemo(
     () =>
       [...positions].sort((a, b) => {
@@ -1207,6 +1246,16 @@ function OptionsChain({ positions }: { positions: FoPosition[] }) {
     }
     return { cost, realized, unrealized, net: realized.plus(unrealized), ce, pe };
   }, [sorted]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  function toggle(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <Card className="overflow-hidden border-border">
@@ -1253,7 +1302,8 @@ function OptionsChain({ positions }: { positions: FoPosition[] }) {
         <table className="w-full text-sm">
           <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-              <th className="text-left pl-4 pr-2 py-2 font-semibold">Underlying</th>
+              <th className="w-8 pl-3 pr-1 py-2"></th>
+              <th className="text-left pl-1 pr-2 py-2 font-semibold">Underlying</th>
               <th className="text-left px-2 py-2 font-semibold">Type</th>
               <th className="text-right px-3 py-2 font-semibold">Strike</th>
               <th className="text-center px-2 py-2 font-semibold">Payoff</th>
@@ -1272,12 +1322,18 @@ function OptionsChain({ positions }: { positions: FoPosition[] }) {
             {sorted.map((p) => {
               const qty = toDecimal(p.netQuantity);
               const isCall = p.instrumentType === 'CALL';
+              const isOpen = expanded.has(p.id);
+              const tradesForThis = tradesForPosition(p, trades);
               return (
+                <Fragment key={p.id}>
                 <tr
-                  key={p.id}
-                  className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
+                  className={`border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors cursor-pointer ${isOpen ? 'bg-muted/30 dark:bg-muted/15' : ''}`}
+                  onClick={() => toggle(p.id)}
                 >
-                  <td className="relative pl-4 pr-2 py-2.5">
+                  <td className="pl-3 pr-1 py-2.5 text-muted-foreground">
+                    {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </td>
+                  <td className="relative pl-1 pr-2 py-2.5">
                     <span
                       className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
                         isCall
@@ -1344,6 +1400,17 @@ function OptionsChain({ positions }: { positions: FoPosition[] }) {
                     <StatusPill status={p.status} />
                   </td>
                 </tr>
+                {isOpen && (
+                  <tr className="bg-muted/15 dark:bg-muted/10">
+                    <td colSpan={14} className="px-4 py-3 font-sans">
+                      <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
+                        Transactions ({tradesForThis.length})
+                      </div>
+                      <ContractTrades trades={tradesForThis} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
