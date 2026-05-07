@@ -207,12 +207,20 @@ async function classifyPending(scanJobId: string): Promise<void> {
           queue.length = 0;
           return;
         }
+        // LLM failed/disabled — surface for manual review and count as kept
         await prisma.gmailDiscoveredDoc.update({
           where: { id: doc.id },
           data: {
             classifierNotes: `${cls.reason}: ${cls.message}`,
             status: 'PENDING_APPROVAL',
             isFinancial: null,
+          },
+        });
+        await prisma.gmailScanJob.update({
+          where: { id: scanJobId },
+          data: {
+            attachmentsClassified: { increment: 1 },
+            attachmentsKept: { increment: 1 },
           },
         });
         continue;

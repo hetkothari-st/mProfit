@@ -31,6 +31,16 @@ export function InboxImportsTab() {
   const [preview, setPreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  // Define scansQ first so runningScan drives docsQ's refetchInterval
+  const scansQ = useQuery({
+    queryKey: ['gmail-scan-jobs'],
+    queryFn: () => gmailScanApi.listScans(),
+    refetchInterval: 5000,
+  });
+  const runningScan = (scansQ.data ?? []).find((s) =>
+    ['PENDING', 'LISTING', 'DOWNLOADING', 'CLASSIFYING'].includes(s.status),
+  );
+
   const docsQ = useQuery({
     queryKey: ['gmail-discovered-docs', statusFilter, senderFilter, docTypeFilter],
     queryFn: () =>
@@ -40,23 +50,20 @@ export function InboxImportsTab() {
         docType: docTypeFilter || undefined,
         limit: 200,
       }),
-    refetchInterval: (query) =>
-      query.state.data?.some((d) => d.status === 'CLASSIFYING' || d.status === 'IMPORTING') ? 3000 : false,
+    // Poll while scan running so docs appear as they're classified, without
+    // waiting for a manual refresh or switching to the "All" status filter.
+    refetchInterval: runningScan
+      ? 3000
+      : (query) =>
+          query.state.data?.some((d) => d.status === 'CLASSIFYING' || d.status === 'IMPORTING')
+            ? 3000
+            : false,
   });
 
   const sendersQ = useQuery({
     queryKey: ['gmail-discovered-senders'],
     queryFn: () => gmailScanApi.listSenders(),
   });
-
-  const scansQ = useQuery({
-    queryKey: ['gmail-scan-jobs'],
-    queryFn: () => gmailScanApi.listScans(),
-    refetchInterval: 5000,
-  });
-  const runningScan = (scansQ.data ?? []).find((s) =>
-    ['PENDING', 'LISTING', 'DOWNLOADING', 'CLASSIFYING'].includes(s.status),
-  );
 
   const approve = useMutation({
     mutationFn: (input: { id: string; createRule: boolean }) =>
@@ -106,10 +113,19 @@ export function InboxImportsTab() {
   const progressLine = useMemo(() => {
     if (!runningScan) return null;
     const total = runningScan.totalMessages ?? 0;
+    const kept = runningScan.attachmentsKept ?? 0;
     return total
-      ? `Scanning your inbox — ${runningScan.processedMessages.toLocaleString()} / ${total.toLocaleString()} • ${runningScan.attachmentsKept} financial documents found`
-      : `Scanning your inbox — ${runningScan.processedMessages.toLocaleString()} messages so far`;
+      ? `Scanning your inbox — ${runningScan.processedMessages.toLocaleString()} / ${total.toLocaleString()} messages • ${kept} document${kept !== 1 ? 's' : ''} pending review`
+      : `Scanning your inbox — ${runningScan.processedMessages.toLocaleString()} messages scanned so far`;
   }, [runningScan]);
+
+  const TAB_FILTERS: Array<{ value: 'ALL' | GmailDocStatus; label: string }> = [
+    { value: STATUS.PENDING_APPROVAL, label: 'Pending review' },
+    { value: STATUS.APPROVED, label: 'Approved' },
+    { value: STATUS.IMPORTED, label: 'Imported' },
+    { value: STATUS.PARSE_FAILED, label: 'Parse failed' },
+    { value: 'ALL', label: 'All' },
+  ];
 
   return (
     <div className="space-y-3">
@@ -120,17 +136,27 @@ export function InboxImportsTab() {
         </div>
       )}
 
+      {/* Status tabs */}
+      <div className="flex flex-wrap gap-1.5">
+        {TAB_FILTERS.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => setStatusFilter(t.value)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              statusFilter === t.value
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background border-input text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <Card>
         <CardContent className="p-3 flex flex-wrap items-center gap-2">
-          <Select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'ALL' | GmailDocStatus)}
-            className="h-8 text-xs w-44"
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </Select>
+          {/* Extra filters: sender + doc type */}
           <Select
             value={senderFilter}
             onChange={(e) => setSenderFilter(e.target.value)}
