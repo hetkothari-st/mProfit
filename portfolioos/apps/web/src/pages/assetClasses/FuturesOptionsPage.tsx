@@ -542,14 +542,17 @@ export function FuturesOptionsPage() {
    without reading the title. */
 
 function FuturesGlyph({ className = '' }: { className?: string }) {
+  // Stacked lots on a baseline — depicts standardized linear contracts.
+  // Theme-tone fills so the glyph reads as part of the editorial palette
+  // rather than a candy-bright accent.
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="2" y="6" width="3.5" height="11" className="fill-sky-500/40 dark:fill-sky-400/40" />
-      <rect x="7.25" y="3" width="3.5" height="14" className="fill-sky-600/55 dark:fill-sky-300/55" />
-      <rect x="12.5" y="9" width="3.5" height="8" className="fill-sky-500/40 dark:fill-sky-400/40" />
-      <rect x="17.75" y="5" width="3.5" height="12" className="fill-sky-700/55 dark:fill-sky-300/65" />
-      <line x1="1.5" y1="18.5" x2="22.5" y2="18.5" className="stroke-sky-700/70 dark:stroke-sky-300/70" strokeWidth="0.7" />
-      <line x1="1.5" y1="20.5" x2="22.5" y2="20.5" className="stroke-sky-700/30 dark:stroke-sky-300/30" strokeWidth="0.4" />
+      <rect x="2" y="6" width="3.5" height="11" className="fill-accent/45 dark:fill-accent/40" />
+      <rect x="7.25" y="3" width="3.5" height="14" className="fill-accent/70 dark:fill-accent/65" />
+      <rect x="12.5" y="9" width="3.5" height="8" className="fill-accent/45 dark:fill-accent/40" />
+      <rect x="17.75" y="5" width="3.5" height="12" className="fill-accent/85 dark:fill-accent/80" />
+      <line x1="1.5" y1="18.5" x2="22.5" y2="18.5" className="stroke-foreground/60" strokeWidth="0.7" />
+      <line x1="1.5" y1="20.5" x2="22.5" y2="20.5" className="stroke-foreground/25" strokeWidth="0.4" />
     </svg>
   );
 }
@@ -678,10 +681,80 @@ function SplitFoTables({
 
   return (
     <div className="space-y-5">
-      {futures.length > 0 && <FuturesLedger positions={futures} />}
-      {options.length > 0 && <OptionsChain positions={options} />}
-      <UnderlyingActivity positions={rows} trades={trades} />
+      {futures.length > 0 && <FuturesLedger positions={futures} trades={trades} />}
+      {options.length > 0 && <OptionsChain positions={options} trades={trades} />}
       {trades.length > 0 && <TapeSection trades={trades} limit={50} />}
+    </div>
+  );
+}
+
+/**
+ * Match every trade in `all` that belongs to the same contract as `p`.
+ * Futures: same underlying + expiry, no strike, no optionType.
+ * Options: same underlying + expiry + strike + Call/Put.
+ */
+function tradesForPosition(p: FoPosition, all: FoTrade[]): FoTrade[] {
+  return all.filter((t) => {
+    const u = tradeUnderlying(t);
+    if (u !== p.underlying) return false;
+    if ((t.expiryDate ?? '') !== p.expiryDate) return false;
+    if (p.instrumentType === 'FUTURES') {
+      return !t.strikePrice && !t.optionType;
+    }
+    const tStrike = t.strikePrice ? Number(t.strikePrice) : 0;
+    const pStrike = p.strikePrice ? Number(p.strikePrice) : 0;
+    if (tStrike !== pStrike) return false;
+    const tType = t.optionType === 'PUT' ? 'PUT' : 'CALL';
+    return tType === p.instrumentType;
+  });
+}
+
+/** Compact trades table rendered inside an expanded contract row. */
+function ContractTrades({ trades }: { trades: FoTrade[] }) {
+  if (trades.length === 0) {
+    return (
+      <div className="text-xs text-muted-foreground italic py-2">
+        No transactions on file for this contract.
+      </div>
+    );
+  }
+  const sorted = [...trades].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
+  return (
+    <div className="overflow-x-auto rounded border border-border bg-background/60">
+      <table className="w-full text-xs">
+        <thead className="bg-muted/40">
+          <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            <th className="text-left px-2.5 py-1.5 font-semibold">Date</th>
+            <th className="text-left px-2.5 py-1.5 font-semibold">Side</th>
+            <th className="text-right px-2.5 py-1.5 font-semibold">Qty</th>
+            <th className="text-right px-2.5 py-1.5 font-semibold">Price</th>
+            <th className="text-right px-2.5 py-1.5 font-semibold">Net</th>
+            <th className="text-left px-2.5 py-1.5 font-semibold">Broker</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((t) => (
+            <tr key={t.id} className="border-t border-border/60">
+              <td className="px-2.5 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">{t.tradeDate}</td>
+              <td className="px-2.5 py-1.5">
+                <span
+                  className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                    t.transactionType === 'BUY'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                  }`}
+                >
+                  {t.transactionType}
+                </span>
+              </td>
+              <td className="px-2.5 py-1.5 text-right tabular-nums">{t.quantity}</td>
+              <td className="px-2.5 py-1.5 text-right tabular-nums">{fmtINR(t.price)}</td>
+              <td className="px-2.5 py-1.5 text-right tabular-nums font-medium">{fmtINR(t.netAmount)}</td>
+              <td className="px-2.5 py-1.5 text-xs text-muted-foreground">{t.broker ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -969,26 +1042,26 @@ function FuturesLedger({ positions }: { positions: FoPosition[] }) {
   }, [sorted]);
 
   return (
-    <Card className="overflow-hidden ring-1 ring-sky-200/70 dark:ring-sky-700/40 border-sky-100 dark:border-sky-900/40">
-      {/* Header — graph-paper backdrop telegraphs the time-grid nature of futures lots */}
-      <div className="relative border-b border-sky-200/70 dark:border-sky-700/40">
+    <Card className="overflow-hidden border-border">
+      {/* Header — graph-paper backdrop in foreground tone telegraphs the time-grid nature of futures lots */}
+      <div className="relative border-b border-border">
         <div
-          className="absolute inset-0 opacity-[0.08] dark:opacity-[0.14] pointer-events-none text-sky-700 dark:text-sky-300"
+          className="absolute inset-0 opacity-[0.06] dark:opacity-[0.10] pointer-events-none text-foreground"
           style={{
             backgroundImage:
               'repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 18px), repeating-linear-gradient(0deg, currentColor 0 1px, transparent 1px 16px)',
           }}
         />
-        <div className="relative flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-sky-50/80 via-slate-50/30 to-sky-50/80 dark:from-sky-950/50 dark:via-slate-900/30 dark:to-sky-950/50">
+        <div className="relative flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-muted/40 via-card to-muted/40 dark:from-muted/30 dark:via-card dark:to-muted/30">
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center justify-center h-9 w-9 rounded-md bg-sky-600/10 dark:bg-sky-400/10 ring-1 ring-sky-300/60 dark:ring-sky-500/40">
+            <span className="inline-flex items-center justify-center h-9 w-9 rounded-md bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/30 dark:ring-accent/40">
               <FuturesGlyph className="h-5 w-5" />
             </span>
             <div>
-              <div className="text-[11px] uppercase tracking-[0.2em] text-sky-800 dark:text-sky-200 font-semibold">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold">
                 Futures Ledger
               </div>
-              <div className="text-[10px] uppercase tracking-wider text-sky-700/70 dark:text-sky-300/70">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                 Standardized linear contracts · {sorted.length}{' '}
                 {sorted.length === 1 ? 'position' : 'positions'}
               </div>
@@ -1004,8 +1077,8 @@ function FuturesLedger({ positions }: { positions: FoPosition[] }) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-sky-50/60 dark:bg-sky-950/30 border-b border-sky-200/60 dark:border-sky-800/40">
-            <tr className="text-[10px] uppercase tracking-[0.12em] text-sky-900/80 dark:text-sky-200/80">
+          <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
+            <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-4 pr-2 py-2 font-semibold">Contract</th>
               <th className="text-left px-3 py-2 font-semibold">Side</th>
               <th className="text-left px-3 py-2 font-semibold">Expiry</th>
@@ -1027,7 +1100,7 @@ function FuturesLedger({ positions }: { positions: FoPosition[] }) {
               return (
                 <tr
                   key={p.id}
-                  className="border-t border-sky-100/70 dark:border-sky-900/40 hover:bg-sky-50/50 dark:hover:bg-sky-950/30 transition-colors"
+                  className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
                 >
                   <td className="relative pl-4 pr-2 py-2.5">
                     <span
@@ -1036,11 +1109,11 @@ function FuturesLedger({ positions }: { positions: FoPosition[] }) {
                           ? 'bg-emerald-500/85 dark:bg-emerald-400/80'
                           : short
                             ? 'bg-rose-500/85 dark:bg-rose-400/80'
-                            : 'bg-sky-300/60'
+                            : 'bg-border'
                       }`}
                     />
                     <span className="font-semibold tracking-wide text-foreground">{p.underlying}</span>
-                    <span className="ml-1.5 text-[10px] text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/50 ring-1 ring-sky-200/60 dark:ring-sky-700/40 rounded px-1 py-0.5 font-sans uppercase tracking-wider">
+                    <span className="ml-1.5 text-[10px] text-foreground/80 bg-muted ring-1 ring-border rounded px-1 py-0.5 font-sans uppercase tracking-wider">
                       FUT
                     </span>
                   </td>
@@ -1529,7 +1602,7 @@ function LiveStatusChip({
 function ContractTypeBadge({ instrumentType }: { instrumentType: 'FUTURES' | 'CALL' | 'PUT' }) {
   if (instrumentType === 'FUTURES') {
     return (
-      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-sky-100 text-sky-700 ring-1 ring-sky-200/60 dark:bg-sky-900/40 dark:text-sky-300 dark:ring-sky-700/40">
+      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-muted text-foreground/80 ring-1 ring-border">
         <Layers className="h-2.5 w-2.5" /> FUT
       </span>
     );
