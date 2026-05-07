@@ -1,6 +1,17 @@
 import { useMemo, useState } from 'react';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { TrendingUp, RefreshCw, Plus, Loader2, Pencil, ChevronRight, ChevronDown } from 'lucide-react';
+import {
+  TrendingUp,
+  RefreshCw,
+  Plus,
+  Loader2,
+  Pencil,
+  ChevronRight,
+  ChevronDown,
+  ArrowUpRight,
+  ArrowDownRight,
+  Trash2,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,13 +33,34 @@ import {
 import type { HoldingRow, Money, Quantity, TransactionDTO } from '@portfolioos/shared';
 
 const TXN_TYPE_LABELS: Record<string, string> = {
-  BUY: 'Buy', SELL: 'Sell', DIVIDEND: 'Dividend',
-  BONUS: 'Bonus', SPLIT: 'Split', MERGER: 'Merger',
+  BUY: 'Buy',
+  SELL: 'Sell',
+  DIVIDEND: 'Dividend',
+  BONUS: 'Bonus',
+  SPLIT: 'Split',
+  MERGER: 'Merger',
 };
 
 interface AggregatedHolding extends HoldingRow {
   portfolioIds: string[];
   portfolioNames: string[];
+}
+
+/* ─────────────────────────── Visual glyph ───────────────────────────────
+   Tiny candlestick triplet — telegraphs "this is equity / market data"
+   without leaning on a generic line-chart cliche. */
+
+function StocksGlyph({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 26 18" fill="none" aria-hidden>
+      <line x1="5" y1="2" x2="5" y2="16" className="stroke-emerald-600/70 dark:stroke-emerald-400/70" strokeWidth="0.7" />
+      <rect x="3" y="6" width="4" height="6" rx="0.4" className="fill-emerald-600/80 dark:fill-emerald-400/80" />
+      <line x1="13" y1="3" x2="13" y2="15" className="stroke-rose-600/70 dark:stroke-rose-400/70" strokeWidth="0.7" />
+      <rect x="11" y="5" width="4" height="8" rx="0.4" className="fill-rose-600/80 dark:fill-rose-400/80" />
+      <line x1="21" y1="4" x2="21" y2="16" className="stroke-emerald-600/70 dark:stroke-emerald-400/70" strokeWidth="0.7" />
+      <rect x="19" y="7" width="4" height="7" rx="0.4" className="fill-emerald-600/85 dark:fill-emerald-400/85" />
+    </svg>
+  );
 }
 
 export function StocksPage() {
@@ -214,39 +246,101 @@ export function StocksPage() {
               {
                 label: 'Unrealised P&L',
                 value: formatINR(totalPnLD.toFixed(4)),
-                cls: totalPnLD.greaterThan(0) ? 'text-positive' : totalPnLD.isNegative() ? 'text-negative' : '',
+                cls: totalPnLD.greaterThan(0)
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : totalPnLD.isNegative()
+                    ? 'text-rose-700 dark:text-rose-400'
+                    : '',
               },
               {
                 label: 'Return',
                 value: formatPercent(totalPnLPct),
-                cls: totalPnLD.greaterThan(0) ? 'text-positive' : totalPnLD.isNegative() ? 'text-negative' : '',
+                cls: totalPnLD.greaterThan(0)
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : totalPnLD.isNegative()
+                    ? 'text-rose-700 dark:text-rose-400'
+                    : '',
               },
             ].map((m) => (
-              <Card key={m.label}>
+              <Card
+                key={m.label}
+                className="overflow-hidden border-t-2 border-t-accent/70 dark:border-t-accent/60"
+              >
                 <CardContent className="p-4">
-                  <div className="text-xs text-muted-foreground">{m.label}</div>
-                  <div className={`text-xl font-semibold mt-1 tabular-nums ${m.cls ?? ''}`}>{m.value}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-[0.16em] font-semibold">
+                    {m.label}
+                  </div>
+                  <div className={`text-xl font-semibold mt-1 tabular-nums ${m.cls ?? ''}`}>
+                    {m.value}
+                  </div>
                 </CardContent>
               </Card>
             ))}
           </div>
 
-          {/* Holdings — each row expands to show transactions + per-portfolio split */}
-          <Card className="mb-8">
-            <CardContent className="p-4 overflow-x-auto">
+          {/* Holdings — themed equity ledger with expandable rows */}
+          <Card className="mb-8 overflow-hidden border-border">
+            <div className="relative border-b border-border">
+              {/* Subtle vertical-bar backdrop hints at the price-bar nature of equities */}
+              <div
+                className="absolute inset-0 opacity-[0.05] dark:opacity-[0.10] pointer-events-none text-foreground"
+                style={{
+                  backgroundImage:
+                    'repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 22px)',
+                }}
+              />
+              <div className="relative flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-muted/40 via-card to-muted/40 dark:from-muted/30 dark:via-card dark:to-muted/30">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center justify-center h-9 w-10 rounded-md bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/30 dark:ring-accent/40">
+                    <StocksGlyph className="h-5 w-7" />
+                  </span>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold">
+                      Equity Holdings
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {aggregated.length}{' '}
+                      {aggregated.length === 1 ? 'instrument' : 'instruments'} · click a row to
+                      drill into transactions
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+                  <Stat label="Invested" value={formatINR(totalCostD.toFixed(4))} />
+                  <Stat
+                    label="Value"
+                    value={formatINR(totalValueD.toFixed(4))}
+                    bold
+                  />
+                  <Stat
+                    label="P&L"
+                    value={formatINR(totalPnLD.toFixed(4))}
+                    accent={
+                      totalPnLD.greaterThan(0)
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : totalPnLD.isNegative()
+                          ? 'text-rose-700 dark:text-rose-400'
+                          : ''
+                    }
+                    bold
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-muted-foreground uppercase tracking-wide border-b">
-                    <th className="py-2 pr-2 w-8"></th>
-                    <th className="py-2 pr-4">Symbol</th>
-                    <th className="py-2 pr-4">Name</th>
-                    <th className="py-2 pr-4 text-right">Qty</th>
-                    <th className="py-2 pr-4 text-right">Avg cost</th>
-                    <th className="py-2 pr-4 text-right">LTP</th>
-                    <th className="py-2 pr-4 text-right">Value</th>
-                    <th className="py-2 pr-4 text-right">P&L</th>
-                    <th className="py-2 pr-4 text-right">%</th>
-                    <th className="py-2 pr-4">Portfolios</th>
+                <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
+                  <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                    <th className="py-2 pl-3 pr-2 w-8 font-semibold"></th>
+                    <th className="py-2 pr-4 font-semibold">Symbol</th>
+                    <th className="py-2 pr-4 font-semibold">Name</th>
+                    <th className="py-2 pr-4 text-right font-semibold">Qty</th>
+                    <th className="py-2 pr-4 text-right font-semibold">Avg cost</th>
+                    <th className="py-2 pr-4 text-right font-semibold">LTP</th>
+                    <th className="py-2 pr-4 text-right font-semibold">Value</th>
+                    <th className="py-2 pr-4 text-right font-semibold">P&L</th>
+                    <th className="py-2 pr-4 text-right font-semibold">%</th>
+                    <th className="py-2 pr-4 font-semibold">Portfolios</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -273,7 +367,7 @@ export function StocksPage() {
                   })}
                 </tbody>
               </table>
-            </CardContent>
+            </div>
           </Card>
         </>
       )}
@@ -285,6 +379,40 @@ export function StocksPage() {
       />
     </div>
   );
+}
+
+function Stat({
+  label,
+  value,
+  accent,
+  bold,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+  bold?: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-end leading-tight">
+      <span className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground font-semibold">
+        {label}
+      </span>
+      <span
+        className={`tabular-nums ${bold ? 'font-semibold text-sm' : 'font-medium'} ${accent ?? ''}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function pnlClassFor(v: string | null | undefined): string {
+  if (!v) return '';
+  return toDecimal(v).isPositive()
+    ? 'text-emerald-700 dark:text-emerald-400'
+    : toDecimal(v).isNegative()
+      ? 'text-rose-700 dark:text-rose-400'
+      : '';
 }
 
 interface StockRowProps {
@@ -311,51 +439,74 @@ function StockRow({
   deleteMutation,
   openEdit,
 }: StockRowProps) {
-  const pnlClass =
-    h.unrealisedPnL && toDecimal(h.unrealisedPnL).greaterThan(0)
-      ? 'text-positive'
-      : h.unrealisedPnL && toDecimal(h.unrealisedPnL).isNegative()
-        ? 'text-negative'
-        : '';
-  const pnlPctClass =
-    (h.unrealisedPnLPct ?? 0) > 0
-      ? 'text-positive'
-      : (h.unrealisedPnLPct ?? 0) < 0
-        ? 'text-negative'
-        : '';
+  const pnlVal = h.unrealisedPnL ?? '';
+  const pnlD = pnlVal ? toDecimal(pnlVal) : null;
+  const pnlCls = pnlClassFor(pnlVal);
+  const pnlPct = h.unrealisedPnLPct ?? null;
+  const pnlPctCls =
+    pnlPct == null
+      ? ''
+      : pnlPct > 0
+        ? 'text-emerald-700 dark:text-emerald-400'
+        : pnlPct < 0
+          ? 'text-rose-700 dark:text-rose-400'
+          : '';
+  // Subtle directional cue — left edge bar reflects P&L direction
+  const edgeCls =
+    pnlD?.isPositive()
+      ? 'bg-emerald-500/80 dark:bg-emerald-400/75'
+      : pnlD?.isNegative()
+        ? 'bg-rose-500/80 dark:bg-rose-400/75'
+        : 'bg-border';
   return (
     <>
       <tr
-        className={`border-b last:border-0 hover:bg-accent/20 cursor-pointer ${isOpen ? 'bg-accent/10' : ''}`}
+        className={`border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 cursor-pointer transition-colors ${
+          isOpen ? 'bg-muted/30 dark:bg-muted/15' : ''
+        }`}
         onClick={onToggle}
       >
-        <td className="py-2 pr-2 text-muted-foreground">
+        <td className="relative py-2.5 pl-3 pr-2 text-muted-foreground">
+          <span className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${edgeCls}`} />
           {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </td>
-        <td className="py-2 pr-4 font-medium">{h.symbol ?? '—'}</td>
-        <td className="py-2 pr-4 truncate max-w-xs">{h.assetName}</td>
-        <td className="py-2 pr-4 text-right tabular-nums">{h.quantity}</td>
-        <td className="py-2 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
-        <td className="py-2 pr-4 text-right tabular-nums">
-          {h.currentPrice != null ? formatINR(h.currentPrice) : '—'}
+        <td className="py-2.5 pr-4">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="font-mono font-semibold tracking-wide text-foreground">
+              {h.symbol ?? '—'}
+            </span>
+            {h.assetClass === 'ETF' && (
+              <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-muted text-muted-foreground ring-1 ring-border">
+                ETF
+              </span>
+            )}
+          </span>
         </td>
-        <td className="py-2 pr-4 text-right tabular-nums">
+        <td className="py-2.5 pr-4 truncate max-w-xs text-muted-foreground">{h.assetName}</td>
+        <td className="py-2.5 pr-4 text-right tabular-nums">{h.quantity}</td>
+        <td className="py-2.5 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
+        <td className="py-2.5 pr-4 text-right tabular-nums font-medium">
+          {h.currentPrice != null ? formatINR(h.currentPrice) : (
+            <span className="text-muted-foreground italic text-xs">—</span>
+          )}
+        </td>
+        <td className="py-2.5 pr-4 text-right tabular-nums">
           {h.currentValue != null ? formatINR(h.currentValue) : '—'}
         </td>
-        <td className={`py-2 pr-4 text-right tabular-nums ${pnlClass}`}>
+        <td className={`py-2.5 pr-4 text-right tabular-nums font-medium ${pnlCls}`}>
           {h.unrealisedPnL != null ? formatINR(h.unrealisedPnL) : '—'}
         </td>
-        <td className={`py-2 pr-4 text-right tabular-nums ${pnlPctClass}`}>
-          {h.unrealisedPnLPct != null ? formatPercent(h.unrealisedPnLPct) : '—'}
+        <td className={`py-2.5 pr-4 text-right tabular-nums ${pnlPctCls}`}>
+          {pnlPct != null ? formatPercent(pnlPct) : '—'}
         </td>
-        <td className="py-2 pr-4 text-xs text-muted-foreground truncate max-w-[180px]">
+        <td className="py-2.5 pr-4 text-xs text-muted-foreground truncate max-w-[180px]">
           {h.portfolioNames.join(', ')}
         </td>
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={10} className="bg-muted/10 p-0">
-            <div className="border-l-2 border-primary/40 ml-4 mr-2 my-2 pl-3 pr-1 py-2 space-y-4">
+          <td colSpan={10} className="bg-muted/20 dark:bg-muted/10 p-0 border-t border-border">
+            <div className="px-4 py-4 space-y-4">
               {portfolioBreakdown.length > 1 && (
                 <PortfolioBreakdown rows={portfolioBreakdown} />
               )}
@@ -381,40 +532,35 @@ function PortfolioBreakdown({
 }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">
+      <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
         Per-portfolio breakdown
       </div>
-      <div className="overflow-x-auto rounded border bg-background">
+      <div className="overflow-x-auto rounded border border-border bg-card">
         <table className="w-full text-xs">
-          <thead className="bg-muted/40">
-            <tr className="text-[10px] uppercase text-muted-foreground">
-              <th className="text-left px-2 py-1.5">Portfolio</th>
-              <th className="text-right px-2 py-1.5">Qty</th>
-              <th className="text-right px-2 py-1.5">Avg cost</th>
-              <th className="text-right px-2 py-1.5">Total cost</th>
-              <th className="text-right px-2 py-1.5">Current value</th>
-              <th className="text-right px-2 py-1.5">P&L</th>
+          <thead className="bg-muted/40 dark:bg-muted/20">
+            <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <th className="text-left pl-3 pr-2 py-1.5 font-semibold">Portfolio</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Qty</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Avg cost</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Total cost</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Current value</th>
+              <th className="text-right px-2 py-1.5 font-semibold">P&L</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={`${r.portfolioId}:${r.id}`} className="border-t">
-                <td className="px-2 py-1.5">{r.portfolioName}</td>
+              <tr
+                key={`${r.portfolioId}:${r.id}`}
+                className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
+              >
+                <td className="pl-3 pr-2 py-1.5 font-medium">{r.portfolioName}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{r.quantity}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{formatINR(r.avgCostPrice)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{formatINR(r.totalCost)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">
                   {r.currentValue != null ? formatINR(r.currentValue) : '—'}
                 </td>
-                <td
-                  className={`px-2 py-1.5 text-right tabular-nums ${
-                    r.unrealisedPnL && toDecimal(r.unrealisedPnL).greaterThan(0)
-                      ? 'text-positive'
-                      : r.unrealisedPnL && toDecimal(r.unrealisedPnL).isNegative()
-                        ? 'text-negative'
-                        : ''
-                  }`}
-                >
+                <td className={`px-2 py-1.5 text-right tabular-nums ${pnlClassFor(r.unrealisedPnL)}`}>
                   {r.unrealisedPnL != null ? formatINR(r.unrealisedPnL) : '—'}
                 </td>
               </tr>
@@ -423,6 +569,30 @@ function PortfolioBreakdown({
         </table>
       </div>
     </div>
+  );
+}
+
+function TxnTypePill({ type }: { type: string }) {
+  const isBuy = type === 'BUY';
+  const isSell = type === 'SELL';
+  if (isBuy) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ring-1 bg-emerald-100 text-emerald-700 ring-emerald-200/60 dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-emerald-700/40">
+        <ArrowUpRight className="h-2.5 w-2.5" /> {TXN_TYPE_LABELS[type] ?? type}
+      </span>
+    );
+  }
+  if (isSell) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ring-1 bg-rose-100 text-rose-700 ring-rose-200/60 dark:bg-rose-900/40 dark:text-rose-300 dark:ring-rose-700/40">
+        <ArrowDownRight className="h-2.5 w-2.5" /> {TXN_TYPE_LABELS[type] ?? type}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ring-1 bg-muted text-foreground/80 ring-border">
+      {TXN_TYPE_LABELS[type] ?? type}
+    </span>
   );
 }
 
@@ -442,7 +612,7 @@ function StockTransactions({
   if (txns.length === 0) {
     return (
       <div>
-        <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">
+        <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
           Transactions
         </div>
         <div className="text-xs text-muted-foreground italic">
@@ -453,18 +623,18 @@ function StockTransactions({
   }
   return (
     <div>
-      <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">
+      <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
         Transactions ({txns.length})
       </div>
-      <div className="overflow-x-auto rounded border bg-background">
+      <div className="overflow-x-auto rounded border border-border bg-card">
         <table className="w-full text-xs">
-          <thead className="bg-muted/40">
-            <tr className="text-[10px] uppercase text-muted-foreground">
-              <th className="text-left px-2 py-1.5">Date</th>
-              <th className="text-left px-2 py-1.5">Type</th>
-              <th className="text-right px-2 py-1.5">Qty</th>
-              <th className="text-right px-2 py-1.5">Price</th>
-              <th className="text-right px-2 py-1.5">Amount</th>
+          <thead className="bg-muted/40 dark:bg-muted/20">
+            <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <th className="text-left pl-3 pr-2 py-1.5 font-semibold">Date</th>
+              <th className="text-left px-2 py-1.5 font-semibold">Type</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Qty</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Price</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Amount</th>
               <th className="px-2 py-1.5"></th>
             </tr>
           </thead>
@@ -474,24 +644,22 @@ function StockTransactions({
               const isConfirmDelete = confirmDeleteId === txn.id;
               const isDeleting = deleteMutation.isPending && confirmDeleteId === txn.id;
               return (
-                <tr key={txn.id} className="border-t">
-                  <td className="px-2 py-1.5 whitespace-nowrap">{txn.tradeDate}</td>
+                <tr
+                  key={txn.id}
+                  className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
+                >
+                  <td className="pl-3 pr-2 py-1.5 whitespace-nowrap tabular-nums text-muted-foreground">
+                    <span className="text-accent/60 mr-1.5">▸</span>
+                    {txn.tradeDate}
+                  </td>
                   <td className="px-2 py-1.5">
-                    <span
-                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                        txn.transactionType === 'BUY'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}
-                    >
-                      {TXN_TYPE_LABELS[txn.transactionType] ?? txn.transactionType}
-                    </span>
+                    <TxnTypePill type={txn.transactionType} />
                   </td>
                   <td className="px-2 py-1.5 text-right tabular-nums">
                     {new Decimal(txn.quantity).toFixed(3)}
                   </td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{formatINR(txn.price)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums font-medium">
+                  <td className="px-2 py-1.5 text-right tabular-nums font-semibold">
                     {formatINR(amount.toString())}
                   </td>
                   <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
@@ -540,23 +708,7 @@ function StockTransactions({
                           onClick={() => setConfirmDeleteId(txn.id)}
                           title="Delete"
                         >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                            <path d="M10 11v6" />
-                            <path d="M14 11v6" />
-                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                          </svg>
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     )}
