@@ -61,17 +61,21 @@ export type LlmEventType = (typeof LLM_EVENT_TYPES)[number];
 export const ParsedEventSchema = z.object({
   event_type: z.enum(LLM_EVENT_TYPES),
   event_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'event_date must be YYYY-MM-DD'),
-  amount: z.string().nullable(),
-  quantity: z.string().nullable(),
-  price: z.string().nullable(),
-  counterparty: z.string().nullable(),
-  instrument_isin: z.string().nullable(),
-  instrument_symbol: z.string().nullable(),
-  instrument_name: z.string().nullable(),
-  account_last4: z.string().nullable(),
+  // All non-required fields are .nullable().optional(): the JSON Schema's
+  // `required` block lists only event_type, event_date, confidence — so
+  // Haiku is free to omit any other field entirely (undefined) AND/or
+  // emit it as null. Both must validate.
+  amount: z.string().nullable().optional(),
+  quantity: z.string().nullable().optional(),
+  price: z.string().nullable().optional(),
+  counterparty: z.string().nullable().optional(),
+  instrument_isin: z.string().nullable().optional(),
+  instrument_symbol: z.string().nullable().optional(),
+  instrument_name: z.string().nullable().optional(),
+  account_last4: z.string().nullable().optional(),
   currency: z.string().default('INR'),
   confidence: z.number().min(0).max(1),
-  notes: z.string().nullable(),
+  notes: z.string().nullable().optional(),
   // F&O extensions — only populated for FNO_TRADE events. Buy/Sell side
   // for F&O is encoded as event_type=FNO_TRADE plus side="BUY"|"SELL" in
   // a follow-up field; dropped into the metadata blob on CanonicalEvent.

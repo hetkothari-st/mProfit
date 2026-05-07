@@ -210,8 +210,9 @@ function synthesizeNumericField(
   let candidateIndex: number | null = null;
   for (const sample of samples) {
     const raw = sample.event[field];
-    if (raw === null) {
-      // All-null is handled separately; mixed null/value means inconsistent.
+    if (raw === null || raw === undefined) {
+      // Absent value (null or omitted) — handled separately by the
+      // caller. Mixed null/value across samples = inconsistent → bail.
       return null;
     }
     const slots = extractTemplateSlots(sample.redactedBody).filter(
