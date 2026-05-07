@@ -22,6 +22,9 @@ export interface CreateImportJobInput {
   gmailMessageId?: string | null;
   /** Optional user-supplied PDF password (forwarded to the PDF reader). */
   pdfPassword?: string | null;
+  /** When this import was promoted from a Gmail discovered doc, the
+   *  doc's id so the worker can mirror the final status back. */
+  gmailDocId?: string | null;
 }
 
 export async function createImportJob(input: CreateImportJobInput) {
@@ -75,6 +78,7 @@ export async function createImportJob(input: CreateImportJobInput) {
         broker: input.broker ?? null,
         contentHash: input.contentHash ?? null,
         gmailMessageId: input.gmailMessageId ?? null,
+        gmailDocId: input.gmailDocId ?? null,
       },
     });
 
@@ -180,6 +184,12 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
           },
         },
       });
+      if (job.gmailDocId) {
+        await prisma.gmailDiscoveredDoc.update({
+          where: { id: job.gmailDocId },
+          data: { status: 'PARSE_FAILED' },
+        });
+      }
       return {
         parser: adapter?.id ?? 'none',
         total: 0,
@@ -213,6 +223,12 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
         completedAt: new Date(),
       },
     });
+    if (job.gmailDocId) {
+      await prisma.gmailDiscoveredDoc.update({
+        where: { id: job.gmailDocId },
+        data: { status: 'PARSE_FAILED' },
+      });
+    }
     return {
       parser: adapter?.id ?? 'none',
       total: 0,
@@ -371,6 +387,23 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
       completedAt: new Date(),
     },
   });
+
+  // Mirror outcome back to the originating GmailDiscoveredDoc (if any).
+  // Keeps the inbox approval queue's status in sync without callers
+  // having to poll two endpoints.
+  if (job.gmailDocId) {
+    const docStatus =
+      finalStatus === 'FAILED' || finalStatus === 'NEEDS_PASSWORD'
+        ? 'PARSE_FAILED'
+        : 'IMPORTED';
+    await prisma.gmailDiscoveredDoc.update({
+      where: { id: job.gmailDocId },
+      data: {
+        status: docStatus,
+        importedAt: docStatus === 'IMPORTED' ? new Date() : null,
+      },
+    });
+  }
 
   return { parser: adapterId, total, success, failed, errors };
 }
