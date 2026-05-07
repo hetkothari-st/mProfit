@@ -11,16 +11,24 @@ import { Label } from '@/components/ui/label';
 import { gmailScanApi } from '@/api/gmailScan.api';
 import { apiErrorMessage } from '@/api/client';
 
-function dateMinusYears(years: number): string {
+function dateMinus(years = 0, days = 0): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - years);
+  d.setDate(d.getDate() - days);
   return d.toISOString().slice(0, 10);
 }
+
+const PRESETS = [
+  { label: 'Last 7 days', from: dateMinus(0, 7) },
+  { label: 'Last 30 days', from: dateMinus(0, 30) },
+  { label: 'Last 1 year', from: dateMinus(1) },
+  { label: 'Last 5 years', from: dateMinus(5) },
+];
 
 export function GmailScanSetupPage() {
   const nav = useNavigate();
   const today = new Date().toISOString().slice(0, 10);
-  const [from, setFrom] = useState(dateMinusYears(5));
+  const [from, setFrom] = useState(dateMinus(5));
   const [to, setTo] = useState(today);
 
   const start = useMutation({
@@ -63,9 +71,21 @@ export function GmailScanSetupPage() {
               />
             </div>
           </div>
+          <div className="flex flex-wrap gap-1.5">
+            {PRESETS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                className="text-xs px-2 py-1 rounded border border-input hover:bg-accent"
+                onClick={() => { setFrom(p.from); setTo(today); }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           <div className="text-xs text-muted-foreground flex items-center gap-2">
             <Calendar className="h-3.5 w-3.5" />
-            Default range: last 5 years.
+            Scans all attachments (PDF, XLSX, XLS, CSV) in your inbox. Both dates inclusive.
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={() => nav('/dashboard')}>Skip for now</Button>

@@ -75,15 +75,7 @@ async function collectMessageIds(scanJobId: string): Promise<string[]> {
   const ids: string[] = [];
   let cursor = job.nextPageToken ?? null;
   const query = buildScanQuery(job.lookbackFrom, job.lookbackTo);
-  logger.info(
-    {
-      scanJobId,
-      query,
-      lookbackFrom: job.lookbackFrom,
-      lookbackTo: job.lookbackTo,
-    },
-    '[gmailScan] LISTING start',
-  );
+  logger.info({ scanJobId, query, lookbackFrom: job.lookbackFrom, lookbackTo: job.lookbackTo }, '[gmailScan] LISTING start');
 
   while (true) {
     if (await isCancelled(scanJobId)) return ids;

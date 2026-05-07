@@ -37,11 +37,14 @@ export async function postScanJob(req: Request, res: Response) {
     orderBy: { createdAt: 'desc' },
   });
   if (!mb) throw new BadRequestError('Connect Gmail before starting a scan');
+  // Parse YYYY-MM-DD strings as UTC noon to avoid timezone-shift edge cases
+  // where "today" in IST (UTC+5:30) would be "yesterday" in UTC.
+  const parseDate = (s: string) => new Date(`${s}T12:00:00Z`);
   const job = await createScanJob({
     userId: req.user.id,
     mailboxId: mb.id,
-    lookbackFrom: new Date(body.lookbackFrom),
-    lookbackTo: new Date(body.lookbackTo),
+    lookbackFrom: parseDate(body.lookbackFrom),
+    lookbackTo: parseDate(body.lookbackTo),
   });
   created(res, job);
 }
