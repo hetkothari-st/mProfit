@@ -10,6 +10,7 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { assetKeyFromTransaction } from './assetKey.js';
 import { getLatestFoContractPrice } from '../priceFeeds/nseFoMaster.service.js';
+import { getLiveFoPricesBatch } from '../priceFeeds/nseLiveFo.service.js';
 
 /**
  * F&O position aggregate. Each (portfolio, assetKey) groups all transactions
@@ -190,9 +191,20 @@ export async function recomputeDerivativePosition(
   });
   if (!portfolio) return;
 
-  // Latest mark — use FoContractPrice if available, else null.
-  const ltp = await getLatestFoContractPrice(assetKey);
-  const mtmPrice = ltp ? dec(ltp.closePrice) : null;
+  // Latest mark — try live NSE quote-derivative first (intraday), fall
+  // back to the EOD FoContractPrice row, then null.
+  let mtmPrice: Decimal | null = null;
+  try {
+    const liveMap = await getLiveFoPricesBatch([assetKey]);
+    const live = liveMap.get(assetKey);
+    if (live != null && live > 0) mtmPrice = new Decimal(live);
+  } catch {
+    // live feed best-effort — never block recompute on NSE flakiness
+  }
+  if (!mtmPrice) {
+    const ltp = await getLatestFoContractPrice(assetKey);
+    if (ltp) mtmPrice = dec(ltp.closePrice);
+  }
   let unrealizedPnl: Decimal | null = null;
   if (mtmPrice && !result.netQuantity.isZero()) {
     // unrealized = sum over open lots of (mark - entry) × qty (signed)
@@ -303,4 +315,64 @@ export async function refreshAllDerivativePositionPrices(): Promise<{ updated: n
     updated += 1;
   }
   return { updated };
+}
+
+/**
+ * Live (intraday) MTM refresh using the NSE quote-derivative feed. Groups
+ * positions by underlying so each NSE call covers an entire option-chain +
+ * futures strip in one shot. Falls back to the EOD `FoContractPrice` row
+ * when NSE returns nothing for a contract (illiquid / circuit-tripped).
+ *
+ * Scope: when `userId` is provided, refresh only that user's open positions
+ * (used by the "Refresh prices" button on the F&O page). With no userId,
+ * refresh every user's open positions (cron path).
+ */
+export async function refreshLiveDerivativePositionPrices(opts?: {
+  userId?: string;
+  portfolioId?: string;
+}): Promise<{ updated: number; total: number }> {
+  const where: Prisma.DerivativePositionWhereInput = { status: 'OPEN' };
+  if (opts?.userId) where.userId = opts.userId;
+  if (opts?.portfolioId) where.portfolioId = opts.portfolioId;
+
+  const positions = await prisma.derivativePosition.findMany({
+    where,
+    select: { id: true, assetKey: true, openLots: true },
+  });
+  if (positions.length === 0) return { updated: 0, total: 0 };
+
+  // Pre-warm the NSE cache: one fetch per distinct underlying.
+  const liveMap = await getLiveFoPricesBatch(positions.map((p) => p.assetKey));
+
+  let updated = 0;
+  for (const p of positions) {
+    let mtmPrice: Decimal | null = null;
+    const live = liveMap.get(p.assetKey);
+    if (live != null && live > 0) {
+      mtmPrice = new Decimal(live);
+    } else {
+      // Fallback: yesterday's bhavcopy close (better than blank).
+      const eod = await getLatestFoContractPrice(p.assetKey);
+      if (eod) mtmPrice = dec(eod.closePrice);
+    }
+    if (!mtmPrice) continue;
+
+    const lots = p.openLots as unknown as OpenLot[];
+    const unrealized = lots.reduce((acc, l) => {
+      const q = new Decimal(l.qty);
+      const entry = new Decimal(l.price);
+      return acc.plus(mtmPrice!.minus(entry).times(q));
+    }, new Decimal(0));
+
+    await prisma.derivativePosition.update({
+      where: { id: p.id },
+      data: {
+        mtmPrice: mtmPrice.toString(),
+        unrealizedPnl: unrealized.toString(),
+        computedAt: new Date(),
+      },
+    });
+    updated += 1;
+  }
+  return { updated, total: positions.length };
 }

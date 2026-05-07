@@ -12,7 +12,10 @@ import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates } from '../priceFeeds/fx.service.js';
 import { loadNseFoMaster } from '../priceFeeds/nseFoMaster.service.js';
 import { loadNseFoBhavcopy } from '../priceFeeds/nseFoBhavcopy.service.js';
-import { refreshAllDerivativePositionPrices } from '../services/derivativePosition.service.js';
+import {
+  refreshAllDerivativePositionPrices,
+  refreshLiveDerivativePositionPrices,
+} from '../services/derivativePosition.service.js';
 
 const TZ = 'Asia/Kolkata';
 
@@ -26,6 +29,7 @@ const running = {
   fx: false,
   foMaster: false,
   foBhavcopy: false,
+  foLive: false,
 };
 
 async function runGuarded<K extends keyof typeof running>(
@@ -121,6 +125,12 @@ async function runFoBhavcopyJob(): Promise<void> {
   });
 }
 
+async function runFoLiveJob(): Promise<void> {
+  await runGuarded('foLive', 'NSE F&O live MTM', () =>
+    refreshLiveDerivativePositionPrices(),
+  );
+}
+
 export function startPriceJobs(): void {
   if (process.env.ENABLE_PRICE_CRONS === 'false') {
     logger.info('[cron] price jobs disabled via ENABLE_PRICE_CRONS=false');
@@ -157,8 +167,13 @@ export function startPriceJobs(): void {
   // F&O EOD bhavcopy at 16:45 IST Mon–Fri (NSE publishes ~16:30; +15min buffer)
   cron.schedule('45 16 * * 1-5', runFoBhavcopyJob, { timezone: TZ });
 
+  // F&O LIVE MTM during market hours: every 60s, 9:15–15:30 IST Mon–Fri.
+  // The NSE quote-derivative cache (5s per underlying) collapses concurrent
+  // user polls onto these fetches.
+  cron.schedule('* 9-15 * * 1-5', runFoLiveJob, { timezone: TZ });
+
   logger.info(
-    '[cron] scheduled: AMFI@22:00, stockEOD@16:30 MF, intraday 15-min MF, universe Sun 03:00, CA@20:00, commodities@23:30, crypto 30-min, FX hourly, F&O master Sun 03:30, F&O bhavcopy@16:45 MF — all IST',
+    '[cron] scheduled: AMFI@22:00, stockEOD@16:30 MF, intraday 15-min MF, universe Sun 03:00, CA@20:00, commodities@23:30, crypto 30-min, FX hourly, F&O master Sun 03:30, F&O bhavcopy@16:45 MF, F&O live 60s MF — all IST',
   );
 }
 
@@ -173,4 +188,5 @@ export {
   runFxJob,
   runFoMasterJob,
   runFoBhavcopyJob,
+  runFoLiveJob,
 };

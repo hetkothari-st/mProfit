@@ -123,15 +123,50 @@ export function FuturesOptionsPage() {
   });
   const portfolioId = portfolioIdQ ?? portfolios?.[0]?.id;
 
+  // Auto-refresh live MTM in the background while the page is open. The
+  // server-side service caches NSE quote-derivative responses for 5s per
+  // underlying, so polling at 5s collapses onto one upstream call per
+  // underlying. We pause when the tab is hidden to spare both NSE and
+  // ourselves from idle traffic.
+  const liveRefreshMut = useMutation({
+    mutationFn: () => foApi.refreshLive(portfolioId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fo', 'positions'] });
+      queryClient.invalidateQueries({ queryKey: ['fo', 'summary'] });
+    },
+  });
+
+  useEffect(() => {
+    if (!portfolioId) return;
+    // Fire once on mount, then every 5s while visible.
+    let cancelled = false;
+    function tick() {
+      if (cancelled) return;
+      if (document.visibilityState !== 'visible') return;
+      liveRefreshMut.mutate();
+    }
+    tick();
+    const id = window.setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolioId]);
+
   const positionsQ = useQuery({
     queryKey: ['fo', 'positions', portfolioId],
     queryFn: () => foApi.positions(portfolioId),
     enabled: !!portfolioId,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   });
   const summaryQ = useQuery({
     queryKey: ['fo', 'summary', portfolioId],
     queryFn: () => foApi.summary(portfolioId),
     enabled: !!portfolioId,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   });
   const tradesQ = useQuery({
     queryKey: ['fo', 'trades', portfolioId],

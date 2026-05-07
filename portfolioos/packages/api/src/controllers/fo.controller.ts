@@ -5,7 +5,10 @@ import { ok, noContent } from '../lib/response.js';
 import { UnauthorizedError, NotFoundError, ForbiddenError, BadRequestError } from '../lib/errors.js';
 import { computePortfolioFoPnl, computeUserFoPnl } from '../services/foPnl.service.js';
 import { buildSchedule43Report } from '../services/reports/schedule43.report.js';
-import { recomputeAllDerivativePositions } from '../services/derivativePosition.service.js';
+import {
+  recomputeAllDerivativePositions,
+  refreshLiveDerivativePositionPrices,
+} from '../services/derivativePosition.service.js';
 import { syncFnoBroker } from '../services/foBrokerSync.service.js';
 import { getOptionChainSnapshot } from '../priceFeeds/nseOptionChain.service.js';
 import { blackScholes, impliedVolatility, timeToExpiryYears, DEFAULT_INDIAN_RISK_FREE_RATE } from '@portfolioos/shared';
@@ -168,6 +171,21 @@ export async function optionChain(req: Request, res: Response) {
     return out;
   });
   return ok(res, { ...snap, strikes: augmented });
+}
+
+/**
+ * Live MTM refresh for the calling user. Pulls NSE quote-derivative for
+ * each underlying represented in the user's OPEN positions, updates
+ * `mtmPrice` + `unrealizedPnl`, and returns counts. Frontend polls this
+ * every few seconds while the F&O page is visible.
+ */
+export async function refreshLive(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const userId = req.user.id;
+  const portfolioId = req.query.portfolioId as string | undefined;
+  if (portfolioId) await assertPortfolio(userId, portfolioId);
+  const r = await refreshLiveDerivativePositionPrices({ userId, portfolioId });
+  return ok(res, r);
 }
 
 const recomputeSchema = z.object({ portfolioId: z.string().cuid() });

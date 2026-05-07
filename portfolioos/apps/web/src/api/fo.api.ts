@@ -105,6 +105,12 @@ export const foApi = {
   approveExpiry: (id: string) => api.post(`/api/fo/expiry-jobs/${id}/approve`),
   rejectExpiry: (id: string) => api.post(`/api/fo/expiry-jobs/${id}/reject`),
   recompute: (portfolioId: string) => api.post('/api/fo/recompute', { portfolioId }),
+  refreshLive: (portfolioId?: string) =>
+    api.post<{ data: { updated: number; total: number } }>(
+      '/api/fo/refresh-live',
+      undefined,
+      { params: { portfolioId } },
+    ).then((r) => r.data.data),
   syncBroker: (brokerId: 'zerodha' | 'upstox' | 'angel', portfolioId: string) =>
     api.post('/api/fo/sync-broker', { brokerId, portfolioId }),
   updateSetting: (

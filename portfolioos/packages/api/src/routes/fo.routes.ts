@@ -6,6 +6,7 @@ import {
   summary,
   optionChain,
   recompute,
+  refreshLive,
   syncBroker,
   listMargin,
   listExpiryJobs,
@@ -47,6 +48,7 @@ foRouter.get('/expiry-jobs', asyncHandler(listExpiryJobs));
 foRouter.post('/expiry-jobs/:id/approve', asyncHandler(approveExpiryJob));
 foRouter.post('/expiry-jobs/:id/reject', asyncHandler(rejectExpiryJob));
 foRouter.post('/recompute', asyncHandler(recompute));
+foRouter.post('/refresh-live', asyncHandler(refreshLive));
 foRouter.post('/sync-broker', asyncHandler(syncBroker));
 foRouter.patch('/settings/:portfolioId', asyncHandler(updateSetting));
 
