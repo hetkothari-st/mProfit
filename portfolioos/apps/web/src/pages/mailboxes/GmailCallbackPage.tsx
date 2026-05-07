@@ -38,7 +38,7 @@ export function GmailCallbackPage() {
         toast.error(apiErrorMessage(e));
       } finally {
         setTimeout(
-          () => nav(success ? '/ingestion?auto-discover=1' : '/mailboxes', { replace: true }),
+          () => nav(success ? '/gmail/scan-setup' : '/mailboxes', { replace: true }),
           500,
         );
       }

@@ -22,6 +22,9 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { transactionsApi } from '@/api/transactions.api';
 import { assetsApi } from '@/api/assets.api';
 import { dashboardApi } from '@/api/dashboard.api';
+import { mailboxesApi } from '@/api/mailboxes.api';
+import { ConnectGmailCard } from '@/components/dashboard/ConnectGmailCard';
+import { GmailScanProgressCard } from '@/components/dashboard/GmailScanProgressCard';
 import { apiErrorMessage } from '@/api/client';
 import {
   formatINR,
@@ -223,6 +226,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-7">
+      <GmailDashboardCards />
       <PageHeader
         eyebrow="Dashboard"
         title="Your financial portrait"
@@ -816,3 +820,20 @@ function DashboardSkeleton() {
     </div>
   );
 }
+
+function GmailDashboardCards() {
+  const q = useQuery({
+    queryKey: ['mailboxes'],
+    queryFn: () => mailboxesApi.list(),
+  });
+  const hasGmail = (q.data ?? []).some(
+    (m) => m.provider === 'GMAIL_OAUTH' && m.isActive,
+  );
+  return (
+    <div className="space-y-3">
+      {!hasGmail && <ConnectGmailCard />}
+      {hasGmail && <GmailScanProgressCard />}
+    </div>
+  );
+}
+

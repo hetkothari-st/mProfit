@@ -24,6 +24,7 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { reportsApi } from '@/api/reports.api';
 import { importsApi } from '@/api/imports.api';
 import { useAuthStore } from '@/stores/auth.store';
+import { InboxImportsTab } from './InboxImportsTab';
 import {
   Decimal,
   toDecimal,
@@ -41,7 +42,8 @@ type Tab =
   | 'income'
   | 'unrealised'
   | 'xirr'
-  | 'historical';
+  | 'historical'
+  | 'inbox-imports';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'summary', label: 'Summary' },
@@ -53,6 +55,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'income', label: 'Income' },
   { key: 'xirr', label: 'XIRR' },
   { key: 'historical', label: 'Historical' },
+  { key: 'inbox-imports', label: 'Inbox imports' },
 ];
 
 function currentFy(): string {
@@ -114,9 +117,19 @@ function fmtPct(n: number | null | undefined): string {
   return `${(n * 100).toFixed(2)}%`;
 }
 
+function initialTabFromUrl(): Tab {
+  if (typeof window === 'undefined') return 'summary';
+  const v = new URLSearchParams(window.location.search).get('tab');
+  const valid: Tab[] = [
+    'summary', 'intraday', 'stcg', 'ltcg', 'schedule-112a',
+    'income', 'unrealised', 'xirr', 'historical', 'inbox-imports',
+  ];
+  return (valid as string[]).includes(v ?? '') ? (v as Tab) : 'summary';
+}
+
 export function ReportsPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
-  const [tab, setTab] = useState<Tab>('summary');
+  const [tab, setTab] = useState<Tab>(initialTabFromUrl);
   const [portfolioId, setPortfolioId] = useState<string>('');
   const [fy, setFy] = useState<string>(currentFy());
 
@@ -273,7 +286,9 @@ export function ReportsPage() {
         ))}
       </div>
 
-      {!portfolioId ? (
+      {tab === 'inbox-imports' ? (
+        <InboxImportsTab />
+      ) : !portfolioId ? (
         <div className="text-sm text-muted-foreground p-6 text-center">
           Select a portfolio to view reports.
         </div>

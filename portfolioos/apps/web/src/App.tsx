@@ -18,6 +18,7 @@ import { FailuresPage } from './pages/imports/FailuresPage';
 import { ConnectorsPage } from './pages/connectors/ConnectorsPage';
 import { MailboxesPage } from './pages/mailboxes/MailboxesPage';
 import { GmailCallbackPage } from './pages/mailboxes/GmailCallbackPage';
+import { GmailScanSetupPage } from './pages/mailboxes/GmailScanSetupPage';
 import { CasPage } from './pages/cas/CasPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { IngestionPage } from './pages/ingestion/IngestionPage';
@@ -121,6 +122,7 @@ export function App() {
             as a redirect so bookmarked URLs don't 404. */}
         <Route path="/mailboxes" element={<Navigate to="/ingestion" replace />} />
         <Route path="/gmail/callback" element={<GmailCallbackPage />} />
+        <Route path="/gmail/scan-setup" element={<GmailScanSetupPage />} />
         <Route path="/cas" element={<CasPage />} />
         <Route path="/ingestion" element={<IngestionPage />} />
         <Route path="/ingestion/senders" element={<SendersPage />} />
