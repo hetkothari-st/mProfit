@@ -17,6 +17,10 @@ import { nsdlCdslCasParser } from '../../services/imports/parsers/nsdlCdslCas.pa
 import { mfCasParser } from '../../services/imports/parsers/mfCas.parser.js';
 import { genericExcelParser } from '../../services/imports/parsers/genericExcel.parser.js';
 import { genericCsvParser } from '../../services/imports/parsers/genericCsv.parser.js';
+import { bankStatementParser } from '../../services/imports/parsers/bankStatement.parser.js';
+import { fdCertificateParser } from '../../services/imports/parsers/fdCertificate.parser.js';
+import { insuranceStatementParser } from '../../services/imports/parsers/insuranceStatement.parser.js';
+import { salarySlipParser } from '../../services/imports/parsers/salarySlip.parser.js';
 import type {
   FileImportAdapter,
   FileImportInput,
@@ -187,6 +191,10 @@ export const nsdlCdslCasAdapter = makeAdapter(
   '1',
 );
 export const mfCasAdapter = makeAdapter(mfCasParser, 'cas.mf.cams_kfintech', '1');
+export const bankStatementAdapter = makeAdapter(bankStatementParser, 'bank.statement.pdf', '1');
+export const fdCertificateAdapter = makeAdapter(fdCertificateParser, 'fd.certificate.pdf', '1');
+export const insuranceStatementAdapter = makeAdapter(insuranceStatementParser, 'insurance.statement.pdf', '1');
+export const salarySlipAdapter = makeAdapter(salarySlipParser, 'salary.slip.pdf', '1');
 export const genericExcelAdapter = makeAdapter(genericExcelParser, 'generic.excel', '1');
 export const genericCsvAdapter = makeAdapter(genericCsvParser, 'generic.csv', '1');
 
@@ -198,16 +206,23 @@ export const genericCsvAdapter = makeAdapter(genericCsvParser, 'generic.csv', '1
  *
  * Order matters:
  *   1. zerodha — specific regex parser, deterministic + free.
- *   2. genericBrokerContractNote — LLM-backed, covers the other 24 brokers.
- *      Sits AFTER zerodha so a Zerodha PDF never burns LLM budget.
+ *   2. genericBrokerContractNote — LLM-backed, covers 24+ brokers.
+ *      AFTER zerodha so Zerodha PDFs never burn LLM budget.
  *   3. CAS adapters — NSDL/CDSL + CAMS/KFintech.
- *   4. Generic Excel / CSV — last-resort spreadsheet handlers.
+ *   4. Document-type parsers — bank statements, FD certificates,
+ *      insurance statements, salary slips. Each has strict canHandle
+ *      keyword guards so they don't shadow contract notes or CAS.
+ *   5. Generic Excel / CSV — last-resort spreadsheet handlers.
  */
 export const FILE_IMPORT_ADAPTERS: readonly FileImportAdapter[] = [
   zerodhaContractNoteAdapter,
   genericBrokerContractNoteAdapter,
   nsdlCdslCasAdapter,
   mfCasAdapter,
+  fdCertificateAdapter,
+  insuranceStatementAdapter,
+  salarySlipAdapter,
+  bankStatementAdapter,
   genericExcelAdapter,
   genericCsvAdapter,
 ] as const;
@@ -217,6 +232,10 @@ export const PARSER_OF = new Map<FileImportAdapter, Parser>([
   [genericBrokerContractNoteAdapter, genericBrokerContractNoteParser],
   [nsdlCdslCasAdapter, nsdlCdslCasParser],
   [mfCasAdapter, mfCasParser],
+  [fdCertificateAdapter, fdCertificateParser],
+  [insuranceStatementAdapter, insuranceStatementParser],
+  [salarySlipAdapter, salarySlipParser],
+  [bankStatementAdapter, bankStatementParser],
   [genericExcelAdapter, genericExcelParser],
   [genericCsvAdapter, genericCsvParser],
 ]);

@@ -7,18 +7,30 @@ import { NotFoundError, BadRequestError } from '../lib/errors.js';
 
 function inferImportType(fileName: string, classifiedDocType: string | null): ImportType {
   const lower = fileName.toLowerCase();
-  if (classifiedDocType === 'CAS') return lower.endsWith('.pdf') ? 'MF_CAS_PDF' : 'MF_CAS_EXCEL';
-  if (classifiedDocType === 'CONTRACT_NOTE') {
-    if (lower.endsWith('.pdf')) return 'CONTRACT_NOTE_PDF';
-    if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'CONTRACT_NOTE_HTML';
-    return 'CONTRACT_NOTE_EXCEL';
+  switch (classifiedDocType) {
+    case 'CAS':
+      return lower.endsWith('.pdf') ? 'MF_CAS_PDF' : 'MF_CAS_EXCEL';
+    case 'CONTRACT_NOTE':
+      if (lower.endsWith('.pdf')) return 'CONTRACT_NOTE_PDF';
+      if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'CONTRACT_NOTE_HTML';
+      return 'CONTRACT_NOTE_EXCEL';
+    case 'BANK_STATEMENT':
+      return lower.endsWith('.pdf') ? 'BANK_STATEMENT_PDF' : 'BANK_STATEMENT_CSV';
+    case 'FD_CERTIFICATE':
+    case 'MF_STATEMENT':
+    case 'INSURANCE':
+    case 'SALARY_SLIP':
+    case 'CC_STATEMENT':
+    case 'TAX_DOCUMENT':
+      // These all route to the auto-detecting runner (canHandle dispatches
+      // to the right parser by file content). Use a generic fallback type
+      // that keeps the ImportJob displayable while the runner does the work.
+      return lower.endsWith('.pdf') ? 'BANK_STATEMENT_PDF' : 'GENERIC_CSV';
+    default:
+      if (lower.endsWith('.pdf')) return 'CONTRACT_NOTE_PDF';
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) return 'GENERIC_EXCEL';
+      return 'GENERIC_CSV';
   }
-  if (classifiedDocType === 'BANK_STATEMENT') {
-    return lower.endsWith('.pdf') ? 'BANK_STATEMENT_PDF' : 'BANK_STATEMENT_CSV';
-  }
-  if (lower.endsWith('.pdf')) return 'CONTRACT_NOTE_PDF';
-  if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) return 'GENERIC_EXCEL';
-  return 'GENERIC_CSV';
 }
 
 export async function approveDoc(
