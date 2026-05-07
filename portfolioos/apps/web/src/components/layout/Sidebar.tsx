@@ -57,8 +57,8 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
     heading: 'Asset Classes',
     items: [
       { label: 'Stocks', to: '/stocks', icon: TrendingUp },
-      { label: 'Mutual Funds', to: '/mutual-funds', icon: LineChart },
       { label: 'F & O', to: '/fo', icon: BarChart3 },
+      { label: 'Mutual Funds', to: '/mutual-funds', icon: LineChart },
       { label: 'Bonds', to: '/bonds', icon: Landmark },
       { label: 'Fixed Deposits', to: '/fds', icon: PiggyBank },
       { label: 'Gold & Silver', to: '/gold', icon: Coins },
