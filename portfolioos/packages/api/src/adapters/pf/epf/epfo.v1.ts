@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { tokenizePassbookPdf } from '../shared/pdfPassbookParser.js';
 import { solveCaptcha } from '../shared/captcha.js';
+import { newStealthContext, clickDelay, typeDelay } from '../shared/stealth.js';
 import { parseEpfoPassbook } from './epfo.v1.parse.js';
 import { registerPfAdapter } from '../chain.js';
 import { logger } from '../../../lib/logger.js';
@@ -41,15 +42,16 @@ const epfoAdapter: PfAdapter = {
 
     const browser = await chromium.launch({ headless: true });
     try {
-      const page = await browser.newPage();
+      const context = await newStealthContext(browser);
+      const page = await context.newPage();
       ctx.emit('SCRAPING', { stage: 'navigate' });
 
       await page.goto(
         'https://passbook.epfindia.gov.in/MemberPassBook/login',
         { waitUntil: 'domcontentloaded' },
       );
-      await page.fill('#username', ctx.credentials.username);
-      await page.fill('#password', ctx.credentials.password);
+      await page.type('#username', ctx.credentials.username, typeDelay());
+      await page.type('#password', ctx.credentials.password, typeDelay());
 
       ctx.emit('AWAITING_CAPTCHA');
       const captchaImg = await page.locator('img.captcha-image').screenshot();
@@ -59,8 +61,8 @@ const epfoAdapter: PfAdapter = {
         expectedLength: 6,
         charset: 'alnum',
       });
-      await page.fill('#captcha', captchaText);
-      await page.click('#login-btn');
+      await page.type('#captcha', captchaText, typeDelay());
+      await page.click('#login-btn', clickDelay());
       await page.waitForLoadState('networkidle');
 
       ctx.emit('SCRAPING', { stage: 'enumerate_members' });
@@ -78,7 +80,7 @@ const epfoAdapter: PfAdapter = {
         await page.selectOption('select#memberDropdown', m.memberId);
         const [download] = await Promise.all([
           page.waitForEvent('download'),
-          page.click('button#downloadPdf'),
+          page.click('button#downloadPdf', clickDelay()),
         ]);
         const tmpPath = join(tmpdir(), `epfo_${randomUUID()}.pdf`);
         await download.saveAs(tmpPath);

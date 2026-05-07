@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { tokenizePassbookPdf } from '../shared/pdfPassbookParser.js';
 import { solveCaptcha } from '../shared/captcha.js';
+import { newStealthContext, clickDelay, typeDelay } from '../shared/stealth.js';
 import { parseSbiPpfPassbook } from './sbi.v1.parse.js';
 import { registerPfAdapter } from '../chain.js';
 import { logger } from '../../../lib/logger.js';
@@ -38,16 +39,17 @@ const sbiPpfAdapter: PfAdapter = {
 
     const browser = await chromium.launch({ headless: true });
     try {
-      const page = await browser.newPage();
+      const context = await newStealthContext(browser);
+      const page = await context.newPage();
       ctx.emit('SCRAPING', { stage: 'navigate' });
       await page.goto('https://retail.onlinesbi.sbi/personal/login.htm', {
         waitUntil: 'domcontentloaded',
       });
 
       // SBI Personal Banking login — dismiss the "Continue to Login" interstitial if present
-      await page.click('a:has-text("Continue to Login")').catch(() => undefined);
-      await page.fill('input[name="username"]', ctx.credentials.username);
-      await page.fill('input[name="password"]', ctx.credentials.password);
+      await page.click('a:has-text("Continue to Login")', clickDelay()).catch(() => undefined);
+      await page.type('input[name="username"]', ctx.credentials.username, typeDelay());
+      await page.type('input[name="password"]', ctx.credentials.password, typeDelay());
 
       // CAPTCHA (image-based)
       ctx.emit('AWAITING_CAPTCHA');
@@ -57,8 +59,8 @@ const sbiPpfAdapter: PfAdapter = {
         imgBytes: captchaImg,
         charset: 'alnum',
       });
-      await page.fill('input[name="captcha"]', captchaText);
-      await page.click('button[type="submit"]');
+      await page.type('input[name="captcha"]', captchaText, typeDelay());
+      await page.click('button[type="submit"]', clickDelay());
       await page.waitForLoadState('networkidle');
 
       // OTP step (SBI sends to registered mobile)
@@ -66,19 +68,19 @@ const sbiPpfAdapter: PfAdapter = {
       if (await otpInput.isVisible().catch(() => false)) {
         ctx.emit('AWAITING_OTP');
         const otp = await ctx.prompt.askOtp('sms');
-        await otpInput.fill(otp);
-        await page.click('button[type="submit"]');
+        await otpInput.type(otp, typeDelay());
+        await page.click('button[type="submit"]', clickDelay());
         await page.waitForLoadState('networkidle');
       }
 
       // Navigate to PPF accounts section then download statement
       ctx.emit('SCRAPING', { stage: 'navigate_ppf' });
-      await page.click('a:has-text("PPF Account")');
+      await page.click('a:has-text("PPF Account")', clickDelay());
       await page.waitForLoadState('networkidle');
 
       const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 30_000 }),
-        page.click('a:has-text("View Statement"), button:has-text("Download Statement")'),
+        page.click('a:has-text("View Statement"), button:has-text("Download Statement")', clickDelay()),
       ]);
 
       const tmpPath = join(tmpdir(), `sbi_ppf_${randomUUID()}.pdf`);
