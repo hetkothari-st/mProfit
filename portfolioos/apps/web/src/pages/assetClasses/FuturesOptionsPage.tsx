@@ -1058,18 +1058,21 @@ function FuturesLedger({
 
   return (
     <Card className="overflow-hidden border-border">
-      {/* Header — graph-paper backdrop in foreground tone telegraphs the time-grid nature of futures lots */}
+      {/* Header chrome mirrors Options Chain — same dot backdrop in foreground
+          tone — so the two cards read as a matched pair. The depictive
+          element for futures lives in the FuturesGlyph icon. */}
       <div className="relative border-b border-border">
         <div
           className="absolute inset-0 opacity-[0.06] dark:opacity-[0.10] pointer-events-none text-foreground"
           style={{
             backgroundImage:
-              'repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 18px), repeating-linear-gradient(0deg, currentColor 0 1px, transparent 1px 16px)',
+              'radial-gradient(circle at 25% 70%, currentColor 0.7px, transparent 1.5px), radial-gradient(circle at 75% 30%, currentColor 0.7px, transparent 1.5px)',
+            backgroundSize: '16px 16px',
           }}
         />
         <div className="relative flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-muted/40 via-card to-muted/40 dark:from-muted/30 dark:via-card dark:to-muted/30">
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center justify-center h-9 w-9 rounded-md bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/30 dark:ring-accent/40">
+            <span className="inline-flex items-center justify-center h-9 w-10 rounded-md bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/30 dark:ring-accent/40">
               <FuturesGlyph className="h-5 w-5" />
             </span>
             <div>
