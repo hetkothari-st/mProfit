@@ -94,6 +94,11 @@ model User {
 
   // Plan C — browser extension pairing tokens.
   extensionPairings ExtensionPairing[]
+
+  // Phase Gmail-FullInbox — attachment-pivot ingestion pipeline.
+  gmailScanJobs         GmailScanJob[]
+  gmailDiscoveredDocs   GmailDiscoveredDoc[]
+  gmailAutoApproveRules GmailAutoApproveRule[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -164,6 +169,8 @@ model MailboxAccount {
   isActive        Boolean         @default(true)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+
+  gmailScanJobs   GmailScanJob[]
 
   @@index([userId])
 }
@@ -822,10 +829,14 @@ model ImportJob {
   // these bytes came from. Lets us link Reports / DLQ entries back to the
   // original email and skip re-processing if poller revisits the message.
   gmailMessageId String?
+  // Phase Gmail-FullInbox — back-reference when this job was promoted
+  // from a discovered Gmail attachment. Null for direct uploads.
+  gmailDocId     String?
   createdAt      DateTime     @default(now())
   completedAt    DateTime?
 
-  transactions Transaction[]
+  transactions        Transaction[]
+  gmailDiscoveredDocs GmailDiscoveredDoc[]
 
   @@index([userId, createdAt])
   @@index([userId, contentHash])
@@ -853,6 +864,123 @@ enum ImportStatus {
   COMPLETED_WITH_ERRORS
   FAILED
   NEEDS_PASSWORD
+}
+
+// ─── GMAIL FULL-INBOX INGESTION ──────────────────────────────────
+
+model GmailScanJob {
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mailboxId       String
+  mailbox         MailboxAccount  @relation(fields: [mailboxId], references: [id])
+
+  lookbackFrom    DateTime        @db.Date
+  lookbackTo      DateTime        @db.Date
+
+  status          GmailScanStatus @default(PENDING)
+
+  totalMessages         Int?
+  processedMessages     Int       @default(0)
+  attachmentsFound      Int       @default(0)
+  attachmentsClassified Int       @default(0)
+  attachmentsKept       Int       @default(0)
+
+  nextPageToken   String?
+
+  errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime        @default(now())
+
+  documents       GmailDiscoveredDoc[]
+
+  @@index([userId, status])
+  @@index([mailboxId, status])
+}
+
+enum GmailScanStatus {
+  PENDING
+  LISTING
+  DOWNLOADING
+  CLASSIFYING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model GmailDiscoveredDoc {
+  id                   String         @id @default(cuid())
+  userId               String
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scanJobId            String
+  scanJob              GmailScanJob   @relation(fields: [scanJobId], references: [id], onDelete: Cascade)
+
+  gmailMessageId       String
+  gmailAttachmentId    String
+  fromAddress          String
+  subject              String
+  receivedAt           DateTime
+  fileName             String
+  fileSize             Int
+  mimeType             String
+  contentHash          String
+
+  isFinancial          Boolean?
+  classifiedDocType    String?
+  classifierConfidence Decimal?       @db.Decimal(3, 2)
+  suggestedParser      String?
+  classifierNotes      String?
+  classifierTokensIn   Int?
+  classifierTokensOut  Int?
+
+  storagePath          String
+
+  status               GmailDocStatus @default(CLASSIFYING)
+
+  importJobId          String?
+  importJob            ImportJob?     @relation(fields: [importJobId], references: [id], onDelete: SetNull)
+  rejectedReason       String?
+
+  approvedAt           DateTime?
+  rejectedAt           DateTime?
+  importedAt           DateTime?
+
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  @@unique([userId, gmailMessageId, gmailAttachmentId])
+  @@unique([userId, contentHash])
+  @@index([userId, status, receivedAt])
+  @@index([scanJobId, status])
+  @@index([userId, fromAddress, isFinancial])
+}
+
+enum GmailDocStatus {
+  CLASSIFYING
+  PENDING_APPROVAL
+  NOT_FINANCIAL
+  DUPLICATE
+  APPROVED
+  IMPORTING
+  IMPORTED
+  PARSE_FAILED
+  REJECTED
+}
+
+model GmailAutoApproveRule {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromAddress     String
+  docType         String?
+  enabled         Boolean  @default(true)
+  approvedCount   Int      @default(0)
+  lastUsedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, fromAddress, docType])
+  @@index([userId, enabled])
 }
 
 // ─── ALERTS & REMINDERS ───────────────────────────────────────────
