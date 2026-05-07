@@ -11,6 +11,7 @@ import { registerRoutes } from './routes/index.js';
 import { prisma } from './lib/prisma.js';
 import { startPriceJobs } from './jobs/priceJobs.js';
 import { startImportWorker } from './jobs/importWorker.js';
+import { registerGmailScanWorker } from './jobs/gmailScanWorker.js';
 import { runStartupSync } from './jobs/startupSync.js';
 import { startMailboxPoller, stopMailboxPoller } from './jobs/mailboxPoller.js';
 import { startVehicleJobs } from './jobs/vehicleJobs.js';
@@ -91,6 +92,7 @@ const server = app.listen(env.PORT, '::', () => {
   logger.info(`PortfolioOS API listening on http://localhost:${env.PORT}`);
   startPriceJobs();
   startImportWorker();
+  registerGmailScanWorker();
   startMailboxPoller();
   startVehicleJobs();
   startCatalogJobs();
