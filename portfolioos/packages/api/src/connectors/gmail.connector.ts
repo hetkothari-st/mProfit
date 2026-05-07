@@ -121,7 +121,10 @@ export function buildGmailAuthUrl(userId: string): string {
   const client = makeOAuthClient();
   return client.generateAuthUrl({
     access_type: 'offline',
-    prompt: 'consent',
+    // 'select_account' forces Google to show the account picker so users with
+    // multiple Google accounts can choose the right one.
+    // 'consent' forces a fresh refresh_token on every connect.
+    prompt: 'select_account consent',
     scope: SCOPES,
     state: userId,
     include_granted_scopes: true,

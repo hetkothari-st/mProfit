@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 import { gmailApi } from '@/api/gmail.api';
@@ -8,6 +9,7 @@ import { apiErrorMessage } from '@/api/client';
 export function GmailCallbackPage() {
   const [params] = useSearchParams();
   const nav = useNavigate();
+  const qc = useQueryClient();
   const ranRef = useRef(false);
   const [msg, setMsg] = useState('Connecting Gmail…');
 
@@ -32,7 +34,9 @@ export function GmailCallbackPage() {
       try {
         const r = await gmailApi.callback(code);
         toast.success(`Connected ${r.email}`);
-        setMsg(`Connected ${r.email} — discovering financial senders…`);
+        setMsg(`Connected ${r.email} — setting up scan…`);
+        // Invalidate so dashboard shows connected state immediately on return
+        await qc.invalidateQueries({ queryKey: ['mailboxes'] });
         success = true;
       } catch (e) {
         toast.error(apiErrorMessage(e));
@@ -43,7 +47,7 @@ export function GmailCallbackPage() {
         );
       }
     })();
-  }, [params, nav]);
+  }, [params, nav, qc]);
 
   return (
     <div className="flex items-center justify-center h-[60vh]">
