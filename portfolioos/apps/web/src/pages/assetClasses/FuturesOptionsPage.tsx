@@ -17,6 +17,8 @@ import {
   Layers,
   ArrowUpRight,
   ArrowDownRight,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { formatINR, toDecimal, Decimal } from '@portfolioos/shared';
 import { foApi, brokerApi, type FoPosition, type FoTrade, type BrokerStatus } from '@/api/fo.api';
@@ -553,11 +555,26 @@ function FuturesGlyph({ className = '' }: { className?: string }) {
 }
 
 function OptionsGlyph({ className = '' }: { className?: string }) {
+  // Strike-chain matrix — CE bars (left) + PE bars (right) flanking a strike
+  // axis. Mirrors the layout of an actual broker option-chain table so the
+  // glyph telegraphs "this is an option chain" at a glance.
   return (
     <svg className={className} viewBox="0 0 26 18" fill="none" aria-hidden>
-      <line x1="13" y1="1.5" x2="13" y2="16.5" className="stroke-violet-500/40 dark:stroke-violet-300/50" strokeWidth="0.5" strokeDasharray="1 1.3" />
-      <path d="M2 14 L13 14 L23 3" className="stroke-emerald-600 dark:stroke-emerald-400" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      <path d="M3 3 L13 14 L24 14" className="stroke-rose-600 dark:stroke-rose-400" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" strokeDasharray="0.6 1.4" />
+      <line
+        x1="13"
+        y1="1"
+        x2="13"
+        y2="17"
+        className="stroke-foreground/50 dark:stroke-foreground/55"
+        strokeWidth="0.7"
+        strokeDasharray="1.4 1"
+      />
+      <rect x="2" y="2.5" width="8" height="2.8" rx="0.4" className="fill-emerald-600/65 dark:fill-emerald-400/70" />
+      <rect x="16" y="2.5" width="8" height="2.8" rx="0.4" className="fill-rose-600/65 dark:fill-rose-400/70" />
+      <rect x="2" y="7.5" width="8" height="2.8" rx="0.4" className="fill-emerald-600/85 dark:fill-emerald-400/90" />
+      <rect x="16" y="7.5" width="8" height="2.8" rx="0.4" className="fill-rose-600/85 dark:fill-rose-400/90" />
+      <rect x="2" y="12.5" width="8" height="2.8" rx="0.4" className="fill-emerald-600/50 dark:fill-emerald-400/55" />
+      <rect x="16" y="12.5" width="8" height="2.8" rx="0.4" className="fill-rose-600/50 dark:fill-rose-400/55" />
     </svg>
   );
 }
@@ -663,7 +680,265 @@ function SplitFoTables({
     <div className="space-y-5">
       {futures.length > 0 && <FuturesLedger positions={futures} />}
       {options.length > 0 && <OptionsChain positions={options} />}
+      <UnderlyingActivity positions={rows} trades={trades} />
       {trades.length > 0 && <TapeSection trades={trades} limit={50} />}
+    </div>
+  );
+}
+
+/* ───────────────────── Per-underlying expandable activity ────────────────
+   Drill-down per underlying. Each card is a tappable summary; expanding it
+   reveals every transaction we have on file for that underlying. Position
+   details already live in the Futures Ledger / Options Chain above, so the
+   body here intentionally focuses on the *transactions* the user wanted
+   back. */
+
+interface UnderlyingActivityGroup {
+  underlying: string;
+  positions: FoPosition[];
+  trades: FoTrade[];
+  futCount: number;
+  ceCount: number;
+  peCount: number;
+  openCount: number;
+  closedCount: number;
+  totalCost: Decimal;
+  realizedPnl: Decimal;
+  unrealizedPnl: Decimal;
+}
+
+/** Extract the underlying ticker from a trade's full instrument string.
+ *  Handles both spaced ("NIFTY 25000 CE 28-APR-2026") and concatenated
+ *  ("NIFTY27NOV2525500CE") forms by grabbing the leading run of letters. */
+function tradeUnderlyingOf(t: FoTrade): string {
+  const name = (t.assetName ?? '').trim();
+  if (!name) return 'UNKNOWN';
+  const m = name.match(/^([A-Za-z]+)/);
+  const head = m?.[1] ?? name.split(/\s+/)[0] ?? 'UNKNOWN';
+  return head.toUpperCase();
+}
+
+function groupUnderlyings(
+  positions: FoPosition[],
+  trades: FoTrade[],
+): UnderlyingActivityGroup[] {
+  const map = new Map<string, UnderlyingActivityGroup>();
+  function ensure(u: string): UnderlyingActivityGroup {
+    let g = map.get(u);
+    if (!g) {
+      g = {
+        underlying: u,
+        positions: [],
+        trades: [],
+        futCount: 0,
+        ceCount: 0,
+        peCount: 0,
+        openCount: 0,
+        closedCount: 0,
+        totalCost: new Decimal(0),
+        realizedPnl: new Decimal(0),
+        unrealizedPnl: new Decimal(0),
+      };
+      map.set(u, g);
+    }
+    return g;
+  }
+  for (const p of positions) {
+    const g = ensure(p.underlying);
+    g.positions.push(p);
+    if (p.totalCost) g.totalCost = g.totalCost.plus(toDecimal(p.totalCost));
+    if (p.realizedPnl) g.realizedPnl = g.realizedPnl.plus(toDecimal(p.realizedPnl));
+    if (p.unrealizedPnl) g.unrealizedPnl = g.unrealizedPnl.plus(toDecimal(p.unrealizedPnl));
+    if (p.instrumentType === 'FUTURES') g.futCount++;
+    else if (p.instrumentType === 'CALL') g.ceCount++;
+    else if (p.instrumentType === 'PUT') g.peCount++;
+    if (p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') g.openCount++;
+    else g.closedCount++;
+  }
+  for (const t of trades) {
+    const g = ensure(tradeUnderlyingOf(t));
+    g.trades.push(t);
+  }
+  return [...map.values()].sort((a, b) => {
+    const e = b.totalCost.abs().comparedTo(a.totalCost.abs());
+    if (e !== 0) return e;
+    return b.openCount - a.openCount;
+  });
+}
+
+function UnderlyingActivity({
+  positions,
+  trades,
+}: {
+  positions: FoPosition[];
+  trades: FoTrade[];
+}) {
+  const groups = useMemo(() => groupUnderlyings(positions, trades), [positions, trades]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  if (groups.length === 0) return null;
+
+  function toggle(u: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(u)) next.delete(u);
+      else next.add(u);
+      return next;
+    });
+  }
+
+  return (
+    <Card className="overflow-hidden border-border">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-border bg-gradient-to-r from-muted/40 via-card to-muted/40 dark:from-muted/30 dark:via-card dark:to-muted/30">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-accent">
+            Underlying Activity
+          </span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {groups.length} {groups.length === 1 ? 'underlying' : 'underlyings'} · click to expand
+          </span>
+        </div>
+      </div>
+      <div className="divide-y divide-border">
+        {groups.map((g) => (
+          <UnderlyingRow
+            key={g.underlying}
+            group={g}
+            isOpen={expanded.has(g.underlying)}
+            onToggle={() => toggle(g.underlying)}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function UnderlyingRow({
+  group,
+  isOpen,
+  onToggle,
+}: {
+  group: UnderlyingActivityGroup;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const netPnl = group.realizedPnl.plus(group.unrealizedPnl);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-muted-foreground">
+            {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </span>
+          <span className="font-semibold tracking-wide text-foreground">{group.underlying}</span>
+          <div className="flex items-center gap-1 flex-wrap">
+            {group.futCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-foreground/80 ring-1 ring-border">
+                <Layers className="h-2.5 w-2.5" /> FUT × {group.futCount}
+              </span>
+            )}
+            {group.ceCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/60 dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-emerald-700/40">
+                <ArrowUpRight className="h-2.5 w-2.5" /> CE × {group.ceCount}
+              </span>
+            )}
+            {group.peCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 ring-1 ring-rose-200/60 dark:bg-rose-900/40 dark:text-rose-300 dark:ring-rose-700/40">
+                <ArrowDownRight className="h-2.5 w-2.5" /> PE × {group.peCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <span className="text-emerald-700 dark:text-emerald-400 font-medium">{group.openCount} open</span>
+            {group.closedCount > 0 && <> · {group.closedCount} closed</>}
+            {group.trades.length > 0 && <> · {group.trades.length} txns</>}
+          </span>
+        </div>
+        <div className="flex items-center gap-x-5 gap-y-1 flex-wrap text-xs">
+          <Stat label="Exposure" value={fmtINR(group.totalCost.abs().toString())} />
+          <Stat label="Realized" value={fmtINR(group.realizedPnl.toString())} accent={pnlClass(group.realizedPnl.toString())} />
+          <Stat label="Unrealized" value={fmtINR(group.unrealizedPnl.toString())} accent={pnlClass(group.unrealizedPnl.toString())} />
+          <Stat label="Net P&L" value={fmtINR(netPnl.toString())} accent={pnlClass(netPnl.toString())} bold />
+        </div>
+      </button>
+      {isOpen && (
+        <div className="bg-muted/20 dark:bg-muted/10 border-t border-border px-4 py-3">
+          <UnderlyingTrades trades={group.trades} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UnderlyingTrades({ trades }: { trades: FoTrade[] }) {
+  if (trades.length === 0) {
+    return (
+      <div>
+        <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-1.5">
+          Transactions
+        </div>
+        <div className="text-xs text-muted-foreground italic">
+          No transactions on file for this underlying.
+        </div>
+      </div>
+    );
+  }
+  const sorted = [...trades].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
+        Transactions ({trades.length})
+      </div>
+      <div className="overflow-x-auto rounded border border-border bg-card">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/40 dark:bg-muted/20">
+            <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <th className="text-left pl-3 pr-2 py-1.5 font-semibold">Date</th>
+              <th className="text-left px-2 py-1.5 font-semibold">Side</th>
+              <th className="text-left px-2 py-1.5 font-semibold">Instrument</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Strike</th>
+              <th className="text-left px-2 py-1.5 font-semibold">Expiry</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Qty</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Price</th>
+              <th className="text-right px-2 py-1.5 font-semibold">Net</th>
+              <th className="text-left px-2 py-1.5 font-semibold">Broker</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono">
+            {sorted.map((t) => (
+              <tr
+                key={t.id}
+                className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
+              >
+                <td className="pl-3 pr-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
+                  <span className="text-accent/60 mr-1.5">▸</span>
+                  {t.tradeDate}
+                </td>
+                <td className="px-2 py-1.5 font-sans">
+                  <SideTagBadge side={t.transactionType} />
+                </td>
+                <td className="px-2 py-1.5 truncate max-w-[260px] text-[11px]">{t.assetName ?? '—'}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
+                <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
+                  {t.expiryDate ?? '—'}
+                </td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{t.quantity}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{fmtINR(t.price)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums font-semibold">
+                  {fmtINR(t.netAmount)}
+                </td>
+                <td className="px-2 py-1.5 text-[11px] text-muted-foreground font-sans">
+                  {t.broker ?? '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -861,29 +1136,29 @@ function OptionsChain({ positions }: { positions: FoPosition[] }) {
   }, [sorted]);
 
   return (
-    <Card className="overflow-hidden ring-1 ring-violet-200/70 dark:ring-violet-700/40 border-violet-100 dark:border-violet-900/40">
-      <div className="relative border-b border-violet-200/70 dark:border-violet-700/40">
-        {/* Strike-grid dotted backdrop hints at the option-chain matrix */}
+    <Card className="overflow-hidden border-border">
+      <div className="relative border-b border-border">
+        {/* Strike-grid dotted backdrop in foreground tone — hints at the option-chain matrix */}
         <div
-          className="absolute inset-0 opacity-[0.10] dark:opacity-[0.18] pointer-events-none text-violet-700 dark:text-violet-300"
+          className="absolute inset-0 opacity-[0.06] dark:opacity-[0.10] pointer-events-none text-foreground"
           style={{
             backgroundImage:
               'radial-gradient(circle at 25% 70%, currentColor 0.7px, transparent 1.5px), radial-gradient(circle at 75% 30%, currentColor 0.7px, transparent 1.5px)',
             backgroundSize: '16px 16px',
           }}
         />
-        <div className="relative flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-violet-50/80 via-amber-50/30 to-violet-50/80 dark:from-violet-950/50 dark:via-amber-950/20 dark:to-violet-950/50">
+        <div className="relative flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-muted/40 via-card to-muted/40 dark:from-muted/30 dark:via-card dark:to-muted/30">
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center justify-center h-9 w-10 rounded-md bg-violet-600/10 dark:bg-violet-400/10 ring-1 ring-violet-300/60 dark:ring-violet-500/40">
+            <span className="inline-flex items-center justify-center h-9 w-10 rounded-md bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/30 dark:ring-accent/40">
               <OptionsGlyph className="h-5 w-7" />
             </span>
             <div>
-              <div className="text-[11px] uppercase tracking-[0.2em] text-violet-800 dark:text-violet-200 font-semibold">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-accent font-semibold">
                 Options Chain
               </div>
-              <div className="text-[10px] uppercase tracking-wider text-violet-700/70 dark:text-violet-300/70 flex items-center gap-2">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                 <span>Strike-indexed asymmetric payoffs</span>
-                <span className="text-violet-300 dark:text-violet-700">·</span>
+                <span className="text-muted-foreground/40">·</span>
                 <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
                   <ArrowUpRight className="h-2.5 w-2.5" /> {totals.ce} CE
                 </span>
@@ -903,8 +1178,8 @@ function OptionsChain({ positions }: { positions: FoPosition[] }) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-violet-50/60 dark:bg-violet-950/30 border-b border-violet-200/60 dark:border-violet-800/40">
-            <tr className="text-[10px] uppercase tracking-[0.12em] text-violet-900/80 dark:text-violet-200/80">
+          <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
+            <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-4 pr-2 py-2 font-semibold">Underlying</th>
               <th className="text-left px-2 py-2 font-semibold">Type</th>
               <th className="text-right px-3 py-2 font-semibold">Strike</th>
@@ -927,7 +1202,7 @@ function OptionsChain({ positions }: { positions: FoPosition[] }) {
               return (
                 <tr
                   key={p.id}
-                  className="border-t border-violet-100/70 dark:border-violet-900/40 hover:bg-violet-50/50 dark:hover:bg-violet-950/30 transition-colors"
+                  className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
                 >
                   <td className="relative pl-4 pr-2 py-2.5">
                     <span
@@ -943,7 +1218,7 @@ function OptionsChain({ positions }: { positions: FoPosition[] }) {
                     <ContractTypeBadge instrumentType={p.instrumentType} />
                   </td>
                   <td className="px-3 py-2.5 text-right">
-                    <span className="inline-block text-xs font-semibold tabular-nums px-2 py-0.5 rounded bg-violet-100/80 dark:bg-violet-900/50 text-violet-900 dark:text-violet-100 ring-1 ring-violet-200/60 dark:ring-violet-700/40">
+                    <span className="inline-block text-xs font-semibold tabular-nums px-2 py-0.5 rounded bg-muted text-foreground ring-1 ring-border">
                       {p.strikePrice ?? '—'}
                     </span>
                   </td>
@@ -1013,28 +1288,28 @@ function TapeSection({ trades, limit }: { trades: FoTrade[]; limit?: number }) {
     return limit ? s.slice(0, limit) : s;
   }, [trades, limit]);
   return (
-    <Card className="overflow-hidden ring-1 ring-amber-200/50 dark:ring-amber-700/30 border-amber-100/60 dark:border-amber-900/40">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-amber-200/60 dark:border-amber-800/40 bg-gradient-to-r from-amber-50/70 via-stone-50/40 to-amber-50/70 dark:from-amber-950/30 dark:via-stone-900/30 dark:to-amber-950/30">
+    <Card className="overflow-hidden border-border">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-border bg-gradient-to-r from-muted/40 via-card to-muted/40 dark:from-muted/30 dark:via-card dark:to-muted/30">
         <div className="flex items-center gap-2">
           <span className="relative inline-flex h-2.5 w-2.5">
-            <span className="absolute inset-0 rounded-full bg-amber-500 animate-ping opacity-60" />
-            <span className="relative h-2.5 w-2.5 rounded-full bg-amber-600 dark:bg-amber-400" />
+            <span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-60" />
+            <span className="relative h-2.5 w-2.5 rounded-full bg-emerald-600 dark:bg-emerald-400" />
           </span>
-          <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-amber-800 dark:text-amber-300">
+          <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-accent">
             Trade Tape
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-amber-700/70 dark:text-amber-300/70">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {trades.length} total{limit && trades.length > limit ? ` · last ${sorted.length}` : ''}
           </span>
         </div>
-        <div className="hidden md:block text-[10px] uppercase tracking-[0.3em] text-amber-700/40 dark:text-amber-300/30 font-mono">
+        <div className="hidden md:block text-[10px] uppercase tracking-[0.3em] text-muted-foreground/50 font-mono">
           ── time-series ledger ──
         </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-amber-50/40 dark:bg-amber-950/20">
-            <tr className="text-[10px] uppercase tracking-[0.12em] text-amber-900/80 dark:text-amber-200/80">
+          <thead className="bg-muted/40 dark:bg-muted/20">
+            <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-4 pr-2 py-2 font-semibold">Date</th>
               <th className="text-left px-3 py-2 font-semibold">Side</th>
               <th className="text-left px-3 py-2 font-semibold">Instrument</th>
@@ -1050,12 +1325,12 @@ function TapeSection({ trades, limit }: { trades: FoTrade[]; limit?: number }) {
             {sorted.map((t, i) => (
               <tr
                 key={t.id}
-                className={`border-t border-amber-100/60 dark:border-amber-900/30 hover:bg-amber-50/50 dark:hover:bg-amber-950/30 transition-colors ${
-                  i % 2 === 1 ? 'bg-amber-50/25 dark:bg-amber-950/15' : ''
+                className={`border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors ${
+                  i % 2 === 1 ? 'bg-muted/20 dark:bg-muted/10' : ''
                 }`}
               >
                 <td className="pl-4 pr-2 py-2 whitespace-nowrap text-muted-foreground tabular-nums">
-                  <span className="text-amber-700/50 dark:text-amber-300/40 mr-1.5">▸</span>
+                  <span className="text-accent/60 mr-1.5">▸</span>
                   {t.tradeDate}
                 </td>
                 <td className="px-3 py-2 font-sans">
