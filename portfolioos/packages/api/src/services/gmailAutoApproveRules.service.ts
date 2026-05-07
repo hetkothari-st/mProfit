@@ -14,21 +14,28 @@ export async function upsertRule(input: {
   docType?: string | null;
   enabled: boolean;
 }) {
-  return prisma.gmailAutoApproveRule.upsert({
+  // Prisma's compound unique where clauses don't accept null — use findFirst
+  // for the lookup (treating null docType as "any" rule for this sender)
+  // and create-or-update by id.
+  const docType = input.docType ?? null;
+  const existing = await prisma.gmailAutoApproveRule.findFirst({
     where: {
-      userId_fromAddress_docType: {
-        userId: input.userId,
-        fromAddress: input.fromAddress,
-        docType: input.docType ?? null,
-      },
-    },
-    create: {
       userId: input.userId,
       fromAddress: input.fromAddress,
-      docType: input.docType ?? null,
-      enabled: input.enabled,
+      docType,
     },
-    update: {
+  });
+  if (existing) {
+    return prisma.gmailAutoApproveRule.update({
+      where: { id: existing.id },
+      data: { enabled: input.enabled },
+    });
+  }
+  return prisma.gmailAutoApproveRule.create({
+    data: {
+      userId: input.userId,
+      fromAddress: input.fromAddress,
+      docType,
       enabled: input.enabled,
     },
   });
@@ -50,12 +57,12 @@ export async function findMatchingRule(
   docType: string | null,
 ) {
   if (docType) {
-    const exact = await prisma.gmailAutoApproveRule.findUnique({
-      where: { userId_fromAddress_docType: { userId, fromAddress, docType } },
+    const exact = await prisma.gmailAutoApproveRule.findFirst({
+      where: { userId, fromAddress, docType },
     });
     if (exact) return exact;
   }
-  return prisma.gmailAutoApproveRule.findUnique({
-    where: { userId_fromAddress_docType: { userId, fromAddress, docType: null } },
+  return prisma.gmailAutoApproveRule.findFirst({
+    where: { userId, fromAddress, docType: null },
   });
 }

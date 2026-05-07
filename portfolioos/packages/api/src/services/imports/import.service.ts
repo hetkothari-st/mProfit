@@ -392,10 +392,9 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
   // Keeps the inbox approval queue's status in sync without callers
   // having to poll two endpoints.
   if (job.gmailDocId) {
-    const docStatus =
-      finalStatus === 'FAILED' || finalStatus === 'NEEDS_PASSWORD'
-        ? 'PARSE_FAILED'
-        : 'IMPORTED';
+    // finalStatus here is one of COMPLETED | COMPLETED_WITH_ERRORS | FAILED;
+    // the NEEDS_PASSWORD path returned early above with its own mirror.
+    const docStatus = finalStatus === 'FAILED' ? 'PARSE_FAILED' : 'IMPORTED';
     await prisma.gmailDiscoveredDoc.update({
       where: { id: job.gmailDocId },
       data: {

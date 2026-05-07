@@ -9,6 +9,7 @@ import { ingestionFailuresRouter } from './ingestionFailures.routes.js';
 import { connectorsRouter } from './connectors.routes.js';
 import { mailboxesRouter } from './mailboxes.routes.js';
 import { gmailRouter } from './gmail.routes.js';
+import { gmailScanRouter } from './gmailScan.routes.js';
 import { reportsRouter } from './reports.routes.js';
 import { casRouter } from './cas.routes.js';
 import { canonicalEventsRouter } from './canonicalEvents.routes.js';
@@ -43,6 +44,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/connectors', connectorsRouter);
   app.use('/api/mailboxes', mailboxesRouter);
   app.use('/api/gmail', gmailRouter);
+  app.use('/api/gmail', gmailScanRouter);
   app.use('/api/reports', reportsRouter);
   app.use('/api/cas', casRouter);
   app.use('/api/canonical-events', canonicalEventsRouter);
