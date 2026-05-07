@@ -1097,8 +1097,8 @@ function FuturesLedger({
         <table className="w-full text-sm">
           <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-              <th className="w-8 pl-3 pr-1 py-2"></th>
-              <th className="text-left pl-1 pr-2 py-2 font-semibold">Contract</th>
+              <th className="w-7 pl-3 pr-2 py-2"></th>
+              <th className="text-left pl-4 pr-2 py-2 font-semibold">Contract</th>
               <th className="text-left px-3 py-2 font-semibold">Side</th>
               <th className="text-left px-3 py-2 font-semibold">Expiry</th>
               <th className="text-right px-3 py-2 font-semibold">Net Qty</th>
@@ -1124,10 +1124,10 @@ function FuturesLedger({
                   className={`border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors cursor-pointer ${isOpen ? 'bg-muted/30 dark:bg-muted/15' : ''}`}
                   onClick={() => toggle(p.id)}
                 >
-                  <td className="pl-3 pr-1 py-2.5 text-muted-foreground">
+                  <td className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </td>
-                  <td className="relative pl-1 pr-2 py-2.5">
+                  <td className="relative pl-4 pr-2 py-2.5">
                     <span
                       className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
                         long
@@ -1305,8 +1305,8 @@ function OptionsChain({
         <table className="w-full text-sm">
           <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-              <th className="w-8 pl-3 pr-1 py-2"></th>
-              <th className="text-left pl-1 pr-2 py-2 font-semibold">Underlying</th>
+              <th className="w-7 pl-3 pr-2 py-2"></th>
+              <th className="text-left pl-4 pr-2 py-2 font-semibold">Underlying</th>
               <th className="text-left px-2 py-2 font-semibold">Type</th>
               <th className="text-right px-3 py-2 font-semibold">Strike</th>
               <th className="text-center px-2 py-2 font-semibold">Payoff</th>
@@ -1333,10 +1333,10 @@ function OptionsChain({
                   className={`border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors cursor-pointer ${isOpen ? 'bg-muted/30 dark:bg-muted/15' : ''}`}
                   onClick={() => toggle(p.id)}
                 >
-                  <td className="pl-3 pr-1 py-2.5 text-muted-foreground">
+                  <td className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </td>
-                  <td className="relative pl-1 pr-2 py-2.5">
+                  <td className="relative pl-4 pr-2 py-2.5">
                     <span
                       className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
                         isCall
