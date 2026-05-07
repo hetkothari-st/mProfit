@@ -27,10 +27,15 @@ export interface GmailMessageWithAttachments {
   attachments: GmailAttachmentMeta[];
 }
 
-const ATTACHMENT_QUERY =
-  '(filename:pdf OR filename:xlsx OR filename:xls OR filename:csv) has:attachment';
+// Use `has:attachment` only. Per-attachment MIME/extension filtering
+// happens in `walkParts` below — Gmail's `filename:` operator misses
+// some attachments where the filename string lacks the extension token
+// (e.g. server-encoded names without the dot, or uppercase variants).
+// Excluding -in:trash keeps junk out without filtering by sender.
+const ATTACHMENT_QUERY = 'has:attachment -in:trash';
 
 const PROMO_FILENAME_RE = /(unsubscribe|newsletter|promotion|deals?)/i;
+const ALLOWED_EXT_RE = /\.(pdf|xlsx?|csv|tsv)$/i;
 
 function formatDate(d: Date): string {
   // Gmail expects YYYY/MM/DD in `after:` and `before:` filters.
@@ -40,8 +45,17 @@ function formatDate(d: Date): string {
   return `${yyyy}/${mm}/${dd}`;
 }
 
+function addDays(d: Date, n: number): Date {
+  const out = new Date(d);
+  out.setUTCDate(out.getUTCDate() + n);
+  return out;
+}
+
 export function buildScanQuery(lookbackFrom: Date, lookbackTo: Date): string {
-  return `${ATTACHMENT_QUERY} after:${formatDate(lookbackFrom)} before:${formatDate(lookbackTo)}`;
+  // Gmail's `before:` is exclusive of the named date — bump by 1 day so
+  // emails received on the user's chosen end date still match.
+  const beforeExclusive = addDays(lookbackTo, 1);
+  return `${ATTACHMENT_QUERY} after:${formatDate(lookbackFrom)} before:${formatDate(beforeExclusive)}`;
 }
 
 export async function listMessageIdsPage(
@@ -58,6 +72,10 @@ export async function listMessageIdsPage(
     pageToken: pageToken ?? undefined,
   });
   const ids = (res.data.messages ?? []).map((m) => m.id!).filter(Boolean);
+  logger.info(
+    { mailboxId, query, count: ids.length, nextPageToken: res.data.nextPageToken ?? null },
+    '[gmailLister] message page',
+  );
   return { ids, nextPageToken: res.data.nextPageToken ?? null };
 }
 
@@ -70,7 +88,12 @@ function walkParts(
   out: GmailAttachmentMeta[],
 ): void {
   if (!part) return;
-  if (part.body?.attachmentId && part.filename && !PROMO_FILENAME_RE.test(part.filename)) {
+  if (
+    part.body?.attachmentId
+    && part.filename
+    && !PROMO_FILENAME_RE.test(part.filename)
+    && ALLOWED_EXT_RE.test(part.filename)
+  ) {
     out.push({
       attachmentId: part.body.attachmentId,
       fileName: part.filename,

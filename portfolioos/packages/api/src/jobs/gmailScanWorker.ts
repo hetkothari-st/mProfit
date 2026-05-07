@@ -75,6 +75,15 @@ async function collectMessageIds(scanJobId: string): Promise<string[]> {
   const ids: string[] = [];
   let cursor = job.nextPageToken ?? null;
   const query = buildScanQuery(job.lookbackFrom, job.lookbackTo);
+  logger.info(
+    {
+      scanJobId,
+      query,
+      lookbackFrom: job.lookbackFrom,
+      lookbackTo: job.lookbackTo,
+    },
+    '[gmailScan] LISTING start',
+  );
 
   while (true) {
     if (await isCancelled(scanJobId)) return ids;
@@ -87,6 +96,7 @@ async function collectMessageIds(scanJobId: string): Promise<string[]> {
     });
     if (!cursor) break;
   }
+  logger.info({ scanJobId, total: ids.length }, '[gmailScan] LISTING done');
   return ids;
 }
 
