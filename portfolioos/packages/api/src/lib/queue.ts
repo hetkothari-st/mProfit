@@ -62,9 +62,55 @@ export function getImportQueue(): Bull.Queue<ImportJobPayload> {
   return _importQueue;
 }
 
+export interface GmailScanJobPayload {
+  scanJobId: string;
+}
+
+let _gmailScanQueue: Bull.Queue<GmailScanJobPayload> | null = null;
+
+/**
+ * Bull queue for the Gmail full-inbox scan worker. Lock + timeout
+ * tuned for long-running list/download/classify phases (large inboxes
+ * can take 30+ minutes).
+ */
+export function getGmailScanQueue(): Bull.Queue<GmailScanJobPayload> {
+  if (!_gmailScanQueue) {
+    _gmailScanQueue = new Bull<GmailScanJobPayload>('gmail-scan', env.REDIS_URL, {
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 60_000 },
+        timeout: 30 * 60 * 1000,
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 100 },
+      },
+      settings: {
+        lockDuration: 5 * 60 * 1000,
+        lockRenewTime: 2 * 60 * 1000,
+        stalledInterval: 30_000,
+        maxStalledCount: 2,
+      },
+    });
+
+    _gmailScanQueue.on('failed', (job, err) => {
+      logger.error({ jobId: job?.id, err }, '[queue] gmail-scan job failed');
+    });
+    _gmailScanQueue.on('completed', (job) => {
+      logger.info(
+        { jobId: job.id, scanJobId: job.data.scanJobId },
+        '[queue] gmail-scan job completed',
+      );
+    });
+  }
+  return _gmailScanQueue;
+}
+
 export async function closeQueues(): Promise<void> {
   if (_importQueue) {
     await _importQueue.close();
     _importQueue = null;
+  }
+  if (_gmailScanQueue) {
+    await _gmailScanQueue.close();
+    _gmailScanQueue = null;
   }
 }
