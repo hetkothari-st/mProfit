@@ -2,26 +2,45 @@
 
 > **Deferred from Plans A–D.** Plans A–D shipped the framework, schema, parsers, server-headless adapters, browser extension skeleton, and 8 institution adapters in mock-runnable state. This plan covers the remaining work that requires real-world inputs (live portal access, real PDFs, store accounts, production telemetry).
 
-**Status:** Pending. Each task block can be executed independently as inputs become available.
+**Status:** Partially complete. See progress table below.
+
+**Last updated:** 2026-05-07.
 
 **Prerequisites:** Plans A, B, C, D shipped (tags `pf-plan-{a,b,c,d}-*`).
 
 ---
 
-## Input requirements summary (read first)
+## Progress snapshot (2026-05-07)
 
-Tracks ordered by what blocks each. Tracks marked **READY** can begin without external inputs.
+| Track | Status | What's done | What remains |
+|-------|--------|-------------|--------------|
+| 1 — Real DOM selectors | ⛔ NOT STARTED | — | Full track. Blocked on live portal access. |
+| 2 — Parser tuning | ⛔ NOT STARTED | — | Full track. Blocked on real PDFs. |
+| 3 — Extension store-readiness | 🟡 PARTIAL | Icons (placeholder rendered), `PRIVACY.md` + `/privacy` route, `STORE_LISTING.md`, `RELEASE.md` | Real designer icons + screenshots, store dev account signups, real privacy email, content scripts for 6 banks |
+| 4 — Bot-detection hardening | 🟡 PARTIAL | `stealth.ts` shared helper (UA pool, viewport pool, click/type delays, Bezier mouse). Applied to EPFO + SBI adapters. | Apply to remaining 6 bank adapters (after their real DOM selectors land in Track 1). Residential proxy rotation (after detection telemetry collected). |
+| 5 — Monthly nudge | ✅ DONE | Schema fields, `pfNudges.service.ts`, daily 9am IST cron, snooze endpoint, yellow banner UI on ProvidentFundPage | — |
+| 6 — DLQ ops UI | ✅ DONE | List/get/retry/resolve endpoints, `IngestionFailuresPage.tsx`, sidebar nav entry | Admin overlay (deferred — not yet needed) |
+| 7 — Account Aggregator | ⛔ NOT STARTED | — | Full track. Blocked on TSP partnership + NBFC-AA license decision + legal review. |
+| 8 — Performance + scale | 🟡 PARTIAL | pino `duration_ms` logging, `@sentry/node` SDK + `lib/sentry.ts` (no-op until DSN set), `lib/metrics.ts` counter scaffold, `pf.fetch.success/failure/duration_ms` counters in worker | Real Sentry DSN registration (user action), production telemetry collection, query-plan analysis (needs ≥100 concurrent users), browser pool sizing |
 
-| Track | Status | Blocking inputs |
-|-------|--------|-----------------|
+**Tags shipped so far:** `pf-plan-{a,b,c,d}-*` + `pf-plan-e-tracks-5-6`. Plan E partial work for Tracks 3/4/8 is on `main`, untagged.
+
+---
+
+## Input requirements summary
+
+Updated 2026-05-07. Inputs needed to unblock the remaining work on each track.
+
+| Track | Status | Outstanding blocking inputs |
+|-------|--------|-----------------------------|
 | 1 — Real DOM selectors | BLOCKED | Live netbanking accounts × 8 institutions; UAN with passbook access; CAPTCHA samples; mobile + email for OTP |
 | 2 — Parser tuning | BLOCKED | ≥5 anonymized real passbook PDFs per institution (40 PDFs total); CII table |
-| 3 — Extension full + store | PARTIAL | Track 1 inputs (for content scripts); designer assets; Chrome WebStore $5 dev account; Firefox AMO account; privacy policy hosted; listing copy |
-| 4 — Bot-detection hardening | BLOCKED | Production telemetry baseline (≥100 fetches); residential proxy budget ($50–200/mo); DLQ telemetry from Track 6 |
-| 5 — Monthly nudge | **READY** | None — ships from existing primitives |
-| 6 — DLQ ops UI | **READY** | None — ships from existing primitives; access-control + retention decisions |
+| 3 — Extension full + store | PARTIAL — store-prep done | Real designer icons + screenshots; Chrome WebStore $5 dev account; Firefox AMO account; real privacy contact email; Track 1 inputs (for the 6 bank content scripts) |
+| 4 — Bot-detection hardening | PARTIAL — preemptive hardening shipped | Production telemetry baseline (≥100 fetches across institutions); residential proxy budget ($50–200/mo); DLQ telemetry from Track 6 |
+| 5 — Monthly nudge | ✅ DONE | — |
+| 6 — DLQ ops UI | ✅ DONE | — |
 | 7 — Account Aggregator | BLOCKED | TSP partnership; NBFC-AA license decision; legal review; per-fetch fee budget |
-| 8 — Performance + scale | BLOCKED | Production telemetry; APM tooling; 100+ concurrent active users |
+| 8 — Performance + scale | PARTIAL — APM scaffolded | Real Sentry DSN (free-tier signup at sentry.io); production users for telemetry collection; APM dashboards built once data flows |
 
 ### Categorized procurement list
 
@@ -50,7 +69,14 @@ Tracks ordered by what blocks each. Tracks marked **READY** can begin without ex
 - RBI Master Direction on AA review (if pursuing FIU license)
 - PII redaction audit on `IngestionFailure.rawPayload` before opening DLQ to non-admins
 
-**No-input tracks (start anytime):** 5, 6.
+**Outstanding user-blocking actions (gate everything else):**
+
+1. **Sentry DSN** — sign up free at sentry.io → create project → set `SENTRY_DSN` in Railway env. Unlocks Track 8 telemetry. Zero cost.
+2. **Live netbanking discovery walks** — schedule one focused session per institution (45–90 min each). Unlocks Tracks 1, 2 (per-bank), and the rest of 3 (content scripts).
+3. **Chrome Web Store dev account** ($5) + **Firefox AMO** (free). Unlocks Track 3 final submission.
+4. **Real privacy email** + **support email** — register `privacy@portfolio-os.in` and `support@portfolio-os.in` (or pick alternates). Unlocks store submission listing.
+5. **Designer hand-off** — icons (16/48/128 + svg) + store hero (1280×800) + screenshots (1280×800 × 4–5). Unlocks store submission visuals.
+6. **TSP partnership decision** for AA (Track 7) — multi-month, separate planning cycle.
 
 ---
 
@@ -142,6 +168,16 @@ EPFO interest credit lines need year-specific interest rate validation (FY-aware
 
 ## Track 3: Browser extension full coverage + store packaging
 
+**Status (2026-05-07):** PARTIAL — store-prep + privacy + listing copy + placeholder icons shipped on `main`. Real content scripts for 6 banks + designer artwork + store submission still pending.
+
+### Done
+
+- `extension/scripts/generate-icons.mjs` — generates 16/48/128 PNGs (teal background + white "P"). Output committed at `extension/icons/icon-{16,48,128}.png` (placeholder, designer-replaceable).
+- `extension/PRIVACY.md` — full privacy policy text.
+- `apps/web/src/pages/legal/PrivacyPage.tsx` + public `/privacy` route in `App.tsx` — privacy policy hosted at `https://portfolio-os.up.railway.app/privacy`.
+- `extension/STORE_LISTING.md` — Chrome Web Store name, short/detailed description, keywords, category, languages.
+- `extension/RELEASE.md` — pre-release checklist + Chrome Web Store + Firefox AMO submission runbook.
+
 ### Required inputs
 
 - **Live netbanking access** for content-script DOM walks (same accounts as Track 1)
@@ -202,6 +238,13 @@ Once on stores, store distribution handles updates. For unpacked-dev installs, d
 
 Server-headless Playwright adapters can be detected by anti-bot WAFs (Cloudflare, Akamai, PerimeterX). Production telemetry will reveal which banks block.
 
+**Status (2026-05-07):** PARTIAL — preemptive hardening shipped on `main`. Production tuning (proxy rotation, headed-fallback) still pending.
+
+### Done
+
+- `packages/api/src/adapters/pf/shared/stealth.ts` — UA pool (5 real Chrome strings), viewport pool (5 desktop sizes), `newStealthContext()`, `jitter()`, `clickDelay()`, `typeDelay()`, Bezier-curve `humanMouseMoveTo()`.
+- Applied to `epfo.v1.ts` and `sbi.v1.ts`: `browser.newPage()` replaced by `newStealthContext(browser)`; `page.fill()` calls replaced by `page.type()` + `typeDelay()` for per-char human-typing delays; `clickDelay()` added to every `page.click()`.
+
 ### Required inputs
 
 - **Production traffic baseline** — ≥100 real fetch attempts across the 8 institutions before deciding what to harden. Without telemetry, hardening is speculative.
@@ -235,12 +278,15 @@ Surface in DLQ ops UI for triage.
 
 Spec §12 milestone 11. Cadence per Q5 decision = on-demand + monthly nudge.
 
-### Required inputs
+**Status (2026-05-07):** ✅ DONE — tag `pf-plan-e-tracks-5-6`.
 
-- **None external.** Ships from existing schema + UI primitives. Can begin immediately.
-- **UX decision (low-stakes)** — confirm 30-day default cadence is right.
-- **Email digest opt-in flag** — needs `User.preferences.weeklyPfDigest: boolean` column or equivalent. Add if absent.
-- **Email template assets** — designer-supplied HTML if marketing wants branded; otherwise plaintext fine for v1.
+### Done
+
+- Migration `20260506150000_pf_nudge_fields` added `PF_REFRESH_DUE` to `AlertType` and `lastNudgedAt` / `nudgeSnoozedUntil` columns to `ProvidentFundAccount`.
+- `packages/api/src/services/pfNudges.service.ts` — `emitStaleAccountAlerts()` (30-day stale threshold, 7-day re-nudge interval, snooze-aware, dedup on metadata key) and `snoozeNudge()`.
+- `packages/api/src/jobs/pfNudgeJob.ts` — daily 9am IST cron via BullMQ repeatable. Registered in `startupSync.ts`.
+- `POST /api/epfppf/accounts/:id/snooze-nudge` endpoint.
+- `apps/web/src/pages/assetClasses/ProvidentFundPage.tsx` — yellow banner above stale account cards with "Snooze 30d" + "Refresh now" buttons.
 
 ### Tasks
 
@@ -256,12 +302,21 @@ Spec §12 milestone 11. Cadence per Q5 decision = on-demand + monthly nudge.
 
 Currently `IngestionFailure` rows are written but no admin UI to triage them.
 
-### Required inputs
+**Status (2026-05-07):** ✅ DONE — tag `pf-plan-e-tracks-5-6`.
 
-- **None external.** Ships from existing schema + React components. Can begin immediately.
-- **Access-control decision** — admin-only? user-self-serve for own failures? Recommendation: per-user view of own failures + admin overlay gated behind `User.isAdmin` flag (add column if absent).
-- **Retention policy** — keep `IngestionFailure` rows forever, or auto-purge after N days? Recommendation: keep forever for own failures; admin-side purge job after 90 days for resolved entries.
-- **Sensitive payload redaction audit** — raw payloads stored in `IngestionFailure.rawPayload` may contain partial PII. Verify Plan A's PII redaction (`packages/api/src/ingestion/pii.ts`) is applied before write. Audit one production failure sample before opening UI to non-admins.
+### Done
+
+- `GET /api/ingestion-failures` — cursor pagination + `adapter` / `since` / `resolved` filters.
+- `GET /api/ingestion-failures/:id` — full detail.
+- `POST /api/ingestion-failures/:id/retry` — re-fetches Gmail emails and re-runs `processEmail`. PF/vehicle/valuation adapters return `BadRequestError` (not re-runnable without live sessions).
+- `POST /api/ingestion-failures/:id/resolve` — accepts `manual_entry | ignored | fixed_externally`.
+- `apps/web/src/pages/ops/IngestionFailuresPage.tsx` — adapter search, filter chips (All / Unresolved / Resolved), retry button (Gmail-only), expand-to-detail dialog, cursor "Load more" pagination.
+- Sidebar nav entry "Failures (DLQ)" under Tools; `/ops/ingestion-failures` route alias in `App.tsx`.
+
+### Deferred (not yet needed)
+
+- Admin overlay (cross-user view) — gated behind a future `User.isAdmin` flag if/when an internal-ops use-case appears.
+- Auto-purge cron for resolved entries (>90 days) — defer until table size warrants.
 
 ### Tasks
 
@@ -300,11 +355,21 @@ Touchpoints when ready:
 
 ## Track 8: Performance + scale
 
-### Required inputs
+**Status (2026-05-07):** PARTIAL — APM + metrics scaffolding shipped on `main`. Real-world telemetry tuning still pending.
 
-- **Production telemetry** — query timing histogram on top 5 endpoints. Recommend `pino` request-duration logging or APM (Datadog, New Relic, Sentry tracing).
+### Done
+
+- `packages/api/src/index.ts` pinoHttp now emits `duration_ms` per request log line (machine-parseable for log shipping).
+- `@sentry/node` v10 installed; `packages/api/src/lib/sentry.ts` with `initSentry()` (no-op when `SENTRY_DSN` unset) + `Sentry.setupExpressErrorHandler(app)` wired into Express middleware chain.
+- `SENTRY_DSN=` placeholder added to `.env.example`.
+- `packages/api/src/lib/metrics.ts` — counter scaffold with `incCounter()` / `getCounters()` / `dumpAndResetCounters()`.
+- `pf.fetch.success` / `pf.fetch.failure` / `pf.fetch.duration_ms` counters emitted from `pfFetchWorker.ts`.
+
+### Required inputs (remaining)
+
+- **Real Sentry DSN** — sign up free at sentry.io → create Node.js project → set `SENTRY_DSN` in Railway env vars. Zero cost on the free tier (5k events/month). User action.
 - **Realistic user load** — 100+ concurrent active users with 1000+ transactions each before perf work matters.
-- **Database query plan visibility** — Postgres `pg_stat_statements` extension enabled (Neon supports this).
+- **Database query plan visibility** — Postgres `pg_stat_statements` extension enabled (Neon supports this; flip on via Neon console).
 - **Browser pool sizing target** — pick max concurrent fetches per worker (e.g. 5). Drives memory budget for Railway service plan.
 
 Once telemetry exists:
@@ -318,13 +383,18 @@ Once telemetry exists:
 
 ## Execution order recommendation
 
-1. **Track 5 (Nudge)** — small, ships immediately, improves stickiness
-2. **Track 6 (DLQ UI)** — needed before Track 1 begins (otherwise can't triage failures)
-3. **Track 1 + Track 2 in parallel, per bank** — discover selectors + tune parser together; bank-by-bank
-4. **Track 4 (Hardening)** — kicks in once any bank shows >20% detection rate in production
-5. **Track 3 (Extension full + store)** — independent track; can start any time once designer + dev account ready
-6. **Track 7 (AA)** — long-tail, separate planning cycle
-7. **Track 8 (Perf)** — driven by production telemetry, post-launch
+Updated 2026-05-07 — Tracks 5, 6 done; Tracks 3, 4, 8 partial.
+
+1. ~~**Track 5 (Nudge)**~~ ✅ shipped
+2. ~~**Track 6 (DLQ UI)**~~ ✅ shipped
+3. ~~**Track 4 preemptive hardening**~~ ✅ shipped (UA pool + delays + Bezier mouse on EPFO + SBI). Real-world tuning waits on telemetry.
+4. ~~**Track 8 APM scaffolding**~~ ✅ shipped. Activate by setting `SENTRY_DSN`.
+5. ~~**Track 3 store-prep**~~ ✅ shipped (placeholder icons, privacy policy, listing copy, release runbook). Real submission waits on designer + store dev accounts.
+6. **Track 1 + Track 2 in parallel, per bank** — discover selectors + tune parser together; bank-by-bank. Largest remaining work.
+7. **Track 3 final** — content scripts for 6 banks (after Track 1) + real designer artifacts + store submission.
+8. **Track 4 production tuning** — proxy rotation once any bank shows >20% detection rate.
+9. **Track 8 production tuning** — query plan analysis once ≥100 concurrent users.
+10. **Track 7 (AA)** — long-tail, separate planning cycle.
 
 ---
 
