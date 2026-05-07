@@ -50,6 +50,7 @@ import { FuturesOptionsPage } from './pages/assetClasses/FuturesOptionsPage';
 import { AccountingPage } from './pages/accounting/AccountingPage';
 import { AlertsPage } from './pages/alerts/AlertsPage';
 import { OnboardingWizard } from './pages/onboarding/OnboardingWizard';
+import { PrivacyPage } from './pages/legal/PrivacyPage';
 
 export function App() {
   return (
@@ -57,6 +58,7 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route
         path="/onboarding"
         element={
