@@ -102,6 +102,12 @@ function normalizeExpiry(raw: string | undefined): string | null {
   return `${yyyy}-${mon}-${dd}`;
 }
 
+/**
+ * Mirror the precedence in services/assetKey.computeAssetKey:
+ *   FUT  → "fno:<UND>:FUT:000000:<YYYY-MM-DD>"
+ *   OPT  → "fno:<UND>:<CE|PE>:<strike padded 6>:<YYYY-MM-DD>"
+ * Drift here = silent miss against DerivativePosition.assetKey.
+ */
 function buildAssetKey(
   underlying: string,
   instrumentType: string | undefined,
@@ -110,16 +116,18 @@ function buildAssetKey(
   strike: number | undefined,
 ): string | null {
   if (!instrumentType) return null;
+  const u = underlying.toUpperCase();
   const isFut = instrumentType.toLowerCase().includes('futures');
   const isOpt = instrumentType.toLowerCase().includes('options');
   if (isFut) {
-    return `fno:${underlying}:FUT::${expiry}`;
+    return `fno:${u}:FUT:000000:${expiry}`;
   }
   if (isOpt) {
-    if (!optionType || strike === undefined) return null;
+    if (!optionType || strike === undefined || strike === null) return null;
     const t = optionType.toLowerCase().startsWith('c') ? 'CE' : 'PE';
-    const strikeStr = String(strike).split('.')[0]!;
-    return `fno:${underlying}:${t}:${strikeStr}:${expiry}`;
+    const intPart = String(strike).split('.')[0]!.replace(/\D/g, '');
+    const padded = (intPart || '0').padStart(6, '0');
+    return `fno:${u}:${t}:${padded}:${expiry}`;
   }
   return null;
 }

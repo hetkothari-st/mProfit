@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { Activity, AlertTriangle, RefreshCw, Loader2, Calendar, TrendingUp, TrendingDown, CheckCircle2, X, KeyRound, ChevronRight, ChevronDown } from 'lucide-react';
+import { Activity, AlertTriangle, RefreshCw, Loader2, Calendar, TrendingUp, TrendingDown, CheckCircle2, X, KeyRound, ChevronRight, ChevronDown, Layers, ArrowUpRight, ArrowDownRight, BarChart3 } from 'lucide-react';
 import { formatINR, toDecimal, Decimal } from '@portfolioos/shared';
 import { foApi, brokerApi, type FoPosition, type FoTrade, type BrokerStatus } from '@/api/fo.api';
 import { portfoliosApi } from '@/api/portfolios.api';
@@ -363,8 +363,21 @@ export function FuturesOptionsPage() {
         </nav>
       </div>
 
-      {tab === 'open' && <PositionsTable rows={open} trades={tradesQ.data ?? []} />}
-      {tab === 'closed' && <PositionsTable rows={closed} closedView trades={tradesQ.data ?? []} />}
+      {tab === 'open' && (
+        <PositionsTable
+          rows={open}
+          allPositions={positionsQ.data ?? []}
+          trades={tradesQ.data ?? []}
+        />
+      )}
+      {tab === 'closed' && (
+        <PositionsTable
+          rows={closed}
+          allPositions={positionsQ.data ?? []}
+          closedView
+          trades={tradesQ.data ?? []}
+        />
+      )}
 
       {tab === 'trades' && (
         <Card>
@@ -566,38 +579,68 @@ function tradeUnderlying(t: FoTrade): string {
 
 interface UnderlyingGroup {
   underlying: string;
+  /** Positions visible in the current tab (open or closed). */
   positions: FoPosition[];
+  /** Realized P&L summed across ALL positions ever recorded for this
+   *  underlying — open + closed. Closed lots are where realized actually
+   *  comes from, so excluding them on the Open tab made the number look
+   *  permanently zero. */
   netRealizedPnl: Decimal;
+  /** Unrealized P&L summed across positions in the current view (open
+   *  positions on the Open tab; nothing on the Closed tab). */
   netUnrealizedPnl: Decimal;
   totalCost: Decimal;
   openContracts: number;
   closedContracts: number;
+  futCount: number;
+  ceCount: number;
+  peCount: number;
 }
 
-function groupByUnderlying(rows: FoPosition[]): UnderlyingGroup[] {
+/**
+ * Group positions in `rowsForView` by underlying and use the full
+ * `allPositions` list to compute realized P&L per underlying. Without
+ * the second list the Open tab would only sum realized from currently-
+ * open lots — which is always zero by definition (open = unrealized).
+ */
+function groupByUnderlying(
+  rowsForView: FoPosition[],
+  allPositions: FoPosition[],
+): UnderlyingGroup[] {
+  const realizedByUnderlying = new Map<string, Decimal>();
+  for (const p of allPositions) {
+    if (!p.realizedPnl) continue;
+    const cur = realizedByUnderlying.get(p.underlying) ?? new Decimal(0);
+    realizedByUnderlying.set(p.underlying, cur.plus(toDecimal(p.realizedPnl)));
+  }
+
   const map = new Map<string, UnderlyingGroup>();
-  for (const p of rows) {
+  for (const p of rowsForView) {
     let g = map.get(p.underlying);
     if (!g) {
       g = {
         underlying: p.underlying,
         positions: [],
-        netRealizedPnl: new Decimal(0),
+        netRealizedPnl: realizedByUnderlying.get(p.underlying) ?? new Decimal(0),
         netUnrealizedPnl: new Decimal(0),
         totalCost: new Decimal(0),
         openContracts: 0,
         closedContracts: 0,
+        futCount: 0,
+        ceCount: 0,
+        peCount: 0,
       };
       map.set(p.underlying, g);
     }
     g.positions.push(p);
-    if (p.realizedPnl) g.netRealizedPnl = g.netRealizedPnl.plus(toDecimal(p.realizedPnl));
     if (p.unrealizedPnl) g.netUnrealizedPnl = g.netUnrealizedPnl.plus(toDecimal(p.unrealizedPnl));
     if (p.totalCost) g.totalCost = g.totalCost.plus(toDecimal(p.totalCost));
     if (p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') g.openContracts++;
     else g.closedContracts++;
+    if (p.instrumentType === 'FUTURES') g.futCount++;
+    else if (p.instrumentType === 'CALL') g.ceCount++;
+    else if (p.instrumentType === 'PUT') g.peCount++;
   }
-  // Largest absolute exposure first, with open contracts breaking ties
   return [...map.values()].sort((a, b) => {
     const expDiff = b.totalCost.abs().comparedTo(a.totalCost.abs());
     if (expDiff !== 0) return expDiff;
@@ -607,15 +650,20 @@ function groupByUnderlying(rows: FoPosition[]): UnderlyingGroup[] {
 
 function PositionsTable({
   rows,
+  allPositions,
   closedView,
   trades,
 }: {
   rows: FoPosition[];
+  allPositions: FoPosition[];
   closedView?: boolean;
   trades: FoTrade[];
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const groups = useMemo(() => groupByUnderlying(rows), [rows]);
+  const groups = useMemo(
+    () => groupByUnderlying(rows, allPositions),
+    [rows, allPositions],
+  );
   const tradesByUnderlying = useMemo(() => {
     const m = new Map<string, FoTrade[]>();
     for (const t of trades) {
@@ -728,7 +776,28 @@ function UnderlyingRows({
         <td className="px-2 py-2 text-muted-foreground">
           {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </td>
-        <td className="px-3 py-2 font-medium">{group.underlying}</td>
+        <td className="px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{group.underlying}</span>
+            <div className="flex items-center gap-1">
+              {group.futCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200">
+                  <Layers className="h-2.5 w-2.5" /> FUT × {group.futCount}
+                </span>
+              )}
+              {group.ceCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
+                  <ArrowUpRight className="h-2.5 w-2.5" /> CE × {group.ceCount}
+                </span>
+              )}
+              {group.peCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
+                  <ArrowDownRight className="h-2.5 w-2.5" /> PE × {group.peCount}
+                </span>
+              )}
+            </div>
+          </div>
+        </td>
         <td className="px-3 py-2 text-right text-xs">
           <span className="text-emerald-700">{group.openContracts} open</span>
           {group.closedContracts > 0 && (
@@ -751,10 +820,13 @@ function UnderlyingRows({
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={8} className="bg-muted/10 p-0">
-            <div className="border-l-2 border-primary/40 ml-4 mr-2 my-2 pl-3 pr-1 py-2 space-y-4">
-              <UnderlyingContracts positions={group.positions} />
-              <UnderlyingTrades trades={trades} />
+          <td colSpan={8} className="p-0">
+            <div className="bg-gradient-to-br from-muted/30 via-background to-muted/10 border-l-4 border-primary/60 mx-3 my-3 rounded-lg shadow-sm">
+              <div className="p-4 space-y-5">
+                <UnderlyingHeader group={group} />
+                <UnderlyingContractGroups positions={group.positions} />
+                <UnderlyingTrades trades={trades} />
+              </div>
             </div>
           </td>
         </tr>
@@ -763,52 +835,194 @@ function UnderlyingRows({
   );
 }
 
-function UnderlyingContracts({ positions }: { positions: FoPosition[] }) {
+function UnderlyingHeader({ group }: { group: UnderlyingGroup }) {
+  const totalContracts = group.positions.length;
+  const exposure = group.totalCost.abs().toString();
   return (
-    <div>
-      <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">
-        Contracts ({positions.length})
+    <div className="flex flex-wrap items-end gap-x-6 gap-y-2 pb-3 border-b border-border/60">
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          Underlying
+        </div>
+        <div className="text-lg font-semibold mt-0.5 flex items-center gap-2">
+          {group.underlying}
+          <span className="text-xs text-muted-foreground font-normal">
+            · {totalContracts} {totalContracts === 1 ? 'contract' : 'contracts'}
+          </span>
+        </div>
       </div>
-      <div className="overflow-x-auto rounded border bg-background">
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          Exposure
+        </div>
+        <div className="text-sm font-semibold tabular-nums mt-0.5">{fmtINR(exposure)}</div>
+      </div>
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          Realized P&L
+        </div>
+        <div className={`text-sm font-semibold tabular-nums mt-0.5 ${pnlClass(group.netRealizedPnl.toString())}`}>
+          {fmtINR(group.netRealizedPnl.toString())}
+        </div>
+      </div>
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          Unrealized P&L
+        </div>
+        <div className={`text-sm font-semibold tabular-nums mt-0.5 ${pnlClass(group.netUnrealizedPnl.toString())}`}>
+          {fmtINR(group.netUnrealizedPnl.toString())}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function instrumentSection(p: FoPosition): 'futures' | 'options' {
+  return p.instrumentType === 'FUTURES' ? 'futures' : 'options';
+}
+
+function ContractTypeBadge({ instrumentType }: { instrumentType: 'FUTURES' | 'CALL' | 'PUT' }) {
+  if (instrumentType === 'FUTURES') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-sky-100 text-sky-700 border border-sky-200">
+        <Layers className="h-2.5 w-2.5" /> FUT
+      </span>
+    );
+  }
+  if (instrumentType === 'CALL') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+        <ArrowUpRight className="h-2.5 w-2.5" /> CE
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+      <ArrowDownRight className="h-2.5 w-2.5" /> PE
+    </span>
+  );
+}
+
+function UnderlyingContractGroups({ positions }: { positions: FoPosition[] }) {
+  const futures = positions.filter((p) => instrumentSection(p) === 'futures');
+  const options = positions.filter((p) => instrumentSection(p) === 'options');
+
+  return (
+    <div className="space-y-4">
+      {futures.length > 0 && (
+        <ContractSection
+          title="Futures"
+          icon={<Layers className="h-3.5 w-3.5" />}
+          tone="sky"
+          positions={futures}
+          isOptions={false}
+        />
+      )}
+      {options.length > 0 && (
+        <ContractSection
+          title="Options"
+          icon={<BarChart3 className="h-3.5 w-3.5" />}
+          tone="violet"
+          positions={options}
+          isOptions
+        />
+      )}
+    </div>
+  );
+}
+
+const TONE_CLASSES: Record<string, { header: string; pill: string; ring: string }> = {
+  sky:    { header: 'bg-sky-50/70 text-sky-900 border-sky-200',     pill: 'bg-sky-100 text-sky-700',     ring: 'ring-sky-200/60' },
+  violet: { header: 'bg-violet-50/70 text-violet-900 border-violet-200', pill: 'bg-violet-100 text-violet-700', ring: 'ring-violet-200/60' },
+};
+
+function ContractSection({
+  title,
+  icon,
+  tone,
+  positions,
+  isOptions,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  tone: 'sky' | 'violet';
+  positions: FoPosition[];
+  isOptions: boolean;
+}) {
+  const t = TONE_CLASSES[tone]!;
+  return (
+    <div className={`rounded-lg border bg-background overflow-hidden ring-1 ${t.ring}`}>
+      <div className={`flex items-center gap-2 px-3 py-2 border-b ${t.header}`}>
+        <span className={`inline-flex items-center justify-center h-5 w-5 rounded ${t.pill}`}>
+          {icon}
+        </span>
+        <span className="text-xs font-semibold uppercase tracking-wide">{title}</span>
+        <span className="text-[10px] text-muted-foreground font-normal">
+          ({positions.length} {positions.length === 1 ? 'contract' : 'contracts'})
+        </span>
+      </div>
+      <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-muted/40">
+          <thead className="bg-muted/30">
             <tr className="text-[10px] uppercase text-muted-foreground">
-              <th className="text-left px-2 py-1.5">Type</th>
-              <th className="text-right px-2 py-1.5">Strike</th>
-              <th className="text-left px-2 py-1.5">Expiry</th>
-              <th className="text-right px-2 py-1.5">Net Qty</th>
-              <th className="text-right px-2 py-1.5">Lot</th>
-              <th className="text-right px-2 py-1.5">Avg Entry</th>
-              <th className="text-right px-2 py-1.5">LTP</th>
-              <th className="text-right px-2 py-1.5">Realized</th>
-              <th className="text-right px-2 py-1.5">Unrealized</th>
-              <th className="text-left px-2 py-1.5">Status</th>
+              <th className="text-left px-2.5 py-2">Side</th>
+              {isOptions && <th className="text-right px-2.5 py-2">Strike</th>}
+              <th className="text-left px-2.5 py-2">Expiry</th>
+              <th className="text-right px-2.5 py-2">Net Qty</th>
+              <th className="text-right px-2.5 py-2">Lot</th>
+              <th className="text-right px-2.5 py-2">Avg Entry</th>
+              <th className="text-right px-2.5 py-2">LTP</th>
+              <th className="text-right px-2.5 py-2">Realized</th>
+              <th className="text-right px-2.5 py-2">Unrealized</th>
+              <th className="text-left px-2.5 py-2">Status</th>
             </tr>
           </thead>
           <tbody>
             {positions.map((p) => (
-              <tr key={p.id} className="border-t">
-                <td className="px-2 py-1.5 font-medium">{p.instrumentType}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{p.strikePrice ?? '—'}</td>
-                <td className="px-2 py-1.5">
+              <tr key={p.id} className="border-t hover:bg-muted/20 transition-colors">
+                <td className="px-2.5 py-2">
+                  <ContractTypeBadge instrumentType={p.instrumentType} />
+                </td>
+                {isOptions && (
+                  <td className="px-2.5 py-2 text-right tabular-nums font-medium">
+                    {p.strikePrice ?? '—'}
+                  </td>
+                )}
+                <td className="px-2.5 py-2">
                   <div className="flex items-center gap-1.5">
-                    <span>{p.expiryDate}</span>
-                    {p.status === 'OPEN' && <ExpiryBadge iso={p.expiryDate} />}
+                    <span className="text-muted-foreground">{p.expiryDate}</span>
+                    {(p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') && (
+                      <ExpiryBadge iso={p.expiryDate} />
+                    )}
                   </div>
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{p.netQuantity}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{p.lotSize}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{fmtINR(p.avgEntryPrice)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{p.mtmPrice ? fmtINR(p.mtmPrice) : '—'}</td>
-                <td className={`px-2 py-1.5 text-right tabular-nums ${pnlClass(p.realizedPnl)}`}>
+                <td className="px-2.5 py-2 text-right tabular-nums">
+                  <span className={
+                    toDecimal(p.netQuantity).isPositive() ? 'text-emerald-700'
+                    : toDecimal(p.netQuantity).isNegative() ? 'text-rose-700' : ''
+                  }>
+                    {toDecimal(p.netQuantity).isPositive() ? '+' : ''}
+                    {p.netQuantity}
+                  </span>
+                </td>
+                <td className="px-2.5 py-2 text-right tabular-nums text-muted-foreground">
+                  {p.lotSize}
+                </td>
+                <td className="px-2.5 py-2 text-right tabular-nums">{fmtINR(p.avgEntryPrice)}</td>
+                <td className="px-2.5 py-2 text-right tabular-nums font-medium">
+                  {p.mtmPrice ? fmtINR(p.mtmPrice) : (
+                    <span className="text-muted-foreground italic">awaiting LTP</span>
+                  )}
+                </td>
+                <td className={`px-2.5 py-2 text-right tabular-nums ${pnlClass(p.realizedPnl)}`}>
                   {fmtINR(p.realizedPnl)}
                 </td>
-                <td className={`px-2 py-1.5 text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
+                <td className={`px-2.5 py-2 text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
                   {p.unrealizedPnl ? fmtINR(p.unrealizedPnl) : '—'}
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2.5 py-2">
                   <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
                       p.status === 'OPEN'
                         ? 'bg-emerald-100 text-emerald-700'
                         : p.status === 'PENDING_EXPIRY_APPROVAL'
