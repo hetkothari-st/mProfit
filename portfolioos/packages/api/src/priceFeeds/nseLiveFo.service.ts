@@ -191,6 +191,17 @@ async function fetchUnderlyingSnapshot(underlying: string): Promise<UnderlyingSn
     }
   }
 
+  logger.debug(
+    {
+      underlying,
+      underlyingValue: json.underlyingValue ?? 0,
+      stocksTotal: stocks.length,
+      contractsParsed: byAssetKey.size,
+      sample: Array.from(byAssetKey.entries()).slice(0, 3),
+    },
+    '[nseLiveFo] fetched',
+  );
+
   return {
     underlying,
     underlyingValue: json.underlyingValue ?? 0,

@@ -342,7 +342,17 @@ export async function refreshLiveDerivativePositionPrices(opts?: {
   if (positions.length === 0) return { updated: 0, total: 0 };
 
   // Pre-warm the NSE cache: one fetch per distinct underlying.
-  const liveMap = await getLiveFoPricesBatch(positions.map((p) => p.assetKey));
+  const positionKeys = positions.map((p) => p.assetKey);
+  const liveMap = await getLiveFoPricesBatch(positionKeys);
+  logger.info(
+    {
+      total: positions.length,
+      liveHits: liveMap.size,
+      missed: positionKeys.filter((k) => !liveMap.has(k)).slice(0, 5),
+      sampleHit: Array.from(liveMap.entries()).slice(0, 3),
+    },
+    '[fno] live refresh — assetKey match summary',
+  );
 
   let updated = 0;
   for (const p of positions) {

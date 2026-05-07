@@ -128,9 +128,16 @@ export function FuturesOptionsPage() {
   // underlying, so polling at 5s collapses onto one upstream call per
   // underlying. We pause when the tab is hidden to spare both NSE and
   // ourselves from idle traffic.
+  const [liveStatus, setLiveStatus] = useState<{
+    updated: number;
+    total: number;
+    at: number;
+  } | null>(null);
+
   const liveRefreshMut = useMutation({
     mutationFn: () => foApi.refreshLive(portfolioId),
-    onSuccess: () => {
+    onSuccess: (r) => {
+      setLiveStatus({ updated: r.updated, total: r.total, at: Date.now() });
       queryClient.invalidateQueries({ queryKey: ['fo', 'positions'] });
       queryClient.invalidateQueries({ queryKey: ['fo', 'summary'] });
     },
@@ -287,6 +294,16 @@ export function FuturesOptionsPage() {
             >
               {syncMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sync Kite'}
             </Button>
+            <LiveStatusChip status={liveStatus} pending={liveRefreshMut.isPending} />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => liveRefreshMut.mutate()}
+              disabled={!portfolioId || liveRefreshMut.isPending}
+              title="Pull live MTM from NSE quote-derivative"
+            >
+              {liveRefreshMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sync prices'}
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -364,14 +381,14 @@ export function FuturesOptionsPage() {
       </div>
 
       {tab === 'open' && (
-        <PositionsTable
+        <SplitFoTables
           rows={open}
           allPositions={positionsQ.data ?? []}
           trades={tradesQ.data ?? []}
         />
       )}
       {tab === 'closed' && (
-        <PositionsTable
+        <SplitFoTables
           rows={closed}
           allPositions={positionsQ.data ?? []}
           closedView
@@ -648,6 +665,300 @@ function groupByUnderlying(
   });
 }
 
+/**
+ * Top-level split: Futures and Options each get their own flat table.
+ * One row per contract — no underlying-grouping at this level — so the
+ * eye can read off "what FUT do I have vs what options" without nesting.
+ */
+function SplitFoTables({
+  rows,
+  allPositions,
+  closedView,
+  trades,
+}: {
+  rows: FoPosition[];
+  allPositions: FoPosition[];
+  closedView?: boolean;
+  trades: FoTrade[];
+}) {
+  const futures = useMemo(
+    () => rows.filter((p) => p.instrumentType === 'FUTURES'),
+    [rows],
+  );
+  const options = useMemo(
+    () => rows.filter((p) => p.instrumentType === 'CALL' || p.instrumentType === 'PUT'),
+    [rows],
+  );
+
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        title={closedView ? 'No closed positions' : 'No open F&O positions'}
+        description={
+          closedView
+            ? 'Closed positions will appear here once you trade out, expire, or roll.'
+            : 'Sync your broker or import contract notes to populate positions.'
+        }
+      />
+    );
+  }
+
+  // Lifetime realized per underlying — needed only if we ever surface a
+  // per-contract realized that crosses tabs. The flat tables below show
+  // per-position realized directly so this is informational.
+  const lifetimeRealizedByUnderlying = new Map<string, Decimal>();
+  for (const p of allPositions) {
+    if (!p.realizedPnl) continue;
+    const cur = lifetimeRealizedByUnderlying.get(p.underlying) ?? new Decimal(0);
+    lifetimeRealizedByUnderlying.set(p.underlying, cur.plus(toDecimal(p.realizedPnl)));
+  }
+
+  return (
+    <div className="space-y-5">
+      {futures.length > 0 && (
+        <FoFlatTable
+          title="Futures"
+          tone="sky"
+          icon={<Layers className="h-3.5 w-3.5" />}
+          positions={futures}
+          isOptions={false}
+        />
+      )}
+      {options.length > 0 && (
+        <FoFlatTable
+          title="Options"
+          tone="violet"
+          icon={<BarChart3 className="h-3.5 w-3.5" />}
+          positions={options}
+          isOptions
+        />
+      )}
+      {trades.length > 0 && <TradesSection trades={trades} />}
+    </div>
+  );
+}
+
+function FoFlatTable({
+  title,
+  tone,
+  icon,
+  positions,
+  isOptions,
+}: {
+  title: string;
+  tone: 'sky' | 'violet';
+  icon: React.ReactNode;
+  positions: FoPosition[];
+  isOptions: boolean;
+}) {
+  const t = TONE_CLASSES[tone]!;
+  const sorted = useMemo(
+    () =>
+      [...positions].sort((a, b) => {
+        const u = a.underlying.localeCompare(b.underlying);
+        if (u !== 0) return u;
+        const e = a.expiryDate.localeCompare(b.expiryDate);
+        if (e !== 0) return e;
+        const sa = Number(a.strikePrice ?? 0);
+        const sb = Number(b.strikePrice ?? 0);
+        return sa - sb;
+      }),
+    [positions],
+  );
+
+  const totals = useMemo(() => {
+    let cost = new Decimal(0);
+    let realized = new Decimal(0);
+    let unrealized = new Decimal(0);
+    for (const p of sorted) {
+      if (p.totalCost) cost = cost.plus(toDecimal(p.totalCost));
+      if (p.realizedPnl) realized = realized.plus(toDecimal(p.realizedPnl));
+      if (p.unrealizedPnl) unrealized = unrealized.plus(toDecimal(p.unrealizedPnl));
+    }
+    return { cost, realized, unrealized, net: realized.plus(unrealized) };
+  }, [sorted]);
+
+  return (
+    <Card className={`overflow-hidden ring-1 ${t.ring}`}>
+      <div className={`flex items-center justify-between gap-3 px-4 py-2.5 border-b ${t.header}`}>
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center justify-center h-6 w-6 rounded ${t.pill}`}>
+            {icon}
+          </span>
+          <span className="text-sm font-semibold uppercase tracking-wide">{title}</span>
+          <span className="text-xs text-muted-foreground font-normal">
+            ({sorted.length})
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-xs">
+          <Stat label="Exposure" value={fmtINR(totals.cost.abs().toString())} />
+          <Stat label="Realized" value={fmtINR(totals.realized.toString())} accent={pnlClass(totals.realized.toString())} />
+          <Stat label="Unrealized" value={fmtINR(totals.unrealized.toString())} accent={pnlClass(totals.unrealized.toString())} />
+          <Stat label="Net P&L" value={fmtINR(totals.net.toString())} accent={pnlClass(totals.net.toString())} bold />
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40">
+            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <th className="text-left px-3 py-2">Underlying</th>
+              <th className="text-left px-3 py-2">Type</th>
+              {isOptions && <th className="text-right px-3 py-2">Strike</th>}
+              <th className="text-left px-3 py-2">Expiry</th>
+              <th className="text-right px-3 py-2">Net Qty</th>
+              <th className="text-right px-3 py-2">Lot</th>
+              <th className="text-right px-3 py-2">Avg Entry</th>
+              <th className="text-right px-3 py-2">LTP</th>
+              <th className="text-right px-3 py-2">Total Cost</th>
+              <th className="text-right px-3 py-2">Realized</th>
+              <th className="text-right px-3 py-2">Unrealized</th>
+              <th className="text-left px-3 py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((p) => {
+              const qty = toDecimal(p.netQuantity);
+              return (
+                <tr key={p.id} className="border-t hover:bg-muted/20 transition-colors">
+                  <td className="px-3 py-2 font-medium">{p.underlying}</td>
+                  <td className="px-3 py-2">
+                    <ContractTypeBadge instrumentType={p.instrumentType} />
+                  </td>
+                  {isOptions && (
+                    <td className="px-3 py-2 text-right tabular-nums font-medium">
+                      {p.strikePrice ?? '—'}
+                    </td>
+                  )}
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">{p.expiryDate}</span>
+                      {(p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') && (
+                        <ExpiryBadge iso={p.expiryDate} />
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    <span className={
+                      qty.isPositive() ? 'text-emerald-700 font-medium'
+                      : qty.isNegative() ? 'text-rose-700 font-medium' : ''
+                    }>
+                      {qty.isPositive() ? '+' : ''}
+                      {p.netQuantity}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                    {p.lotSize}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtINR(p.avgEntryPrice)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                    {p.mtmPrice ? fmtINR(p.mtmPrice) : (
+                      <span className="text-amber-600 italic text-xs">awaiting LTP</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtINR(p.totalCost)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${pnlClass(p.realizedPnl)}`}>
+                    {fmtINR(p.realizedPnl)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
+                    {p.unrealizedPnl ? fmtINR(p.unrealizedPnl) : '—'}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                        p.status === 'OPEN'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : p.status === 'PENDING_EXPIRY_APPROVAL'
+                            ? 'bg-amber-100 text-amber-700'
+                            : p.status === 'EXPIRED_WORTHLESS'
+                              ? 'bg-zinc-200 text-zinc-700'
+                              : 'bg-zinc-100 text-zinc-700'
+                      }`}
+                    >
+                      {p.status}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function Stat({
+  label, value, accent, bold,
+}: { label: string; value: string; accent?: string; bold?: boolean }) {
+  return (
+    <div className="flex flex-col items-end leading-tight">
+      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className={`tabular-nums ${bold ? 'font-semibold' : 'font-medium'} ${accent ?? ''}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function TradesSection({ trades }: { trades: FoTrade[] }) {
+  const sorted = useMemo(
+    () => [...trades].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate)).slice(0, 50),
+    [trades],
+  );
+  return (
+    <Card>
+      <div className="px-4 py-2.5 border-b bg-muted/30">
+        <span className="text-sm font-semibold uppercase tracking-wide">Recent Transactions</span>
+        <span className="text-xs text-muted-foreground font-normal ml-2">
+          ({trades.length} total · showing last {sorted.length})
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/30">
+            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <th className="text-left px-3 py-2">Date</th>
+              <th className="text-left px-3 py-2">Side</th>
+              <th className="text-left px-3 py-2">Instrument</th>
+              <th className="text-right px-3 py-2">Strike</th>
+              <th className="text-left px-3 py-2">Expiry</th>
+              <th className="text-right px-3 py-2">Qty</th>
+              <th className="text-right px-3 py-2">Price</th>
+              <th className="text-right px-3 py-2">Net</th>
+              <th className="text-left px-3 py-2">Broker</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((t) => (
+              <tr key={t.id} className="border-t hover:bg-muted/20 transition-colors">
+                <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{t.tradeDate}</td>
+                <td className="px-3 py-2">
+                  <span
+                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                      t.transactionType === 'BUY'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-rose-100 text-rose-700'
+                    }`}
+                  >
+                    {t.transactionType}
+                  </span>
+                </td>
+                <td className="px-3 py-2 truncate max-w-[260px] font-mono text-xs">{t.assetName ?? '—'}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{t.expiryDate ?? '—'}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{t.quantity}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmtINR(t.price)}</td>
+                <td className="px-3 py-2 text-right tabular-nums font-medium">{fmtINR(t.netAmount)}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">{t.broker ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 function PositionsTable({
   rows,
   allPositions,
@@ -879,6 +1190,49 @@ function UnderlyingHeader({ group }: { group: UnderlyingGroup }) {
 
 function instrumentSection(p: FoPosition): 'futures' | 'options' {
   return p.instrumentType === 'FUTURES' ? 'futures' : 'options';
+}
+
+function LiveStatusChip({
+  status, pending,
+}: {
+  status: { updated: number; total: number; at: number } | null;
+  pending: boolean;
+}) {
+  // Re-render every second so the "Xs ago" label stays fresh.
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => force((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  if (!status && !pending) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground">
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" /> waiting for first poll
+      </span>
+    );
+  }
+  if (pending && !status) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" /> fetching
+      </span>
+    );
+  }
+  if (!status) return null;
+  const ageSec = Math.max(0, Math.floor((Date.now() - status.at) / 1000));
+  const ok = status.updated > 0;
+  const partial = status.updated > 0 && status.updated < status.total;
+  const cls = ok && !partial
+    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+    : partial
+      ? 'border-amber-300 bg-amber-50 text-amber-700'
+      : 'border-rose-300 bg-rose-50 text-rose-700';
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] ${cls}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${ok ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+      Live · {status.updated}/{status.total} · {ageSec}s ago
+    </span>
+  );
 }
 
 function ContractTypeBadge({ instrumentType }: { instrumentType: 'FUTURES' | 'CALL' | 'PUT' }) {
