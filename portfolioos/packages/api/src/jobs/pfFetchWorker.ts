@@ -26,6 +26,7 @@ import { startSession, transition, complete, fail } from '../services/pfFetchSes
 import { buildCanonicalEvents } from '../services/pfCanonicalize.service.js';
 import { runPfChain } from '../adapters/pf/chain.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
+import { incCounter } from '../lib/metrics.js';
 import { randomUUID } from 'node:crypto';
 import type { ScrapeContext } from '../adapters/pf/types.js';
 import type { PfFetchStatus } from '@prisma/client';
@@ -191,6 +192,7 @@ export function startPfFetchWorker(): void {
             rawPayload: chainResult.raw ?? null,
           });
 
+          incCounter('pf.fetch.failure');
           await fail(sessionId, errMsg, (dlqEntry as { id: string }).id);
           return;
         }
@@ -255,13 +257,17 @@ export function startPfFetchWorker(): void {
         // 9. Complete session
         await complete(sessionId, eventsInserted);
 
+        const durationMs = Date.now() - t0;
+        incCounter('pf.fetch.success');
+        incCounter('pf.fetch.duration_ms', durationMs);
         logger.info(
-          { bullJobId: job.id, sessionId, eventsInserted, durationMs: Date.now() - t0 },
+          { bullJobId: job.id, sessionId, eventsInserted, durationMs },
           '[pf-worker] done',
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error({ bullJobId: job.id, sessionId, err }, '[pf-worker] unhandled error');
+        incCounter('pf.fetch.failure');
 
         const dlqEntry = await writeIngestionFailure({
           userId,

@@ -20,6 +20,11 @@ import { startInsuranceJobs } from './jobs/insuranceJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
 import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
 import { closeQueues } from './lib/queue.js';
+import { initSentry, Sentry } from './lib/sentry.js';
+
+// Initialise Sentry BEFORE building the Express app so auto-instrumentation
+// wraps all request handling. No-ops if SENTRY_DSN is not set.
+initSentry();
 
 const app = express();
 
@@ -59,6 +64,9 @@ app.use(
       if (res.statusCode >= 400) return 'warn';
       return 'info';
     },
+    customSuccessMessage: (req: IncomingMessage, res: ServerResponse, responseTime: number) =>
+      `${(req as Request).method} ${(req as Request).url} ${res.statusCode} ${responseTime.toFixed(1)}ms`,
+    customAttributeKeys: { responseTime: 'duration_ms' },
     serializers: {
       req: (req: Request) => ({ method: req.method, url: req.url }),
       res: (res: Response) => ({ statusCode: res.statusCode }),
@@ -74,6 +82,9 @@ app.use('/api', standardLimiter);
 registerRoutes(app);
 
 app.use(notFoundHandler);
+// Sentry error handler must come before other error handlers and after all routes.
+// It is a no-op when Sentry is not initialised (no SENTRY_DSN).
+Sentry.setupExpressErrorHandler(app);
 app.use(errorHandler);
 
 const server = app.listen(env.PORT, '::', () => {
