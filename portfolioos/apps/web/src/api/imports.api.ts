@@ -36,8 +36,11 @@ export const importsApi = {
   async remove(id: string): Promise<void> {
     await api.delete(`/api/imports/${id}`);
   },
-  async reprocess(id: string, password?: string): Promise<unknown> {
-    const { data } = await api.post<ApiResponse<unknown>>(`/api/imports/${id}/reprocess`, password ? { password } : {});
+  async reprocess(id: string, password?: string, save = true): Promise<unknown> {
+    const { data } = await api.post<ApiResponse<unknown>>(
+      `/api/imports/${id}/reprocess`,
+      password ? { password, save } : {},
+    );
     return unwrap(data);
   },
   async download(id: string, fileName: string): Promise<void> {

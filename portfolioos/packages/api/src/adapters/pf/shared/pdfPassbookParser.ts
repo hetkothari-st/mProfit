@@ -12,6 +12,19 @@ export interface PassbookTokens {
   lines: string[];
 }
 
+/**
+ * Build PassbookTokens from already-extracted text. Used when the caller
+ * has already run the bytes through `decryptIfNeeded` (e.g. to handle a
+ * password-protected EPFO passbook) and has the rawText in hand.
+ */
+export function tokenizePassbookText(rawText: string, pageCount = 1): PassbookTokens {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter((l) => l.length > 0);
+  return { pageCount, rawText, lines };
+}
+
 export async function tokenizePassbookPdf(buf: Buffer): Promise<PassbookTokens> {
   if (buf.length === 0) {
     throw new Error('Empty PDF buffer');

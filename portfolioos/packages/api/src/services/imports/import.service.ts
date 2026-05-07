@@ -160,7 +160,35 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
   // ImportJob-level failure (so the user can find it in /import) AND an
   // IngestionFailure row (so the DLQ carries the rawPayload for manual
   // review/retry — §3.5, §5.1 task 8).
+  //
+  // Locked files (PDF/XLSX requiring password) get NEEDS_PASSWORD instead
+  // of FAILED — the user can supply a password via /reprocess and unlock
+  // without re-uploading. No DLQ row: we expect resolution interactively.
   if (!result.ok) {
+    if (result.locked) {
+      await prisma.importJob.update({
+        where: { id: importJobId },
+        data: {
+          status: 'NEEDS_PASSWORD',
+          totalRows: 0,
+          successRows: 0,
+          failedRows: 0,
+          errorLog: {
+            parser: adapter?.id ?? 'none',
+            parserWarnings: [result.error],
+            rowErrors: [],
+          },
+        },
+      });
+      return {
+        parser: adapter?.id ?? 'none',
+        total: 0,
+        success: 0,
+        failed: 0,
+        errors: [{ row: 0, reason: result.error }],
+      };
+    }
+
     const dlq = await writeIngestionFailure({
       userId: job.userId,
       sourceAdapter: adapter?.id ?? 'file-import.unmatched',

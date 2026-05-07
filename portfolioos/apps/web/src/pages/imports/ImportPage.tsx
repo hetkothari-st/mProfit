@@ -2,11 +2,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { UploadCloud, Trash2, RefreshCw, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle, Inbox, Download, Lock, KeyRound, Square, CheckSquare } from 'lucide-react';
+import { UploadCloud, Trash2, RefreshCw, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle, Inbox, Download, Lock, Square, CheckSquare } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
 import { importsApi } from '@/api/imports.api';
@@ -16,6 +15,8 @@ import type { ImportJobDTO, ImportStatus } from '@portfolioos/shared';
 import { IMPORT_STATUS_LABELS } from '@portfolioos/shared';
 import { ImportErrorDialog } from './ImportErrorDialog';
 import { ImportDropzone } from './ImportDropzone';
+import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
+import { useUploadWithPasswordRetry } from '@/hooks/useUploadWithPasswordRetry';
 
 const STATUS_STYLES: Record<ImportStatus, string> = {
   PENDING: 'bg-muted text-muted-foreground',
@@ -23,6 +24,7 @@ const STATUS_STYLES: Record<ImportStatus, string> = {
   COMPLETED: 'bg-positive/10 text-positive',
   COMPLETED_WITH_ERRORS: 'bg-amber-500/10 text-amber-700',
   FAILED: 'bg-negative/10 text-negative',
+  NEEDS_PASSWORD: 'bg-amber-500/10 text-amber-700',
 };
 
 const STATUS_ICONS: Record<ImportStatus, typeof FileText> = {
@@ -31,78 +33,24 @@ const STATUS_ICONS: Record<ImportStatus, typeof FileText> = {
   COMPLETED: CheckCircle2,
   COMPLETED_WITH_ERRORS: AlertTriangle,
   FAILED: XCircle,
+  NEEDS_PASSWORD: Lock,
 };
-
-function isPasswordError(j: ImportJobDTO): boolean {
-  return (
-    j.status === 'FAILED' &&
-    (j.errorLog?.parserWarnings ?? []).some((w) =>
-      w.toLowerCase().includes('password'),
-    )
-  );
-}
-
-function PasswordUnlockRow({
-  job,
-  onDone,
-}: {
-  job: ImportJobDTO;
-  onDone: () => void;
-}) {
-  const [pw, setPw] = useState('');
-  const queryClient = useQueryClient();
-  const mut = useMutation({
-    mutationFn: async () => {
-      if (!pw.trim()) throw new Error('Enter a password');
-      await importsApi.reprocess(job.id, pw.trim());
-    },
-    onSuccess: () => {
-      toast.success('Password accepted — reprocessing');
-      queryClient.invalidateQueries({ queryKey: ['imports'] });
-      onDone();
-    },
-    onError: (err) => toast.error(apiErrorMessage(err, 'Failed')),
-  });
-
-  return (
-    <div className="flex items-center gap-2 mt-1.5 pl-2">
-      <KeyRound className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-      <span className="text-[11px] text-amber-600 shrink-0 whitespace-nowrap">PDF password:</span>
-      <Input
-        className="h-7 text-xs w-40 font-mono"
-        placeholder="PAN or custom password"
-        value={pw}
-        onChange={(e) => setPw(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && mut.mutate()}
-        autoFocus
-      />
-      <Button
-        size="sm"
-        className="h-7 px-3 text-xs shrink-0"
-        onClick={() => mut.mutate()}
-        disabled={mut.isPending || !pw.trim()}
-      >
-        {mut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Retry'}
-      </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="h-7 px-2 text-xs shrink-0"
-        onClick={onDone}
-      >
-        Cancel
-      </Button>
-    </div>
-  );
-}
 
 export function ImportPage() {
   const queryClient = useQueryClient();
   const [portfolioId, setPortfolioId] = useState<string>('');
   const [viewError, setViewError] = useState<ImportJobDTO | null>(null);
-  const [unlockingId, setUnlockingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const passwordRetry = useUploadWithPasswordRetry({
+    retryFn: async (jobId, password, save) => importsApi.reprocess(jobId, password, save),
+    onSuccess: () => {
+      toast.success('Password accepted — reprocessing');
+      queryClient.invalidateQueries({ queryKey: ['imports'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed')),
+  });
 
   const { data: portfolios } = useQuery({
     queryKey: ['portfolios'],
@@ -298,11 +246,10 @@ export function ImportPage() {
                 </thead>
                 <tbody className="divide-y">
                   {jobs.map((j) => {
-                    const pwErr = isPasswordError(j);
                     const status = j.status as ImportStatus;
-                    const Icon = pwErr ? Lock : STATUS_ICONS[status];
+                    const pwErr = status === 'NEEDS_PASSWORD';
+                    const Icon = STATUS_ICONS[status];
                     const isRunning = status === 'PROCESSING' || status === 'PENDING';
-                    const isUnlocking = unlockingId === j.id;
                     return (
                       <tr key={j.id} className={`hover:bg-muted/30 ${selected.has(j.id) ? 'bg-accent/20' : ''}`}>
                         <td className="px-4 py-2 w-8">
@@ -318,12 +265,6 @@ export function ImportPage() {
                               <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                               <span className="font-medium truncate">{j.fileName}</span>
                             </div>
-                            {isUnlocking && (
-                              <PasswordUnlockRow
-                                job={j}
-                                onDone={() => setUnlockingId(null)}
-                              />
-                            )}
                           </div>
                         </td>
                         <td className="px-4 py-2 text-xs text-muted-foreground">
@@ -333,11 +274,11 @@ export function ImportPage() {
                           {pwErr ? (
                             <button
                               className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 transition-colors"
-                              onClick={() => setUnlockingId(isUnlocking ? null : j.id)}
+                              onClick={() => passwordRetry.openForJob(j.id, j.fileName)}
                               title="Click to enter PDF password"
                             >
                               <Lock className="h-3 w-3" />
-                              Password protected
+                              {IMPORT_STATUS_LABELS[status]}
                             </button>
                           ) : (
                             <span
@@ -412,6 +353,7 @@ export function ImportPage() {
       </Card>
 
       <ImportErrorDialog job={viewError} onClose={() => setViewError(null)} />
+      <PasswordPromptDialog {...passwordRetry.dialogProps} />
     </div>
   );
 }

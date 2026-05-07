@@ -127,6 +127,7 @@ export const ImportStatus = {
   COMPLETED: 'COMPLETED',
   COMPLETED_WITH_ERRORS: 'COMPLETED_WITH_ERRORS',
   FAILED: 'FAILED',
+  NEEDS_PASSWORD: 'NEEDS_PASSWORD',
 } as const;
 export type ImportStatus = (typeof ImportStatus)[keyof typeof ImportStatus];
 

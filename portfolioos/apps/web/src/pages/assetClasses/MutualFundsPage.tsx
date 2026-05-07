@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, KeyRound, Lock } from 'lucide-react';
+import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ImportJobDTO, ImportStatus } from '@portfolioos/shared';
 import { IMPORT_STATUS_LABELS } from '@portfolioos/shared';
@@ -9,7 +9,6 @@ import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/common/EmptyState';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
@@ -17,56 +16,14 @@ import { transactionsApi } from '@/api/transactions.api';
 import { apiErrorMessage } from '@/api/client';
 import { importsApi } from '@/api/imports.api';
 import { useScan } from '@/context/ScanContext';
-import { authApi } from '@/api/auth.api';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
 import { ImportDropzone } from '@/pages/imports/ImportDropzone';
 import { MFCasparserDialog } from '@/pages/mutualFunds/MFCasparserDialog';
 import { MFCasMailbackDialog } from '@/pages/mutualFunds/MFCasMailbackDialog';
+import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
+import { useUploadWithPasswordRetry } from '@/hooks/useUploadWithPasswordRetry';
 import { formatINR, formatPercent, Decimal, toDecimal } from '@portfolioos/shared';
 import type { HoldingRow, TransactionDTO } from '@portfolioos/shared';
-
-function PanInlinePrompt({ jobId, onDone }: { jobId: string; onDone: () => void }) {
-  const [pan, setPan] = useState('');
-  const queryClient = useQueryClient();
-  const mut = useMutation({
-    mutationFn: async () => {
-      const trimmed = pan.trim().toUpperCase();
-      if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(trimmed)) throw new Error('Invalid PAN format');
-      await authApi.updateProfile({ pan: trimmed });
-      await importsApi.reprocess(jobId);
-    },
-    onSuccess: () => {
-      toast.success('PAN saved — re-processing import');
-      queryClient.invalidateQueries({ queryKey: ['imports'] });
-      queryClient.invalidateQueries({ queryKey: ['me'] });
-      onDone();
-    },
-    onError: (err) => toast.error(apiErrorMessage(err, 'Failed')),
-  });
-
-  return (
-    <div className="flex items-center gap-2 mt-2 pl-7">
-      <KeyRound className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-      <span className="text-[11px] text-amber-600 shrink-0">PDF needs your PAN:</span>
-      <Input
-        className="h-7 text-xs w-36 font-mono uppercase"
-        placeholder="ABCDE1234F"
-        maxLength={10}
-        value={pan}
-        onChange={(e) => setPan(e.target.value.toUpperCase())}
-        onKeyDown={(e) => e.key === 'Enter' && mut.mutate()}
-      />
-      <Button
-        size="sm"
-        className="h-7 px-3 text-xs"
-        onClick={() => mut.mutate()}
-        disabled={mut.isPending || pan.length < 10}
-      >
-        {mut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save & retry'}
-      </Button>
-    </div>
-  );
-}
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   BUY: 'Buy', SELL: 'Sell / Redeem', DIVIDEND: 'Dividend',
@@ -81,10 +38,16 @@ export function MutualFundsPage() {
   const [mailbackOpen, setMailbackOpen] = useState(false);
   const [viewError, setViewError] = useState<ImportJobDTO | null>(null);
   const [confirmDeleteImportId, setConfirmDeleteImportId] = useState<string | null>(null);
-  const [pdfPassword, setPdfPassword] = useState('');
   const queryClient = useQueryClient();
 
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => authApi.me() });
+  const passwordRetry = useUploadWithPasswordRetry({
+    retryFn: async (jobId, password, save) => importsApi.reprocess(jobId, password, save),
+    onSuccess: () => {
+      toast.success('Password accepted — reprocessing');
+      queryClient.invalidateQueries({ queryKey: ['imports'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed')),
+  });
 
   const { data: portfolios } = useQuery({
     queryKey: ['portfolios'],
@@ -139,10 +102,9 @@ export function MutualFundsPage() {
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) =>
-      importsApi.upload({ file, portfolioId: null, password: pdfPassword || undefined }),
+      importsApi.upload({ file, portfolioId: null }),
     onSuccess: () => {
       toast.success('CAS uploaded — parsing in background. Status will update below.');
-      setPdfPassword('');
       queryClient.invalidateQueries({ queryKey: ['imports'] });
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Upload failed')),
@@ -185,6 +147,7 @@ export function MutualFundsPage() {
     COMPLETED: 'bg-positive/10 text-positive',
     COMPLETED_WITH_ERRORS: 'bg-amber-500/10 text-amber-700',
     FAILED: 'bg-negative/10 text-negative',
+    NEEDS_PASSWORD: 'bg-amber-500/10 text-amber-700',
   };
   const STATUS_ICONS: Record<ImportStatus, typeof FileText> = {
     PENDING: Loader2,
@@ -192,6 +155,7 @@ export function MutualFundsPage() {
     COMPLETED: CheckCircle2,
     COMPLETED_WITH_ERRORS: AlertTriangle,
     FAILED: XCircle,
+    NEEDS_PASSWORD: Lock,
   };
 
   const all = holdingsQueries.flatMap((q, idx) =>
@@ -266,27 +230,13 @@ export function MutualFundsPage() {
               onUpload={(file) => uploadMutation.mutate(file)}
               uploading={uploadMutation.isPending}
             />
-            <div className="flex items-center gap-2 mt-3">
-              <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <Input
-                className="h-8 text-xs w-56 font-mono"
-                placeholder="PDF password (optional — e.g. your PAN)"
-                maxLength={200}
-                type="password"
-                value={pdfPassword}
-                onChange={(e) => setPdfPassword(e.target.value)}
-              />
-              {pdfPassword && (
-                <span className="text-[10px] text-muted-foreground">Will be used to unlock the PDF</span>
-              )}
-            </div>
           </CardContent>
         </Card>
         <Card className="bg-muted/30 border-dashed">
           <CardContent className="p-4 text-xs space-y-2">
             <p className="font-semibold">Pro Tips:</p>
             <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-              <li>Password-protected PDFs: enter your PAN below.</li>
+              <li>Password-protected PDFs: we'll prompt you for the password if needed.</li>
               <li>We auto-try your PAN, email & phone from Settings.</li>
               <li>Consolidated CAS (Demat + MF) is supported.</li>
               <li>Only MF transactions will be extracted.</li>
@@ -317,8 +267,7 @@ export function MutualFundsPage() {
                 const isConfirmingDelete = confirmDeleteImportId === j.id;
                 const isDeletingThis = deleteImportMutation.isPending && confirmDeleteImportId === j.id;
                 const firstWarning = j.errorLog?.parserWarnings?.[0] ?? j.errorLog?.general ?? null;
-                const isPasswordErr = firstWarning?.toLowerCase().includes('password');
-                const needsPan = isPasswordErr && !me?.pan;
+                const needsPassword = status === 'NEEDS_PASSWORD';
                 const isEmptyCas =
                   status === 'COMPLETED' &&
                   (j.totalRows ?? 0) === 0 &&
@@ -331,12 +280,23 @@ export function MutualFundsPage() {
                     <div className="flex items-center gap-3">
                     <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="flex-1 truncate font-medium">{j.fileName}</span>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status]}`}
-                    >
-                      <Icon className={`h-3 w-3 ${isRunning ? 'animate-spin' : ''}`} />
-                      {IMPORT_STATUS_LABELS[status]}
-                    </span>
+                    {needsPassword ? (
+                      <button
+                        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status]} hover:bg-amber-500/20 transition-colors`}
+                        onClick={() => passwordRetry.openForJob(j.id, j.fileName)}
+                        title="Click to enter PDF password"
+                      >
+                        <Lock className="h-3 w-3" />
+                        {IMPORT_STATUS_LABELS[status]}
+                      </button>
+                    ) : (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status]}`}
+                      >
+                        <Icon className={`h-3 w-3 ${isRunning ? 'animate-spin' : ''}`} />
+                        {IMPORT_STATUS_LABELS[status]}
+                      </span>
+                    )}
                     {!isRunning && (
                       <span className="text-xs text-muted-foreground tabular-nums">
                         {j.totalRows != null ? `${j.successRows ?? 0}/${j.totalRows} rows` : '—'}
@@ -392,12 +352,6 @@ export function MutualFundsPage() {
                     {isEmptyCas && (
                       <p className="text-[11px] text-muted-foreground mt-1.5 pl-7">
                         CAS confirmed — no MF transactions in this period. If you have holdings, request a wider date range.
-                      </p>
-                    )}
-                    {needsPan && <PanInlinePrompt jobId={j.id} onDone={() => setConfirmDeleteImportId(null)} />}
-                    {isPasswordErr && !needsPan && (
-                      <p className="text-[11px] text-amber-600 mt-1.5 pl-7">
-                        PDF is password-protected — PAN on file didn't unlock it. Try re-uploading with the correct PAN in <a href="/settings" className="underline">Settings</a>.
                       </p>
                     )}
                   </div>
@@ -592,6 +546,7 @@ export function MutualFundsPage() {
       />
 
       <ImportErrorDialog job={viewError} onClose={() => setViewError(null)} />
+      <PasswordPromptDialog {...passwordRetry.dialogProps} />
     </div>
   );
 }

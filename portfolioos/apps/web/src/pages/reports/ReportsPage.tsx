@@ -11,6 +11,7 @@ import {
   XCircle,
   AlertTriangle,
   ChevronRight,
+  Lock,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -313,6 +314,7 @@ const STATUS_STYLES: Record<ImportStatus, string> = {
   COMPLETED: 'bg-positive/10 text-positive',
   COMPLETED_WITH_ERRORS: 'bg-amber-500/10 text-amber-700',
   FAILED: 'bg-negative/10 text-negative',
+  NEEDS_PASSWORD: 'bg-amber-500/10 text-amber-700',
 };
 const STATUS_ICONS: Record<ImportStatus, typeof FileText> = {
   PENDING: Loader2,
@@ -320,6 +322,7 @@ const STATUS_ICONS: Record<ImportStatus, typeof FileText> = {
   COMPLETED: CheckCircle2,
   COMPLETED_WITH_ERRORS: AlertTriangle,
   FAILED: XCircle,
+  NEEDS_PASSWORD: Lock,
 };
 
 function RecentEmailImports() {

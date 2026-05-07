@@ -15,6 +15,7 @@ import {
 import { readStream } from '../lib/documentStorage.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
+import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 import {
   buildEditorConfig,
   convertToPdf,
@@ -44,6 +45,27 @@ const uploadBodySchema = z.object({
 export async function upload(req: Request, res: Response) {
   if (!req.file) throw new BadRequestError('file required');
   const body = uploadBodySchema.parse(req.body);
+
+  // Magic-byte sniff guards against extension-spoofed uploads (a .pdf
+  // file that's actually an executable). Vault is storage-only — we
+  // accept the broad allowlist and only reject true junk.
+  const probe = await decryptIfNeeded(req.file.buffer, {
+    fileName: req.file.originalname,
+    allowedKinds: [
+      'pdf',
+      'xlsx_ooxml',
+      'xlsx_encrypted',
+      'xls',
+      'csv',
+      'image',
+      'office_doc',
+      'other',
+    ],
+  });
+  if (!probe.ok && !probe.requiresPassword && probe.reason === 'junk_type') {
+    throw new BadRequestError(probe.detail);
+  }
+
   const doc = await createDocument({
     userId: userId(req),
     ownerType: body.ownerType,

@@ -83,7 +83,7 @@ export interface CanonicalEvent {
 
 export type ParseResult<T extends CanonicalEvent> =
   | { ok: true; events: T[]; warnings?: string[]; metadata?: Record<string, unknown> }
-  | { ok: false; error: string; rawPayload?: unknown };
+  | { ok: false; error: string; rawPayload?: unknown; locked?: boolean; passwordsTried?: number };
 
 export interface Adapter<TInput, TOutput extends CanonicalEvent = CanonicalEvent> {
   id: string;

@@ -26,7 +26,9 @@ import {
 import { startSession } from '../services/pfFetchSessions.service.js';
 import { buildCanonicalEvents } from '../services/pfCanonicalize.service.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
-import { tokenizePassbookPdf } from '../adapters/pf/shared/pdfPassbookParser.js';
+import { tokenizePassbookPdf, tokenizePassbookText } from '../adapters/pf/shared/pdfPassbookParser.js';
+import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
+import { saveDocPassword } from '../lib/userDocPasswords.js';
 import { parseEpfoPassbook } from '../adapters/pf/epf/epfo.v1.parse.js';
 import { pfFetchQueue } from '../jobs/pfFetchWorker.js';
 import { findPfAdapter } from '../adapters/pf/chain.js';
@@ -265,9 +267,51 @@ export async function uploadManualPassbookHandler(req: Request, res: Response) {
     return error(res, 400, 'No file uploaded', 'NO_FILE');
   }
 
+  // Optional password the user just typed in the prompt dialog. Saved to
+  // the user's encrypted password store on success (unless it's a PAN —
+  // PAN is auto-derived from User.pan). `save:false` opts out.
+  const bodyPwSchema = z
+    .object({ password: z.string().min(1).max(200).optional(), save: z.coerce.boolean().optional().default(true) })
+    .safeParse(req.body ?? {});
+  const supplied = bodyPwSchema.success ? bodyPwSchema.data : { password: undefined, save: true };
+
+  // Magic-byte check + PDF unlock in one pass. We use the buffer path
+  // (multer.memoryStorage) so no temp file is written for the happy case.
+  const decrypted = await decryptIfNeeded(req.file.buffer, {
+    fileName: req.file.originalname,
+    allowedKinds: ['pdf'],
+    userId,
+    extraPasswords: supplied.password ? [supplied.password] : [],
+  });
+
+  if (!decrypted.ok) {
+    if (decrypted.requiresPassword) {
+      return res.status(422).json({
+        success: false,
+        error: 'PDF is password-protected',
+        code: 'FILE_LOCKED',
+        requiresPassword: true,
+        passwordsTried: decrypted.passwordsTried,
+      });
+    }
+    if (decrypted.reason === 'junk_type') {
+      return error(res, 400, decrypted.detail, 'INVALID_FILE_TYPE');
+    }
+    if (decrypted.reason === 'scanned_pdf') {
+      return error(res, 422, decrypted.detail, 'SCANNED_PDF');
+    }
+    return error(res, 422, decrypted.detail, 'PARSE_FAIL');
+  }
+
+  if (supplied.password && supplied.save && decrypted.usedPassword === supplied.password) {
+    await saveDocPassword(userId, supplied.password);
+  }
+
   let tokens;
   try {
-    tokens = await tokenizePassbookPdf(req.file.buffer);
+    tokens = decrypted.text
+      ? tokenizePassbookText(decrypted.text)
+      : await tokenizePassbookPdf(req.file.buffer);
   } catch (pdfErr) {
     const msg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
     return error(res, 422, `PDF parse failed: ${msg}`, 'PARSE_FAIL');

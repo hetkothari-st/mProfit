@@ -23,6 +23,10 @@ model User {
   phone         String?
   pan           String?
   dob           DateTime?
+  // Encrypted JSON array of passwords the user has supplied to unlock
+  // PDF/XLSX uploads. Tried automatically on every locked file.
+  // See lib/userDocPasswords.ts and lib/decryptIfNeeded.ts.
+  savedFilePasswordsEnc String?
   role          UserRole  @default(INVESTOR)
   plan          PlanTier  @default(FREE)
   planExpiresAt DateTime?
@@ -847,6 +851,7 @@ enum ImportStatus {
   COMPLETED
   COMPLETED_WITH_ERRORS
   FAILED
+  NEEDS_PASSWORD
 }
 
 // ─── ALERTS & REMINDERS ───────────────────────────────────────────

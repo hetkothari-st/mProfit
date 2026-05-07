@@ -54,4 +54,5 @@ export const IMPORT_STATUS_LABELS: Record<ImportStatus, string> = {
   COMPLETED: 'Completed',
   COMPLETED_WITH_ERRORS: 'Partial',
   FAILED: 'Failed',
+  NEEDS_PASSWORD: 'Needs password',
 };

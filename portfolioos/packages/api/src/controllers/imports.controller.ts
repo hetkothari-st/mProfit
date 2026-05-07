@@ -12,6 +12,7 @@ import {
 } from '../services/imports/import.service.js';
 import { ok, created } from '../lib/response.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
+import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 
 const ImportTypeEnum = z.enum([
   'CONTRACT_NOTE_PDF',
@@ -74,6 +75,19 @@ export async function upload(req: Request, res: Response) {
     throw new BadRequestError(regulatoryReason);
   }
 
+  // Magic-byte sniff before creating an ImportJob — keeps the history
+  // clean of obvious junk (renamed .exe, archives, etc.). Encrypted /
+  // password-protected files pass this check; their unlock happens in
+  // the worker so the user can supply a password mid-flight.
+  const probe = await decryptIfNeeded(req.file.path, {
+    fileName: req.file.originalname,
+    allowedKinds: ['pdf', 'xlsx_ooxml', 'xlsx_encrypted', 'xls', 'csv'],
+  });
+  if (!probe.ok && !probe.requiresPassword && probe.reason === 'junk_type') {
+    fs.unlink(req.file.path, () => {});
+    throw new BadRequestError(probe.detail);
+  }
+
   const body = createSchema.parse(req.body ?? {});
   const type = body.type ?? inferTypeFromFileName(req.file.originalname);
 
@@ -121,9 +135,18 @@ export async function reprocess(req: Request, res: Response) {
   const id = req.params.id!;
   const job = await getImportJob(req.user.id, id);
 
-  // If caller supplies a password, save it on the user's profile before
-  // reprocessing so the PDF reader picks it up automatically.
-  const { password } = z.object({ password: z.string().min(1).optional() }).parse(req.body ?? {});
+  // Caller supplies a password to unlock a NEEDS_PASSWORD / FAILED job.
+  // Two persistence rules:
+  //   - PAN-shaped → save to User.pan (only if not already set).
+  //   - Anything else with `save:true` (default) → append to encrypted
+  //     User.savedFilePasswordsEnc list, tried automatically on every
+  //     future locked file the user uploads.
+  const { password, save } = z
+    .object({
+      password: z.string().min(1).optional(),
+      save: z.boolean().optional().default(true),
+    })
+    .parse(req.body ?? {});
   if (password) {
     const pan = password.trim().toUpperCase();
     const isPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan);
@@ -133,6 +156,9 @@ export async function reprocess(req: Request, res: Response) {
       if (!existing?.pan) {
         await prisma.user.update({ where: { id: req.user.id }, data: { pan } });
       }
+    } else if (save) {
+      const { saveDocPassword } = await import('../lib/userDocPasswords.js');
+      await saveDocPassword(req.user.id, password);
     }
   }
 
