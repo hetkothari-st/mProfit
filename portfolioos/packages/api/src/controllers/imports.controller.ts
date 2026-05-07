@@ -13,6 +13,7 @@ import {
 import { ok, created } from '../lib/response.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
+import { prisma } from '../lib/prisma.js';
 
 const ImportTypeEnum = z.enum([
   'CONTRACT_NOTE_PDF',
@@ -136,7 +137,8 @@ export async function reprocess(req: Request, res: Response) {
   const job = await getImportJob(req.user.id, id);
 
   // Caller supplies a password to unlock a NEEDS_PASSWORD / FAILED job.
-  // Two persistence rules:
+  // Two persistence rules — applied AFTER the job actually runs so a
+  // wrong password never pollutes the saved-password list:
   //   - PAN-shaped → save to User.pan (only if not already set).
   //   - Anything else with `save:true` (default) → append to encrypted
   //     User.savedFilePasswordsEnc list, tried automatically on every
@@ -147,22 +149,40 @@ export async function reprocess(req: Request, res: Response) {
       save: z.boolean().optional().default(true),
     })
     .parse(req.body ?? {});
+
+  const result = await processImportJob(job.id, password);
+
+  // Persist only when the password actually unlocked the file. The job's
+  // post-process status tells us: NEEDS_PASSWORD = still locked → don't
+  // save; anything else = the password was either correct or unused
+  // (job had no encryption to begin with).
   if (password) {
-    const pan = password.trim().toUpperCase();
-    const isPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan);
-    if (isPan) {
-      const { prisma } = await import('../lib/prisma.js');
-      const existing = await prisma.user.findUnique({ where: { id: req.user.id }, select: { pan: true } });
-      if (!existing?.pan) {
-        await prisma.user.update({ where: { id: req.user.id }, data: { pan } });
+    const after = await prisma.importJob.findUnique({
+      where: { id: job.id },
+      select: { status: true },
+    });
+    const unlocked = after?.status !== 'NEEDS_PASSWORD';
+    if (unlocked) {
+      const trimmed = password.trim().toUpperCase();
+      const isPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(trimmed);
+      if (isPan) {
+        const existing = await prisma.user.findUnique({
+          where: { id: req.user.id },
+          select: { pan: true },
+        });
+        if (!existing?.pan) {
+          await prisma.user.update({
+            where: { id: req.user.id },
+            data: { pan: trimmed },
+          });
+        }
+      } else if (save) {
+        const { saveDocPassword } = await import('../lib/userDocPasswords.js');
+        await saveDocPassword(req.user.id, password);
       }
-    } else if (save) {
-      const { saveDocPassword } = await import('../lib/userDocPasswords.js');
-      await saveDocPassword(req.user.id, password);
     }
   }
 
-  const result = await processImportJob(job.id, password);
   ok(res, result);
 }
 
