@@ -60,7 +60,7 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'F & O', to: '/fo', icon: BarChart3 },
       { label: 'Mutual Funds', to: '/mutual-funds', icon: LineChart },
       { label: 'Bonds', to: '/bonds', icon: Landmark },
-      { label: 'Fixed Deposits', to: '/fds', icon: PiggyBank },
+      { label: 'FDs & RDs', to: '/fds', icon: PiggyBank },
       { label: 'Gold & Silver', to: '/gold', icon: Coins },
       { label: 'PPF & EPF', to: '/provident-fund', icon: Wallet },
       // NPS — disabled until NSDL CRA adapter lands (§10.2)
