@@ -3,11 +3,14 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { GmailAutoConnectBanner } from './GmailAutoConnectBanner';
 import { ScanProvider } from '@/context/ScanContext';
+import { usePrivacyStore } from '@/stores/privacy.store';
 
 export function AppShell() {
+  const { hideSensitive } = usePrivacyStore();
+
   return (
     <ScanProvider>
-      <div className="h-screen flex overflow-hidden bg-background">
+      <div className={`h-screen flex overflow-hidden bg-background ${hideSensitive ? 'privacy-mask' : ''}`}>
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <Header />

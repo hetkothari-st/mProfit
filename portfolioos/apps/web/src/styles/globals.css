@@ -398,4 +398,17 @@
   }
   .recharts-cartesian-axis-tick-value { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
   .recharts-legend-item-text { font-size: 12px !important; }
+
+  /* Privacy mode: visually mask sensitive numeric values app-wide.
+     Blur preserves layout widths so cards/tables do not jump when toggled. */
+  .privacy-mask .money-digits,
+  .privacy-mask .money-hero-digits,
+  .privacy-mask .numeric-display,
+  .privacy-mask .numeric-display-lg,
+  .privacy-mask .numeric,
+  .privacy-mask .tabular-nums {
+    filter: blur(6px);
+    transition: filter 180ms ease;
+    user-select: none;
+  }
 }
