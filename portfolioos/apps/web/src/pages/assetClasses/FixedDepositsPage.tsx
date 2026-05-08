@@ -369,15 +369,26 @@ export function FixedDepositsPage() {
 
   const allTxns: TransactionDTO[] = txnQueries.flatMap((q) => q.data?.items ?? []);
 
-  function depositTxnsFor(h: FDHolding): TransactionDTO[] {
+  // All transactions for this holding (any type) — used for primary/edit
+  function txnsFor(h: FDHolding): TransactionDTO[] {
+    const name = h.assetName?.toLowerCase().trim() ?? '';
     return allTxns
       .filter(
         (t) =>
           t.portfolioId === h.portfolioId &&
-          t.assetName === h.assetName &&
-          t.transactionType === 'DEPOSIT',
+          (t.assetName?.toLowerCase().trim() ?? '') === name,
       )
       .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
+  }
+
+  // DEPOSIT-type only — used for RD installment count
+  function depositTxnsFor(h: FDHolding): TransactionDTO[] {
+    return txnsFor(h).filter((t) => t.transactionType === 'DEPOSIT');
+  }
+
+  function primaryTxnFor(h: FDHolding): TransactionDTO | null {
+    const all = txnsFor(h);
+    return all.find((t) => t.transactionType === 'DEPOSIT') ?? all[0] ?? null;
   }
 
   const totalInvested = allHoldings.reduce(
@@ -499,17 +510,13 @@ export function FixedDepositsPage() {
           </div>
           <div className="space-y-3">
             {fdHoldings.map((h) => {
-              const deposits = depositTxnsFor(h);
+              const primary = primaryTxnFor(h);
               return (
                 <FDCard
                   key={h.id}
                   holding={h}
-                  primaryTxn={deposits[0] ?? null}
-                  onClick={() => {
-                    const t = deposits[0];
-                    if (t) openEdit(t);
-                    else openAdd('FIXED_DEPOSIT');
-                  }}
+                  primaryTxn={primary}
+                  onClick={() => (primary ? openEdit(primary) : openAdd('FIXED_DEPOSIT'))}
                 />
               );
             })}
@@ -531,18 +538,15 @@ export function FixedDepositsPage() {
           </div>
           <div className="space-y-3">
             {rdHoldings.map((h) => {
-              const deposits = depositTxnsFor(h);
+              const primary = primaryTxnFor(h);
+              const depositOnly = depositTxnsFor(h);
               return (
                 <RDCard
                   key={h.id}
                   holding={h}
-                  primaryTxn={deposits[0] ?? null}
-                  allDepositTxns={deposits}
-                  onClick={() => {
-                    const t = deposits[0];
-                    if (t) openEdit(t);
-                    else openAdd('RECURRING_DEPOSIT');
-                  }}
+                  primaryTxn={primary}
+                  allDepositTxns={depositOnly}
+                  onClick={() => (primary ? openEdit(primary) : openAdd('RECURRING_DEPOSIT'))}
                 />
               );
             })}
