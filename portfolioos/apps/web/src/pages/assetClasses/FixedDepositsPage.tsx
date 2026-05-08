@@ -89,22 +89,20 @@ function FDCard({
   return (
     <div
       onClick={onClick}
-      className="group relative rounded-xl border bg-card hover:border-amber-400/50 hover:shadow-md transition-all cursor-pointer overflow-hidden"
+      className="group relative rounded-xl border border-border bg-card hover:border-accent/40 hover:shadow-sm transition-all cursor-pointer overflow-hidden"
     >
-      {/* Amber left accent */}
-      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-amber-400 rounded-l-xl" />
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent rounded-l-xl" />
 
       <div className="pl-5 pr-4 py-4">
-        {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+            <span className="inline-flex items-center justify-center h-9 w-9 shrink-0 rounded-md bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/30 dark:ring-accent/40 text-accent">
               <PiggyBank className="h-4 w-4" strokeWidth={1.8} />
-            </div>
+            </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="font-semibold text-sm truncate max-w-[240px]">{holding.assetName ?? '—'}</p>
-                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-accent/10 dark:bg-accent/15 text-accent ring-1 ring-inset ring-accent/25 dark:ring-accent/35">
                   FD
                 </span>
               </div>
@@ -115,15 +113,14 @@ function FDCard({
           </div>
           <div className="flex items-center gap-2 shrink-0 mt-0.5">
             {rate && (
-              <span className="rounded-full border border-amber-300/70 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-700/50">
+              <span className="rounded-full border border-accent/35 dark:border-accent/45 bg-accent/10 dark:bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent">
                 {rate}% p.a.
               </span>
             )}
-            <Pencil className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
           </div>
         </div>
 
-        {/* Meta */}
         <div className="mt-2 flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
           {freq && <span>{FREQ_LABELS[freq] ?? freq} payout</span>}
           {openDate && (
@@ -147,18 +144,17 @@ function FDCard({
           )}
         </div>
 
-        <div className="mt-3 border-t" />
+        <div className="mt-3 border-t border-border" />
 
-        {/* Numbers */}
         <div className="mt-3 grid grid-cols-3 gap-4">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
               Principal
             </p>
             <p className="tabular-nums font-semibold text-sm">{formatINR(holding.totalCost)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
               Current Value
             </p>
             <p className="tabular-nums font-semibold text-sm">
@@ -166,7 +162,7 @@ function FDCard({
             </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
               Interest Earned
             </p>
             <p className="tabular-nums font-semibold text-sm">
@@ -205,22 +201,20 @@ function RDCard({
   return (
     <div
       onClick={onClick}
-      className="group relative rounded-xl border bg-card hover:border-blue-400/50 hover:shadow-md transition-all cursor-pointer overflow-hidden"
+      className="group relative rounded-xl border border-border bg-card hover:border-accent/40 hover:shadow-sm transition-all cursor-pointer overflow-hidden"
     >
-      {/* Blue left accent */}
-      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-blue-400 rounded-l-xl" />
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent/60 dark:bg-accent/50 rounded-l-xl" />
 
       <div className="pl-5 pr-4 py-4">
-        {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+            <span className="inline-flex items-center justify-center h-9 w-9 shrink-0 rounded-md bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/30 dark:ring-accent/40 text-accent">
               <CalendarClock className="h-4 w-4" strokeWidth={1.8} />
-            </div>
+            </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="font-semibold text-sm truncate max-w-[240px]">{holding.assetName ?? '—'}</p>
-                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-muted text-foreground/65 ring-1 ring-inset ring-border dark:text-foreground/55">
                   RD
                 </span>
               </div>
@@ -231,15 +225,14 @@ function RDCard({
           </div>
           <div className="flex items-center gap-2 shrink-0 mt-0.5">
             {rate && (
-              <span className="rounded-full border border-blue-300/70 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-800 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-700/50">
+              <span className="rounded-full border border-accent/35 dark:border-accent/45 bg-accent/10 dark:bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent">
                 {rate}% p.a.
               </span>
             )}
-            <Pencil className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
           </div>
         </div>
 
-        {/* Meta */}
         <div className="mt-2 flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
           {monthlyAmt && <span>{monthlyAmt}/month</span>}
           {tenureMonths && (
@@ -268,12 +261,11 @@ function RDCard({
           )}
         </div>
 
-        {/* Installment progress bar */}
         {progressPct !== null && (
           <div className="mt-2.5 flex items-center gap-2.5">
             <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
               <div
-                className="h-full rounded-full bg-blue-400 transition-all"
+                className="h-full rounded-full bg-accent/70 dark:bg-accent/60 transition-all"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
@@ -283,7 +275,6 @@ function RDCard({
           </div>
         )}
 
-        {/* Maturity */}
         {maturity && (
           <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
             <span>Matures {maturity}</span>
@@ -291,18 +282,17 @@ function RDCard({
           </div>
         )}
 
-        <div className="mt-3 border-t" />
+        <div className="mt-3 border-t border-border" />
 
-        {/* Numbers */}
         <div className="mt-3 grid grid-cols-3 gap-4">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
               Total Deposited
             </p>
             <p className="tabular-nums font-semibold text-sm">{formatINR(holding.totalCost)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
               Current Value
             </p>
             <p className="tabular-nums font-semibold text-sm">
@@ -310,7 +300,7 @@ function RDCard({
             </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
               Interest Earned
             </p>
             <p className="tabular-nums font-semibold text-sm">
@@ -460,9 +450,9 @@ export function FixedDepositsPage() {
               className: totalPnL.gte(0) ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600',
             },
           ].map((m) => (
-            <Card key={m.label}>
+            <Card key={m.label} className="border-t-2 border-t-accent/70 dark:border-t-accent/60">
               <CardContent className="px-4 py-3">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
                   {m.label}
                 </p>
                 <p className={`text-xl font-semibold tabular-nums mt-1 ${m.className}`}>
@@ -498,8 +488,11 @@ export function FixedDepositsPage() {
       {/* Fixed Deposits */}
       {!isLoading && fdHoldings.length > 0 && (
         <section className="mb-8">
-          <div className="flex items-baseline gap-2 mb-3 px-0.5">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground/80">
+          <div className="flex items-center gap-2.5 mb-3 px-0.5">
+            <span className="inline-flex items-center justify-center h-6 w-6 rounded bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/25 dark:ring-accent/35 text-accent">
+              <PiggyBank className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </span>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
               Fixed Deposits
             </h3>
             <span className="text-xs text-muted-foreground">({fdHoldings.length})</span>
@@ -527,8 +520,11 @@ export function FixedDepositsPage() {
       {/* Recurring Deposits */}
       {!isLoading && rdHoldings.length > 0 && (
         <section className="mb-8">
-          <div className="flex items-baseline gap-2 mb-3 px-0.5">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground/80">
+          <div className="flex items-center gap-2.5 mb-3 px-0.5">
+            <span className="inline-flex items-center justify-center h-6 w-6 rounded bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/25 dark:ring-accent/35 text-accent">
+              <CalendarClock className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </span>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
               Recurring Deposits
             </h3>
             <span className="text-xs text-muted-foreground">({rdHoldings.length})</span>
