@@ -41,6 +41,13 @@ const TYPE_TONES: Record<AlertType, { dot: string; text: string; ring: string; b
   CUSTOM:             { dot: 'hsl(215 14% 38%)',  text: 'text-foreground/85', ring: 'border-border',                  bg: 'bg-muted/40'                },
 };
 
+const FALLBACK_TONE = {
+  dot: 'hsl(var(--muted-foreground))',
+  text: 'text-foreground/85',
+  ring: 'border-border',
+  bg: 'bg-muted/40',
+} as const;
+
 const ALL_TYPES: AlertType[] = [
   'FD_MATURITY', 'BOND_MATURITY', 'MF_LOCK_IN_EXPIRY', 'SIP_DUE',
   'INSURANCE_PREMIUM', 'DIVIDEND_RECEIVED', 'CORPORATE_ACTION', 'PRICE_TARGET', 'CUSTOM',
@@ -61,7 +68,8 @@ function AlertRow({ alert, onMarkRead, onDelete }: {
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const tone = TYPE_TONES[alert.type];
+  const tone = TYPE_TONES[alert.type as AlertType] ?? FALLBACK_TONE;
+  const typeLabel = TYPE_LABELS[alert.type as AlertType] ?? alert.type.replace(/_/g, ' ');
   const days = daysUntil(alert.triggerDate);
   const isOverdue = days < 0;
   const isUrgent = days >= 0 && days <= 7;
@@ -102,7 +110,7 @@ function AlertRow({ alert, onMarkRead, onDelete }: {
               'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned',
               tone.ring, tone.bg, tone.text,
             )}>
-              {TYPE_LABELS[alert.type]}
+              {typeLabel}
             </span>
             {isOverdue && !alert.isRead && (
               <span className="inline-flex items-center gap-1 rounded-full border border-negative/30 bg-negative/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned text-negative">
