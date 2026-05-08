@@ -1449,9 +1449,9 @@ function TapeSection({ trades, limit }: { trades: FoTrade[]; limit?: number }) {
           ── time-series ledger ──
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="h-[420px] overflow-auto">
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 dark:bg-muted/20">
+          <thead className="bg-muted/40 dark:bg-muted/20 sticky top-0 z-10">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-4 pr-2 py-2 font-semibold">Date</th>
               <th className="text-left px-3 py-2 font-semibold">Side</th>

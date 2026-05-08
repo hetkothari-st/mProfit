@@ -30,7 +30,6 @@ const OTHER_CLASSES = [
   { value: 'CRYPTOCURRENCY',  label: 'Cryptocurrency' },
   { value: 'REIT',            label: 'REIT (Real Estate Investment Trust)' },
   { value: 'INVIT',           label: 'InvIT (Infrastructure Inv. Trust)' },
-  { value: 'REAL_ESTATE',     label: 'Real Estate (direct property)' },
   { value: 'ART_COLLECTIBLES', label: 'Art & Collectibles' },
   { value: 'CASH',            label: 'Cash / Liquid Savings' },
   { value: 'OTHER',           label: 'Other' },
