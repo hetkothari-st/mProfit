@@ -12,6 +12,27 @@ export interface LiveCommodityPrices {
   fetchedAt: string;
 }
 
+export interface CryptoSearchHit {
+  id: string;
+  coinGeckoId: string;
+  symbol: string;
+  name: string;
+}
+
+export interface LiveCryptoCoin {
+  coinGeckoId: string;
+  symbol: string;
+  name: string;
+  priceInr: string | null;
+  priceUsd: string | null;
+  change24h: number | null;
+}
+
+export interface LiveCryptoPrices {
+  coins: LiveCryptoCoin[];
+  fetchedAt: string;
+}
+
 export const assetsApi = {
   async search(q: string, kind: 'all' | 'stock' | 'mf' = 'all', limit = 15): Promise<AssetSearchHit[]> {
     const { data } = await api.get<ApiResponse<AssetSearchHit[]>>('/api/assets/search', {
@@ -43,6 +64,16 @@ export const assetsApi = {
   },
   async commoditiesLive(): Promise<LiveCommodityPrices> {
     const { data } = await api.get<ApiResponse<LiveCommodityPrices>>('/api/assets/commodities/live');
+    return unwrap(data);
+  },
+  async cryptoSearch(q: string, limit = 15): Promise<CryptoSearchHit[]> {
+    const { data } = await api.get<ApiResponse<CryptoSearchHit[]>>('/api/assets/crypto/search', {
+      params: { q, limit },
+    });
+    return unwrap(data);
+  },
+  async cryptoLive(): Promise<LiveCryptoPrices> {
+    const { data } = await api.get<ApiResponse<LiveCryptoPrices>>('/api/assets/crypto/live');
     return unwrap(data);
   },
 };

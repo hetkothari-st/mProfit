@@ -17,7 +17,7 @@ import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniv
 import { loadBseEquityUniverse } from '../priceFeeds/bseUniverse.service.js';
 import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.js';
 import { syncAllCommodities, getLatestCommodityPrice, fetchLivePrices } from '../priceFeeds/commodity.service.js';
-import { syncCryptoPrices, searchCrypto } from '../priceFeeds/crypto.service.js';
+import { syncCryptoPrices, searchCrypto, fetchLiveCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates, getLatestFxRate } from '../priceFeeds/fx.service.js';
 import { runMasterSync, runPriceSync } from '../priceFeeds/router.service.js';
 import { refreshAllHoldingPrices, refreshPortfolioPrices } from '../services/holdings.service.js';
@@ -183,4 +183,9 @@ export async function searchCryptoController(req: Request, res: Response) {
   const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 15)));
   const hits = await searchCrypto(q, limit);
   ok(res, hits);
+}
+
+export async function liveCryptoPrices(_req: Request, res: Response) {
+  const rows = await fetchLiveCryptoPrices();
+  ok(res, { coins: rows, fetchedAt: new Date().toISOString() });
 }

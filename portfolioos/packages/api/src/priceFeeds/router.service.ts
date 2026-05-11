@@ -5,7 +5,7 @@ import { logger } from '../lib/logger.js';
 import { getLatestStockPrice } from './yahoo.service.js';
 import { getLatestNavForFund } from './amfi.service.js';
 import { getLatestCommodityPrice } from './commodity.service.js';
-import { getLatestCryptoPrice } from './crypto.service.js';
+import { getLatestCryptoPrice, getLatestCryptoPriceByCoinGeckoId } from './crypto.service.js';
 
 /**
  * Unified price feed router — dispatches a price lookup to the correct
@@ -50,7 +50,11 @@ export async function routePriceLookup(input: PriceLookupInput): Promise<Decimal
       return getLatestCommodityPrice('SILVER');
 
     case 'CRYPTOCURRENCY':
-      return input.cryptoId ? getLatestCryptoPrice(input.cryptoId) : null;
+      // Crypto holdings store the CoinGecko slug in the `isin` field — no FK
+      // exists on Transaction. If a direct cryptoId is supplied, prefer it.
+      if (input.cryptoId) return getLatestCryptoPrice(input.cryptoId);
+      if (input.isin) return getLatestCryptoPriceByCoinGeckoId(input.isin);
+      return null;
 
     case 'BOND':
     case 'GOVT_BOND':

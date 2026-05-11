@@ -42,6 +42,8 @@ import { FixedDepositsPage } from './pages/assetClasses/FixedDepositsPage';
 import { BondsPage } from './pages/assetClasses/BondsPage';
 import { GoldPage } from './pages/assetClasses/GoldPage';
 import { GoldAssetDetailPage } from './pages/assetClasses/GoldAssetDetailPage';
+import { CryptoPage } from './pages/assetClasses/CryptoPage';
+import { CryptoDetailPage } from './pages/assetClasses/CryptoDetailPage';
 import { NpsPage } from './pages/assetClasses/NpsPage';
 import { ProvidentFundPage } from './pages/assetClasses/ProvidentFundPage';
 import { PfExtensionPairPage } from './pages/pf/PfExtensionPairPage';
@@ -89,6 +91,8 @@ export function App() {
         <Route path="/fds" element={<FixedDepositsPage />} />
         <Route path="/gold" element={<GoldPage />} />
         <Route path="/gold/:holdingId" element={<GoldAssetDetailPage />} />
+        <Route path="/crypto" element={<CryptoPage />} />
+        <Route path="/crypto/:holdingId" element={<CryptoDetailPage />} />
         <Route path="/provident-fund" element={<ProvidentFundPage />} />
         <Route path="/provident-fund/extension" element={<PfExtensionPairPage />} />
         {/* PPF + EPF merged into /provident-fund. Old paths redirect for back-compat. */}

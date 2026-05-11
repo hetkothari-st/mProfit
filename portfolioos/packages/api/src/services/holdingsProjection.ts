@@ -299,11 +299,13 @@ async function currentPriceFor(opts: {
   assetClass: AssetClass;
   stockId: string | null;
   fundId: string | null;
+  isin: string | null;
 }): Promise<Decimal | null> {
   return routePriceLookup({
     assetClass: opts.assetClass,
     stockId: opts.stockId,
     fundId: opts.fundId,
+    isin: opts.isin,
   });
 }
 
@@ -371,6 +373,7 @@ export async function recomputeForAsset(
       assetClass: meta.assetClass,
       stockId: resolved.stockId,
       fundId: resolved.fundId,
+      isin: meta.isin,
     });
     currentValue = price ? agg.quantity.times(price) : null;
   }
@@ -494,6 +497,7 @@ async function refreshPricesForRows(rows: Array<{
       assetClass: row.assetClass,
       stockId: resolved.stockId,
       fundId: resolved.fundId,
+      isin: row.isin,
     });
     const patch: Prisma.HoldingProjectionUpdateInput = { computedAt: new Date() };
     let didPatch = false;

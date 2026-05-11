@@ -27,6 +27,7 @@ import {
   PanelLeftOpen,
   ArrowLeftRight,
   Coins,
+  Bitcoin,
   Wallet,
   CreditCard,
   HandCoins,
@@ -62,6 +63,7 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Bonds', to: '/bonds', icon: Landmark },
       { label: 'FDs & RDs', to: '/fds', icon: PiggyBank },
       { label: 'Gold & Silver', to: '/gold', icon: Coins },
+      { label: 'Crypto', to: '/crypto', icon: Bitcoin },
       { label: 'PPF & EPF', to: '/provident-fund', icon: Wallet },
       // NPS — disabled until NSDL CRA adapter lands (§10.2)
       // { label: 'NPS', to: '/nps', icon: ShieldCheck },

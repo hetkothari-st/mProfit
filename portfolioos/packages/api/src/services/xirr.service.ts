@@ -151,6 +151,7 @@ async function terminalValue(portfolioId: string, filter: {
         assetClass: h.assetClass,
         stockId: h.stockId,
         fundId: h.fundId,
+        isin: h.isin,
       });
     }
     if (!price) continue;

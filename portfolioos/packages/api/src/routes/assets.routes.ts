@@ -19,6 +19,7 @@ import {
   liveCommodityPrices,
   listFxRates,
   searchCryptoController,
+  liveCryptoPrices,
 } from '../controllers/assets.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
@@ -29,6 +30,7 @@ assetsRouter.use(authenticate);
 
 assetsRouter.get('/search', asyncHandler(search));
 assetsRouter.get('/crypto/search', asyncHandler(searchCryptoController));
+assetsRouter.get('/crypto/live', asyncHandler(liveCryptoPrices));
 assetsRouter.get('/quote/:symbol', asyncHandler(liveQuote));
 assetsRouter.get('/stocks/:id/price', asyncHandler(latestStockPrice));
 assetsRouter.get('/funds/:id/nav', asyncHandler(latestFundNav));

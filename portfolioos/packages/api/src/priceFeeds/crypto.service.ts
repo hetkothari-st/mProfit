@@ -107,6 +107,98 @@ export async function getLatestCryptoPrice(cryptoId: string): Promise<Decimal | 
   return row ? new Decimal(row.priceInr.toString()) : null;
 }
 
+/**
+ * Crypto holdings store the CoinGecko ID in the Transaction/HoldingProjection
+ * `isin` field (CryptoMaster has no relational FK on Transaction). Resolve the
+ * internal CryptoMaster.id from that slug, then read the latest INR price.
+ */
+export async function getLatestCryptoPriceByCoinGeckoId(coinGeckoId: string): Promise<Decimal | null> {
+  const coin = await prisma.cryptoMaster.findUnique({ where: { coinGeckoId } });
+  if (!coin) return null;
+  return getLatestCryptoPrice(coin.id);
+}
+
+export interface LiveCryptoPriceRow {
+  coinGeckoId: string;
+  symbol: string;
+  name: string;
+  priceInr: string | null;
+  priceUsd: string | null;
+  change24h: number | null;
+}
+
+/**
+ * Fetch live INR + USD + 24h change for every active coin. Used by the
+ * /api/assets/crypto/live endpoint to power the Crypto page's live overlay.
+ * Falls back to the last DB row when CoinGecko rate-limits.
+ */
+export async function fetchLiveCryptoPrices(): Promise<LiveCryptoPriceRow[]> {
+  await ensureCryptoSeed();
+  const coins = await prisma.cryptoMaster.findMany({ where: { isActive: true } });
+  if (coins.length === 0) return [];
+
+  const ids = coins.map((c) => c.coinGeckoId).join(',');
+  const url = `${COINGECKO_BASE}/simple/price?ids=${ids}&vs_currencies=inr,usd&include_24hr_change=true`;
+  let live: Record<string, { inr?: number; usd?: number; inr_24h_change?: number }> = {};
+  try {
+    const res = await request(url, {
+      method: 'GET',
+      headers: { accept: 'application/json', 'user-agent': 'PortfolioOS/0.2' },
+    });
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      live = (await res.body.json()) as typeof live;
+    }
+  } catch (err) {
+    logger.warn({ err }, '[crypto] live fetch failed, using DB cache');
+  }
+
+  // Batch-load the latest cached price per coin so the fallback path doesn't
+  // issue one query per coin (N+1) when CoinGecko returns nothing.
+  const needsCacheLookup = coins.some((c) => {
+    const l = live[c.coinGeckoId];
+    return l?.inr == null || l?.usd == null;
+  });
+  const cachedByCoinId = new Map<string, { priceInr: string | null; priceUsd: string | null }>();
+  if (needsCacheLookup) {
+    const cached = await prisma.cryptoPrice.findMany({
+      where: { cryptoId: { in: coins.map((c) => c.id) } },
+      orderBy: { date: 'desc' },
+    });
+    for (const row of cached) {
+      if (cachedByCoinId.has(row.cryptoId)) continue;
+      cachedByCoinId.set(row.cryptoId, {
+        priceInr: row.priceInr?.toString() ?? null,
+        priceUsd: row.priceUsd?.toString() ?? null,
+      });
+    }
+  }
+
+  const rows: LiveCryptoPriceRow[] = [];
+  for (const coin of coins) {
+    const l = live[coin.coinGeckoId];
+    let priceInr: string | null = null;
+    let priceUsd: string | null = null;
+    if (l?.inr != null) priceInr = new Decimal(l.inr).toFixed(4);
+    if (l?.usd != null) priceUsd = new Decimal(l.usd).toFixed(4);
+
+    if (!priceInr || !priceUsd) {
+      const cached = cachedByCoinId.get(coin.id);
+      if (!priceInr && cached?.priceInr) priceInr = cached.priceInr;
+      if (!priceUsd && cached?.priceUsd) priceUsd = cached.priceUsd;
+    }
+
+    rows.push({
+      coinGeckoId: coin.coinGeckoId,
+      symbol: coin.symbol,
+      name: coin.name,
+      priceInr,
+      priceUsd,
+      change24h: l?.inr_24h_change != null ? Number(l.inr_24h_change.toFixed(2)) : null,
+    });
+  }
+  return rows;
+}
+
 export async function searchCrypto(query: string, limit = 10) {
   const q = query.trim();
   if (!q) return [];
