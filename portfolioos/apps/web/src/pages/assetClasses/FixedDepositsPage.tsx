@@ -392,61 +392,64 @@ function RDCard({
   onClick: () => void;
   onEdit: (e: React.MouseEvent) => void;
 }) {
-  const rate = primaryTxn?.interestRate;
-  const freq = primaryTxn?.interestFrequency;
-  const maturity = primaryTxn?.maturityDate;
-  const openDate = primaryTxn?.tradeDate;
-  const monthlyAmt = primaryTxn ? formatINR(primaryTxn.price) : null;
+  const rate = primaryTxn?.interestRate ?? null;
+  const freq = primaryTxn?.interestFrequency ?? null;
+  const maturity = primaryTxn?.maturityDate ?? null;
+  const openDate = primaryTxn?.tradeDate ?? null;
+  const monthlyRaw = primaryTxn?.price ?? null;
+  const monthlyAmt = monthlyRaw ? formatINR(monthlyRaw) : '—';
 
   const tenureMonths = openDate && maturity ? monthsBetween(openDate, maturity) : null;
   const installmentsDone = allDepositTxns.length;
-  const totalStamps = tenureMonths && tenureMonths > 0 ? tenureMonths : Math.max(installmentsDone, 1);
+  const totalStamps = tenureMonths && tenureMonths > 0 ? tenureMonths : Math.max(installmentsDone, 12);
   const stamps = Array.from({ length: totalStamps }, (_, i) => i < installmentsDone);
   const progressPct = tenureMonths && tenureMonths > 0
     ? Math.min(100, (installmentsDone / tenureMonths) * 100)
-    : null;
+    : 0;
+
+  const matValue = rdMaturityValue(monthlyRaw, rate, tenureMonths);
+  const certNo = holding.id.slice(-6).toUpperCase();
 
   return (
     <div
       onClick={onClick}
-      className="group relative rounded-lg border border-border bg-card hover:border-accent/40 shadow-elev hover:shadow-elev-lg transition-all cursor-pointer overflow-hidden"
+      className="group relative rounded-lg border border-border bg-card hover:border-accent/50 shadow-elev hover:shadow-elev-lg transition-all cursor-pointer overflow-hidden"
     >
       {/* Ruled passbook lines */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-[0.06] dark:opacity-[0.08]"
+        className="absolute inset-0 pointer-events-none opacity-[0.07] dark:opacity-[0.10]"
         style={{
           backgroundImage:
-            'repeating-linear-gradient(to bottom, transparent 0, transparent 31px, hsl(var(--accent)) 31px, hsl(var(--accent)) 32px)',
+            'repeating-linear-gradient(to bottom, transparent 0, transparent 25px, hsl(var(--accent)) 25px, hsl(var(--accent)) 26px)',
         }}
       />
-      {/* Red top fold line */}
-      <div className="absolute inset-x-0 top-0 h-px bg-[hsl(var(--destructive)/0.45)]" />
-      <div className="absolute inset-x-0 top-[3px] h-px bg-[hsl(var(--destructive)/0.25)]" />
+      {/* Red top fold lines */}
+      <div className="absolute inset-x-0 top-0 h-px bg-[hsl(var(--destructive)/0.5)]" />
+      <div className="absolute inset-x-0 top-[3px] h-px bg-[hsl(var(--destructive)/0.3)]" />
 
       {/* Book binding (left spine) */}
-      <div className="absolute inset-y-0 left-0 w-[10px] bg-gradient-to-r from-accent/20 via-accent/10 to-transparent" />
-      <div className="absolute inset-y-0 left-[10px] w-px bg-accent/30" />
-      {/* Stitch holes */}
-      <div className="absolute inset-y-0 left-[3px] flex flex-col justify-evenly py-4 pointer-events-none">
+      <div className="absolute inset-y-0 left-0 w-[10px] bg-gradient-to-r from-accent/25 via-accent/12 to-transparent" />
+      <div className="absolute inset-y-0 left-[10px] w-px bg-accent/40" />
+      <div className="absolute inset-y-0 left-[3px] flex flex-col justify-evenly py-3 pointer-events-none">
         {[0, 1, 2, 3, 4].map((i) => (
           <span
             key={i}
-            className="h-[5px] w-[5px] rounded-full bg-accent/60 ring-2 ring-card shadow-[inset_0_0_0_0.5px_hsl(var(--accent)/0.6)]"
+            className="h-[5px] w-[5px] rounded-full bg-accent/70 ring-2 ring-card"
           />
         ))}
       </div>
 
-      <div className="relative pl-7 pr-6 py-5">
+      <div className="relative pl-7 pr-5 pt-3.5 pb-4">
         {/* Eyebrow */}
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <DiamondMark className="h-1.5 w-1.5 shrink-0 opacity-80" />
+            <DiamondMark className="h-1.5 w-1.5 shrink-0" />
             <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-accent leading-none">
               Recurring Deposit
             </span>
             <span className="text-accent/30 select-none">·</span>
             <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground leading-none">
-              Passbook
+              Passbook № <span className="text-foreground/80">{certNo}</span>
             </span>
           </div>
           <button
@@ -459,14 +462,14 @@ function RDCard({
           </button>
         </div>
 
-        {/* Headline + rate */}
-        <div className="mt-3 flex items-end justify-between gap-4">
+        {/* Headline + rate chip */}
+        <div className="mt-2 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="font-display text-[26px] leading-[1.1] text-foreground truncate">
+            <h3 className="font-display text-[22px] leading-[1.15] text-foreground truncate">
               {holding.assetName ?? '—'}
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              {monthlyAmt && <span className="text-foreground/85 font-medium">{monthlyAmt} / month</span>}
+            <p className="mt-0.5 text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="text-foreground/85 font-medium">{monthlyAmt} / month</span>
               {tenureMonths && (
                 <>
                   <span className="text-muted-foreground/40">·</span>
@@ -487,31 +490,27 @@ function RDCard({
               )}
             </p>
           </div>
-          {rate != null && (
-            <div className="shrink-0 text-right">
-              <p className="font-display text-3xl text-accent leading-none tabular-nums">
-                {rate}
-                <span className="text-xl align-top">%</span>
-              </p>
-              <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.28em] text-muted-foreground">
-                per annum
-              </p>
-            </div>
-          )}
+          <div className="shrink-0 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1 text-right">
+            <p className="font-display text-xl text-accent leading-none tabular-nums">
+              {rate ?? '—'}
+              <span className="text-sm align-top">%</span>
+            </p>
+            <p className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.22em] text-accent/80">
+              per annum
+            </p>
+          </div>
         </div>
 
-        {/* Stamp grid — passbook installment marks */}
-        <div className="mt-5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+        {/* Stamp grid */}
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Installments stamped
             </p>
             <p className="font-mono text-[10px] tabular-nums text-foreground/80">
               <span className="text-accent font-semibold">{installmentsDone}</span>
               <span className="text-muted-foreground/60"> / {tenureMonths ?? '—'}</span>
-              {progressPct !== null && (
-                <span className="ml-2 text-muted-foreground">({Math.round(progressPct)}%)</span>
-              )}
+              <span className="ml-1.5 text-muted-foreground">({Math.round(progressPct)}%)</span>
             </p>
           </div>
           <div className="flex flex-wrap gap-[3px]">
@@ -521,8 +520,8 @@ function RDCard({
                 title={`Month ${i + 1}${paid ? ' — paid' : ' — pending'}`}
                 className={
                   paid
-                    ? 'h-[14px] w-[14px] rounded-[2px] bg-accent/85 ring-1 ring-inset ring-accent/50 shadow-[inset_0_-1px_0_hsl(var(--accent)/0.6),inset_0_0_0_2px_hsl(var(--card))]'
-                    : 'h-[14px] w-[14px] rounded-[2px] border border-dashed border-border bg-muted/30'
+                    ? 'h-[12px] w-[12px] rounded-[2px] bg-accent ring-1 ring-inset ring-accent/60 shadow-[inset_0_0_0_2px_hsl(var(--card))]'
+                    : 'h-[12px] w-[12px] rounded-[2px] border border-dashed border-border bg-muted/30'
                 }
               />
             ))}
@@ -530,51 +529,46 @@ function RDCard({
         </div>
 
         {/* Maturity meta */}
-        {maturity && (
-          <div className="mt-4 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-            <span>Matures {maturity}</span>
-            <MaturityBadge date={maturity} />
-            {openDate && (
-              <>
-                <span className="text-muted-foreground/30">·</span>
-                <span>Opened {openDate}</span>
-              </>
-            )}
-          </div>
-        )}
-
-        {holding.isin && (
-          <p className="mt-1 font-mono text-[10px] text-muted-foreground/70 tracking-wide">
-            {holding.isin}
-          </p>
-        )}
+        <div className="mt-3 flex items-center justify-between flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <span>Opened {formatShortDate(openDate)}</span>
+          <span>Matures {formatShortDate(maturity)}</span>
+          {maturity && <MaturityBadge date={maturity} />}
+        </div>
 
         {/* Decorative rule */}
-        <div className="mt-5 rule-ornament"><span /></div>
+        <div className="mt-3.5 rule-ornament"><span /></div>
 
-        {/* Stat trio */}
-        <div className="mt-5 grid grid-cols-3 gap-4">
+        {/* Stat row: 4 cols */}
+        <div className="mt-3.5 grid grid-cols-4 gap-3">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
               Deposited
             </p>
-            <p className="numeric-display text-base text-foreground">
+            <p className="numeric-display text-[15px] text-foreground">
               {formatINR(holding.totalCost)}
             </p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
               Current Value
             </p>
-            <p className="numeric-display text-base text-foreground">
+            <p className="numeric-display text-[15px] text-foreground">
               {holding.currentValue ? formatINR(holding.currentValue) : '—'}
             </p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-accent/80 mb-0.5">
+              Maturity Value
+            </p>
+            <p className="numeric-display text-[15px] text-accent">
+              {matValue ? formatINR(matValue.toString()) : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
               Earned
             </p>
-            <p className="numeric-display text-base">
+            <p className="numeric-display text-[15px]">
               <PnLDisplay holding={holding} />
             </p>
           </div>
@@ -799,7 +793,7 @@ export function FixedDepositsPage() {
             </h3>
             <span className="text-xs text-muted-foreground">({fdHoldings.length})</span>
           </div>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
             {fdHoldings.map((h) => {
               const primary = primaryTxnFor(h);
               return (
@@ -831,7 +825,7 @@ export function FixedDepositsPage() {
             </h3>
             <span className="text-xs text-muted-foreground">({rdHoldings.length})</span>
           </div>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
             {rdHoldings.map((h) => {
               const primary = primaryTxnFor(h);
               const depositOnly = depositTxnsFor(h);
