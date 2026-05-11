@@ -41,29 +41,75 @@ const SILVER_ETFS = [
   'SILVERBEES.NS', 'SILVERIETF.NS',
 ];
 
+async function fetchUsdInr(): Promise<Decimal | null> {
+  // Yahoo INR=X is the fast path; fall back to exchangerate-api when it's
+  // rate-limited or returns an unexpected shape.
+  try {
+    const arr = await yahooQuoteRaw(['INR=X']);
+    const q = arr[0];
+    if (q && typeof q.regularMarketPrice === 'number' && q.regularMarketPrice > 0) {
+      return new Decimal(q.regularMarketPrice);
+    }
+  } catch (err) {
+    logger.warn({ err }, '[commodity] Yahoo INR=X failed');
+  }
+  try {
+    const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD', {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const j = await res.json() as { rates?: Record<string, number> };
+      const inr = j.rates?.['INR'];
+      if (inr && inr > 0) return new Decimal(inr);
+    }
+  } catch (err) {
+    logger.warn({ err }, '[commodity] exchangerate-api failed');
+  }
+  return null;
+}
+
 async function fetchGoldApiInr(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null }> {
-  // CoinGecko public API — major platform, global CDN, no auth, no Yahoo dependency.
-  // PAXG (Paxos Gold) = 1 troy oz of physical gold. Price tracks XAU very closely.
+  let GOLD: Decimal | null = null;
+  let SILVER: Decimal | null = null;
+
+  // CoinGecko PAXG (1 troy oz of physical gold) → INR per gram.
   try {
     const res = await fetch(
       'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=inr',
       { signal: AbortSignal.timeout(8000) },
     );
-    if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
-    const data = await res.json() as Record<string, { inr?: number }>;
-    const paxgInr = data['pax-gold']?.inr;
-
-    if (paxgInr) {
-      logger.info({ paxgInr }, '[commodity] gold price from CoinGecko PAXG');
-      return {
-        GOLD: new Decimal(paxgInr).div(TROY_OZ_TO_GRAMS),
-        SILVER: null, // silver fetched separately via Yahoo when rate limit clears
-      };
+    if (res.ok) {
+      const data = await res.json() as Record<string, { inr?: number }>;
+      const paxgInr = data['pax-gold']?.inr;
+      if (paxgInr) {
+        GOLD = new Decimal(paxgInr).div(TROY_OZ_TO_GRAMS);
+        logger.info({ paxgInr }, '[commodity] gold price from CoinGecko PAXG');
+      }
     }
   } catch (err) {
     logger.warn({ err }, '[commodity] CoinGecko gold fetch failed');
   }
-  return { GOLD: null, SILVER: null };
+
+  // gold-api.com XAU/XAG — free, no key, returns USD/oz spot. Reliable silver
+  // source (CoinGecko has no major silver token). Convert to INR per gram via
+  // USD/INR FX. Try in parallel with the FX lookup.
+  try {
+    const [xagRes, fxRate] = await Promise.all([
+      fetch('https://api.gold-api.com/price/XAG', { signal: AbortSignal.timeout(5000) }),
+      fetchUsdInr(),
+    ]);
+    if (xagRes.ok && fxRate) {
+      const j = await xagRes.json() as { price?: number };
+      if (j.price && j.price > 0) {
+        SILVER = new Decimal(j.price).times(fxRate).div(TROY_OZ_TO_GRAMS);
+        logger.info({ silverUsd: j.price, usdInr: fxRate.toString() }, '[commodity] silver from gold-api XAG');
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, '[commodity] gold-api XAG silver fetch failed');
+  }
+
+  return { GOLD, SILVER };
 }
 
 /**
