@@ -175,10 +175,10 @@ function Ledger({
     highlight === 'accent'   ? 'text-[hsl(var(--accent))]' :
     'text-foreground';
   return (
-    <div className="px-5 py-4 first:pl-0 last:pr-0">
-      <p className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80 font-medium">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold leading-none tabular-nums ${colour}`}>{value}</p>
-      {hint && <p className="mt-1.5 text-[11px] text-muted-foreground/70">{hint}</p>}
+    <div className="px-5 py-4 min-w-0">
+      <p className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80 font-medium truncate">{label}</p>
+      <p className={`mt-2 text-xl xl:text-2xl font-semibold leading-tight tabular-nums truncate ${colour}`}>{value}</p>
+      {hint && <p className="mt-1.5 text-[11px] text-muted-foreground/70 truncate">{hint}</p>}
     </div>
   );
 }
