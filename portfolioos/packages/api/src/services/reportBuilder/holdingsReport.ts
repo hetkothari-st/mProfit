@@ -225,44 +225,230 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
     narration:       t.narration ?? '',
   }));
 
-  // ── F&O closed trades (realised P&L) — only for F&O reports ────────────────
   const additionalSections: NonNullable<ExportPayload['additionalSections']> = [];
+  let footerOverride: Record<string, string> | null = null;
+  let metaOverride: Record<string, string> = {
+    Portfolio: portfolioLabel,
+    Section: section,
+    Holdings: String(holdings.length),
+    Transactions: String(txns.length),
+  };
 
+  // ────────────────────────────────────────────────────────────────────
+  // F&O-SPECIFIC SECTIONS: closed positions, realised P&L by FY, tax buckets
+  // ────────────────────────────────────────────────────────────────────
   if (isFoOnly && resolvedIds.length > 0) {
+    // Closed positions
+    const closedPositions = await prisma.derivativePosition.findMany({
+      where: { portfolioId: { in: resolvedIds }, status: 'CLOSED' },
+      orderBy: [{ closedAt: 'desc' }],
+    });
+
+    const closedRows = closedPositions.map(p => {
+      const tag = p.instrumentType === 'FUTURES'
+        ? 'FUT'
+        : `${p.instrumentType === 'CALL' ? 'CE' : 'PE'} ${p.strikePrice?.toString() ?? ''}`;
+      return {
+        portfolioName: portfolioNameMap[p.portfolioId] ?? p.portfolioId,
+        instrument:    `${p.underlying} ${tag}`,
+        expiryDate:    p.expiryDate.toISOString().slice(0, 10),
+        closedAt:      p.closedAt?.toISOString().slice(0, 10) ?? '',
+        closeReason:   p.closeReason ?? '',
+        avgEntryPrice: p.avgEntryPrice.toString(),
+        settlementPrice: p.settlementPrice?.toString() ?? '',
+        realizedPnl:   p.realizedPnl.toString(),
+      };
+    });
+
+    if (closedRows.length > 0) {
+      additionalSections.push({
+        title: `Closed Positions (${closedRows.length})`,
+        columns: [
+          { key: 'portfolioName',   header: 'Portfolio',     width: 14 },
+          { key: 'instrument',      header: 'Instrument',    width: 22 },
+          { key: 'expiryDate',      header: 'Expiry',        width: 12 },
+          { key: 'closedAt',        header: 'Closed On',     width: 12 },
+          { key: 'closeReason',     header: 'Close Reason',  width: 14 },
+          { key: 'avgEntryPrice',   header: 'Avg Entry',     width: 12, formatter: fmtRs },
+          { key: 'settlementPrice', header: 'Settlement',    width: 12, formatter: fmtRs },
+          { key: 'realizedPnl',     header: 'Realised P&L',  width: 14, formatter: fmtRs },
+        ],
+        rows: closedRows,
+        emptyMessage: 'No closed positions.',
+      });
+    }
+
+    // Realised P&L per asset key by FY + Tax bucket summary
     const { computePortfolioFoPnl } = await import('../foPnl.service.js');
-    let foRows: Array<Record<string, unknown>> = [];
+    const foRows: Array<Record<string, unknown>> = [];
+    let totalRealised = new Decimal(0);
+    let specPnl = new Decimal(0);
+    let nonSpecPnl = new Decimal(0);
+    let totalTurnover = new Decimal(0);
+    const fySummary = new Map<string, { spec: Decimal; nonSpec: Decimal; total: Decimal; turnover: Decimal; trades: number }>();
+
     for (const pid of resolvedIds) {
       try {
         const fo = await computePortfolioFoPnl(pid);
         const pName = portfolioNameMap[pid] ?? pid;
-        fo.rows.forEach(r => foRows.push({ portfolioName: pName, ...r }));
+        fo.rows.forEach(r => {
+          foRows.push({ portfolioName: pName, ...r });
+          const pnl = new Decimal(r.realizedPnl);
+          totalRealised = totalRealised.plus(pnl);
+          if (r.taxBucket === 'SPECULATIVE') specPnl = specPnl.plus(pnl);
+          else nonSpecPnl = nonSpecPnl.plus(pnl);
+          totalTurnover = totalTurnover.plus(new Decimal(r.turnover));
+
+          const exist = fySummary.get(r.financialYear) ?? { spec: new Decimal(0), nonSpec: new Decimal(0), total: new Decimal(0), turnover: new Decimal(0), trades: 0 };
+          if (r.taxBucket === 'SPECULATIVE') exist.spec = exist.spec.plus(pnl);
+          else exist.nonSpec = exist.nonSpec.plus(pnl);
+          exist.total = exist.total.plus(pnl);
+          exist.turnover = exist.turnover.plus(new Decimal(r.turnover));
+          exist.trades += r.closedTradeCount;
+          fySummary.set(r.financialYear, exist);
+        });
       } catch { /* portfolio may have no F&O */ }
     }
+
     if (foRows.length > 0) {
-      const foColumns: ExportColumn[] = [
-        { key: 'portfolioName',    header: 'Portfolio',     width: 14 },
-        { key: 'financialYear',    header: 'FY',            width: 8 },
-        { key: 'underlying',       header: 'Underlying',    width: 14 },
-        { key: 'instrumentType',   header: 'Type',          width: 8 },
-        { key: 'strikePrice',      header: 'Strike',        width: 10, formatter: v => v ? fmtNum(v) : '' },
-        { key: 'expiryDate',       header: 'Expiry',        width: 12 },
-        { key: 'taxBucket',        header: 'Tax Bucket',    width: 14 },
-        { key: 'closedTradeCount', header: 'Trades',        width: 8 },
-        { key: 'turnover',         header: 'Turnover',      width: 14, formatter: fmtRs },
-        { key: 'realizedPnl',      header: 'Realised P&L',  width: 14, formatter: fmtRs },
-      ];
       additionalSections.push({
-        title: 'Realised F&O P&L (closed trades by FY)',
-        columns: foColumns,
+        title: 'Realised F&O P&L (per instrument, per FY)',
+        columns: [
+          { key: 'portfolioName',    header: 'Portfolio',     width: 14 },
+          { key: 'financialYear',    header: 'FY',            width: 8 },
+          { key: 'underlying',       header: 'Underlying',    width: 14 },
+          { key: 'instrumentType',   header: 'Type',          width: 8 },
+          { key: 'strikePrice',      header: 'Strike',        width: 10, formatter: v => v ? fmtNum(v) : '' },
+          { key: 'expiryDate',       header: 'Expiry',        width: 12 },
+          { key: 'taxBucket',        header: 'Tax Bucket',    width: 14 },
+          { key: 'closedTradeCount', header: 'Trades',        width: 8 },
+          { key: 'turnover',         header: 'Turnover',      width: 14, formatter: fmtRs },
+          { key: 'realizedPnl',      header: 'Realised P&L',  width: 14, formatter: fmtRs },
+        ],
         rows: foRows,
         emptyMessage: 'No closed F&O trades.',
       });
+
+      // Tax bucket summary by FY
+      const taxRows = Array.from(fySummary.entries())
+        .sort(([a], [b]) => a > b ? -1 : 1)
+        .map(([fy, v]) => ({
+          fy,
+          speculative:    v.spec.toString(),
+          nonSpeculative: v.nonSpec.toString(),
+          total:          v.total.toString(),
+          turnover:       v.turnover.toString(),
+          trades:         v.trades,
+        }));
+      additionalSections.push({
+        title: 'Tax Summary by Financial Year (§43(5) classification)',
+        columns: [
+          { key: 'fy',             header: 'FY',                     width: 10 },
+          { key: 'trades',         header: 'Closed Trades',          width: 12 },
+          { key: 'turnover',       header: 'Turnover (ICAI)',        width: 16, formatter: fmtRs },
+          { key: 'speculative',    header: 'Speculative P&L',        width: 16, formatter: fmtRs },
+          { key: 'nonSpeculative', header: 'Non-Speculative P&L',    width: 16, formatter: fmtRs },
+          { key: 'total',          header: 'Total Realised',         width: 14, formatter: fmtRs },
+        ],
+        rows: taxRows,
+        emptyMessage: 'No tax data.',
+      });
     }
+
+    // Override F&O footer with realized P&L (matches app's KPI cards)
+    metaOverride['Closed Positions'] = String(closedPositions.length);
+    metaOverride['Closed Trades']    = String(foRows.length);
+    footerOverride = {
+      'Open Positions':   String(holdings.length),
+      'Realised P&L':     `${totalRealised.isNegative() ? '' : '+'}Rs. ${fmtNum(totalRealised.toString())}`,
+      'Unrealised P&L':   `${totalPnl.isNegative() ? '' : '+'}Rs. ${fmtNum(totalPnl.toString())}`,
+      'Total Turnover':   `Rs. ${fmtNum(totalTurnover.toString())}`,
+    };
   }
 
-  // Transactions section — always include
+  // ────────────────────────────────────────────────────────────────────
+  // CAPITAL GAINS section — for non-F&O classes (equity, MF, ETF, bonds...)
+  // ────────────────────────────────────────────────────────────────────
+  if (!isFoOnly && resolvedIds.length > 0) {
+    try {
+      const { computePortfolioCapitalGains } = await import('../capitalGains.service.js');
+      const cgRows: Array<Record<string, unknown>> = [];
+      for (const pid of resolvedIds) {
+        try {
+          const { rows } = await computePortfolioCapitalGains(pid);
+          const filtered = classFilter
+            ? rows.filter(r => classFilter.includes(r.assetClass as AssetClass))
+            : rows;
+          filtered.forEach(r => cgRows.push({
+            portfolioName: portfolioNameMap[pid] ?? pid,
+            assetName:     r.assetName ?? r.isin ?? '—',
+            buyDate:       r.buyDate,
+            sellDate:      r.sellDate,
+            quantity:      r.quantity.toString(),
+            buyAmount:     r.buyAmount.toString(),
+            sellAmount:    r.sellAmount.toString(),
+            type:          r.capitalGainType,
+            gainLoss:      r.gainLoss.toString(),
+            taxableGain:   r.taxableGain.toString(),
+            financialYear: r.financialYear,
+          }));
+        } catch { /* no CG for this portfolio */ }
+      }
+      if (cgRows.length > 0) {
+        additionalSections.push({
+          title: `Realised Capital Gains (${cgRows.length} matched trades)`,
+          columns: [
+            { key: 'portfolioName', header: 'Portfolio',   width: 14 },
+            { key: 'financialYear', header: 'FY',          width: 8 },
+            { key: 'type',          header: 'Type',        width: 10 },
+            { key: 'assetName',     header: 'Asset',       width: 24 },
+            { key: 'buyDate',       header: 'Buy Date',    width: 12, formatter: fmtDate },
+            { key: 'sellDate',      header: 'Sell Date',   width: 12, formatter: fmtDate },
+            { key: 'quantity',      header: 'Qty',         width: 10, formatter: v => fmtNum(v, 4) },
+            { key: 'buyAmount',     header: 'Cost',        width: 14, formatter: fmtRs },
+            { key: 'sellAmount',    header: 'Proceeds',    width: 14, formatter: fmtRs },
+            { key: 'gainLoss',      header: 'Gain/Loss',   width: 14, formatter: fmtRs },
+            { key: 'taxableGain',   header: 'Taxable',     width: 14, formatter: fmtRs },
+          ],
+          rows: cgRows,
+          emptyMessage: 'No realised gains.',
+        });
+      }
+    } catch { /* CG service may fail for non-applicable asset classes */ }
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // INCOME section — dividends, interest, maturity for this asset class
+  // ────────────────────────────────────────────────────────────────────
+  const incomeTypes = ['DIVIDEND_PAYOUT', 'INTEREST_RECEIVED', 'MATURITY'] as const;
+  const incomeTxns = txns.filter(t => (incomeTypes as readonly string[]).includes(t.transactionType));
+  if (incomeTxns.length > 0) {
+    const incomeRows = incomeTxns.map(t => ({
+      portfolioName: portfolioNameMap[t.portfolioId] ?? t.portfolioId,
+      tradeDate:     t.tradeDate,
+      type:          t.transactionType,
+      assetName:     t.assetName ?? t.isin ?? '—',
+      amount:        t.netAmount.toString(),
+      narration:     t.narration ?? '',
+    }));
+    additionalSections.push({
+      title: `Income Received (${incomeTxns.length} entries)`,
+      columns: [
+        { key: 'portfolioName', header: 'Portfolio', width: 14 },
+        { key: 'tradeDate',     header: 'Date',      width: 12, formatter: fmtDate },
+        { key: 'type',          header: 'Type',      width: 16 },
+        { key: 'assetName',     header: 'Asset',     width: 28 },
+        { key: 'amount',        header: 'Amount',    width: 14, formatter: fmtRs },
+        { key: 'narration',     header: 'Narration', width: 24 },
+      ],
+      rows: incomeRows,
+      emptyMessage: 'No income received.',
+    });
+  }
+
+  // Transaction tape — always last, always full data
   additionalSections.push({
-    title: `Transaction History (${txns.length} records)`,
+    title: `Transaction Tape (${txns.length} entries)`,
     columns: txnColumns,
     rows: txnRows,
     emptyMessage: 'No transactions recorded.',
@@ -272,16 +458,11 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
     title: `${section} Report`,
     subtitle: `${portfolioLabel}  ·  ${todayStr}`,
     filenameStem: fileStem,
-    meta: {
-      Portfolio: portfolioLabel,
-      Section: section,
-      Holdings: String(holdings.length),
-      Transactions: String(txns.length),
-    },
+    meta: metaOverride,
     mainSectionLabel: isFoOnly ? `Open Positions (${holdings.length})` : `Current Holdings (${holdings.length})`,
     columns: holdingColumns,
     rows: holdingRows,
-    footer: {
+    footer: footerOverride ?? {
       'Total Invested': `Rs. ${fmtNum(totalCost.toString())}`,
       'Current Value':  `Rs. ${fmtNum(totalValue.toString())}`,
       'Unrealised P&L': `${totalPnl.isNegative() ? '' : '+'}Rs. ${fmtNum(totalPnl.toString())}`,

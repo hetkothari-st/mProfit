@@ -266,15 +266,9 @@ export async function getHoldingsExport(req: Request, res: Response) {
   }
 
   if (format === 'pdf') {
-    // Merge holdings + transactions into one combined payload and reuse streamPdf
-    const combined: ExportPayload = {
-      title: summaryTitle,
-      meta: holdingsPayload.meta,
-      columns: holdingsPayload.columns,
-      rows: holdingsPayload.rows,
-      footer: holdingsPayload.footer,
-    };
-    await streamPdf(res, combined);
+    // holdingsPayload already carries additionalSections (Transactions,
+    // realised F&O P&L, etc.) — pass it through unchanged.
+    await streamPdf(res, holdingsPayload);
     return;
   }
 
