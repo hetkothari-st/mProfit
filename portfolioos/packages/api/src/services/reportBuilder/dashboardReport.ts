@@ -263,13 +263,13 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   cy += 22;
 
   const holdingCols: ColDef[] = [
-    { key: 'portfolioName', header: 'Portfolio', width: 90 },
-    { key: 'assetClass',    header: 'Class',     width: 72 },
-    { key: 'assetName',     header: 'Asset',     width: 130 },
-    { key: 'invested',      header: 'Invested',  width: 78, money: true },
-    { key: 'value',         header: 'Value',     width: 78, money: true },
-    { key: 'pnl',           header: 'P&L',       width: 70, money: true, signed: true },
-    { key: 'pctReturn',     header: '%',         width: 42, pct: true },
+    { key: 'portfolioName', header: 'Portfolio',       width: 90 },
+    { key: 'assetClass',    header: 'Class',           width: 72 },
+    { key: 'assetName',     header: 'Asset',           width: 130 },
+    { key: 'invested',      header: 'Invested (Rs.)',  width: 88, money: true },
+    { key: 'value',         header: 'Value (Rs.)',     width: 88, money: true },
+    { key: 'pnl',           header: 'P&L (Rs.)',       width: 78, money: true, signed: true },
+    { key: 'pctReturn',     header: '%',               width: 42, pct: true },
   ];
   const totalColW = holdingCols.reduce((s, c) => s + c.width, 0);
   const scale = W / totalColW;
@@ -378,6 +378,18 @@ async function getPortfolioLabel(params: DashboardReportParams): Promise<string>
   return 'All Portfolios';
 }
 
+function truncToFit(doc: InstanceType<typeof PDFDocument>, text: string, maxWidth: number): string {
+  const ellW = doc.widthOfString('...');
+  if (ellW > maxWidth) return '';
+  let lo = 0, hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (doc.widthOfString(text.slice(0, mid)) + ellW <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + '...';
+}
+
 function drawSectionHeader(
   doc: InstanceType<typeof PDFDocument>,
   text: string,
@@ -442,11 +454,17 @@ function drawTable(
       const raw   = rows[i]![col.key] ?? '';
       let value = String(raw);
       if (col.pct) value = `${value}%`;
-      else if (col.money) value = `Rs. ${fmtNum(value)}`;
+      else if (col.money) value = fmtNum(value);  // no Rs. prefix in cells
       const isNeg = (col.signed || col.money) && String(raw).startsWith('-');
       doc.fillColor(isNeg ? BRAND.negative : BRAND.ink);
       const align = (col.money || col.pct) ? 'right' : 'left';
-      doc.text(pdfSafe(value), x + 4, y + 5, { width: col.width - 8, ellipsis: true, align });
+      const cellW = col.width - 8;
+      // Truncate to fit current font metrics
+      const safe = pdfSafe(value);
+      const display = doc.widthOfString(safe) <= cellW
+        ? safe
+        : truncToFit(doc, safe, cellW);
+      doc.text(display, x + 4, y + 5, { width: cellW, align, lineBreak: false });
       x += col.width;
     }
     y += ROW_H;

@@ -161,21 +161,22 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
     };
   });
 
-  // Currency-prefixed money formatter for tables (PDF-safe — no ₹)
-  const fmtRs   = (v: unknown) => v == null || v === '' ? '' : `Rs. ${fmtNum(v)}`;
+  // Money formatter for TABLE cells — no "Rs. " prefix (header gives currency).
+  // Keeps cells narrow; we add Rs. back in metric cards / footers where space exists.
+  const fmtMoney = (v: unknown) => v == null || v === '' ? '' : fmtNum(v);
 
   const holdingColumns: ExportColumn[] = [
-    { key: 'portfolioName',  header: 'Portfolio',    width: 16 },
-    { key: 'assetClass',     header: 'Class',        width: 12 },
-    { key: 'assetName',      header: 'Name',         width: 32 },
-    { key: 'isin',           header: 'ISIN',         width: 14 },
+    { key: 'portfolioName',  header: 'Portfolio',    width: 14 },
+    { key: 'assetClass',     header: 'Class',        width: 10 },
+    { key: 'assetName',      header: 'Name',         width: 26 },
+    { key: 'isin',           header: 'ISIN',         width: 12 },
     { key: 'quantity',       header: 'Qty',          width: 10, formatter: v => fmtNum(v, 4) },
-    { key: 'avgCostPrice',   header: 'Avg Cost',     width: 12, formatter: fmtRs },
-    { key: 'currentPrice',   header: 'CMP',          width: 12, formatter: fmtRs },
-    { key: 'totalCost',      header: 'Invested',     width: 14, formatter: fmtRs },
-    { key: 'currentValue',   header: 'Value',        width: 14, formatter: fmtRs },
-    { key: 'unrealisedPnL',  header: 'P&L',          width: 14, formatter: fmtRs },
-    { key: 'pctReturn',      header: '% Rtn',        width: 8,  formatter: v => `${v}%` },
+    { key: 'avgCostPrice',   header: 'Avg Cost (Rs.)', width: 12, formatter: fmtMoney },
+    { key: 'currentPrice',   header: 'CMP (Rs.)',      width: 12, formatter: fmtMoney },
+    { key: 'totalCost',      header: 'Invested (Rs.)', width: 16, formatter: fmtMoney },
+    { key: 'currentValue',   header: 'Value (Rs.)',    width: 16, formatter: fmtMoney },
+    { key: 'unrealisedPnL',  header: 'P&L (Rs.)',      width: 14, formatter: fmtMoney },
+    { key: 'pctReturn',      header: '% Rtn',          width: 8,  formatter: v => `${v}%` },
   ];
 
   const totalPnl = totalValue.minus(totalCost);
@@ -206,8 +207,8 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
     { key: 'assetName',         header: 'Asset',       width: 28 },
     { key: 'transactionType',   header: 'Type',        width: 12 },
     { key: 'quantity',          header: 'Qty',         width: 10, formatter: v => fmtNum(v, 4) },
-    { key: 'price',             header: 'Price',       width: 12, formatter: fmtRs },
-    { key: 'netAmount',         header: 'Net Amount',  width: 14, formatter: fmtRs },
+    { key: 'price',             header: 'Price (Rs.)',     width: 12, formatter: fmtMoney },
+    { key: 'netAmount',         header: 'Net Amount (Rs.)', width: 18, formatter: fmtMoney },
     { key: 'broker',            header: 'Broker',      width: 14 },
     { key: 'narration',         header: 'Narration',   width: 22 },
   ];
@@ -269,9 +270,9 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
           { key: 'expiryDate',      header: 'Expiry',        width: 12 },
           { key: 'closedAt',        header: 'Closed On',     width: 12 },
           { key: 'closeReason',     header: 'Close Reason',  width: 14 },
-          { key: 'avgEntryPrice',   header: 'Avg Entry',     width: 12, formatter: fmtRs },
-          { key: 'settlementPrice', header: 'Settlement',    width: 12, formatter: fmtRs },
-          { key: 'realizedPnl',     header: 'Realised P&L',  width: 14, formatter: fmtRs },
+          { key: 'avgEntryPrice',   header: 'Avg Entry (Rs.)',    width: 14, formatter: fmtMoney },
+          { key: 'settlementPrice', header: 'Settlement (Rs.)',   width: 14, formatter: fmtMoney },
+          { key: 'realizedPnl',     header: 'Realised P&L (Rs.)', width: 16, formatter: fmtMoney },
         ],
         rows: closedRows,
         emptyMessage: 'No closed positions.',
@@ -322,8 +323,8 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
           { key: 'expiryDate',       header: 'Expiry',        width: 12 },
           { key: 'taxBucket',        header: 'Tax Bucket',    width: 14 },
           { key: 'closedTradeCount', header: 'Trades',        width: 8 },
-          { key: 'turnover',         header: 'Turnover',      width: 14, formatter: fmtRs },
-          { key: 'realizedPnl',      header: 'Realised P&L',  width: 14, formatter: fmtRs },
+          { key: 'turnover',         header: 'Turnover (Rs.)',      width: 16, formatter: fmtMoney },
+          { key: 'realizedPnl',      header: 'Realised P&L (Rs.)',  width: 16, formatter: fmtMoney },
         ],
         rows: foRows,
         emptyMessage: 'No closed F&O trades.',
@@ -345,10 +346,10 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
         columns: [
           { key: 'fy',             header: 'FY',                     width: 10 },
           { key: 'trades',         header: 'Closed Trades',          width: 12 },
-          { key: 'turnover',       header: 'Turnover (ICAI)',        width: 16, formatter: fmtRs },
-          { key: 'speculative',    header: 'Speculative P&L',        width: 16, formatter: fmtRs },
-          { key: 'nonSpeculative', header: 'Non-Speculative P&L',    width: 16, formatter: fmtRs },
-          { key: 'total',          header: 'Total Realised',         width: 14, formatter: fmtRs },
+          { key: 'turnover',       header: 'Turnover ICAI (Rs.)',        width: 18, formatter: fmtMoney },
+          { key: 'speculative',    header: 'Speculative P&L (Rs.)',      width: 18, formatter: fmtMoney },
+          { key: 'nonSpeculative', header: 'Non-Spec. P&L (Rs.)',        width: 18, formatter: fmtMoney },
+          { key: 'total',          header: 'Total Realised (Rs.)',       width: 16, formatter: fmtMoney },
         ],
         rows: taxRows,
         emptyMessage: 'No tax data.',
@@ -405,10 +406,10 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
             { key: 'buyDate',       header: 'Buy Date',    width: 12, formatter: fmtDate },
             { key: 'sellDate',      header: 'Sell Date',   width: 12, formatter: fmtDate },
             { key: 'quantity',      header: 'Qty',         width: 10, formatter: v => fmtNum(v, 4) },
-            { key: 'buyAmount',     header: 'Cost',        width: 14, formatter: fmtRs },
-            { key: 'sellAmount',    header: 'Proceeds',    width: 14, formatter: fmtRs },
-            { key: 'gainLoss',      header: 'Gain/Loss',   width: 14, formatter: fmtRs },
-            { key: 'taxableGain',   header: 'Taxable',     width: 14, formatter: fmtRs },
+            { key: 'buyAmount',     header: 'Cost (Rs.)',        width: 14, formatter: fmtMoney },
+            { key: 'sellAmount',    header: 'Proceeds (Rs.)',    width: 14, formatter: fmtMoney },
+            { key: 'gainLoss',      header: 'Gain/Loss (Rs.)',   width: 14, formatter: fmtMoney },
+            { key: 'taxableGain',   header: 'Taxable (Rs.)',     width: 14, formatter: fmtMoney },
           ],
           rows: cgRows,
           emptyMessage: 'No realised gains.',
@@ -438,7 +439,7 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
         { key: 'tradeDate',     header: 'Date',      width: 12, formatter: fmtDate },
         { key: 'type',          header: 'Type',      width: 16 },
         { key: 'assetName',     header: 'Asset',     width: 28 },
-        { key: 'amount',        header: 'Amount',    width: 14, formatter: fmtRs },
+        { key: 'amount',        header: 'Amount (Rs.)', width: 14, formatter: fmtMoney },
         { key: 'narration',     header: 'Narration', width: 24 },
       ],
       rows: incomeRows,

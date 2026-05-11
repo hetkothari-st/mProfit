@@ -238,6 +238,25 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
   });
 }
 
+// Manually truncate a string so it fits inside `maxWidth` at the document's
+// current font/size. Caller must set the desired font/size BEFORE calling.
+// Returns the input unchanged when it already fits.
+function fitText(doc: InstanceType<typeof PDFDocument>, text: string, maxWidth: number): string {
+  if (!text) return '';
+  if (doc.widthOfString(text) <= maxWidth) return text;
+  const ellipsis = '...';
+  const ellW = doc.widthOfString(ellipsis);
+  if (ellW > maxWidth) return '';
+  // Binary-search the longest prefix that fits with the ellipsis suffix.
+  let lo = 0, hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (doc.widthOfString(text.slice(0, mid)) + ellW <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + ellipsis;
+}
+
 function drawSectionBand(
   doc: InstanceType<typeof PDFDocument>,
   x: number,
@@ -307,13 +326,19 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
     for (let i = 0; i < o.columns.length; i++) {
       const col = o.columns[i]!;
       const raw = o.rows[idx]![col.key];
-      const val = col.formatter ? col.formatter(raw) : (raw == null ? '' : String(raw));
-      const isNumeric = /^[+-]?[\d,.]+%?$/.test(val.trim()) || /^[+-]?Rs/.test(val.trim());
-      const isNeg = val.trim().startsWith('-');
+      const rawVal = col.formatter ? col.formatter(raw) : (raw == null ? '' : String(raw));
+      const safe = pdfSafe(rawVal);
+      const isNumeric = /^[+-]?[\d,.]+%?$/.test(safe.trim()) || /^[+-]?Rs/.test(safe.trim());
+      const isNeg = safe.trim().startsWith('-');
       const align = isNumeric ? 'right' : 'left';
+      const cellW = (colWidths[i] ?? 80) - 8;
+      // Manually truncate so we can guarantee single-line — PDFKit's
+      // lineBreak:false + ellipsis:true combo is unreliable when text is
+      // far wider than the column. doc.widthOfString uses real font metrics.
+      const display = fitText(doc, safe, cellW);
       doc.fillColor(isNeg ? BRAND.negative : BRAND.ink)
-         .text(pdfSafe(val), x + 4, cy + 5, {
-           width: (colWidths[i] ?? 80) - 8, ellipsis: true, align, lineBreak: false,
+         .text(display, x + 4, cy + 5, {
+           width: cellW, align, lineBreak: false,
          });
       x += colWidths[i] ?? 80;
     }
