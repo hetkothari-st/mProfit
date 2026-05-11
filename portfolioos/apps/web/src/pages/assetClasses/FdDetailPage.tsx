@@ -63,14 +63,12 @@ const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
   fontSize: 11,
 };
 
-// Distinct chart palettes so the detail page isn't a wall of accent gold.
-// Growth = sky/indigo (forward-looking), Composition donut = indigo+emerald,
-// Accrual split = violet (principal) vs emerald (interest).
-const CHART_GROWTH = '#3b82f6';        // blue-500
-const CHART_GROWTH_DIM = '#93c5fd';    // blue-300
-const CHART_PRINCIPAL = '#8b5cf6';     // violet-500
-const CHART_INTEREST = '#10b981';      // emerald-500
-const CHART_INTEREST_DIM = '#6ee7b7';  // emerald-300
+// Match the loans-page chart palette: neutral foreground for the growth/
+// balance line, positive (green) for principal, negative (red) for interest.
+const CHART_GROWTH = 'hsl(var(--foreground))';
+const CHART_GROWTH_DIM = 'hsl(var(--muted-foreground))';
+const CHART_PRINCIPAL = 'hsl(var(--positive))';
+const CHART_INTEREST = 'hsl(var(--negative))';
 
 function daysUntil(iso: string): number {
   return Math.round((new Date(iso).getTime() - Date.now()) / 86_400_000);
@@ -865,8 +863,9 @@ export function FdDetailPage() {
                   <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
                     <defs>
                       <linearGradient id="gradValue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={CHART_GROWTH} stopOpacity={0.45} />
-                        <stop offset="100%" stopColor={CHART_GROWTH} stopOpacity={0.02} />
+                        <stop offset="0%" stopColor={CHART_GROWTH} stopOpacity={0.22} />
+                        <stop offset="55%" stopColor={CHART_GROWTH} stopOpacity={0.06} />
+                        <stop offset="100%" stopColor={CHART_GROWTH} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
@@ -882,8 +881,9 @@ export function FdDetailPage() {
                     )}
                     <Area type="monotone" dataKey="principal" stroke="hsl(var(--muted-foreground))"
                       strokeWidth={1} strokeDasharray="3 3" fill="transparent" />
-                    <Area type="monotone" dataKey="value" stroke={CHART_GROWTH} strokeWidth={2.5}
-                      fill="url(#gradValue)" />
+                    <Area type="monotone" dataKey="value" stroke={CHART_GROWTH} strokeWidth={2}
+                      fill="url(#gradValue)" dot={false}
+                      activeDot={{ r: 4, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 2 }} />
                   </AreaChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -943,11 +943,11 @@ export function FdDetailPage() {
                   <AreaChart data={chartData} margin={{ top: 5, right: 12, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradStackedPrincipal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={CHART_PRINCIPAL} stopOpacity={0.55} />
+                        <stop offset="0%" stopColor={CHART_PRINCIPAL} stopOpacity={0.5} />
                         <stop offset="100%" stopColor={CHART_PRINCIPAL} stopOpacity={0.05} />
                       </linearGradient>
                       <linearGradient id="gradStackedInterest" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={CHART_INTEREST} stopOpacity={0.55} />
+                        <stop offset="0%" stopColor={CHART_INTEREST} stopOpacity={0.5} />
                         <stop offset="100%" stopColor={CHART_INTEREST} stopOpacity={0.05} />
                       </linearGradient>
                     </defs>
