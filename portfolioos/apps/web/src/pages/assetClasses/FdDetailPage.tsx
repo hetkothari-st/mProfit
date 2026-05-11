@@ -915,7 +915,28 @@ export function FdDetailPage() {
                           >
                             {pieData.map((_, i) => <Cell key={i} fill={pieColors[i]} />)}
                           </Pie>
-                          {/* Tooltip omitted — full breakdown shown below the chart */}
+                          <Tooltip
+                            cursor={false}
+                            wrapperStyle={{ outline: 'none' }}
+                            position={{ y: -8 }}
+                            content={({ active, payload }) => {
+                              if (!active || !payload?.length) return null;
+                              const p = payload[0]!;
+                              const total = pieData.reduce((s, r) => s + r.value, 0);
+                              const pct = total > 0 ? (Number(p.value) / total) * 100 : 0;
+                              return (
+                                <div className="rounded-md border bg-popover/95 backdrop-blur-sm shadow-md px-2.5 py-1.5 text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-2 w-2 rounded-full shrink-0"
+                                      style={{ background: (p.payload as { fill?: string }).fill }} />
+                                    <span className="font-medium">{p.name}</span>
+                                    <span className="tabular-nums font-semibold ml-1">{formatINR(String(p.value))}</span>
+                                    <span className="text-muted-foreground tabular-nums ml-1">· {pct.toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                              );
+                            }}
+                          />
                         </PieChart>
                       </ResponsiveContainer>
                       {/* Center label inside the donut */}
