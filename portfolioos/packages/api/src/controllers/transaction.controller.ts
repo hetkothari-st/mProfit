@@ -63,7 +63,7 @@ const listQuerySchema = z.object({
   from: isoDate.optional(),
   to: isoDate.optional(),
   page: z.coerce.number().int().positive().optional(),
-  pageSize: z.coerce.number().int().positive().max(200).optional(),
+  pageSize: z.coerce.number().int().positive().max(1000).optional(),
 });
 
 function userId(req: Request): string {
