@@ -395,15 +395,21 @@ export async function getSectionExport(req: Request, res: Response) {
         title: 'Credit Cards',
         meta: { 'Generated On': new Date().toISOString().slice(0, 10), 'Total': String(rows.length) },
         columns: [
-          { key: 'cardName',       header: 'Card',          width: 20 },
-          { key: 'bankName',       header: 'Bank',          width: 18 },
-          { key: 'last4Digits',    header: 'Last 4',        width: 8 },
-          { key: 'creditLimit',    header: 'Limit',         width: 14, formatter: v => fmtNum(v) },
-          { key: 'billingCycleDay',header: 'Billing Day',   width: 10 },
-          { key: 'dueDayOffset',   header: 'Due Day',       width: 10 },
-          { key: 'isActive',       header: 'Active',        width: 8, formatter: v => v ? 'Yes' : 'No' },
+          { key: 'cardName',     header: 'Card',          width: 20 },
+          { key: 'issuerBank',   header: 'Issuer Bank',   width: 18 },
+          { key: 'last4',        header: 'Last 4',        width: 8 },
+          { key: 'network',      header: 'Network',       width: 12 },
+          { key: 'creditLimit',  header: 'Limit (Rs.)',   width: 14, formatter: v => fmtNum(v) },
+          { key: 'interestRate', header: 'Rate %',        width: 10, formatter: v => v ? fmtNum(v) : '' },
+          { key: 'annualFee',    header: 'Annual Fee',    width: 12, formatter: v => v ? fmtNum(v) : '' },
+          { key: 'status',       header: 'Status',        width: 10 },
         ],
-        rows: rows.map(r => ({ ...r, creditLimit: r.creditLimit?.toString() ?? '' })),
+        rows: rows.map(r => ({
+          ...r,
+          creditLimit:  r.creditLimit?.toString() ?? '',
+          interestRate: r.interestRate?.toString() ?? '',
+          annualFee:    r.annualFee?.toString() ?? '',
+        })),
       };
       break;
     }
