@@ -55,37 +55,73 @@ const RBI_SUPPORTED = new Set(['USD', 'EUR', 'GBP', 'JPY']);
 export interface FxSyncResult {
   updated: number;
   skipped: number;
-  bySource: { rbi: number; frankfurter: number; yahoo: number; derived: number };
+  bySource: { rbi: number; exchangerateApi: number; frankfurter: number; yahoo: number; derived: number };
 }
 
-// ─── Frankfurter adapter ────────────────────────────────────────────
+// ─── Free public rate adapters ──────────────────────────────────────
 //
-// Frankfurter mirrors ECB / RBI / BoE daily reference rates with a simple
-// JSON API, no auth, no rate limit. Already battle-tested in
-// commodity.service.ts for USD/INR. Used as the secondary adapter after RBI
-// HTML scrape: when RBI's homepage widget can't be parsed (markup changes,
-// JS-rendered table, etc) and before falling through to Yahoo (which is
-// rate-limited on Railway IPs).
+// Railway egress can't reach api.gold-api.com (DNS) and Yahoo
+// rate-limits aggressively. Frankfurter + exchangerate-api are the
+// proven free aggregators (already used in commodity.service.ts for
+// USD/INR). One call to exchangerate-api's /latest/USD returns INR + all
+// other currencies vs USD; we derive base→INR by combining base→USD and
+// USD→INR. This is cheaper than per-base Frankfurter calls and gives us
+// AED + every other supported currency in a single round-trip.
+
+interface ExchangeRateApiResponse {
+  base?: string;
+  rates?: Record<string, number>;
+}
+
+async function fetchExchangeRateApi(): Promise<Map<string, Decimal>> {
+  const out = new Map<string, Decimal>();
+  try {
+    const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD', {
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, '[fx] exchangerate-api non-2xx');
+      return out;
+    }
+    const body = (await res.json()) as ExchangeRateApiResponse;
+    const rates = body?.rates;
+    if (!rates) return out;
+    const usdInr = rates['INR'];
+    if (typeof usdInr !== 'number' || usdInr <= 0) return out;
+    // Direct USD→INR.
+    out.set('USD', new Decimal(usdInr));
+    // For every other supported base, derive base→INR = (1 / base-per-USD) × USD/INR.
+    // exchangerate-api's `rates[X]` is X per 1 USD, so 1 USD = rates[X] X,
+    // and 1 X = (1 / rates[X]) USD = (1 / rates[X]) × USD/INR INR.
+    for (const code of PRIMARY_INR_PAIRS.map((p) => p.base)) {
+      if (code === 'USD') continue;
+      const r = rates[code];
+      if (typeof r !== 'number' || r <= 0) continue;
+      out.set(code, new Decimal(usdInr).dividedBy(r));
+    }
+    logger.info({ count: out.size }, '[fx] exchangerate-api rates parsed');
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, '[fx] exchangerate-api fetch failed');
+  }
+  return out;
+}
+
 async function fetchFrankfurterRates(bases: string[]): Promise<Map<string, Decimal>> {
   const out = new Map<string, Decimal>();
   await Promise.all(
     bases.map(async (base) => {
       try {
-        const url = `https://api.frankfurter.app/latest?from=${base}&to=INR`;
-        const res = await request(url, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          bodyTimeout: 8_000,
-          headersTimeout: 4_000,
+        const res = await fetch(`https://api.frankfurter.app/latest?from=${base}&to=INR`, {
+          signal: AbortSignal.timeout(7000),
         });
-        if (res.statusCode < 200 || res.statusCode >= 300) return;
-        const body = (await res.body.json()) as { rates?: Record<string, number> };
+        if (!res.ok) return;
+        const body = (await res.json()) as { rates?: Record<string, number> };
         const rate = body?.rates?.INR;
         if (typeof rate === 'number' && rate > 0) {
           out.set(base, new Decimal(rate));
         }
-      } catch {
-        // swallow — fall through to next adapter
+      } catch (err) {
+        logger.warn({ err: (err as Error).message, base }, '[fx] Frankfurter failed');
       }
     }),
   );
@@ -179,7 +215,7 @@ export async function syncFxRates(): Promise<FxSyncResult> {
 
   let updated = 0;
   let skipped = 0;
-  const bySource = { rbi: 0, frankfurter: 0, yahoo: 0, derived: 0 };
+  const bySource = { rbi: 0, exchangerateApi: 0, frankfurter: 0, yahoo: 0, derived: 0 };
 
   // 1) RBI primary for USD/EUR/GBP/JPY → INR (best-effort HTML scrape).
   const rbiRates = await fetchRbiReferenceRates();
@@ -189,9 +225,19 @@ export async function syncFxRates(): Promise<FxSyncResult> {
     bySource.rbi++;
   }
 
-  // 2) Frankfurter for any INR pair RBI didn't cover. Reliable, no auth,
-  //    no rate limit — designed for exactly this kind of fallback.
-  const needFrankfurter = PRIMARY_INR_PAIRS.filter((p) => !rbiRates.has(p.base)).map((p) => p.base);
+  // 2) exchangerate-api gives us 11 INR pairs in a single round-trip.
+  //    Proven reachable from Railway egress; no auth, no per-key limit.
+  const erRates = await fetchExchangeRateApi();
+  for (const [code, rate] of erRates) {
+    if (rbiRates.has(code)) continue;
+    await upsertRate(code, 'INR', today, rate, 'FRANKFURTER');
+    updated++;
+    bySource.exchangerateApi++;
+  }
+
+  // 3) Frankfurter for any INR pair the prior adapters missed.
+  const covered0 = new Set<string>([...rbiRates.keys(), ...erRates.keys()]);
+  const needFrankfurter = PRIMARY_INR_PAIRS.filter((p) => !covered0.has(p.base)).map((p) => p.base);
   const frankRates = needFrankfurter.length > 0 ? await fetchFrankfurterRates(needFrankfurter) : new Map<string, Decimal>();
   for (const [code, rate] of frankRates) {
     await upsertRate(code, 'INR', today, rate, 'FRANKFURTER');
@@ -199,9 +245,9 @@ export async function syncFxRates(): Promise<FxSyncResult> {
     bySource.frankfurter++;
   }
 
-  // 3) Yahoo for whatever's still missing + the cross pairs (Frankfurter
-  //    doesn't cover non-INR pairs).
-  const covered = new Set<string>([...rbiRates.keys(), ...frankRates.keys()]);
+  // 4) Yahoo for whatever's still missing + the cross pairs (no free
+  //    aggregator covers non-INR pairs).
+  const covered = new Set<string>([...rbiRates.keys(), ...erRates.keys(), ...frankRates.keys()]);
   const yahooSymbols = [
     ...PRIMARY_INR_PAIRS.filter((p) => !covered.has(p.base)).map((p) => p.yahooSymbol),
     ...CROSS_PAIRS.map((p) => p.yahooSymbol),
