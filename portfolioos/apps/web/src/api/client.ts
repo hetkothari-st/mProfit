@@ -19,7 +19,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 
 let refreshPromise: Promise<string> | null = null;
 
-async function doRefresh(): Promise<string> {
+export async function doRefresh(): Promise<string> {
   const refreshToken = useAuthStore.getState().refreshToken;
   if (!refreshToken) throw new Error('No refresh token');
   const response = await axios.post(`${baseURL}/api/auth/refresh`, { refreshToken });

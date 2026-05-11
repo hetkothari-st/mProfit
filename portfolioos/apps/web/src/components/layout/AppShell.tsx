@@ -4,9 +4,11 @@ import { Header } from './Header';
 import { GmailAutoConnectBanner } from './GmailAutoConnectBanner';
 import { ScanProvider } from '@/context/ScanContext';
 import { usePrivacyStore } from '@/stores/privacy.store';
+import { useTokenRefresh } from '@/hooks/useTokenRefresh';
 
 export function AppShell() {
   const { hideSensitive } = usePrivacyStore();
+  useTokenRefresh();
 
   return (
     <ScanProvider>
