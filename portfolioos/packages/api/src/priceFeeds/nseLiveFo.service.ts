@@ -37,8 +37,8 @@ async function fetchSession(): Promise<string> {
       'accept-language': 'en-US,en;q=0.9',
     },
     maxRedirections: 5,
-    bodyTimeout: 20_000,
-    headersTimeout: 15_000,
+    bodyTimeout: 8_000,
+    headersTimeout: 6_000,
   });
   const rawCookies = res.headers['set-cookie'];
   await res.body.dump();
@@ -175,8 +175,8 @@ async function fetchUnderlyingSnapshot(underlying: string): Promise<UnderlyingSn
       referer: NSE_HOME,
       cookie: cookies,
     },
-    bodyTimeout: 15_000,
-    headersTimeout: 10_000,
+    bodyTimeout: 8_000,
+    headersTimeout: 6_000,
   });
 
   if (res.statusCode === 429) {

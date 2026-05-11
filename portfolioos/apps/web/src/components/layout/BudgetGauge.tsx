@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { toDecimal } from '@portfolioos/shared';
 import { ingestionApi } from '@/api/ingestion.api';
+import { useAuthStore } from '@/stores/auth.store';
 
 /**
  * §9 / §17 — sidebar gauge for the user's month-to-date LLM spend. Colour
@@ -8,10 +9,13 @@ import { ingestionApi } from '@/api/ingestion.api';
  * Poll every 60s so an email parsed in another tab updates here too.
  */
 export function BudgetGauge({ collapsed }: { collapsed: boolean }) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
   const { data, isLoading } = useQuery({
     queryKey: ['ingestion', 'budget'],
     queryFn: () => ingestionApi.budget(),
     refetchInterval: 60_000,
+    enabled: isAuthenticated,
+    retry: false,
   });
 
   if (isLoading || !data) {
