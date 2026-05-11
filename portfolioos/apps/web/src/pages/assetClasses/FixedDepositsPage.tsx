@@ -138,54 +138,146 @@ function DiamondMark({
   );
 }
 
-function ChipIcon({ className = '' }: { className?: string }) {
+function VaultGlyph({ className = '' }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 40 30" fill="none" aria-hidden>
-      <defs>
-        <linearGradient id="chipGradFD" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#FDE68A" />
-          <stop offset="45%" stopColor="#F59E0B" />
-          <stop offset="100%" stopColor="#92400E" />
-        </linearGradient>
-      </defs>
-      <rect
-        x="0.5"
-        y="0.5"
-        width="39"
-        height="29"
-        rx="4"
-        fill="url(#chipGradFD)"
-        stroke="#78350F"
-        strokeOpacity="0.6"
-        strokeWidth="0.5"
-      />
-      <path
-        d="M0 10 L15 10 M0 20 L15 20 M40 10 L25 10 M40 20 L25 20 M15 0 L15 10 M25 0 L25 10 M15 20 L15 30 M25 20 L25 30"
-        stroke="#78350F"
-        strokeOpacity="0.55"
-        strokeWidth="0.6"
-      />
-      <rect
-        x="14"
-        y="9"
-        width="12"
-        height="12"
-        rx="1.5"
-        fill="none"
-        stroke="#78350F"
-        strokeOpacity="0.7"
-        strokeWidth="0.8"
-      />
-      <rect
-        x="16.5"
-        y="11.5"
-        width="7"
-        height="7"
-        rx="0.5"
-        fill="#FCD34D"
-        fillOpacity="0.55"
-      />
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1" strokeOpacity="0.7" />
+      <line x1="12" y1="2.5" x2="12" y2="5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="12" y1="18.5" x2="12" y2="21.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="2.5" y1="12" x2="5.5" y2="12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="18.5" y1="12" x2="21.5" y2="12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="5.5" y1="5.5" x2="7.5" y2="7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.7" />
+      <line x1="16.5" y1="16.5" x2="18.5" y2="18.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.7" />
+      <line x1="5.5" y1="18.5" x2="7.5" y2="16.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.7" />
+      <line x1="16.5" y1="7.5" x2="18.5" y2="5.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.7" />
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" />
     </svg>
+  );
+}
+
+function polarPoint(cx: number, cy: number, r: number, deg: number) {
+  const rad = (deg * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
+  if (endDeg - startDeg <= 0) return '';
+  const start = polarPoint(cx, cy, r, startDeg);
+  const end = polarPoint(cx, cy, r, endDeg);
+  const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+  return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
+}
+
+function VaultDial({
+  rate,
+  elapsedPct,
+  className = '',
+}: {
+  rate: string | null;
+  elapsedPct: number;
+  className?: string;
+}) {
+  const ticks = Array.from({ length: 60 }, (_, i) => i);
+  const sweepEndDeg = -90 + (Math.max(0, Math.min(100, elapsedPct)) / 100) * 360;
+  const sweepPath = arcPath(50, 50, 38, -90, sweepEndDeg);
+  // Pointer angle (clockwise from top)
+  const pointer = polarPoint(50, 50, 36, sweepEndDeg);
+
+  return (
+    <div className={`relative shrink-0 ${className}`}>
+      {/* Brass outer ring with brushed gradient + bevel */}
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background:
+            'conic-gradient(from 220deg, #FDE68A 0deg, #F59E0B 90deg, #92400E 180deg, #F59E0B 260deg, #FDE68A 360deg)',
+          boxShadow:
+            'inset 0 2px 4px rgba(255,255,255,0.45), inset 0 -3px 6px rgba(0,0,0,0.55), 0 6px 20px rgba(0,0,0,0.55)',
+        }}
+      />
+      {/* Inner steel face */}
+      <div
+        className="absolute inset-[6px] rounded-full bg-gradient-to-br from-slate-700 via-slate-900 to-black"
+        style={{
+          boxShadow:
+            'inset 0 4px 14px rgba(0,0,0,0.78), inset 0 -1px 2px rgba(255,255,255,0.06)',
+        }}
+      >
+        {/* Brushed steel radial scratches */}
+        <div
+          className="absolute inset-0 rounded-full opacity-25 mix-blend-overlay"
+          style={{
+            backgroundImage:
+              'repeating-conic-gradient(from 0deg, rgba(255,255,255,0.10) 0deg, transparent 3deg, rgba(255,255,255,0.10) 6deg)',
+          }}
+        />
+        {/* Vignette */}
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{
+            background:
+              'radial-gradient(circle at 38% 28%, rgba(255,255,255,0.16), transparent 55%)',
+          }}
+        />
+        {/* Tick marks + sweep arc + pointer */}
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" aria-hidden>
+          {ticks.map((i) => {
+            const deg = i * 6 - 90;
+            const rad = (deg * Math.PI) / 180;
+            const major = i % 5 === 0;
+            const r1 = major ? 39 : 42;
+            const r2 = 46;
+            return (
+              <line
+                key={i}
+                x1={50 + r1 * Math.cos(rad)}
+                y1={50 + r1 * Math.sin(rad)}
+                x2={50 + r2 * Math.cos(rad)}
+                y2={50 + r2 * Math.sin(rad)}
+                stroke={major ? '#FCD34D' : 'rgba(255,255,255,0.45)'}
+                strokeWidth={major ? 1.1 : 0.5}
+                strokeLinecap="round"
+              />
+            );
+          })}
+          {sweepPath && (
+            <path
+              d={sweepPath}
+              fill="none"
+              stroke="#FCD34D"
+              strokeWidth="2.2"
+              strokeOpacity="0.9"
+              strokeLinecap="round"
+              filter="drop-shadow(0 0 3px rgba(252,211,77,0.65))"
+            />
+          )}
+          {/* Pointer */}
+          <line
+            x1="50"
+            y1="50"
+            x2={pointer.x}
+            y2={pointer.y}
+            stroke="#FDE68A"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeOpacity="0.85"
+          />
+          <circle cx="50" cy="50" r="3.5" fill="#FCD34D" />
+          <circle cx="50" cy="50" r="1.6" fill="#7C2D12" />
+        </svg>
+        {/* Rate text */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <p className="font-bold tabular-nums text-[26px] text-amber-100 leading-none drop-shadow-[0_2px_8px_rgba(252,211,77,0.55)]">
+            {rate ?? '—'}
+            <span className="text-base align-top opacity-85 ml-0.5">%</span>
+          </p>
+          <p className="mt-1 font-mono text-[8px] uppercase tracking-[0.25em] text-amber-200/70">
+            per annum
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -264,64 +356,84 @@ function FDCard({
     <div
       onClick={onClick}
       className="group relative rounded-2xl overflow-hidden cursor-pointer
-        bg-gradient-to-br from-[#042F2E] via-[#134E4A] to-[#0E7490]
-        ring-1 ring-white/10 hover:ring-white/25
-        shadow-[0_18px_45px_-20px_rgba(8,47,73,0.65),0_8px_18px_-10px_rgba(8,47,73,0.45)]
-        hover:shadow-[0_28px_70px_-20px_rgba(8,47,73,0.85),0_10px_24px_-10px_rgba(8,47,73,0.55)]
+        bg-gradient-to-br from-[#0B1220] via-[#1F2937] to-[#374151]
+        ring-1 ring-white/10 hover:ring-amber-300/35
+        shadow-[0_18px_45px_-18px_rgba(0,0,0,0.85),0_8px_18px_-10px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)]
+        hover:shadow-[0_28px_70px_-20px_rgba(0,0,0,0.95),0_10px_24px_-10px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.08)]
         hover:-translate-y-0.5
         transition-all duration-300"
     >
-      {/* Atmospheric glows */}
+      {/* Brushed steel grain — vertical streaks + top highlight */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-40 mix-blend-overlay"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(90deg, rgba(255,255,255,0) 0px, rgba(255,255,255,0.04) 1px, rgba(255,255,255,0) 2px), radial-gradient(ellipse 80% 40% at 50% -10%, rgba(255,255,255,0.22), transparent 70%)',
+        }}
+      />
+
+      {/* Bottom shadow gradient */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(circle at 85% -10%, rgba(45,212,191,0.45), transparent 55%), radial-gradient(circle at -5% 105%, rgba(8,145,178,0.45), transparent 55%), radial-gradient(circle at 50% 50%, rgba(20,184,166,0.10), transparent 70%)',
+            'radial-gradient(ellipse 80% 50% at 50% 130%, rgba(0,0,0,0.55), transparent 70%)',
         }}
       />
 
-      {/* Diagonal sheen — animates on hover */}
+      {/* Warm vault glow behind dial */}
       <div
-        className="absolute inset-0 pointer-events-none -translate-x-[40%] group-hover:translate-x-[40%] transition-transform duration-[1400ms] ease-out"
+        className="absolute pointer-events-none"
+        style={{
+          left: '4%',
+          top: '20%',
+          width: '40%',
+          height: '70%',
+          background:
+            'radial-gradient(circle at 30% 50%, rgba(252,211,77,0.16), transparent 60%)',
+        }}
+      />
+
+      {/* Diagonal sheen on hover */}
+      <div
+        className="absolute inset-0 pointer-events-none -translate-x-[45%] group-hover:translate-x-[45%] transition-transform duration-[1400ms] ease-out"
         style={{
           background:
-            'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.06) 45%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0.06) 55%, transparent 70%)',
+            'linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.05) 48%, rgba(255,255,255,0.14) 50%, rgba(255,255,255,0.05) 52%, transparent 65%)',
         }}
       />
 
-      {/* Faint guilloché lines (banknote vibe) */}
-      <svg
-        className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.07] mix-blend-overlay"
-        viewBox="0 0 600 300"
-        preserveAspectRatio="none"
-        aria-hidden
-      >
-        <defs>
-          <pattern id="guilloche-fd" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M0 20 Q10 0 20 20 T40 20" stroke="white" strokeWidth="0.6" fill="none" />
-            <path d="M0 30 Q10 10 20 30 T40 30" stroke="white" strokeWidth="0.4" fill="none" />
-          </pattern>
-        </defs>
-        <rect width="600" height="300" fill="url(#guilloche-fd)" />
-      </svg>
+      {/* Corner rivets */}
+      {['top-3 left-3', 'top-3 right-3', 'bottom-3 left-3', 'bottom-3 right-3'].map((pos) => (
+        <span
+          key={pos}
+          className={`absolute ${pos} h-[7px] w-[7px] rounded-full pointer-events-none`}
+          style={{
+            background:
+              'radial-gradient(circle at 35% 30%, #E2E8F0, #475569 55%, #1E293B 100%)',
+            boxShadow:
+              'inset 0 -1px 1px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.45), 0 1px 1px rgba(0,0,0,0.5)',
+          }}
+        />
+      ))}
 
       <div className="relative px-6 pt-5 pb-5 text-white">
-        {/* Top row: chip + locked */}
+        {/* Top row */}
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <ChipIcon className="h-7 w-9 drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" />
+          <div className="flex items-center gap-2.5">
+            <VaultGlyph className="h-5 w-5 text-amber-300 drop-shadow-[0_0_6px_rgba(252,211,77,0.55)]" />
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.32em] text-white/65 leading-none">
-                Fixed Deposit
+              <p className="font-mono text-[9px] uppercase tracking-[0.32em] text-white/70 leading-none">
+                Fixed Deposit · Vault
               </p>
               <p className="font-mono text-[10px] text-white/40 mt-1 tabular-nums leading-none">
-                Cert № {certNo}
+                № {certNo}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/10 backdrop-blur px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.22em] text-white ring-1 ring-white/25">
-              <Lock className="h-2.5 w-2.5" strokeWidth={2.5} /> Locked
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/12 ring-1 ring-amber-300/40 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.22em] text-amber-200">
+              <Lock className="h-2.5 w-2.5" strokeWidth={2.5} /> Sealed
             </span>
             <button
               type="button"
@@ -334,10 +446,12 @@ function FDCard({
           </div>
         </div>
 
-        {/* Bank name + rate */}
-        <div className="mt-6 flex items-end justify-between gap-4">
-          <div className="min-w-0">
-            <h3 className="text-[28px] leading-[1.05] font-semibold tracking-tight text-white truncate drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]">
+        {/* Body: dial + details */}
+        <div className="mt-5 flex items-center gap-5">
+          <VaultDial rate={rate} elapsedPct={elapsedPct} className="h-[124px] w-[124px]" />
+
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[26px] leading-[1.05] font-semibold tracking-tight text-white truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.45)]">
               {holding.assetName ?? '—'}
             </h3>
             <p className="mt-1.5 text-[11px] text-white/60 flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -355,59 +469,58 @@ function FDCard({
                 </>
               )}
             </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-[42px] font-bold leading-none tabular-nums text-white drop-shadow-[0_2px_10px_rgba(110,231,183,0.45)]">
-              {rate ?? '—'}
-              <span className="text-2xl align-top opacity-85 ml-0.5">%</span>
-            </p>
-            <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.32em] text-white/50">
-              per annum
-            </p>
-          </div>
-        </div>
 
-        {/* Timeline */}
-        <div className="mt-5">
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] tabular-nums text-white/85 shrink-0 w-[88px]">
-              {formatShortDate(openDate)}
-            </span>
-            <div className="relative flex-1 h-[6px] rounded-full bg-white/12 overflow-visible">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-teal-200 via-cyan-100 to-emerald-200 shadow-[0_0_12px_rgba(110,231,183,0.7)]"
-                style={{ width: `${elapsedPct}%` }}
-              />
-              {tenureMonths !== null && (
-                <span
-                  className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-white ring-2 ring-cyan-200/70 shadow-[0_0_10px_rgba(255,255,255,0.85)]"
-                  style={{ left: `calc(${Math.max(elapsedPct, 0)}% - 6px)` }}
-                />
-              )}
-            </div>
-            <span className="text-[11px] tabular-nums text-white/85 shrink-0 w-[88px] text-right">
-              {formatShortDate(maturity)}
-            </span>
-          </div>
-          <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.22em] text-white/45">
-            <span>Opened</span>
-            <span className="text-white/65 tabular-nums normal-case tracking-normal">
-              {tenureMonths ? `${Math.round(elapsedPct)}% of ${tenureMonths}mo elapsed` : 'Tenure pending'}
-            </span>
-            <span className="flex items-center gap-1">
-              Matures
-              {maturity && (
-                <span className="ml-2">
-                  <MaturityBadge date={maturity} />
+            {/* Timeline */}
+            <div className="mt-4">
+              <div className="flex items-center gap-2.5">
+                <span className="text-[10px] tabular-nums text-white/80 shrink-0">
+                  {formatShortDate(openDate)}
                 </span>
-              )}
-            </span>
+                <div className="relative flex-1 h-[5px] rounded-full bg-white/12 overflow-visible">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-amber-300 via-amber-200 to-amber-100 shadow-[0_0_10px_rgba(252,211,77,0.6)]"
+                    style={{ width: `${elapsedPct}%` }}
+                  />
+                  {tenureMonths !== null && (
+                    <span
+                      className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-amber-200 ring-2 ring-amber-300/70 shadow-[0_0_8px_rgba(252,211,77,0.85)]"
+                      style={{ left: `calc(${Math.max(elapsedPct, 0)}% - 5px)` }}
+                    />
+                  )}
+                </div>
+                <span className="text-[10px] tabular-nums text-white/80 shrink-0">
+                  {formatShortDate(maturity)}
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.22em] text-white/45">
+                <span>Sealed</span>
+                <span className="text-white/65 tabular-nums normal-case tracking-normal">
+                  {tenureMonths ? `${Math.round(elapsedPct)}% of ${tenureMonths}mo elapsed` : 'Tenure pending'}
+                </span>
+                <span className="flex items-center gap-1">
+                  Unseals
+                  {maturity && (
+                    <span className="ml-2">
+                      <MaturityBadge date={maturity} />
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Glass stat row */}
+        {/* Stat compartments — vault drawers */}
         <div className="mt-5 grid grid-cols-4 gap-2.5">
-          <div className="rounded-lg bg-white/8 backdrop-blur-md ring-1 ring-white/15 px-3 py-2.5">
+          <div
+            className="rounded-lg px-3 py-2.5 ring-1 ring-white/12"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
+              boxShadow:
+                'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.35)',
+            }}
+          >
             <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/55 mb-1">
               Principal
             </p>
@@ -415,7 +528,15 @@ function FDCard({
               {formatINR(holding.totalCost)}
             </p>
           </div>
-          <div className="rounded-lg bg-white/8 backdrop-blur-md ring-1 ring-white/15 px-3 py-2.5">
+          <div
+            className="rounded-lg px-3 py-2.5 ring-1 ring-white/12"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
+              boxShadow:
+                'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.35)',
+            }}
+          >
             <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/55 mb-1">
               Current Value
             </p>
@@ -423,8 +544,16 @@ function FDCard({
               {holding.currentValue ? formatINR(holding.currentValue) : '—'}
             </p>
           </div>
-          <div className="rounded-lg bg-amber-300/12 backdrop-blur-md ring-1 ring-amber-200/35 px-3 py-2.5 shadow-[0_0_18px_-6px_rgba(252,211,77,0.45)]">
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-100/85 mb-1 flex items-center gap-1">
+          <div
+            className="rounded-lg px-3 py-2.5 ring-1 ring-amber-300/45"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(252,211,77,0.18), rgba(252,211,77,0.04))',
+              boxShadow:
+                'inset 0 1px 0 rgba(252,211,77,0.25), 0 0 18px -6px rgba(252,211,77,0.45)',
+            }}
+          >
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-100/90 mb-1 flex items-center gap-1">
               <ShieldCheck className="h-2.5 w-2.5" strokeWidth={2.5} />
               Maturity Value
             </p>
@@ -432,7 +561,15 @@ function FDCard({
               {matValue ? formatINR(matValue.toString()) : '—'}
             </p>
           </div>
-          <div className="rounded-lg bg-white/8 backdrop-blur-md ring-1 ring-white/15 px-3 py-2.5">
+          <div
+            className="rounded-lg px-3 py-2.5 ring-1 ring-white/12"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
+              boxShadow:
+                'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.35)',
+            }}
+          >
             <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/55 mb-1">
               Earned
             </p>
