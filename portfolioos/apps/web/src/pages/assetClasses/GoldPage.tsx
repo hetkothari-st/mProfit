@@ -6,8 +6,6 @@ import { SimpleAssetPage } from './SimpleAssetPage';
 import { GoldFormDialog } from './GoldFormDialog';
 import { assetsApi } from '@/api/assets.api';
 
-const GOLD_ASSET_CLASSES = new Set(['PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF']);
-
 function detectCarat(assetName: string | null | undefined): number {
   if (!assetName) return 24;
   const m = assetName.match(/\b(\d+)\s*[kK]\b/);
@@ -20,6 +18,15 @@ function detectSilverPurity(assetName: string | null | undefined): string {
   const m = assetName.match(/^(999|925|800)\b/);
   if (m) return ({ '999': '1', '925': '0.925', '800': '0.8' } as Record<string, string>)[m[1]!] ?? '1';
   return '1';
+}
+
+const KNOWN_GOLD_ETFS = /\b(GOLDBEES|GOLDIETF|AXISGOLD|HDFCGOLD|KOTAKGOLD|SETFGOLD|LICMFGOLD|QGOLDHALF)\b/;
+const KNOWN_SILVER_ETFS = /\b(SILVERBEES|SILVERIETF)\b/;
+
+function detectEtfTicker(assetName: string | null | undefined, pattern: RegExp): string | null {
+  if (!assetName) return null;
+  const m = assetName.toUpperCase().match(pattern);
+  return m ? m[1] ?? null : null;
 }
 
 export function GoldPage() {
@@ -35,9 +42,23 @@ export function GoldPage() {
 
   function computeLiveValue(h: HoldingRow & { portfolioName: string }): string | null {
     try {
-      if (GOLD_ASSET_CLASSES.has(h.assetClass)) {
+      if (h.assetClass === 'PHYSICAL_GOLD') {
         if (!live?.GOLD) return null;
         return new Decimal(live.GOLD).times(detectCarat(h.assetName)).div(24).times(new Decimal(h.quantity)).toFixed(4);
+      }
+      if (h.assetClass === 'GOLD_BOND') {
+        // SGB: 1 unit = 1 g of 24K-equivalent gold; no carat scaling.
+        if (!live?.GOLD) return null;
+        return new Decimal(live.GOLD).times(new Decimal(h.quantity)).toFixed(4);
+      }
+      if (h.assetClass === 'GOLD_ETF') {
+        // ETF NAV per unit (not per gram). Match the holding's name to a
+        // known NSE gold ETF ticker; fall back to whatever the DB has.
+        const ticker = detectEtfTicker(h.assetName, KNOWN_GOLD_ETFS)
+          ?? detectEtfTicker(h.symbol, KNOWN_GOLD_ETFS);
+        const nav = ticker ? live?.etfNavs?.[ticker] : null;
+        if (!nav) return null;
+        return new Decimal(nav).times(new Decimal(h.quantity)).toFixed(4);
       }
       if (h.assetClass === 'PHYSICAL_SILVER') {
         if (!live?.SILVER) return null;

@@ -196,15 +196,29 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
     }
   }, [open, initial, defaultPortfolioId, portfolios, reset]);
 
-  // Auto-fill price from live rates when creating new entry or when carat/purity changes
+  // Auto-fill price from live rates when creating new entry. Each asset class
+  // uses its own pricing dimension — physical gold scales by carat, SGB is
+  // pure-gold per-gram, ETFs trade at a NAV per unit (NOT per-gram), and
+  // silver scales by purity grade.
+  const watchedAssetName = watch('assetName') ?? '';
   useEffect(() => {
     if (!live || !open) return;
     let price: string | null = null;
-    if (assetClass === 'PHYSICAL_GOLD' || assetClass === 'GOLD_BOND' || assetClass === 'GOLD_ETF') {
+    if (assetClass === 'PHYSICAL_GOLD') {
       if (!live.GOLD) return;
       const caratNum = parseInt(purity.replace(/[kK]/, ''), 10);
       const multiplier = !isNaN(caratNum) ? caratNum / 24 : 1;
       price = new Decimal(live.GOLD).times(multiplier).toFixed(2);
+    } else if (assetClass === 'GOLD_BOND') {
+      // SGB: 1 unit = 1 gram of pure gold (24K reference). No carat scaling.
+      if (!live.GOLD) return;
+      price = new Decimal(live.GOLD).toFixed(2);
+    } else if (assetClass === 'GOLD_ETF') {
+      // Match user-typed asset name against known NSE gold ETF tickers.
+      const ticker = (watchedAssetName.toUpperCase().match(/\b(GOLDBEES|GOLDIETF|AXISGOLD|HDFCGOLD|KOTAKGOLD|SETFGOLD|LICMFGOLD|QGOLDHALF)\b/) ?? [])[1];
+      const nav = ticker ? live.etfNavs?.[ticker] : null;
+      if (!nav) return; // unknown ETF — let user enter manually
+      price = new Decimal(nav).toFixed(2);
     } else if (assetClass === 'PHYSICAL_SILVER') {
       if (!live.SILVER) return;
       const purityMap: Record<string, string> = { '999': '1', '925': '0.925', '800': '0.8' };
@@ -212,12 +226,11 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
       price = new Decimal(live.SILVER).times(mult).toFixed(2);
     }
     if (!price) return;
-    // For new entry: always fill. For edit: only fill if price field is empty or unchanged from original.
     if (!isEdit) {
       setValue('price', parseFloat(price) as any);
       setLivePriceApplied(true);
     }
-  }, [live, purity, assetClass, open, isEdit, setValue]);
+  }, [live, purity, assetClass, watchedAssetName, open, isEdit, setValue]);
 
   const mutation = useMutation({
     mutationFn: async (values: FormOutput) => {

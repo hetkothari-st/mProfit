@@ -23,11 +23,23 @@ const PROXIES: Record<CommodityType, { yahooInr: string; yahooUsd: string }> = {
 interface LiveCache {
   GOLD: Decimal | null;
   SILVER: Decimal | null;
+  etfNavs: Record<string, Decimal>;
   fetchedAt: Date;
 }
 let liveCache: LiveCache | null = null;
 const LIVE_CACHE_TTL_MS = 60_000;
 const TROY_OZ_TO_GRAMS = 31.1035;
+
+// NSE gold ETF symbols — each unit trades at NAV ≈ (1/100 g) × gold price.
+// Listed here so the form can auto-fill the *unit* NAV instead of misusing
+// the per-gram spot. Add new ETFs as they become commonly held.
+const GOLD_ETFS = [
+  'GOLDBEES.NS', 'GOLDIETF.NS', 'AXISGOLD.NS', 'HDFCGOLD.NS',
+  'KOTAKGOLD.NS', 'SETFGOLD.NS', 'LICMFGOLD.NS', 'QGOLDHALF.NS',
+];
+const SILVER_ETFS = [
+  'SILVERBEES.NS', 'SILVERIETF.NS',
+];
 
 async function fetchGoldApiInr(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null }> {
   // CoinGecko public API — major platform, global CDN, no auth, no Yahoo dependency.
@@ -54,29 +66,71 @@ async function fetchGoldApiInr(): Promise<{ GOLD: Decimal | null; SILVER: Decima
   return { GOLD: null, SILVER: null };
 }
 
-export async function fetchLivePrices(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null; fetchedAt: Date }> {
+/**
+ * Batch-fetch silver spot + gold/silver ETF NAVs in one Yahoo call so each
+ * asset type can display the right number (per-gram for physical / SGB, per-
+ * unit NAV for ETFs). Silver spot uses SI=F (USD/oz) × USD/INR to avoid the
+ * SILVERBEES.NS rate-limit issue that was leaving the field blank.
+ */
+async function fetchYahooBundle(): Promise<{
+  silverInrPerGram: Decimal | null;
+  goldInrPerGramFallback: Decimal | null;
+  etfNavs: Record<string, Decimal>;
+}> {
+  const symbols = ['SI=F', 'GC=F', 'INR=X', ...GOLD_ETFS, ...SILVER_ETFS];
+  const arr = await yahooQuoteRaw(symbols);
+  const bySym = new Map<string, any>();
+  for (const q of arr) if (q?.symbol) bySym.set(q.symbol, q);
+
+  const fxQ = bySym.get('INR=X');
+  const usdInr = fxQ && typeof fxQ.regularMarketPrice === 'number'
+    ? new Decimal(fxQ.regularMarketPrice) : null;
+
+  const siQ = bySym.get('SI=F');
+  let silverInrPerGram: Decimal | null = null;
+  if (siQ && typeof siQ.regularMarketPrice === 'number' && usdInr) {
+    silverInrPerGram = new Decimal(siQ.regularMarketPrice).times(usdInr).div(TROY_OZ_TO_GRAMS);
+  }
+
+  const gcQ = bySym.get('GC=F');
+  let goldInrPerGramFallback: Decimal | null = null;
+  if (gcQ && typeof gcQ.regularMarketPrice === 'number' && usdInr) {
+    goldInrPerGramFallback = new Decimal(gcQ.regularMarketPrice).times(usdInr).div(TROY_OZ_TO_GRAMS);
+  }
+
+  const etfNavs: Record<string, Decimal> = {};
+  for (const sym of [...GOLD_ETFS, ...SILVER_ETFS]) {
+    const q = bySym.get(sym);
+    if (q && typeof q.regularMarketPrice === 'number') {
+      // Store keyed by ticker (strip `.NS`) so the frontend can match on the
+      // user-typed asset name without worrying about the exchange suffix.
+      const ticker = sym.replace(/\.NS$/, '');
+      etfNavs[ticker] = new Decimal(q.regularMarketPrice);
+    }
+  }
+  return { silverInrPerGram, goldInrPerGramFallback, etfNavs };
+}
+
+export async function fetchLivePrices(): Promise<{
+  GOLD: Decimal | null;
+  SILVER: Decimal | null;
+  etfNavs: Record<string, Decimal>;
+  fetchedAt: Date;
+}> {
   const now = new Date();
   if (liveCache && now.getTime() - liveCache.fetchedAt.getTime() < LIVE_CACHE_TTL_MS) {
     return liveCache;
   }
 
-  // Primary: gold-api.com (free, no key, returns real-time USD spot)
+  // Primary: CoinGecko PAXG for gold per-gram INR (rock-solid, no key).
   let { GOLD, SILVER } = await fetchGoldApiInr();
 
-  // Fallback: Yahoo ETF proxy (GOLDBEES.NS / SILVERBEES.NS)
-  if (!GOLD || !SILVER) {
-    const arr = await yahooQuoteRaw([PROXIES.GOLD.yahooInr, PROXIES.SILVER.yahooInr]);
-    const bySymbol = new Map<string, any>();
-    for (const q of arr) if (q?.symbol) bySymbol.set(q.symbol, q);
-    const goldQ = bySymbol.get(PROXIES.GOLD.yahooInr);
-    const silverQ = bySymbol.get(PROXIES.SILVER.yahooInr);
-    if (!GOLD && goldQ && typeof goldQ.regularMarketPrice === 'number')
-      GOLD = new Decimal(goldQ.regularMarketPrice);
-    if (!SILVER && silverQ && typeof silverQ.regularMarketPrice === 'number')
-      SILVER = new Decimal(silverQ.regularMarketPrice);
-  }
+  // Yahoo bundle: silver via SI=F + USD/INR, gold fallback via GC=F, ETF NAVs.
+  const yahoo = await fetchYahooBundle();
+  if (!GOLD) GOLD = yahoo.goldInrPerGramFallback;
+  if (!SILVER) SILVER = yahoo.silverInrPerGram;
 
-  liveCache = { GOLD, SILVER, fetchedAt: now };
+  liveCache = { GOLD, SILVER, etfNavs: yahoo.etfNavs, fetchedAt: now };
   return liveCache;
 }
 

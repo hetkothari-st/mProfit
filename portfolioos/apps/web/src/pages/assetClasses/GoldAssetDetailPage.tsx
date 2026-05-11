@@ -166,14 +166,26 @@ export function GoldAssetDetailPage() {
     (t.photos ?? []).map((p) => ({ id: p.id, txnId: t.id, fileName: p.fileName })),
   );
 
-  // Live value computation
-  const GOLD_CLASSES = new Set(['PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF']);
+  // Live value computation — each class uses its own pricing dimension.
+  const GOLD_ETF_PATTERN = /\b(GOLDBEES|GOLDIETF|AXISGOLD|HDFCGOLD|KOTAKGOLD|SETFGOLD|LICMFGOLD|QGOLDHALF)\b/;
   let liveValue: Decimal | null = null;
   let livePricePerUnit: Decimal | null = null;
-  if (GOLD_CLASSES.has(holding.assetClass) && live?.GOLD) {
+  if (holding.assetClass === 'PHYSICAL_GOLD' && live?.GOLD) {
     const carat = detectCarat(assetName);
     livePricePerUnit = new Decimal(live.GOLD).times(carat).div(24);
     liveValue = livePricePerUnit.times(new Decimal(holding.quantity));
+  } else if (holding.assetClass === 'GOLD_BOND' && live?.GOLD) {
+    // SGB: 1 unit = 1 g of pure gold.
+    livePricePerUnit = new Decimal(live.GOLD);
+    liveValue = livePricePerUnit.times(new Decimal(holding.quantity));
+  } else if (holding.assetClass === 'GOLD_ETF') {
+    const ticker = (assetName.toUpperCase().match(GOLD_ETF_PATTERN) ?? [])[1]
+      ?? (holding.symbol?.toUpperCase().match(GOLD_ETF_PATTERN) ?? [])[1];
+    const nav = ticker ? live?.etfNavs?.[ticker] : null;
+    if (nav) {
+      livePricePerUnit = new Decimal(nav);
+      liveValue = livePricePerUnit.times(new Decimal(holding.quantity));
+    }
   } else if (holding.assetClass === 'PHYSICAL_SILVER' && live?.SILVER) {
     const mult = detectSilverPurityMultiplier(assetName);
     livePricePerUnit = new Decimal(live.SILVER).times(mult);

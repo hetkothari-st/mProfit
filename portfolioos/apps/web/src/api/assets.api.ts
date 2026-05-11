@@ -9,6 +9,8 @@ function unwrap<T>(data: ApiResponse<T>): T {
 export interface LiveCommodityPrices {
   GOLD: string | null;
   SILVER: string | null;
+  /** NSE gold/silver ETF NAVs keyed by ticker (e.g. `GOLDBEES`, `SILVERBEES`). */
+  etfNavs: Record<string, string>;
   fetchedAt: string;
 }
 

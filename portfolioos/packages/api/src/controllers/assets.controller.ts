@@ -151,17 +151,23 @@ export async function listCommodityPrices(_req: Request, res: Response) {
 }
 
 export async function liveCommodityPrices(_req: Request, res: Response) {
-  const { GOLD: liveGold, SILVER: liveSilver, fetchedAt } = await fetchLivePrices();
+  const { GOLD: liveGold, SILVER: liveSilver, etfNavs, fetchedAt } = await fetchLivePrices();
 
-  // Fall back to DB-cached price when Yahoo rate-limits
+  // Fall back to DB-cached price when both live sources fail.
   const [gold, silver] = await Promise.all([
     liveGold ?? getLatestCommodityPrice('GOLD'),
     liveSilver ?? getLatestCommodityPrice('SILVER'),
   ]);
 
+  const etfPayload: Record<string, string> = {};
+  for (const [sym, price] of Object.entries(etfNavs)) {
+    etfPayload[sym] = serializeMoney(price);
+  }
+
   ok(res, {
     GOLD: gold ? serializeMoney(gold) : null,
     SILVER: silver ? serializeMoney(silver) : null,
+    etfNavs: etfPayload,
     fetchedAt: fetchedAt.toISOString(),
     source: liveGold ? 'live' : 'cached',
   });
