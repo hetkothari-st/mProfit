@@ -302,11 +302,15 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
 
   function sectionBand(label: string, cy: number, parent?: PDFKit.PDFOutline): { cy: number; bookmark: PDFKit.PDFOutline } {
     const newCy = ensureSpace(cy, 36);
-    doc.rect(ML, newCy, W, 20).fill(BRAND.ink);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(BRAND.white)
-       .text(truncToFit(doc, pdfSafe(label), W - 16), ML + 8, newCy + 6, { width: W - 16, lineBreak: false });
+    const H = 20;
+    // Light blue band + accent left bar + ink text. Lighter than the cover
+    // header so a stack of sections doesn't read as a wall of navy.
+    doc.rect(ML, newCy, W, H).fill(BRAND.headerBg);
+    doc.rect(ML, newCy, 3, H).fill(BRAND.accent);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(BRAND.ink)
+       .text(truncToFit(doc, pdfSafe(label), W - 18), ML + 10, newCy + 6, { width: W - 18, lineBreak: false });
     const bookmark = (parent ?? rootBookmark).addItem(label);
-    return { cy: newCy + 26, bookmark };
+    return { cy: newCy + H + 6, bookmark };
   }
 
   // ─── COVER ────────────────────────────────────────────────────────────────
@@ -824,8 +828,10 @@ function drawTable(
   let cy = startY;
 
   function drawHead(y: number): void {
-    doc.rect(ML, y, W, ROW_H).fill('#2C4360');
-    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.white);
+    // Soft slate — visually distinct from the section band above and the
+    // alternating row tint below, but never as heavy as a navy bar.
+    doc.rect(ML, y, W, ROW_H).fill('#DDE3EC');
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
     let x = ML;
     for (const col of scaled) {
       const w = col.width - 6;

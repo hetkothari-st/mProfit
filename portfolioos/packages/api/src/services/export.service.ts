@@ -252,6 +252,9 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
   });
 }
 
+// Section header band — light blue field with an accent vertical bar on the
+// left and dark ink text. Replaces the previous solid dark-navy bar that made
+// the report feel visually heavy when several sections stacked.
 function drawSectionBand(
   doc: InstanceType<typeof PDFDocument>,
   x: number,
@@ -259,10 +262,12 @@ function drawSectionBand(
   y: number,
   label: string,
 ): number {
-  doc.rect(x, y, width, 18).fill(BRAND.ink);
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.white)
-     .text(pdfSafe(label), x + 8, y + 5, { width: width - 16, lineBreak: false });
-  return y + 22;
+  const H = 20;
+  doc.rect(x, y, width, H).fill(BRAND.headerBg);
+  doc.rect(x, y, 3, H).fill(BRAND.accent);
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(BRAND.ink)
+     .text(pdfSafe(label), x + 10, y + 6, { width: width - 18, lineBreak: false });
+  return y + H + 4;
 }
 
 interface RenderTableOpts {
@@ -293,8 +298,10 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
   const ROW_H       = 16;
 
   const drawHeader = (yy: number): void => {
-    doc.rect(o.x, yy, o.width, ROW_H).fill('#2C4360');
-    doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.white);
+    // Table column header — soft slate background, ink text. Distinct from
+    // section header (light blue) and row background (white / row-alt).
+    doc.rect(o.x, yy, o.width, ROW_H).fill('#DDE3EC');
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
     let x = o.x;
     for (let i = 0; i < o.columns.length; i++) {
       const cellW = (colWidths[i] ?? 80) - 8;
