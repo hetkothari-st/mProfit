@@ -220,9 +220,10 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     doc.rect(cx, cy, cardW, cardH).fill(BRAND.headerBg);
     doc.rect(cx, cy, 3, cardH).fill(BRAND.accent);
     doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.muted)
-       .text(c.label.toUpperCase(), cx + 10, cy + 9, { width: cardW - 14, characterSpacing: 0.5 });
-    doc.font('Helvetica-Bold').fontSize(13).fillColor(c.neg ? BRAND.negative : BRAND.ink)
-       .text(pdfSafe(c.value), cx + 10, cy + 26, { width: cardW - 14, ellipsis: true });
+       .text(c.label.toUpperCase(), cx + 10, cy + 9, { width: cardW - 14, characterSpacing: 0.5, lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(c.neg ? BRAND.negative : BRAND.ink);
+    const valFitted = truncToFit(doc, pdfSafe(c.value), cardW - 16);
+    doc.text(valFitted, cx + 10, cy + 26, { width: cardW - 14, lineBreak: false });
   });
   cy += cardH + 18;
 
@@ -424,7 +425,7 @@ function drawTable(
     doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.white);
     let xx = marginLeft;
     for (const col of cols) {
-      doc.text(pdfSafe(col.header), xx + 4, yy + 5, { width: col.width - 8, ellipsis: true });
+      doc.text(truncToFit(doc, pdfSafe(col.header), col.width - 8), xx + 4, yy + 5, { width: col.width - 8, lineBreak: false });
       xx += col.width;
     }
   };

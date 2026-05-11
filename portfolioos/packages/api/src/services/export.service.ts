@@ -106,6 +106,25 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
   res.end();
 }
 
+// Manually truncate a string so it fits inside `maxWidth` at the document's
+// current font/size. Caller must set the desired font/size BEFORE calling.
+// Returns the input unchanged when it already fits.
+function fitText(doc: InstanceType<typeof PDFDocument>, text: string, maxWidth: number): string {
+  if (!text) return '';
+  if (doc.widthOfString(text) <= maxWidth) return text;
+  const ellipsis = '...';
+  const ellW = doc.widthOfString(ellipsis);
+  if (ellW > maxWidth) return '';
+  // Binary-search the longest prefix that fits with the ellipsis suffix.
+  let lo = 0, hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (doc.widthOfString(text.slice(0, mid)) + ellW <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + ellipsis;
+}
+
 // ─── PDF ────────────────────────────────────────────────────────────
 
 export function streamPdf(res: Response, payload: ExportPayload): Promise<void> {
@@ -144,22 +163,17 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     renderPageHeader();
     let cy = 72;
 
-    // ─── META STRIP ──────────────────────────────────────────────────
+    // ─── META STRIP — single-line, single-color, never wraps ────────
+    // Pre-rendered single string avoids the continued: true chain that
+    // PDFKit auto-paginates when it overflows pageW.
     if (payload.meta && Object.keys(payload.meta).length > 0) {
-      const entries = Object.entries(payload.meta);
-      doc.y = cy;
-      doc.x = ML;
-      doc.font('Helvetica').fontSize(8.5);
-      entries.forEach(([k, v], i) => {
-        doc.fillColor(BRAND.muted).font('Helvetica')
-           .text(`${pdfSafe(k)}: `, { continued: true });
-        doc.fillColor(BRAND.ink).font('Helvetica-Bold')
-           .text(pdfSafe(String(v)), { continued: i < entries.length - 1 });
-        if (i < entries.length - 1) {
-          doc.fillColor(BRAND.border).font('Helvetica').text('   ·   ', { continued: true });
-        }
-      });
-      cy = doc.y + 12;
+      const parts = Object.entries(payload.meta)
+        .map(([k, v]) => `${pdfSafe(k)}: ${pdfSafe(String(v))}`);
+      const fullStr = parts.join('   ·   ');
+      doc.font('Helvetica').fontSize(8.5).fillColor(BRAND.muted);
+      const fitted = fitText(doc, fullStr, pageW);
+      doc.text(fitted, ML, cy, { width: pageW, lineBreak: false });
+      cy += 16;
     }
 
     // ─── METRIC CARDS ────────────────────────────────────────────────
@@ -238,25 +252,6 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
   });
 }
 
-// Manually truncate a string so it fits inside `maxWidth` at the document's
-// current font/size. Caller must set the desired font/size BEFORE calling.
-// Returns the input unchanged when it already fits.
-function fitText(doc: InstanceType<typeof PDFDocument>, text: string, maxWidth: number): string {
-  if (!text) return '';
-  if (doc.widthOfString(text) <= maxWidth) return text;
-  const ellipsis = '...';
-  const ellW = doc.widthOfString(ellipsis);
-  if (ellW > maxWidth) return '';
-  // Binary-search the longest prefix that fits with the ellipsis suffix.
-  let lo = 0, hi = text.length;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (doc.widthOfString(text.slice(0, mid)) + ellW <= maxWidth) lo = mid;
-    else hi = mid - 1;
-  }
-  return text.slice(0, lo) + ellipsis;
-}
-
 function drawSectionBand(
   doc: InstanceType<typeof PDFDocument>,
   x: number,
@@ -302,8 +297,9 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
     doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.white);
     let x = o.x;
     for (let i = 0; i < o.columns.length; i++) {
-      doc.text(pdfSafe(o.columns[i]!.header), x + 4, yy + 5, {
-        width: (colWidths[i] ?? 80) - 8, ellipsis: true, lineBreak: false,
+      const cellW = (colWidths[i] ?? 80) - 8;
+      doc.text(fitText(doc, pdfSafe(o.columns[i]!.header), cellW), x + 4, yy + 5, {
+        width: cellW, lineBreak: false,
       });
       x += colWidths[i] ?? 80;
     }
