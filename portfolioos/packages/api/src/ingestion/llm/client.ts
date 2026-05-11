@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { Decimal } from '@portfolioos/shared';
 import { env } from '../../config/env.js';
@@ -45,17 +42,44 @@ import {
  *      exhaust the monthly cap.
  */
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
 /**
- * System prompt is read once at module load. The file is committed in the
- * repo (source-controlled); changing it is a deliberate release action,
- * not a runtime config knob.
+ * System prompt is inlined here so the compiled `dist/` bundle has no
+ * runtime dependency on a sibling `.txt` asset (tsc doesn't copy
+ * non-TS files into dist, which broke `analytics.insights.ts` on
+ * Railway — same fix applied here defensively). Changing the prompt is
+ * a deliberate release action, not a runtime config knob.
  */
-const SYSTEM_PROMPT = readFileSync(
-  join(__dirname, 'system-prompt.txt'),
-  'utf8',
-);
+const SYSTEM_PROMPT = `You are a financial document parser for an Indian personal finance app. Extract structured transaction data from the document below. The input may be an email body OR text extracted from a broker contract-note PDF — treat both the same way.
+
+Rules:
+- Return VALID JSON matching the provided schema. No preamble, no markdown, no explanation outside JSON.
+- Dates: ISO 8601 (YYYY-MM-DD). Convert any Indian format to this.
+- Amounts: positive decimal string, no ₹ symbol, no commas. "1,23,456.78" -> "123456.78".
+- If the document is promotional/marketing and contains no financial event, return event_type "OTHER" with confidence < 0.3.
+- If multiple events are in one document (e.g. a contract note or statement listing 10 transactions), return the \`events\` array with one entry per event.
+- Never invent data. If a field is not present in the document, set it null.
+- confidence: 0.0 to 1.0. How certain you are this is a real financial event with the claimed type and amount.
+
+Indian broker contract notes — equity equity (BUY / SELL):
+- One event per traded row. ISIN goes in instrument_isin (format INE/INF + 9 alphanumerics). Symbol in instrument_symbol. Stock name in instrument_name.
+- price = per-share trade rate. quantity = shares traded. amount = net amount for that row if listed; else null.
+- Charges (brokerage, STT, GST) are NOT individual events — only emit one event per actual trade row.
+
+F&O (Futures & Options) — when the email is a contract note or trade confirmation for a derivative:
+- event_type = FNO_TRADE (do NOT use BUY/SELL for derivatives — those are equity-only)
+- fno_side = "BUY" or "SELL" (the side of the trade, not the option type)
+- fno_underlying = bare underlying ticker, e.g. "NIFTY", "RELIANCE", "BANKNIFTY"
+- fno_instrument_type = "FUTURES" | "CALL" | "PUT"
+- fno_strike_price = decimal string (null for futures)
+- fno_expiry_date = YYYY-MM-DD
+- fno_lot_size = integer (units per contract; e.g. NIFTY = 25 in 2026)
+- fno_quantity_contracts = number of CONTRACTS, not lot-units. 1 NIFTY lot = qty="1".
+- fno_trading_symbol = exchange tradingsymbol if present (e.g. "NIFTY26NOV24500CE")
+- amount = net trade value (qty_contracts * lot_size * price). Positive even for sells; the side flag conveys direction.
+- price = per-unit premium (option) or per-unit futures price.
+- quantity = total units traded (qty_contracts * lot_size).
+- For multiple-trade contract notes, emit one FNO_TRADE event per row.
+`;
 
 /** Shared client — reused across calls so keep-alive helps with back-to-back parses. */
 let anthropicClient: Anthropic | null = null;
