@@ -49,6 +49,13 @@ const EnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ENABLE_LLM_PARSER: z.enum(['true', 'false']).default('false'),
   LLM_MODEL: z.string().default('claude-haiku-4-5-20251001'),
+  // Phase 5-Analytics — separate model knob for the portfolio insights
+  // generator. Sonnet by default since narrative quality matters more
+  // than per-call cost (insights are user-triggered, cached 24h).
+  // Override via `llm.insights_model` AppSetting at runtime; this env
+  // var is the fallback when no AppSetting is present.
+  LLM_INSIGHTS_MODEL: z.string().default('claude-sonnet-4-5-20251001'),
+  ENABLE_LLM_INSIGHTS: z.enum(['true', 'false']).default('false'),
   // Per §13: Anthropic zero-retention is an account-level setting, not a
   // per-request header. This env var is advisory — if set to 'true' we
   // log the assumption so ops can double-check the Anthropic console.

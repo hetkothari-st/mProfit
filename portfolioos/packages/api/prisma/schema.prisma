@@ -104,6 +104,9 @@ model User {
   forexBalances  ForexBalance[]
   lrsRemittances LrsRemittance[]
   tcsCredits     TcsCredit[]
+
+  // Phase 5-Analytics — persisted AI portfolio insights (cards + narrative).
+  portfolioInsights PortfolioInsight[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -283,6 +286,10 @@ model Portfolio {
   // Forex feature
   forexBalances  ForexBalance[]
   lrsRemittances LrsRemittance[]
+
+  // Phase 5-Analytics — per-portfolio AI insights (also nullable on
+  // PortfolioInsight for user-level "ALL portfolios" scope).
+  portfolioInsights PortfolioInsight[]
 
   @@index([userId])
   @@index([clientId])
@@ -1705,7 +1712,7 @@ model LlmSpend {
   inputTokens  Int
   outputTokens Int
   costInr      Decimal  @db.Decimal(10, 4)
-  purpose      String // "email.parse" | "template.promote" | ...
+  purpose      String // "email.parse" | "template.promote" | "portfolio_insight" | ...
   sourceRef    String? // e.g. Gmail message id, file hash
   success      Boolean  @default(true)
   errorMessage String?
@@ -1713,6 +1720,45 @@ model LlmSpend {
 
   @@index([userId, createdAt])
   @@index([createdAt])
+}
+
+// ─── PHASE 5-ANALYTICS — PORTFOLIO INSIGHTS ─────────────────────
+//
+// Persisted output of the AI Insights generator. One row per
+// (user, portfolio|null, generation). The 24-hour cache logic in
+// analytics.insights.ts picks the latest row by generatedAt within
+// the window; force=true bypasses cache and writes a fresh row.
+//
+// portfolioId is nullable: a null value means the insight was
+// generated for the user's combined "ALL portfolios" scope.
+
+model PortfolioInsight {
+  id                    String     @id @default(cuid())
+  userId                String
+  user                  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId           String?
+  portfolio             Portfolio? @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+
+  // Snapshot context for staleness detection / audit trail.
+  portfolioValueInr     Decimal    @db.Decimal(18, 4)
+  period                String // '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y' | 'All'
+
+  // Structured payload — array of InsightCard JSON objects.
+  cards                 Json
+  narrative             String     @db.Text
+  // Optional asset-class → percentage map suggested by the model.
+  recommendedAllocation Json?
+
+  // LLM metadata for audit + cost reconciliation against LlmSpend.
+  model                 String
+  inputTokens           Int
+  outputTokens          Int
+  costInr               Decimal    @db.Decimal(10, 4)
+
+  generatedAt           DateTime   @default(now())
+
+  @@index([userId, portfolioId, generatedAt])
+  @@index([userId, generatedAt])
 }
 
 // ─── SIP PLAN REGISTRY ────────────────────────────────────────────

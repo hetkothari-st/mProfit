@@ -51,6 +51,7 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
     heading: 'Overview',
     items: [
       { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
+      { label: 'Analytics', to: '/analytics', icon: BarChart3 },
       { label: 'Portfolios', to: '/portfolios', icon: Briefcase },
       { label: 'Transactions', to: '/transactions', icon: Receipt },
       { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },

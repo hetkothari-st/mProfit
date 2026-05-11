@@ -21,6 +21,7 @@ import { GmailCallbackPage } from './pages/mailboxes/GmailCallbackPage';
 import { GmailScanSetupPage } from './pages/mailboxes/GmailScanSetupPage';
 import { CasPage } from './pages/cas/CasPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
+import { AnalyticsPage } from './pages/analytics/AnalyticsPage';
 import { TaxPage } from './pages/tax/TaxPage';
 import { IngestionPage } from './pages/ingestion/IngestionPage';
 import { SendersPage } from './pages/ingestion/SendersPage';
@@ -83,6 +84,7 @@ export function App() {
       >
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/portfolios" element={<PortfolioListPage />} />
         <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
         <Route path="/portfolio-groups/:id" element={<PortfolioGroupDetailPage />} />
