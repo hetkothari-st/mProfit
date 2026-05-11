@@ -63,6 +63,15 @@ const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
   fontSize: 11,
 };
 
+// Distinct chart palettes so the detail page isn't a wall of accent gold.
+// Growth = sky/indigo (forward-looking), Composition donut = indigo+emerald,
+// Accrual split = violet (principal) vs emerald (interest).
+const CHART_GROWTH = '#3b82f6';        // blue-500
+const CHART_GROWTH_DIM = '#93c5fd';    // blue-300
+const CHART_PRINCIPAL = '#8b5cf6';     // violet-500
+const CHART_INTEREST = '#10b981';      // emerald-500
+const CHART_INTEREST_DIM = '#6ee7b7';  // emerald-300
+
 function daysUntil(iso: string): number {
   return Math.round((new Date(iso).getTime() - Date.now()) / 86_400_000);
 }
@@ -290,19 +299,29 @@ function InstallmentSchedule({
   );
 }
 
+// Unified row type so the log can mix real Transaction rows with synthetic
+// interest accruals computed from the deposit's rate/frequency.
+interface LogRow {
+  key: string;
+  date: string;
+  type: string;
+  amount: Decimal;
+  notes: string | null;
+  txn: TransactionDTO | null; // null → synthetic (no edit/delete)
+}
+
 // ── Payment history (transaction log) ────────────────────────────────
 function PaymentHistory({
-  txns,
+  rows,
   onEdit,
   onDelete,
 }: {
-  txns: TransactionDTO[];
+  rows: LogRow[];
   onEdit: (txn: TransactionDTO) => void;
   onDelete: (id: string) => void;
-  deletingId: string | null;
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  if (txns.length === 0) {
+  if (rows.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-lg">Payment log</CardTitle></CardHeader>
@@ -315,7 +334,7 @@ function PaymentHistory({
       <CardHeader className="pb-3 flex flex-row items-baseline justify-between">
         <CardTitle className="text-lg flex items-baseline gap-2">
           Payment log
-          <span className="text-xs font-normal text-muted-foreground">{txns.length} records</span>
+          <span className="text-xs font-normal text-muted-foreground">{rows.length} records</span>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -331,25 +350,37 @@ function PaymentHistory({
               </tr>
             </thead>
             <tbody>
-              {[...txns].reverse().map((t) => {
-                const amount = new Decimal(t.quantity).times(new Decimal(t.price));
+              {rows.map((r) => {
+                const t = r.txn;
+                const isSynthetic = !t;
                 return (
-                  <tr key={t.id} className="border-b last:border-0 group hover:bg-muted/20">
-                    <td className="py-2 px-3 tabular-nums">{formatDate(t.tradeDate)}</td>
-                    <td className={`py-2 px-3 font-medium ${TXN_COLORS[t.transactionType] ?? ''}`}>
-                      {TXN_LABEL[t.transactionType] ?? t.transactionType}
+                  <tr key={r.key} className={`border-b last:border-0 group hover:bg-muted/20 ${isSynthetic ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}>
+                    <td className="py-2 px-3 tabular-nums">{formatDate(r.date)}</td>
+                    <td className={`py-2 px-3 font-medium ${TXN_COLORS[r.type] ?? ''}`}>
+                      <span className="inline-flex items-center gap-1.5">
+                        {TXN_LABEL[r.type] ?? r.type}
+                        {isSynthetic && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold"
+                            style={{ background: `${CHART_INTEREST}22`, color: CHART_INTEREST }}>
+                            accrued
+                          </span>
+                        )}
+                      </span>
                     </td>
-                    <td className="py-2 px-3 text-right tabular-nums font-medium">
-                      {formatINR(amount.toString())}
+                    <td className="py-2 px-3 text-right tabular-nums font-medium"
+                      style={isSynthetic ? { color: CHART_INTEREST } : undefined}>
+                      {isSynthetic ? '+' : ''}{formatINR(r.amount.toString())}
                     </td>
                     <td className="py-2 px-3 text-muted-foreground hidden md:table-cell max-w-[200px] truncate">
-                      {t.narration ?? '—'}
+                      {r.notes ?? (isSynthetic ? 'Computed from rate & frequency' : '—')}
                     </td>
                     <td className="py-2 px-3 text-right">
-                      {confirmId === t.id ? (
+                      {isSynthetic ? (
+                        <span className="text-[10px] text-muted-foreground/60">—</span>
+                      ) : confirmId === t!.id ? (
                         <div className="flex gap-1 justify-end">
                           <Button size="sm" variant="destructive" className="h-6 px-2 text-xs"
-                            onClick={() => { onDelete(t.id); setConfirmId(null); }}>
+                            onClick={() => { onDelete(t!.id); setConfirmId(null); }}>
                             Yes
                           </Button>
                           <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
@@ -357,11 +388,11 @@ function PaymentHistory({
                         </div>
                       ) : (
                         <div className="flex gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onEdit(t)} title="Edit">
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onEdit(t!)} title="Edit">
                             <Pencil className="h-3 w-3" />
                           </Button>
                           <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                            onClick={() => setConfirmId(t.id)} title="Delete">
+                            onClick={() => setConfirmId(t!.id)} title="Delete">
                             <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
@@ -594,6 +625,52 @@ export function FdDetailPage() {
     return rows;
   }, [isRD, openDate, annualRate, tenureMonths, monthlyAmount, periodsPerYear, deposits, todayIso]);
 
+  // Build the unified payment log: real txns + synthetic interest credits
+  // for every payout period from open date → today. RD doesn't accrue interim
+  // payouts (it pays at maturity) so we only synthesize for FD here.
+  const logRows: LogRow[] = useMemo(() => {
+    const rows: LogRow[] = sorted.map((t) => ({
+      key: `t:${t.id}`,
+      date: t.tradeDate,
+      type: t.transactionType,
+      amount: new Decimal(t.quantity).times(new Decimal(t.price)),
+      notes: t.narration ?? null,
+      txn: t,
+    }));
+
+    if (!isRD && openDate && annualRate && freq && freq !== 'AT_MATURITY') {
+      const periodMonths = 12 / periodsPerYear;
+      // Per-period simple interest on running principal (matches how banks
+      // credit payout FDs — they keep the principal flat and pay interest
+      // out each period).
+      const perPeriod = principal.times(annualRate).div(periodsPerYear);
+      const endIso = maturity && maturity < todayIso ? maturity : todayIso;
+      let m = periodMonths;
+      while (true) {
+        const date = addMonthsIso(openDate, m);
+        if (date > endIso) break;
+        const hasReal = sorted.some(
+          (t) => t.transactionType === 'INTEREST_RECEIVED' && t.tradeDate === date,
+        );
+        if (!hasReal) {
+          rows.push({
+            key: `syn:int:${date}`,
+            date,
+            type: 'INTEREST_RECEIVED',
+            amount: perPeriod,
+            notes: null,
+            txn: null,
+          });
+        }
+        m += periodMonths;
+      }
+    }
+
+    // Newest first.
+    rows.sort((a, b) => b.date.localeCompare(a.date));
+    return rows;
+  }, [sorted, isRD, openDate, annualRate, freq, periodsPerYear, principal, maturity, todayIso]);
+
   function openEdit(txn: TransactionDTO) {
     setEditTxn(txn);
     setEditOpen(true);
@@ -624,14 +701,14 @@ export function FdDetailPage() {
     });
   }
 
-  // Composition pie data
+  // Composition pie data — distinct hues to break the gold monotony
   const pieData = totalInterest
     ? [
         { name: 'Principal', value: Number(totalPrincipalAtMaturity.toFixed(2)) },
         { name: 'Interest', value: Number(totalInterest.toFixed(2)) },
       ]
     : null;
-  const pieColors = ['hsl(var(--accent))', 'hsl(var(--positive, 142 71% 45%))'];
+  const pieColors = [CHART_PRINCIPAL, CHART_INTEREST];
 
   const elapsedPct = openDate && maturity
     ? Math.min(100, Math.max(0, (
@@ -779,7 +856,7 @@ export function FdDetailPage() {
               <CardHeader className="pb-2 flex flex-row items-baseline justify-between gap-3">
                 <CardTitle className="text-lg">Projected growth</CardTitle>
                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-accent/70" /> Value</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: CHART_GROWTH }} /> Value</span>
                   <span className="flex items-center gap-1"><span className="h-0.5 w-3 bg-muted-foreground/50" /> Principal</span>
                 </div>
               </CardHeader>
@@ -788,8 +865,8 @@ export function FdDetailPage() {
                   <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
                     <defs>
                       <linearGradient id="gradValue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={0.45} />
-                        <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity={0.02} />
+                        <stop offset="0%" stopColor={CHART_GROWTH} stopOpacity={0.45} />
+                        <stop offset="100%" stopColor={CHART_GROWTH} stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
@@ -800,12 +877,12 @@ export function FdDetailPage() {
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={TOOLTIP_LABEL_STYLE}
                       formatter={(v: number, name: string) => [formatINR(String(v)), name === 'value' ? 'Total value' : 'Principal']} />
                     {todayChartLabel && (
-                      <ReferenceLine x={todayChartLabel} stroke="hsl(var(--accent))" strokeDasharray="2 4"
-                        label={{ value: 'Today', fontSize: 10, fill: 'hsl(var(--accent))', position: 'top' }} />
+                      <ReferenceLine x={todayChartLabel} stroke={CHART_GROWTH_DIM} strokeDasharray="2 4"
+                        label={{ value: 'Today', fontSize: 10, fill: CHART_GROWTH, position: 'top' }} />
                     )}
                     <Area type="monotone" dataKey="principal" stroke="hsl(var(--muted-foreground))"
                       strokeWidth={1} strokeDasharray="3 3" fill="transparent" />
-                    <Area type="monotone" dataKey="value" stroke="hsl(var(--accent))" strokeWidth={2.5}
+                    <Area type="monotone" dataKey="value" stroke={CHART_GROWTH} strokeWidth={2.5}
                       fill="url(#gradValue)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -834,15 +911,17 @@ export function FdDetailPage() {
                     <div className="space-y-1.5 text-xs mt-2 border-t pt-3">
                       <div className="flex justify-between">
                         <span className="flex items-center gap-1.5 text-muted-foreground">
-                          <span className="h-2 w-2 rounded-full bg-accent" /> Principal
+                          <span className="h-2 w-2 rounded-full" style={{ background: CHART_PRINCIPAL }} /> Principal
                         </span>
-                        <span className="font-medium tabular-nums">{formatINR(totalPrincipalAtMaturity.toString())}</span>
+                        <span className="font-medium tabular-nums" style={{ color: CHART_PRINCIPAL }}>
+                          {formatINR(totalPrincipalAtMaturity.toString())}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="flex items-center gap-1.5 text-muted-foreground">
-                          <span className="h-2 w-2 rounded-full bg-emerald-500" /> Interest
+                          <span className="h-2 w-2 rounded-full" style={{ background: CHART_INTEREST }} /> Interest
                         </span>
-                        <span className="font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                        <span className="font-medium tabular-nums" style={{ color: CHART_INTEREST }}>
                           {formatINR((totalInterest ?? new Decimal(0)).toString())}
                         </span>
                       </div>
@@ -864,12 +943,12 @@ export function FdDetailPage() {
                   <AreaChart data={chartData} margin={{ top: 5, right: 12, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradStackedPrincipal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={0.55} />
-                        <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity={0.05} />
+                        <stop offset="0%" stopColor={CHART_PRINCIPAL} stopOpacity={0.55} />
+                        <stop offset="100%" stopColor={CHART_PRINCIPAL} stopOpacity={0.05} />
                       </linearGradient>
                       <linearGradient id="gradStackedInterest" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(142 71% 45%)" stopOpacity={0.55} />
-                        <stop offset="100%" stopColor="hsl(142 71% 45%)" stopOpacity={0.05} />
+                        <stop offset="0%" stopColor={CHART_INTEREST} stopOpacity={0.55} />
+                        <stop offset="100%" stopColor={CHART_INTEREST} stopOpacity={0.05} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
@@ -880,9 +959,9 @@ export function FdDetailPage() {
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={TOOLTIP_LABEL_STYLE}
                       formatter={(v: number, name: string) => [formatINR(String(v)), name === 'principal' ? 'Principal' : 'Interest']} />
                     <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconType="circle" iconSize={8} />
-                    <Area type="monotone" dataKey="principal" stackId="1" stroke="hsl(var(--accent))" strokeWidth={1.5}
+                    <Area type="monotone" dataKey="principal" stackId="1" stroke={CHART_PRINCIPAL} strokeWidth={1.5}
                       fill="url(#gradStackedPrincipal)" name="Principal" />
-                    <Area type="monotone" dataKey="interest" stackId="1" stroke="hsl(142 71% 45%)" strokeWidth={1.5}
+                    <Area type="monotone" dataKey="interest" stackId="1" stroke={CHART_INTEREST} strokeWidth={1.5}
                       fill="url(#gradStackedInterest)" name="Interest" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -911,10 +990,9 @@ export function FdDetailPage() {
           <p className="text-sm text-muted-foreground py-6 text-center">Loading payments…</p>
         ) : (
           <PaymentHistory
-            txns={sorted}
+            rows={logRows}
             onEdit={openEdit}
             onDelete={(id) => deleteMutation.mutate(id)}
-            deletingId={deleteMutation.isPending ? null : null}
           />
         )}
       </div>
