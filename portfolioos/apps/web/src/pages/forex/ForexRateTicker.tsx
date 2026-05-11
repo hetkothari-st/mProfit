@@ -76,7 +76,7 @@ export function ForexRateTicker() {
                 </span>
                 <span
                   className={`rounded px-1 py-0.5 text-[9px] uppercase tracking-wider ${
-                    r.source === 'RBI'
+                    r.source === 'RBI' || r.source === 'FRANKFURTER'
                       ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                       : r.source === 'DERIVED'
                         ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'

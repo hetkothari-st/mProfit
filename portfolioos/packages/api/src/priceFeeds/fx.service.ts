@@ -55,7 +55,42 @@ const RBI_SUPPORTED = new Set(['USD', 'EUR', 'GBP', 'JPY']);
 export interface FxSyncResult {
   updated: number;
   skipped: number;
-  bySource: { rbi: number; yahoo: number; derived: number };
+  bySource: { rbi: number; frankfurter: number; yahoo: number; derived: number };
+}
+
+// ─── Frankfurter adapter ────────────────────────────────────────────
+//
+// Frankfurter mirrors ECB / RBI / BoE daily reference rates with a simple
+// JSON API, no auth, no rate limit. Already battle-tested in
+// commodity.service.ts for USD/INR. Used as the secondary adapter after RBI
+// HTML scrape: when RBI's homepage widget can't be parsed (markup changes,
+// JS-rendered table, etc) and before falling through to Yahoo (which is
+// rate-limited on Railway IPs).
+async function fetchFrankfurterRates(bases: string[]): Promise<Map<string, Decimal>> {
+  const out = new Map<string, Decimal>();
+  await Promise.all(
+    bases.map(async (base) => {
+      try {
+        const url = `https://api.frankfurter.app/latest?from=${base}&to=INR`;
+        const res = await request(url, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          bodyTimeout: 8_000,
+          headersTimeout: 4_000,
+        });
+        if (res.statusCode < 200 || res.statusCode >= 300) return;
+        const body = (await res.body.json()) as { rates?: Record<string, number> };
+        const rate = body?.rates?.INR;
+        if (typeof rate === 'number' && rate > 0) {
+          out.set(base, new Decimal(rate));
+        }
+      } catch {
+        // swallow — fall through to next adapter
+      }
+    }),
+  );
+  if (out.size > 0) logger.info({ count: out.size }, '[fx] Frankfurter rates parsed');
+  return out;
 }
 
 // ─── RBI adapter ────────────────────────────────────────────────────
@@ -129,7 +164,7 @@ async function upsertRate(
   quoteCcy: string,
   date: Date,
   rate: Decimal,
-  source: 'RBI' | 'YAHOO' | 'DERIVED',
+  source: 'RBI' | 'FRANKFURTER' | 'YAHOO' | 'DERIVED',
 ): Promise<void> {
   await prisma.fXRate.upsert({
     where: { baseCcy_quoteCcy_date: { baseCcy, quoteCcy, date } },
@@ -144,9 +179,9 @@ export async function syncFxRates(): Promise<FxSyncResult> {
 
   let updated = 0;
   let skipped = 0;
-  const bySource = { rbi: 0, yahoo: 0, derived: 0 };
+  const bySource = { rbi: 0, frankfurter: 0, yahoo: 0, derived: 0 };
 
-  // 1) RBI primary for USD/EUR/GBP/JPY → INR.
+  // 1) RBI primary for USD/EUR/GBP/JPY → INR (best-effort HTML scrape).
   const rbiRates = await fetchRbiReferenceRates();
   for (const [code, rate] of rbiRates) {
     await upsertRate(code, 'INR', today, rate, 'RBI');
@@ -154,9 +189,21 @@ export async function syncFxRates(): Promise<FxSyncResult> {
     bySource.rbi++;
   }
 
-  // 2) Yahoo for the rest of the INR pairs (and as RBI fallback).
+  // 2) Frankfurter for any INR pair RBI didn't cover. Reliable, no auth,
+  //    no rate limit — designed for exactly this kind of fallback.
+  const needFrankfurter = PRIMARY_INR_PAIRS.filter((p) => !rbiRates.has(p.base)).map((p) => p.base);
+  const frankRates = needFrankfurter.length > 0 ? await fetchFrankfurterRates(needFrankfurter) : new Map<string, Decimal>();
+  for (const [code, rate] of frankRates) {
+    await upsertRate(code, 'INR', today, rate, 'FRANKFURTER');
+    updated++;
+    bySource.frankfurter++;
+  }
+
+  // 3) Yahoo for whatever's still missing + the cross pairs (Frankfurter
+  //    doesn't cover non-INR pairs).
+  const covered = new Set<string>([...rbiRates.keys(), ...frankRates.keys()]);
   const yahooSymbols = [
-    ...PRIMARY_INR_PAIRS.filter((p) => !rbiRates.has(p.base)).map((p) => p.yahooSymbol),
+    ...PRIMARY_INR_PAIRS.filter((p) => !covered.has(p.base)).map((p) => p.yahooSymbol),
     ...CROSS_PAIRS.map((p) => p.yahooSymbol),
   ];
 
@@ -172,7 +219,7 @@ export async function syncFxRates(): Promise<FxSyncResult> {
   for (const q of yahooQuotes) if (q?.symbol) bySymbol.set(q.symbol, q);
 
   for (const pair of PRIMARY_INR_PAIRS) {
-    if (rbiRates.has(pair.base)) continue; // already covered by RBI
+    if (covered.has(pair.base)) continue; // already covered by RBI / Frankfurter
     const q = bySymbol.get(pair.yahooSymbol);
     if (!q || typeof q.regularMarketPrice !== 'number') {
       skipped++;
