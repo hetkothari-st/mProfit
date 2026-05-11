@@ -12,11 +12,13 @@ import {
   getUserSchedule43,
   getTaxHarvest,
   downloadSchedule112ACsv,
+  getAvailableFys,
 } from '../controllers/tax.controller.js';
 
 export const taxRouter = Router();
 taxRouter.use(authenticate);
 
+taxRouter.get('/available-fys', asyncHandler(getAvailableFys));
 taxRouter.get('/summary', asyncHandler(getTaxSummary));
 taxRouter.get('/stcg', asyncHandler(getUserStcg));
 taxRouter.get('/ltcg', asyncHandler(getUserLtcg));

@@ -81,6 +81,26 @@ function fyOptionsFromRows(rows: CapitalGainRow[]): string[] {
   return Array.from(set).sort().reverse();
 }
 
+/**
+ * Returns FYs (descending) where the user has any taxable activity:
+ * realised capital gains, dividend/interest income, F&O trades, or
+ * maturity proceeds. Used by the Tax page to default the FY selector
+ * to the latest FY with data instead of the calendar-current FY.
+ */
+export async function availableTaxFys(userId: string): Promise<string[]> {
+  const [cgRows, txs] = await Promise.all([
+    computeUserCapitalGains(userId).then((r) => r.rows),
+    prisma.transaction.findMany({
+      where: { portfolio: { userId } },
+      select: { tradeDate: true },
+    }),
+  ]);
+  const set = new Set<string>();
+  for (const r of cgRows) set.add(r.financialYear);
+  for (const t of txs) set.add(financialYearOf(t.tradeDate));
+  return Array.from(set).sort().reverse();
+}
+
 // ─── User-scoped cross-portfolio CG reports ─────────────────────────
 
 export async function userStcgReport(userId: string, fy?: string) {

@@ -11,6 +11,7 @@ import {
   userIncomeReport,
   schedule112ACsv,
   taxHarvestReport,
+  availableTaxFys,
 } from '../services/tax.service.js';
 import { buildSchedule43Report } from '../services/reports/schedule43.report.js';
 
@@ -25,6 +26,11 @@ export async function getTaxSummary(req: Request, res: Response) {
   const userId = req.user!.id;
   const data = await buildTaxSummary(userId, fy);
   ok(res, data);
+}
+
+export async function getAvailableFys(req: Request, res: Response) {
+  const fys = await availableTaxFys(req.user!.id);
+  ok(res, { fys });
 }
 
 export async function getUserStcg(req: Request, res: Response) {

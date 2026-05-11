@@ -134,6 +134,10 @@ export interface TaxHarvestReport {
 }
 
 export const taxApi = {
+  availableFys: async (): Promise<{ fys: string[] }> => {
+    const { data } = await api.get<ApiResponse<{ fys: string[] }>>('/api/tax/available-fys');
+    return unwrap(data);
+  },
   summary: async (fy: string): Promise<TaxSummary> => {
     const { data } = await api.get<ApiResponse<TaxSummary>>('/api/tax/summary' + qs({ fy }));
     return unwrap(data);

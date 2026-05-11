@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FileDown, Loader2, Info } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -36,7 +36,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'stcg', label: 'STCG' },
   { key: 'ltcg', label: 'LTCG' },
   { key: 'intraday', label: 'Intraday' },
-  { key: 'fno', label: 'F&O (§43(5))' },
+  { key: 'fno', label: 'F&O (Sec. 43(5))' },
   { key: 'income', label: 'Dividend & Interest' },
   { key: 'harvest', label: 'Tax Harvest' },
 ];
@@ -49,7 +49,7 @@ function currentFy(): string {
   return `${start}-${String(start + 1).slice(2)}`;
 }
 
-function fyOptions(): string[] {
+function fyOptionsFallback(): string[] {
   const years: string[] = [];
   const now = new Date();
   const startYear = now.getUTCMonth() + 1 >= 4 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
@@ -95,52 +95,74 @@ function isNonNegativeMoney(s: string | number | null | undefined): boolean {
 export function TaxPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const [tab, setTab] = useState<Tab>('summary');
-  const [fy, setFy] = useState<string>(currentFy());
+  const [fy, setFy] = useState<string>('');
+
+  const availableFysQ = useQuery({
+    queryKey: ['tax-available-fys'],
+    queryFn: () => taxApi.availableFys(),
+    staleTime: 60_000,
+  });
+
+  // Pick the latest FY that has actual data; fall back to the current FY.
+  // Without this the dropdown defaults to today's FY and shows ₹0 across
+  // the board if the user's last transactions were in a prior FY.
+  useEffect(() => {
+    if (fy) return;
+    const fromApi = availableFysQ.data?.fys ?? [];
+    if (fromApi.length > 0) setFy(fromApi[0]!);
+    else if (availableFysQ.isFetched) setFy(currentFy());
+  }, [availableFysQ.data, availableFysQ.isFetched, fy]);
+
+  const fyOptions = useMemo<string[]>(() => {
+    const fromApi = availableFysQ.data?.fys ?? [];
+    if (fromApi.length > 0) return fromApi;
+    return fyOptionsFallback();
+  }, [availableFysQ.data]);
 
   const summaryQ = useQuery({
     queryKey: ['tax-summary', fy],
     queryFn: () => taxApi.summary(fy),
-    enabled: tab === 'summary',
+    enabled: tab === 'summary' && !!fy,
   });
   const s112AQ = useQuery({
     queryKey: ['tax-112a', fy],
     queryFn: () => taxApi.schedule112A(fy),
-    enabled: tab === 'schedule-112a',
+    enabled: tab === 'schedule-112a' && !!fy,
   });
   const s112Q = useQuery({
     queryKey: ['tax-112', fy],
     queryFn: () => taxApi.schedule112(fy),
-    enabled: tab === 'schedule-112',
+    enabled: tab === 'schedule-112' && !!fy,
   });
   const stcgQ = useQuery({
     queryKey: ['tax-stcg', fy],
     queryFn: () => taxApi.stcg(fy),
-    enabled: tab === 'stcg',
+    enabled: tab === 'stcg' && !!fy,
   });
   const ltcgQ = useQuery({
     queryKey: ['tax-ltcg', fy],
     queryFn: () => taxApi.ltcg(fy),
-    enabled: tab === 'ltcg',
+    enabled: tab === 'ltcg' && !!fy,
   });
   const intradayQ = useQuery({
     queryKey: ['tax-intraday', fy],
     queryFn: () => taxApi.intraday(fy),
-    enabled: tab === 'intraday',
+    enabled: tab === 'intraday' && !!fy,
   });
   const fnoQ = useQuery({
     queryKey: ['tax-fno', fy],
     queryFn: () => taxApi.schedule43(fy),
-    enabled: tab === 'fno',
+    enabled: tab === 'fno' && !!fy,
   });
   const incomeQ = useQuery({
     queryKey: ['tax-income', fy],
     queryFn: () => taxApi.income(fy),
-    enabled: tab === 'income',
+    enabled: tab === 'income' && !!fy,
   });
   const harvestQ = useQuery({
     queryKey: ['tax-harvest', fy],
     queryFn: () => taxApi.harvest(fy),
-    enabled: tab === 'harvest',
+    enabled: tab === 'harvest' && !!fy,
   });
 
   const downloadCsv = () => {
@@ -170,7 +192,7 @@ export function TaxPage() {
           <div>
             <Label>Financial Year</Label>
             <Select className="mt-1" value={fy} onChange={(e) => setFy(e.target.value)}>
-              {fyOptions().map((y) => (
+              {fyOptions.map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>
@@ -226,7 +248,7 @@ export function TaxPage() {
         <GainsView data={ltcgQ.data} loading={ltcgQ.isLoading} kind="Long-Term Capital Gains" showIndexed />
       )}
       {tab === 'intraday' && (
-        <GainsView data={intradayQ.data} loading={intradayQ.isLoading} kind="Intraday (§43(5) Speculative)" />
+        <GainsView data={intradayQ.data} loading={intradayQ.isLoading} kind="Intraday (Sec. 43(5) Speculative)" />
       )}
       {tab === 'fno' && <Schedule43View data={fnoQ.data} loading={fnoQ.isLoading} />}
       {tab === 'income' && <IncomeView data={incomeQ.data} loading={incomeQ.isLoading} />}
@@ -313,7 +335,7 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
             </thead>
             <tbody>
               <tr className="border-b">
-                <td className="p-2 font-medium">§111A</td>
+                <td className="p-2 font-medium">Sec. 111A</td>
                 <td className="p-2">STCG on listed equity (STT paid)</td>
                 <td className={cn('p-2 text-right', isNonNegativeMoney(cg.section111A_stcgEquity.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.section111A_stcgEquity.gain)}
@@ -323,7 +345,7 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
                 <td className="p-2 text-right font-medium">₹{fmt(cg.section111A_stcgEquity.tax)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 font-medium">§112A</td>
+                <td className="p-2 font-medium">Sec. 112A</td>
                 <td className="p-2">
                   LTCG on listed equity (exemption ₹{fmt(cg.section112A_ltcgEquity.exemption, 0)})
                 </td>
@@ -335,7 +357,7 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
                 <td className="p-2 text-right font-medium">₹{fmt(cg.section112A_ltcgEquity.tax)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 font-medium">§112</td>
+                <td className="p-2 font-medium">Sec. 112</td>
                 <td className="p-2">LTCG on other assets (indexed 20% / non-indexed 12.5%)</td>
                 <td className={cn('p-2 text-right', isNonNegativeMoney(cg.section112_ltcgOther.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.section112_ltcgOther.gain)}
@@ -355,7 +377,7 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
                 <td className="p-2 text-right font-medium">₹{fmt(cg.stcgOther.tax)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 font-medium">§43(5)</td>
+                <td className="p-2 font-medium">Sec. 43(5)</td>
                 <td className="p-2">Intraday speculative business income</td>
                 <td className={cn('p-2 text-right', isNonNegativeMoney(cg.intradaySpeculative.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.intradaySpeculative.gain)}
@@ -365,9 +387,9 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
                 <td className="p-2 text-right font-medium">₹{fmt(cg.intradaySpeculative.tax)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 font-medium">§43(5)</td>
+                <td className="p-2 font-medium">Sec. 43(5)</td>
                 <td className="p-2">
-                  F&O non-speculative {data.fnoBusinessIncome.auditApplicable && <span className="text-xs text-amber-600 ml-1">· §44AB audit</span>}
+                  F&O non-speculative {data.fnoBusinessIncome.auditApplicable && <span className="text-xs text-amber-600 ml-1">· Sec. 44AB audit</span>}
                 </td>
                 <td className={cn('p-2 text-right', isNonNegativeMoney(data.fnoBusinessIncome.netPnl) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(data.fnoBusinessIncome.netPnl)}
@@ -416,8 +438,8 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
         <Info className="h-3 w-3 mt-0.5 shrink-0" />
         <span>
           Estimates use current statutory rates and exclude surcharge, cess, deductions
-          (§80C/§80D), set-off of brought-forward losses, and any FMV adjustment for
-          pre-31-Jan-2018 equity (grandfathering). Confirm with your CA before filing.
+          (Sec. 80C / Sec. 80D), set-off of brought-forward losses, and any FMV adjustment
+          for pre-31-Jan-2018 equity (grandfathering). Confirm with your CA before filing.
         </span>
       </div>
     </div>
@@ -769,7 +791,7 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
         <Info className="h-3 w-3 mt-0.5 shrink-0" />
         <span>
           STCG losses can offset both STCG and LTCG. LTCG losses can offset only LTCG.
-          Unabsorbed losses can be carried forward for 8 AYs (§74). Holding-period
+          Unabsorbed losses can be carried forward for 8 AYs (Sec. 74). Holding-period
           classification uses the oldest BUY in the lot — actual FIFO matching at sell
           time may differ.
         </span>
