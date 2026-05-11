@@ -1,7 +1,17 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { CalendarClock, ChevronDown, Clock, Lock, Pencil, PiggyBank, Plus } from 'lucide-react';
+import {
+  ArrowUpRight,
+  CalendarClock,
+  ChevronDown,
+  Clock,
+  Landmark,
+  Pencil,
+  PiggyBank,
+  Plus,
+  ShieldCheck,
+} from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import type { AssetClass, HoldingRow, TransactionDTO } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -21,6 +31,9 @@ const FREQ_LABELS: Record<string, string> = {
   ANNUAL: 'Annual',
   AT_MATURITY: 'At maturity',
 };
+
+const FD_ACCENT = 'hsl(var(--positive))';
+const RD_ACCENT = 'hsl(var(--accent))';
 
 function daysUntil(iso: string): number {
   return Math.round((new Date(iso).getTime() - Date.now()) / 86_400_000);
@@ -42,7 +55,7 @@ function freqCompoundN(freq: string | null | undefined): number {
     case 'QUARTERLY': return 4;
     case 'HALF_YEARLY': return 2;
     case 'ANNUAL': return 1;
-    default: return 0; // AT_MATURITY or unknown → simple interest
+    default: return 0;
   }
 }
 
@@ -104,40 +117,78 @@ function MaturityBadge({ date }: { date: string }) {
   const d = daysUntil(date);
   if (d < 0) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground">
+      <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider bg-muted text-muted-foreground">
         <Clock className="h-3 w-3" /> Matured
       </span>
     );
   }
   const cls =
     d <= 30
-      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+      ? 'bg-negative/10 text-negative'
       : d <= 90
-        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
+        ? 'bg-warning/15 text-warning'
+        : 'bg-positive/10 text-positive';
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>
-      <Clock className="h-3 w-3" /> {d}d left
+    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>
+      <Clock className="h-3 w-3" /> in {d}d
     </span>
   );
 }
 
-function DiamondMark({
-  className = '',
-  style,
+function ProgressRing({
+  pct,
+  color,
+  topLabel,
+  bottomLabel,
 }: {
-  className?: string;
-  style?: CSSProperties;
+  pct: number;
+  color: string;
+  topLabel: string;
+  bottomLabel: string;
 }) {
+  const size = 96;
+  const stroke = 6;
+  const radius = (size - stroke) / 2;
+  const circ = 2 * Math.PI * radius;
+  const safe = Math.min(100, Math.max(0, pct));
+  const dash = (safe / 100) * circ;
   return (
-    <span
-      className={`inline-block rotate-45 bg-accent ${className}`}
-      style={style}
-      aria-hidden
-    />
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="hsl(var(--border))"
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.22, 0.61, 0.36, 1)' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <span
+          className="font-display text-2xl leading-none tracking-tight"
+          style={{ color }}
+        >
+          {topLabel}
+        </span>
+        <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground mt-0.5 font-mono">
+          {bottomLabel}
+        </span>
+      </div>
+    </div>
   );
 }
-
 
 function PnLDisplay({ holding }: { holding: FDHolding }) {
   if (!holding.currentValue) return <span className="text-muted-foreground">—</span>;
@@ -147,10 +198,10 @@ function PnLDisplay({ holding }: { holding: FDHolding }) {
     : pnl.div(holding.totalCost).times(100).toNumber();
   const pos = pnl.gte(0);
   return (
-    <span className={pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+    <span className={pos ? 'text-positive' : 'text-negative'}>
       {pos ? '+' : ''}{formatINR(pnl.toString())}
       {pct != null && (
-        <span className="ml-1 text-xs opacity-80">
+        <span className="ml-1 text-[11px] opacity-80">
           ({pos ? '+' : ''}{pct.toFixed(2)}%)
         </span>
       )}
@@ -158,78 +209,27 @@ function PnLDisplay({ holding }: { holding: FDHolding }) {
   );
 }
 
-function VaultGlyph({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="3" y="4" width="18" height="16" rx="1.5" />
-      <circle cx="12" cy="12" r="4.5" />
-      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-      <path d="M12 7.5v1.2M12 15.3v1.2M7.5 12h1.2M15.3 12h1.2" />
-      <path d="M6 4v-1M18 4v-1M6 21v-1M18 21v-1" />
-    </svg>
-  );
-}
-
-function VaultDial({
-  rate,
-  elapsedPct,
-  className = '',
+function StatBlock({
+  label,
+  value,
+  accent = false,
 }: {
-  rate: number | string | null | undefined;
-  elapsedPct: number;
-  className?: string;
+  label: string;
+  value: React.ReactNode;
+  accent?: boolean;
 }) {
-  const r = 46;
-  const c = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(100, elapsedPct));
-  const dash = (pct / 100) * c;
   return (
-    <div className={`relative shrink-0 ${className}`}>
-      <svg viewBox="0 0 120 120" className="absolute inset-0">
-        <defs>
-          <radialGradient id="dialFace" cx="0.5" cy="0.5" r="0.55">
-            <stop offset="0%" stopColor="rgba(252,211,77,0.18)" />
-            <stop offset="100%" stopColor="rgba(0,0,0,0.0)" />
-          </radialGradient>
-        </defs>
-        <circle cx="60" cy="60" r="56" fill="url(#dialFace)" stroke="rgba(252,211,77,0.35)" strokeWidth="1" />
-        <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="6" />
-        <circle
-          cx="60" cy="60" r={r}
-          fill="none"
-          stroke="rgba(252,211,77,0.85)"
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${c - dash}`}
-          transform="rotate(-90 60 60)"
-        />
-        {Array.from({ length: 12 }).map((_, i) => {
-          const a = (i * 30 - 90) * (Math.PI / 180);
-          const x1 = 60 + Math.cos(a) * 52;
-          const y1 = 60 + Math.sin(a) * 52;
-          const x2 = 60 + Math.cos(a) * (i % 3 === 0 ? 47 : 49);
-          const y2 = 60 + Math.sin(a) * (i % 3 === 0 ? 47 : 49);
-          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(252,211,77,0.45)" strokeWidth={i % 3 === 0 ? 1.6 : 0.8} />;
-        })}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        {rate != null && rate !== '' ? (
-          <>
-            <p className="font-display text-3xl text-amber-300 leading-none tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.55)]">
-              {String(rate)}
-              <span className="text-base align-top">%</span>
-            </p>
-            <p className="mt-1 font-mono text-[8px] uppercase tracking-[0.28em] text-amber-200/70">
-              p.a.
-            </p>
-          </>
-        ) : (
-          <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-200/60">No rate</p>
-        )}
-        <p className="mt-1.5 font-mono text-[8px] tabular-nums text-white/45">
-          {Math.round(pct)}% elapsed
-        </p>
-      </div>
+    <div>
+      <p className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground font-mono mb-0.5">
+        {label}
+      </p>
+      <p
+        className={`numeric-display text-[15px] truncate ${
+          accent ? 'text-positive' : 'text-foreground'
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -260,132 +260,147 @@ function FDCard({
       })()
     : 0;
 
-  const certNo = holding.id.slice(-6).toUpperCase();
+  const certNo = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
   const matValue = fdMaturityValue(holding.totalCost, rate, tenureMonths, freq);
+  const isMatured = maturity ? daysUntil(maturity) < 0 : false;
 
-  const daysLeft = maturity ? daysUntil(maturity) : null;
+  const stop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   return (
     <div
       onClick={onClick}
-      className="group relative rounded-xl cursor-pointer
-        bg-white dark:bg-slate-900
-        border border-slate-200 dark:border-slate-800
-        hover:border-slate-300 dark:hover:border-slate-700
-        shadow-sm hover:shadow-md
-        transition-all duration-200"
+      className={`block group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg ${isMatured ? 'opacity-70' : ''}`}
     >
-      <div className="px-5 py-4">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0 text-slate-500 dark:text-slate-400">
-            <Lock className="h-3 w-3 shrink-0" strokeWidth={2.2} />
-            <span className="text-[11px] font-medium uppercase tracking-wider">Fixed Deposit</span>
-            <span className="text-slate-300 dark:text-slate-600">·</span>
-            <span className="text-[11px] font-mono tabular-nums">№{certNo}</span>
-          </div>
-          <button
-            type="button"
-            onClick={onEdit}
-            aria-label="Edit deposit"
-            className="p-1 -m-1 rounded text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        {/* Headline + rate */}
-        <div className="mt-2 flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h3 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 truncate">
-              {holding.assetName ?? '—'}
-            </h3>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-              <span>{tenureMonths ? `${tenureMonths}-month` : 'Term'} deposit</span>
-              {freq && (
-                <>
-                  <span className="text-slate-300 dark:text-slate-600">·</span>
-                  <span>{FREQ_LABELS[freq] ?? freq} payout</span>
-                </>
-              )}
-              {holding.portfolioName && (
-                <>
-                  <span className="text-slate-300 dark:text-slate-600">·</span>
-                  <span>{holding.portfolioName}</span>
-                </>
-              )}
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-2xl font-semibold tabular-nums leading-none text-indigo-600 dark:text-indigo-400">
-              {rate ?? '—'}
-              <span className="text-base font-medium opacity-80 ml-0.5">%</span>
-            </p>
-            <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              per annum
-            </p>
-          </div>
-        </div>
-
-        {/* Timeline */}
-        <div className="mt-4">
-          <div className="relative h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-indigo-500 dark:bg-indigo-400 transition-all"
-              style={{ width: `${elapsedPct}%` }}
-            />
-          </div>
-          <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-            <span>{formatShortDate(openDate)}</span>
-            <span className="text-slate-600 dark:text-slate-300">
-              {tenureMonths
-                ? `${Math.round(elapsedPct)}%${
-                    daysLeft !== null
-                      ? ` · ${daysLeft < 0 ? 'matured' : `${daysLeft}d left`}`
-                      : ''
-                  }`
-                : '—'}
+      <Card
+        className="overflow-hidden p-0 paper relative transition-all duration-300 group-hover:shadow-elev-lg group-hover:-translate-y-0.5"
+        style={{ borderTop: `3px solid ${FD_ACCENT}` }}
+      >
+        {/* Engraved certificate header */}
+        <div className="relative px-5 pt-3 pb-2 border-b border-border/70">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.22em] font-medium">
+            <span className="flex items-center gap-1.5" style={{ color: FD_ACCENT }}>
+              <ShieldCheck className="h-3 w-3" strokeWidth={1.8} />
+              Term Deposit
             </span>
-            <span>{formatShortDate(maturity)}</span>
+            <span className="font-mono normal-case tracking-normal text-muted-foreground">
+              № {certNo}
+            </span>
+          </div>
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
+                {holding.assetName ?? '—'}
+              </h3>
+              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                <span className="tabular-nums">
+                  {tenureMonths ? `${tenureMonths}-month term` : 'Term —'}
+                </span>
+                {freq && (
+                  <>
+                    <span className="text-accent/40">·</span>
+                    <span>{FREQ_LABELS[freq] ?? freq} payout</span>
+                  </>
+                )}
+                {holding.portfolioName && (
+                  <>
+                    <span className="text-accent/40">·</span>
+                    <span className="font-display-italic truncate">{holding.portfolioName}</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => { stop(e); onEdit(e); }}
+              aria-label="Edit deposit"
+              className="shrink-0 p-1 rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-4 gap-4">
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
-              Principal
-            </p>
-            <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-              {formatINR(holding.totalCost)}
-            </p>
+        {/* Body — ring + ledger grid */}
+        <CardContent className="p-5 relative">
+          <div className="grid grid-cols-[auto_1fr] gap-5 items-center">
+            <ProgressRing
+              pct={elapsedPct}
+              color={FD_ACCENT}
+              topLabel={rate != null && rate !== '' ? `${rate}%` : '—'}
+              bottomLabel="p.a."
+            />
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
+                Principal
+              </p>
+              <p className="numeric-display-lg money-digits text-2xl mt-0.5">
+                {formatINR(holding.totalCost)}
+              </p>
+              <div className="mt-2.5 grid grid-cols-3 gap-x-3">
+                <StatBlock
+                  label="Current"
+                  value={holding.currentValue ? formatINR(holding.currentValue) : '—'}
+                />
+                <StatBlock
+                  label="Maturity"
+                  value={matValue ? formatINR(matValue.toString()) : '—'}
+                  accent
+                />
+                <StatBlock
+                  label="Earned"
+                  value={<PnLDisplay holding={holding} />}
+                />
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
-              Current Value
-            </p>
-            <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-              {holding.currentValue ? formatINR(holding.currentValue) : '—'}
-            </p>
+
+          {/* Timeline */}
+          {tenureMonths != null && (
+            <div className="mt-4">
+              <div className="relative h-[3px] rounded-full bg-border/70 overflow-hidden">
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full transition-all"
+                  style={{ width: `${elapsedPct}%`, background: FD_ACCENT }}
+                />
+              </div>
+              <div className="mt-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.18em] font-mono text-muted-foreground">
+                <span>{formatShortDate(openDate)}</span>
+                <span className="text-foreground/70 tabular-nums">
+                  {Math.round(elapsedPct)}% elapsed
+                </span>
+                <span>{formatShortDate(maturity)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="mt-4 pt-3 border-t border-dashed border-border/70 flex items-center justify-between text-xs">
+            {maturity ? (
+              <>
+                <span className="text-muted-foreground flex items-center gap-1.5">
+                  <CalendarClock className="h-3 w-3" />
+                  <span className="font-display-italic">Matures</span>
+                  <span className="tabular-nums text-foreground">{formatShortDate(maturity)}</span>
+                </span>
+                <MaturityBadge date={maturity} />
+              </>
+            ) : (
+              <span className="text-muted-foreground font-display-italic">Maturity date not set</span>
+            )}
+            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-accent transition-colors ml-auto" />
           </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
-              Maturity Value
-            </p>
-            <p className="text-sm font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">
-              {matValue ? formatINR(matValue.toString()) : '—'}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
-              Earned
-            </p>
-            <p className="text-sm font-semibold tabular-nums">
-              <PnLDisplay holding={holding} />
-            </p>
-          </div>
-        </div>
-      </div>
+
+          {/* Matured stamp */}
+          {isMatured && (
+            <div className="absolute top-3 right-3 -rotate-6 border-2 border-muted-foreground/50 px-2 py-0.5 rounded-sm font-display text-xs tracking-[0.18em] text-muted-foreground/70 pointer-events-none">
+              MATURED
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -404,7 +419,6 @@ function RDCard({
   onEdit: (e: React.MouseEvent) => void;
 }) {
   const rate = primaryTxn?.interestRate ?? null;
-  const freq = primaryTxn?.interestFrequency ?? null;
   const maturity = primaryTxn?.maturityDate ?? null;
   const openDate = primaryTxn?.tradeDate ?? null;
   const monthlyRaw = primaryTxn?.price ?? null;
@@ -412,179 +426,171 @@ function RDCard({
 
   const tenureMonths = openDate && maturity ? monthsBetween(openDate, maturity) : null;
   const installmentsDone = allDepositTxns.length;
-  const totalStamps = tenureMonths && tenureMonths > 0 ? tenureMonths : Math.max(installmentsDone, 12);
-  const stamps = Array.from({ length: totalStamps }, (_, i) => i < installmentsDone);
   const progressPct = tenureMonths && tenureMonths > 0
     ? Math.min(100, (installmentsDone / tenureMonths) * 100)
     : 0;
 
   const matValue = rdMaturityValue(monthlyRaw, rate, tenureMonths);
-  const certNo = holding.id.slice(-6).toUpperCase();
+  const certNo = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
+  const isMatured = maturity ? daysUntil(maturity) < 0 : false;
+
+  // Compact installment row — up to 24 dots, summarised if longer
+  const dotCount = tenureMonths ?? Math.max(installmentsDone, 12);
+  const showDots = Math.min(dotCount, 24);
+  const overflow = dotCount > 24;
+
+  const stop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   return (
     <div
       onClick={onClick}
-      className="group relative rounded-lg border border-border bg-card hover:border-accent/50 shadow-elev hover:shadow-elev-lg transition-all cursor-pointer overflow-hidden"
+      className={`block group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg ${isMatured ? 'opacity-70' : ''}`}
     >
-      {/* Ruled passbook lines */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.07] dark:opacity-[0.10]"
-        style={{
-          backgroundImage:
-            'repeating-linear-gradient(to bottom, transparent 0, transparent 25px, hsl(var(--accent)) 25px, hsl(var(--accent)) 26px)',
-        }}
-      />
-      {/* Red top fold lines */}
-      <div className="absolute inset-x-0 top-0 h-px bg-[hsl(var(--destructive)/0.5)]" />
-      <div className="absolute inset-x-0 top-[3px] h-px bg-[hsl(var(--destructive)/0.3)]" />
-
-      {/* Book binding (left spine) */}
-      <div className="absolute inset-y-0 left-0 w-[10px] bg-gradient-to-r from-accent/25 via-accent/12 to-transparent" />
-      <div className="absolute inset-y-0 left-[10px] w-px bg-accent/40" />
-      <div className="absolute inset-y-0 left-[3px] flex flex-col justify-evenly py-3 pointer-events-none">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <span
-            key={i}
-            className="h-[5px] w-[5px] rounded-full bg-accent/70 ring-2 ring-card"
-          />
-        ))}
-      </div>
-
-      <div className="relative pl-7 pr-5 pt-3.5 pb-4">
-        {/* Eyebrow */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <DiamondMark className="h-1.5 w-1.5 shrink-0" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-accent leading-none">
+      <Card
+        className="overflow-hidden p-0 paper relative transition-all duration-300 group-hover:shadow-elev-lg group-hover:-translate-y-0.5"
+        style={{ borderTop: `3px solid ${RD_ACCENT}` }}
+      >
+        {/* Passbook header */}
+        <div className="relative px-5 pt-3 pb-2 border-b border-border/70">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.22em] font-medium">
+            <span className="flex items-center gap-1.5" style={{ color: RD_ACCENT }}>
+              <CalendarClock className="h-3 w-3" strokeWidth={1.8} />
               Recurring Deposit
             </span>
-            <span className="text-accent/30 select-none">·</span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground leading-none">
-              Passbook № <span className="text-foreground/80">{certNo}</span>
+            <span className="font-mono normal-case tracking-normal text-muted-foreground">
+              № {certNo}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={onEdit}
-            aria-label="Edit deposit"
-            className="shrink-0 p-1 -m-1 rounded text-muted-foreground/40 hover:text-foreground hover:bg-muted/60 transition-colors"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
+                {holding.assetName ?? '—'}
+              </h3>
+              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                <span className="text-foreground/80 font-medium tabular-nums">{monthlyAmt}</span>
+                <span className="text-muted-foreground/60">/month</span>
+                {tenureMonths && (
+                  <>
+                    <span className="text-accent/40">·</span>
+                    <span className="tabular-nums">{tenureMonths}-month tenure</span>
+                  </>
+                )}
+                {holding.portfolioName && (
+                  <>
+                    <span className="text-accent/40">·</span>
+                    <span className="font-display-italic truncate">{holding.portfolioName}</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => { stop(e); onEdit(e); }}
+              aria-label="Edit deposit"
+              className="shrink-0 p-1 rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
-        {/* Headline + rate chip */}
-        <div className="mt-2 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="font-display text-[22px] leading-[1.15] text-foreground truncate">
-              {holding.assetName ?? '—'}
-            </h3>
-            <p className="mt-0.5 text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span className="text-foreground/85 font-medium">{monthlyAmt} / month</span>
-              {tenureMonths && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span>{tenureMonths}-month tenure</span>
-                </>
+        <CardContent className="p-5 relative">
+          <div className="grid grid-cols-[auto_1fr] gap-5 items-center">
+            <ProgressRing
+              pct={progressPct}
+              color={RD_ACCENT}
+              topLabel={rate != null && rate !== '' ? `${rate}%` : '—'}
+              bottomLabel="p.a."
+            />
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
+                Deposited
+              </p>
+              <p className="numeric-display-lg money-digits text-2xl mt-0.5">
+                {formatINR(holding.totalCost)}
+              </p>
+              <div className="mt-2.5 grid grid-cols-3 gap-x-3">
+                <StatBlock
+                  label="Current"
+                  value={holding.currentValue ? formatINR(holding.currentValue) : '—'}
+                />
+                <StatBlock
+                  label="Maturity"
+                  value={matValue ? formatINR(matValue.toString()) : '—'}
+                  accent
+                />
+                <StatBlock
+                  label="Earned"
+                  value={<PnLDisplay holding={holding} />}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Installment stamps */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground font-mono">
+                Installments stamped
+              </p>
+              <p className="font-mono text-[10px] tabular-nums">
+                <span className="font-semibold" style={{ color: RD_ACCENT }}>{installmentsDone}</span>
+                <span className="text-muted-foreground/60"> / {tenureMonths ?? '—'}</span>
+                <span className="ml-1.5 text-muted-foreground">({Math.round(progressPct)}%)</span>
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-[3px] items-center">
+              {Array.from({ length: showDots }, (_, i) => i < installmentsDone).map((paid, i) => (
+                <span
+                  key={i}
+                  title={`Month ${i + 1}${paid ? ' — paid' : ' — pending'}`}
+                  className={
+                    paid
+                      ? 'h-[10px] w-[10px] rounded-[2px] ring-1 ring-inset shadow-[inset_0_0_0_2px_hsl(var(--card))]'
+                      : 'h-[10px] w-[10px] rounded-[2px] border border-dashed border-border bg-muted/30'
+                  }
+                  style={
+                    paid
+                      ? { background: RD_ACCENT, boxShadow: `inset 0 0 0 2px hsl(var(--card))`, '--tw-ring-color': RD_ACCENT } as React.CSSProperties
+                      : undefined
+                  }
+                />
+              ))}
+              {overflow && (
+                <span className="ml-1 font-mono text-[10px] text-muted-foreground tabular-nums">
+                  +{dotCount - 24}
+                </span>
               )}
-              {freq && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span>{FREQ_LABELS[freq] ?? freq} compounding</span>
-                </>
-              )}
-              {holding.portfolioName && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span>{holding.portfolioName}</span>
-                </>
-              )}
-            </p>
+            </div>
           </div>
-          <div className="shrink-0 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1 text-right">
-            <p className="font-display text-xl text-accent leading-none tabular-nums">
-              {rate ?? '—'}
-              <span className="text-sm align-top">%</span>
-            </p>
-            <p className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.22em] text-accent/80">
-              per annum
-            </p>
-          </div>
-        </div>
 
-        {/* Stamp grid */}
-        <div className="mt-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              Installments stamped
-            </p>
-            <p className="font-mono text-[10px] tabular-nums text-foreground/80">
-              <span className="text-accent font-semibold">{installmentsDone}</span>
-              <span className="text-muted-foreground/60"> / {tenureMonths ?? '—'}</span>
-              <span className="ml-1.5 text-muted-foreground">({Math.round(progressPct)}%)</span>
-            </p>
+          {/* Footer */}
+          <div className="mt-4 pt-3 border-t border-dashed border-border/70 flex items-center justify-between text-xs">
+            {maturity ? (
+              <>
+                <span className="text-muted-foreground flex items-center gap-1.5">
+                  <CalendarClock className="h-3 w-3" />
+                  <span className="font-display-italic">Matures</span>
+                  <span className="tabular-nums text-foreground">{formatShortDate(maturity)}</span>
+                </span>
+                <MaturityBadge date={maturity} />
+              </>
+            ) : (
+              <span className="text-muted-foreground font-display-italic">Maturity date not set</span>
+            )}
+            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-accent transition-colors ml-auto" />
           </div>
-          <div className="flex flex-wrap gap-[3px]">
-            {stamps.map((paid, i) => (
-              <span
-                key={i}
-                title={`Month ${i + 1}${paid ? ' — paid' : ' — pending'}`}
-                className={
-                  paid
-                    ? 'h-[12px] w-[12px] rounded-[2px] bg-accent ring-1 ring-inset ring-accent/60 shadow-[inset_0_0_0_2px_hsl(var(--card))]'
-                    : 'h-[12px] w-[12px] rounded-[2px] border border-dashed border-border bg-muted/30'
-                }
-              />
-            ))}
-          </div>
-        </div>
 
-        {/* Maturity meta */}
-        <div className="mt-3 flex items-center justify-between flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          <span>Opened {formatShortDate(openDate)}</span>
-          <span>Matures {formatShortDate(maturity)}</span>
-          {maturity && <MaturityBadge date={maturity} />}
-        </div>
-
-        {/* Decorative rule */}
-        <div className="mt-3.5 rule-ornament"><span /></div>
-
-        {/* Stat row: 4 cols */}
-        <div className="mt-3.5 grid grid-cols-4 gap-3">
-          <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
-              Deposited
-            </p>
-            <p className="numeric-display text-[15px] text-foreground">
-              {formatINR(holding.totalCost)}
-            </p>
-          </div>
-          <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
-              Current Value
-            </p>
-            <p className="numeric-display text-[15px] text-foreground">
-              {holding.currentValue ? formatINR(holding.currentValue) : '—'}
-            </p>
-          </div>
-          <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-accent/80 mb-0.5">
-              Maturity Value
-            </p>
-            <p className="numeric-display text-[15px] text-accent">
-              {matValue ? formatINR(matValue.toString()) : '—'}
-            </p>
-          </div>
-          <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
-              Earned
-            </p>
-            <p className="numeric-display text-[15px]">
-              <PnLDisplay holding={holding} />
-            </p>
-          </div>
-        </div>
-      </div>
+          {isMatured && (
+            <div className="absolute top-3 right-3 -rotate-6 border-2 border-muted-foreground/50 px-2 py-0.5 rounded-sm font-display text-xs tracking-[0.18em] text-muted-foreground/70 pointer-events-none">
+              MATURED
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -632,7 +638,6 @@ export function FixedDepositsPage() {
     holdingsQueries.some((q) => q.isLoading) ||
     txnQueries.some((q) => q.isLoading);
 
-  // Flatten holdings
   const allHoldings: FDHolding[] = [];
   (portfolios ?? []).forEach((p, i) => {
     const rows: HoldingRow[] = holdingsQueries[i]?.data ?? [];
@@ -646,7 +651,6 @@ export function FixedDepositsPage() {
 
   const allTxns: TransactionDTO[] = txnQueries.flatMap((q) => q.data?.items ?? []);
 
-  // All transactions for this holding (any type) — used for primary/edit
   function txnsFor(h: FDHolding): TransactionDTO[] {
     const base = allTxns.filter(
       (t) => t.portfolioId === h.portfolioId && t.assetClass === h.assetClass,
@@ -668,8 +672,6 @@ export function FixedDepositsPage() {
       return nameMatched.sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
     }
 
-    // If there is exactly one candidate for this portfolio + asset class,
-    // treat it as the backing entry for click-through/edit.
     if (base.length === 1) {
       return [...base].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
     }
@@ -677,7 +679,6 @@ export function FixedDepositsPage() {
     return [];
   }
 
-  // DEPOSIT-type only — used for RD installment count
   function depositTxnsFor(h: FDHolding): TransactionDTO[] {
     return txnsFor(h).filter((t) => t.transactionType === 'DEPOSIT');
   }
@@ -748,23 +749,25 @@ export function FixedDepositsPage() {
       {/* Summary strip */}
       {!isLoading && allHoldings.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">
-          {[
-            { label: 'Total Invested', value: formatINR(totalInvested.toString()), className: '' },
-            { label: 'Current Value', value: formatINR(totalValue.toString()), className: '' },
+          {([
+            { label: 'Total Invested', value: formatINR(totalInvested.toString()), sub: `${allHoldings.length} deposit${allHoldings.length === 1 ? '' : 's'}`, valueClass: '' },
+            { label: 'Current Value', value: formatINR(totalValue.toString()), sub: 'live valuation', valueClass: '' },
             {
               label: 'Total Earnings',
               value: `${totalPnL.gte(0) ? '+' : ''}${formatINR(totalPnL.toString())}${pnlPct != null ? ` (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : ''}`,
-              className: totalPnL.gte(0) ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600',
+              sub: 'realised + unrealised',
+              valueClass: totalPnL.gte(0) ? 'text-positive' : 'text-negative',
             },
-          ].map((m) => (
-            <Card key={m.label} className="border-t-2 border-t-accent/70 dark:border-t-accent/60">
+          ] as { label: string; value: string; sub: string; valueClass: string }[]).map((m) => (
+            <Card key={m.label}>
               <CardContent className="px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
                   {m.label}
                 </p>
-                <p className={`text-xl font-semibold tabular-nums mt-1 ${m.className}`}>
+                <p className={`text-xl font-semibold tabular-nums mt-1 ${m.valueClass}`}>
                   {m.value}
                 </p>
+                <p className="text-xs text-muted-foreground">{m.sub}</p>
               </CardContent>
             </Card>
           ))}
@@ -772,16 +775,16 @@ export function FixedDepositsPage() {
       )}
 
       {isLoading && (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-32 rounded-xl border bg-muted/40 animate-pulse" />
+            <Card key={i} className="h-44 animate-pulse bg-muted/60" />
           ))}
         </div>
       )}
 
       {!isLoading && allHoldings.length === 0 && (
         <EmptyState
-          icon={PiggyBank}
+          icon={Landmark}
           title="No deposits yet"
           description="Add a Fixed or Recurring Deposit to start tracking."
           action={
@@ -792,19 +795,16 @@ export function FixedDepositsPage() {
         />
       )}
 
-      {/* Fixed Deposits */}
       {!isLoading && fdHoldings.length > 0 && (
         <section className="mb-8">
-          <div className="flex items-center gap-2.5 mb-3 px-0.5">
-            <span className="inline-flex items-center justify-center h-6 w-6 rounded bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/25 dark:ring-accent/35 text-accent">
-              <PiggyBank className="h-3.5 w-3.5" strokeWidth={1.8} />
-            </span>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
+          <div className="flex items-center gap-2 mb-3 px-0.5">
+            <PiggyBank className="h-3.5 w-3.5" style={{ color: FD_ACCENT }} strokeWidth={1.8} />
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: FD_ACCENT }}>
               Fixed Deposits
             </h3>
             <span className="text-xs text-muted-foreground">({fdHoldings.length})</span>
           </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {fdHoldings.map((h) => {
               const primary = primaryTxnFor(h);
               return (
@@ -824,19 +824,16 @@ export function FixedDepositsPage() {
         </section>
       )}
 
-      {/* Recurring Deposits */}
       {!isLoading && rdHoldings.length > 0 && (
         <section className="mb-8">
-          <div className="flex items-center gap-2.5 mb-3 px-0.5">
-            <span className="inline-flex items-center justify-center h-6 w-6 rounded bg-accent/10 dark:bg-accent/15 ring-1 ring-accent/25 dark:ring-accent/35 text-accent">
-              <CalendarClock className="h-3.5 w-3.5" strokeWidth={1.8} />
-            </span>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
+          <div className="flex items-center gap-2 mb-3 px-0.5">
+            <CalendarClock className="h-3.5 w-3.5" style={{ color: RD_ACCENT }} strokeWidth={1.8} />
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: RD_ACCENT }}>
               Recurring Deposits
             </h3>
             <span className="text-xs text-muted-foreground">({rdHoldings.length})</span>
           </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {rdHoldings.map((h) => {
               const primary = primaryTxnFor(h);
               const depositOnly = depositTxnsFor(h);
