@@ -34,7 +34,7 @@ export const Money = React.forwardRef<HTMLSpanElement, MoneyProps>(
         {...props}
       >
         {sign && (
-          <span aria-hidden="true" className="mr-[0.04em]">{sign}</span>
+          <span aria-hidden="true" className="money-sign mr-[0.04em]">{sign}</span>
         )}
         {symbol && (
           <span

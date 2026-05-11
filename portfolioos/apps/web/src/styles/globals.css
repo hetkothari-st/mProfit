@@ -399,16 +399,39 @@
   .recharts-cartesian-axis-tick-value { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
   .recharts-legend-item-text { font-size: 12px !important; }
 
-  /* Privacy mode: visually mask sensitive numeric values app-wide.
-     Blur preserves layout widths so cards/tables do not jump when toggled. */
+  /* Privacy mode: replace numeric values with clean redaction bars.
+     Text stays in DOM so layout is preserved; color becomes transparent,
+     background fills the text bounding box to create a solid pill bar. */
   .privacy-mask .money-digits,
-  .privacy-mask .money-hero-digits,
-  .privacy-mask .numeric-display,
-  .privacy-mask .numeric-display-lg,
-  .privacy-mask .numeric,
-  .privacy-mask .tabular-nums {
-    filter: blur(6px);
-    transition: filter 180ms ease;
+  .privacy-mask .money-hero-digits {
+    color: transparent !important;
+    text-shadow: none !important;
+    background: hsl(var(--foreground) / 0.11);
+    border-radius: 4px;
     user-select: none;
+    pointer-events: none;
+    transition: color 180ms ease, background-color 180ms ease;
+  }
+
+  /* Hide gain/loss sign (+ / -) — reveals directional info */
+  .privacy-mask .money-sign {
+    color: transparent !important;
+    transition: color 180ms ease;
+  }
+
+  /* Non-Money numeric containers: bare XIRR %, counts, percentages, allocation values, trend badges.
+     :not(:has(.money-digits)) guards against styling Money's outer wrapper (which
+     already has its digits handled above) and creating a double background box. */
+  .privacy-mask .numeric-display:not(:has(.money-digits)),
+  .privacy-mask .numeric-display-lg:not(:has(.money-digits)),
+  .privacy-mask .numeric:not(:has(.money-digits)),
+  .privacy-mask .tabular-nums:not(:has(.money-digits)) {
+    color: transparent !important;
+    text-shadow: none !important;
+    background: hsl(var(--foreground) / 0.11);
+    border-radius: 4px;
+    user-select: none;
+    pointer-events: none;
+    transition: color 180ms ease, background-color 180ms ease;
   }
 }
