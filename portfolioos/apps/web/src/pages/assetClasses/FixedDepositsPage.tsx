@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { CalendarClock, ChevronDown, Clock, Pencil, PiggyBank, Plus } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
@@ -57,39 +57,68 @@ function MaturityBadge({ date }: { date: string }) {
   );
 }
 
-function FDGlyph({ className = '' }: { className?: string }) {
+function WaxSeal({ className = '' }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 18" fill="none" aria-hidden>
-      {/* Certificate / bond document */}
-      <rect x="1.5" y="1" width="21" height="16" rx="1.5" className="stroke-foreground/35 dark:stroke-foreground/40" strokeWidth="0.7" />
-      {/* Header rule */}
-      <rect x="1.5" y="1" width="21" height="5" rx="1.5" className="fill-accent/30 dark:fill-accent/35" />
-      {/* Text lines */}
-      <line x1="4.5" y1="9.5" x2="14" y2="9.5" className="stroke-foreground/30" strokeWidth="0.7" />
-      <line x1="4.5" y1="12" x2="11" y2="12" className="stroke-foreground/20" strokeWidth="0.7" />
-      {/* Seal circle */}
-      <circle cx="18.5" cy="12" r="3" className="stroke-accent/60 dark:stroke-accent/70" strokeWidth="0.8" />
-      <circle cx="18.5" cy="12" r="1.2" className="fill-accent/40 dark:fill-accent/50" />
+    <svg className={className} viewBox="0 0 64 64" fill="none" aria-hidden>
+      <defs>
+        <radialGradient id="waxFill" cx="0.35" cy="0.32" r="0.75">
+          <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity="0.95" />
+          <stop offset="55%" stopColor="hsl(var(--accent))" stopOpacity="0.78" />
+          <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="0.55" />
+        </radialGradient>
+      </defs>
+      {/* Scalloped outer ring (wax drip silhouette) */}
+      <path
+        d="M32 4 L37 8 L42 6 L44 12 L50 13 L50 19 L55 22 L52 28 L57 33 L52 37 L55 43 L50 45 L50 51 L44 52 L42 58 L37 56 L32 60 L27 56 L22 58 L20 52 L14 51 L14 45 L9 43 L12 37 L7 33 L12 28 L9 22 L14 19 L14 13 L20 12 L22 6 L27 8 Z"
+        fill="url(#waxFill)"
+        stroke="hsl(var(--accent))"
+        strokeWidth="0.6"
+        strokeOpacity="0.65"
+      />
+      {/* Inner ring */}
+      <circle cx="32" cy="32" r="17" fill="none" stroke="hsl(var(--accent-foreground))" strokeOpacity="0.55" strokeWidth="0.8" strokeDasharray="2 2" />
+      {/* Monogram star */}
+      <path
+        d="M32 19 L34 28 L43 28 L36 33 L39 42 L32 36.5 L25 42 L28 33 L21 28 L30 28 Z"
+        fill="hsl(var(--accent-foreground))"
+        fillOpacity="0.75"
+      />
+      {/* Highlight crescent */}
+      <path
+        d="M22 18 Q26 14 32 14"
+        stroke="hsl(0 0% 100%)"
+        strokeOpacity="0.35"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        fill="none"
+      />
     </svg>
   );
 }
 
-function RDGlyph({ className = '' }: { className?: string }) {
+function CornerOrnament({ className = '' }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 18" fill="none" aria-hidden>
-      {/* Calendar outline */}
-      <rect x="2" y="3" width="20" height="14" rx="1.5" className="stroke-foreground/35 dark:stroke-foreground/40" strokeWidth="0.7" />
-      {/* Calendar header */}
-      <rect x="2" y="3" width="20" height="4.5" rx="1.5" className="fill-accent/25 dark:fill-accent/30" />
-      {/* Installment dots row 1: 4 filled = paid */}
-      <circle cx="6" cy="11" r="1.3" className="fill-accent/70 dark:fill-accent/75" />
-      <circle cx="10" cy="11" r="1.3" className="fill-accent/70 dark:fill-accent/75" />
-      <circle cx="14" cy="11" r="1.3" className="fill-accent/70 dark:fill-accent/75" />
-      {/* Dot row 2: remaining */}
-      <circle cx="18" cy="11" r="1.3" className="fill-foreground/15 dark:fill-foreground/20" />
-      <circle cx="6" cy="14.5" r="1.3" className="fill-foreground/15 dark:fill-foreground/20" />
-      <circle cx="10" cy="14.5" r="1.3" className="fill-foreground/15 dark:fill-foreground/20" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M2 2 L10 2 M2 2 L2 10" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" />
+      <path d="M5 2 L5 5 L2 5" stroke="currentColor" strokeWidth="0.6" strokeOpacity="0.6" />
+      <circle cx="2" cy="2" r="0.8" fill="currentColor" />
     </svg>
+  );
+}
+
+function DiamondMark({
+  className = '',
+  style,
+}: {
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <span
+      className={`inline-block rotate-45 bg-accent ${className}`}
+      style={style}
+      aria-hidden
+    />
   );
 }
 
@@ -126,6 +155,7 @@ function FDCard({
   const maturity = primaryTxn?.maturityDate;
   const openDate = primaryTxn?.tradeDate;
 
+  const tenureMonths = openDate && maturity ? monthsBetween(openDate, maturity) : null;
   const elapsedPct = openDate && maturity
     ? (() => {
         const start = new Date(`${openDate}T00:00:00Z`).getTime();
@@ -135,127 +165,146 @@ function FDCard({
       })()
     : null;
 
+  const certNo = holding.id.slice(-6).toUpperCase();
+  const isMatured = maturity ? daysUntil(maturity) < 0 : false;
+
   return (
     <div
       onClick={onClick}
-      className="group relative rounded-2xl border border-amber-200/60 dark:border-amber-900/40 bg-card/95 dark:bg-card/90 hover:border-amber-300/80 dark:hover:border-amber-700/60 hover:shadow-lg hover:shadow-amber-500/10 dark:hover:shadow-amber-900/20 transition-all cursor-pointer overflow-hidden"
+      className="group relative paper rounded-lg border border-border hover:border-accent/40 shadow-elev hover:shadow-elev-lg transition-all cursor-pointer overflow-hidden"
     >
-      <div className="h-1.5 w-full bg-gradient-to-r from-amber-400/80 via-amber-500/70 to-amber-300/70 dark:from-amber-700/80 dark:via-amber-600/70 dark:to-amber-500/70" />
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,rgba(245,158,11,0.12),transparent_45%),radial-gradient(circle_at_90%_10%,rgba(251,191,36,0.08),transparent_35%)] dark:bg-[radial-gradient(circle_at_20%_0%,rgba(180,83,9,0.28),transparent_45%),radial-gradient(circle_at_90%_10%,rgba(146,64,14,0.2),transparent_35%)]" />
-      {/* Editorial card header */}
-      <div className="relative border-b border-border/70 dark:border-border/60">
-        <div
-          className="absolute inset-0 opacity-[0.05] dark:opacity-[0.08] pointer-events-none text-foreground"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle, currentColor 0.6px, transparent 1px)',
-            backgroundSize: '14px 14px',
-          }}
-        />
-        <div className="relative flex items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-amber-50/70 via-card to-amber-50/60 dark:from-amber-950/20 dark:via-card dark:to-amber-900/15">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="inline-flex items-center justify-center h-9 w-10 shrink-0 rounded-md bg-amber-100/70 dark:bg-amber-900/30 ring-1 ring-amber-300/70 dark:ring-amber-700/60 text-amber-700 dark:text-amber-300">
-              <FDGlyph className="h-5 w-6" />
+      {/* Top double-rule brass band */}
+      <div className="h-[3px] w-full bg-gradient-to-r from-accent/40 via-accent/85 to-accent/40" />
+      <div className="h-px w-full bg-accent/30" />
+
+      {/* Subtle radial wash from seal */}
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_88%_22%,hsl(var(--accent)/0.10),transparent_55%)]" />
+
+      {/* Corner filigree */}
+      <CornerOrnament className="pointer-events-none absolute top-[10px] left-[10px] h-4 w-4 text-accent/45" />
+      <CornerOrnament className="pointer-events-none absolute top-[10px] right-[10px] h-4 w-4 text-accent/45 -scale-x-100" />
+      <CornerOrnament className="pointer-events-none absolute bottom-[10px] left-[10px] h-4 w-4 text-accent/45 -scale-y-100" />
+      <CornerOrnament className="pointer-events-none absolute bottom-[10px] right-[10px] h-4 w-4 text-accent/45 -scale-100" />
+
+      <div className="relative px-6 pt-5 pb-5">
+        {/* Eyebrow rule */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <DiamondMark className="h-1.5 w-1.5 shrink-0 opacity-80" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-accent leading-none">
+              Fixed Deposit
             </span>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-semibold text-sm leading-tight truncate max-w-[220px]">
-                  {holding.assetName ?? '—'}
-                </p>
-                <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-900/35 ring-1 ring-inset ring-amber-300/70 dark:ring-amber-700/60 px-1.5 py-0.5 rounded">
-                  FD
-                </span>
-                <span className="shrink-0 hidden sm:inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-200 bg-amber-100/60 dark:bg-amber-900/25 border border-amber-200/80 dark:border-amber-800/60">
-                  One-time deposit
-                </span>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                {holding.portfolioName && <span>{holding.portfolioName}</span>}
-                {holding.isin && (
-                  <>
-                    {holding.portfolioName && <span className="text-muted-foreground/30">·</span>}
-                    <span className="font-mono">{holding.isin}</span>
-                  </>
-                )}
-              </div>
-            </div>
+            <span className="text-accent/30 select-none">·</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground leading-none">
+              Certificate № <span className="text-foreground/80">{certNo}</span>
+            </span>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            {rate && (
-              <div className="text-right">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground leading-none mb-0.5">
-                  Rate
-                </p>
-                <p className="text-lg font-bold text-amber-700 dark:text-amber-300 tabular-nums leading-none">
-                  {rate}%
-                </p>
-                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">p.a.</p>
+          <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
+        </div>
+
+        {/* Headline + rate */}
+        <div className="mt-3 flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="font-display text-[26px] leading-[1.1] text-foreground truncate">
+              {holding.assetName ?? '—'}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {tenureMonths ? <span>{tenureMonths}-month deposit</span> : <span>Term deposit</span>}
+              {freq && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>{FREQ_LABELS[freq] ?? freq} payout</span>
+                </>
+              )}
+              {holding.portfolioName && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>{holding.portfolioName}</span>
+                </>
+              )}
+            </p>
+          </div>
+          {rate != null && (
+            <div className="shrink-0 text-right">
+              <p className="font-display text-3xl text-accent leading-none tabular-nums">
+                {rate}
+                <span className="text-xl align-top">%</span>
+              </p>
+              <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.28em] text-muted-foreground">
+                per annum
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Body: seal + timeline */}
+        <div className="mt-5 grid grid-cols-[1fr_auto] gap-5 items-center">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground">
+              <span>{isMatured ? 'Matured' : 'Principal locked'}</span>
+              {maturity && <MaturityBadge date={maturity} />}
+            </div>
+            {elapsedPct !== null && openDate && maturity && (
+              <div className="mt-2.5">
+                <div className="relative h-[6px] rounded-sm bg-muted/70 overflow-visible">
+                  {/* Brass fill */}
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-sm bg-gradient-to-r from-accent/70 via-accent to-accent/80 shadow-[0_0_0_0.5px_hsl(var(--accent)/0.4)]"
+                    style={{ width: `${elapsedPct}%` }}
+                  />
+                  {/* Marker diamond */}
+                  <DiamondMark
+                    className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 ring-2 ring-card"
+                    style={{ left: `calc(${elapsedPct}% - 5px)` }}
+                  />
+                </div>
+                <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
+                  <span>{openDate}</span>
+                  <span className="text-foreground/70">
+                    {Math.round(elapsedPct)}% of term
+                  </span>
+                  <span>{maturity}</span>
+                </div>
               </div>
             )}
-            <Pencil className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
+            {!elapsedPct && maturity && (
+              <p className="mt-2 text-xs text-muted-foreground">Matures {maturity}</p>
+            )}
+            {holding.isin && (
+              <p className="mt-2 font-mono text-[10px] text-muted-foreground/70 tracking-wide">
+                {holding.isin}
+              </p>
+            )}
           </div>
-        </div>
-      </div>
-
-      {/* Card body */}
-      <div className="px-4 py-3">
-        {/* Meta line */}
-        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
-          {freq && <span>{FREQ_LABELS[freq] ?? freq} payout</span>}
-          {openDate && (
-            <>
-              {freq && <span className="text-muted-foreground/30">·</span>}
-              <span>Opened {openDate}</span>
-            </>
-          )}
-          {maturity && (
-            <>
-              <span className="text-muted-foreground/30">·</span>
-              <span>Matures {maturity}</span>
-              <MaturityBadge date={maturity} />
-            </>
-          )}
+          <WaxSeal className="h-16 w-16 shrink-0 drop-shadow-[0_2px_4px_hsl(var(--accent)/0.35)]" />
         </div>
 
-        {/* Maturity timeline */}
-        {elapsedPct !== null && (
-          <div className="mt-2.5 flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums w-[72px] truncate">
-              {openDate}
-            </span>
-            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full bg-accent/70 dark:bg-accent/60 transition-all"
-                style={{ width: `${elapsedPct}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums w-[72px] truncate text-right">
-              {maturity}
-            </span>
-          </div>
-        )}
+        {/* Decorative rule */}
+        <div className="mt-5 rule-ornament"><span /></div>
 
-        {/* Stats */}
-        <div className="mt-3 grid grid-cols-3 gap-4 pt-3 border-t border-border">
+        {/* Stat trio */}
+        <div className="mt-5 grid grid-cols-3 gap-4">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
               Principal
             </p>
-            <p className="tabular-nums font-semibold text-sm">{formatINR(holding.totalCost)}</p>
+            <p className="numeric-display text-base text-foreground">
+              {formatINR(holding.totalCost)}
+            </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
               Current Value
             </p>
-            <p className="tabular-nums font-semibold text-sm">
+            <p className="numeric-display text-base text-foreground">
               {holding.currentValue ? formatINR(holding.currentValue) : '—'}
             </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
-              Interest Earned
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+              Earned
             </p>
-            <p className="tabular-nums font-semibold text-sm">
+            <p className="numeric-display text-base">
               <PnLDisplay holding={holding} />
             </p>
           </div>
@@ -284,6 +333,8 @@ function RDCard({
 
   const tenureMonths = openDate && maturity ? monthsBetween(openDate, maturity) : null;
   const installmentsDone = allDepositTxns.length;
+  const totalStamps = tenureMonths && tenureMonths > 0 ? tenureMonths : Math.max(installmentsDone, 1);
+  const stamps = Array.from({ length: totalStamps }, (_, i) => i < installmentsDone);
   const progressPct = tenureMonths && tenureMonths > 0
     ? Math.min(100, (installmentsDone / tenureMonths) * 100)
     : null;
@@ -291,114 +342,165 @@ function RDCard({
   return (
     <div
       onClick={onClick}
-      className="group relative rounded-2xl border border-cyan-200/60 dark:border-cyan-900/40 bg-card/95 dark:bg-card/90 hover:border-cyan-300/80 dark:hover:border-cyan-700/60 hover:shadow-lg hover:shadow-cyan-500/10 dark:hover:shadow-cyan-900/20 transition-all cursor-pointer overflow-hidden"
+      className="group relative rounded-lg border border-border bg-card hover:border-accent/40 shadow-elev hover:shadow-elev-lg transition-all cursor-pointer overflow-hidden"
     >
-      <div className="h-1.5 w-full bg-gradient-to-r from-cyan-400/80 via-sky-500/70 to-indigo-400/70 dark:from-cyan-700/80 dark:via-sky-700/70 dark:to-indigo-700/70" />
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_85%_0%,rgba(14,165,233,0.12),transparent_38%),radial-gradient(circle_at_10%_0%,rgba(34,211,238,0.1),transparent_35%)] dark:bg-[radial-gradient(circle_at_85%_0%,rgba(3,105,161,0.25),transparent_38%),radial-gradient(circle_at_10%_0%,rgba(8,145,178,0.2),transparent_35%)]" />
-      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-cyan-400/70 dark:bg-cyan-700/60 rounded-l-2xl" />
+      {/* Ruled passbook lines */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.06] dark:opacity-[0.08]"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(to bottom, transparent 0, transparent 31px, hsl(var(--accent)) 31px, hsl(var(--accent)) 32px)',
+        }}
+      />
+      {/* Red top fold line */}
+      <div className="absolute inset-x-0 top-0 h-px bg-[hsl(var(--destructive)/0.45)]" />
+      <div className="absolute inset-x-0 top-[3px] h-px bg-[hsl(var(--destructive)/0.25)]" />
 
-      <div className="pl-5 pr-4 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="inline-flex items-center justify-center h-9 w-9 shrink-0 rounded-md bg-cyan-100/70 dark:bg-cyan-900/30 ring-1 ring-cyan-300/70 dark:ring-cyan-700/60 text-cyan-700 dark:text-cyan-300">
-              <CalendarClock className="h-4 w-4" strokeWidth={1.8} />
+      {/* Book binding (left spine) */}
+      <div className="absolute inset-y-0 left-0 w-[10px] bg-gradient-to-r from-accent/20 via-accent/10 to-transparent" />
+      <div className="absolute inset-y-0 left-[10px] w-px bg-accent/30" />
+      {/* Stitch holes */}
+      <div className="absolute inset-y-0 left-[3px] flex flex-col justify-evenly py-4 pointer-events-none">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <span
+            key={i}
+            className="h-[5px] w-[5px] rounded-full bg-accent/60 ring-2 ring-card shadow-[inset_0_0_0_0.5px_hsl(var(--accent)/0.6)]"
+          />
+        ))}
+      </div>
+
+      <div className="relative pl-7 pr-6 py-5">
+        {/* Eyebrow */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <DiamondMark className="h-1.5 w-1.5 shrink-0 opacity-80" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-accent leading-none">
+              Recurring Deposit
             </span>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-semibold text-sm truncate max-w-[240px]">{holding.assetName ?? '—'}</p>
-                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-cyan-700 dark:text-cyan-300 bg-cyan-100/70 dark:bg-cyan-900/35 ring-1 ring-inset ring-cyan-300/70 dark:ring-cyan-700/60">
-                  RD
-                </span>
-                <span className="shrink-0 hidden sm:inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium text-cyan-700 dark:text-cyan-200 bg-cyan-100/60 dark:bg-cyan-900/25 border border-cyan-200/80 dark:border-cyan-800/60">
-                  Monthly installments
-                </span>
-              </div>
-              {holding.isin && (
-                <p className="text-xs text-muted-foreground mt-0.5 font-mono">{holding.isin}</p>
+            <span className="text-accent/30 select-none">·</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground leading-none">
+              Passbook
+            </span>
+          </div>
+          <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
+        </div>
+
+        {/* Headline + rate */}
+        <div className="mt-3 flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="font-display text-[26px] leading-[1.1] text-foreground truncate">
+              {holding.assetName ?? '—'}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {monthlyAmt && <span className="text-foreground/85 font-medium">{monthlyAmt} / month</span>}
+              {tenureMonths && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>{tenureMonths}-month tenure</span>
+                </>
               )}
+              {freq && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>{FREQ_LABELS[freq] ?? freq} compounding</span>
+                </>
+              )}
+              {holding.portfolioName && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>{holding.portfolioName}</span>
+                </>
+              )}
+            </p>
+          </div>
+          {rate != null && (
+            <div className="shrink-0 text-right">
+              <p className="font-display text-3xl text-accent leading-none tabular-nums">
+                {rate}
+                <span className="text-xl align-top">%</span>
+              </p>
+              <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.28em] text-muted-foreground">
+                per annum
+              </p>
             </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0 mt-0.5">
-            {rate && (
-              <span className="rounded-full border border-cyan-300/70 dark:border-cyan-700/60 bg-cyan-100/70 dark:bg-cyan-900/30 px-2.5 py-0.5 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
-                {rate}% p.a.
-              </span>
-            )}
-            <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-          </div>
-        </div>
-
-        <div className="mt-2 flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
-          {monthlyAmt && <span>{monthlyAmt}/month</span>}
-          {tenureMonths && (
-            <>
-              <span className="text-muted-foreground/30">·</span>
-              <span>{tenureMonths} months tenure</span>
-            </>
-          )}
-          {freq && (
-            <>
-              <span className="text-muted-foreground/30">·</span>
-              <span>{FREQ_LABELS[freq] ?? freq} compounding</span>
-            </>
-          )}
-          {holding.portfolioName && (
-            <>
-              <span className="text-muted-foreground/30">·</span>
-              <span>{holding.portfolioName}</span>
-            </>
-          )}
-          {openDate && (
-            <>
-              <span className="text-muted-foreground/30">·</span>
-              <span>Since {openDate}</span>
-            </>
           )}
         </div>
 
-        {progressPct !== null && (
-          <div className="mt-2.5 flex items-center gap-2.5">
-            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full bg-accent/70 dark:bg-accent/60 transition-all"
-                style={{ width: `${progressPct}%` }}
+        {/* Stamp grid — passbook installment marks */}
+        <div className="mt-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              Installments stamped
+            </p>
+            <p className="font-mono text-[10px] tabular-nums text-foreground/80">
+              <span className="text-accent font-semibold">{installmentsDone}</span>
+              <span className="text-muted-foreground/60"> / {tenureMonths ?? '—'}</span>
+              {progressPct !== null && (
+                <span className="ml-2 text-muted-foreground">({Math.round(progressPct)}%)</span>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-[3px]">
+            {stamps.map((paid, i) => (
+              <span
+                key={i}
+                title={`Month ${i + 1}${paid ? ' — paid' : ' — pending'}`}
+                className={
+                  paid
+                    ? 'h-[14px] w-[14px] rounded-[2px] bg-accent/85 ring-1 ring-inset ring-accent/50 shadow-[inset_0_-1px_0_hsl(var(--accent)/0.6),inset_0_0_0_2px_hsl(var(--card))]'
+                    : 'h-[14px] w-[14px] rounded-[2px] border border-dashed border-border bg-muted/30'
+                }
               />
-            </div>
-            <span className="text-[10px] tabular-nums text-muted-foreground shrink-0">
-              {installmentsDone}/{tenureMonths} installments
-            </span>
+            ))}
           </div>
-        )}
+        </div>
 
+        {/* Maturity meta */}
         {maturity && (
-          <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-4 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
             <span>Matures {maturity}</span>
             <MaturityBadge date={maturity} />
+            {openDate && (
+              <>
+                <span className="text-muted-foreground/30">·</span>
+                <span>Opened {openDate}</span>
+              </>
+            )}
           </div>
         )}
 
-        <div className="mt-3 border-t border-border" />
+        {holding.isin && (
+          <p className="mt-1 font-mono text-[10px] text-muted-foreground/70 tracking-wide">
+            {holding.isin}
+          </p>
+        )}
 
-        <div className="mt-3 grid grid-cols-3 gap-4">
+        {/* Decorative rule */}
+        <div className="mt-5 rule-ornament"><span /></div>
+
+        {/* Stat trio */}
+        <div className="mt-5 grid grid-cols-3 gap-4">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
-              Total Deposited
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+              Deposited
             </p>
-            <p className="tabular-nums font-semibold text-sm">{formatINR(holding.totalCost)}</p>
+            <p className="numeric-display text-base text-foreground">
+              {formatINR(holding.totalCost)}
+            </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
               Current Value
             </p>
-            <p className="tabular-nums font-semibold text-sm">
+            <p className="numeric-display text-base text-foreground">
               {holding.currentValue ? formatINR(holding.currentValue) : '—'}
             </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium mb-1">
-              Interest Earned
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+              Earned
             </p>
-            <p className="tabular-nums font-semibold text-sm">
+            <p className="numeric-display text-base">
               <PnLDisplay holding={holding} />
             </p>
           </div>
