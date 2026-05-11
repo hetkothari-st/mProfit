@@ -177,7 +177,7 @@ function Ledger({
   return (
     <div className="px-5 py-4 first:pl-0 last:pr-0">
       <p className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80 font-medium">{label}</p>
-      <p className={`mt-2 font-serif text-2xl leading-none tabular-nums ${colour}`}>{value}</p>
+      <p className={`mt-2 text-2xl font-semibold leading-none tabular-nums ${colour}`}>{value}</p>
       {hint && <p className="mt-1.5 text-[11px] text-muted-foreground/70">{hint}</p>}
     </div>
   );
@@ -208,14 +208,14 @@ function CostBar({ invested, current, accent }: { invested: Decimal; current: De
           <div className="relative flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
             <div className={`absolute inset-y-0 left-0 ${investedColor} rounded-full transition-all duration-700`} style={{ width: `${investedPct}%` }} />
           </div>
-          <span className="font-serif text-sm tabular-nums w-32 text-right">{formatINR(invested.toString())}</span>
+          <span className="font-semibold text-sm tabular-nums w-32 text-right">{formatINR(invested.toString())}</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="w-20 text-[10px] tracking-[0.18em] uppercase text-muted-foreground">Today</span>
           <div className="relative flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
             <div className={`absolute inset-y-0 left-0 ${currentColor} rounded-full transition-all duration-700`} style={{ width: `${currentPct}%` }} />
           </div>
-          <span className="font-serif text-sm tabular-nums w-32 text-right">{formatINR(current.toString())}</span>
+          <span className="font-semibold text-sm tabular-nums w-32 text-right">{formatINR(current.toString())}</span>
         </div>
       </div>
     </div>
@@ -383,7 +383,7 @@ export function GoldAssetDetailPage() {
                 </div>
               )}
               <div className="min-w-0">
-                <h1 className="font-serif text-[2.4rem] sm:text-[3.2rem] leading-[1.05] tracking-tight">
+                <h1 className="text-[2.4rem] sm:text-[3.2rem] font-bold leading-[1.05] tracking-tight">
                   {displayName || assetName}
                 </h1>
                 {holding.isin && (
@@ -412,14 +412,14 @@ export function GoldAssetDetailPage() {
                   </span>
                 )}
               </div>
-              <p className={`font-serif text-[3.6rem] sm:text-[4.6rem] leading-none tabular-nums tracking-tight ${
+              <p className={`text-[3.6rem] sm:text-[4.6rem] font-bold leading-none tabular-nums tracking-tight ${
                 accent === 'gold' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-700 dark:text-slate-200'
               }`}>
                 {currentVal ? formatINR(currentVal.toString()) : '—'}
               </p>
               {livePricePerUnit && (
                 <p className="mt-2 text-sm text-muted-foreground tabular-nums">
-                  <span className="font-serif text-base text-foreground">{formatINR(livePricePerUnit.toString())}</span>
+                  <span className="font-semibold text-base text-foreground">{formatINR(livePricePerUnit.toString())}</span>
                   <span className="mx-1 text-muted-foreground/60">/</span>
                   <span>{unitLabel}</span>
                   {purityTag && <span className="ml-2 text-muted-foreground/70">· {purityTag}</span>}
@@ -446,7 +446,7 @@ export function GoldAssetDetailPage() {
                     : <TrendingDown className="h-3.5 w-3.5 text-rose-700 dark:text-rose-300" />}
                 </span>
                 <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground font-medium">Unrealised</span>
-                <span className={`font-serif text-lg tabular-nums ${isGain ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
+                <span className={`text-lg font-semibold tabular-nums ${isGain ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
                   {isGain ? '+' : ''}{formatINR(pnl.toString())}
                 </span>
                 {pnlPct != null && (
@@ -485,36 +485,34 @@ export function GoldAssetDetailPage() {
             <Ledger
               label={isPhysical ? 'Weight' : 'Units'}
               value={`${new Decimal(holding.quantity).toFixed(isPhysical ? 3 : 2)}${isPhysical ? ' g' : ''}`}
-              hint={isPhysical ? 'fine weight' : `held quantity`}
+              hint={isPhysical ? 'fine weight' : 'held quantity'}
             />
             <Ledger
               label="Avg Cost"
               value={formatINR(holding.avgCostPrice)}
               hint={`per ${unitLabel}`}
             />
-            {holding.xirr != null && (
-              <Ledger
-                label="XIRR"
-                value={`${holding.xirr >= 0 ? '+' : ''}${(holding.xirr * 100).toFixed(2)}%`}
-                hint="annualised"
-                highlight={holding.xirr >= 0 ? 'positive' : 'negative'}
-              />
-            )}
-            {holdHuman && (
-              <Ledger
-                label="Held For"
-                value={holdHuman}
-                hint={firstTxnDate ? `since ${firstTxnDate}` : undefined}
-              />
-            )}
-            {totalSold.gt(0) && (
-              <Ledger
-                label="Realised"
-                value={formatINR(totalSold.toString())}
-                hint={`${sellTxns.length} ${sellTxns.length === 1 ? 'sale' : 'sales'}`}
-                highlight="accent"
-              />
-            )}
+            <Ledger
+              label="XIRR"
+              value={holding.xirr != null
+                ? `${holding.xirr >= 0 ? '+' : ''}${(holding.xirr * 100).toFixed(2)}%`
+                : '—'}
+              hint={holding.xirr != null ? 'annualised' : 'not yet computable'}
+              highlight={holding.xirr == null ? undefined : holding.xirr >= 0 ? 'positive' : 'negative'}
+            />
+            <Ledger
+              label="Held For"
+              value={holdHuman ?? '—'}
+              hint={firstTxnDate ? `since ${firstTxnDate}` : undefined}
+            />
+            <Ledger
+              label="Realised"
+              value={totalSold.gt(0) ? formatINR(totalSold.toString()) : '—'}
+              hint={totalSold.gt(0)
+                ? `${sellTxns.length} ${sellTxns.length === 1 ? 'sale' : 'sales'}`
+                : 'no sales yet'}
+              highlight={totalSold.gt(0) ? 'accent' : undefined}
+            />
           </div>
         </section>
 
@@ -524,19 +522,19 @@ export function GoldAssetDetailPage() {
             <div className="flex items-center gap-2 text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
               <Calendar className="h-3 w-3" /> First Acquired
             </div>
-            <p className="mt-2 font-serif text-xl tabular-nums">{firstTxnDate ?? '—'}</p>
+            <p className="mt-2 text-xl font-semibold tabular-nums">{firstTxnDate ?? '—'}</p>
           </div>
           <div className="rounded-xl border bg-[hsl(var(--card))]/60 p-5">
             <div className="flex items-center gap-2 text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
               <Activity className="h-3 w-3" /> Last Activity
             </div>
-            <p className="mt-2 font-serif text-xl tabular-nums">{lastTxnDate ?? '—'}</p>
+            <p className="mt-2 text-xl font-semibold tabular-nums">{lastTxnDate ?? '—'}</p>
           </div>
           <div className="rounded-xl border bg-[hsl(var(--card))]/60 p-5">
             <div className="flex items-center gap-2 text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
               <Scale className="h-3 w-3" /> Net Position
             </div>
-            <p className="mt-2 font-serif text-xl tabular-nums">
+            <p className="mt-2 text-xl font-semibold tabular-nums">
               {formatINR(totalBought.minus(totalSold).toString())}
             </p>
             <p className="text-[11px] text-muted-foreground/70 mt-0.5 tabular-nums">
@@ -550,7 +548,7 @@ export function GoldAssetDetailPage() {
           <header className="flex items-baseline justify-between mb-5">
             <div>
               <p className="text-[10px] tracking-[0.28em] uppercase text-muted-foreground/80 font-medium">Provenance Log</p>
-              <h2 className="font-serif text-2xl mt-1">Transactions</h2>
+              <h2 className="text-2xl font-bold mt-1">Transactions</h2>
             </div>
             <p className="text-xs text-muted-foreground tabular-nums">
               {transactions.length} {transactions.length === 1 ? 'entry' : 'entries'}
@@ -619,7 +617,7 @@ export function GoldAssetDetailPage() {
                       {/* Amount + edit */}
                       <div className="text-right shrink-0 flex items-center gap-2">
                         <div>
-                          <p className="font-serif text-lg tabular-nums leading-tight">{formatINR(amount.toString())}</p>
+                          <p className="text-lg font-semibold tabular-nums leading-tight">{formatINR(amount.toString())}</p>
                           {txnPhotos.length > 1 && (
                             <p className="text-[10px] tracking-wider uppercase text-muted-foreground/60 mt-0.5">{txnPhotos.length} photos</p>
                           )}
