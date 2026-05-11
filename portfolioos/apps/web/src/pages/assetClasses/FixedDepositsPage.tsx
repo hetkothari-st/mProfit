@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { CalendarClock, ChevronDown, Clock, Pencil, PiggyBank, Plus } from 'lucide-react';
+import { CalendarClock, ChevronDown, Clock, Lock, Pencil, PiggyBank, Plus, ShieldCheck } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import type { AssetClass, HoldingRow, TransactionDTO } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -122,55 +122,6 @@ function MaturityBadge({ date }: { date: string }) {
   );
 }
 
-function WaxSeal({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 64 64" fill="none" aria-hidden>
-      <defs>
-        <radialGradient id="waxFill" cx="0.35" cy="0.32" r="0.75">
-          <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity="0.95" />
-          <stop offset="55%" stopColor="hsl(var(--accent))" stopOpacity="0.78" />
-          <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="0.55" />
-        </radialGradient>
-      </defs>
-      {/* Scalloped outer ring (wax drip silhouette) */}
-      <path
-        d="M32 4 L37 8 L42 6 L44 12 L50 13 L50 19 L55 22 L52 28 L57 33 L52 37 L55 43 L50 45 L50 51 L44 52 L42 58 L37 56 L32 60 L27 56 L22 58 L20 52 L14 51 L14 45 L9 43 L12 37 L7 33 L12 28 L9 22 L14 19 L14 13 L20 12 L22 6 L27 8 Z"
-        fill="url(#waxFill)"
-        stroke="hsl(var(--accent))"
-        strokeWidth="0.6"
-        strokeOpacity="0.65"
-      />
-      {/* Inner ring */}
-      <circle cx="32" cy="32" r="17" fill="none" stroke="hsl(var(--accent-foreground))" strokeOpacity="0.55" strokeWidth="0.8" strokeDasharray="2 2" />
-      {/* Monogram star */}
-      <path
-        d="M32 19 L34 28 L43 28 L36 33 L39 42 L32 36.5 L25 42 L28 33 L21 28 L30 28 Z"
-        fill="hsl(var(--accent-foreground))"
-        fillOpacity="0.75"
-      />
-      {/* Highlight crescent */}
-      <path
-        d="M22 18 Q26 14 32 14"
-        stroke="hsl(0 0% 100%)"
-        strokeOpacity="0.35"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        fill="none"
-      />
-    </svg>
-  );
-}
-
-function CornerOrnament({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M2 2 L10 2 M2 2 L2 10" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" />
-      <path d="M5 2 L5 5 L2 5" stroke="currentColor" strokeWidth="0.6" strokeOpacity="0.6" />
-      <circle cx="2" cy="2" r="0.8" fill="currentColor" />
-    </svg>
-  );
-}
-
 function DiamondMark({
   className = '',
   style,
@@ -184,6 +135,57 @@ function DiamondMark({
       style={style}
       aria-hidden
     />
+  );
+}
+
+function ChipIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 40 30" fill="none" aria-hidden>
+      <defs>
+        <linearGradient id="chipGradFD" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#FDE68A" />
+          <stop offset="45%" stopColor="#F59E0B" />
+          <stop offset="100%" stopColor="#92400E" />
+        </linearGradient>
+      </defs>
+      <rect
+        x="0.5"
+        y="0.5"
+        width="39"
+        height="29"
+        rx="4"
+        fill="url(#chipGradFD)"
+        stroke="#78350F"
+        strokeOpacity="0.6"
+        strokeWidth="0.5"
+      />
+      <path
+        d="M0 10 L15 10 M0 20 L15 20 M40 10 L25 10 M40 20 L25 20 M15 0 L15 10 M25 0 L25 10 M15 20 L15 30 M25 20 L25 30"
+        stroke="#78350F"
+        strokeOpacity="0.55"
+        strokeWidth="0.6"
+      />
+      <rect
+        x="14"
+        y="9"
+        width="12"
+        height="12"
+        rx="1.5"
+        fill="none"
+        stroke="#78350F"
+        strokeOpacity="0.7"
+        strokeWidth="0.8"
+      />
+      <rect
+        x="16.5"
+        y="11.5"
+        width="7"
+        height="7"
+        rx="0.5"
+        fill="#FCD34D"
+        fillOpacity="0.55"
+      />
+    </svg>
   );
 }
 
@@ -203,6 +205,29 @@ function PnLDisplay({ holding }: { holding: FDHolding }) {
         </span>
       )}
     </span>
+  );
+}
+
+function PnLOnDark({ holding }: { holding: FDHolding }) {
+  if (!holding.currentValue) return <p className="text-white/40 text-sm font-semibold">—</p>;
+  const pnl = new Decimal(holding.currentValue).minus(holding.totalCost);
+  const pct = new Decimal(holding.totalCost).isZero()
+    ? null
+    : pnl.div(holding.totalCost).times(100).toNumber();
+  const pos = pnl.gte(0);
+  return (
+    <p
+      className={`tabular-nums font-semibold text-sm ${
+        pos ? 'text-emerald-300' : 'text-rose-300'
+      }`}
+    >
+      {pos ? '+' : ''}{formatINR(pnl.toString())}
+      {pct != null && (
+        <span className="ml-1 text-[10px] opacity-80">
+          ({pos ? '+' : ''}{pct.toFixed(2)}%)
+        </span>
+      )}
+    </p>
   );
 }
 
@@ -233,145 +258,185 @@ function FDCard({
     : 0;
 
   const certNo = holding.id.slice(-6).toUpperCase();
-  const daysLeft = maturity ? daysUntil(maturity) : null;
   const matValue = fdMaturityValue(holding.totalCost, rate, tenureMonths, freq);
 
   return (
     <div
       onClick={onClick}
-      className="group relative paper rounded-lg border border-accent/25 hover:border-accent/60 shadow-elev hover:shadow-elev-lg transition-all cursor-pointer overflow-hidden"
+      className="group relative rounded-2xl overflow-hidden cursor-pointer
+        bg-gradient-to-br from-[#042F2E] via-[#134E4A] to-[#0E7490]
+        ring-1 ring-white/10 hover:ring-white/25
+        shadow-[0_18px_45px_-20px_rgba(8,47,73,0.65),0_8px_18px_-10px_rgba(8,47,73,0.45)]
+        hover:shadow-[0_28px_70px_-20px_rgba(8,47,73,0.85),0_10px_24px_-10px_rgba(8,47,73,0.55)]
+        hover:-translate-y-0.5
+        transition-all duration-300"
     >
-      {/* Top brass band */}
-      <div className="h-[3px] w-full bg-gradient-to-r from-accent/40 via-accent to-accent/40" />
-      <div className="h-px w-full bg-accent/30" />
+      {/* Atmospheric glows */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(circle at 85% -10%, rgba(45,212,191,0.45), transparent 55%), radial-gradient(circle at -5% 105%, rgba(8,145,178,0.45), transparent 55%), radial-gradient(circle at 50% 50%, rgba(20,184,166,0.10), transparent 70%)',
+        }}
+      />
 
-      {/* Subtle radial wash + corner ornaments */}
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_98%_8%,hsl(var(--accent)/0.14),transparent_45%)]" />
-      <CornerOrnament className="pointer-events-none absolute top-[8px] left-[8px] h-3 w-3 text-accent/50" />
-      <CornerOrnament className="pointer-events-none absolute top-[8px] right-[8px] h-3 w-3 text-accent/50 -scale-x-100" />
+      {/* Diagonal sheen — animates on hover */}
+      <div
+        className="absolute inset-0 pointer-events-none -translate-x-[40%] group-hover:translate-x-[40%] transition-transform duration-[1400ms] ease-out"
+        style={{
+          background:
+            'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.06) 45%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0.06) 55%, transparent 70%)',
+        }}
+      />
 
-      <div className="relative px-5 pt-3.5 pb-4">
-        {/* Eyebrow */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <DiamondMark className="h-1.5 w-1.5 shrink-0" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-accent leading-none">
-              Fixed Deposit
-            </span>
-            <span className="text-accent/30 select-none">·</span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground leading-none">
-              Cert № <span className="text-foreground/80">{certNo}</span>
-            </span>
+      {/* Faint guilloché lines (banknote vibe) */}
+      <svg
+        className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.07] mix-blend-overlay"
+        viewBox="0 0 600 300"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <defs>
+          <pattern id="guilloche-fd" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M0 20 Q10 0 20 20 T40 20" stroke="white" strokeWidth="0.6" fill="none" />
+            <path d="M0 30 Q10 10 20 30 T40 30" stroke="white" strokeWidth="0.4" fill="none" />
+          </pattern>
+        </defs>
+        <rect width="600" height="300" fill="url(#guilloche-fd)" />
+      </svg>
+
+      <div className="relative px-6 pt-5 pb-5 text-white">
+        {/* Top row: chip + locked */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <ChipIcon className="h-7 w-9 drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" />
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-[0.32em] text-white/65 leading-none">
+                Fixed Deposit
+              </p>
+              <p className="font-mono text-[10px] text-white/40 mt-1 tabular-nums leading-none">
+                Cert № {certNo}
+              </p>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={onEdit}
-            aria-label="Edit deposit"
-            className="shrink-0 p-1 -m-1 rounded text-muted-foreground/40 hover:text-foreground hover:bg-muted/60 transition-colors"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/10 backdrop-blur px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.22em] text-white ring-1 ring-white/25">
+              <Lock className="h-2.5 w-2.5" strokeWidth={2.5} /> Locked
+            </span>
+            <button
+              type="button"
+              onClick={onEdit}
+              aria-label="Edit deposit"
+              className="p-1 -m-1 rounded text-white/45 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
-        {/* Headline + rate chip */}
-        <div className="mt-2 flex items-start justify-between gap-3">
+        {/* Bank name + rate */}
+        <div className="mt-6 flex items-end justify-between gap-4">
           <div className="min-w-0">
-            <h3 className="font-display text-[22px] leading-[1.15] text-foreground truncate">
+            <h3 className="text-[28px] leading-[1.05] font-semibold tracking-tight text-white truncate drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]">
               {holding.assetName ?? '—'}
             </h3>
-            <p className="mt-0.5 text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <p className="mt-1.5 text-[11px] text-white/60 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span>{tenureMonths ? `${tenureMonths}-month` : 'Term'} deposit</span>
               {freq && (
                 <>
-                  <span className="text-muted-foreground/40">·</span>
+                  <span className="text-white/30">·</span>
                   <span>{FREQ_LABELS[freq] ?? freq} payout</span>
                 </>
               )}
               {holding.portfolioName && (
                 <>
-                  <span className="text-muted-foreground/40">·</span>
+                  <span className="text-white/30">·</span>
                   <span>{holding.portfolioName}</span>
                 </>
               )}
             </p>
           </div>
-          <div className="shrink-0 flex items-center gap-2">
-            <div className="rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1 text-right">
-              <p className="font-display text-xl text-accent leading-none tabular-nums">
-                {rate ?? '—'}
-                <span className="text-sm align-top">%</span>
-              </p>
-              <p className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.22em] text-accent/80">
-                per annum
-              </p>
-            </div>
-            <WaxSeal className="h-11 w-11 drop-shadow-[0_2px_3px_hsl(var(--accent)/0.4)]" />
+          <div className="shrink-0 text-right">
+            <p className="text-[42px] font-bold leading-none tabular-nums text-white drop-shadow-[0_2px_10px_rgba(110,231,183,0.45)]">
+              {rate ?? '—'}
+              <span className="text-2xl align-top opacity-85 ml-0.5">%</span>
+            </p>
+            <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.32em] text-white/50">
+              per annum
+            </p>
           </div>
         </div>
 
-        {/* Maturity timeline */}
-        <div className="mt-3">
-          <div className="flex items-center justify-between mb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            <span>{daysLeft !== null && daysLeft < 0 ? 'Matured' : 'Principal locked'}</span>
-            <span className="text-foreground/70 normal-case tracking-normal tabular-nums">
-              {tenureMonths ? `${Math.round(elapsedPct)}% of ${tenureMonths}mo` : '—'}
+        {/* Timeline */}
+        <div className="mt-5">
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] tabular-nums text-white/85 shrink-0 w-[88px]">
+              {formatShortDate(openDate)}
             </span>
-            {maturity && <MaturityBadge date={maturity} />}
-          </div>
-          <div className="relative h-[6px] rounded-sm bg-muted/70 overflow-visible">
-            <div
-              className="absolute inset-y-0 left-0 rounded-sm bg-gradient-to-r from-accent/70 via-accent to-accent/80"
-              style={{ width: `${elapsedPct}%` }}
-            />
-            {tenureMonths && (
-              <DiamondMark
-                className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 ring-2 ring-card"
-                style={{ left: `calc(${Math.max(elapsedPct, 0)}% - 5px)` }}
+            <div className="relative flex-1 h-[6px] rounded-full bg-white/12 overflow-visible">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-teal-200 via-cyan-100 to-emerald-200 shadow-[0_0_12px_rgba(110,231,183,0.7)]"
+                style={{ width: `${elapsedPct}%` }}
               />
-            )}
+              {tenureMonths !== null && (
+                <span
+                  className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-white ring-2 ring-cyan-200/70 shadow-[0_0_10px_rgba(255,255,255,0.85)]"
+                  style={{ left: `calc(${Math.max(elapsedPct, 0)}% - 6px)` }}
+                />
+              )}
+            </div>
+            <span className="text-[11px] tabular-nums text-white/85 shrink-0 w-[88px] text-right">
+              {formatShortDate(maturity)}
+            </span>
           </div>
-          <div className="mt-1 flex items-center justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
-            <span>Opened {formatShortDate(openDate)}</span>
-            <span>Matures {formatShortDate(maturity)}</span>
+          <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.22em] text-white/45">
+            <span>Opened</span>
+            <span className="text-white/65 tabular-nums normal-case tracking-normal">
+              {tenureMonths ? `${Math.round(elapsedPct)}% of ${tenureMonths}mo elapsed` : 'Tenure pending'}
+            </span>
+            <span className="flex items-center gap-1">
+              Matures
+              {maturity && (
+                <span className="ml-2">
+                  <MaturityBadge date={maturity} />
+                </span>
+              )}
+            </span>
           </div>
         </div>
 
-        {/* Decorative rule */}
-        <div className="mt-3.5 rule-ornament"><span /></div>
-
-        {/* Stat row: 4 cols */}
-        <div className="mt-3.5 grid grid-cols-4 gap-3">
-          <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
+        {/* Glass stat row */}
+        <div className="mt-5 grid grid-cols-4 gap-2.5">
+          <div className="rounded-lg bg-white/8 backdrop-blur-md ring-1 ring-white/15 px-3 py-2.5">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/55 mb-1">
               Principal
             </p>
-            <p className="numeric-display text-[15px] text-foreground">
+            <p className="tabular-nums font-semibold text-sm text-white">
               {formatINR(holding.totalCost)}
             </p>
           </div>
-          <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
+          <div className="rounded-lg bg-white/8 backdrop-blur-md ring-1 ring-white/15 px-3 py-2.5">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/55 mb-1">
               Current Value
             </p>
-            <p className="numeric-display text-[15px] text-foreground">
+            <p className="tabular-nums font-semibold text-sm text-white">
               {holding.currentValue ? formatINR(holding.currentValue) : '—'}
             </p>
           </div>
-          <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-accent/80 mb-0.5">
+          <div className="rounded-lg bg-amber-300/12 backdrop-blur-md ring-1 ring-amber-200/35 px-3 py-2.5 shadow-[0_0_18px_-6px_rgba(252,211,77,0.45)]">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-100/85 mb-1 flex items-center gap-1">
+              <ShieldCheck className="h-2.5 w-2.5" strokeWidth={2.5} />
               Maturity Value
             </p>
-            <p className="numeric-display text-[15px] text-accent">
+            <p className="tabular-nums font-semibold text-sm text-amber-100">
               {matValue ? formatINR(matValue.toString()) : '—'}
             </p>
           </div>
-          <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
+          <div className="rounded-lg bg-white/8 backdrop-blur-md ring-1 ring-white/15 px-3 py-2.5">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/55 mb-1">
               Earned
             </p>
-            <p className="numeric-display text-[15px]">
-              <PnLDisplay holding={holding} />
-            </p>
+            <PnLOnDark holding={holding} />
           </div>
         </div>
       </div>
