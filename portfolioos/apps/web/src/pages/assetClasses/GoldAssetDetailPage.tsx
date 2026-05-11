@@ -175,9 +175,9 @@ function Ledger({
     highlight === 'accent'   ? 'text-[hsl(var(--accent))]' :
     'text-foreground';
   return (
-    <div className="px-5 py-4 min-w-0">
+    <div className="px-4 py-4 min-w-0">
       <p className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80 font-medium truncate">{label}</p>
-      <p className={`mt-2 text-xl xl:text-2xl font-semibold leading-tight tabular-nums truncate ${colour}`}>{value}</p>
+      <p className={`mt-2 text-base sm:text-lg lg:text-xl font-semibold leading-tight tabular-nums whitespace-nowrap ${colour}`}>{value}</p>
       {hint && <p className="mt-1.5 text-[11px] text-muted-foreground/70 truncate">{hint}</p>}
     </div>
   );
@@ -316,13 +316,18 @@ export function GoldAssetDetailPage() {
   const purityTag = goldCaratMatch?.[1]?.toUpperCase() ?? silverPurityMatch?.[1] ?? null;
   const displayName = purityTag ? assetName.replace(/^[\d]+[kK]?\s*/, '').trim() || assetName : assetName;
 
-  // Holding period in human form
+  // Holding period — fall back to (today - firstTxnDate) if backend hasn't populated it
+  const holdDays = (() => {
+    if (holding.holdingPeriodDays != null) return holding.holdingPeriodDays;
+    if (!firstTxnDate) return null;
+    const ms = Date.now() - new Date(firstTxnDate).getTime();
+    return Math.max(0, Math.floor(ms / 86_400_000));
+  })();
   const holdHuman = (() => {
-    const d = holding.holdingPeriodDays;
-    if (d == null) return null;
-    const y = Math.floor(d / 365);
-    const m = Math.floor((d % 365) / 30);
-    if (y === 0 && m === 0) return `${d}d`;
+    if (holdDays == null) return null;
+    const y = Math.floor(holdDays / 365);
+    const m = Math.floor((holdDays % 365) / 30);
+    if (y === 0 && m === 0) return `${holdDays} ${holdDays === 1 ? 'day' : 'days'}`;
     if (y === 0) return `${m}mo`;
     return `${y}y ${m}mo`;
   })();
@@ -348,7 +353,7 @@ export function GoldAssetDetailPage() {
         <p className="font-medium text-sm truncate">{displayName || assetName}</p>
       </div>
 
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
 
         {/* ────────────── HERO ────────────── */}
         <div className={`grid gap-10 lg:gap-16 mb-12 sm:mb-16 ${allPhotos.length > 0 ? 'lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]' : 'lg:grid-cols-1'}`}>
@@ -493,26 +498,30 @@ export function GoldAssetDetailPage() {
               hint={`per ${unitLabel}`}
             />
             <Ledger
-              label="XIRR"
-              value={holding.xirr != null
-                ? `${holding.xirr >= 0 ? '+' : ''}${(holding.xirr * 100).toFixed(2)}%`
-                : '—'}
-              hint={holding.xirr != null ? 'annualised' : 'not yet computable'}
-              highlight={holding.xirr == null ? undefined : holding.xirr >= 0 ? 'positive' : 'negative'}
+              label="Live Price"
+              value={livePricePerUnit ? formatINR(livePricePerUnit.toString()) : '—'}
+              hint={livePricePerUnit ? `per ${unitLabel}${purityTag ? ` · ${purityTag}` : ''}` : 'awaiting feed'}
+              highlight={livePricePerUnit ? 'accent' : undefined}
             />
             <Ledger
               label="Held For"
               value={holdHuman ?? '—'}
               hint={firstTxnDate ? `since ${firstTxnDate}` : undefined}
             />
-            <Ledger
-              label="Realised"
-              value={totalSold.gt(0) ? formatINR(totalSold.toString()) : '—'}
-              hint={totalSold.gt(0)
-                ? `${sellTxns.length} ${sellTxns.length === 1 ? 'sale' : 'sales'}`
-                : 'no sales yet'}
-              highlight={totalSold.gt(0) ? 'accent' : undefined}
-            />
+            {holding.xirr != null ? (
+              <Ledger
+                label="XIRR"
+                value={`${holding.xirr >= 0 ? '+' : ''}${(holding.xirr * 100).toFixed(2)}%`}
+                hint="annualised"
+                highlight={holding.xirr >= 0 ? 'positive' : 'negative'}
+              />
+            ) : (
+              <Ledger
+                label="Activity"
+                value={`${buyTxns.length} / ${sellTxns.length}`}
+                hint={`${buyTxns.length === 1 ? 'buy' : 'buys'} · ${sellTxns.length === 1 ? 'sale' : 'sales'}`}
+              />
+            )}
           </div>
         </section>
 
