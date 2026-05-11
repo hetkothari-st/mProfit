@@ -189,27 +189,6 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
 
   const todayStr = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
 
-  const holdingsPayload: ExportPayload = {
-    title: `${section} Holdings Report`,
-    subtitle: `${portfolioLabel}  ·  ${todayStr}`,
-    filenameStem: fileStem,
-    meta: {
-      Portfolio: portfolioLabel,
-      Section: section,
-      Holdings: String(holdings.length),
-    },
-    columns: holdingColumns,
-    rows: holdingRows,
-    footer: {
-      'Total Invested': `Rs. ${fmtNum(totalCost.toString())}`,
-      'Current Value':  `Rs. ${fmtNum(totalValue.toString())}`,
-      'Unrealised P&L': `${totalPnl.isNegative() ? '' : '+'}Rs. ${fmtNum(totalPnl.toString())}`,
-      'Return %':       totalCost.isZero() ? '—' : `${totalPnl.dividedBy(totalCost).times(100).toFixed(2)}%`,
-    },
-    chartRows,
-    chartTitle: `Top ${chartRows.length} holdings by current value`,
-  };
-
   // ── Transactions ─────────────────────────────────────────────────────────────
   const txns = await prisma.transaction.findMany({
     where: {
@@ -221,16 +200,16 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
   });
 
   const txnColumns: ExportColumn[] = [
-    { key: 'portfolioName',     header: 'Portfolio',   width: 16 },
+    { key: 'portfolioName',     header: 'Portfolio',   width: 14 },
     { key: 'tradeDate',         header: 'Date',        width: 12, formatter: fmtDate },
     { key: 'assetClass',        header: 'Class',       width: 12 },
-    { key: 'assetName',         header: 'Asset',       width: 30 },
+    { key: 'assetName',         header: 'Asset',       width: 28 },
     { key: 'transactionType',   header: 'Type',        width: 12 },
     { key: 'quantity',          header: 'Qty',         width: 10, formatter: v => fmtNum(v, 4) },
     { key: 'price',             header: 'Price',       width: 12, formatter: fmtRs },
     { key: 'netAmount',         header: 'Net Amount',  width: 14, formatter: fmtRs },
     { key: 'broker',            header: 'Broker',      width: 14 },
-    { key: 'narration',         header: 'Narration',   width: 24 },
+    { key: 'narration',         header: 'Narration',   width: 22 },
   ];
 
   const txnRows = txns.map(t => ({
@@ -246,6 +225,74 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
     narration:       t.narration ?? '',
   }));
 
+  // ── F&O closed trades (realised P&L) — only for F&O reports ────────────────
+  const additionalSections: NonNullable<ExportPayload['additionalSections']> = [];
+
+  if (isFoOnly && resolvedIds.length > 0) {
+    const { computePortfolioFoPnl } = await import('../foPnl.service.js');
+    let foRows: Array<Record<string, unknown>> = [];
+    for (const pid of resolvedIds) {
+      try {
+        const fo = await computePortfolioFoPnl(pid);
+        const pName = portfolioNameMap[pid] ?? pid;
+        fo.rows.forEach(r => foRows.push({ portfolioName: pName, ...r }));
+      } catch { /* portfolio may have no F&O */ }
+    }
+    if (foRows.length > 0) {
+      const foColumns: ExportColumn[] = [
+        { key: 'portfolioName',    header: 'Portfolio',     width: 14 },
+        { key: 'financialYear',    header: 'FY',            width: 8 },
+        { key: 'underlying',       header: 'Underlying',    width: 14 },
+        { key: 'instrumentType',   header: 'Type',          width: 8 },
+        { key: 'strikePrice',      header: 'Strike',        width: 10, formatter: v => v ? fmtNum(v) : '' },
+        { key: 'expiryDate',       header: 'Expiry',        width: 12 },
+        { key: 'taxBucket',        header: 'Tax Bucket',    width: 14 },
+        { key: 'closedTradeCount', header: 'Trades',        width: 8 },
+        { key: 'turnover',         header: 'Turnover',      width: 14, formatter: fmtRs },
+        { key: 'realizedPnl',      header: 'Realised P&L',  width: 14, formatter: fmtRs },
+      ];
+      additionalSections.push({
+        title: 'Realised F&O P&L (closed trades by FY)',
+        columns: foColumns,
+        rows: foRows,
+        emptyMessage: 'No closed F&O trades.',
+      });
+    }
+  }
+
+  // Transactions section — always include
+  additionalSections.push({
+    title: `Transaction History (${txns.length} records)`,
+    columns: txnColumns,
+    rows: txnRows,
+    emptyMessage: 'No transactions recorded.',
+  });
+
+  const holdingsPayload: ExportPayload = {
+    title: `${section} Report`,
+    subtitle: `${portfolioLabel}  ·  ${todayStr}`,
+    filenameStem: fileStem,
+    meta: {
+      Portfolio: portfolioLabel,
+      Section: section,
+      Holdings: String(holdings.length),
+      Transactions: String(txns.length),
+    },
+    mainSectionLabel: isFoOnly ? `Open Positions (${holdings.length})` : `Current Holdings (${holdings.length})`,
+    columns: holdingColumns,
+    rows: holdingRows,
+    footer: {
+      'Total Invested': `Rs. ${fmtNum(totalCost.toString())}`,
+      'Current Value':  `Rs. ${fmtNum(totalValue.toString())}`,
+      'Unrealised P&L': `${totalPnl.isNegative() ? '' : '+'}Rs. ${fmtNum(totalPnl.toString())}`,
+      'Return %':       totalCost.isZero() ? '—' : `${totalPnl.dividedBy(totalCost).times(100).toFixed(2)}%`,
+    },
+    chartRows,
+    chartTitle: `Top ${chartRows.length} holdings by current value`,
+    additionalSections,
+  };
+
+  // Standalone transactions payload — still used by Excel export (2nd sheet)
   const transactionsPayload: ExportPayload = {
     title: `${section} Transactions`,
     subtitle: `${portfolioLabel}  ·  ${todayStr}`,

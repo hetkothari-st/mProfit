@@ -11,6 +11,13 @@ export interface ExportColumn {
   formatter?: (value: unknown) => string;
 }
 
+export interface ExportSection {
+  title: string;
+  columns: ExportColumn[];
+  rows: Array<Record<string, unknown>>;
+  emptyMessage?: string;
+}
+
 export interface ExportPayload {
   title: string;
   subtitle?: string;
@@ -24,6 +31,11 @@ export interface ExportPayload {
   chartTitle?: string;
   // Optional explicit filename (no extension). Falls back to slugified title.
   filenameStem?: string;
+  // Additional sections rendered after the main table (e.g. Transactions,
+  // Realised Trades, Income).
+  additionalSections?: ExportSection[];
+  // Optional label shown on the main table band (defaults to "Details").
+  mainSectionLabel?: string;
 }
 
 // ─── Excel (XLSX) ───────────────────────────────────────────────────
@@ -112,170 +124,205 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     const MR    = doc.page.margins.right;
     const pageW = doc.page.width - ML - MR;
     const pageH = doc.page.height;
+    const BOT   = pageH - 40;  // bottom safe y for content
 
-    // ─────────────────────────────────────────────────────────────────
-    // HEADER BAR
-    // ─────────────────────────────────────────────────────────────────
-    doc.rect(0, 0, doc.page.width, 56).fill(BRAND.ink);
-    doc.font('Helvetica-Bold').fontSize(17).fillColor(BRAND.white)
-       .text('PortfolioOS', ML, 14);
-    doc.font('Helvetica').fontSize(10).fillColor('#94AECB')
-       .text(pdfSafe(payload.title), ML, 36);
-
-    const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
-    doc.font('Helvetica').fontSize(8.5).fillColor('#94AECB')
-       .text(genStr, ML, 22, { align: 'right', width: pageW });
-    if (payload.subtitle) {
-      doc.font('Helvetica').fontSize(8).fillColor('#94AECB')
-         .text(pdfSafe(payload.subtitle), ML, 38, { align: 'right', width: pageW });
+    function renderPageHeader(): void {
+      doc.rect(0, 0, doc.page.width, 56).fill(BRAND.ink);
+      doc.font('Helvetica-Bold').fontSize(17).fillColor(BRAND.white)
+         .text('PortfolioOS', ML, 14, { lineBreak: false });
+      doc.font('Helvetica').fontSize(10).fillColor('#94AECB')
+         .text(pdfSafe(payload.title), ML, 36, { lineBreak: false });
+      const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+      doc.font('Helvetica').fontSize(8.5).fillColor('#94AECB')
+         .text(genStr, ML, 22, { align: 'right', width: pageW, lineBreak: false });
+      if (payload.subtitle) {
+        doc.font('Helvetica').fontSize(8).fillColor('#94AECB')
+           .text(pdfSafe(payload.subtitle), ML, 38, { align: 'right', width: pageW, lineBreak: false });
+      }
     }
 
+    renderPageHeader();
     let cy = 72;
 
-    // ─────────────────────────────────────────────────────────────────
-    // META STRIP — single line key: value pills
-    // ─────────────────────────────────────────────────────────────────
+    // ─── META STRIP ──────────────────────────────────────────────────
     if (payload.meta && Object.keys(payload.meta).length > 0) {
-      doc.fillColor(BRAND.muted).font('Helvetica').fontSize(8.5);
-      const pieces: { k: string; v: string }[] = Object.entries(payload.meta)
-        .map(([k, v]) => ({ k, v: pdfSafe(String(v)) }));
-      let mx = ML;
+      const entries = Object.entries(payload.meta);
       doc.y = cy;
-      pieces.forEach((p, i) => {
-        const text = `${p.k}: `;
-        const valText = p.v;
-        doc.font('Helvetica').fillColor(BRAND.muted).text(text, mx, cy, { continued: true })
-           .font('Helvetica-Bold').fillColor(BRAND.ink).text(valText, { continued: i < pieces.length - 1 });
-        if (i < pieces.length - 1) {
-          doc.font('Helvetica').fillColor(BRAND.border).text('   ·   ', { continued: true });
+      doc.x = ML;
+      doc.font('Helvetica').fontSize(8.5);
+      entries.forEach(([k, v], i) => {
+        doc.fillColor(BRAND.muted).font('Helvetica')
+           .text(`${pdfSafe(k)}: `, { continued: true });
+        doc.fillColor(BRAND.ink).font('Helvetica-Bold')
+           .text(pdfSafe(String(v)), { continued: i < entries.length - 1 });
+        if (i < entries.length - 1) {
+          doc.fillColor(BRAND.border).font('Helvetica').text('   ·   ', { continued: true });
         }
       });
-      cy = doc.y + 14;
+      cy = doc.y + 12;
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // METRIC CARDS — from footer entries (4 across)
-    // ─────────────────────────────────────────────────────────────────
+    // ─── METRIC CARDS ────────────────────────────────────────────────
     if (payload.footer && Object.keys(payload.footer).length > 0) {
       const entries = Object.entries(payload.footer);
       const cardCount = entries.length;
       const gap = 8;
       const cardW = (pageW - gap * (cardCount - 1)) / cardCount;
-      const cardH = 42;
+      const cardH = 44;
       entries.forEach(([k, v], i) => {
         const cx = ML + i * (cardW + gap);
         doc.rect(cx, cy, cardW, cardH).fill(BRAND.headerBg);
         doc.rect(cx, cy, 3, cardH).fill(BRAND.accent);
         doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.muted)
-           .text(pdfSafe(k).toUpperCase(), cx + 9, cy + 7, { width: cardW - 12, characterSpacing: 0.5 });
+           .text(pdfSafe(k).toUpperCase(), cx + 10, cy + 8, { width: cardW - 14, characterSpacing: 0.5, lineBreak: false });
         const valStr = pdfSafe(String(v));
-        const isNeg = valStr.includes('-') && (k.toLowerCase().includes('p&l') || k.toLowerCase().includes('gain') || k.toLowerCase().includes('loss'));
+        const isNeg = valStr.startsWith('-') && (k.toLowerCase().includes('p&l') || k.toLowerCase().includes('gain') || k.toLowerCase().includes('loss'));
         doc.font('Helvetica-Bold').fontSize(13).fillColor(isNeg ? BRAND.negative : BRAND.ink)
-           .text(valStr, cx + 9, cy + 21, { width: cardW - 14, ellipsis: true });
+           .text(valStr, cx + 10, cy + 22, { width: cardW - 16, ellipsis: true, lineBreak: false });
       });
       cy += cardH + 14;
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // CHART (top N items, horizontal bars)
-    // ─────────────────────────────────────────────────────────────────
+    // ─── CHART (top N items, horizontal bars) ────────────────────────
     if (payload.chartRows && payload.chartRows.length > 0) {
-      const chartTitle = payload.chartTitle ?? 'Top items by value';
-      doc.rect(ML, cy, pageW, 16).fill(BRAND.headerBg);
-      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(BRAND.ink)
-         .text(pdfSafe(chartTitle), ML + 8, cy + 4);
-      cy += 22;
-      const chartH = Math.min(payload.chartRows.length * 18 + 8, 180);
+      cy = drawSectionBand(doc, ML, pageW, cy, payload.chartTitle ?? 'Top items by value');
+      const chartH = Math.min(payload.chartRows.length * 18 + 8, 200);
       const bottom = drawHorizontalBarChart(doc, payload.chartRows, {
         x: ML, y: cy, width: pageW, height: chartH,
       });
-      cy = bottom + 10;
+      cy = bottom + 12;
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // TABLE
-    // ─────────────────────────────────────────────────────────────────
-    if (payload.rows.length === 0) {
-      doc.rect(ML, cy, pageW, 60).fill(BRAND.rowAlt);
-      doc.font('Helvetica').fontSize(10).fillColor(BRAND.muted)
-         .text('No records to display.', ML, cy + 22, { width: pageW, align: 'center' });
-      cy += 70;
-    } else {
-      // Table header
-      doc.rect(ML, cy, pageW, 16).fill(BRAND.headerBg);
-      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(BRAND.ink)
-         .text('Details', ML + 8, cy + 4);
-      cy += 22;
+    // ─── MAIN TABLE ──────────────────────────────────────────────────
+    cy = renderTable(doc, {
+      x: ML, y: cy, width: pageW, pageH,
+      label: payload.mainSectionLabel ?? 'Details',
+      columns: payload.columns,
+      rows: payload.rows,
+      emptyMessage: 'No records to display.',
+      onPageBreak: () => { doc.addPage(); renderPageHeader(); return 72; },
+    });
+    cy += 10;
 
-      const totalWeight = payload.columns.reduce((s, c) => s + (c.width ?? 10), 0) || payload.columns.length;
-      const colWidths   = payload.columns.map(c => ((c.width ?? 10) / totalWeight) * pageW);
-      const ROW_H       = 17;
-
-      const drawHeader = (y: number): void => {
-        doc.rect(ML, y, pageW, ROW_H).fill(BRAND.ink);
-        doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.white);
-        let x = ML;
-        for (let i = 0; i < payload.columns.length; i++) {
-          doc.text(pdfSafe(payload.columns[i]!.header), x + 4, y + 5, {
-            width: (colWidths[i] ?? 80) - 8, ellipsis: true,
-          });
-          x += colWidths[i] ?? 80;
-        }
-      };
-
-      drawHeader(cy);
-      cy += ROW_H;
-
-      payload.rows.forEach((data, idx) => {
-        // Page break check
-        if (cy + ROW_H > pageH - 40) {
-          // Draw page number on current page first
-          doc.fontSize(7).fillColor(BRAND.muted).font('Helvetica')
-             .text(`PortfolioOS  ·  ${safeTitle}`, ML, pageH - 26, { width: pageW, align: 'left' });
-          doc.addPage();
-          cy = 36;
-          drawHeader(cy);
-          cy += ROW_H;
-        }
-
-        if (idx % 2 === 1) doc.rect(ML, cy, pageW, ROW_H).fill(BRAND.rowAlt);
-        let x = ML;
-        doc.font('Helvetica').fontSize(8);
-        for (let i = 0; i < payload.columns.length; i++) {
-          const col = payload.columns[i]!;
-          const raw = data[col.key];
-          const val = col.formatter ? col.formatter(raw) : (raw == null ? '' : String(raw));
-          const isNumeric = /^-?[\d,.]+%?$/.test(val.trim()) || /^Rs/.test(val.trim());
-          const isNeg = val.trim().startsWith('-');
-          const align = isNumeric ? 'right' : 'left';
-          doc.fillColor(isNeg ? BRAND.negative : BRAND.ink)
-             .text(pdfSafe(val), x + 4, cy + 5, {
-               width: (colWidths[i] ?? 80) - 8, ellipsis: true, align,
-             });
-          x += colWidths[i] ?? 80;
-        }
-        cy += ROW_H;
+    // ─── ADDITIONAL SECTIONS (e.g. Transactions, Realised Trades) ────
+    for (const section of payload.additionalSections ?? []) {
+      // Force new page if section header would land too close to bottom
+      if (cy + 60 > BOT) {
+        doc.addPage();
+        renderPageHeader();
+        cy = 72;
+      }
+      cy = renderTable(doc, {
+        x: ML, y: cy, width: pageW, pageH,
+        label: section.title,
+        columns: section.columns,
+        rows: section.rows,
+        emptyMessage: section.emptyMessage ?? 'None.',
+        onPageBreak: () => { doc.addPage(); renderPageHeader(); return 72; },
       });
-
-      // bottom border
-      doc.rect(ML, cy, pageW, 0.5).fill(BRAND.border);
+      cy += 10;
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // PAGE NUMBERS — applied after content with switchToPage
-    // ─────────────────────────────────────────────────────────────────
+    // ─── PAGE NUMBERS ────────────────────────────────────────────────
     const range = doc.bufferedPageRange();
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(range.start + i);
       doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted).text(
         `PortfolioOS  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`,
-        ML, pageH - 22, { width: pageW, align: 'center' },
+        ML, pageH - 22, { width: pageW, align: 'center', lineBreak: false },
       );
     }
 
     doc.flushPages();
     doc.end();
   });
+}
+
+function drawSectionBand(
+  doc: InstanceType<typeof PDFDocument>,
+  x: number,
+  width: number,
+  y: number,
+  label: string,
+): number {
+  doc.rect(x, y, width, 18).fill(BRAND.ink);
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.white)
+     .text(pdfSafe(label), x + 8, y + 5, { width: width - 16, lineBreak: false });
+  return y + 22;
+}
+
+interface RenderTableOpts {
+  x: number;
+  y: number;
+  width: number;
+  pageH: number;
+  label: string;
+  columns: ExportColumn[];
+  rows: Array<Record<string, unknown>>;
+  emptyMessage: string;
+  onPageBreak: () => number;  // returns new cy after adding page + header
+}
+
+function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts): number {
+  let cy = drawSectionBand(doc, o.x, o.width, o.y, o.label);
+  const BOT = o.pageH - 40;
+
+  if (o.rows.length === 0) {
+    doc.rect(o.x, cy, o.width, 36).fill(BRAND.rowAlt);
+    doc.font('Helvetica').fontSize(9).fillColor(BRAND.muted)
+       .text(o.emptyMessage, o.x, cy + 12, { width: o.width, align: 'center', lineBreak: false });
+    return cy + 40;
+  }
+
+  const totalWeight = o.columns.reduce((s, c) => s + (c.width ?? 10), 0) || o.columns.length;
+  const colWidths   = o.columns.map(c => ((c.width ?? 10) / totalWeight) * o.width);
+  const ROW_H       = 16;
+
+  const drawHeader = (yy: number): void => {
+    doc.rect(o.x, yy, o.width, ROW_H).fill('#2C4360');
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.white);
+    let x = o.x;
+    for (let i = 0; i < o.columns.length; i++) {
+      doc.text(pdfSafe(o.columns[i]!.header), x + 4, yy + 5, {
+        width: (colWidths[i] ?? 80) - 8, ellipsis: true, lineBreak: false,
+      });
+      x += colWidths[i] ?? 80;
+    }
+  };
+
+  drawHeader(cy);
+  cy += ROW_H;
+
+  for (let idx = 0; idx < o.rows.length; idx++) {
+    if (cy + ROW_H > BOT) {
+      cy = o.onPageBreak();
+      cy = drawSectionBand(doc, o.x, o.width, cy, `${o.label} (continued)`);
+      drawHeader(cy);
+      cy += ROW_H;
+    }
+
+    if (idx % 2 === 1) doc.rect(o.x, cy, o.width, ROW_H).fill(BRAND.rowAlt);
+    let x = o.x;
+    doc.font('Helvetica').fontSize(8);
+    for (let i = 0; i < o.columns.length; i++) {
+      const col = o.columns[i]!;
+      const raw = o.rows[idx]![col.key];
+      const val = col.formatter ? col.formatter(raw) : (raw == null ? '' : String(raw));
+      const isNumeric = /^[+-]?[\d,.]+%?$/.test(val.trim()) || /^[+-]?Rs/.test(val.trim());
+      const isNeg = val.trim().startsWith('-');
+      const align = isNumeric ? 'right' : 'left';
+      doc.fillColor(isNeg ? BRAND.negative : BRAND.ink)
+         .text(pdfSafe(val), x + 4, cy + 5, {
+           width: (colWidths[i] ?? 80) - 8, ellipsis: true, align, lineBreak: false,
+         });
+      x += colWidths[i] ?? 80;
+    }
+    cy += ROW_H;
+  }
+
+  // Thin bottom border
+  doc.rect(o.x, cy, o.width, 0.5).fill(BRAND.border);
+  return cy;
 }
 
 // Format money or quantity for reports. Parses through Decimal so the 4dp/6dp
