@@ -906,26 +906,22 @@ export function FdDetailPage() {
                             nameKey="name"
                             cx="50%"
                             cy="50%"
-                            innerRadius={50}
-                            outerRadius={75}
+                            innerRadius={52}
+                            outerRadius={76}
                             paddingAngle={2}
                             stroke="hsl(var(--card))"
                             strokeWidth={2}
+                            isAnimationActive={false}
                           >
                             {pieData.map((_, i) => <Cell key={i} fill={pieColors[i]} />)}
                           </Pie>
-                          <Tooltip
-                            contentStyle={TOOLTIP_STYLE}
-                            itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
-                            labelStyle={TOOLTIP_LABEL_STYLE}
-                            formatter={(v: number, name: string) => [formatINR(String(v)), name]}
-                          />
+                          {/* Tooltip omitted — full breakdown shown below the chart */}
                         </PieChart>
                       </ResponsiveContainer>
                       {/* Center label inside the donut */}
                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                         <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">Total</p>
-                        <p className="text-sm font-semibold tabular-nums leading-tight">
+                        <p className="text-sm font-semibold tabular-nums leading-tight mt-0.5">
                           {formatINR((maturityValue ?? totalPrincipalAtMaturity).toString())}
                         </p>
                       </div>
