@@ -32,13 +32,16 @@ function daysUntil(date: Date): number {
   return Math.ceil((date.getTime() - Date.now()) / 86_400_000);
 }
 
-export async function getDashboardNetWorth(userId: string) {
+export async function getDashboardNetWorth(userId: string, portfolioId?: string) {
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 86_400_000);
 
   // ── 1. Financial portfolio ───────────────────────────────────────────
   const holdings = await prisma.holdingProjection.findMany({
-    where: { portfolio: { userId } },
+    where: {
+      portfolio: { userId },
+      ...(portfolioId ? { portfolioId } : {}),
+    },
     include: { portfolio: true },
   });
 

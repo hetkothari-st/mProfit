@@ -75,8 +75,10 @@ function unwrap<T>(data: ApiResponse<T>): T {
 }
 
 export const dashboardApi = {
-  async netWorth(): Promise<NetWorthResponse> {
-    const { data } = await api.get<ApiResponse<NetWorthResponse>>('/api/dashboard/net-worth');
+  async netWorth(portfolioId?: string): Promise<NetWorthResponse> {
+    const { data } = await api.get<ApiResponse<NetWorthResponse>>('/api/dashboard/net-worth', {
+      params: portfolioId ? { portfolioId } : undefined,
+    });
     return unwrap(data);
   },
 };

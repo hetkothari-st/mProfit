@@ -99,8 +99,8 @@ export function DashboardPage() {
   }, [portfoliosQuery.isLoading, portfolios.length, navigate]);
 
   const netWorthQuery = useQuery({
-    queryKey: ['dashboard', 'net-worth'],
-    queryFn: () => dashboardApi.netWorth(),
+    queryKey: ['dashboard', 'net-worth', selectedId],
+    queryFn: () => dashboardApi.netWorth(selectedId !== 'ALL' ? selectedId : undefined),
   });
 
   const summariesQuery = useQuery({

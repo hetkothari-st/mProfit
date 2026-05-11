@@ -13,6 +13,7 @@ dashboardRouter.get(
   '/net-worth',
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw new UnauthorizedError();
-    ok(res, await getDashboardNetWorth(req.user.id));
+    const portfolioId = req.query.portfolioId as string | undefined;
+    ok(res, await getDashboardNetWorth(req.user.id, portfolioId));
   }),
 );
