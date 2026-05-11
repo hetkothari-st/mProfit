@@ -34,6 +34,7 @@ import {
   Home,
   Bug,
   Globe,
+  Calculator,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -89,6 +90,7 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
     heading: 'Tools',
     items: [
       { label: 'Reports', to: '/reports', icon: FileText },
+      { label: 'Tax', to: '/tax', icon: Calculator },
       { label: 'Import', to: '/import', icon: Upload },
       { label: 'Connectors', to: '/connectors', icon: Plug },
       { label: 'CAS', to: '/cas', icon: FileDown },

@@ -21,6 +21,7 @@ import { GmailCallbackPage } from './pages/mailboxes/GmailCallbackPage';
 import { GmailScanSetupPage } from './pages/mailboxes/GmailScanSetupPage';
 import { CasPage } from './pages/cas/CasPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
+import { TaxPage } from './pages/tax/TaxPage';
 import { IngestionPage } from './pages/ingestion/IngestionPage';
 import { SendersPage } from './pages/ingestion/SendersPage';
 import { ReviewPage } from './pages/ingestion/ReviewPage';
@@ -121,6 +122,7 @@ export function App() {
         <Route path="/real-estate/:id" element={<RealEstateDetailPage />} />
         <Route path="/cashflows" element={<CashFlowsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/tax" element={<TaxPage />} />
         <Route path="/import" element={<ImportPage />} />
         <Route path="/import/failures" element={<FailuresPage />} />
         {/* /ops/ingestion-failures is the plan-specified ops URL — alias to /import/failures */}
