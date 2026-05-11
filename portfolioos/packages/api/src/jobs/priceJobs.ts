@@ -155,8 +155,9 @@ export function startPriceJobs(): void {
   // Commodities EOD at 11:30 PM IST daily (MCX closes ~11:30 PM)
   cron.schedule('30 23 * * *', runCommoditiesJob, { timezone: TZ });
 
-  // Crypto every 30 min 24/7
-  cron.schedule('*/30 * * * *', runCryptoJob, { timezone: TZ });
+  // Crypto every 2 min 24/7 — keeps DB fallback fresh for the live endpoint
+  // and triggers HoldingProjection price refresh on every tick.
+  cron.schedule('*/2 * * * *', runCryptoJob, { timezone: TZ });
 
   // FX rates every hour
   cron.schedule('0 * * * *', runFxJob, { timezone: TZ });

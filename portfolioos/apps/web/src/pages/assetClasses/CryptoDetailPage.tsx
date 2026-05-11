@@ -50,8 +50,9 @@ export function CryptoDetailPage() {
   const { data: live } = useQuery({
     queryKey: ['crypto-live'],
     queryFn: () => assetsApi.cryptoLive(),
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
   });
 
   const { data: txnData, isLoading: txnLoading } = useQuery({

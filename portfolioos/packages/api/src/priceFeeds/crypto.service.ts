@@ -127,12 +127,38 @@ export interface LiveCryptoPriceRow {
   change24h: number | null;
 }
 
+// Short-lived in-memory cache so multiple concurrent browser polls share a
+// single CoinGecko call. CoinGecko's free tier rate-limits, and a 10 s TTL
+// lets us advertise "live" updates without burning the quota when several
+// tabs / users hit the endpoint at once.
+const LIVE_TTL_MS = 10_000;
+let liveCache: { at: number; rows: LiveCryptoPriceRow[] } | null = null;
+let liveInflight: Promise<LiveCryptoPriceRow[]> | null = null;
+
 /**
  * Fetch live INR + USD + 24h change for every active coin. Used by the
  * /api/assets/crypto/live endpoint to power the Crypto page's live overlay.
- * Falls back to the last DB row when CoinGecko rate-limits.
+ * Falls back to the last DB row when CoinGecko rate-limits. Coalesces
+ * concurrent callers behind a 10 s cache + single-flight promise.
  */
 export async function fetchLiveCryptoPrices(): Promise<LiveCryptoPriceRow[]> {
+  if (liveCache && Date.now() - liveCache.at < LIVE_TTL_MS) {
+    return liveCache.rows;
+  }
+  if (liveInflight) return liveInflight;
+  liveInflight = (async () => {
+    try {
+      const rows = await fetchLiveCryptoPricesUncached();
+      liveCache = { at: Date.now(), rows };
+      return rows;
+    } finally {
+      liveInflight = null;
+    }
+  })();
+  return liveInflight;
+}
+
+async function fetchLiveCryptoPricesUncached(): Promise<LiveCryptoPriceRow[]> {
   await ensureCryptoSeed();
   const coins = await prisma.cryptoMaster.findMany({ where: { isActive: true } });
   if (coins.length === 0) return [];
