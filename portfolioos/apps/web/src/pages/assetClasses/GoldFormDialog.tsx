@@ -153,7 +153,13 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
     const newPurity = assetClass === 'PHYSICAL_SILVER' ? '999' : '24K';
     setPurity(newPurity);
     setLivePriceApplied(false);
-  }, [assetClass, setValue, watch]);
+    // Clear price so the previously-filled value from another class (e.g. the
+    // 24K gold per-gram rate) doesn't bleed into silver / ETF / SGB. Edit mode
+    // intentionally skips this — the form was initialised from `initial`.
+    if (!isEdit) {
+      setValue('price', undefined as unknown as FormValues['price']);
+    }
+  }, [assetClass, isEdit, setValue, watch]);
 
   useEffect(() => {
     if (open) {
@@ -202,33 +208,41 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
   // silver scales by purity grade.
   const watchedAssetName = watch('assetName') ?? '';
   useEffect(() => {
-    if (!live || !open) return;
+    if (!live || !open || isEdit) return;
     let price: string | null = null;
+    let available = false; // did this class have a live source?
     if (assetClass === 'PHYSICAL_GOLD') {
-      if (!live.GOLD) return;
-      const caratNum = parseInt(purity.replace(/[kK]/, ''), 10);
-      const multiplier = !isNaN(caratNum) ? caratNum / 24 : 1;
-      price = new Decimal(live.GOLD).times(multiplier).toFixed(2);
+      available = !!live.GOLD;
+      if (live.GOLD) {
+        const caratNum = parseInt(purity.replace(/[kK]/, ''), 10);
+        const multiplier = !isNaN(caratNum) ? caratNum / 24 : 1;
+        price = new Decimal(live.GOLD).times(multiplier).toFixed(2);
+      }
     } else if (assetClass === 'GOLD_BOND') {
-      // SGB: 1 unit = 1 gram of pure gold (24K reference). No carat scaling.
-      if (!live.GOLD) return;
-      price = new Decimal(live.GOLD).toFixed(2);
+      available = !!live.GOLD;
+      if (live.GOLD) price = new Decimal(live.GOLD).toFixed(2);
     } else if (assetClass === 'GOLD_ETF') {
-      // Match user-typed asset name against known NSE gold ETF tickers.
       const ticker = (watchedAssetName.toUpperCase().match(/\b(GOLDBEES|GOLDIETF|AXISGOLD|HDFCGOLD|KOTAKGOLD|SETFGOLD|LICMFGOLD|QGOLDHALF)\b/) ?? [])[1];
       const nav = ticker ? live.etfNavs?.[ticker] : null;
-      if (!nav) return; // unknown ETF — let user enter manually
-      price = new Decimal(nav).toFixed(2);
+      available = !!nav;
+      if (nav) price = new Decimal(nav).toFixed(2);
     } else if (assetClass === 'PHYSICAL_SILVER') {
-      if (!live.SILVER) return;
-      const purityMap: Record<string, string> = { '999': '1', '925': '0.925', '800': '0.8' };
-      const mult = purityMap[purity] ?? '1';
-      price = new Decimal(live.SILVER).times(mult).toFixed(2);
+      available = !!live.SILVER;
+      if (live.SILVER) {
+        const purityMap: Record<string, string> = { '999': '1', '925': '0.925', '800': '0.8' };
+        const mult = purityMap[purity] ?? '1';
+        price = new Decimal(live.SILVER).times(mult).toFixed(2);
+      }
     }
-    if (!price) return;
-    if (!isEdit) {
+
+    if (price) {
       setValue('price', parseFloat(price) as any);
       setLivePriceApplied(true);
+    } else if (!available) {
+      // No live source for this class — clear any stale value carried over
+      // from a previous class so the user knows they must enter manually.
+      setValue('price', undefined as any);
+      setLivePriceApplied(false);
     }
   }, [live, purity, assetClass, watchedAssetName, open, isEdit, setValue]);
 

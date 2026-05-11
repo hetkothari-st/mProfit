@@ -751,6 +751,26 @@ export function FdDetailPage() {
           />
         </div>
 
+        {/* Missing-data CTA */}
+        {(!rate || !maturity) && (
+          <div className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3 flex items-center gap-3">
+            <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-300 flex-1">
+              {!rate && !maturity
+                ? 'Add interest rate and maturity date to see growth charts, maturity projection, and installment schedule.'
+                : !rate
+                  ? 'Add interest rate to see growth charts and maturity projection.'
+                  : 'Add maturity date to see growth charts and installment schedule.'}
+            </p>
+            {primary && (
+              <Button size="sm" variant="outline" className="border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                onClick={() => openEdit(primary)}>
+                <Pencil className="h-3 w-3 mr-1" /> Edit details
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* ── Charts ── */}
         {chartData.length > 1 && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
