@@ -897,18 +897,40 @@ export function FdDetailPage() {
               <CardContent>
                 {pieData ? (
                   <>
-                    <ResponsiveContainer width="100%" height={180}>
-                      <PieChart>
-                        <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={42} outerRadius={72}
-                          paddingAngle={2} stroke="hsl(var(--card))" strokeWidth={2}>
-                          {pieData.map((_, i) => <Cell key={i} fill={pieColors[i]} />)}
-                        </Pie>
-                        <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={TOOLTIP_LABEL_STYLE}
-                          formatter={(v: number, name: string) => [formatINR(String(v)), name]} />
-                        <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="circle" iconSize={8} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="space-y-1.5 text-xs mt-2 border-t pt-3">
+                    <div className="relative flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height={180}>
+                        <PieChart>
+                          <Pie
+                            data={pieData}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={75}
+                            paddingAngle={2}
+                            stroke="hsl(var(--card))"
+                            strokeWidth={2}
+                          >
+                            {pieData.map((_, i) => <Cell key={i} fill={pieColors[i]} />)}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={TOOLTIP_STYLE}
+                            itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
+                            labelStyle={TOOLTIP_LABEL_STYLE}
+                            formatter={(v: number, name: string) => [formatINR(String(v)), name]}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      {/* Center label inside the donut */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">Total</p>
+                        <p className="text-sm font-semibold tabular-nums leading-tight">
+                          {formatINR((maturityValue ?? totalPrincipalAtMaturity).toString())}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 text-xs mt-3 border-t pt-3">
                       <div className="flex justify-between">
                         <span className="flex items-center gap-1.5 text-muted-foreground">
                           <span className="h-2 w-2 rounded-full" style={{ background: CHART_PRINCIPAL }} /> Principal
@@ -925,6 +947,14 @@ export function FdDetailPage() {
                           {formatINR((totalInterest ?? new Decimal(0)).toString())}
                         </span>
                       </div>
+                      {totalInterest && !totalPrincipalAtMaturity.isZero() && (
+                        <div className="flex justify-between border-t pt-1.5 mt-1">
+                          <span className="text-muted-foreground">Interest as % of total</span>
+                          <span className="font-semibold tabular-nums" style={{ color: CHART_INTEREST }}>
+                            {totalInterest.div(totalPrincipalAtMaturity.plus(totalInterest)).times(100).toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (
