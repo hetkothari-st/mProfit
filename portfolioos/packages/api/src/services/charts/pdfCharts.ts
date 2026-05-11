@@ -69,13 +69,15 @@ export function drawPieChart(
   let oy = y;
 
   if (title) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink).text(pdfSafe(title), x, oy);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink)
+       .text(pdfSafe(title), x, oy, { width, lineBreak: false });
     oy += 15;
   }
 
   const total = data.reduce((s, d) => s + d.value, 0);
   if (total <= 0) {
-    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted).text('No data', x, oy);
+    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+       .text('No data', x, oy, { width, lineBreak: false });
     doc.y = oy + 14;
     return oy + 14;
   }
@@ -99,21 +101,29 @@ export function drawPieChart(
   // White donut hole
   doc.circle(cx, cy, radius * 0.5).fill(BRAND.white);
 
-  // Legend — right side, two columns if many items
-  const legX  = cx + radius + 18;
-  const legW  = x + width - legX - 4;
-  let legY    = oy;
-  const items = data.slice(0, 12);
-  const rowH  = 13;
+  // Legend — right side. Each row uses two SEPARATE text writes with
+  // explicit (x, y) + lineBreak:false so PDFKit cannot wrap and advance
+  // the cursor past the page bottom.
+  const legX     = cx + radius + 18;
+  const legW     = x + width - legX - 4;
+  const pctColW  = 36;
+  const labelColW = legW - pctColW - 4;
+  let legY       = oy;
+  const items    = data.slice(0, 12);
+  const rowH     = 13;
 
   items.forEach((seg, i) => {
     const color = seg.color ?? PIE_COLORS[i % PIE_COLORS.length]!;
     const pct   = ((seg.value / total) * 100).toFixed(1);
     doc.rect(legX, legY + 1, 7, 7).fill(color);
     doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.ink)
-       .text(pdfSafe(seg.label), legX + 10, legY, { width: legW - 40, ellipsis: true, continued: true })
-       .fillColor(BRAND.muted)
-       .text(` ${pct}%`, { width: 36 });
+       .text(pdfSafe(seg.label), legX + 10, legY, {
+         width: labelColW, lineBreak: false,
+       });
+    doc.fillColor(BRAND.muted)
+       .text(`${pct}%`, legX + 10 + labelColW + 2, legY, {
+         width: pctColW, align: 'right', lineBreak: false,
+       });
     legY += rowH;
   });
 
@@ -133,12 +143,14 @@ export function drawHorizontalBarChart(
   let oy = y;
 
   if (title) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink).text(pdfSafe(title), x, oy);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink)
+       .text(pdfSafe(title), x, oy, { width, lineBreak: false });
     oy += 16;
   }
 
   if (data.length === 0) {
-    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted).text('No data', x, oy);
+    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+       .text('No data', x, oy, { width, lineBreak: false });
     doc.y = oy + 14;
     return oy + 14;
   }
@@ -156,7 +168,7 @@ export function drawHorizontalBarChart(
     const color = item.color ?? (isNeg ? BRAND.negative : BRAND.accent);
 
     doc.font('Helvetica').fontSize(8).fillColor(BRAND.ink)
-       .text(pdfSafe(item.label), x, oy + 2, { width: labelW - 6, ellipsis: true });
+       .text(pdfSafe(item.label), x, oy + 2, { width: labelW - 6, lineBreak: false });
 
     // bar track
     doc.rect(x + labelW, oy + 3, barAreaW, barH - 6).fill(BRAND.rowAlt);
@@ -164,7 +176,9 @@ export function drawHorizontalBarChart(
     doc.rect(x + labelW, oy + 3, barW, barH - 6).fill(color);
 
     doc.font('Helvetica-Bold').fontSize(8).fillColor(isNeg ? BRAND.negative : BRAND.ink)
-       .text(pdfSafe(fmtCompact(item.value)), x + labelW + barAreaW + 4, oy + 2, { width: valueW, align: 'right' });
+       .text(pdfSafe(fmtCompact(item.value)), x + labelW + barAreaW + 4, oy + 2, {
+         width: valueW, align: 'right', lineBreak: false,
+       });
 
     oy += barH + rowGap;
     if (oy > y + height) return; // overflow guard
@@ -185,12 +199,14 @@ export function drawLineChart(
   let oy = y;
 
   if (title) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink).text(pdfSafe(title), x, oy);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink)
+       .text(pdfSafe(title), x, oy, { width, lineBreak: false });
     oy += 16;
   }
 
   if (data.length < 2) {
-    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted).text('Not enough data', x, oy);
+    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+       .text('Not enough data', x, oy, { width, lineBreak: false });
     doc.y = oy + 14;
     return oy + 14;
   }
@@ -237,7 +253,9 @@ export function drawLineChart(
   const step = Math.max(1, Math.round(data.length / 6));
   doc.font('Helvetica').fontSize(6.5).fillColor(BRAND.muted);
   for (let i = 0; i < data.length; i += step) {
-    doc.text(pdfSafe(data[i]!.label), pts[i]!.px - 18, oy + chartH + 4, { width: 36, align: 'center' });
+    doc.text(pdfSafe(data[i]!.label), pts[i]!.px - 18, oy + chartH + 4, {
+      width: 36, align: 'center', lineBreak: false,
+    });
   }
 
   const bottom = oy + chartH + xLabelH;
