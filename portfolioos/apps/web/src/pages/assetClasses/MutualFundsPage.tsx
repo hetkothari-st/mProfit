@@ -7,6 +7,7 @@ import { IMPORT_STATUS_LABELS } from '@portfolioos/shared';
 import { ImportErrorDialog } from '@/pages/imports/ImportErrorDialog';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -194,6 +195,7 @@ export function MutualFundsPage() {
         description="MF holdings across all portfolios, priced from AMFI NAV"
         actions={
           <div className="flex gap-2">
+            <DownloadReportButton type="holdings" assetClasses={['MUTUAL_FUND']} />
             <Button onClick={() => setSyncDialogOpen(true)}>
               <Download className="h-4 w-4" /> Sync MF via CASParser
             </Button>

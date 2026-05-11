@@ -32,6 +32,7 @@ import {
 } from '@portfolioos/shared';
 import type { OwnedPropertyDTO, PropertyType } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -830,9 +831,12 @@ export function RealEstateListPage() {
         title="Real Estate"
         description="Properties you own — homes, plots, commercial. Manual current value, capital-gain on sale, document vault."
         actions={
-          <Button onClick={() => { setEditProperty(null); setCreateOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add property
-          </Button>
+          <div className="flex gap-2">
+            <DownloadReportButton type="holdings" assetClasses={['REAL_ESTATE']} />
+            <Button onClick={() => { setEditProperty(null); setCreateOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add property
+            </Button>
+          </div>
         }
       />
 

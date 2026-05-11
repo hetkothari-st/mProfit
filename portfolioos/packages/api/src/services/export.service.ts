@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
 import { Decimal, toDecimal } from '@portfolioos/shared';
+import { BRAND } from './charts/pdfCharts.js';
 
 export interface ExportColumn {
   key: string;
@@ -88,80 +89,106 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
 
 // ─── PDF ────────────────────────────────────────────────────────────
 
-export function streamPdf(res: Response, payload: ExportPayload): void {
-  const safeTitle = payload.title.replace(/[^a-z0-9-_]+/gi, '_');
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.pdf"`);
+export function streamPdf(res: Response, payload: ExportPayload): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const safeTitle = payload.title.replace(/[^a-z0-9-_]+/gi, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.pdf"`);
 
-  const doc = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape' });
-  doc.pipe(res);
+    const doc = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape', bufferPages: true });
+    doc.on('end', resolve);
+    doc.on('error', reject);
+    res.on('error', reject);
+    doc.pipe(res);
 
-  doc.font('Helvetica-Bold').fontSize(18).text(payload.title);
-  doc.moveDown(0.3);
+    const ML    = doc.page.margins.left;
+    const pageW = doc.page.width - ML - doc.page.margins.right;
 
-  if (payload.meta) {
-    doc.font('Helvetica').fontSize(10);
-    for (const [k, v] of Object.entries(payload.meta)) {
-      doc.text(`${k}: ${v}`);
-    }
-    doc.moveDown(0.5);
-  }
+    // ── Branded header block ──────────────────────────────────────────
+    doc.rect(0, 0, doc.page.width, 52).fill(BRAND.ink);
+    doc.font('Helvetica-Bold').fontSize(16).fillColor(BRAND.white)
+       .text('PortfolioOS', ML, 12);
+    doc.font('Helvetica').fontSize(10).fillColor('#94AECB')
+       .text(payload.title, ML, 34);
+    doc.font('Helvetica').fontSize(8).fillColor('#94AECB')
+       .text(`Generated ${new Date().toISOString().slice(0, 10)}`, ML, 38, { align: 'right', width: pageW });
+    doc.y = 64;
 
-  // Table header
-  const tableStartX = doc.page.margins.left;
-  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const totalWeight =
-    payload.columns.reduce((sum, c) => sum + (c.width ?? 10), 0) || payload.columns.length;
-  const colWidths = payload.columns.map(
-    (c) => ((c.width ?? 10) / totalWeight) * pageWidth,
-  );
-
-  function drawRow(values: string[], opts: { bold?: boolean; bg?: boolean }): void {
-    const y = doc.y;
-    const rowHeight = 18;
-    if (opts.bg) {
-      doc.save().rect(tableStartX, y, pageWidth, rowHeight).fill('#E8EEF7').restore();
-    }
-    doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor('#111');
-    let x = tableStartX;
-    for (let i = 0; i < values.length; i++) {
-      doc.text(values[i] ?? '', x + 4, y + 4, {
-        width: (colWidths[i] ?? 100) - 8,
-        ellipsis: true,
+    if (payload.meta) {
+      doc.font('Helvetica').fontSize(8.5).fillColor(BRAND.muted);
+      const entries = Object.entries(payload.meta);
+      entries.forEach(([k, v], i) => {
+        if (i > 0) doc.text('  |  ', { continued: true });
+        doc.fillColor(BRAND.muted).text(`${k}: `, { continued: true });
+        doc.fillColor(BRAND.ink).text(String(v), { continued: i < entries.length - 1 });
       });
-      x += colWidths[i] ?? 100;
+      doc.moveDown(0.5);
     }
-    doc.y = y + rowHeight;
-    if (doc.y > doc.page.height - doc.page.margins.bottom - 40) {
-      doc.addPage();
-    }
-  }
 
-  drawRow(
-    payload.columns.map((c) => c.header),
-    { bold: true, bg: true },
-  );
+    // ── Table ─────────────────────────────────────────────────────────
+    const totalWeight = payload.columns.reduce((s, c) => s + (c.width ?? 10), 0) || payload.columns.length;
+    const colWidths   = payload.columns.map(c => ((c.width ?? 10) / totalWeight) * pageW);
+    const ROW_H       = 16;
 
-  for (const data of payload.rows) {
-    const values = payload.columns.map((col) => {
-      const raw = data[col.key];
-      if (col.formatter) return col.formatter(raw);
-      if (raw == null) return '';
-      return String(raw);
+    const drawRow = (values: string[], opts: { bold?: boolean; alt?: boolean }): void => {
+      const y = doc.y;
+      if (opts.bold)      doc.rect(ML, y, pageW, ROW_H).fill(BRAND.headerBg);
+      else if (opts.alt)  doc.rect(ML, y, pageW, ROW_H).fill(BRAND.rowAlt);
+      doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8).fillColor(BRAND.ink);
+      let x = ML;
+      for (let i = 0; i < values.length; i++) {
+        doc.text(values[i] ?? '', x + 3, y + 4, { width: (colWidths[i] ?? 80) - 6, ellipsis: true });
+        x += colWidths[i] ?? 80;
+      }
+      doc.y = y + ROW_H;
+      if (doc.y > doc.page.height - doc.page.margins.bottom - 36) {
+        doc.addPage();
+        doc.y = 36;
+        const hy = doc.y;
+        doc.rect(ML, hy, pageW, ROW_H).fill(BRAND.headerBg);
+        doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.ink);
+        let hx = ML;
+        for (let i = 0; i < payload.columns.length; i++) {
+          doc.text(payload.columns[i]!.header, hx + 3, hy + 4, { width: (colWidths[i] ?? 80) - 6, ellipsis: true });
+          hx += colWidths[i] ?? 80;
+        }
+        doc.y = hy + ROW_H;
+      }
+    };
+
+    drawRow(payload.columns.map(c => c.header), { bold: true });
+    payload.rows.forEach((data, idx) => {
+      const values = payload.columns.map(col => {
+        const raw = data[col.key];
+        if (col.formatter) return col.formatter(raw);
+        return raw == null ? '' : String(raw);
+      });
+      drawRow(values, { alt: idx % 2 === 1 });
     });
-    drawRow(values, {});
-  }
 
-  if (payload.footer) {
-    doc.moveDown(0.5);
-    doc.font('Helvetica-Bold').fontSize(10);
-    for (const [k, v] of Object.entries(payload.footer)) {
-      doc.text(`${k}: ${v}`);
+    if (payload.footer) {
+      doc.moveDown(0.6);
+      doc.rect(ML, doc.y, pageW, 1).fill(BRAND.border);
+      doc.moveDown(0.4);
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink);
+      Object.entries(payload.footer).forEach(([k, v]) => {
+        doc.text(`${k}: `, { continued: true }).font('Helvetica').text(String(v));
+      });
     }
-  }
 
-  doc.end();
-}
+    // ── Page numbers ──────────────────────────────────────────────────
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      doc.font('Helvetica').fontSize(6.5).fillColor(BRAND.muted).text(
+        `PortfolioOS  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`,
+        ML, doc.page.height - 22, { width: pageW, align: 'center' },
+      );
+    }
+
+    doc.flushPages();
+    doc.end();
+  });
 
 // Format money or quantity for reports. Parses through Decimal so the 4dp/6dp
 // strings coming off the API don't lose their last digit to IEEE-754 before

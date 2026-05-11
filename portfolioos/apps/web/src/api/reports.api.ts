@@ -189,4 +189,32 @@ export const reportsApi = {
     const base = getApiBaseUrl();
     return `${base}/api/reports/${endpoint}${qs({ portfolioId, fy, format })}`;
   },
+
+  holdingsExportUrl: (
+    format: 'pdf' | 'xlsx',
+    portfolioIds: string[],
+    assetClasses?: string[],
+  ): string => {
+    const base = getApiBaseUrl();
+    return (
+      `${base}/api/reports/holdings-export` +
+      qs({
+        format,
+        portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
+        assetClasses: assetClasses && assetClasses.length > 0 ? assetClasses.join(',') : undefined,
+      })
+    );
+  },
+
+  dashboardExportUrl: (
+    format: 'pdf' | 'xlsx',
+    scope: 'all' | 'single' | 'per-portfolio',
+    portfolioId?: string,
+  ): string => {
+    const base = getApiBaseUrl();
+    return (
+      `${base}/api/reports/dashboard-export` +
+      qs({ format, scope, portfolioId })
+    );
+  },
 };

@@ -62,6 +62,14 @@ export interface CreateTransactionInput {
   sourceAdapter?: string;
   sourceAdapterVer?: string;
   sourceHash?: string;
+
+  // Forex: trade-time currency snapshot for non-INR transactions. `currency`
+  // null/undefined → INR (backward compat). `fxRateAtTrade` is the base→INR
+  // rate frozen at tradeDate (Rule 115); `inrEquivalent` is the INR value of
+  // grossAmount and is used when projecting into HoldingProjection.
+  currency?: string;
+  fxRateAtTrade?: number | string;
+  inrEquivalent?: number | string;
 }
 
 function d(v: number | string | undefined | null, fallback = 0): Decimal {
@@ -84,13 +92,19 @@ async function assertPortfolio(userId: string, portfolioId: string) {
 async function resolveAssetRefs(
   input: CreateTransactionInput,
 ): Promise<{ stockId: string | null; fundId: string | null; assetName: string | null; isin: string | null }> {
-  const isStock = ['EQUITY', 'FUTURES', 'OPTIONS', 'ETF'].includes(input.assetClass);
+  const isStock = ['EQUITY', 'FUTURES', 'OPTIONS', 'ETF', 'FOREIGN_EQUITY'].includes(input.assetClass);
   const isFund = input.assetClass === 'MUTUAL_FUND';
 
   if (isStock && input.stockSymbol) {
+    // Foreign equity defaults to NASDAQ when no exchange supplied — keeps
+    // domestic exchange (NSE) for everything else. Exchange enum exposes
+    // NSE/BSE/MCX/NFO/BFO today; foreign exchanges still pass through as
+    // strings via Prisma so the symbol lookup works even if the enum lacks
+    // a NASDAQ value (we surface symbol+name; price feed runs via Yahoo).
+    const exchange = input.exchange ?? (input.assetClass === 'FOREIGN_EQUITY' ? 'NASDAQ' : 'NSE');
     const stock = await ensureStockMaster({
       symbol: input.stockSymbol,
-      exchange: input.exchange ?? 'NSE',
+      exchange,
       name: input.stockName,
       isin: input.isin,
     });
@@ -238,6 +252,9 @@ export async function createTransaction(userId: string, input: CreateTransaction
     sourceAdapter: input.sourceAdapter ?? null,
     sourceAdapterVer: input.sourceAdapterVer ?? null,
     sourceHash: sourceHash,
+    currency: input.currency ? input.currency.toUpperCase() : null,
+    fxRateAtTrade: input.fxRateAtTrade ? d(input.fxRateAtTrade).toString() : null,
+    inrEquivalent: input.inrEquivalent ? d(input.inrEquivalent).toString() : null,
   };
 
   const tx = await prisma.transaction.create({ data });
@@ -246,7 +263,7 @@ export async function createTransaction(userId: string, input: CreateTransaction
 
   // Fire-and-forget price refresh so the new holding's current value shows
   // immediately without the user having to click "Refresh".
-  const priceable = ['EQUITY', 'ETF', 'MUTUAL_FUND'] as AssetClass[];
+  const priceable = ['EQUITY', 'ETF', 'MUTUAL_FUND', 'FOREIGN_EQUITY'] as AssetClass[];
   if (priceable.includes(input.assetClass)) {
     updateStockPricesFromYahoo({ onlyHeld: true })
       .then(() => refreshAllHoldingPrices())
@@ -317,6 +334,20 @@ export async function updateTransaction(
     orderNo: input.orderNo ?? existing.orderNo ?? undefined,
     tradeNo: input.tradeNo ?? existing.tradeNo ?? undefined,
     narration: input.narration ?? existing.narration ?? undefined,
+
+    // Forex carry-through. existing.currency/fxRateAtTrade may be null for
+    // legacy INR rows; preserve null unless caller overrides.
+    currency: input.currency ?? (existing as { currency?: string | null }).currency ?? undefined,
+    fxRateAtTrade:
+      input.fxRateAtTrade ??
+      ((existing as { fxRateAtTrade?: { toString(): string } | null }).fxRateAtTrade
+        ? (existing as { fxRateAtTrade: { toString(): string } }).fxRateAtTrade.toString()
+        : undefined),
+    inrEquivalent:
+      input.inrEquivalent ??
+      ((existing as { inrEquivalent?: { toString(): string } | null }).inrEquivalent
+        ? (existing as { inrEquivalent: { toString(): string } }).inrEquivalent.toString()
+        : undefined),
   };
 
   const qty = d(merged.quantity);
@@ -379,6 +410,9 @@ export async function updateTransaction(
     orderNo: merged.orderNo ?? null,
     tradeNo: merged.tradeNo ?? null,
     narration: merged.narration ?? null,
+    currency: merged.currency ? merged.currency.toUpperCase() : null,
+    fxRateAtTrade: merged.fxRateAtTrade ? d(merged.fxRateAtTrade).toString() : null,
+    inrEquivalent: merged.inrEquivalent ? d(merged.inrEquivalent).toString() : null,
   };
 
   const updated = await prisma.transaction.update({ where: { id }, data: patch });
@@ -548,6 +582,9 @@ export function toTransactionDTO(tx: TransactionWithRefs | Prisma.TransactionGet
       mimeType: p.mimeType,
       sizeBytes: p.sizeBytes,
     })),
+    currency: anyTx.currency ?? null,
+    fxRateAtTrade: anyTx.fxRateAtTrade ? anyTx.fxRateAtTrade.toString() : null,
+    inrEquivalent: anyTx.inrEquivalent ? anyTx.inrEquivalent.toString() : null,
     createdAt: tx.createdAt.toISOString(),
     updatedAt: tx.updatedAt.toISOString(),
   };

@@ -82,6 +82,9 @@ const schema = z.object({
   otherCharges: moneyInOptional,
   broker: z.string().optional(),
   narration: z.string().optional(),
+  // Forex — only relevant for FOREIGN_EQUITY / FOREX_PAIR; otherwise INR.
+  currency: z.string().optional(),
+  fxRateAtTrade: moneyInOptional,
 });
 
 // Input type lets us hand Money/Quantity strings straight to `reset()`.
@@ -105,8 +108,11 @@ const ASSET_CLASS_OPTIONS: AssetClass[] = [
   'PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF', 'PHYSICAL_SILVER',
   'CRYPTOCURRENCY', 'REIT', 'INVIT',
   'PMS', 'AIF', 'ULIP',
+  'FOREIGN_EQUITY', 'FOREX_PAIR',
   'REAL_ESTATE', 'ART_COLLECTIBLES', 'CASH', 'OTHER',
 ];
+
+const FOREX_CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'JPY', 'AED', 'SGD', 'AUD', 'CAD', 'CHF', 'HKD', 'CNY'];
 
 const TXN_TYPE_OPTIONS: TransactionType[] = [
   'BUY',
@@ -217,7 +223,11 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
         payload.schemeName = values.schemeName;
         payload.amcName = values.amcName;
         payload.isin = values.isin || undefined;
-      } else if (values.assetClass === 'EQUITY' || values.assetClass === 'ETF') {
+      } else if (
+        values.assetClass === 'EQUITY' ||
+        values.assetClass === 'ETF' ||
+        values.assetClass === 'FOREIGN_EQUITY'
+      ) {
         payload.stockSymbol = values.stockSymbol;
         payload.stockName = values.stockName;
         payload.exchange = values.exchange;
@@ -225,6 +235,18 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
       } else {
         payload.assetName = values.assetName;
         payload.isin = values.isin || undefined;
+      }
+
+      // Forex fields — only persisted when relevant; assetClass-gated.
+      const isForex = values.assetClass === 'FOREIGN_EQUITY' || values.assetClass === 'FOREX_PAIR';
+      if (isForex && values.currency) {
+        payload.currency = values.currency.toUpperCase();
+      }
+      if (isForex && values.fxRateAtTrade !== undefined && values.fxRateAtTrade !== null) {
+        payload.fxRateAtTrade = values.fxRateAtTrade;
+        // inrEquivalent = grossAmount × fxRateAtTrade (computed live below).
+        const fx = d(values.fxRateAtTrade);
+        if (fx.greaterThan(0)) payload.inrEquivalent = grossD.times(fx).toFixed(4);
       }
 
       if (isEdit && initial) return transactionsApi.update(initial.id, payload);
@@ -376,15 +398,47 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
             </div>
           </div>
 
-          {assetClass !== 'EQUITY' && assetClass !== 'ETF' && assetClass !== 'MUTUAL_FUND' && (
+          {assetClass !== 'EQUITY' && assetClass !== 'ETF' && assetClass !== 'MUTUAL_FUND' && assetClass !== 'FOREIGN_EQUITY' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="assetName">Asset name</Label>
                 <Input id="assetName" className="mt-1" {...register('assetName')} />
               </div>
               <div>
-                <Label htmlFor="isin">ISIN (optional)</Label>
+                <Label htmlFor="isin">
+                  {assetClass === 'FOREX_PAIR' ? 'Pair code (e.g. USDINR / EURUSD)' : 'ISIN (optional)'}
+                </Label>
                 <Input id="isin" className="mt-1 uppercase" maxLength={12} {...register('isin')} />
+              </div>
+            </div>
+          )}
+
+          {(assetClass === 'FOREIGN_EQUITY' || assetClass === 'FOREX_PAIR') && (
+            <div className="rounded-md border border-amber-300/40 bg-amber-50/30 p-3 dark:border-amber-700/40 dark:bg-amber-900/10">
+              <p className="mb-2 text-xs font-medium text-foreground">Foreign currency</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="currency">Currency</Label>
+                  <Select id="currency" className="mt-1" {...register('currency')}>
+                    <option value="">INR (default)</option>
+                    {FOREX_CURRENCY_OPTIONS.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="fxRateAtTrade">Rate to INR at trade</Label>
+                  <Input
+                    id="fxRateAtTrade"
+                    type="number"
+                    step="0.000001"
+                    className="mt-1 tabular-nums"
+                    {...register('fxRateAtTrade')}
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Frozen for tax basis per Rule 115. INR equivalent = gross × rate.
+                  </p>
+                </div>
               </div>
             </div>
           )}

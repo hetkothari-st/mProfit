@@ -16,23 +16,23 @@ datasource db {
 // ─── USERS & AUTH ───────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String
-  name          String
-  phone         String?
-  pan           String?
-  dob           DateTime?
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  passwordHash          String
+  name                  String
+  phone                 String?
+  pan                   String?
+  dob                   DateTime?
   // Encrypted JSON array of passwords the user has supplied to unlock
   // PDF/XLSX uploads. Tried automatically on every locked file.
   // See lib/userDocPasswords.ts and lib/decryptIfNeeded.ts.
   savedFilePasswordsEnc String?
-  role          UserRole  @default(INVESTOR)
-  plan          PlanTier  @default(FREE)
-  planExpiresAt DateTime?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  role                  UserRole  @default(INVESTOR)
+  plan                  PlanTier  @default(FREE)
+  planExpiresAt         DateTime?
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   portfolios          Portfolio[]
   portfolioGroups     PortfolioGroup[]
@@ -99,6 +99,11 @@ model User {
   gmailScanJobs         GmailScanJob[]
   gmailDiscoveredDocs   GmailDiscoveredDoc[]
   gmailAutoApproveRules GmailAutoApproveRule[]
+
+  // Forex feature
+  forexBalances  ForexBalance[]
+  lrsRemittances LrsRemittance[]
+  tcsCredits     TcsCredit[]
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -170,7 +175,7 @@ model MailboxAccount {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  gmailScanJobs   GmailScanJob[]
+  gmailScanJobs GmailScanJob[]
 
   @@index([userId])
 }
@@ -275,6 +280,10 @@ model Portfolio {
   // Phase 5-PF — EPF / PPF auto-fetch accounts linked to this portfolio.
   pfAccounts ProvidentFundAccount[]
 
+  // Forex feature
+  forexBalances  ForexBalance[]
+  lrsRemittances LrsRemittance[]
+
   @@index([userId])
   @@index([clientId])
 }
@@ -333,6 +342,12 @@ enum Exchange {
   MCX
   NFO
   BFO
+  NASDAQ
+  NYSE
+  LSE
+  HKEX
+  SGX
+  TSE
 }
 
 model MutualFundMaster {
@@ -472,6 +487,79 @@ model FXRate {
   @@index([baseCcy, quoteCcy, date])
 }
 
+// ─── FOREX (foreign-currency cash, LRS, TCS) ─────────────────────
+//
+// ForexBalance models a foreign-currency cash holding outside the
+// HoldingProjection engine — it has a single live balance, no FIFO lots.
+// FX pair and FOREIGN_EQUITY trades use the standard Transaction model
+// (with AssetClass FOREX_PAIR / FOREIGN_EQUITY) and project into
+// HoldingProjection like any other tradeable asset.
+//
+// LRS (Liberalised Remittance Scheme) tracks outward remittance against the
+// USD 250k/year RBI ceiling for ITR Schedule FA reporting. TcsCredit tracks
+// the 20%-above-7L collected at source so the user can claim it in Form 26AS.
+
+model ForexBalance {
+  id               String     @id @default(cuid())
+  userId           String
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId      String?
+  portfolio        Portfolio? @relation(fields: [portfolioId], references: [id])
+  currency         String // ISO 4217 e.g. "USD", "EUR"
+  balance          Decimal    @db.Decimal(18, 4)
+  accountLabel     String? // user-supplied, e.g. "Wise USD"
+  accountNumberEnc String? // AES-256-GCM via lib/secrets.ts
+  accountLast4     String? // plain, for display
+  bankName         String?
+  country          String?
+  notes            String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@unique([userId, currency, accountLabel])
+  @@index([userId])
+}
+
+model LrsRemittance {
+  id             String     @id @default(cuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId    String?
+  portfolio      Portfolio? @relation(fields: [portfolioId], references: [id])
+  remittanceDate DateTime   @db.Date
+  currency       String
+  foreignAmount  Decimal    @db.Decimal(18, 4)
+  inrEquivalent  Decimal    @db.Decimal(18, 4)
+  fxRate         Decimal    @db.Decimal(18, 6)
+  purpose        String // "INVESTMENT" | "EDUCATION" | "TRAVEL" | "GIFT" | "MAINTENANCE" | "OTHER"
+  bankName       String?
+  remittanceRef  String?
+  tcsDeducted    Decimal    @default(0) @db.Decimal(18, 4)
+  tcsCreditId    String?
+  tcsCredit      TcsCredit? @relation(fields: [tcsCreditId], references: [id])
+  notes          String?
+  createdAt      DateTime   @default(now())
+
+  @@index([userId, remittanceDate])
+}
+
+model TcsCredit {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  financialYear String // "2025-26"
+  tcsAmount     Decimal  @db.Decimal(18, 4)
+  usedAmount    Decimal  @default(0) @db.Decimal(18, 4)
+  tan           String?
+  collectorName String?
+  form27eqRef   String?
+  createdAt     DateTime @default(now())
+
+  remittances LrsRemittance[]
+
+  @@index([userId, financialYear])
+}
+
 // ─── HOLDINGS ────────────────────────────────────────────────────
 
 model Holding {
@@ -544,6 +632,8 @@ enum AssetClass {
   POST_OFFICE_RD
   POST_OFFICE_TD
   POST_OFFICE_SAVINGS
+  FOREIGN_EQUITY
+  FOREX_PAIR
 }
 
 // ─── TRANSACTIONS ─────────────────────────────────────────────────
@@ -597,6 +687,15 @@ model Transaction {
 
   importJobId String?
   importJob   ImportJob? @relation(fields: [importJobId], references: [id])
+
+  // Forex feature: native currency + rate frozen at trade time (tax basis).
+  // currency = null means INR (backward compat). fxRateAtTrade is the
+  // base→INR rate at tradeDate; inrEquivalent is the INR value of grossAmount
+  // (or netAmount, depending on caller) at that rate. Nullable to preserve
+  // existing INR-only rows.
+  currency      String?
+  fxRateAtTrade Decimal? @db.Decimal(18, 6)
+  inrEquivalent Decimal? @db.Decimal(18, 4)
 
   // Phase 4.5 hardening (§4.5): idempotency + parser lineage + asset identity.
   // assetKey starts nullable for backfill; a follow-up migration flips it to
@@ -714,14 +813,18 @@ enum CapitalGainType {
 // ─── CASH FLOWS ───────────────────────────────────────────────────
 
 model CashFlow {
-  id          String       @id @default(cuid())
-  portfolioId String
-  portfolio   Portfolio    @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  date        DateTime     @db.Date
-  type        CashFlowType
-  amount      Decimal      @db.Decimal(18, 4)
-  description String?
-  createdAt   DateTime     @default(now())
+  id            String       @id @default(cuid())
+  portfolioId   String
+  portfolio     Portfolio    @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  date          DateTime     @db.Date
+  type          CashFlowType
+  amount        Decimal      @db.Decimal(18, 4)
+  description   String?
+  // Forex: native currency + INR equivalent for foreign-currency cash moves.
+  // null currency means INR.
+  currency      String?
+  inrEquivalent Decimal?     @db.Decimal(18, 4)
+  createdAt     DateTime     @default(now())
 
   @@index([portfolioId, date])
 }
@@ -869,31 +972,31 @@ enum ImportStatus {
 // ─── GMAIL FULL-INBOX INGESTION ──────────────────────────────────
 
 model GmailScanJob {
-  id              String          @id @default(cuid())
-  userId          String
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mailboxId       String
-  mailbox         MailboxAccount  @relation(fields: [mailboxId], references: [id])
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mailboxId String
+  mailbox   MailboxAccount @relation(fields: [mailboxId], references: [id])
 
-  lookbackFrom    DateTime        @db.Date
-  lookbackTo      DateTime        @db.Date
+  lookbackFrom DateTime @db.Date
+  lookbackTo   DateTime @db.Date
 
-  status          GmailScanStatus @default(PENDING)
+  status GmailScanStatus @default(PENDING)
 
   totalMessages         Int?
-  processedMessages     Int       @default(0)
-  attachmentsFound      Int       @default(0)
-  attachmentsClassified Int       @default(0)
-  attachmentsKept       Int       @default(0)
+  processedMessages     Int  @default(0)
+  attachmentsFound      Int  @default(0)
+  attachmentsClassified Int  @default(0)
+  attachmentsKept       Int  @default(0)
 
-  nextPageToken   String?
+  nextPageToken String?
 
-  errorMessage    String?
-  startedAt       DateTime?
-  completedAt     DateTime?
-  createdAt       DateTime        @default(now())
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
 
-  documents       GmailDiscoveredDoc[]
+  documents GmailDiscoveredDoc[]
 
   @@index([userId, status])
   @@index([mailboxId, status])
@@ -910,44 +1013,44 @@ enum GmailScanStatus {
 }
 
 model GmailDiscoveredDoc {
-  id                   String         @id @default(cuid())
-  userId               String
-  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  scanJobId            String
-  scanJob              GmailScanJob   @relation(fields: [scanJobId], references: [id], onDelete: Cascade)
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scanJobId String
+  scanJob   GmailScanJob @relation(fields: [scanJobId], references: [id], onDelete: Cascade)
 
-  gmailMessageId       String
-  gmailAttachmentId    String
-  fromAddress          String
-  subject              String
-  receivedAt           DateTime
-  fileName             String
-  fileSize             Int
-  mimeType             String
-  contentHash          String
+  gmailMessageId    String
+  gmailAttachmentId String
+  fromAddress       String
+  subject           String
+  receivedAt        DateTime
+  fileName          String
+  fileSize          Int
+  mimeType          String
+  contentHash       String
 
   isFinancial          Boolean?
   classifiedDocType    String?
-  classifierConfidence Decimal?       @db.Decimal(3, 2)
+  classifierConfidence Decimal? @db.Decimal(3, 2)
   suggestedParser      String?
   classifierNotes      String?
   classifierTokensIn   Int?
   classifierTokensOut  Int?
 
-  storagePath          String
+  storagePath String
 
-  status               GmailDocStatus @default(CLASSIFYING)
+  status GmailDocStatus @default(CLASSIFYING)
 
-  importJobId          String?
-  importJob            ImportJob?     @relation(fields: [importJobId], references: [id], onDelete: SetNull)
-  rejectedReason       String?
+  importJobId    String?
+  importJob      ImportJob? @relation(fields: [importJobId], references: [id], onDelete: SetNull)
+  rejectedReason String?
 
-  approvedAt           DateTime?
-  rejectedAt           DateTime?
-  importedAt           DateTime?
+  approvedAt DateTime?
+  rejectedAt DateTime?
+  importedAt DateTime?
 
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, gmailMessageId, gmailAttachmentId])
   @@unique([userId, contentHash])
@@ -969,15 +1072,15 @@ enum GmailDocStatus {
 }
 
 model GmailAutoApproveRule {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fromAddress     String
-  docType         String?
-  enabled         Boolean  @default(true)
-  approvedCount   Int      @default(0)
-  lastUsedAt      DateTime?
-  createdAt       DateTime @default(now())
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromAddress   String
+  docType       String?
+  enabled       Boolean   @default(true)
+  approvedCount Int       @default(0)
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
 
   @@unique([userId, fromAddress, docType])
   @@index([userId, enabled])
@@ -2340,15 +2443,15 @@ model ExtensionPairing {
   pairingCodeExpiresAt DateTime
 
   /// SHA-256(bearer) — used for O(1) bearer lookup. Never stores plaintext.
-  bearerHash String?  @unique
+  bearerHash  String? @unique
   /// Last 8 hex chars of the bearer for display purposes.
   bearerLast8 String?
 
-  paired    Boolean   @default(false)
-  pairedAt  DateTime?
+  paired     Boolean   @default(false)
+  pairedAt   DateTime?
   lastUsedAt DateTime?
-  revoked   Boolean   @default(false)
-  revokedAt DateTime?
+  revoked    Boolean   @default(false)
+  revokedAt  DateTime?
 
   createdAt DateTime @default(now())
 

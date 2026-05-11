@@ -396,9 +396,11 @@ export async function getHistoricalValuation(
     byDate.get(d)!.push(tx);
   }
 
-  // Apply all transactions before window start as baseline
+  // Apply transactions STRICTLY before window start as the opening baseline.
+  // Transactions on rangeStart itself get applied below in the per-day loop;
+  // applying them here too would double-count (invested 2×, state inflated).
   for (const [d, txns] of [...byDate.entries()].sort()) {
-    if (d > rangeStart) break;
+    if (d >= rangeStart) break;
     for (const tx of txns) {
       const key = tx.assetKey ?? `_${tx.stockId ?? d}`;
       const qty = toDecimal(tx.quantity);
@@ -462,18 +464,38 @@ export async function getHistoricalValuation(
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
-  // Replace today's point with live HoldingProjection values (most accurate)
-  const projections = await prisma.holdingProjection.findMany({
-    where: { portfolioId: id },
-    select: { currentValue: true, totalCost: true },
-  });
-  const liveValue = projections.reduce((s, h) => s.plus(toDecimal(h.currentValue ?? h.totalCost)), new Decimal(0));
-  const liveCost  = projections.reduce((s, h) => s.plus(toDecimal(h.totalCost)), new Decimal(0));
-
-  if (points.length > 0 && points[points.length - 1]!.date === todayStr) {
-    points[points.length - 1] = { date: todayStr, value: serializeMoney(liveValue) as Money, invested: serializeMoney(liveCost) as Money };
-  } else if (liveValue.greaterThan(0)) {
-    points.push({ date: todayStr, value: serializeMoney(liveValue) as Money, invested: serializeMoney(liveCost) as Money });
+  // Overlay today's point with live HoldingProjection market value (most
+  // accurate snapshot — picks up intraday price moves the historical
+  // StockPrice table hasn't seen yet). Critically, do NOT replace `invested`
+  // from HoldingProjection.totalCost: that field is the cost basis of
+  // remaining holdings (drops on every SELL), while `invested` here means
+  // cumulative gross outflow. Conflating them caused the chart to "drop to
+  // zero" after the last sell. Reuse the prior cumulative `invested` instead.
+  if (points.length > 0) {
+    const projections = await prisma.holdingProjection.findMany({
+      where: { portfolioId: id },
+      select: { currentValue: true, totalCost: true },
+    });
+    const liveValue = projections.reduce(
+      (s, h) => s.plus(toDecimal(h.currentValue ?? h.totalCost)),
+      new Decimal(0),
+    );
+    const last = points[points.length - 1]!;
+    if (last.date === todayStr) {
+      // Keep last.invested (cumulative); refresh only value.
+      points[points.length - 1] = {
+        date: todayStr,
+        value: serializeMoney(liveValue) as Money,
+        invested: last.invested,
+      };
+    } else if (liveValue.greaterThan(0)) {
+      // Append today using the carried-forward cumulative `invested`.
+      points.push({
+        date: todayStr,
+        value: serializeMoney(liveValue) as Money,
+        invested: last.invested,
+      });
+    }
   }
 
   return points;

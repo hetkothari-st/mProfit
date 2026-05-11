@@ -15,6 +15,7 @@ import {
 import { Decimal, formatINR } from '@portfolioos/shared';
 import type { AssetClass, HoldingRow, TransactionDTO } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -720,7 +721,9 @@ export function FixedDepositsPage() {
         title="Fixed & Recurring Deposits"
         description="Track FDs and RDs across banks — one-time deposits or monthly installments."
         actions={
-          <div className="relative" ref={addMenuRef}>
+          <div className="flex items-center gap-2">
+            <DownloadReportButton type="holdings" assetClasses={['FIXED_DEPOSIT', 'RECURRING_DEPOSIT']} />
+            <div className="relative" ref={addMenuRef}>
             <Button onClick={() => setAddMenuOpen((v) => !v)}>
               <Plus className="h-4 w-4" /> Add{' '}
               <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
@@ -742,6 +745,7 @@ export function FixedDepositsPage() {
                 ))}
               </div>
             )}
+            </div>
           </div>
         }
       />

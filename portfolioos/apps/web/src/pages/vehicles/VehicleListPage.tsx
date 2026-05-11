@@ -14,6 +14,7 @@ import {
   Calculator,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -37,6 +38,7 @@ export function VehicleListPage() {
         description="Registration, insurance, PUC, fitness — all expiries in one place"
         actions={
           <div className="flex gap-2">
+            <DownloadReportButton type="vehicles" />
             <Button asChild variant="outline">
               <Link to="/vehicles/value">
                 <Calculator className="h-4 w-4" /> Get valuation

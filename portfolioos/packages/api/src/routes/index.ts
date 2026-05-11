@@ -32,6 +32,7 @@ import { loansRouter } from './loans.routes.js';
 import { creditCardsRouter } from './creditCards.routes.js';
 import { realEstateRouter } from './realEstate.routes.js';
 import { pfRouter } from './pf.routes.js';
+import { forexRouter } from './forex.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -68,4 +69,5 @@ export function registerRoutes(app: Express): void {
   app.use('/api/credit-cards', creditCardsRouter);
   app.use('/api/real-estate', realEstateRouter);
   app.use('/api/epfppf', pfRouter);
+  app.use('/api/forex', forexRouter);
 }

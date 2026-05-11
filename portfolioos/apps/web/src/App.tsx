@@ -51,6 +51,7 @@ import { PfExtensionPairPage } from './pages/pf/PfExtensionPairPage';
 import { OtherAssetsPage } from './pages/assetClasses/OtherAssetsPage';
 import { PostOfficePage } from './pages/assetClasses/PostOfficePage';
 import { FuturesOptionsPage } from './pages/assetClasses/FuturesOptionsPage';
+import { ForexPage } from './pages/forex/ForexPage';
 import { AccountingPage } from './pages/accounting/AccountingPage';
 import { AlertsPage } from './pages/alerts/AlertsPage';
 import { OnboardingWizard } from './pages/onboarding/OnboardingWizard';
@@ -95,6 +96,7 @@ export function App() {
         <Route path="/gold/:holdingId" element={<GoldAssetDetailPage />} />
         <Route path="/crypto" element={<CryptoPage />} />
         <Route path="/crypto/:holdingId" element={<CryptoDetailPage />} />
+        <Route path="/forex" element={<ForexPage />} />
         <Route path="/provident-fund" element={<ProvidentFundPage />} />
         <Route path="/provident-fund/extension" element={<PfExtensionPairPage />} />
         {/* PPF + EPF merged into /provident-fund. Old paths redirect for back-compat. */}

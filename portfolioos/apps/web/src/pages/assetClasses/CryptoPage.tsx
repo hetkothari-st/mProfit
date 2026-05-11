@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -280,9 +281,12 @@ export function CryptoPage() {
         title="Cryptocurrency"
         description="Track Bitcoin, Ethereum, and other digital assets with live prices"
         actions={
-          <Button onClick={openAdd}>
-            <Plus className="h-4 w-4" /> Add Crypto
-          </Button>
+          <div className="flex gap-2">
+            <DownloadReportButton type="holdings" assetClasses={['CRYPTOCURRENCY']} />
+            <Button onClick={openAdd}>
+              <Plus className="h-4 w-4" /> Add Crypto
+            </Button>
+          </div>
         }
       />
 

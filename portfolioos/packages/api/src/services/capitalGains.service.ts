@@ -84,6 +84,31 @@ function isFnoSkipped(ac: AssetClass): boolean {
   return ac === 'FUTURES' || ac === 'OPTIONS';
 }
 
+/**
+ * Forex pair trades (USDINR, EURUSD, …) are speculative business income under
+ * §43(5)/§28 — not capital gains. They bypass the FIFO engine entirely; P&L
+ * is computed separately by `forex.service.ts` and surfaced as business
+ * income in tax reports.
+ */
+function isForexPair(ac: AssetClass): boolean {
+  return ac === 'FOREX_PAIR';
+}
+
+/**
+ * Foreign equity (US/international listed shares) is a non-equity capital
+ * asset for Indian tax purposes:
+ *   - LTCG threshold: 24 months (Finance Act 2023).
+ *   - Post-Apr-2023 buys: 12.5% flat LTCG, no indexation (Finance Act 2024).
+ *   - Pre-Apr-2023 buys held >36 months historically qualified for
+ *     indexation. We treat post-2023 as the new normal; pre-2023 indexation
+ *     can be re-enabled by flipping `qualifiesForIndexation` for FOREIGN_EQUITY.
+ *   - STCG: slab rate (handled at report level, not here).
+ *   - Currency conversion uses fxRateAtTrade frozen at each leg per Rule 115.
+ */
+function isForeignEquity(ac: AssetClass): boolean {
+  return ac === 'FOREIGN_EQUITY';
+}
+
 function isEquityMF(ac: AssetClass): boolean {
   // We don't persist equity-vs-debt at the MF level without category data.
   // Treat MF as equity-style by default; downstream users can reclassify via
@@ -93,6 +118,7 @@ function isEquityMF(ac: AssetClass): boolean {
 
 function longTermThresholdMonths(ac: AssetClass): number {
   if (isEquityLike(ac) || isEquityMF(ac)) return 12;
+  if (isForeignEquity(ac)) return 24; // Finance Act 2023
   // Bonds, gold, real estate, PMS, AIF, REIT, others
   return 36;
 }
@@ -104,6 +130,8 @@ function qualifiesForIndexation(ac: AssetClass, buyDate: Date): boolean {
     // Debt MFs bought before 1-Apr-2023 still qualify; post that, no indexation.
     return buyDate < DEBT_MF_INDEXATION_CUTOFF;
   }
+  // Foreign equity post Finance Act 2024 — flat 12.5%, no indexation.
+  if (isForeignEquity(ac)) return false;
   // Bonds, gold, real estate, etc.
   return (
     ac === 'BOND' ||
@@ -234,10 +262,12 @@ function groupByAsset(txs: Transaction[]): Map<string, { key: AssetKey; txs: Tra
 }
 
 export function computeFIFOGains(txs: Transaction[]): CapitalGainRow[] {
-  // F&O is §43(5) business income, not capital gains — strip those rows
-  // upstream of the FIFO engine so an accidental future asset-class addition
-  // can never silently get bucketed as STCG/LTCG.
-  const cgEligible = txs.filter((t) => !isFnoSkipped(t.assetClass));
+  // F&O and forex pairs are §43(5)/§28 business income, not capital gains —
+  // strip those rows upstream of the FIFO engine so they can never silently
+  // get bucketed as STCG/LTCG.
+  const cgEligible = txs.filter(
+    (t) => !isFnoSkipped(t.assetClass) && !isForexPair(t.assetClass),
+  );
   const groups = groupByAsset(cgEligible);
   const rows: CapitalGainRow[] = [];
 

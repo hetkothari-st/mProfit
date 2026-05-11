@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -648,9 +649,12 @@ export function InsuranceListPage() {
         title="Insurance"
         description="Track policies, premiums, and claims across all types"
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> Add policy
-          </Button>
+          <div className="flex gap-2">
+            <DownloadReportButton type="insurance" />
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" /> Add policy
+            </Button>
+          </div>
         }
       />
 

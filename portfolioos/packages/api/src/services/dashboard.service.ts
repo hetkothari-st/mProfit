@@ -4,6 +4,27 @@ import { serializeMoney } from '@portfolioos/shared';
 import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
 import { computeCardSummary } from './creditCards.service.js';
 
+// Human-readable labels for the AssetClass enum — used in dashboard breakdown.
+// Mirrors the per-class labels in apps/web/src/pages/assetClasses/SimpleAssetPage.tsx
+// (kept inline rather than imported because the API package cannot pull from /apps).
+const ASSET_CLASS_LABELS: Record<string, string> = {
+  EQUITY: 'Equity', MUTUAL_FUND: 'Mutual Fund', ETF: 'ETF',
+  FUTURES: 'Futures', OPTIONS: 'Options',
+  BOND: 'Bond', GOVT_BOND: 'Govt Bond', CORPORATE_BOND: 'Corp Bond',
+  FIXED_DEPOSIT: 'Fixed Deposit', RECURRING_DEPOSIT: 'Recurring Deposit',
+  NPS: 'NPS', PPF: 'PPF', EPF: 'EPF', PMS: 'PMS', AIF: 'AIF',
+  REIT: 'REIT', INVIT: 'InvIT',
+  GOLD_BOND: 'Gold Bond', GOLD_ETF: 'Gold ETF',
+  PHYSICAL_GOLD: 'Physical Gold', PHYSICAL_SILVER: 'Silver',
+  ULIP: 'ULIP', INSURANCE: 'Insurance',
+  REAL_ESTATE: 'Real Estate', PRIVATE_EQUITY: 'Private Equity',
+  CRYPTOCURRENCY: 'Crypto', ART_COLLECTIBLES: 'Art', CASH: 'Cash', OTHER: 'Other',
+  NSC: 'NSC', KVP: 'KVP', SCSS: 'SCSS', SSY: 'SSY',
+  POST_OFFICE_MIS: 'PO MIS', POST_OFFICE_RD: 'PO RD',
+  POST_OFFICE_TD: 'PO TD', POST_OFFICE_SAVINGS: 'PO Savings',
+  FOREIGN_EQUITY: 'Foreign Equity', FOREX_PAIR: 'FX Pair',
+};
+
 const ZERO = new Decimal(0);
 
 function d(v: { toString(): string } | null | undefined): Decimal {
@@ -266,7 +287,7 @@ export async function getDashboardNetWorth(userId: string, portfolioId?: string)
   )) {
     allocationBreakdown.push({
       key: cls,
-      label: cls,
+      label: ASSET_CLASS_LABELS[cls] ?? cls,
       value: serializeMoney(val),
       numericValue: val.toNumber(),
       percent: totalTangible.greaterThan(0) ? val.dividedBy(totalTangible).times(100).toNumber() : 0,

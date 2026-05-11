@@ -13,6 +13,9 @@ import {
   getUserXirr,
   getHistoricalValuation,
   rebuildCapitalGains,
+  getHoldingsExport,
+  getDashboardExport,
+  getSectionExport,
 } from '../controllers/reports.controller.js';
 
 export const reportsRouter = Router();
@@ -29,3 +32,6 @@ reportsRouter.get('/xirr', asyncHandler(getXirr));
 reportsRouter.get('/xirr/user', asyncHandler(getUserXirr));
 reportsRouter.get('/historical-valuation', asyncHandler(getHistoricalValuation));
 reportsRouter.post('/rebuild-capital-gains', asyncHandler(rebuildCapitalGains));
+reportsRouter.get('/holdings-export', asyncHandler(getHoldingsExport));
+reportsRouter.get('/dashboard-export', asyncHandler(getDashboardExport));
+reportsRouter.get('/section-export', asyncHandler(getSectionExport));

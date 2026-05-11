@@ -32,6 +32,12 @@ export const Exchange = {
   MCX: 'MCX',
   NFO: 'NFO',
   BFO: 'BFO',
+  NASDAQ: 'NASDAQ',
+  NYSE: 'NYSE',
+  LSE: 'LSE',
+  HKEX: 'HKEX',
+  SGX: 'SGX',
+  TSE: 'TSE',
 } as const;
 export type Exchange = (typeof Exchange)[keyof typeof Exchange];
 
@@ -73,6 +79,8 @@ export const AssetClass = {
   POST_OFFICE_RD: 'POST_OFFICE_RD',
   POST_OFFICE_TD: 'POST_OFFICE_TD',
   POST_OFFICE_SAVINGS: 'POST_OFFICE_SAVINGS',
+  FOREIGN_EQUITY: 'FOREIGN_EQUITY',
+  FOREX_PAIR: 'FOREX_PAIR',
 } as const;
 export type AssetClass = (typeof AssetClass)[keyof typeof AssetClass];
 

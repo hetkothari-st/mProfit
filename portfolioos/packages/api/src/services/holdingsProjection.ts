@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js';
 import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';
+import { getLatestFxRate } from '../priceFeeds/fx.service.js';
 import { assetKeyFromTransaction } from './assetKey.js';
 import { resolveMutualFundId, resolveStockMasterId } from './masterData.service.js';
 
@@ -219,7 +220,26 @@ export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
 
   for (const tx of sorted) {
     const qty = new Decimal(tx.quantity.toString());
-    const net = new Decimal(tx.netAmount.toString());
+    // INR-equivalent net for cost basis: foreign-currency trades carry
+    // `inrEquivalent` frozen at trade time (Rule 115). When set, prefer it
+    // so totalCost ends up in INR even though netAmount is in native ccy.
+    // Falls back to netAmount × fxRateAtTrade when explicit equiv missing,
+    // and finally to raw netAmount (INR trades have currency=null, so
+    // netAmount IS already in INR).
+    const txAny = tx as Transaction & {
+      currency?: string | null;
+      fxRateAtTrade?: { toString(): string } | null;
+      inrEquivalent?: { toString(): string } | null;
+    };
+    const rawNet = new Decimal(tx.netAmount.toString());
+    const isForeign = txAny.currency && txAny.currency !== 'INR';
+    const net = isForeign
+      ? txAny.inrEquivalent
+        ? new Decimal(txAny.inrEquivalent.toString())
+        : txAny.fxRateAtTrade
+          ? rawNet.times(new Decimal(txAny.fxRateAtTrade.toString()))
+          : rawNet
+      : rawNet;
 
     if (BUY_TYPES.has(tx.transactionType)) {
       if (tx.transactionType === 'BONUS') {
@@ -376,6 +396,37 @@ export async function recomputeForAsset(
       isin: meta.isin,
     });
     currentValue = price ? agg.quantity.times(price) : null;
+
+    // Foreign-currency native-price → INR conversion.
+    //
+    // FOREIGN_EQUITY: Yahoo returns the price in the listed exchange's native
+    // currency (USD for NASDAQ/NYSE, GBP for LSE, etc). totalCost is already
+    // in INR (we used inrEquivalent above), so currentValue needs the same
+    // INR treatment for consistent unrealisedPnL. Native currency comes from
+    // the latest transaction's `currency` field (frozen per-trade).
+    //
+    // FOREX_PAIR with 6-letter isin (e.g. "EURUSD"): price = USD per EUR.
+    // qty × price = USD value; multiply by USD→INR to surface as INR.
+    // 3-letter isin (e.g. "USD"): price already = USD→INR, no extra step.
+    if (currentValue && currentValue.greaterThan(0)) {
+      if (meta.assetClass === 'FOREIGN_EQUITY') {
+        const latest = meta.txs[meta.txs.length - 1] as Transaction & { currency?: string | null };
+        const ccy = latest?.currency;
+        if (ccy && ccy !== 'INR') {
+          const fx = await getLatestFxRate(ccy, 'INR');
+          if (fx && fx.greaterThan(0)) currentValue = currentValue.times(fx);
+        }
+      } else if (meta.assetClass === 'FOREX_PAIR') {
+        const code = (meta.isin ?? '').toUpperCase();
+        if (code.length === 6) {
+          const quote = code.slice(3, 6);
+          if (quote !== 'INR') {
+            const fx = await getLatestFxRate(quote, 'INR');
+            if (fx && fx.greaterThan(0)) currentValue = currentValue.times(fx);
+          }
+        }
+      }
+    }
   }
 
   const unrealisedPnL = currentValue ? currentValue.minus(agg.totalCost) : null;

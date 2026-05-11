@@ -25,6 +25,7 @@ import { foApi, brokerApi, type FoPosition, type FoTrade, type BrokerStatus } fr
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -317,6 +318,7 @@ export function FuturesOptionsPage() {
         description="Open positions, P&L, expiry lifecycle, broker sync."
         actions={
           <div className="flex flex-wrap gap-2 items-center">
+            <DownloadReportButton type="holdings" assetClasses={['FUTURES', 'OPTIONS']} />
             <BrokerStatusChips
               statuses={brokerStatusQ.data ?? []}
               onConnect={(b) => setConnect({ broker: b, resumeSync: false })}

@@ -12,6 +12,7 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
@@ -25,6 +26,7 @@ import { dashboardApi } from '@/api/dashboard.api';
 import { mailboxesApi } from '@/api/mailboxes.api';
 import { ConnectGmailCard } from '@/components/dashboard/ConnectGmailCard';
 import { GmailScanProgressCard } from '@/components/dashboard/GmailScanProgressCard';
+import { DashboardFxStrip } from '@/pages/forex/DashboardFxStrip';
 import { apiErrorMessage } from '@/api/client';
 import {
   formatINR,
@@ -237,6 +239,7 @@ export function DashboardPage() {
               <option value="ALL">All portfolios ({portfolios.length})</option>
               {portfolios.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </Select>
+            <DownloadReportButton type="dashboard" label="Export" />
             <Button variant="outline" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
               {refreshMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Refresh
@@ -348,6 +351,9 @@ export function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* Live FX rates strip — quick glance + click-through to /forex */}
+      <DashboardFxStrip />
 
       {/* Investment metric cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

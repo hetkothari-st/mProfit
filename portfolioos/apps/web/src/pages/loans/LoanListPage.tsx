@@ -23,6 +23,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -686,9 +687,12 @@ export function LoanListPage() {
         title="Loans"
         description="Track home, car, personal, and other loans"
         actions={
-          <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add loan
-          </Button>
+          <div className="flex gap-2">
+            <DownloadReportButton type="loans" />
+            <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add loan
+            </Button>
+          </div>
         }
       />
 

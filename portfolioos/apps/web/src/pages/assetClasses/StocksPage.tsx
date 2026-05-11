@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -219,6 +220,7 @@ export function StocksPage() {
         description="Equity holdings aggregated across all portfolios"
         actions={
           <div className="flex gap-2">
+            <DownloadReportButton type="holdings" assetClasses={['EQUITY']} />
             <Button variant="outline" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
               {refreshMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Refresh prices

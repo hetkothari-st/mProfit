@@ -19,6 +19,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -568,9 +569,12 @@ export function RentalListPage() {
         title="Rental Properties"
         description="Track properties, tenancies, rent receipts, and expenses"
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> Add property
-          </Button>
+          <div className="flex gap-2">
+            <DownloadReportButton type="rental" />
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" /> Add property
+            </Button>
+          </div>
         }
       />
 

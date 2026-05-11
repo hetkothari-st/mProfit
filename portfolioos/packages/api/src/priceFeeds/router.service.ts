@@ -6,6 +6,7 @@ import { getLatestStockPrice } from './yahoo.service.js';
 import { getLatestNavForFund } from './amfi.service.js';
 import { getLatestCommodityPrice } from './commodity.service.js';
 import { getLatestCryptoPrice, getLatestCryptoPriceByCoinGeckoId } from './crypto.service.js';
+import { getLatestFxRate } from './fx.service.js';
 
 /**
  * Unified price feed router — dispatches a price lookup to the correct
@@ -55,6 +56,22 @@ export async function routePriceLookup(input: PriceLookupInput): Promise<Decimal
       if (input.cryptoId) return getLatestCryptoPrice(input.cryptoId);
       if (input.isin) return getLatestCryptoPriceByCoinGeckoId(input.isin);
       return null;
+
+    case 'FOREIGN_EQUITY':
+      // US/international tickers (AAPL, MSFT, GOOGL) ride the existing Yahoo
+      // price feed — the same path as domestic EQUITY. Native price is in the
+      // listed currency (typically USD); the projection layer converts to INR
+      // via `convertToInr` at compute time.
+      return input.stockId ? getLatestStockPrice(input.stockId) : null;
+
+    case 'FOREX_PAIR': {
+      // Pair identity lives in `isin`: a 3-letter code (e.g. "USD") means
+      // base→INR; a 6-letter code (e.g. "EURUSD") means base→quote.
+      const code = (input.isin ?? '').toUpperCase();
+      if (code.length === 3) return getLatestFxRate(code, 'INR');
+      if (code.length === 6) return getLatestFxRate(code.slice(0, 3), code.slice(3, 6));
+      return null;
+    }
 
     case 'BOND':
     case 'GOVT_BOND':

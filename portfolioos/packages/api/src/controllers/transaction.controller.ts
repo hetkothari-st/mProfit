@@ -51,6 +51,10 @@ const baseTransactionSchema = z.object({
   orderNo: z.string().max(100).optional(),
   tradeNo: z.string().max(100).optional(),
   narration: z.string().max(500).optional(),
+  // Forex (optional; INR when omitted).
+  currency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
+  fxRateAtTrade: decimalLike.optional(),
+  inrEquivalent: decimalLike.optional(),
 });
 
 const createSchema = baseTransactionSchema;

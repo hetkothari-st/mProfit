@@ -33,6 +33,7 @@ import {
   HandCoins,
   Home,
   Bug,
+  Globe,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -64,6 +65,7 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'FDs & RDs', to: '/fds', icon: PiggyBank },
       { label: 'Gold & Silver', to: '/gold', icon: Coins },
       { label: 'Crypto', to: '/crypto', icon: Bitcoin },
+      { label: 'Forex', to: '/forex', icon: Globe },
       { label: 'PPF & EPF', to: '/provident-fund', icon: Wallet },
       // NPS — disabled until NSDL CRA adapter lands (§10.2)
       // { label: 'NPS', to: '/nps', icon: ShieldCheck },

@@ -43,6 +43,10 @@ export interface TransactionDTO {
   tradeNo: string | null;
   narration: string | null;
   photos: Array<{ id: string; fileName: string; mimeType: string; sizeBytes: number }>;
+  // Forex — present on FOREIGN_EQUITY / FOREX_PAIR transactions. null for INR.
+  currency: string | null;
+  fxRateAtTrade: string | null;
+  inrEquivalent: Money | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -81,6 +85,10 @@ export interface CreateTransactionRequest {
   orderNo?: string;
   tradeNo?: string;
   narration?: string;
+  // Forex — only relevant for FOREIGN_EQUITY / FOREX_PAIR.
+  currency?: string;
+  fxRateAtTrade?: number | string;
+  inrEquivalent?: number | string;
 }
 
 export type UpdateTransactionRequest = Partial<CreateTransactionRequest>;

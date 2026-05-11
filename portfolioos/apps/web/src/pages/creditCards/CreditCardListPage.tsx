@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -450,9 +451,12 @@ export function CreditCardListPage() {
         title="Credit Cards"
         description="Track credit cards, statements, and payment history"
         actions={
-          <Button onClick={() => { setEditCard(null); setCreateOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add card
-          </Button>
+          <div className="flex gap-2">
+            <DownloadReportButton type="credit-cards" />
+            <Button onClick={() => { setEditCard(null); setCreateOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add card
+            </Button>
+          </div>
         }
       />
 

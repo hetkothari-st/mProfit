@@ -22,6 +22,7 @@ import { transactionsApi } from '@/api/transactions.api';
 import { api, apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
 import type { FormDialogProps } from './FDFormDialog';
+import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 
 interface FormOption {
   label: string;
@@ -63,6 +64,7 @@ const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
   NSC: 'NSC', KVP: 'KVP', SCSS: 'SCSS', SSY: 'SSY',
   POST_OFFICE_MIS: 'PO MIS', POST_OFFICE_RD: 'PO RD',
   POST_OFFICE_TD: 'PO TD', POST_OFFICE_SAVINGS: 'PO Savings',
+  FOREIGN_EQUITY: 'Foreign Equity', FOREX_PAIR: 'FX Pair',
 };
 
 const TXN_TYPE_LABELS: Record<string, string> = {
@@ -215,31 +217,34 @@ export function SimpleAssetPage({
         title={title}
         description={description}
         actions={
-          formOptions && formOptions.length > 0 ? (
-            <div className="relative" ref={addMenuRef}>
-              <Button onClick={() => setAddMenuOpen((v) => !v)}>
-                <Plus className="h-4 w-4" /> Add <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
+          <div className="flex items-center gap-2">
+            <DownloadReportButton type="holdings" assetClasses={assetClasses} />
+            {formOptions && formOptions.length > 0 ? (
+              <div className="relative" ref={addMenuRef}>
+                <Button onClick={() => setAddMenuOpen((v) => !v)}>
+                  <Plus className="h-4 w-4" /> Add <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
+                </Button>
+                {addMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-44 rounded-md border bg-popover text-popover-foreground shadow-md z-20 py-1">
+                    {formOptions.map((opt) => (
+                      <button
+                        key={opt.assetClass}
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                        onClick={() => openAdd(opt.assetClass)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Button onClick={() => openAdd()}>
+                <Plus className="h-4 w-4" /> Add
               </Button>
-              {addMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 w-44 rounded-md border bg-popover text-popover-foreground shadow-md z-20 py-1">
-                  {formOptions.map((opt) => (
-                    <button
-                      key={opt.assetClass}
-                      type="button"
-                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
-                      onClick={() => openAdd(opt.assetClass)}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <Button onClick={() => openAdd()}>
-              <Plus className="h-4 w-4" /> Add
-            </Button>
-          )
+            )}
+          </div>
         }
       />
 

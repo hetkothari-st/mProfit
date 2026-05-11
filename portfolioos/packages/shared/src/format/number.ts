@@ -76,6 +76,53 @@ export function compactIndian(absValue: number | string, fractionDigits = 2): st
   return compactIndianDecimal(d.abs(), fractionDigits);
 }
 
+// ─── Foreign currency formatting ─────────────────────────────────
+//
+// Used for non-INR money in the Forex section. Falls through to formatINR for
+// "INR" (or empty/null code) so callers can pass a per-row currency without
+// branching. Uses Intl.NumberFormat — locale `en-US` gives the conventional
+// "$1,234.56" / "€1.234,56" / "¥1234" shapes traders expect. JPY-style
+// zero-decimal currencies are auto-detected by Intl (no manual override).
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  AED: 'د.إ',
+  SGD: 'S$',
+  AUD: 'A$',
+  CAD: 'C$',
+  CHF: 'CHF',
+  HKD: 'HK$',
+  CNY: '¥',
+};
+
+export function formatCurrency(
+  value: number | string | null | undefined,
+  currencyCode: string | null | undefined,
+  opts: FormatOptions = {},
+): string {
+  const code = (currencyCode || 'INR').toUpperCase();
+  if (code === 'INR') return formatINR(value, opts);
+
+  const d = tryDecimal(value);
+  if (!d) return '-';
+
+  const { fractionDigits = 2, showSymbol = true, showSign = false } = opts;
+  const sign = d.isNegative() ? '-' : showSign && d.greaterThan(0) ? '+' : '';
+  const abs = d.abs();
+
+  const fixed = abs.toFixed(fractionDigits, Decimal.ROUND_HALF_EVEN);
+  const [intPart, fracPart] = fixed.split('.');
+  // Western thousands grouping (1,234,567.89). Switch to Intl if locale-aware
+  // grouping becomes a requirement.
+  const grouped = intPart!.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const body = fracPart ? `${grouped}.${fracPart}` : grouped;
+  const symbol = showSymbol ? (CURRENCY_SYMBOLS[code] ?? `${code} `) : '';
+  return `${sign}${symbol}${body}`;
+}
+
 // Percent is dimensionless — JS number is fine for display; the caller is
 // responsible for computing the ratio in Decimal up to the point of rendering.
 export function formatPercent(
