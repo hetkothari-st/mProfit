@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { CalendarClock, ChevronDown, Clock, Pencil, PiggyBank, Plus } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
@@ -33,6 +34,70 @@ function monthsBetween(from: string, to: string): number {
 
 function normalizeText(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function freqCompoundN(freq: string | null | undefined): number {
+  switch (freq) {
+    case 'MONTHLY': return 12;
+    case 'QUARTERLY': return 4;
+    case 'HALF_YEARLY': return 2;
+    case 'ANNUAL': return 1;
+    default: return 0; // AT_MATURITY or unknown → simple interest
+  }
+}
+
+function fdMaturityValue(
+  principal: string,
+  ratePct: string | null | undefined,
+  months: number | null,
+  freq: string | null | undefined,
+): Decimal | null {
+  if (!ratePct || !months || months <= 0) return null;
+  try {
+    const p = new Decimal(principal);
+    const r = new Decimal(ratePct).div(100);
+    const years = new Decimal(months).div(12);
+    const n = freqCompoundN(freq);
+    if (n === 0) {
+      return p.times(new Decimal(1).plus(r.times(years)));
+    }
+    const base = new Decimal(1).plus(r.div(n));
+    const exp = n * months / 12;
+    return p.times(base.pow(exp));
+  } catch {
+    return null;
+  }
+}
+
+function rdMaturityValue(
+  monthly: string | null | undefined,
+  ratePct: string | null | undefined,
+  months: number | null,
+): Decimal | null {
+  if (!monthly || !ratePct || !months || months <= 0) return null;
+  try {
+    const m = new Decimal(monthly);
+    const r = new Decimal(ratePct).div(100);
+    const i = r.div(12);
+    if (i.isZero()) return m.times(months);
+    const factor = new Decimal(1).plus(i).pow(months).minus(1).div(i);
+    return m.times(factor).times(new Decimal(1).plus(i));
+  } catch {
+    return null;
+  }
+}
+
+function formatShortDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function MaturityBadge({ date }: { date: string }) {
@@ -145,15 +210,17 @@ function FDCard({
   holding,
   primaryTxn,
   onClick,
+  onEdit,
 }: {
   holding: FDHolding;
   primaryTxn: TransactionDTO | null;
   onClick: () => void;
+  onEdit: (e: React.MouseEvent) => void;
 }) {
-  const rate = primaryTxn?.interestRate;
-  const freq = primaryTxn?.interestFrequency;
-  const maturity = primaryTxn?.maturityDate;
-  const openDate = primaryTxn?.tradeDate;
+  const rate = primaryTxn?.interestRate ?? null;
+  const freq = primaryTxn?.interestFrequency ?? null;
+  const maturity = primaryTxn?.maturityDate ?? null;
+  const openDate = primaryTxn?.tradeDate ?? null;
 
   const tenureMonths = openDate && maturity ? monthsBetween(openDate, maturity) : null;
   const elapsedPct = openDate && maturity
@@ -163,53 +230,57 @@ function FDCard({
         const now = Date.now();
         return Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100));
       })()
-    : null;
+    : 0;
 
   const certNo = holding.id.slice(-6).toUpperCase();
-  const isMatured = maturity ? daysUntil(maturity) < 0 : false;
+  const daysLeft = maturity ? daysUntil(maturity) : null;
+  const matValue = fdMaturityValue(holding.totalCost, rate, tenureMonths, freq);
 
   return (
     <div
       onClick={onClick}
-      className="group relative paper rounded-lg border border-border hover:border-accent/40 shadow-elev hover:shadow-elev-lg transition-all cursor-pointer overflow-hidden"
+      className="group relative paper rounded-lg border border-accent/25 hover:border-accent/60 shadow-elev hover:shadow-elev-lg transition-all cursor-pointer overflow-hidden"
     >
-      {/* Top double-rule brass band */}
-      <div className="h-[3px] w-full bg-gradient-to-r from-accent/40 via-accent/85 to-accent/40" />
+      {/* Top brass band */}
+      <div className="h-[3px] w-full bg-gradient-to-r from-accent/40 via-accent to-accent/40" />
       <div className="h-px w-full bg-accent/30" />
 
-      {/* Subtle radial wash from seal */}
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_88%_22%,hsl(var(--accent)/0.10),transparent_55%)]" />
+      {/* Subtle radial wash + corner ornaments */}
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_98%_8%,hsl(var(--accent)/0.14),transparent_45%)]" />
+      <CornerOrnament className="pointer-events-none absolute top-[8px] left-[8px] h-3 w-3 text-accent/50" />
+      <CornerOrnament className="pointer-events-none absolute top-[8px] right-[8px] h-3 w-3 text-accent/50 -scale-x-100" />
 
-      {/* Corner filigree */}
-      <CornerOrnament className="pointer-events-none absolute top-[10px] left-[10px] h-4 w-4 text-accent/45" />
-      <CornerOrnament className="pointer-events-none absolute top-[10px] right-[10px] h-4 w-4 text-accent/45 -scale-x-100" />
-      <CornerOrnament className="pointer-events-none absolute bottom-[10px] left-[10px] h-4 w-4 text-accent/45 -scale-y-100" />
-      <CornerOrnament className="pointer-events-none absolute bottom-[10px] right-[10px] h-4 w-4 text-accent/45 -scale-100" />
-
-      <div className="relative px-6 pt-5 pb-5">
-        {/* Eyebrow rule */}
-        <div className="flex items-start justify-between gap-4">
+      <div className="relative px-5 pt-3.5 pb-4">
+        {/* Eyebrow */}
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <DiamondMark className="h-1.5 w-1.5 shrink-0 opacity-80" />
+            <DiamondMark className="h-1.5 w-1.5 shrink-0" />
             <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-accent leading-none">
               Fixed Deposit
             </span>
             <span className="text-accent/30 select-none">·</span>
             <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground leading-none">
-              Certificate № <span className="text-foreground/80">{certNo}</span>
+              Cert № <span className="text-foreground/80">{certNo}</span>
             </span>
           </div>
-          <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label="Edit deposit"
+            className="shrink-0 p-1 -m-1 rounded text-muted-foreground/40 hover:text-foreground hover:bg-muted/60 transition-colors"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
         </div>
 
-        {/* Headline + rate */}
-        <div className="mt-3 flex items-end justify-between gap-4">
+        {/* Headline + rate chip */}
+        <div className="mt-2 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="font-display text-[26px] leading-[1.1] text-foreground truncate">
+            <h3 className="font-display text-[22px] leading-[1.15] text-foreground truncate">
               {holding.assetName ?? '—'}
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              {tenureMonths ? <span>{tenureMonths}-month deposit</span> : <span>Term deposit</span>}
+            <p className="mt-0.5 text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span>{tenureMonths ? `${tenureMonths}-month` : 'Term'} deposit</span>
               {freq && (
                 <>
                   <span className="text-muted-foreground/40">·</span>
@@ -224,87 +295,81 @@ function FDCard({
               )}
             </p>
           </div>
-          {rate != null && (
-            <div className="shrink-0 text-right">
-              <p className="font-display text-3xl text-accent leading-none tabular-nums">
-                {rate}
-                <span className="text-xl align-top">%</span>
+          <div className="shrink-0 flex items-center gap-2">
+            <div className="rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1 text-right">
+              <p className="font-display text-xl text-accent leading-none tabular-nums">
+                {rate ?? '—'}
+                <span className="text-sm align-top">%</span>
               </p>
-              <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.28em] text-muted-foreground">
+              <p className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.22em] text-accent/80">
                 per annum
               </p>
             </div>
-          )}
+            <WaxSeal className="h-11 w-11 drop-shadow-[0_2px_3px_hsl(var(--accent)/0.4)]" />
+          </div>
         </div>
 
-        {/* Body: seal + timeline */}
-        <div className="mt-5 grid grid-cols-[1fr_auto] gap-5 items-center">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground">
-              <span>{isMatured ? 'Matured' : 'Principal locked'}</span>
-              {maturity && <MaturityBadge date={maturity} />}
-            </div>
-            {elapsedPct !== null && openDate && maturity && (
-              <div className="mt-2.5">
-                <div className="relative h-[6px] rounded-sm bg-muted/70 overflow-visible">
-                  {/* Brass fill */}
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-sm bg-gradient-to-r from-accent/70 via-accent to-accent/80 shadow-[0_0_0_0.5px_hsl(var(--accent)/0.4)]"
-                    style={{ width: `${elapsedPct}%` }}
-                  />
-                  {/* Marker diamond */}
-                  <DiamondMark
-                    className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 ring-2 ring-card"
-                    style={{ left: `calc(${elapsedPct}% - 5px)` }}
-                  />
-                </div>
-                <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
-                  <span>{openDate}</span>
-                  <span className="text-foreground/70">
-                    {Math.round(elapsedPct)}% of term
-                  </span>
-                  <span>{maturity}</span>
-                </div>
-              </div>
-            )}
-            {!elapsedPct && maturity && (
-              <p className="mt-2 text-xs text-muted-foreground">Matures {maturity}</p>
-            )}
-            {holding.isin && (
-              <p className="mt-2 font-mono text-[10px] text-muted-foreground/70 tracking-wide">
-                {holding.isin}
-              </p>
+        {/* Maturity timeline */}
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            <span>{daysLeft !== null && daysLeft < 0 ? 'Matured' : 'Principal locked'}</span>
+            <span className="text-foreground/70 normal-case tracking-normal tabular-nums">
+              {tenureMonths ? `${Math.round(elapsedPct)}% of ${tenureMonths}mo` : '—'}
+            </span>
+            {maturity && <MaturityBadge date={maturity} />}
+          </div>
+          <div className="relative h-[6px] rounded-sm bg-muted/70 overflow-visible">
+            <div
+              className="absolute inset-y-0 left-0 rounded-sm bg-gradient-to-r from-accent/70 via-accent to-accent/80"
+              style={{ width: `${elapsedPct}%` }}
+            />
+            {tenureMonths && (
+              <DiamondMark
+                className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 ring-2 ring-card"
+                style={{ left: `calc(${Math.max(elapsedPct, 0)}% - 5px)` }}
+              />
             )}
           </div>
-          <WaxSeal className="h-16 w-16 shrink-0 drop-shadow-[0_2px_4px_hsl(var(--accent)/0.35)]" />
+          <div className="mt-1 flex items-center justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
+            <span>Opened {formatShortDate(openDate)}</span>
+            <span>Matures {formatShortDate(maturity)}</span>
+          </div>
         </div>
 
         {/* Decorative rule */}
-        <div className="mt-5 rule-ornament"><span /></div>
+        <div className="mt-3.5 rule-ornament"><span /></div>
 
-        {/* Stat trio */}
-        <div className="mt-5 grid grid-cols-3 gap-4">
+        {/* Stat row: 4 cols */}
+        <div className="mt-3.5 grid grid-cols-4 gap-3">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
               Principal
             </p>
-            <p className="numeric-display text-base text-foreground">
+            <p className="numeric-display text-[15px] text-foreground">
               {formatINR(holding.totalCost)}
             </p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
               Current Value
             </p>
-            <p className="numeric-display text-base text-foreground">
+            <p className="numeric-display text-[15px] text-foreground">
               {holding.currentValue ? formatINR(holding.currentValue) : '—'}
             </p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-accent/80 mb-0.5">
+              Maturity Value
+            </p>
+            <p className="numeric-display text-[15px] text-accent">
+              {matValue ? formatINR(matValue.toString()) : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground mb-0.5">
               Earned
             </p>
-            <p className="numeric-display text-base">
+            <p className="numeric-display text-[15px]">
               <PnLDisplay holding={holding} />
             </p>
           </div>
@@ -319,11 +384,13 @@ function RDCard({
   primaryTxn,
   allDepositTxns,
   onClick,
+  onEdit,
 }: {
   holding: FDHolding;
   primaryTxn: TransactionDTO | null;
   allDepositTxns: TransactionDTO[];
   onClick: () => void;
+  onEdit: (e: React.MouseEvent) => void;
 }) {
   const rate = primaryTxn?.interestRate;
   const freq = primaryTxn?.interestFrequency;
@@ -382,7 +449,14 @@ function RDCard({
               Passbook
             </span>
           </div>
-          <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label="Edit deposit"
+            className="shrink-0 p-1 -m-1 rounded text-muted-foreground/40 hover:text-foreground hover:bg-muted/60 transition-colors"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         {/* Headline + rate */}
@@ -511,6 +585,7 @@ function RDCard({
 }
 
 export function FixedDepositsPage() {
+  const navigate = useNavigate();
   const [formOpen, setFormOpen] = useState(false);
   const [editTxn, setEditTxn] = useState<TransactionDTO | null>(null);
   const [activeFormAssetClass, setActiveFormAssetClass] = useState<AssetClass>('FIXED_DEPOSIT');
@@ -732,7 +807,9 @@ export function FixedDepositsPage() {
                   key={h.id}
                   holding={h}
                   primaryTxn={primary}
-                  onClick={() => {
+                  onClick={() => navigate(`/fds/${h.id}`, { state: { holding: h } })}
+                  onEdit={(e) => {
+                    e.stopPropagation();
                     if (primary) openEdit(primary);
                   }}
                 />
@@ -764,7 +841,9 @@ export function FixedDepositsPage() {
                   holding={h}
                   primaryTxn={primary}
                   allDepositTxns={depositOnly}
-                  onClick={() => {
+                  onClick={() => navigate(`/fds/${h.id}`, { state: { holding: h } })}
+                  onEdit={(e) => {
+                    e.stopPropagation();
                     if (primary) openEdit(primary);
                   }}
                 />

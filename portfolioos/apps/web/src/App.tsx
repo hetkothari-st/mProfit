@@ -39,6 +39,7 @@ import { CreditCardDetailPage } from './pages/creditCards/CreditCardDetailPage';
 import { RealEstateListPage } from './pages/realEstate/RealEstateListPage';
 import { RealEstateDetailPage } from './pages/realEstate/RealEstateDetailPage';
 import { FixedDepositsPage } from './pages/assetClasses/FixedDepositsPage';
+import { FdDetailPage } from './pages/assetClasses/FdDetailPage';
 import { BondsPage } from './pages/assetClasses/BondsPage';
 import { GoldPage } from './pages/assetClasses/GoldPage';
 import { GoldAssetDetailPage } from './pages/assetClasses/GoldAssetDetailPage';
@@ -89,6 +90,7 @@ export function App() {
         <Route path="/fo" element={<FuturesOptionsPage />} />
         <Route path="/bonds" element={<BondsPage />} />
         <Route path="/fds" element={<FixedDepositsPage />} />
+        <Route path="/fds/:holdingId" element={<FdDetailPage />} />
         <Route path="/gold" element={<GoldPage />} />
         <Route path="/gold/:holdingId" element={<GoldAssetDetailPage />} />
         <Route path="/crypto" element={<CryptoPage />} />
