@@ -191,9 +191,15 @@ export async function getHoldingsExport(req: Request, res: Response) {
   }
 
   const rawClasses = (req.query.assetClasses as string | undefined) ?? '';
-  const assetClasses = rawClasses
-    ? (rawClasses.split(',').map(s => s.trim()).filter(Boolean) as AssetClass[])
-    : undefined;
+  let assetClasses: AssetClass[] | undefined;
+  if (rawClasses) {
+    const { AssetClass: AssetClassEnum } = await import('@prisma/client');
+    const valid = new Set(Object.values(AssetClassEnum));
+    const parsed = rawClasses.split(',').map(s => s.trim()).filter(Boolean);
+    const invalid = parsed.filter(s => !valid.has(s as AssetClass));
+    if (invalid.length > 0) throw new BadRequestError(`Invalid assetClass values: ${invalid.join(', ')}`);
+    assetClasses = parsed as AssetClass[];
+  }
 
   const format = getFormat(req);
   const { holdingsPayload, transactionsPayload, summaryTitle } = await buildHoldingsExport({
@@ -260,91 +266,15 @@ export async function getHoldingsExport(req: Request, res: Response) {
   }
 
   if (format === 'pdf') {
-    // PDF: holdings first, then transactions
-    const PDFDocumentClass = (await import('pdfkit')).default;
-    const { BRAND } = await import('../services/charts/pdfCharts.js');
-
-    const safeTitle = summaryTitle.replace(/[^a-z0-9-_]+/gi, '_');
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.pdf"`);
-
-    const doc = new PDFDocumentClass({ margin: 36, size: 'A4', layout: 'landscape', bufferPages: true });
-    doc.pipe(res);
-
-    // Render each sheet as a section — reuse streamPdf logic inline
-    for (const payload of [holdingsPayload, transactionsPayload]) {
-      if (doc.bufferedPageRange().count > 0) doc.addPage();
-      const ML   = doc.page.margins.left;
-      const pageW = doc.page.width - ML - doc.page.margins.right;
-      doc.rect(0, 0, doc.page.width, 48).fill(BRAND.ink);
-      doc.font('Helvetica-Bold').fontSize(14).fillColor(BRAND.white).text('PortfolioOS', ML, 10);
-      doc.font('Helvetica').fontSize(9).fillColor('#94AECB').text(payload.title, ML, 30);
-      doc.y = 58;
-
-      if (payload.meta) {
-        doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted);
-        Object.entries(payload.meta).forEach(([k, v]) => doc.text(`${k}: ${v}`));
-        doc.moveDown(0.4);
-      }
-
-      const totalW    = payload.columns.reduce((s, c) => s + (c.width ?? 10), 0) || payload.columns.length;
-      const colWidths = payload.columns.map(c => ((c.width ?? 10) / totalW) * pageW);
-      const ROW_H     = 14;
-
-      const drawRow = (values: string[], opts: { bold?: boolean; alt?: boolean }) => {
-        const y = doc.y;
-        if (opts.bold)       doc.rect(ML, y, pageW, ROW_H).fill(BRAND.headerBg);
-        else if (opts.alt)   doc.rect(ML, y, pageW, ROW_H).fill(BRAND.rowAlt);
-        doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(7.5).fillColor(BRAND.ink);
-        let x = ML;
-        for (let i = 0; i < values.length; i++) {
-          doc.text(values[i] ?? '', x + 3, y + 3, { width: (colWidths[i] ?? 80) - 5, ellipsis: true });
-          x += colWidths[i] ?? 80;
-        }
-        doc.y = y + ROW_H;
-        if (doc.y > doc.page.height - doc.page.margins.bottom - 30) {
-          doc.addPage(); doc.y = 36;
-          const hy = doc.y;
-          doc.rect(ML, hy, pageW, ROW_H).fill(BRAND.headerBg);
-          doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
-          let hx = ML;
-          payload.columns.forEach((col, i) => {
-            doc.text(col.header, hx + 3, hy + 3, { width: (colWidths[i] ?? 80) - 5, ellipsis: true });
-            hx += colWidths[i] ?? 80;
-          });
-          doc.y = hy + ROW_H;
-        }
-      };
-
-      drawRow(payload.columns.map(c => c.header), { bold: true });
-      payload.rows.forEach((data, idx) => {
-        const values = payload.columns.map(col => {
-          const raw = data[col.key];
-          if (col.formatter) return col.formatter(raw);
-          return raw == null ? '' : String(raw);
-        });
-        drawRow(values, { alt: idx % 2 === 1 });
-      });
-
-      if (payload.footer) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink);
-        for (const [k, v] of Object.entries(payload.footer)) {
-          doc.text(`${k}: ${v}`);
-        }
-      }
-    }
-
-    const range = doc.bufferedPageRange();
-    for (let i = 0; i < range.count; i++) {
-      doc.switchToPage(range.start + i);
-      doc.font('Helvetica').fontSize(6.5).fillColor(BRAND.muted).text(
-        `PortfolioOS  ·  Page ${i + 1} of ${range.count}`,
-        36, doc.page.height - 20, { width: doc.page.width - 72, align: 'center' },
-      );
-    }
-    doc.flushPages();
-    doc.end();
+    // Merge holdings + transactions into one combined payload and reuse streamPdf
+    const combined: ExportPayload = {
+      title: summaryTitle,
+      meta: holdingsPayload.meta,
+      columns: holdingsPayload.columns,
+      rows: holdingsPayload.rows,
+      footer: holdingsPayload.footer,
+    };
+    await streamPdf(res, combined);
     return;
   }
 
@@ -357,7 +287,7 @@ export async function getDashboardExport(req: Request, res: Response) {
   const userId      = req.user!.id;
   const portfolioId = req.query.portfolioId as string | undefined;
   const rawScope    = (req.query.scope as string | undefined) ?? 'all';
-  const scope: DashboardScope = rawScope === 'single' ? 'single' : rawScope === 'per-portfolio' ? 'per-portfolio' : 'all';
+  const scope: DashboardScope = rawScope === 'single' ? 'single' : 'all';
 
   // If scope = single, verify portfolio ownership
   if (scope === 'single' && portfolioId) {
@@ -411,7 +341,15 @@ export async function getSectionExport(req: Request, res: Response) {
           { key: 'pucExpiry',      header: 'PUC Expiry',    width: 12, formatter: fmtDate },
           { key: 'fitnessExpiry',  header: 'Fitness Expiry',width: 12, formatter: fmtDate },
         ],
-        rows: rows.map(v => ({ ...v, purchasePrice: v.purchasePrice?.toString(), currentValue: v.currentValue?.toString() })),
+        rows: rows.map(v => ({
+          ...v,
+          // Mask all but last 4 chars per §15.1 PII rules
+          registrationNo: v.registrationNo.length > 4
+            ? `XXXX${v.registrationNo.slice(-4)}`
+            : v.registrationNo,
+          purchasePrice: v.purchasePrice?.toString(),
+          currentValue: v.currentValue?.toString(),
+        })),
       };
       break;
     }

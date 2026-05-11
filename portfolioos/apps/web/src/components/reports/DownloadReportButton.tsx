@@ -34,7 +34,7 @@ interface Props {
 export function DownloadReportButton({ type, assetClasses, label, className }: Props) {
   const [open, setOpen]           = useState(false);
   const [portfolioId, setPortfolioId] = useState<string>('');
-  const [scope, setScope]         = useState<'all' | 'single' | 'per-portfolio'>('all');
+  const [scope, setScope]         = useState<'all' | 'single'>('all');
   const [format, setFormat]       = useState<ReportFormat>('pdf');
   const { download, loading }     = useDownloadReport();
 
@@ -132,7 +132,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
                 <Label>Scope</Label>
                 <Select
                   value={scope}
-                  onChange={e => setScope(e.target.value as typeof scope)}
+                  onChange={e => setScope(e.target.value as 'all' | 'single')}
                 >
                   <option value="all">All portfolios combined</option>
                   <option value="single">Specific portfolio</option>

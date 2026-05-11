@@ -17,7 +17,7 @@ import {
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 
-export type DashboardScope = 'single' | 'all' | 'per-portfolio';
+export type DashboardScope = 'single' | 'all';
 
 export interface DashboardReportParams {
   userId: string;
@@ -160,7 +160,7 @@ function buildHistoricalLine(
 
   for (const t of txns) {
     const key = t.tradeDate.toISOString().slice(0, 7);
-    const amt = d(t.netAmount);
+    const amt = d(t.netAmount).abs();   // netAmount may be negative for sells; normalise
     if (BUY_TYPES.has(t.transactionType))  running = running.plus(amt);
     if (SELL_TYPES.has(t.transactionType)) running = Decimal.max(running.minus(amt), new Decimal(0));
     byMonth.set(key, running);

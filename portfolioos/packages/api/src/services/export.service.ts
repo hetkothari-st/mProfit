@@ -189,6 +189,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     doc.flushPages();
     doc.end();
   });
+}
 
 // Format money or quantity for reports. Parses through Decimal so the 4dp/6dp
 // strings coming off the API don't lose their last digit to IEEE-754 before

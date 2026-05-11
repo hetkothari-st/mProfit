@@ -36,10 +36,12 @@ export function useDownloadReport() {
       }
       const blob = await r.blob();
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
+      const objectUrl = URL.createObjectURL(blob);
+      a.href = objectUrl;
       a.download = filename;
       a.click();
-      URL.revokeObjectURL(a.href);
+      // Delay revocation — browser fetches the blob URL asynchronously after click
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } finally {
       setLoading(false);
     }
