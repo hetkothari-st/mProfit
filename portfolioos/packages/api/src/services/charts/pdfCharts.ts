@@ -15,14 +15,23 @@ export const BRAND = {
 
 // PDFKit built-in Helvetica does not support U+20B9 (₹). Replace before render.
 // Also normalises a couple of other common chars that drop in Helvetica.
+//
+// IMPORTANT: strip newlines/tabs/control chars. PDFKit's `text(..., { lineBreak: false })`
+// only disables word-wrap on overflow — it still splits on `\n` and advances doc.y
+// per line. A narration or asset name with embedded newlines therefore pushes the
+// cursor past page bottom, triggering auto-pagination and stray blank pages.
 export function pdfSafe(s: string | number | null | undefined): string {
   if (s == null) return '';
   return String(s)
+    .replace(/[\r\n\t\v\f]+/g, ' ')          // newlines/tabs → single space
+    .replace(/[\x00-\x1F\x7F]/g, '')   // other control chars → drop
     .replace(/₹/g, 'Rs. ')   // ₹ → Rs.
     .replace(/—/g, '-')      // em dash → hyphen
     .replace(/–/g, '-')      // en dash → hyphen
     .replace(/[‘’]/g, "'")  // smart quotes
-    .replace(/[“”]/g, '"');
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, ' ')    // collapse runs of whitespace
+    .trim();
 }
 
 // Allocation colour wheel — 12 distinct, editorial, never neon
