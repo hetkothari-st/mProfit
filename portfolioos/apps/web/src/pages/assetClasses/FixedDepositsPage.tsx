@@ -158,6 +158,82 @@ function PnLDisplay({ holding }: { holding: FDHolding }) {
   );
 }
 
+function VaultGlyph({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="4" width="18" height="16" rx="1.5" />
+      <circle cx="12" cy="12" r="4.5" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+      <path d="M12 7.5v1.2M12 15.3v1.2M7.5 12h1.2M15.3 12h1.2" />
+      <path d="M6 4v-1M18 4v-1M6 21v-1M18 21v-1" />
+    </svg>
+  );
+}
+
+function VaultDial({
+  rate,
+  elapsedPct,
+  className = '',
+}: {
+  rate: number | string | null | undefined;
+  elapsedPct: number;
+  className?: string;
+}) {
+  const r = 46;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, elapsedPct));
+  const dash = (pct / 100) * c;
+  return (
+    <div className={`relative shrink-0 ${className}`}>
+      <svg viewBox="0 0 120 120" className="absolute inset-0">
+        <defs>
+          <radialGradient id="dialFace" cx="0.5" cy="0.5" r="0.55">
+            <stop offset="0%" stopColor="rgba(252,211,77,0.18)" />
+            <stop offset="100%" stopColor="rgba(0,0,0,0.0)" />
+          </radialGradient>
+        </defs>
+        <circle cx="60" cy="60" r="56" fill="url(#dialFace)" stroke="rgba(252,211,77,0.35)" strokeWidth="1" />
+        <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="6" />
+        <circle
+          cx="60" cy="60" r={r}
+          fill="none"
+          stroke="rgba(252,211,77,0.85)"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${c - dash}`}
+          transform="rotate(-90 60 60)"
+        />
+        {Array.from({ length: 12 }).map((_, i) => {
+          const a = (i * 30 - 90) * (Math.PI / 180);
+          const x1 = 60 + Math.cos(a) * 52;
+          const y1 = 60 + Math.sin(a) * 52;
+          const x2 = 60 + Math.cos(a) * (i % 3 === 0 ? 47 : 49);
+          const y2 = 60 + Math.sin(a) * (i % 3 === 0 ? 47 : 49);
+          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(252,211,77,0.45)" strokeWidth={i % 3 === 0 ? 1.6 : 0.8} />;
+        })}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        {rate != null && rate !== '' ? (
+          <>
+            <p className="font-display text-3xl text-amber-300 leading-none tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.55)]">
+              {String(rate)}
+              <span className="text-base align-top">%</span>
+            </p>
+            <p className="mt-1 font-mono text-[8px] uppercase tracking-[0.28em] text-amber-200/70">
+              p.a.
+            </p>
+          </>
+        ) : (
+          <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-200/60">No rate</p>
+        )}
+        <p className="mt-1.5 font-mono text-[8px] tabular-nums text-white/45">
+          {Math.round(pct)}% elapsed
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function FDCard({
   holding,
   primaryTxn,

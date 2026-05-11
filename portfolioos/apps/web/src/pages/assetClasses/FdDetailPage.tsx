@@ -433,9 +433,11 @@ export function FdDetailPage() {
   const titleNoun = isRD ? 'Recurring Deposit' : 'Fixed Deposit';
   const Icon = isRD ? CalendarClock : PiggyBank;
 
-  // Filter txns for this holding
+  // Filter txns for this holding. We try progressively looser matches so a
+  // tiny inconsistency in stored asset names (extra spaces, slightly different
+  // case, partial bank-name typo) doesn't leave the detail page empty.
   const allTxns = (txnData?.items ?? []).filter(
-    (t) => t.portfolioId === holding.portfolioId &&
+    (t) => (!holding.portfolioId || t.portfolioId === holding.portfolioId) &&
            t.assetClass === holding.assetClass,
   );
   const matched = (() => {
@@ -446,10 +448,17 @@ export function FdDetailPage() {
       if (r.length > 0) return r;
     }
     if (name) {
-      const r = allTxns.filter((t) => normalizeText(t.assetName) === name);
-      if (r.length > 0) return r;
+      const exact = allTxns.filter((t) => normalizeText(t.assetName) === name);
+      if (exact.length > 0) return exact;
+      const partial = allTxns.filter((t) => {
+        const tn = normalizeText(t.assetName);
+        return tn && (tn.includes(name) || name.includes(tn));
+      });
+      if (partial.length > 0) return partial;
     }
-    return allTxns.length === 1 ? allTxns : [];
+    // Last resort: show every txn in this portfolio + class so the user at
+    // least sees their entries, rather than an empty page.
+    return allTxns;
   })();
   const sorted = [...matched].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
   const deposits = sorted.filter((t) => t.transactionType === 'DEPOSIT');
