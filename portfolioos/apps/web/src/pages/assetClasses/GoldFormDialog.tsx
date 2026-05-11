@@ -118,7 +118,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
 
   const { data: portfolios } = useQuery({ queryKey: ['portfolios'], queryFn: portfoliosApi.list });
 
-  const { data: live } = useQuery({
+  const { data: live, isFetching: isPriceFetching } = useQuery({
     queryKey: ['commodities-live'],
     queryFn: () => assetsApi.commoditiesLive(),
     refetchInterval: 60_000,
@@ -453,6 +453,12 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
                   {txnType === 'INTEREST_RECEIVED' ? 'Interest per unit (₹)' : PRICE_LABEL[assetClass]}
                   <span className="text-destructive"> *</span>
                 </Label>
+                {isPriceFetching && !isEdit && isPhysical && !livePriceApplied && (
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                    Fetching…
+                  </span>
+                )}
                 {livePriceApplied && !isEdit && (
                   <span className="flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400 font-medium">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />

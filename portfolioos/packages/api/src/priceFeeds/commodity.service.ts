@@ -42,8 +42,8 @@ const SILVER_ETFS = [
 ];
 
 async function fetchUsdInr(): Promise<Decimal | null> {
-  // Yahoo INR=X is the fast path; fall back to exchangerate-api when it's
-  // rate-limited or returns an unexpected shape.
+  // Yahoo INR=X is the fast path; fall back to exchangerate-api, then
+  // Frankfurter (ECB data, no key, no rate limits) when prior sources fail.
   try {
     const arr = await yahooQuoteRaw(['INR=X']);
     const q = arr[0];
@@ -64,6 +64,21 @@ async function fetchUsdInr(): Promise<Decimal | null> {
     }
   } catch (err) {
     logger.warn({ err }, '[commodity] exchangerate-api failed');
+  }
+  try {
+    const res = await fetch('https://api.frankfurter.app/latest?from=USD&to=INR', {
+      signal: AbortSignal.timeout(7000),
+    });
+    if (res.ok) {
+      const j = await res.json() as { rates?: Record<string, number> };
+      const inr = j.rates?.['INR'];
+      if (inr && inr > 0) {
+        logger.info({ inr }, '[commodity] USD/INR from Frankfurter');
+        return new Decimal(inr);
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, '[commodity] Frankfurter USD/INR failed');
   }
   return null;
 }
