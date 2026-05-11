@@ -13,6 +13,18 @@ export const BRAND = {
   white: '#FFFFFF',
 } as const;
 
+// PDFKit built-in Helvetica does not support U+20B9 (₹). Replace before render.
+// Also normalises a couple of other common chars that drop in Helvetica.
+export function pdfSafe(s: string | number | null | undefined): string {
+  if (s == null) return '';
+  return String(s)
+    .replace(/₹/g, 'Rs. ')   // ₹ → Rs.
+    .replace(/—/g, '-')      // em dash → hyphen
+    .replace(/–/g, '-')      // en dash → hyphen
+    .replace(/[‘’]/g, "'")  // smart quotes
+    .replace(/[“”]/g, '"');
+}
+
 // Allocation colour wheel — 12 distinct, editorial, never neon
 export const PIE_COLORS = [
   '#1B2E4B', '#B8860B', '#2D6A4F', '#8B3A2A',
@@ -45,25 +57,33 @@ function arcPath(cx: number, cy: number, r: number, a1: number, a2: number): str
 }
 
 // ─── Pie / Donut chart ────────────────────────────────────────────────────────
+// Returns the y-coordinate of the bottom of the rendered chart so callers can
+// advance the cursor.
 
 export function drawPieChart(
   doc: InstanceType<typeof PDFDocument>,
   data: PieSlice[],
   box: ChartBox,
-): void {
+): number {
   const { x, y, width, height, title } = box;
   let oy = y;
 
   if (title) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink).text(title, x, oy);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink).text(pdfSafe(title), x, oy);
     oy += 15;
   }
 
   const total = data.reduce((s, d) => s + d.value, 0);
-  if (total <= 0) return;
+  if (total <= 0) {
+    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted).text('No data', x, oy);
+    doc.y = oy + 14;
+    return oy + 14;
+  }
 
-  const radius = Math.min((width * 0.38), (height - (oy - y)) / 2);
-  const cx = x + radius + 4;
+  // Constrain the donut to fit cleanly within the box height
+  const availableH = height - (oy - y);
+  const radius = Math.min(width * 0.18, availableH / 2 - 4);
+  const cx = x + radius + 6;
   const cy = oy + radius;
 
   let startAngle = -Math.PI / 2;
@@ -77,24 +97,29 @@ export function drawPieChart(
   });
 
   // White donut hole
-  doc.circle(cx, cy, radius * 0.45).fill(BRAND.white);
+  doc.circle(cx, cy, radius * 0.5).fill(BRAND.white);
 
-  // Legend — right side
-  const legX  = cx + radius + 16;
+  // Legend — right side, two columns if many items
+  const legX  = cx + radius + 18;
   const legW  = x + width - legX - 4;
   let legY    = oy;
   const items = data.slice(0, 12);
+  const rowH  = 13;
 
   items.forEach((seg, i) => {
     const color = seg.color ?? PIE_COLORS[i % PIE_COLORS.length]!;
     const pct   = ((seg.value / total) * 100).toFixed(1);
     doc.rect(legX, legY + 1, 7, 7).fill(color);
     doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.ink)
-       .text(`${seg.label}`, legX + 10, legY, { width: legW - 36, ellipsis: true, continued: true })
+       .text(pdfSafe(seg.label), legX + 10, legY, { width: legW - 40, ellipsis: true, continued: true })
        .fillColor(BRAND.muted)
-       .text(` ${pct}%`, { width: 32 });
-    legY += 13;
+       .text(` ${pct}%`, { width: 36 });
+    legY += rowH;
   });
+
+  const bottom = Math.max(oy + radius * 2 + 4, legY + 4);
+  doc.y = bottom;
+  return bottom;
 }
 
 // ─── Horizontal bar chart ─────────────────────────────────────────────────────
@@ -103,37 +128,50 @@ export function drawHorizontalBarChart(
   doc: InstanceType<typeof PDFDocument>,
   data: BarDatum[],
   box: ChartBox,
-): void {
+): number {
   const { x, y, width, height, title } = box;
   let oy = y;
 
   if (title) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink).text(title, x, oy);
-    oy += 15;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink).text(pdfSafe(title), x, oy);
+    oy += 16;
   }
 
-  const labelW  = 54;
-  const valueW  = 46;
-  const barAreaW = width - labelW - valueW - 8;
+  if (data.length === 0) {
+    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted).text('No data', x, oy);
+    doc.y = oy + 14;
+    return oy + 14;
+  }
+
+  const labelW   = Math.min(140, width * 0.30);
+  const valueW   = 70;
+  const barAreaW = width - labelW - valueW - 12;
   const max      = Math.max(...data.map(d => Math.abs(d.value)), 1);
-  const available = height - (oy - y);
-  const barH     = Math.max(10, Math.min(16, available / data.length - 3));
+  const barH     = 14;
+  const rowGap   = 4;
 
   data.forEach((item) => {
     const isNeg = item.value < 0;
     const barW  = Math.max(1, (Math.abs(item.value) / max) * barAreaW);
     const color = item.color ?? (isNeg ? BRAND.negative : BRAND.accent);
 
-    doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.ink)
-       .text(item.label, x, oy + 2, { width: labelW - 4, ellipsis: true });
+    doc.font('Helvetica').fontSize(8).fillColor(BRAND.ink)
+       .text(pdfSafe(item.label), x, oy + 2, { width: labelW - 6, ellipsis: true });
 
-    doc.rect(x + labelW, oy, barW, barH - 1).fill(color);
+    // bar track
+    doc.rect(x + labelW, oy + 3, barAreaW, barH - 6).fill(BRAND.rowAlt);
+    // bar fill
+    doc.rect(x + labelW, oy + 3, barW, barH - 6).fill(color);
 
-    doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted)
-       .text(fmtCompact(item.value), x + labelW + barAreaW + 4, oy + 2, { width: valueW });
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(isNeg ? BRAND.negative : BRAND.ink)
+       .text(pdfSafe(fmtCompact(item.value)), x + labelW + barAreaW + 4, oy + 2, { width: valueW, align: 'right' });
 
-    oy += barH + 2;
+    oy += barH + rowGap;
+    if (oy > y + height) return; // overflow guard
   });
+
+  doc.y = oy + 4;
+  return oy + 4;
 }
 
 // ─── Line / area chart ────────────────────────────────────────────────────────
@@ -142,26 +180,27 @@ export function drawLineChart(
   doc: InstanceType<typeof PDFDocument>,
   data: LineDatum[],
   box: ChartBox,
-): void {
+): number {
   const { x, y, width, height, title } = box;
   let oy = y;
 
   if (title) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink).text(title, x, oy);
-    oy += 15;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink).text(pdfSafe(title), x, oy);
+    oy += 16;
   }
 
   if (data.length < 2) {
     doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted).text('Not enough data', x, oy);
-    return;
+    doc.y = oy + 14;
+    return oy + 14;
   }
 
-  const xLabelH = 14;
+  const xLabelH = 16;
   const chartH  = height - (oy - y) - xLabelH;
-  if (chartH < 20) return;
+  if (chartH < 20) { doc.y = oy; return oy; }
 
   const values  = data.map(d => d.value);
-  const minV    = Math.min(...values);
+  const minV    = Math.min(...values, 0);
   const maxV    = Math.max(...values);
   const range   = maxV - minV || 1;
 
@@ -170,13 +209,17 @@ export function drawLineChart(
     py: oy + chartH - ((d.value - minV) / range) * chartH,
   }));
 
-  // Axis baseline
-  doc.moveTo(x, oy + chartH).lineTo(x + width, oy + chartH)
-     .strokeColor(BRAND.border).lineWidth(0.5).stroke();
+  // Grid lines (3 horizontal)
+  for (let i = 0; i <= 3; i++) {
+    const gy = oy + (chartH * i) / 3;
+    doc.moveTo(x, gy).lineTo(x + width, gy)
+       .strokeColor(BRAND.border).lineWidth(0.25).dash(2, { space: 2 }).stroke();
+  }
+  doc.undash();
 
   // Area fill
   doc.save();
-  doc.fillOpacity(0.08);
+  doc.fillOpacity(0.10);
   doc.moveTo(pts[0]!.px, oy + chartH);
   pts.forEach(p => { doc.lineTo(p.px, p.py); });
   doc.lineTo(pts[pts.length - 1]!.px, oy + chartH);
@@ -194,6 +237,10 @@ export function drawLineChart(
   const step = Math.max(1, Math.round(data.length / 6));
   doc.font('Helvetica').fontSize(6.5).fillColor(BRAND.muted);
   for (let i = 0; i < data.length; i += step) {
-    doc.text(data[i]!.label, pts[i]!.px - 14, oy + chartH + 3, { width: 28, align: 'center' });
+    doc.text(pdfSafe(data[i]!.label), pts[i]!.px - 18, oy + chartH + 4, { width: 36, align: 'center' });
   }
+
+  const bottom = oy + chartH + xLabelH;
+  doc.y = bottom;
+  return bottom;
 }

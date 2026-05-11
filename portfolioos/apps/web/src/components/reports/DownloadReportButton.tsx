@@ -47,8 +47,18 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
   const isDashboard = type === 'dashboard';
   const isSection   = (SECTION_TYPES as string[]).includes(type);
 
+  function sectionFilename(): string {
+    if (isDashboard) return `portfolioos-dashboard-report.${format}`;
+    if (isSection)   return `portfolioos-${type}-report.${format}`;
+    if (assetClasses && assetClasses.length > 0) {
+      const slug = assetClasses.map(c => c.toLowerCase().replace(/_/g, '-')).join('_');
+      return `portfolioos-${slug}-report.${format}`;
+    }
+    return `portfolioos-holdings-report.${format}`;
+  }
+
   function handleDownload() {
-    const filename = `portfolioos-${type}-report.${format}`;
+    const filename = sectionFilename();
 
     if (isDashboard) {
       download(

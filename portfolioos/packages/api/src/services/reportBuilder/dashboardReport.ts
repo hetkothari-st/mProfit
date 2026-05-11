@@ -10,6 +10,7 @@ import {
   drawLineChart,
   BRAND,
   PIE_COLORS,
+  pdfSafe,
   type PieSlice,
   type BarDatum,
   type LineDatum,
@@ -174,99 +175,136 @@ function buildHistoricalLine(
 // ─── PDF report ───────────────────────────────────────────────────────────────
 
 export async function streamDashboardPdf(res: Response, params: DashboardReportParams): Promise<void> {
-  const portfolioIds = await resolvePortfolioIds(params);
+  const portfolioIds   = await resolvePortfolioIds(params);
   const portfolioLabel = await getPortfolioLabel(params);
-  const data = await loadPortfolioData(portfolioIds);
+  const data           = await loadPortfolioData(portfolioIds);
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', 'attachment; filename="portfolio-report.pdf"');
+  res.setHeader('Content-Disposition', 'attachment; filename="portfolioos-dashboard-report.pdf"');
 
   const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'portrait', bufferPages: true });
   doc.pipe(res);
 
-  const W = doc.page.width - 80;  // usable width (margin 40 each side)
-  const ML = 40;                  // margin left
+  const ML    = 40;
+  const W     = doc.page.width - 80;
+  const pageH = doc.page.height;
+  const todayStr = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
 
-  // ── Cover header ──────────────────────────────────────────────────────────
-  doc.rect(0, 0, doc.page.width, 90).fill(BRAND.ink);
+  // ─────────────────────────────────────────────────────────────────
+  // COVER HEADER
+  // ─────────────────────────────────────────────────────────────────
+  doc.rect(0, 0, doc.page.width, 94).fill(BRAND.ink);
   doc.font('Helvetica-Bold').fontSize(22).fillColor(BRAND.white)
-     .text('PortfolioOS', ML, 24);
+     .text('PortfolioOS', ML, 22);
   doc.font('Helvetica').fontSize(11).fillColor('#94AECB')
      .text('Portfolio Report', ML, 52);
   doc.font('Helvetica').fontSize(8.5).fillColor('#94AECB')
-     .text(`${portfolioLabel}  ·  Generated ${new Date().toISOString().slice(0, 10)}`, ML, 70);
+     .text(pdfSafe(`${portfolioLabel}  ·  Generated ${todayStr}`), ML, 72);
 
-  // ── Summary bar ─────────────────────────────────────────────────────────────
-  const sY = 106;
-  const cardW = (W - 12) / 4;
-  const summaryCards = [
-    { label: 'Net Worth',       value: `₹${fmtNum(data.totalValue.toString())}` },
-    { label: 'Total Invested',  value: `₹${fmtNum(data.totalInvested.toString())}` },
-    { label: 'Unrealised P&L',  value: `₹${fmtNum(data.totalPnl.toString())}` },
-    { label: 'XIRR',            value: data.xirrPct ?? '—' },
+  let cy = 110;
+
+  // ─────────────────────────────────────────────────────────────────
+  // METRIC CARDS
+  // ─────────────────────────────────────────────────────────────────
+  const cardGap = 8;
+  const cardW = (W - cardGap * 3) / 4;
+  const cardH = 50;
+  const cards = [
+    { label: 'Net Worth',       value: `Rs. ${fmtNum(data.totalValue.toString())}`, neg: false },
+    { label: 'Total Invested',  value: `Rs. ${fmtNum(data.totalInvested.toString())}`, neg: false },
+    { label: 'Unrealised P&L',  value: `${data.totalPnl.isNegative() ? '' : '+'}Rs. ${fmtNum(data.totalPnl.toString())}`, neg: data.totalPnl.isNegative() },
+    { label: 'XIRR',            value: data.xirrPct ?? '—', neg: false },
   ];
-  summaryCards.forEach((card, i) => {
-    const cx = ML + i * (cardW + 4);
-    doc.rect(cx, sY, cardW, 44).fill(BRAND.headerBg);
+  cards.forEach((c, i) => {
+    const cx = ML + i * (cardW + cardGap);
+    doc.rect(cx, cy, cardW, cardH).fill(BRAND.headerBg);
+    doc.rect(cx, cy, 3, cardH).fill(BRAND.accent);
     doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.muted)
-       .text(card.label, cx + 8, sY + 8, { width: cardW - 12 });
-    const isNeg = card.value.includes('-') && card.label.includes('P&L');
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(isNeg ? BRAND.negative : BRAND.ink)
-       .text(card.value, cx + 8, sY + 22, { width: cardW - 12 });
+       .text(c.label.toUpperCase(), cx + 10, cy + 9, { width: cardW - 14, characterSpacing: 0.5 });
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(c.neg ? BRAND.negative : BRAND.ink)
+       .text(pdfSafe(c.value), cx + 10, cy + 26, { width: cardW - 14, ellipsis: true });
+  });
+  cy += cardH + 18;
+
+  // ─────────────────────────────────────────────────────────────────
+  // ASSET ALLOCATION (pie + legend)
+  // ─────────────────────────────────────────────────────────────────
+  cy = renderSection(doc, ML, W, cy, 'Asset Allocation', (top) => {
+    return drawPieChart(doc, data.pieData, { x: ML, y: top, width: W, height: 170 });
   });
 
-  // ── Section: Asset Allocation ────────────────────────────────────────────────
-  let cy = sY + 60;
-  drawSectionHeader(doc, 'Asset Allocation', ML, cy, W);
-  cy += 18;
-  drawPieChart(doc, data.pieData, { x: ML, y: cy, width: W, height: 180, title: undefined });
-  cy += 188;
-
-  // ── Section: Portfolio Value Over Time ──────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────
+  // PORTFOLIO VALUE OVER TIME (line)
+  // ─────────────────────────────────────────────────────────────────
   if (data.historicalLine.length >= 2) {
-    checkPageBreak(doc, cy, 200);
-    cy = doc.y;
-    drawSectionHeader(doc, 'Portfolio Value — Monthly Cost Basis', ML, cy, W);
-    cy += 18;
-    drawLineChart(doc, data.historicalLine, { x: ML, y: cy, width: W, height: 160 });
-    cy += 175;
+    cy = ensureSpace(doc, cy, 200);
+    cy = renderSection(doc, ML, W, cy, 'Portfolio Value — Monthly (Cost Basis)', (top) => {
+      return drawLineChart(doc, data.historicalLine, { x: ML, y: top, width: W, height: 160 });
+    });
   }
 
-  // ── Section: Capital Gains Summary ──────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────
+  // CAPITAL GAINS BY FY (bars)
+  // ─────────────────────────────────────────────────────────────────
   if (data.cgBars.length > 0) {
-    checkPageBreak(doc, cy, 160);
-    cy = doc.y;
-    drawSectionHeader(doc, 'Capital Gains by Financial Year (STCG + LTCG)', ML, cy, W);
-    cy += 18;
-    drawHorizontalBarChart(doc, data.cgBars, { x: ML, y: cy, width: W, height: data.cgBars.length * 22 + 20 });
-    cy += data.cgBars.length * 22 + 30;
+    const barChartH = data.cgBars.length * 20 + 10;
+    cy = ensureSpace(doc, cy, barChartH + 40);
+    cy = renderSection(doc, ML, W, cy, 'Capital Gains by Financial Year (STCG + LTCG)', (top) => {
+      return drawHorizontalBarChart(doc, data.cgBars, { x: ML, y: top, width: W, height: barChartH });
+    });
   }
 
-  // ── Section: Holdings Table ──────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────
+  // HOLDINGS TABLE (new page)
+  // ─────────────────────────────────────────────────────────────────
   doc.addPage();
   cy = 40;
   drawSectionHeader(doc, `Holdings (${data.holdingCount} total)`, ML, cy, W);
-  cy += 18;
+  cy += 22;
 
-  const holdingCols = [
+  const holdingCols: ColDef[] = [
     { key: 'portfolioName', header: 'Portfolio', width: 90 },
     { key: 'assetClass',    header: 'Class',     width: 72 },
-    { key: 'assetName',     header: 'Asset',     width: 140 },
-    { key: 'invested',      header: 'Invested',  width: 72, money: true },
-    { key: 'value',         header: 'Value',     width: 72, money: true },
-    { key: 'pnl',           header: 'P&L',       width: 60, money: true, signed: true },
-    { key: 'pctReturn',     header: '%',         width: 36, pct: true },
+    { key: 'assetName',     header: 'Asset',     width: 130 },
+    { key: 'invested',      header: 'Invested',  width: 78, money: true },
+    { key: 'value',         header: 'Value',     width: 78, money: true },
+    { key: 'pnl',           header: 'P&L',       width: 70, money: true, signed: true },
+    { key: 'pctReturn',     header: '%',         width: 42, pct: true },
   ];
-
   const totalColW = holdingCols.reduce((s, c) => s + c.width, 0);
   const scale = W / totalColW;
   const scaledCols = holdingCols.map(c => ({ ...c, width: c.width * scale }));
-
-  cy = drawTable(doc, data.holdingRows, scaledCols, cy, ML, W);
+  drawTable(doc, data.holdingRows, scaledCols, cy, ML, W);
 
   addPageNumbers(doc);
   doc.flushPages();
   doc.end();
+}
+
+// Render a section header band + body. Body is a closure that draws the section
+// content starting at `top` and returns the bottom y of the rendered content.
+function renderSection(
+  doc: InstanceType<typeof PDFDocument>,
+  x: number,
+  width: number,
+  y: number,
+  title: string,
+  body: (top: number) => number,
+): number {
+  drawSectionHeader(doc, title, x, y, width);
+  const contentTop = y + 22;
+  const bottom = body(contentTop);
+  return bottom + 16;
+}
+
+// Move to next page if `needed` pixels won't fit on the current page.
+function ensureSpace(doc: InstanceType<typeof PDFDocument>, cy: number, needed: number): number {
+  const bottom = doc.page.height - doc.page.margins.bottom - 40;
+  if (cy + needed > bottom) {
+    doc.addPage();
+    return 40;
+  }
+  return cy;
 }
 
 // ─── Excel report ─────────────────────────────────────────────────────────────
@@ -313,7 +351,7 @@ export async function streamDashboardExcel(res: Response, params: DashboardRepor
   wh.getColumn(3).width = 36;
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename="portfolio-report.xlsx"');
+  res.setHeader('Content-Disposition', 'attachment; filename="portfolioos-dashboard-report.xlsx"');
   await wb.xlsx.write(res);
   res.end();
 }
@@ -347,18 +385,10 @@ function drawSectionHeader(
   y: number,
   width: number,
 ): void {
-  doc.rect(x, y, width, 15).fill(BRAND.headerBg);
-  doc.font('Helvetica-Bold').fontSize(8.5).fillColor(BRAND.ink)
-     .text(text, x + 6, y + 3.5, { width: width - 12 });
-  doc.y = y + 15;
-}
-
-function checkPageBreak(doc: InstanceType<typeof PDFDocument>, cy: number, needed: number): void {
-  const bottom = doc.page.height - doc.page.margins.bottom - 40;
-  if (cy + needed > bottom) {
-    doc.addPage();
-    doc.y = 40;
-  }
+  doc.rect(x, y, width, 18).fill(BRAND.ink);
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.white)
+     .text(pdfSafe(text), x + 8, y + 5, { width: width - 12 });
+  doc.y = y + 18;
 }
 
 interface ColDef {
@@ -374,44 +404,49 @@ function drawTable(
   marginLeft: number,
   totalWidth: number,
 ): number {
-  const ROW_H = 14;
+  const ROW_H = 16;
   let y = startY;
 
-  // Header
-  doc.rect(marginLeft, y, totalWidth, ROW_H).fill(BRAND.headerBg);
-  let x = marginLeft;
-  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
-  for (const col of cols) {
-    doc.text(col.header, x + 3, y + 3, { width: col.width - 6, ellipsis: true });
-    x += col.width;
-  }
+  const drawHeader = (yy: number): void => {
+    doc.rect(marginLeft, yy, totalWidth, ROW_H).fill(BRAND.ink);
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.white);
+    let xx = marginLeft;
+    for (const col of cols) {
+      doc.text(pdfSafe(col.header), xx + 4, yy + 5, { width: col.width - 8, ellipsis: true });
+      xx += col.width;
+    }
+  };
+
+  drawHeader(y);
   y += ROW_H;
 
+  if (rows.length === 0) {
+    doc.rect(marginLeft, y, totalWidth, 40).fill(BRAND.rowAlt);
+    doc.font('Helvetica').fontSize(9).fillColor(BRAND.muted)
+       .text('No holdings to display.', marginLeft, y + 14, { width: totalWidth, align: 'center' });
+    return y + 50;
+  }
+
   for (let i = 0; i < rows.length; i++) {
-    if (y > doc.page.height - doc.page.margins.bottom - 20) {
+    if (y > doc.page.height - doc.page.margins.bottom - 30) {
       doc.addPage();
       y = 40;
-      // Repeat header
-      doc.rect(marginLeft, y, totalWidth, ROW_H).fill(BRAND.headerBg);
-      x = marginLeft;
-      doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
-      for (const col of cols) {
-        doc.text(col.header, x + 3, y + 3, { width: col.width - 6, ellipsis: true });
-        x += col.width;
-      }
+      drawHeader(y);
       y += ROW_H;
     }
 
     if (i % 2 === 1) doc.rect(marginLeft, y, totalWidth, ROW_H).fill(BRAND.rowAlt);
-    x = marginLeft;
-    doc.font('Helvetica').fontSize(7.5);
+    let x = marginLeft;
+    doc.font('Helvetica').fontSize(8);
     for (const col of cols) {
       const raw   = rows[i]![col.key] ?? '';
-      const value = col.pct ? `${raw}%` : raw;
+      let value = String(raw);
+      if (col.pct) value = `${value}%`;
+      else if (col.money) value = `Rs. ${fmtNum(value)}`;
       const isNeg = (col.signed || col.money) && String(raw).startsWith('-');
       doc.fillColor(isNeg ? BRAND.negative : BRAND.ink);
       const align = (col.money || col.pct) ? 'right' : 'left';
-      doc.text(value, x + 3, y + 3, { width: col.width - 6, ellipsis: true, align });
+      doc.text(pdfSafe(value), x + 4, y + 5, { width: col.width - 8, ellipsis: true, align });
       x += col.width;
     }
     y += ROW_H;
@@ -427,9 +462,9 @@ function addPageNumbers(doc: InstanceType<typeof PDFDocument>): void {
     doc.switchToPage(range.start + i);
     doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted)
        .text(
-         `PortfolioOS  ·  Page ${i + 1} of ${total}`,
+         pdfSafe(`PortfolioOS  ·  Portfolio Report  ·  Page ${i + 1} of ${total}`),
          40,
-         doc.page.height - 28,
+         doc.page.height - 24,
          { width: doc.page.width - 80, align: 'center' },
        );
   }

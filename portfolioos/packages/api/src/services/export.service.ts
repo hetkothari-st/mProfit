@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
 import { Decimal, toDecimal } from '@portfolioos/shared';
-import { BRAND } from './charts/pdfCharts.js';
+import { BRAND, drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
 
 export interface ExportColumn {
   key: string;
@@ -13,10 +13,17 @@ export interface ExportColumn {
 
 export interface ExportPayload {
   title: string;
+  subtitle?: string;
   meta?: Record<string, string | number>;
   columns: ExportColumn[];
   rows: Array<Record<string, unknown>>;
+  // Footer values are shown as metric cards at the top of the PDF.
   footer?: Record<string, string | number>;
+  // Optional bar chart of top items by value.
+  chartRows?: BarDatum[];
+  chartTitle?: string;
+  // Optional explicit filename (no extension). Falls back to slugified title.
+  filenameStem?: string;
 }
 
 // ─── Excel (XLSX) ───────────────────────────────────────────────────
@@ -91,7 +98,7 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
 
 export function streamPdf(res: Response, payload: ExportPayload): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const safeTitle = payload.title.replace(/[^a-z0-9-_]+/gi, '_');
+    const safeTitle = (payload.filenameStem ?? payload.title).replace(/[^a-z0-9-_]+/gi, '_').toLowerCase();
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.pdf"`);
 
@@ -102,87 +109,167 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     doc.pipe(res);
 
     const ML    = doc.page.margins.left;
-    const pageW = doc.page.width - ML - doc.page.margins.right;
+    const MR    = doc.page.margins.right;
+    const pageW = doc.page.width - ML - MR;
+    const pageH = doc.page.height;
 
-    // ── Branded header block ──────────────────────────────────────────
-    doc.rect(0, 0, doc.page.width, 52).fill(BRAND.ink);
-    doc.font('Helvetica-Bold').fontSize(16).fillColor(BRAND.white)
-       .text('PortfolioOS', ML, 12);
+    // ─────────────────────────────────────────────────────────────────
+    // HEADER BAR
+    // ─────────────────────────────────────────────────────────────────
+    doc.rect(0, 0, doc.page.width, 56).fill(BRAND.ink);
+    doc.font('Helvetica-Bold').fontSize(17).fillColor(BRAND.white)
+       .text('PortfolioOS', ML, 14);
     doc.font('Helvetica').fontSize(10).fillColor('#94AECB')
-       .text(payload.title, ML, 34);
-    doc.font('Helvetica').fontSize(8).fillColor('#94AECB')
-       .text(`Generated ${new Date().toISOString().slice(0, 10)}`, ML, 38, { align: 'right', width: pageW });
-    doc.y = 64;
+       .text(pdfSafe(payload.title), ML, 36);
 
-    if (payload.meta) {
-      doc.font('Helvetica').fontSize(8.5).fillColor(BRAND.muted);
-      const entries = Object.entries(payload.meta);
-      entries.forEach(([k, v], i) => {
-        if (i > 0) doc.text('  |  ', { continued: true });
-        doc.fillColor(BRAND.muted).text(`${k}: `, { continued: true });
-        doc.fillColor(BRAND.ink).text(String(v), { continued: i < entries.length - 1 });
-      });
-      doc.moveDown(0.5);
+    const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+    doc.font('Helvetica').fontSize(8.5).fillColor('#94AECB')
+       .text(genStr, ML, 22, { align: 'right', width: pageW });
+    if (payload.subtitle) {
+      doc.font('Helvetica').fontSize(8).fillColor('#94AECB')
+         .text(pdfSafe(payload.subtitle), ML, 38, { align: 'right', width: pageW });
     }
 
-    // ── Table ─────────────────────────────────────────────────────────
-    const totalWeight = payload.columns.reduce((s, c) => s + (c.width ?? 10), 0) || payload.columns.length;
-    const colWidths   = payload.columns.map(c => ((c.width ?? 10) / totalWeight) * pageW);
-    const ROW_H       = 16;
+    let cy = 72;
 
-    const drawRow = (values: string[], opts: { bold?: boolean; alt?: boolean }): void => {
-      const y = doc.y;
-      if (opts.bold)      doc.rect(ML, y, pageW, ROW_H).fill(BRAND.headerBg);
-      else if (opts.alt)  doc.rect(ML, y, pageW, ROW_H).fill(BRAND.rowAlt);
-      doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8).fillColor(BRAND.ink);
-      let x = ML;
-      for (let i = 0; i < values.length; i++) {
-        doc.text(values[i] ?? '', x + 3, y + 4, { width: (colWidths[i] ?? 80) - 6, ellipsis: true });
-        x += colWidths[i] ?? 80;
-      }
-      doc.y = y + ROW_H;
-      if (doc.y > doc.page.height - doc.page.margins.bottom - 36) {
-        doc.addPage();
-        doc.y = 36;
-        const hy = doc.y;
-        doc.rect(ML, hy, pageW, ROW_H).fill(BRAND.headerBg);
-        doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.ink);
-        let hx = ML;
-        for (let i = 0; i < payload.columns.length; i++) {
-          doc.text(payload.columns[i]!.header, hx + 3, hy + 4, { width: (colWidths[i] ?? 80) - 6, ellipsis: true });
-          hx += colWidths[i] ?? 80;
+    // ─────────────────────────────────────────────────────────────────
+    // META STRIP — single line key: value pills
+    // ─────────────────────────────────────────────────────────────────
+    if (payload.meta && Object.keys(payload.meta).length > 0) {
+      doc.fillColor(BRAND.muted).font('Helvetica').fontSize(8.5);
+      const pieces: { k: string; v: string }[] = Object.entries(payload.meta)
+        .map(([k, v]) => ({ k, v: pdfSafe(String(v)) }));
+      let mx = ML;
+      doc.y = cy;
+      pieces.forEach((p, i) => {
+        const text = `${p.k}: `;
+        const valText = p.v;
+        doc.font('Helvetica').fillColor(BRAND.muted).text(text, mx, cy, { continued: true })
+           .font('Helvetica-Bold').fillColor(BRAND.ink).text(valText, { continued: i < pieces.length - 1 });
+        if (i < pieces.length - 1) {
+          doc.font('Helvetica').fillColor(BRAND.border).text('   ·   ', { continued: true });
         }
-        doc.y = hy + ROW_H;
-      }
-    };
-
-    drawRow(payload.columns.map(c => c.header), { bold: true });
-    payload.rows.forEach((data, idx) => {
-      const values = payload.columns.map(col => {
-        const raw = data[col.key];
-        if (col.formatter) return col.formatter(raw);
-        return raw == null ? '' : String(raw);
       });
-      drawRow(values, { alt: idx % 2 === 1 });
-    });
-
-    if (payload.footer) {
-      doc.moveDown(0.6);
-      doc.rect(ML, doc.y, pageW, 1).fill(BRAND.border);
-      doc.moveDown(0.4);
-      doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink);
-      Object.entries(payload.footer).forEach(([k, v]) => {
-        doc.text(`${k}: `, { continued: true }).font('Helvetica').text(String(v));
-      });
+      cy = doc.y + 14;
     }
 
-    // ── Page numbers ──────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────
+    // METRIC CARDS — from footer entries (4 across)
+    // ─────────────────────────────────────────────────────────────────
+    if (payload.footer && Object.keys(payload.footer).length > 0) {
+      const entries = Object.entries(payload.footer);
+      const cardCount = entries.length;
+      const gap = 8;
+      const cardW = (pageW - gap * (cardCount - 1)) / cardCount;
+      const cardH = 42;
+      entries.forEach(([k, v], i) => {
+        const cx = ML + i * (cardW + gap);
+        doc.rect(cx, cy, cardW, cardH).fill(BRAND.headerBg);
+        doc.rect(cx, cy, 3, cardH).fill(BRAND.accent);
+        doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.muted)
+           .text(pdfSafe(k).toUpperCase(), cx + 9, cy + 7, { width: cardW - 12, characterSpacing: 0.5 });
+        const valStr = pdfSafe(String(v));
+        const isNeg = valStr.includes('-') && (k.toLowerCase().includes('p&l') || k.toLowerCase().includes('gain') || k.toLowerCase().includes('loss'));
+        doc.font('Helvetica-Bold').fontSize(13).fillColor(isNeg ? BRAND.negative : BRAND.ink)
+           .text(valStr, cx + 9, cy + 21, { width: cardW - 14, ellipsis: true });
+      });
+      cy += cardH + 14;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // CHART (top N items, horizontal bars)
+    // ─────────────────────────────────────────────────────────────────
+    if (payload.chartRows && payload.chartRows.length > 0) {
+      const chartTitle = payload.chartTitle ?? 'Top items by value';
+      doc.rect(ML, cy, pageW, 16).fill(BRAND.headerBg);
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(BRAND.ink)
+         .text(pdfSafe(chartTitle), ML + 8, cy + 4);
+      cy += 22;
+      const chartH = Math.min(payload.chartRows.length * 18 + 8, 180);
+      const bottom = drawHorizontalBarChart(doc, payload.chartRows, {
+        x: ML, y: cy, width: pageW, height: chartH,
+      });
+      cy = bottom + 10;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // TABLE
+    // ─────────────────────────────────────────────────────────────────
+    if (payload.rows.length === 0) {
+      doc.rect(ML, cy, pageW, 60).fill(BRAND.rowAlt);
+      doc.font('Helvetica').fontSize(10).fillColor(BRAND.muted)
+         .text('No records to display.', ML, cy + 22, { width: pageW, align: 'center' });
+      cy += 70;
+    } else {
+      // Table header
+      doc.rect(ML, cy, pageW, 16).fill(BRAND.headerBg);
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(BRAND.ink)
+         .text('Details', ML + 8, cy + 4);
+      cy += 22;
+
+      const totalWeight = payload.columns.reduce((s, c) => s + (c.width ?? 10), 0) || payload.columns.length;
+      const colWidths   = payload.columns.map(c => ((c.width ?? 10) / totalWeight) * pageW);
+      const ROW_H       = 17;
+
+      const drawHeader = (y: number): void => {
+        doc.rect(ML, y, pageW, ROW_H).fill(BRAND.ink);
+        doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.white);
+        let x = ML;
+        for (let i = 0; i < payload.columns.length; i++) {
+          doc.text(pdfSafe(payload.columns[i]!.header), x + 4, y + 5, {
+            width: (colWidths[i] ?? 80) - 8, ellipsis: true,
+          });
+          x += colWidths[i] ?? 80;
+        }
+      };
+
+      drawHeader(cy);
+      cy += ROW_H;
+
+      payload.rows.forEach((data, idx) => {
+        // Page break check
+        if (cy + ROW_H > pageH - 40) {
+          // Draw page number on current page first
+          doc.fontSize(7).fillColor(BRAND.muted).font('Helvetica')
+             .text(`PortfolioOS  ·  ${safeTitle}`, ML, pageH - 26, { width: pageW, align: 'left' });
+          doc.addPage();
+          cy = 36;
+          drawHeader(cy);
+          cy += ROW_H;
+        }
+
+        if (idx % 2 === 1) doc.rect(ML, cy, pageW, ROW_H).fill(BRAND.rowAlt);
+        let x = ML;
+        doc.font('Helvetica').fontSize(8);
+        for (let i = 0; i < payload.columns.length; i++) {
+          const col = payload.columns[i]!;
+          const raw = data[col.key];
+          const val = col.formatter ? col.formatter(raw) : (raw == null ? '' : String(raw));
+          const isNumeric = /^-?[\d,.]+%?$/.test(val.trim()) || /^Rs/.test(val.trim());
+          const isNeg = val.trim().startsWith('-');
+          const align = isNumeric ? 'right' : 'left';
+          doc.fillColor(isNeg ? BRAND.negative : BRAND.ink)
+             .text(pdfSafe(val), x + 4, cy + 5, {
+               width: (colWidths[i] ?? 80) - 8, ellipsis: true, align,
+             });
+          x += colWidths[i] ?? 80;
+        }
+        cy += ROW_H;
+      });
+
+      // bottom border
+      doc.rect(ML, cy, pageW, 0.5).fill(BRAND.border);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // PAGE NUMBERS — applied after content with switchToPage
+    // ─────────────────────────────────────────────────────────────────
     const range = doc.bufferedPageRange();
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(range.start + i);
-      doc.font('Helvetica').fontSize(6.5).fillColor(BRAND.muted).text(
+      doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted).text(
         `PortfolioOS  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`,
-        ML, doc.page.height - 22, { width: pageW, align: 'center' },
+        ML, pageH - 22, { width: pageW, align: 'center' },
       );
     }
 

@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fmtNum, fmtDate, type ExportPayload, type ExportColumn } from '../export.service.js';
+import type { BarDatum } from '../charts/pdfCharts.js';
 
 const ASSET_CLASS_LABELS: Record<string, string> = {
   EQUITY: 'Equity', MUTUAL_FUND: 'Mutual Fund', ETF: 'ETF',
@@ -23,6 +24,24 @@ const ASSET_CLASS_LABELS: Record<string, string> = {
 
 function labelClass(ac: string): string {
   return ASSET_CLASS_LABELS[ac] ?? ac;
+}
+
+// Friendly section title — what the user thinks of the page as
+function sectionLabel(classes: AssetClass[] | undefined): string {
+  if (!classes || classes.length === 0) return 'All Holdings';
+  if (classes.length === 1) return labelClass(classes[0]!);
+  // Common groupings:
+  const set = new Set(classes);
+  if (set.size === 2 && set.has('FUTURES' as AssetClass) && set.has('OPTIONS' as AssetClass)) return 'Futures & Options';
+  if (set.size === 2 && set.has('FIXED_DEPOSIT' as AssetClass) && set.has('RECURRING_DEPOSIT' as AssetClass)) return 'Fixed & Recurring Deposits';
+  if (set.has('PHYSICAL_GOLD' as AssetClass) || set.has('GOLD_BOND' as AssetClass) || set.has('GOLD_ETF' as AssetClass) || set.has('PHYSICAL_SILVER' as AssetClass)) return 'Gold & Silver';
+  return classes.map(labelClass).join(' + ');
+}
+
+function filenameStem(classes: AssetClass[] | undefined): string {
+  if (!classes || classes.length === 0) return 'portfolioos-all-holdings';
+  if (classes.length === 1) return `portfolioos-${classes[0]!.toLowerCase().replace(/_/g, '-')}`;
+  return `portfolioos-${classes.map(c => c.toLowerCase().replace(/_/g, '-')).join('_')}`;
 }
 
 // ─── Holdings sheet payload ──────────────────────────────────────────────────
@@ -55,16 +74,67 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
       : resolvedIds.map(id => portfolioNameMap[id] ?? id).join(', ');
 
   const classFilter = assetClasses && assetClasses.length > 0 ? assetClasses : undefined;
-  const classLabel  = classFilter ? classFilter.map(labelClass).join(', ') : 'All Asset Classes';
+  const section     = sectionLabel(classFilter);
+  const fileStem    = filenameStem(classFilter);
 
   // ── Holdings ────────────────────────────────────────────────────────────────
-  const holdings = await prisma.holdingProjection.findMany({
-    where: {
-      portfolioId: { in: resolvedIds },
-      ...(classFilter ? { assetClass: { in: classFilter } } : {}),
-    },
-    orderBy: [{ assetClass: 'asc' }, { assetName: 'asc' }],
-  });
+  // For FUTURES/OPTIONS: HoldingProjection is empty (F&O isn't a traditional
+  // holding). Pull live derivative positions from DerivativePosition instead.
+  const isFoOnly = classFilter != null
+    && classFilter.length > 0
+    && classFilter.every(c => c === 'FUTURES' || c === 'OPTIONS');
+
+  let holdings: Array<{
+    portfolioId:  string;
+    assetClass:   string;
+    assetName:    string | null;
+    isin:         string | null;
+    quantity:     { toString(): string };
+    avgCostPrice: { toString(): string };
+    currentPrice: { toString(): string } | null;
+    totalCost:    { toString(): string };
+    currentValue: { toString(): string } | null;
+  }> = [];
+
+  if (isFoOnly) {
+    const positions = await prisma.derivativePosition.findMany({
+      where: {
+        portfolioId: { in: resolvedIds },
+        status: 'OPEN',
+        ...(classFilter.length === 1 ? { instrumentType: classFilter[0] === 'FUTURES' ? 'FUTURES' : { in: ['CALL', 'PUT'] } } : {}),
+      },
+      orderBy: [{ expiryDate: 'asc' }, { underlying: 'asc' }],
+    });
+    holdings = positions.map(p => {
+      const qty   = new Decimal(p.netQuantity.toString());
+      const cost  = new Decimal(p.totalCost.toString());
+      const price = p.mtmPrice ? new Decimal(p.mtmPrice.toString()) : null;
+      const value = price ? qty.times(price).times(p.lotSize) : null;
+      const optTag = p.instrumentType === 'FUTURES'
+        ? 'FUT'
+        : `${p.instrumentType === 'CALL' ? 'CE' : 'PE'} ${p.strikePrice?.toString() ?? ''}`;
+      const expiry = p.expiryDate.toISOString().slice(0, 10);
+      return {
+        portfolioId:  p.portfolioId,
+        assetClass:   p.instrumentType === 'FUTURES' ? 'FUTURES' : 'OPTIONS',
+        assetName:    `${p.underlying} ${optTag} ${expiry}`,
+        isin:         null,
+        quantity:     { toString: () => qty.toString() },
+        avgCostPrice: { toString: () => p.avgEntryPrice.toString() },
+        currentPrice: price ? { toString: () => price.toString() } : null,
+        totalCost:    { toString: () => cost.toString() },
+        currentValue: value ? { toString: () => value.toString() } : null,
+      };
+    });
+  } else {
+    holdings = await prisma.holdingProjection.findMany({
+      where: {
+        portfolioId: { in: resolvedIds },
+        ...(classFilter ? { assetClass: { in: classFilter } } : {}),
+      },
+      orderBy: [{ assetClass: 'asc' }, { assetName: 'asc' }],
+    });
+  }
 
   let totalCost  = new Decimal(0);
   let totalValue = new Decimal(0);
@@ -91,36 +161,53 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
     };
   });
 
+  // Currency-prefixed money formatter for tables (PDF-safe — no ₹)
+  const fmtRs   = (v: unknown) => v == null || v === '' ? '' : `Rs. ${fmtNum(v)}`;
+
   const holdingColumns: ExportColumn[] = [
-    { key: 'portfolioName',  header: 'Portfolio',    width: 18 },
-    { key: 'assetClass',     header: 'Asset Class',  width: 14 },
+    { key: 'portfolioName',  header: 'Portfolio',    width: 16 },
+    { key: 'assetClass',     header: 'Class',        width: 12 },
     { key: 'assetName',      header: 'Name',         width: 32 },
     { key: 'isin',           header: 'ISIN',         width: 14 },
     { key: 'quantity',       header: 'Qty',          width: 10, formatter: v => fmtNum(v, 4) },
-    { key: 'avgCostPrice',   header: 'Avg Cost',     width: 12, formatter: v => fmtNum(v) },
-    { key: 'currentPrice',   header: 'CMP',          width: 12, formatter: v => fmtNum(v) },
-    { key: 'totalCost',      header: 'Invested ₹',   width: 14, formatter: v => fmtNum(v) },
-    { key: 'currentValue',   header: 'Value ₹',      width: 14, formatter: v => fmtNum(v) },
-    { key: 'unrealisedPnL',  header: 'P&L ₹',        width: 14, formatter: v => fmtNum(v) },
+    { key: 'avgCostPrice',   header: 'Avg Cost',     width: 12, formatter: fmtRs },
+    { key: 'currentPrice',   header: 'CMP',          width: 12, formatter: fmtRs },
+    { key: 'totalCost',      header: 'Invested',     width: 14, formatter: fmtRs },
+    { key: 'currentValue',   header: 'Value',        width: 14, formatter: fmtRs },
+    { key: 'unrealisedPnL',  header: 'P&L',          width: 14, formatter: fmtRs },
     { key: 'pctReturn',      header: '% Rtn',        width: 8,  formatter: v => `${v}%` },
   ];
 
   const totalPnl = totalValue.minus(totalCost);
 
+  // Top-10 holdings by current value — for bar chart
+  const chartRows: BarDatum[] = holdingRows
+    .map(r => ({ label: r.assetName, value: parseFloat(r.currentValue) }))
+    .filter(r => isFinite(r.value) && r.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+
+  const todayStr = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+
   const holdingsPayload: ExportPayload = {
-    title: `Holdings — ${classLabel}`,
+    title: `${section} Holdings Report`,
+    subtitle: `${portfolioLabel}  ·  ${todayStr}`,
+    filenameStem: fileStem,
     meta: {
       Portfolio: portfolioLabel,
-      'Asset Class': classLabel,
-      'Generated On': new Date().toISOString().slice(0, 10),
+      Section: section,
+      Holdings: String(holdings.length),
     },
     columns: holdingColumns,
     rows: holdingRows,
     footer: {
-      'Total Invested': `₹${fmtNum(totalCost.toString())}`,
-      'Total Value':    `₹${fmtNum(totalValue.toString())}`,
-      'Unrealised P&L': `₹${fmtNum(totalPnl.toString())}`,
+      'Total Invested': `Rs. ${fmtNum(totalCost.toString())}`,
+      'Current Value':  `Rs. ${fmtNum(totalValue.toString())}`,
+      'Unrealised P&L': `${totalPnl.isNegative() ? '' : '+'}Rs. ${fmtNum(totalPnl.toString())}`,
+      'Return %':       totalCost.isZero() ? '—' : `${totalPnl.dividedBy(totalCost).times(100).toFixed(2)}%`,
     },
+    chartRows,
+    chartTitle: `Top ${chartRows.length} holdings by current value`,
   };
 
   // ── Transactions ─────────────────────────────────────────────────────────────
@@ -134,16 +221,16 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
   });
 
   const txnColumns: ExportColumn[] = [
-    { key: 'portfolioName',     header: 'Portfolio',   width: 18 },
+    { key: 'portfolioName',     header: 'Portfolio',   width: 16 },
     { key: 'tradeDate',         header: 'Date',        width: 12, formatter: fmtDate },
-    { key: 'assetClass',        header: 'Class',       width: 14 },
-    { key: 'assetName',         header: 'Asset',       width: 32 },
-    { key: 'transactionType',   header: 'Type',        width: 14 },
+    { key: 'assetClass',        header: 'Class',       width: 12 },
+    { key: 'assetName',         header: 'Asset',       width: 30 },
+    { key: 'transactionType',   header: 'Type',        width: 12 },
     { key: 'quantity',          header: 'Qty',         width: 10, formatter: v => fmtNum(v, 4) },
-    { key: 'price',             header: 'Price ₹',     width: 12, formatter: v => fmtNum(v) },
-    { key: 'netAmount',         header: 'Net Amt ₹',   width: 14, formatter: v => fmtNum(v) },
-    { key: 'broker',            header: 'Broker',      width: 16 },
-    { key: 'narration',         header: 'Narration',   width: 28 },
+    { key: 'price',             header: 'Price',       width: 12, formatter: fmtRs },
+    { key: 'netAmount',         header: 'Net Amount',  width: 14, formatter: fmtRs },
+    { key: 'broker',            header: 'Broker',      width: 14 },
+    { key: 'narration',         header: 'Narration',   width: 24 },
   ];
 
   const txnRows = txns.map(t => ({
@@ -160,11 +247,13 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
   }));
 
   const transactionsPayload: ExportPayload = {
-    title: `Transactions — ${classLabel}`,
+    title: `${section} Transactions`,
+    subtitle: `${portfolioLabel}  ·  ${todayStr}`,
+    filenameStem: `${fileStem}-transactions`,
     meta: {
       Portfolio: portfolioLabel,
-      'Asset Class': classLabel,
-      'Generated On': new Date().toISOString().slice(0, 10),
+      Section: section,
+      Transactions: String(txns.length),
     },
     columns: txnColumns,
     rows: txnRows,
@@ -173,14 +262,14 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
   return {
     holdingsPayload,
     transactionsPayload,
-    summaryTitle: `${classLabel} Report`,
+    summaryTitle: `${section} Report`,
     summaryMeta: {
       Portfolio: portfolioLabel,
       'Total Holdings': String(holdings.length),
       'Total Transactions': String(txns.length),
-      'Invested': `₹${fmtNum(totalCost.toString())}`,
-      'Current Value': `₹${fmtNum(totalValue.toString())}`,
-      'Unrealised P&L': `₹${fmtNum(totalValue.minus(totalCost).toString())}`,
+      'Invested': `Rs. ${fmtNum(totalCost.toString())}`,
+      'Current Value': `Rs. ${fmtNum(totalValue.toString())}`,
+      'Unrealised P&L': `Rs. ${fmtNum(totalValue.minus(totalCost).toString())}`,
     },
   };
 }
