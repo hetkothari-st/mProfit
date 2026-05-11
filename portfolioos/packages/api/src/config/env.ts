@@ -54,7 +54,7 @@ const EnvSchema = z.object({
   // than per-call cost (insights are user-triggered, cached 24h).
   // Override via `llm.insights_model` AppSetting at runtime; this env
   // var is the fallback when no AppSetting is present.
-  LLM_INSIGHTS_MODEL: z.string().default('claude-sonnet-4-5-20251001'),
+  LLM_INSIGHTS_MODEL: z.string().default('claude-sonnet-4-6'),
   ENABLE_LLM_INSIGHTS: z.enum(['true', 'false']).default('false'),
   // Per §13: Anthropic zero-retention is an account-level setting, not a
   // per-request header. This env var is advisory — if set to 'true' we
