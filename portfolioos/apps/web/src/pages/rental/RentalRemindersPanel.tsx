@@ -27,7 +27,17 @@ function statusBadge(status: RentReminderDTO['status']): { label: string; cls: s
   }
 }
 
-function leadCopy(leadDays: number): string {
+function leadCopy(leadDays: number, dueDate?: string): string {
+  if (leadDays < 0) {
+    if (dueDate) {
+      const days = Math.max(
+        1,
+        Math.floor((Date.now() - new Date(dueDate).getTime()) / 86_400_000),
+      );
+      return days === 1 ? 'Overdue by 1 day' : `Overdue by ${days} days`;
+    }
+    return 'Overdue';
+  }
   if (leadDays === 0) return 'Due today';
   if (leadDays === 1) return 'Due tomorrow';
   return `Due in ${leadDays} days`;
@@ -212,7 +222,9 @@ export function RentalRemindersPanel() {
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
-                      <span>{leadCopy(r.leadDays)}</span>
+                      <span className={r.leadDays < 0 ? 'text-red-600 font-medium' : ''}>
+                        {leadCopy(r.leadDays, r.receipt?.dueDate)}
+                      </span>
                       <span>· {amount}</span>
                       <span className="flex items-center gap-1">
                         {r.channels.email && <Mail className="h-3 w-3" />}

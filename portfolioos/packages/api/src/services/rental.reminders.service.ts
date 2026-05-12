@@ -46,7 +46,13 @@ interface TemplateVars {
   property: string;
   landlord: string;
   paymentInstructions: string;
+  /**
+   * Positive = days before due (5/3/1/0). Negative sentinel `-1` =
+   * receipt is OVERDUE (the actual days-overdue is passed separately
+   * via `daysOverdue` so the template can render "N days overdue").
+   */
   leadDays: number;
+  daysOverdue: number;
 }
 
 function formatINRPlain(d: Prisma.Decimal): string {
@@ -67,14 +73,20 @@ function formatIsoDate(d: Date): string {
 }
 
 function buildTemplate(vars: TemplateVars): { subject: string; body: string; smsBody: string } {
-  const leadCopy =
-    vars.leadDays === 0
+  const isOverdue = vars.leadDays < 0;
+  const leadCopy = isOverdue
+    ? vars.daysOverdue === 1
+      ? 'was due yesterday and is now overdue'
+      : `is overdue by ${vars.daysOverdue} days`
+    : vars.leadDays === 0
       ? 'is due today'
       : vars.leadDays === 1
         ? 'is due tomorrow'
         : `is due in ${vars.leadDays} days`;
 
-  const subject = `Rent reminder — ${vars.property} (${vars.dueDate})`;
+  const subject = isOverdue
+    ? `Overdue rent — ${vars.property} (${vars.dueDate})`
+    : `Rent reminder — ${vars.property} (${vars.dueDate})`;
 
   const body = `<!doctype html>
 <html>
@@ -133,10 +145,74 @@ function startOfDayUtc(d: Date): Date {
 }
 
 /**
- * For each tenancy with a non-empty email or phone, find every EXPECTED
- * receipt whose dueDate lands on (today + leadDays) for any lead day in
- * REMINDER_LEAD_DAYS. Insert one RentReminder per (receipt, leadDays)
- * tuple via the unique constraint — re-running the cron is safe.
+ * Sentinel leadDays for "overdue receipt — landlord hasn't been paid
+ * yet". We use a single row per receipt (uniqued on (receiptId, -1))
+ * so a 6-month-overdue tenant gets exactly one pending reminder, not
+ * one per missed lead-day. Re-runs of the scan are a no-op once the
+ * row exists; the landlord can manually reject + a future scan won't
+ * re-create it because the unique constraint still blocks.
+ */
+const OVERDUE_LEAD_DAYS_SENTINEL = -1;
+
+async function enqueueOne(
+  ctx: ReceiptWithContext,
+  leadDays: number,
+  daysOverdue: number,
+): Promise<boolean> {
+  const vars: TemplateVars = {
+    tenantName: ctx.tenancy.tenantName,
+    amount: formatINRPlain(new Prisma.Decimal(ctx.receipt.expectedAmount.toString())),
+    dueDate: formatIsoDate(ctx.receipt.dueDate),
+    property: ctx.property.name,
+    landlord: env.LANDLORD_BRAND_NAME,
+    paymentInstructions: env.RENT_PAYMENT_INSTRUCTIONS,
+    leadDays,
+    daysOverdue,
+  };
+  const { subject, body, smsBody } = buildTemplate(vars);
+  const channels = {
+    email: !!ctx.tenancy.tenantEmail,
+    sms: !!ctx.tenancy.tenantPhone,
+  };
+  try {
+    await prisma.rentReminder.create({
+      data: {
+        receiptId: ctx.receipt.id,
+        tenancyId: ctx.tenancy.id,
+        leadDays,
+        status: REMINDER_STATUS.PENDING_APPROVAL,
+        channels,
+        subject,
+        body,
+        smsBody,
+      },
+    });
+    return true;
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code !== 'P2002') {
+      logger.error(
+        { err, receiptId: ctx.receipt.id, leadDays },
+        '[rental.reminders] failed to enqueue reminder',
+      );
+    }
+    return false;
+  }
+}
+
+/**
+ * Two passes:
+ *  1. **Upcoming** — every EXPECTED receipt whose dueDate lands on
+ *     (today + leadDays) for leadDays in REMINDER_LEAD_DAYS (5/3/1/0).
+ *  2. **Overdue** — every OVERDUE receipt for an active tenancy with a
+ *     contact, dedup'd to one row per receipt via the sentinel
+ *     `leadDays = -1`. Without this pass a tenancy created with a past
+ *     startDate (or one whose tenant missed several months) generated
+ *     no reminders at all because the lead-day window only looked
+ *     forward.
+ *
+ * Unique constraint on (receiptId, leadDays) means re-running the scan
+ * is safe — duplicates are silently dropped.
  *
  * Cron callers use `runInSystemContext` so this query can see every
  * user; non-cron callers may pass a `userId` to scope.
@@ -145,6 +221,7 @@ export async function enqueuePendingReminders(userId?: string): Promise<number> 
   const today = startOfDayUtc(new Date());
   let queued = 0;
 
+  // ── 1. Upcoming receipts ──────────────────────────────────────────
   for (const leadDays of REMINDER_LEAD_DAYS) {
     const target = new Date(today);
     target.setUTCDate(target.getUTCDate() + leadDays);
@@ -153,7 +230,6 @@ export async function enqueuePendingReminders(userId?: string): Promise<number> 
       where: {
         status: 'EXPECTED',
         dueDate: target,
-        ...(userId ? { tenancy: { property: { userId } } } : {}),
         tenancy: {
           ...(userId ? { property: { userId } } : {}),
           isActive: true,
@@ -163,9 +239,7 @@ export async function enqueuePendingReminders(userId?: string): Promise<number> 
           ],
         },
       },
-      include: {
-        tenancy: { include: { property: true } },
-      },
+      include: { tenancy: { include: { property: true } } },
     })).map((r) => ({
       receipt: r,
       tenancy: r.tenancy,
@@ -173,44 +247,37 @@ export async function enqueuePendingReminders(userId?: string): Promise<number> 
     }));
 
     for (const ctx of receipts) {
-      const vars: TemplateVars = {
-        tenantName: ctx.tenancy.tenantName,
-        amount: formatINRPlain(new Prisma.Decimal(ctx.receipt.expectedAmount.toString())),
-        dueDate: formatIsoDate(ctx.receipt.dueDate),
-        property: ctx.property.name,
-        landlord: env.LANDLORD_BRAND_NAME,
-        paymentInstructions: env.RENT_PAYMENT_INSTRUCTIONS,
-        leadDays,
-      };
-      const { subject, body, smsBody } = buildTemplate(vars);
-      const channels = {
-        email: !!ctx.tenancy.tenantEmail,
-        sms: !!ctx.tenancy.tenantPhone,
-      };
-      try {
-        await prisma.rentReminder.create({
-          data: {
-            receiptId: ctx.receipt.id,
-            tenancyId: ctx.tenancy.id,
-            leadDays,
-            status: REMINDER_STATUS.PENDING_APPROVAL,
-            channels,
-            subject,
-            body,
-            smsBody,
-          },
-        });
-        queued += 1;
-      } catch (err) {
-        // P2002 (unique violation) — dedup is doing its job, skip.
-        const code = (err as { code?: string })?.code;
-        if (code !== 'P2002') {
-          logger.error(
-            { err, receiptId: ctx.receipt.id, leadDays },
-            '[rental.reminders] failed to enqueue reminder',
-          );
-        }
-      }
+      if (await enqueueOne(ctx, leadDays, 0)) queued += 1;
+    }
+  }
+
+  // ── 2. Overdue receipts (one reminder per receipt, sentinel -1) ──
+  const overdueReceipts: ReceiptWithContext[] = (await prisma.rentReceipt.findMany({
+    where: {
+      status: 'OVERDUE',
+      tenancy: {
+        ...(userId ? { property: { userId } } : {}),
+        isActive: true,
+        OR: [
+          { tenantEmail: { not: null } },
+          { tenantPhone: { not: null } },
+        ],
+      },
+    },
+    include: { tenancy: { include: { property: true } } },
+  })).map((r) => ({
+    receipt: r,
+    tenancy: r.tenancy,
+    property: r.tenancy.property,
+  }));
+
+  for (const ctx of overdueReceipts) {
+    const daysOverdue = Math.max(
+      1,
+      Math.floor((today.getTime() - ctx.receipt.dueDate.getTime()) / 86_400_000),
+    );
+    if (await enqueueOne(ctx, OVERDUE_LEAD_DAYS_SENTINEL, daysOverdue)) {
+      queued += 1;
     }
   }
 
