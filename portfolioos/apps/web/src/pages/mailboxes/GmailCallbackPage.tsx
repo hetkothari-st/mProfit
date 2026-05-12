@@ -34,17 +34,24 @@ export function GmailCallbackPage() {
       try {
         const r = await gmailApi.callback(code);
         toast.success(`Connected ${r.email}`);
-        setMsg(`Connected ${r.email} — setting up scan…`);
-        // Invalidate so dashboard shows connected state immediately on return
+        setMsg(`Connected ${r.email}…`);
         await qc.invalidateQueries({ queryKey: ['mailboxes'] });
         success = true;
       } catch (e) {
         toast.error(apiErrorMessage(e));
       } finally {
-        setTimeout(
-          () => nav(success ? '/gmail/scan-setup' : '/mailboxes', { replace: true }),
-          500,
-        );
+        // If this page is running inside a popup we opened from the
+        // rental reminders panel, just close — the opener polls for
+        // `popup.closed` and refreshes its own state. Falls back to
+        // the existing navigate flow for the full-page redirect.
+        if (window.opener && window.opener !== window) {
+          setTimeout(() => window.close(), 400);
+        } else {
+          setTimeout(
+            () => nav(success ? '/gmail/scan-setup' : '/mailboxes', { replace: true }),
+            500,
+          );
+        }
       }
     })();
   }, [params, nav, qc]);

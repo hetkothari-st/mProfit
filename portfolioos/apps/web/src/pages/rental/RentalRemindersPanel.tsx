@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { rentalApi, type RentReminderDTO } from '@/api/rental.api';
+import { gmailApi } from '@/api/gmail.api';
 
 // Map raw provider/server error codes to landlord-friendly text. Anything
 // not matched falls through unchanged so genuine carrier errors still
@@ -333,9 +334,10 @@ interface TenancyBlockProps {
   tenancyId: string;
   reminders: RentReminderDTO[];
   onPreview: (id: string) => void;
+  onReconnectNeeded: () => void;
 }
 
-function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
+function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: TenancyBlockProps) {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -465,18 +467,19 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
       qc.invalidateQueries({ queryKey: ['rental-reminders'] });
       const sent = results.filter((r) => r.status === 'fulfilled' && r.value.status === 'SENT').length;
       const failed = results.length - sent;
-      // Pull the actual carrier error so the landlord sees "SMTP not
-      // configured" instead of a meaningless "All 1 failed". Falls back
-      // to a generic message only when neither channel reported.
-      const reasons = results
+      const rawReasons = results
         .filter((r): r is PromiseFulfilledResult<RentReminderDTO> => r.status === 'fulfilled')
         .map((r) => r.value)
         .filter((row) => row.status === 'FAILED')
-        .flatMap((row) => [row.emailError, row.smsError].filter(Boolean) as string[])
-        .map(friendlyError)
-        .filter((s, i, arr) => arr.indexOf(s) === i);
+        .flatMap((row) => [row.emailError, row.smsError].filter(Boolean) as string[]);
+      const needsReconnect = rawReasons.includes('gmail_scope_missing_reconnect');
+      const reasons = rawReasons.map(friendlyError).filter((s, i, arr) => arr.indexOf(s) === i);
       if (failed === 0) {
         toast.success(`${sent} reminders sent`);
+      } else if (needsReconnect) {
+        // Skip the noisy toast — the modal that's about to open has
+        // both the explanation and the Reconnect button.
+        onReconnectNeeded();
       } else if (sent === 0) {
         toast.error(`${failed} failed — ${reasons.join(', ')}`, { duration: 8000 });
       } else {
@@ -671,9 +674,85 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
 
 // ── Panel ──────────────────────────────────────────────────────────
 
+// Inline modal that triggers a Gmail OAuth reconnect without making the
+// landlord leave the rental page. Opens the consent screen in a popup
+// window; when the popup closes (after the callback page fires) we
+// invalidate the notifications/status query so the panel refreshes.
+function ReconnectGmailDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const [opening, setOpening] = useState(false);
+
+  async function reconnect() {
+    setOpening(true);
+    try {
+      const { url } = await gmailApi.authUrl();
+      const popup = window.open(
+        url,
+        'gmail-reconnect',
+        'width=520,height=720,resizable=yes,scrollbars=yes',
+      );
+      if (!popup) {
+        // Popup blocked — fall back to same-tab redirect.
+        window.location.href = url;
+        return;
+      }
+      const timer = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(timer);
+          setOpening(false);
+          qc.invalidateQueries({ queryKey: ['notifications', 'status'] });
+          qc.invalidateQueries({ queryKey: ['rental-reminders'] });
+          toast.success('Gmail reconnected — try Approve & send again');
+          onOpenChange(false);
+        }
+      }, 800);
+    } catch (err) {
+      setOpening(false);
+      toast.error(err instanceof Error ? err.message : 'Reconnect failed');
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Reconnect Gmail</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <p>
+            Your existing Gmail connection only has read permission — sending
+            rent reminders needs a small extra permission from Google.
+          </p>
+          <p className="text-muted-foreground text-xs">
+            One click below opens a Google consent screen in a popup. Approve
+            the "Send email on your behalf" scope and we'll retry your
+            reminders.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={opening}>
+            Cancel
+          </Button>
+          <Button onClick={reconnect} disabled={opening}>
+            {opening ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Reconnect Gmail
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function RentalRemindersPanel() {
   const qc = useQueryClient();
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [reconnectOpen, setReconnectOpen] = useState(false);
 
   const remindersQuery = useQuery({
     queryKey: ['rental-reminders', 'pending'],
@@ -753,6 +832,7 @@ export function RentalRemindersPanel() {
                 tenancyId={tenancyId}
                 reminders={group}
                 onPreview={setPreviewId}
+                onReconnectNeeded={() => setReconnectOpen(true)}
               />
             ))}
           </div>
@@ -765,6 +845,7 @@ export function RentalRemindersPanel() {
           onOpenChange={(v) => !v && setPreviewId(null)}
         />
       )}
+      <ReconnectGmailDialog open={reconnectOpen} onOpenChange={setReconnectOpen} />
     </Card>
   );
 }
