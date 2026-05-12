@@ -126,42 +126,38 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
   );
 }
 
-// ── Inline contact editor (per-group) ──────────────────────────────
+// ── Inline contact editor (controlled by parent) ───────────────────
 
 interface ContactEditorProps {
-  tenancyId: string;
   email: string | null;
   phone: string | null;
+  draftEmail: string;
+  draftPhone: string;
+  setDraftEmail: (v: string) => void;
+  setDraftPhone: (v: string) => void;
+  editing: boolean;
+  setEditing: (v: boolean) => void;
+  saving: boolean;
+  onSave: () => void;
   missing: boolean;
 }
 
-function ContactEditor({ tenancyId, email, phone, missing }: ContactEditorProps) {
-  const qc = useQueryClient();
-  const [editing, setEditing] = useState<boolean>(missing);
-  const [draftEmail, setDraftEmail] = useState(email ?? '');
-  const [draftPhone, setDraftPhone] = useState(phone ?? '');
-
-  const saveMut = useMutation({
-    mutationFn: () =>
-      rentalApi.updateTenancy(tenancyId, {
-        tenantEmail: draftEmail.trim() || null,
-        tenantPhone: draftPhone.trim() || null,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
-      qc.invalidateQueries({ queryKey: ['rental-property'] });
-      toast.success('Tenant contact updated — channels enabled');
-      setEditing(false);
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Save failed'),
-  });
-
+function ContactEditor({
+  email,
+  phone,
+  draftEmail,
+  draftPhone,
+  setDraftEmail,
+  setDraftPhone,
+  editing,
+  setEditing,
+  saving,
+  onSave,
+  missing,
+}: ContactEditorProps) {
   const dirty = draftEmail.trim() !== (email ?? '') || draftPhone.trim() !== (phone ?? '');
   const hasContact = !!email || !!phone;
 
-  // Collapsed read-only view once a contact exists and the landlord isn't
-  // actively editing — keeps the row compact and stops the input fields
-  // from re-rendering after every successful save.
   if (hasContact && !editing) {
     return (
       <div className="flex items-center gap-3 flex-wrap text-sm">
@@ -214,10 +210,10 @@ function ContactEditor({ tenancyId, email, phone, missing }: ContactEditorProps)
       <Button
         size="sm"
         variant="outline"
-        onClick={() => saveMut.mutate()}
-        disabled={!dirty || saveMut.isPending}
+        onClick={onSave}
+        disabled={!dirty || saving}
       >
-        {saveMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
         Save contact
       </Button>
       {hasContact && (
@@ -229,7 +225,7 @@ function ContactEditor({ tenancyId, email, phone, missing }: ContactEditorProps)
             setDraftPhone(phone ?? '');
             setEditing(false);
           }}
-          disabled={saveMut.isPending}
+          disabled={saving}
         >
           Cancel
         </Button>
@@ -256,6 +252,34 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
   const tenantPhone = tenancy?.tenantPhone ?? null;
   const missingContact = !tenantEmail && !tenantPhone;
 
+  // Lift contact draft state up so the approve handler can save it
+  // first when the landlord typed an email/phone but forgot to click
+  // "Save contact". Without this, Approve stays disabled even though
+  // the form looks ready to send.
+  const [editing, setEditing] = useState<boolean>(missingContact);
+  const [draftEmail, setDraftEmail] = useState(tenantEmail ?? '');
+  const [draftPhone, setDraftPhone] = useState(tenantPhone ?? '');
+
+  const draftDirty =
+    draftEmail.trim() !== (tenantEmail ?? '') ||
+    draftPhone.trim() !== (tenantPhone ?? '');
+  const draftHasContact = !!draftEmail.trim() || !!draftPhone.trim();
+
+  const saveContactMut = useMutation({
+    mutationFn: () =>
+      rentalApi.updateTenancy(tenancyId, {
+        tenantEmail: draftEmail.trim() || null,
+        tenantPhone: draftPhone.trim() || null,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
+      qc.invalidateQueries({ queryKey: ['rental-property'] });
+      toast.success('Tenant contact updated — channels enabled');
+      setEditing(false);
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Save failed'),
+  });
+
   const sortedReminders = [...reminders].sort((a, b) => {
     // Oldest overdue first; upcoming after, soonest first.
     const aDue = a.receipt?.dueDate ? new Date(a.receipt.dueDate).getTime() : 0;
@@ -277,6 +301,13 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
 
   const approveAllMut = useMutation({
     mutationFn: async (ids: string[]) => {
+      // If the landlord typed an email/phone but hasn't clicked Save
+      // Contact yet, persist it first so the send step sees the
+      // recipient — otherwise every channel would fail with
+      // tenant_email_missing / tenant_phone_missing.
+      if (draftDirty && draftHasContact) {
+        await saveContactMut.mutateAsync();
+      }
       const results = await Promise.allSettled(ids.map((id) => rentalApi.approveReminder(id)));
       return results;
     },
@@ -326,9 +357,16 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
         </div>
         <div className="mt-3">
           <ContactEditor
-            tenancyId={tenancyId}
             email={tenantEmail}
             phone={tenantPhone}
+            draftEmail={draftEmail}
+            draftPhone={draftPhone}
+            setDraftEmail={setDraftEmail}
+            setDraftPhone={setDraftPhone}
+            editing={editing}
+            setEditing={setEditing}
+            saving={saveContactMut.isPending}
+            onSave={() => saveContactMut.mutate()}
             missing={missingContact}
           />
         </div>
@@ -361,10 +399,19 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
           <Button
             size="sm"
             onClick={() => approveAllMut.mutate(Array.from(selected))}
-            disabled={selected.size === 0 || approveAllMut.isPending || missingContact}
-            title={missingContact ? 'Add tenant email or phone above first' : undefined}
+            disabled={
+              selected.size === 0
+              || approveAllMut.isPending
+              || saveContactMut.isPending
+              || (missingContact && !draftHasContact)
+            }
+            title={
+              missingContact && !draftHasContact
+                ? 'Add tenant email or phone above first'
+                : undefined
+            }
           >
-            {approveAllMut.isPending ? (
+            {(approveAllMut.isPending || saveContactMut.isPending) ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Send className="h-3.5 w-3.5" />
