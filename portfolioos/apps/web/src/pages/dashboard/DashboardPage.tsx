@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   TrendingUp, Wallet, LineChart as LineChartIcon, Percent, Briefcase,
   RefreshCw, Loader2, ArrowRight, Car, Home, Shield,
-  AlertTriangle, Bell, CheckCircle2, XCircle, CalendarDays, Layers,
+  AlertTriangle, Bell, CheckCircle2, XCircle, CalendarDays, Layers, ChevronDown,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -89,6 +89,9 @@ export function DashboardPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const hideSensitive = usePrivacyStore((s) => s.hideSensitive);
+  // In-session collapse for the alerts bar. Intentionally NOT persisted —
+  // every fresh load shows alerts expanded so the user re-sees them.
+  const [alertsCollapsed, setAlertsCollapsed] = useState(false);
 
   const portfoliosQuery = useQuery({
     queryKey: ['portfolios'],
@@ -334,25 +337,59 @@ export function DashboardPage() {
         </Card>
       )}
 
-      {/* Alerts bar */}
-      {alerts.length > 0 && (
-        <div className="space-y-2">
-          {alerts.slice(0, 4).map((a, i) => (
-            <div key={i} className={`flex items-start gap-3 rounded-lg border px-4 py-2.5 text-sm ${urgencyBg(a.urgency)}`}>
-              <UrgencyIcon urgency={a.urgency} />
-              <div className="flex-1 min-w-0">
-                <span className="font-medium">{a.title}</span>
-                <span className="text-muted-foreground ml-2">{a.description}</span>
-              </div>
-              {a.daysUntil != null && (
-                <span className={`text-xs font-medium flex-shrink-0 ${urgencyColor(a.urgency)}`}>
-                  {a.daysUntil <= 0 ? 'Overdue' : `${a.daysUntil}d`}
+      {/* Alerts bar — collapsible. In-session only; reload re-expands. */}
+      {alerts.length > 0 && (() => {
+        const shown = alerts.slice(0, 4);
+        const highest = shown.some(a => a.urgency === 'HIGH') ? 'HIGH'
+          : shown.some(a => a.urgency === 'MEDIUM') ? 'MEDIUM' : 'LOW';
+        return (
+          <div className="space-y-2">
+            {!alertsCollapsed ? (
+              <>
+                {shown.map((a, i) => (
+                  <div key={i} className={`flex items-start gap-3 rounded-lg border px-4 py-2.5 text-sm ${urgencyBg(a.urgency)}`}>
+                    <UrgencyIcon urgency={a.urgency} />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium">{a.title}</span>
+                      <span className="text-muted-foreground ml-2">{a.description}</span>
+                    </div>
+                    {a.daysUntil != null && (
+                      <span className={`text-xs font-medium flex-shrink-0 ${urgencyColor(a.urgency)}`}>
+                        {a.daysUntil <= 0 ? 'Overdue' : `${a.daysUntil}d`}
+                      </span>
+                    )}
+                    {i === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setAlertsCollapsed(true)}
+                        aria-label="Collapse alerts"
+                        title="Collapse alerts"
+                        className="ml-1 flex-shrink-0 h-6 w-6 rounded-md grid place-items-center text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
+                      >
+                        <ChevronDown className="h-4 w-4 rotate-180" strokeWidth={1.8} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAlertsCollapsed(false)}
+                aria-label="Expand alerts"
+                className={`w-full flex items-center gap-3 rounded-lg border px-4 py-2 text-sm text-left transition-colors hover:bg-foreground/[0.02] ${urgencyBg(highest)}`}
+              >
+                <UrgencyIcon urgency={highest} />
+                <span className="flex-1 font-medium">
+                  {alerts.length} alert{alerts.length === 1 ? '' : 's'}
+                  <span className="text-muted-foreground font-normal ml-2">— click to expand</span>
                 </span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+                <ChevronDown className="h-4 w-4 text-muted-foreground" strokeWidth={1.8} />
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Live FX rates strip — quick glance + click-through to /forex */}
       <DashboardFxStrip />
