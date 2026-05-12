@@ -120,6 +120,55 @@ function assetClassColor(cls: string): string {
   return ASSET_CLASS_COLORS[cls] ?? 'hsl(220 10% 60%)';
 }
 
+// Map a holding to the route that should open when its row is clicked.
+// Asset classes with per-holding detail pages (FD, Gold, Crypto) deep-link
+// to that holding; everything else lands on its list page. Returns null
+// when there is no matching route — the row is rendered non-clickable.
+function holdingRoute(h: { id: string; assetClass: string }): string | null {
+  switch (h.assetClass) {
+    case 'EQUITY':            return '/stocks';
+    case 'MUTUAL_FUND':
+    case 'ETF':               return '/mutual-funds';
+    case 'FUTURES':
+    case 'OPTIONS':           return '/fo';
+    case 'BOND':
+    case 'GOVT_BOND':
+    case 'CORPORATE_BOND':    return '/bonds';
+    case 'FIXED_DEPOSIT':     return `/fds/${h.id}`;
+    case 'RECURRING_DEPOSIT': return '/fds';
+    case 'PPF':
+    case 'EPF':               return '/provident-fund';
+    case 'GOLD_BOND':
+    case 'GOLD_ETF':
+    case 'PHYSICAL_GOLD':     return `/gold/${h.id}`;
+    case 'PHYSICAL_SILVER':   return '/gold';
+    case 'ULIP':
+    case 'INSURANCE':         return '/insurance';
+    case 'REAL_ESTATE':       return '/real-estate';
+    case 'CRYPTOCURRENCY':    return `/crypto/${h.id}`;
+    case 'FOREIGN_EQUITY':
+    case 'FOREX_PAIR':        return '/forex';
+    case 'NSC':
+    case 'KVP':
+    case 'SCSS':
+    case 'SSY':
+    case 'POST_OFFICE_MIS':
+    case 'POST_OFFICE_RD':
+    case 'POST_OFFICE_TD':
+    case 'POST_OFFICE_SAVINGS': return '/post-office';
+    case 'NPS':
+    case 'PMS':
+    case 'AIF':
+    case 'PRIVATE_EQUITY':
+    case 'REIT':
+    case 'INVIT':
+    case 'ART_COLLECTIBLES':
+    case 'CASH':
+    case 'OTHER':             return '/others';
+    default:                  return null;
+  }
+}
+
 export function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string>('ALL');
   const [period, setPeriod] = useState<number>(365);
@@ -640,10 +689,18 @@ export function DashboardPage() {
                     const pnlD = toDecimal(h.unrealisedPnL ?? '0');
                     const pos = pnlD.greaterThan(0), neg = pnlD.lessThan(0);
                     const color = assetClassColor(h.assetClass);
+                    const route = holdingRoute(h);
                     return (
                       <tr
                         key={h.id}
-                        className="group border-t border-dashed border-border/40 hover:bg-muted/25 transition-colors animate-in fade-in fill-mode-both"
+                        role={route ? 'link' : undefined}
+                        tabIndex={route ? 0 : undefined}
+                        aria-label={route ? `Open ${h.assetName}` : undefined}
+                        onClick={route ? () => navigate(route) : undefined}
+                        onKeyDown={route ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(route); }
+                        } : undefined}
+                        className={`group border-t border-dashed border-border/40 hover:bg-muted/25 transition-colors animate-in fade-in fill-mode-both ${route ? 'cursor-pointer focus:outline-none focus:bg-muted/30' : ''}`}
                         style={{ animationDelay: `${idx * 25}ms`, animationDuration: '350ms' }}
                       >
                         {/* Rank + class-coloured hover accent */}
