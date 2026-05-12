@@ -657,7 +657,7 @@ export function DashboardPage() {
         <CardHeader className="flex-row items-end justify-between gap-4 pb-3 border-b border-dashed border-border/60">
           <div className="space-y-0.5">
             <CardTitle>Top holdings</CardTitle>
-            <p className="text-xs italic font-serif text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Ranked by current value{topHoldings.length > 0 ? ` · ${topHoldings.length} position${topHoldings.length === 1 ? '' : 's'}` : ''}
             </p>
           </div>
@@ -669,19 +669,19 @@ export function DashboardPage() {
           {holdingsQuery.isLoading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
           ) : topHoldings.length === 0 ? (
-            <p className="text-sm italic font-serif text-muted-foreground py-8 text-center">Add transactions to see your top holdings</p>
+            <p className="text-sm text-muted-foreground py-8 text-center">Add transactions to see your top holdings</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70 bg-muted/20">
-                    <th className="w-12 py-2.5 pl-6 font-normal text-left" aria-hidden></th>
-                    <th className="py-2.5 pr-4 font-normal text-left">Asset</th>
-                    <th className="py-2.5 pr-4 font-normal text-left hidden sm:table-cell">Class</th>
-                    <th className="py-2.5 pr-4 font-normal text-right hidden md:table-cell">Qty</th>
-                    <th className="py-2.5 pr-4 font-normal text-right hidden md:table-cell">Avg cost</th>
-                    <th className="py-2.5 pr-4 font-normal text-right">Value</th>
-                    <th className="py-2.5 pr-6 font-normal text-right">Unrealised&nbsp;P&amp;L</th>
+                    <th className="w-10 py-2 pl-6 font-normal text-left" aria-hidden></th>
+                    <th className="py-2 pr-4 font-normal text-left">Asset</th>
+                    <th className="py-2 pr-4 font-normal text-left hidden sm:table-cell">Class</th>
+                    <th className="py-2 pr-4 font-normal text-right hidden md:table-cell">Qty</th>
+                    <th className="py-2 pr-4 font-normal text-right hidden md:table-cell">Avg cost</th>
+                    <th className="py-2 pr-4 font-normal text-right">Value</th>
+                    <th className="py-2 pr-6 font-normal text-right">Unrealised&nbsp;P&amp;L</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -704,74 +704,74 @@ export function DashboardPage() {
                         style={{ animationDelay: `${idx * 25}ms`, animationDuration: '350ms' }}
                       >
                         {/* Rank + class-coloured hover accent */}
-                        <td className="relative w-12 py-4 pl-6 pr-2 align-middle">
+                        <td className="relative w-10 py-2 pl-6 pr-2 align-middle">
                           <span
                             aria-hidden
                             className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r opacity-0 group-hover:opacity-100 transition-opacity"
                             style={{ backgroundColor: color }}
                           />
-                          <span className="font-serif italic text-base leading-none text-muted-foreground/55 tabular-nums group-hover:text-foreground/75 transition-colors">
+                          <span className="text-xs leading-none text-muted-foreground/60 tabular-nums group-hover:text-foreground/75 transition-colors">
                             {String(idx + 1).padStart(2, '0')}
                           </span>
                         </td>
 
                         {/* Asset */}
-                        <td className="py-4 pr-4 align-middle">
-                          <div className="font-serif text-[15px] leading-tight text-foreground truncate max-w-[220px]">{h.assetName}</div>
+                        <td className="py-2 pr-4 align-middle">
+                          <div className="text-sm font-medium leading-tight text-foreground truncate max-w-[220px]">{h.assetName}</div>
                           {h.symbol && (
                             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mt-0.5">{h.symbol}</div>
                           )}
                         </td>
 
-                        {/* Class — colour dot + italic serif label, not a pill */}
-                        <td className="py-4 pr-4 align-middle hidden sm:table-cell">
+                        {/* Class — colour dot + label */}
+                        <td className="py-2 pr-4 align-middle hidden sm:table-cell">
                           <div className="inline-flex items-center gap-2">
                             <span
                               aria-hidden
                               className="h-1.5 w-1.5 rounded-full flex-shrink-0"
                               style={{ backgroundColor: color }}
                             />
-                            <span className="text-xs italic font-serif text-muted-foreground">
+                            <span className="text-xs text-muted-foreground">
                               {ASSET_CLASS_LABELS[h.assetClass] ?? h.assetClass}
                             </span>
                           </div>
                         </td>
 
                         {/* Qty */}
-                        <td className="py-4 pr-4 text-right font-mono text-xs text-muted-foreground tabular-nums hidden md:table-cell">
+                        <td className="py-2 pr-4 text-right text-xs text-muted-foreground tabular-nums hidden md:table-cell">
                           {parseFloat(h.quantity).toLocaleString('en-IN', { maximumFractionDigits: 4 })}
                         </td>
 
                         {/* Avg cost */}
-                        <td className="py-4 pr-4 text-right hidden md:table-cell">
-                          <Money className="font-mono text-xs text-muted-foreground tabular-nums">{formatINR(h.avgCostPrice)}</Money>
+                        <td className="py-2 pr-4 text-right hidden md:table-cell">
+                          <Money className="text-xs text-muted-foreground tabular-nums">{formatINR(h.avgCostPrice)}</Money>
                         </td>
 
                         {/* Value */}
-                        <td className="py-4 pr-4 text-right align-middle">
-                          <Money className="font-mono text-sm tabular-nums text-foreground">{h.currentValue ? formatINR(h.currentValue) : formatINR(h.totalCost)}</Money>
+                        <td className="py-2 pr-4 text-right align-middle">
+                          <Money className="text-sm font-medium tabular-nums text-foreground">{h.currentValue ? formatINR(h.currentValue) : formatINR(h.totalCost)}</Money>
                           {!h.currentValue && (
-                            <div className="text-[10px] italic font-serif text-muted-foreground/70 mt-0.5">cost basis</div>
+                            <div className="text-[10px] text-muted-foreground/70 mt-0.5">cost basis</div>
                           )}
                         </td>
 
                         {/* P&L */}
-                        <td className="py-4 pr-6 text-right align-middle">
+                        <td className="py-2 pr-6 text-right align-middle">
                           {h.currentValue ? (
                             <>
                               <div className={`inline-flex items-center justify-end gap-1.5 ${pos ? 'text-positive' : neg ? 'text-negative' : 'text-muted-foreground'}`}>
                                 {pos && <span aria-hidden className="text-[9px] leading-none translate-y-px">▲</span>}
                                 {neg && <span aria-hidden className="text-[9px] leading-none translate-y-px">▼</span>}
-                                <Money className="font-mono text-sm tabular-nums">{h.unrealisedPnL ? formatINR(h.unrealisedPnL, { showSign: true }) : '—'}</Money>
+                                <Money className="text-sm font-medium tabular-nums">{h.unrealisedPnL ? formatINR(h.unrealisedPnL, { showSign: true }) : '—'}</Money>
                               </div>
                               {h.unrealisedPnLPct != null && (
-                                <div className={`text-[10px] font-mono tabular-nums mt-1 ${pos ? 'text-positive/75' : neg ? 'text-negative/75' : 'text-muted-foreground'}`}>
+                                <div className={`text-[10px] tabular-nums mt-0.5 ${pos ? 'text-positive/75' : neg ? 'text-negative/75' : 'text-muted-foreground'}`}>
                                   {pos ? '+' : ''}{h.unrealisedPnLPct.toFixed(2)}%
                                 </div>
                               )}
                             </>
                           ) : (
-                            <span className="text-[10px] italic font-serif text-muted-foreground/70">no price</span>
+                            <span className="text-[10px] text-muted-foreground/70">no price</span>
                           )}
                         </td>
                       </tr>
