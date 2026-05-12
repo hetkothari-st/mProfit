@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Mail, MessageSquare, X, Pencil, Send, Loader2, BellRing, Save } from 'lucide-react';
+import { Mail, MessageSquare, X, Pencil, Send, Loader2, BellRing, Save, Check } from 'lucide-react';
 import { formatINR } from '@portfolioos/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -162,6 +162,7 @@ interface ContactEditorProps {
   editing: boolean;
   setEditing: (v: boolean) => void;
   saving: boolean;
+  justSaved: boolean;
   onSave: () => void;
   missing: boolean;
 }
@@ -176,6 +177,7 @@ function ContactEditor({
   editing,
   setEditing,
   saving,
+  justSaved,
   onSave,
   missing,
 }: ContactEditorProps) {
@@ -235,10 +237,17 @@ function ContactEditor({
         size="sm"
         variant="outline"
         onClick={onSave}
-        disabled={!dirty || saving}
+        disabled={(!dirty && !justSaved) || saving}
+        className={justSaved ? 'border-emerald-500 text-emerald-700 bg-emerald-50/60' : undefined}
       >
-        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-        Save contact
+        {saving ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : justSaved ? (
+          <Check className="h-3.5 w-3.5 text-emerald-600" />
+        ) : (
+          <Save className="h-3.5 w-3.5" />
+        )}
+        {justSaved ? 'Saved' : 'Save contact'}
       </Button>
       {hasContact && (
         <Button
@@ -288,6 +297,10 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
   const [editing, setEditing] = useState<boolean>(initialEditing);
   const [draftEmail, setDraftEmail] = useState(tenantEmail ?? '');
   const [draftPhone, setDraftPhone] = useState(tenantPhone ?? '');
+  // Transient "Saved" tick — flips on after a successful save and
+  // resets after a couple of seconds so the user gets a clear
+  // confirmation without it lingering forever.
+  const [justSaved, setJustSaved] = useState<boolean>(false);
 
   const draftDirty =
     draftEmail.trim() !== (tenantEmail ?? '') ||
@@ -311,12 +324,38 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
         tenantPhone: draftPhone.trim() || null,
       }),
     onSuccess: async () => {
+      // Optimistic cache patch: stamp the new email/phone onto every
+      // reminder row for this tenancy *before* the refetch returns so
+      // the editor collapses to the read-only view, the warning hides,
+      // and Approve enables in the same paint. refetch still runs to
+      // sync any other fields the server may have updated.
+      const newEmail = draftEmail.trim() || null;
+      const newPhone = draftPhone.trim() || null;
+      qc.setQueryData<RentReminderDTO[]>(
+        ['rental-reminders', 'pending'],
+        (old) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((r) =>
+            r.tenancyId === tenancyId && r.tenancy
+              ? {
+                  ...r,
+                  channels: { email: !!newEmail, sms: !!newPhone },
+                  tenancy: {
+                    ...r.tenancy,
+                    tenantEmail: newEmail,
+                    tenantPhone: newPhone,
+                  },
+                }
+              : r,
+          );
+        },
+      );
       setEditing(false);
-      toast.success('Tenant contact updated — channels enabled');
-      // Force-refetch immediately so the row collapses to the read-only
-      // contact view and the missing-contact warning clears without
-      // waiting for the next staleTime tick. `refetchQueries` is sync
-      // about scheduling so the UI updates in the same paint.
+      setJustSaved(true);
+      // Clear the "Saved" tick after a beat so the button reverts to
+      // "Save contact" the next time the landlord edits the fields.
+      setTimeout(() => setJustSaved(false), 2500);
+      toast.success('Tenant contact saved — channels enabled');
       await Promise.all([
         qc.refetchQueries({ queryKey: ['rental-reminders'] }),
         qc.refetchQueries({ queryKey: ['rental-property'] }),
@@ -433,6 +472,7 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
             editing={editing}
             setEditing={setEditing}
             saving={saveContactMut.isPending}
+            justSaved={justSaved}
             onSave={() => saveContactMut.mutate()}
             missing={missingContact}
           />
