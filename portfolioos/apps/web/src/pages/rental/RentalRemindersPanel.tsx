@@ -250,13 +250,18 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
   const property = tenancy?.property;
   const tenantEmail = tenancy?.tenantEmail ?? null;
   const tenantPhone = tenancy?.tenantPhone ?? null;
-  const missingContact = !tenantEmail && !tenantPhone;
+  // True only when *neither* the saved contact *nor* the in-flight draft
+  // has a destination. As soon as the landlord types an email or phone
+  // (even before clicking Save Contact), the missing-contact warning
+  // hides and the approve button enables — the auto-save on approve
+  // persists the draft before the actual send.
 
   // Lift contact draft state up so the approve handler can save it
   // first when the landlord typed an email/phone but forgot to click
   // "Save contact". Without this, Approve stays disabled even though
   // the form looks ready to send.
-  const [editing, setEditing] = useState<boolean>(missingContact);
+  const initialEditing = !tenantEmail && !tenantPhone;
+  const [editing, setEditing] = useState<boolean>(initialEditing);
   const [draftEmail, setDraftEmail] = useState(tenantEmail ?? '');
   const [draftPhone, setDraftPhone] = useState(tenantPhone ?? '');
 
@@ -264,6 +269,16 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
     draftEmail.trim() !== (tenantEmail ?? '') ||
     draftPhone.trim() !== (tenantPhone ?? '');
   const draftHasContact = !!draftEmail.trim() || !!draftPhone.trim();
+  const missingContact = !tenantEmail && !tenantPhone && !draftHasContact;
+
+  // Per-send channel toggles. Default to whichever channel has a
+  // recipient — landlord can opt out of one channel without losing the
+  // stored config (the override is one-shot; future scans still queue
+  // both channels when both contacts exist).
+  const effectiveEmail = !!tenantEmail || !!draftEmail.trim();
+  const effectivePhone = !!tenantPhone || !!draftPhone.trim();
+  const [sendEmail, setSendEmail] = useState(true);
+  const [sendSms, setSendSms] = useState(true);
 
   const saveContactMut = useMutation({
     mutationFn: () =>
@@ -271,11 +286,17 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
         tenantEmail: draftEmail.trim() || null,
         tenantPhone: draftPhone.trim() || null,
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
-      qc.invalidateQueries({ queryKey: ['rental-property'] });
-      toast.success('Tenant contact updated — channels enabled');
+    onSuccess: async () => {
       setEditing(false);
+      toast.success('Tenant contact updated — channels enabled');
+      // Force-refetch immediately so the row collapses to the read-only
+      // contact view and the missing-contact warning clears without
+      // waiting for the next staleTime tick. `refetchQueries` is sync
+      // about scheduling so the UI updates in the same paint.
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ['rental-reminders'] }),
+        qc.refetchQueries({ queryKey: ['rental-property'] }),
+      ]);
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Save failed'),
   });
@@ -308,7 +329,13 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
       if (draftDirty && draftHasContact) {
         await saveContactMut.mutateAsync();
       }
-      const results = await Promise.allSettled(ids.map((id) => rentalApi.approveReminder(id)));
+      const channelOverride = {
+        email: sendEmail && effectiveEmail,
+        sms: sendSms && effectivePhone,
+      };
+      const results = await Promise.allSettled(
+        ids.map((id) => rentalApi.approveReminder(id, channelOverride)),
+      );
       return results;
     },
     onSuccess: (results) => {
@@ -372,7 +399,7 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
         </div>
       </div>
 
-      {/* Month picker */}
+      {/* Month picker + channel toggles + actions */}
       <div className="px-4 py-2 border-b border-border flex items-center gap-3 flex-wrap bg-background">
         <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
           <input
@@ -387,6 +414,38 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
         <span className="text-xs text-muted-foreground">
           {selected.size} selected
         </span>
+
+        {/* Channel toggles — disabled when the corresponding recipient
+            doesn't exist so the landlord can't pick a channel they
+            haven't filled in. */}
+        <span className="text-xs text-muted-foreground ml-2">· Send via</span>
+        <label
+          className={`flex items-center gap-1.5 text-xs cursor-pointer ${effectiveEmail ? '' : 'opacity-40 cursor-not-allowed'}`}
+          title={effectiveEmail ? undefined : 'Add tenant email above'}
+        >
+          <input
+            type="checkbox"
+            checked={sendEmail && effectiveEmail}
+            onChange={(e) => setSendEmail(e.target.checked)}
+            disabled={!effectiveEmail}
+            className="h-3.5 w-3.5"
+          />
+          <Mail className="h-3 w-3" /> Email
+        </label>
+        <label
+          className={`flex items-center gap-1.5 text-xs cursor-pointer ${effectivePhone ? '' : 'opacity-40 cursor-not-allowed'}`}
+          title={effectivePhone ? undefined : 'Add tenant phone above'}
+        >
+          <input
+            type="checkbox"
+            checked={sendSms && effectivePhone}
+            onChange={(e) => setSendSms(e.target.checked)}
+            disabled={!effectivePhone}
+            className="h-3.5 w-3.5"
+          />
+          <MessageSquare className="h-3 w-3" /> SMS
+        </label>
+
         <div className="ml-auto flex items-center gap-1.5">
           <Button
             variant="outline"
@@ -404,11 +463,14 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
               || approveAllMut.isPending
               || saveContactMut.isPending
               || (missingContact && !draftHasContact)
+              || (!(sendEmail && effectiveEmail) && !(sendSms && effectivePhone))
             }
             title={
               missingContact && !draftHasContact
                 ? 'Add tenant email or phone above first'
-                : undefined
+                : !(sendEmail && effectiveEmail) && !(sendSms && effectivePhone)
+                  ? 'Pick at least one channel'
+                  : undefined
             }
           >
             {(approveAllMut.isPending || saveContactMut.isPending) ? (

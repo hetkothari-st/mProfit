@@ -301,9 +301,13 @@ export const rentalApi = {
     );
     return unwrap(data);
   },
-  async approveReminder(id: string): Promise<RentReminderDTO> {
+  async approveReminder(
+    id: string,
+    channels?: { email?: boolean; sms?: boolean },
+  ): Promise<RentReminderDTO> {
     const { data } = await api.post<ApiResponse<RentReminderDTO>>(
       `/api/rental/reminders/${id}/approve`,
+      channels ? { channels } : undefined,
     );
     return unwrap(data);
   },

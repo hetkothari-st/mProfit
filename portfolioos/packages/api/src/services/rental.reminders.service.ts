@@ -453,16 +453,29 @@ export async function rejectReminder(userId: string, id: string): Promise<RentRe
  *  - all enabled channels sent → SENT
  *  - at least one channel failed → FAILED (per-channel error captured)
  *  - no channels enabled → FAILED with reason='no_channels_enabled'
+ *
+ * `channelOverride` lets the caller force which channels actually fire
+ * for this one send without persisting the change to the row's
+ * `channels` JSON (so toggling "email only" once doesn't permanently
+ * disable SMS for future scans). When omitted, the stored channels
+ * are used as-is.
  */
 export async function approveAndSendReminder(
   userId: string,
   id: string,
+  channelOverride?: { email?: boolean; sms?: boolean },
 ): Promise<RentReminder> {
   const existing = await getReminderOwned(userId, id);
   if (existing.status !== REMINDER_STATUS.PENDING_APPROVAL) {
     throw new BadRequestError('Only PENDING_APPROVAL reminders can be approved');
   }
-  const channels = (existing.channels ?? {}) as { email?: boolean; sms?: boolean };
+  const storedChannels = (existing.channels ?? {}) as { email?: boolean; sms?: boolean };
+  const channels: { email?: boolean; sms?: boolean } = channelOverride
+    ? {
+        email: channelOverride.email ?? storedChannels.email ?? false,
+        sms: channelOverride.sms ?? storedChannels.sms ?? false,
+      }
+    : storedChannels;
   const tenantEmail = existing.tenancy.tenantEmail;
   const tenantPhone = existing.tenancy.tenantPhone;
 

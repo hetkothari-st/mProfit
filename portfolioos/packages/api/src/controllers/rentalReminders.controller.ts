@@ -48,7 +48,9 @@ export async function rejectReminderHandler(req: Request, res: Response): Promis
 export async function approveReminderHandler(req: Request, res: Response): Promise<void> {
   const id = req.params.id;
   if (!id) throw new BadRequestError('id required');
-  const row = await approveAndSendReminder(userId(req), id);
+  // Optional one-shot channel override: { channels: { email?: boolean, sms?: boolean } }
+  const body = (req.body ?? {}) as { channels?: { email?: boolean; sms?: boolean } };
+  const row = await approveAndSendReminder(userId(req), id, body.channels);
   ok(res, row);
 }
 
