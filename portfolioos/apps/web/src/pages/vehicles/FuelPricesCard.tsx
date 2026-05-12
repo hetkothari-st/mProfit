@@ -19,16 +19,19 @@ function stateFromRtoCode(rtoCode: string | null | undefined): string | null {
 }
 
 function SecondsAgo({ fetchedAt }: { fetchedAt: string }) {
-  const [label, setLabel] = useState('');
+  const [label, setLabel] = useState('just now');
   useEffect(() => {
     const update = () => {
       const secs = Math.floor((Date.now() - new Date(fetchedAt).getTime()) / 1000);
-      if (secs < 60) setLabel(`${secs}s ago`);
+      if (secs < 3) setLabel('just now');
+      else if (secs < 60) setLabel(`${secs}s ago`);
       else if (secs < 3600) setLabel(`${Math.floor(secs / 60)}m ago`);
       else setLabel(`${Math.floor(secs / 3600)}h ago`);
     };
     update();
-    const id = setInterval(update, 30_000);
+    // Tick every second so the "Xs ago" indicator feels live; cheaper than
+    // a query refetch but visually communicates freshness.
+    const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, [fetchedAt]);
   return <span>{label}</span>;
@@ -80,8 +83,10 @@ export function FuelPricesCard({ defaultRtoCode }: FuelPricesCardProps) {
     queryKey: ['fuel-prices', selected],
     queryFn: () => vehiclesApi.getFuelPrices(selected),
     enabled: Boolean(selected),
-    refetchInterval: 30 * 60_000,
-    staleTime: 10 * 60_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
   });
 
   const data = pricesQuery.data;

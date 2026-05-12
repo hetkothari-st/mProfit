@@ -46,7 +46,11 @@ interface PetrolDieselCache {
 
 let liveCache: PetrolDieselCache | null = null;
 let inflightRefresh: Promise<PetrolDieselCache> | null = null;
-const CACHE_TTL_MS = 6 * 60 * 60_000; // 6 hours — IOCL revises once at 6 AM IST
+// Short TTL so the "live" badge stays honest. Indian fuel prices revise
+// once daily (IOCL @ 6 AM IST) so the number won't tick, but a 5-minute
+// scrape cadence keeps the fetched-at timestamp fresh enough that users
+// see "just now" / "Xs ago" instead of stale hours.
+const CACHE_TTL_MS = 5 * 60_000;
 
 const CARDEKHO_URL = 'https://www.cardekho.com/fuel-price';
 const USER_AGENT =
