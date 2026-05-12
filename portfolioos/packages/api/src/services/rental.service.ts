@@ -480,6 +480,23 @@ export async function updateTenancy(
       }
     }
 
+    // Sync pending reminders' `channels` JSON with the new contact state
+    // so a landlord who fills in tenantEmail/tenantPhone from the
+    // reminders panel can immediately approve & send without having to
+    // re-run the scan or wait for the cron. We only touch
+    // PENDING_APPROVAL rows — APPROVED/SENT/FAILED/REJECTED are
+    // historical and shouldn't shift under the user.
+    if (patch.tenantEmail !== undefined || patch.tenantPhone !== undefined) {
+      const channels = {
+        email: !!updated.tenantEmail,
+        sms: !!updated.tenantPhone,
+      };
+      await tx.rentReminder.updateMany({
+        where: { tenancyId: id, status: 'PENDING_APPROVAL' },
+        data: { channels },
+      });
+    }
+
     return updated;
   });
 }
