@@ -57,6 +57,8 @@ const updatePropertySchema = z.object({
 const createTenancySchema = z.object({
   tenantName: z.string().min(1).max(200),
   tenantContact: z.string().max(200).nullable().optional(),
+  tenantEmail: z.string().max(200).nullable().optional(),
+  tenantPhone: z.string().max(50).nullable().optional(),
   startDate: isoDate,
   endDate: isoDate.nullable().optional(),
   monthlyRent: moneyString,
@@ -68,6 +70,8 @@ const createTenancySchema = z.object({
 const updateTenancySchema = z.object({
   tenantName: z.string().min(1).max(200).optional(),
   tenantContact: z.string().max(200).nullable().optional(),
+  tenantEmail: z.string().max(200).nullable().optional(),
+  tenantPhone: z.string().max(50).nullable().optional(),
   endDate: isoDate.nullable().optional(),
   monthlyRent: moneyString.optional(),
   securityDeposit: moneyString.nullable().optional(),
