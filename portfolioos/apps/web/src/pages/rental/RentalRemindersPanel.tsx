@@ -230,6 +230,11 @@ export function RentalRemindersPanel() {
                         {r.channels.email && <Mail className="h-3 w-3" />}
                         {r.channels.sms && <MessageSquare className="h-3 w-3" />}
                       </span>
+                      {!r.channels.email && !r.channels.sms && (
+                        <span className="text-amber-700 font-medium">
+                          ⚠ Add tenant email/phone in tenancy form
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">

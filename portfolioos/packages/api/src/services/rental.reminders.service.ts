@@ -25,6 +25,7 @@ import { logger } from '../lib/logger.js';
 import { env } from '../config/env.js';
 import { sendEmail } from './notifications/email.service.js';
 import { sendSms } from './notifications/sms.service.js';
+import { markOverdueReceipts } from './rental.service.js';
 
 export const REMINDER_LEAD_DAYS = [5, 3, 1, 0] as const;
 export type ReminderLeadDay = (typeof REMINDER_LEAD_DAYS)[number];
@@ -217,11 +218,68 @@ async function enqueueOne(
  * Cron callers use `runInSystemContext` so this query can see every
  * user; non-cron callers may pass a `userId` to scope.
  */
+/**
+ * Crude tenantContact → tenantEmail/tenantPhone split. Pre-existing
+ * tenancies (created before the dedicated fields landed) only have the
+ * legacy `tenantContact` string. We don't force a manual edit just to
+ * unblock reminders — if the string looks like an email or an Indian
+ * 10-digit mobile, route it to the appropriate field once. Anything
+ * else stays in tenantContact and the UI surfaces "Add tenant
+ * email/phone" so the landlord can edit explicitly.
+ */
+async function migrateLegacyContactsIfNeeded(userId?: string): Promise<void> {
+  const candidates = await prisma.tenancy.findMany({
+    where: {
+      isActive: true,
+      tenantEmail: null,
+      tenantPhone: null,
+      tenantContact: { not: null },
+      ...(userId ? { property: { userId } } : {}),
+    },
+    select: { id: true, tenantContact: true },
+  });
+  for (const t of candidates) {
+    const raw = (t.tenantContact ?? '').trim();
+    if (!raw) continue;
+    const data: { tenantEmail?: string; tenantPhone?: string } = {};
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw)) {
+      data.tenantEmail = raw;
+    } else {
+      const digits = raw.replace(/\D/g, '');
+      if (/^[6-9]\d{9}$/.test(digits)) data.tenantPhone = digits;
+      else if (/^91[6-9]\d{9}$/.test(digits)) data.tenantPhone = digits.slice(2);
+    }
+    if (Object.keys(data).length > 0) {
+      await prisma.tenancy.update({ where: { id: t.id }, data });
+      logger.info({ tenancyId: t.id, fields: Object.keys(data) }, '[rental.reminders] migrated legacy tenantContact');
+    }
+  }
+}
+
 export async function enqueuePendingReminders(userId?: string): Promise<number> {
+  // Step 0a. Promote legacy tenantContact strings to the structured
+  // tenantEmail / tenantPhone fields where unambiguous, so reminders
+  // can actually send instead of always reporting "missing contact".
+  await migrateLegacyContactsIfNeeded(userId);
+  // Step 0b. Flip any EXPECTED-but-past-due receipts to OVERDUE first.
+  // Existing tenancies created before generate-time OVERDUE stamping
+  // landed have rows that linger in EXPECTED past their dueDate; the
+  // upcoming-window scan won't match them and the overdue scan won't
+  // see them until cron flips the status. Run the same logic inline so
+  // the manual "Run scan" button is enough to surface the backlog.
+  await markOverdueReceipts(userId);
+
   const today = startOfDayUtc(new Date());
   let queued = 0;
 
   // ── 1. Upcoming receipts ──────────────────────────────────────────
+  //
+  // No contact filter: we queue the reminder regardless of whether the
+  // tenancy has an email or phone on file so the landlord sees a
+  // "pending" row even when the contact details are missing. The send
+  // step still respects per-channel presence and marks the channel as
+  // failed with reason="tenant_*_missing" — the UI uses that to prompt
+  // the landlord to fill in the tenancy contact fields before approving.
   for (const leadDays of REMINDER_LEAD_DAYS) {
     const target = new Date(today);
     target.setUTCDate(target.getUTCDate() + leadDays);
@@ -233,10 +291,6 @@ export async function enqueuePendingReminders(userId?: string): Promise<number> 
         tenancy: {
           ...(userId ? { property: { userId } } : {}),
           isActive: true,
-          OR: [
-            { tenantEmail: { not: null } },
-            { tenantPhone: { not: null } },
-          ],
         },
       },
       include: { tenancy: { include: { property: true } } },
@@ -258,10 +312,6 @@ export async function enqueuePendingReminders(userId?: string): Promise<number> 
       tenancy: {
         ...(userId ? { property: { userId } } : {}),
         isActive: true,
-        OR: [
-          { tenantEmail: { not: null } },
-          { tenantPhone: { not: null } },
-        ],
       },
     },
     include: { tenancy: { include: { property: true } } },
