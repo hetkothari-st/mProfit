@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, Fuel, Zap, RefreshCw, Flame, MapPin } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, Fuel, Zap, Flame, MapPin } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { vehiclesApi, type StateFuelPricesDTO } from '@/api/vehicles.api';
 
@@ -34,25 +34,25 @@ function SecondsAgo({ fetchedAt }: { fetchedAt: string }) {
   return <span>{label}</span>;
 }
 
-interface PriceRowProps {
+interface StatCellProps {
   icon: React.ReactNode;
   label: string;
   unit: string;
   value: string | null;
-  accent: string;
+  tone: string;
 }
 
-function PriceRow({ icon, label, unit, value, accent }: PriceRowProps) {
+function StatCell({ icon, label, unit, value, tone }: StatCellProps) {
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b last:border-b-0">
-      <div className={`flex h-9 w-9 items-center justify-center rounded-md ${accent}`}>
-        {icon}
+    <div className="flex-1 min-w-[120px] px-4 py-3 border-r last:border-r-0 border-border/60">
+      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className={tone}>{icon}</span>
+        <span>{label}</span>
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium">{label}</div>
-        <div className="text-xs text-muted-foreground">{unit}</div>
+      <div className="mt-1 text-lg font-semibold tabular-nums">
+        {formatRupees(value)}
       </div>
-      <div className="text-base font-semibold tabular-nums">{formatRupees(value)}</div>
+      <div className="text-[10px] text-muted-foreground">{unit}</div>
     </div>
   );
 }
@@ -60,16 +60,12 @@ function PriceRow({ icon, label, unit, value, accent }: PriceRowProps) {
 export interface FuelPricesCardProps {
   /** Optional vehicle rtoCode used to pick the default state (e.g. "MH47"). */
   defaultRtoCode?: string | null;
-  /** Optional title override. */
-  title?: string;
 }
 
-export function FuelPricesCard({ defaultRtoCode, title = 'Fuel & energy prices' }: FuelPricesCardProps) {
+export function FuelPricesCard({ defaultRtoCode }: FuelPricesCardProps) {
   const defaultCode = useMemo(() => stateFromRtoCode(defaultRtoCode) ?? 'MH', [defaultRtoCode]);
   const [selected, setSelected] = useState<string>(defaultCode);
 
-  // Keep selection in sync when the default changes (eg. user navigates to a
-  // different vehicle from the same card).
   useEffect(() => {
     setSelected(defaultCode);
   }, [defaultCode]);
@@ -89,98 +85,95 @@ export function FuelPricesCard({ defaultRtoCode, title = 'Fuel & energy prices' 
   });
 
   const data = pricesQuery.data;
-  const isLoading = pricesQuery.isLoading;
+  const isLoading = pricesQuery.isLoading && !data;
+  const isLive = data?.petrolDieselSource === 'cardekho';
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Fuel className="h-4 w-4" /> {title}
-          </CardTitle>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {pricesQuery.isFetching ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <span className="h-2 w-2 rounded-full bg-green-500" />
-            )}
-            {data?.fetchedAt ? <SecondsAgo fetchedAt={data.fetchedAt} /> : 'Loading…'}
-            <span className="hidden sm:inline">·</span>
-            <RefreshCw className="h-3 w-3 hidden sm:inline" />
-            <span className="hidden sm:inline">auto 30m</span>
+      <CardContent className="p-0">
+        <div className="flex flex-col lg:flex-row lg:items-stretch">
+          {/* Header strip: state picker + freshness */}
+          <div className="flex items-center justify-between gap-3 px-4 py-3 lg:py-0 lg:px-5 lg:border-r border-b lg:border-b-0 border-border/60 lg:w-[220px] lg:flex-shrink-0">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <MapPin className="h-3 w-3" />
+                <span>State</span>
+              </div>
+              <Select
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+                className="h-8 mt-1 text-sm border-0 px-0 focus-visible:ring-0 font-medium"
+              >
+                {(statesQuery.data ?? [{ code: defaultCode, name: defaultCode }]).map((s) => (
+                  <option key={s.code} value={s.code}>{s.name}</option>
+                ))}
+              </Select>
+              <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                {pricesQuery.isFetching ? (
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                ) : (
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      isLive ? 'bg-green-500' : 'bg-amber-500'
+                    }`}
+                  />
+                )}
+                {data?.fetchedAt ? <SecondsAgo fetchedAt={data.fetchedAt} /> : 'loading…'}
+                <span>·</span>
+                <span className={isLive ? 'text-green-600 dark:text-green-400' : 'text-amber-600'}>
+                  {isLive ? 'live' : 'cached'}
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-3 flex items-center gap-2">
-          <MapPin className="h-4 w-4 text-muted-foreground" />
-          <Select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            className="h-9 text-sm max-w-[240px]"
-          >
-            {(statesQuery.data ?? [{ code: defaultCode, name: defaultCode }]).map((s) => (
-              <option key={s.code} value={s.code}>{s.name}</option>
-            ))}
-          </Select>
-          {data?.petrolDieselSource === 'seed' && (
-            <span className="text-[10px] uppercase tracking-wider text-amber-600 ml-2">
-              cached
-            </span>
+
+          {/* Stat cells */}
+          {isLoading && (
+            <div className="flex-1 flex items-center justify-center py-6 text-sm text-muted-foreground gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Fetching prices…
+            </div>
+          )}
+
+          {data && (
+            <div className="flex-1 flex flex-wrap lg:flex-nowrap divide-x-0">
+              <StatCell
+                icon={<Fuel className="h-3.5 w-3.5" />}
+                label="Petrol"
+                unit="₹ / litre"
+                value={data.petrol}
+                tone="text-red-600 dark:text-red-400"
+              />
+              <StatCell
+                icon={<Fuel className="h-3.5 w-3.5" />}
+                label="Diesel"
+                unit="₹ / litre"
+                value={data.diesel}
+                tone="text-blue-600 dark:text-blue-400"
+              />
+              <StatCell
+                icon={<Flame className="h-3.5 w-3.5" />}
+                label="CNG"
+                unit="₹ / kg"
+                value={data.cng}
+                tone="text-emerald-600 dark:text-emerald-400"
+              />
+              <StatCell
+                icon={<Flame className="h-3.5 w-3.5" />}
+                label="LPG"
+                unit="14.2 kg cyl."
+                value={data.lpg}
+                tone="text-orange-600 dark:text-orange-400"
+              />
+              <StatCell
+                icon={<Zap className="h-3.5 w-3.5" />}
+                label="Electricity"
+                unit="₹ / kWh"
+                value={data.electricity}
+                tone="text-yellow-600 dark:text-yellow-500"
+              />
+            </div>
           )}
         </div>
-
-        {isLoading && !data && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">
-            <Loader2 className="h-4 w-4 animate-spin" /> Fetching prices…
-          </div>
-        )}
-
-        {data && (
-          <div>
-            <PriceRow
-              icon={<Fuel className="h-4 w-4 text-red-600" />}
-              label="Petrol"
-              unit="per litre"
-              value={data.petrol}
-              accent="bg-red-50 dark:bg-red-950/40"
-            />
-            <PriceRow
-              icon={<Fuel className="h-4 w-4 text-blue-600" />}
-              label="Diesel"
-              unit="per litre"
-              value={data.diesel}
-              accent="bg-blue-50 dark:bg-blue-950/40"
-            />
-            <PriceRow
-              icon={<Flame className="h-4 w-4 text-emerald-600" />}
-              label="CNG"
-              unit="per kg"
-              value={data.cng}
-              accent="bg-emerald-50 dark:bg-emerald-950/40"
-            />
-            <PriceRow
-              icon={<Flame className="h-4 w-4 text-orange-600" />}
-              label="LPG (14.2 kg)"
-              unit="domestic cylinder"
-              value={data.lpg}
-              accent="bg-orange-50 dark:bg-orange-950/40"
-            />
-            <PriceRow
-              icon={<Zap className="h-4 w-4 text-yellow-600" />}
-              label="Electricity"
-              unit="per kWh (0–100 unit slab)"
-              value={data.electricity}
-              accent="bg-yellow-50 dark:bg-yellow-950/40"
-            />
-          </div>
-        )}
-
-        <p className="mt-3 pt-3 border-t text-[10px] text-muted-foreground">
-          Petrol &amp; diesel from Goodreturns; CNG / LPG / electricity are
-          representative residential rates. Actual prices vary by city, DISCOM
-          and slab.
-        </p>
       </CardContent>
     </Card>
   );

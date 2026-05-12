@@ -1,11 +1,11 @@
 /**
  * State-wise fuel + electricity price feed for the Vehicle section.
  *
- * Petrol/diesel: scraped daily from Goodreturns' all-states page
- * (https://www.goodreturns.in/petrol-price.html). One HTTP call returns
- * every state — cheaper than per-state requests and the page layout is
- * stable. Stale-while-revalidate cache mirrors commodity.service.ts so
- * frontend polling never blocks on the scraper.
+ * Petrol/diesel: scraped daily from CarDekho's all-states fuel-price page
+ * (https://www.cardekho.com/fuel-price). One HTTP call returns every
+ * state in a stable HTML table; Goodreturns (the earlier choice) now 403s
+ * generic User-Agents. Stale-while-revalidate cache mirrors
+ * commodity.service.ts so frontend polling never blocks on the scraper.
  *
  * CNG / LPG / electricity: static seed data (changes ~quarterly or less).
  * Refreshing these is a manual job — the seed is shipped with the app and
@@ -17,13 +17,11 @@
  * In-memory cache is sufficient — fuel prices revise at most once per day.
  */
 
-import * as cheerio from 'cheerio';
 import { logger } from '../lib/logger.js';
 import {
   FUEL_STATES,
   getStateByCode,
   getStateBySlug,
-  normaliseLabel,
   type FuelState,
 } from './fuelStates.js';
 
@@ -36,7 +34,7 @@ export interface StateFuelPrices {
   lpg: string | null;          // ₹ / 14.2 kg cylinder (domestic)
   electricity: string | null;  // ₹ / kWh (residential 0–100 unit slab)
   fetchedAt: string;
-  petrolDieselSource: 'goodreturns' | 'seed';
+  petrolDieselSource: 'cardekho' | 'seed';
 }
 
 interface ScrapedRow { petrol: string | null; diesel: string | null }
@@ -50,10 +48,17 @@ let liveCache: PetrolDieselCache | null = null;
 let inflightRefresh: Promise<PetrolDieselCache> | null = null;
 const CACHE_TTL_MS = 6 * 60 * 60_000; // 6 hours — IOCL revises once at 6 AM IST
 
-const GOODRETURNS_PETROL = 'https://www.goodreturns.in/petrol-price.html';
-const GOODRETURNS_DIESEL = 'https://www.goodreturns.in/diesel-price.html';
+const CARDEKHO_URL = 'https://www.cardekho.com/fuel-price';
 const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
+
+// CarDekho uses a few slug variants we map back to our canonical slug. Most
+// names match outright; only the colonial-era / hyphenation edge cases differ.
+const SLUG_ALIASES: Record<string, string> = {
+  pondicherry: 'puducherry',
+  'daman-and-diu': 'daman-diu',
+  'andaman-and-nicobar': 'andaman-nicobar',
+};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Static seeds. Updated manually; representative residential rates.
@@ -158,54 +163,59 @@ const ELECTRICITY_BY_SLUG: Record<string, string> = {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
-// Goodreturns scraper
+// CarDekho scraper. Regex over `<a href="...petrol-price-in-X-state">...</a>
+// </td><td>₹NN.NN</td>` works reliably here — the table structure is stable
+// and a regex is cheaper than loading cheerio over a 370 KB HTML payload.
 // ────────────────────────────────────────────────────────────────────────────
 
-async function fetchGoodreturns(url: string): Promise<Map<string, string>> {
-  const result = new Map<string, string>();
-  const res = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,*/*' },
+const PETROL_RE =
+  /href="https:\/\/www\.cardekho\.com\/petrol-price-in-([a-z-]+)-state"[^>]*>[^<]+<\/a><\/td><td>\s*₹?\s*([0-9]+(?:\.[0-9]+)?)/g;
+const DIESEL_RE =
+  /href="https:\/\/www\.cardekho\.com\/diesel-price-in-([a-z-]+)-state"[^>]*>[^<]+<\/a><\/td><td>\s*₹?\s*([0-9]+(?:\.[0-9]+)?)/g;
+
+function canonicaliseSlug(rawSlug: string): string {
+  return SLUG_ALIASES[rawSlug] ?? rawSlug;
+}
+
+async function fetchCarDekho(): Promise<{
+  petrol: Map<string, string>;
+  diesel: Map<string, string>;
+}> {
+  const res = await fetch(CARDEKHO_URL, {
+    headers: {
+      'User-Agent': USER_AGENT,
+      Accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+      'Accept-Language': 'en-IN,en;q=0.9',
+    },
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
-    throw new Error(`Goodreturns ${url} returned ${res.status}`);
+    throw new Error(`CarDekho returned ${res.status}`);
   }
   const html = await res.text();
-  const $ = cheerio.load(html);
 
-  // Goodreturns publishes one table where the first column is the state name
-  // and the second column is today's price (a third column is yesterday's).
-  // The exact CSS class is volatile so we walk every <table> on the page and
-  // accept any row whose first cell matches a known state slug.
-  $('table tr').each((_, row) => {
-    const cells = $(row).find('td');
-    if (cells.length < 2) return;
-    const labelRaw = $(cells[0]).text().trim();
-    if (!labelRaw) return;
-    const slug = normaliseLabel(labelRaw);
-    if (!getStateBySlug(slug)) return;
-
-    // Price cell may carry an ₹ symbol, commas, or trailing chars like "/L".
-    const priceRaw = $(cells[1]).text().trim();
-    const m = priceRaw.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
-    if (!m) return;
-    if (!result.has(slug)) result.set(slug, m[1]!);
-  });
-
-  return result;
+  const petrol = new Map<string, string>();
+  for (const m of html.matchAll(PETROL_RE)) {
+    const slug = canonicaliseSlug(m[1]!);
+    if (!getStateBySlug(slug)) continue;
+    if (!petrol.has(slug)) petrol.set(slug, m[2]!);
+  }
+  const diesel = new Map<string, string>();
+  for (const m of html.matchAll(DIESEL_RE)) {
+    const slug = canonicaliseSlug(m[1]!);
+    if (!getStateBySlug(slug)) continue;
+    if (!diesel.has(slug)) diesel.set(slug, m[2]!);
+  }
+  return { petrol, diesel };
 }
 
 async function refreshPetrolDiesel(): Promise<PetrolDieselCache> {
-  const [petrolMap, dieselMap] = await Promise.all([
-    fetchGoodreturns(GOODRETURNS_PETROL).catch((err) => {
-      logger.warn({ err }, '[fuel] Goodreturns petrol fetch failed');
-      return new Map<string, string>();
-    }),
-    fetchGoodreturns(GOODRETURNS_DIESEL).catch((err) => {
-      logger.warn({ err }, '[fuel] Goodreturns diesel fetch failed');
-      return new Map<string, string>();
-    }),
-  ]);
+  const { petrol: petrolMap, diesel: dieselMap } = await fetchCarDekho().catch(
+    (err) => {
+      logger.warn({ err }, '[fuel] CarDekho fetch failed');
+      return { petrol: new Map<string, string>(), diesel: new Map<string, string>() };
+    },
+  );
 
   const merged: Map<string, ScrapedRow> = new Map();
   const slugs = new Set<string>([...petrolMap.keys(), ...dieselMap.keys()]);
@@ -326,8 +336,8 @@ export async function getFuelPricesForState(
   const scraped = cache.bySlug.get(meta.slug);
   const petrol = scraped?.petrol ?? PETROL_SEED_BY_SLUG[meta.slug] ?? null;
   const diesel = scraped?.diesel ?? DIESEL_SEED_BY_SLUG[meta.slug] ?? null;
-  const petrolDieselSource: 'goodreturns' | 'seed' =
-    scraped?.petrol || scraped?.diesel ? 'goodreturns' : 'seed';
+  const petrolDieselSource: 'cardekho' | 'seed' =
+    scraped?.petrol || scraped?.diesel ? 'cardekho' : 'seed';
 
   return {
     stateCode: meta.code,
@@ -362,7 +372,7 @@ export async function getAllStateFuelPrices(): Promise<StateFuelPrices[]> {
       electricity: ELECTRICITY_BY_SLUG[meta.slug] ?? null,
       fetchedAt: cache.fetchedAt.toISOString(),
       petrolDieselSource:
-        scraped?.petrol || scraped?.diesel ? 'goodreturns' : 'seed',
+        scraped?.petrol || scraped?.diesel ? 'cardekho' : 'seed',
     });
   }
   return out.sort((a, b) => a.stateName.localeCompare(b.stateName));

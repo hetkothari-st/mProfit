@@ -133,7 +133,7 @@ export interface StateFuelPricesDTO {
   lpg: string | null;
   electricity: string | null;
   fetchedAt: string;
-  petrolDieselSource: 'goodreturns' | 'seed';
+  petrolDieselSource: 'cardekho' | 'seed';
 }
 
 export interface StateOption {
