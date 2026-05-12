@@ -76,62 +76,89 @@ interface PreviewProps {
   onOpenChange: (v: boolean) => void;
 }
 
-// Marker we wrap payment instructions in so the preview dialog can
-// patch them without disturbing the surrounding template. Matches the
-// span the cron template wraps the value with (see rental.reminders
-// .service template — we render through this span when building body).
-const PAY_INSTR_OPEN = '<!--pay-instructions-->';
-const PAY_INSTR_CLOSE = '<!--/pay-instructions-->';
+// HTML comment markers wrap every user-editable text region in the
+// server template (see rental.reminders.service.ts template). The
+// preview dialog extracts the inner text for plain-text editing and
+// re-splices on save — the landlord never sees HTML.
+type BlockName = 'greeting' | 'lead' | 'pay-instructions' | 'closing' | 'signature';
 
-function extractPaymentInstructions(html: string): string {
-  const start = html.indexOf(PAY_INSTR_OPEN);
-  const end = html.indexOf(PAY_INSTR_CLOSE);
-  if (start < 0 || end < 0 || end <= start) return '';
-  const inner = html.slice(start + PAY_INSTR_OPEN.length, end);
-  // Strip the wrapping <p ...>…</p> and the strong-prefix the template adds,
-  // then convert <br> back to newlines so the textarea is readable.
+function markerOpen(name: BlockName): string { return `<!--${name}-->`; }
+function markerClose(name: BlockName): string { return `<!--/${name}-->`; }
+
+function htmlToText(inner: string): string {
   return inner
-    .replace(/^.*?<strong>Payment instructions:<\/strong>\s*(<br\s*\/?>)?/i, '')
-    .replace(/<\/p>\s*$/i, '')
     .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
     .trim();
 }
 
-function spliceInstructionsIntoBody(html: string, instructions: string): string {
-  const start = html.indexOf(PAY_INSTR_OPEN);
-  const end = html.indexOf(PAY_INSTR_CLOSE);
-  const trimmed = instructions.trim();
-  const replacement = trimmed
-    ? `${PAY_INSTR_OPEN}<p style="margin:0 0 12px;font-size:13px;line-height:1.55;color:#3d3a2e;"><strong>Payment instructions:</strong><br>${trimmed.replace(/\n/g, '<br>')}</p>${PAY_INSTR_CLOSE}`
-    : `${PAY_INSTR_OPEN}${PAY_INSTR_CLOSE}`;
-  if (start < 0 || end < 0) return html; // template lacks marker — leave as-is
-  return html.slice(0, start) + replacement + html.slice(end + PAY_INSTR_CLOSE.length);
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function extractBlock(html: string, name: BlockName): string {
+  const start = html.indexOf(markerOpen(name));
+  const end = html.indexOf(markerClose(name));
+  if (start < 0 || end < 0 || end <= start) return '';
+  return htmlToText(html.slice(start + markerOpen(name).length, end));
+}
+
+function spliceBlock(html: string, name: BlockName, text: string): string {
+  const start = html.indexOf(markerOpen(name));
+  const end = html.indexOf(markerClose(name));
+  if (start < 0 || end < 0) return html; // template lacks marker — no-op
+  let replacement: string;
+  if (name === 'pay-instructions') {
+    // Pay instructions get the full <p> wrapper so they look identical
+    // to the cron-generated version.
+    const trimmed = text.trim();
+    replacement = trimmed
+      ? `<p style="margin:0 0 12px;font-size:13px;line-height:1.55;color:#3d3a2e;"><strong>Payment instructions:</strong><br>${escapeHtml(trimmed).replace(/\n/g, '<br>')}</p>`
+      : '';
+  } else {
+    // Other blocks live inside their existing wrapper (<h1>, <p>) so
+    // we just escape the user's text and convert newlines.
+    replacement = escapeHtml(text).replace(/\n/g, '<br>');
+  }
+  return (
+    html.slice(0, start + markerOpen(name).length)
+    + replacement
+    + html.slice(end)
+  );
 }
 
 function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
   const qc = useQueryClient();
   const [subject, setSubject] = useState(reminder.subject);
   const [smsBody, setSmsBody] = useState(reminder.smsBody);
-  const [instructions, setInstructions] = useState(
-    extractPaymentInstructions(reminder.body),
-  );
-  // Full-body draft. Starts from the stored body; each keystroke in the
-  // payment-instructions field updates the spliced HTML so the simple
-  // path Just Works without the landlord touching raw HTML. Expanding
-  // "Edit full email" lets advanced users tweak anything they want.
-  const [bodyDraft, setBodyDraft] = useState<string>(reminder.body);
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  const [greeting, setGreeting] = useState(extractBlock(reminder.body, 'greeting'));
+  const [lead, setLead] = useState(extractBlock(reminder.body, 'lead'));
+  const [instructions, setInstructions] = useState(extractBlock(reminder.body, 'pay-instructions'));
+  const [closing, setClosing] = useState(extractBlock(reminder.body, 'closing'));
+  const [signature, setSignature] = useState(extractBlock(reminder.body, 'signature'));
 
-  // Keep bodyDraft in sync with the instructions textarea unless the
-  // landlord has taken over the advanced editor — once `showAdvanced`
-  // is open we treat the textarea as the source of truth and stop
-  // overwriting it from the instructions splicer.
-  function handleInstructionsChange(next: string) {
-    setInstructions(next);
-    if (!showAdvanced) {
-      setBodyDraft(spliceInstructionsIntoBody(reminder.body, next));
-    }
-  }
+  // Live-rebuild the body for the preview + save. Splices each
+  // editable region back into the original template HTML so the
+  // surrounding markup, colours and layout stay intact.
+  const bodyDraft = (() => {
+    let b = reminder.body;
+    b = spliceBlock(b, 'greeting', greeting);
+    b = spliceBlock(b, 'lead', lead);
+    b = spliceBlock(b, 'pay-instructions', instructions);
+    b = spliceBlock(b, 'closing', closing);
+    b = spliceBlock(b, 'signature', signature);
+    return b;
+  })();
 
   const updateMut = useMutation({
     mutationFn: () =>
@@ -171,32 +198,46 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
               className="font-medium"
             />
           </div>
-          <div>
-            <Label>Payment instructions</Label>
-            <textarea
-              value={instructions}
-              onChange={(e) => handleInstructionsChange(e.target.value)}
-              placeholder="UPI: yourname@upi · NEFT: HDFC A/c XXXXX1234, IFSC HDFC0001234"
-              disabled={showAdvanced}
-              className="w-full min-h-[72px] rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-60"
-            />
-            <p className="text-[11px] text-muted-foreground mt-1">
-              {showAdvanced
-                ? 'Disabled — you\'re editing the full email below. Toggle off to use the simple instructions field again.'
-                : 'Replaces the corresponding section in the email body — preview updates live.'}
+          <div className="space-y-3 rounded-md border border-border bg-background/40 p-3">
+            <p className="text-[10px] uppercase tracking-kerned text-muted-foreground">
+              Email content (plain text — formatting handled automatically)
             </p>
+            <div>
+              <Label>Greeting</Label>
+              <Input value={greeting} onChange={(e) => setGreeting(e.target.value)} />
+            </div>
+            <div>
+              <Label>Opening line</Label>
+              <textarea
+                value={lead}
+                onChange={(e) => setLead(e.target.value)}
+                className="w-full min-h-[60px] rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <Label>Payment instructions</Label>
+              <textarea
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                placeholder="UPI: yourname@upi · NEFT: HDFC A/c XXXXX1234, IFSC HDFC0001234"
+                className="w-full min-h-[60px] rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <Label>Closing line</Label>
+              <textarea
+                value={closing}
+                onChange={(e) => setClosing(e.target.value)}
+                className="w-full min-h-[50px] rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <Label>Signature</Label>
+              <Input value={signature} onChange={(e) => setSignature(e.target.value)} />
+            </div>
           </div>
           <div>
-            <div className="flex items-center justify-between">
-              <Label>Email preview</Label>
-              <button
-                type="button"
-                onClick={() => setShowAdvanced((v) => !v)}
-                className="text-[11px] text-accent-ink/80 hover:text-foreground hover:underline"
-              >
-                {showAdvanced ? '◀ Use simple instructions' : 'Edit full email ▸'}
-              </button>
-            </div>
+            <Label>Email preview</Label>
             <div className="mt-1 rounded-md border border-border bg-background/50 p-3 max-h-72 overflow-y-auto">
               <iframe
                 title="Email preview"
@@ -204,23 +245,9 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
                 className="w-full h-64 border-0 bg-white"
               />
             </div>
-            {showAdvanced && (
-              <div className="mt-2">
-                <Label className="text-[10px] uppercase tracking-kerned text-muted-foreground">
-                  Raw HTML body
-                </Label>
-                <textarea
-                  value={bodyDraft}
-                  onChange={(e) => setBodyDraft(e.target.value)}
-                  spellCheck={false}
-                  className="w-full min-h-[200px] rounded-md border border-border bg-background px-3 py-2 text-[12px] font-mono leading-relaxed"
-                />
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Edit any part of the email — greeting, body, signature, anything.
-                  The preview above re-renders on every keystroke.
-                </p>
-              </div>
-            )}
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Updates live as you edit the fields above.
+            </p>
           </div>
           <div>
             <Label className="flex items-center gap-1.5">

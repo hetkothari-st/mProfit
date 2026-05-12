@@ -94,6 +94,9 @@ function buildTemplate(vars: TemplateVars): { subject: string; body: string; sms
     ? `Overdue rent — ${vars.property} (${vars.dueDate})`
     : `Rent reminder — ${vars.property} (${vars.dueDate})`;
 
+  // Each user-editable text region is wrapped in a <!--name-->…<!--/name-->
+  // marker pair. The Preview dialog extracts the inner text for plain-text
+  // editing and re-splices on save — the landlord never has to touch HTML.
   const body = `<!doctype html>
 <html>
 <body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#f7f5ef;color:#1c1c1c;">
@@ -102,11 +105,8 @@ function buildTemplate(vars: TemplateVars): { subject: string; body: string; sms
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="background:#ffffff;border:1px solid #e6e0d4;border-radius:8px;padding:32px;">
         <tr><td>
           <p style="margin:0 0 4px;color:#8a7e5e;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;">Rent Reminder</p>
-          <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#1c1c1c;">Hi ${vars.tenantName},</h1>
-          <p style="margin:0 0 12px;font-size:14px;line-height:1.55;">
-            This is a friendly reminder that your rent for
-            <strong>${vars.property}</strong> ${leadCopy}.
-          </p>
+          <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#1c1c1c;"><!--greeting-->Hi ${vars.tenantName},<!--/greeting--></h1>
+          <p style="margin:0 0 12px;font-size:14px;line-height:1.55;"><!--lead-->This is a friendly reminder that your rent for ${vars.property} ${leadCopy}.<!--/lead--></p>
           <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#fafaf6;border-radius:6px;padding:16px;border:1px solid #ece6d8;">
             <tr><td style="font-size:13px;color:#6b6450;padding:4px 8px;">Amount</td>
                 <td style="font-size:15px;font-weight:600;text-align:right;padding:4px 8px;">${vars.amount}</td></tr>
@@ -120,10 +120,8 @@ function buildTemplate(vars: TemplateVars): { subject: string; body: string; sms
               ? `<p style="margin:0 0 12px;font-size:13px;line-height:1.55;color:#3d3a2e;"><strong>Payment instructions:</strong><br>${vars.paymentInstructions.replace(/\n/g, '<br>')}</p>`
               : ''
           }<!--/pay-instructions-->
-          <p style="margin:24px 0 0;font-size:13px;line-height:1.55;color:#6b6450;">
-            If you've already paid, please ignore this message. Reply to this email if you have any questions.
-          </p>
-          <p style="margin:16px 0 0;font-size:13px;color:#1c1c1c;">— ${vars.landlord}</p>
+          <p style="margin:24px 0 0;font-size:13px;line-height:1.55;color:#6b6450;"><!--closing-->If you've already paid, please ignore this message. Reply to this email if you have any questions.<!--/closing--></p>
+          <p style="margin:16px 0 0;font-size:13px;color:#1c1c1c;"><!--signature-->— ${vars.landlord}<!--/signature--></p>
         </td></tr>
       </table>
     </td></tr>
