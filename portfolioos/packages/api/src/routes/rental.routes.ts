@@ -49,3 +49,18 @@ rentalRouter.post('/receipts/mark-overdue', asyncHandler(markOverdueHandler));
 rentalRouter.get('/expenses', asyncHandler(listExpensesHandler));
 rentalRouter.post('/properties/:id/expenses', asyncHandler(addExpenseHandler));
 rentalRouter.delete('/expenses/:expenseId', asyncHandler(removeExpenseHandler));
+
+// Reminders — approval queue for tenant email/SMS rent reminders.
+import {
+  getReminders,
+  patchReminder,
+  rejectReminderHandler,
+  approveReminderHandler,
+  runReminderScanHandler,
+} from '../controllers/rentalReminders.controller.js';
+
+rentalRouter.get('/reminders', asyncHandler(getReminders));
+rentalRouter.patch('/reminders/:id', asyncHandler(patchReminder));
+rentalRouter.post('/reminders/:id/reject', asyncHandler(rejectReminderHandler));
+rentalRouter.post('/reminders/:id/approve', asyncHandler(approveReminderHandler));
+rentalRouter.post('/reminders/scan', asyncHandler(runReminderScanHandler));

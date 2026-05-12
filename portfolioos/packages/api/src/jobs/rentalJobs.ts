@@ -13,6 +13,7 @@ import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { markOverdueReceipts } from '../services/rental.service.js';
+import { enqueuePendingReminders } from '../services/rental.reminders.service.js';
 
 const TZ = 'Asia/Kolkata';
 let running = false;
@@ -37,6 +38,28 @@ export async function runRentalOverdueJob(): Promise<void> {
   }
 }
 
+let reminderScanRunning = false;
+
+export async function runReminderEnqueueJob(): Promise<void> {
+  if (reminderScanRunning) {
+    logger.warn('[cron] rental reminder scan already running — skipping');
+    return;
+  }
+  reminderScanRunning = true;
+  const t0 = Date.now();
+  try {
+    const queued = await runAsSystem(() => enqueuePendingReminders());
+    logger.info(
+      { queued, ms: Date.now() - t0 },
+      '[cron] rental reminder scan done',
+    );
+  } catch (err) {
+    logger.error({ err }, '[cron] rental reminder scan failed');
+  } finally {
+    reminderScanRunning = false;
+  }
+}
+
 export function startRentalJobs(): void {
   if (process.env.ENABLE_RENTAL_CRONS === 'false') {
     logger.info('[cron] rental jobs disabled via ENABLE_RENTAL_CRONS=false');
@@ -47,6 +70,13 @@ export function startRentalJobs(): void {
   cron.schedule('0 1 * * *', () => void runRentalOverdueJob(), {
     timezone: TZ,
   });
+  // 09:00 IST every day — reminder enqueue. Pushed PENDING_APPROVAL
+  // rows into the queue at lead days 5/3/1/0; landlord reviews + sends
+  // through the UI. Scheduled after most people's morning routine so
+  // they see fresh reminders ready when they open the app.
+  cron.schedule('0 9 * * *', () => void runReminderEnqueueJob(), {
+    timezone: TZ,
+  });
 
-  logger.info('[cron] scheduled: rental overdue daily @01:00 IST');
+  logger.info('[cron] scheduled: rental overdue @01:00 IST, reminder scan @09:00 IST');
 }

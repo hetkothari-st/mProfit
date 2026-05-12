@@ -42,6 +42,8 @@ export interface TenancyDTO {
   propertyId: string;
   tenantName: string;
   tenantContact: string | null;
+  tenantEmail: string | null;
+  tenantPhone: string | null;
   startDate: string;
   endDate: string | null;
   monthlyRent: string;
@@ -99,6 +101,8 @@ export type UpdatePropertyInput = Partial<CreatePropertyInput>;
 export interface CreateTenancyInput {
   tenantName: string;
   tenantContact?: string | null;
+  tenantEmail?: string | null;
+  tenantPhone?: string | null;
   startDate: string;
   endDate?: string | null;
   monthlyRent: string;
@@ -263,4 +267,88 @@ export const rentalApi = {
   async removeExpense(expenseId: string): Promise<void> {
     await api.delete(`/api/rental/expenses/${expenseId}`);
   },
+
+  // Reminders
+  async listReminders(filter: { status?: ReminderStatus; tenancyId?: string } = {}): Promise<RentReminderDTO[]> {
+    const { data } = await api.get<ApiResponse<RentReminderDTO[]>>(
+      '/api/rental/reminders',
+      { params: filter },
+    );
+    return unwrap(data);
+  },
+  async updateReminder(id: string, patch: UpdateReminderInput): Promise<RentReminderDTO> {
+    const { data } = await api.patch<ApiResponse<RentReminderDTO>>(
+      `/api/rental/reminders/${id}`,
+      patch,
+    );
+    return unwrap(data);
+  },
+  async rejectReminder(id: string): Promise<RentReminderDTO> {
+    const { data } = await api.post<ApiResponse<RentReminderDTO>>(
+      `/api/rental/reminders/${id}/reject`,
+    );
+    return unwrap(data);
+  },
+  async approveReminder(id: string): Promise<RentReminderDTO> {
+    const { data } = await api.post<ApiResponse<RentReminderDTO>>(
+      `/api/rental/reminders/${id}/approve`,
+    );
+    return unwrap(data);
+  },
+  async runReminderScan(): Promise<{ queued: number }> {
+    const { data } = await api.post<ApiResponse<{ queued: number }>>(
+      '/api/rental/reminders/scan',
+    );
+    return unwrap(data);
+  },
 };
+
+// ── Reminder DTOs ─────────────────────────────────────────────────────
+
+export type ReminderStatus =
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'SENT'
+  | 'FAILED'
+  | 'REJECTED'
+  | 'SUPERSEDED';
+
+export interface RentReminderDTO {
+  id: string;
+  receiptId: string;
+  tenancyId: string;
+  leadDays: number;
+  status: ReminderStatus;
+  channels: { email?: boolean; sms?: boolean };
+  subject: string;
+  body: string;
+  smsBody: string;
+  emailStatus: string | null;
+  emailError: string | null;
+  smsStatus: string | null;
+  smsError: string | null;
+  createdAt: string;
+  approvedAt: string | null;
+  sentAt: string | null;
+  tenancy?: {
+    id: string;
+    tenantName: string;
+    tenantEmail: string | null;
+    tenantPhone: string | null;
+    property: { id: string; name: string };
+  };
+  receipt?: {
+    id: string;
+    forMonth: string;
+    dueDate: string;
+    expectedAmount: string;
+    status: string;
+  };
+}
+
+export interface UpdateReminderInput {
+  subject?: string;
+  body?: string;
+  smsBody?: string;
+  channels?: { email?: boolean; sms?: boolean };
+}

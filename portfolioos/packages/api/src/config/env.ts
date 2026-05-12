@@ -17,6 +17,21 @@ const EnvSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default('PortfolioOS <no-reply@portfolioos.in>'),
+  // Secure flag: true (port 465 with TLS) vs false (587 with STARTTLS).
+  SMTP_SECURE: z.enum(['true', 'false']).default('false'),
+
+  // SMS provider. Currently only Twilio is wired; leave empty to skip
+  // SMS sends entirely (the rental reminder pipeline will log + mark
+  // the SMS channel as "skipped" so the landlord can resend after
+  // configuration). Add provider-agnostic adapters here as needed.
+  SMS_PROVIDER: z.enum(['twilio', 'none']).default('none'),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM_NUMBER: z.string().optional(),
+
+  // Branding fields used in rental reminder templates.
+  LANDLORD_BRAND_NAME: z.string().default('Your landlord'),
+  RENT_PAYMENT_INSTRUCTIONS: z.string().default(''),
 
   AMFI_NAV_URL: z.string().url().default('https://www.amfiindia.com/spages/NAVAll.txt'),
   NSE_API_KEY: z.string().optional(),

@@ -38,6 +38,7 @@ import {
   type RentalPropertyDTO,
   type CreatePropertyInput,
 } from '@/api/rental.api';
+import { RentalRemindersPanel } from './RentalRemindersPanel';
 
 // ── Property type theming ─────────────────────────────────────────────
 
@@ -579,6 +580,12 @@ export function RentalListPage() {
       />
 
       {!isLoading && list.length > 0 && <SummaryStrip properties={list} />}
+
+      {!isLoading && list.length > 0 && (
+        <div className="mt-4 mb-4">
+          <RentalRemindersPanel />
+        </div>
+      )}
 
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

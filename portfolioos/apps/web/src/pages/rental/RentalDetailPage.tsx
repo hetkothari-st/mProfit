@@ -388,6 +388,8 @@ function AddTenancyDialog({
     monthlyRent: '',
     rentDueDay: 1,
     tenantContact: '',
+    tenantEmail: '',
+    tenantPhone: '',
     securityDeposit: '',
   });
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
@@ -414,6 +416,8 @@ function AddTenancyDialog({
       ...form,
       tenantName: form.tenantName.trim(),
       tenantContact: form.tenantContact || null,
+      tenantEmail: form.tenantEmail?.trim() || null,
+      tenantPhone: form.tenantPhone?.trim() || null,
       securityDeposit: form.securityDeposit || null,
     });
   }
@@ -436,12 +440,38 @@ function AddTenancyDialog({
               <p className="text-xs text-negative mt-1">{errors.tenantName}</p>
             )}
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Tenant email</Label>
+              <Input
+                type="email"
+                value={form.tenantEmail ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, tenantEmail: e.target.value }))}
+                placeholder="tenant@example.com"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Used for rent reminders
+              </p>
+            </div>
+            <div>
+              <Label>Tenant phone</Label>
+              <Input
+                type="tel"
+                value={form.tenantPhone ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, tenantPhone: e.target.value }))}
+                placeholder="9876543210"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                10-digit, used for SMS reminders
+              </p>
+            </div>
+          </div>
           <div>
-            <Label>Contact</Label>
+            <Label>Other contact (optional)</Label>
             <Input
               value={form.tenantContact ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, tenantContact: e.target.value }))}
-              placeholder="Phone or email"
+              placeholder="Alt phone, alternate email, etc."
             />
           </div>
           <div className="grid grid-cols-2 gap-3">

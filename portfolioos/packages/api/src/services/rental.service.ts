@@ -71,6 +71,8 @@ export interface CreateTenancyInput {
   propertyId: string;
   tenantName: string;
   tenantContact?: string | null;
+  tenantEmail?: string | null;
+  tenantPhone?: string | null;
   startDate: string;
   endDate?: string | null;
   monthlyRent: string;
@@ -357,6 +359,8 @@ export async function createTenancy(userId: string, input: CreateTenancyInput) {
         propertyId: input.propertyId,
         tenantName: input.tenantName.trim(),
         tenantContact: input.tenantContact ?? null,
+        tenantEmail: input.tenantEmail?.trim() || null,
+        tenantPhone: input.tenantPhone?.trim() || null,
         startDate,
         endDate,
         monthlyRent,
@@ -398,6 +402,8 @@ export async function updateTenancy(
   const data: Prisma.TenancyUpdateInput = {};
   if (patch.tenantName !== undefined) data.tenantName = patch.tenantName.trim();
   if (patch.tenantContact !== undefined) data.tenantContact = patch.tenantContact;
+  if (patch.tenantEmail !== undefined) data.tenantEmail = patch.tenantEmail?.trim() || null;
+  if (patch.tenantPhone !== undefined) data.tenantPhone = patch.tenantPhone?.trim() || null;
   if (patch.startDate !== undefined) {
     throw new BadRequestError(
       'startDate is immutable after tenancy creation — create a new tenancy instead',
@@ -583,7 +589,7 @@ export async function markReceiptReceived(
       });
       cashFlowId = cf.id;
     }
-    return tx.rentReceipt.update({
+    const updated = await tx.rentReceipt.update({
       where: { id: receiptId },
       data: {
         status,
@@ -593,6 +599,13 @@ export async function markReceiptReceived(
         cashFlowId,
       },
     });
+    // Receipt is settled — abandon any pending reminders for this row so
+    // we don't bother the tenant about money we already received.
+    await tx.rentReminder.updateMany({
+      where: { receiptId, status: 'PENDING_APPROVAL' },
+      data: { status: 'SUPERSEDED' },
+    });
+    return updated;
   });
 }
 

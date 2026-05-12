@@ -1578,7 +1578,11 @@ model Tenancy {
   propertyId      String
   property        RentalProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   tenantName      String
+  // Legacy single-line contact (free text). Retained for back-compat with
+  // tenancies created before tenantEmail/tenantPhone were split out.
   tenantContact   String?
+  tenantEmail     String?
+  tenantPhone     String?
   startDate       DateTime       @db.Date
   endDate         DateTime?      @db.Date
   monthlyRent     Decimal        @db.Decimal(12, 2)
@@ -1589,6 +1593,7 @@ model Tenancy {
   createdAt       DateTime       @default(now())
 
   rentReceipts RentReceipt[]
+  reminders    RentReminder[]
 
   @@index([propertyId, isActive])
 }
@@ -1607,8 +1612,56 @@ model RentReceipt {
   notes                  String?
   autoMatchedFromEventId String?
 
+  reminders RentReminder[]
+
   @@unique([tenancyId, forMonth])
   @@index([dueDate, status])
+}
+
+// Tenant rent reminder queue. The cron creates one row per (receipt,
+// leadDays) tuple as the due date approaches. Each row starts in
+// PENDING_APPROVAL — the landlord reviews + optionally edits the
+// subject/body in the UI, then either approves (which triggers the
+// actual SMS + email send) or rejects. No auto-send: every outbound
+// message is a deliberate human action.
+model RentReminder {
+  id          String   @id @default(cuid())
+  receiptId   String
+  receipt     RentReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  tenancyId   String
+  tenancy     Tenancy  @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
+
+  // Days before dueDate this reminder was queued for: 5 / 3 / 1 / 0
+  // (0 = same-day). Multiple rows per receipt — one per lead day —
+  // dedup-protected by the unique constraint below.
+  leadDays    Int
+
+  // PENDING_APPROVAL | APPROVED | SENT | FAILED | REJECTED | SUPERSEDED
+  // SUPERSEDED = receipt was marked RECEIVED before approval, no longer needed.
+  status      String   @default("PENDING_APPROVAL")
+
+  // Channels the landlord wants to send through. {email: true, sms: true}.
+  channels    Json
+
+  // Editable message content (cron pre-fills via template).
+  subject     String
+  body        String   @db.Text
+  smsBody     String   @db.Text
+
+  // Per-channel send result. "skipped" when channel disabled or
+  // recipient missing; "sent" / "failed" otherwise.
+  emailStatus String?
+  emailError  String?
+  smsStatus   String?
+  smsError    String?
+
+  createdAt   DateTime @default(now())
+  approvedAt  DateTime?
+  sentAt      DateTime?
+
+  @@unique([receiptId, leadDays])
+  @@index([status, createdAt])
+  @@index([tenancyId, status])
 }
 
 model PropertyExpense {
