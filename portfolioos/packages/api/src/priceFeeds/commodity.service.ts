@@ -95,19 +95,27 @@ async function fetchGoldApiInr(): Promise<{
   let SILVER: Decimal | null = null;
   let derivedUsdInr: Decimal | null = null;
 
-  // Run CoinGecko (gold + derived FX), gold-api XAU (gold USD fallback), and
-  // gold-api XAG (silver USD) in parallel.
+  // Run CoinGecko (gold + silver + derived FX), gold-api XAU (gold USD
+  // fallback), and gold-api XAG (silver USD) in parallel. The single CoinGecko
+  // call carries PAXG (gold) and kinesis-silver (silver) in both INR and USD,
+  // which means: (a) one cloud-friendly upstream covers both metals when
+  // Yahoo / gold-api are unreachable, and (b) USD/INR FX falls out for free
+  // either way (PAXG INR÷USD or KAG INR÷USD).
   const [cgRes, xauRes, xagRes] = await Promise.allSettled([
     fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=inr,usd',
+      'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold,kinesis-silver&vs_currencies=inr,usd',
       { signal: AbortSignal.timeout(6000) },
     ),
     fetch('https://api.gold-api.com/price/XAU', { signal: AbortSignal.timeout(5000) }),
     fetch('https://api.gold-api.com/price/XAG', { signal: AbortSignal.timeout(5000) }),
   ]);
 
-  // CoinGecko PAXG (1 troy oz physical gold) → INR/gram. Derive USD/INR from
-  // the same response so we don't need a separate FX call for silver.
+  // CoinGecko PAXG (1 troy oz physical gold) + kinesis-silver (1 troy oz
+  // physical silver) → INR/gram for each. Derive USD/INR from PAXG so the
+  // gold-api fallback paths don't need a separate FX call. CoinGecko has been
+  // the only upstream consistently reachable from Railway's egress IPs (Yahoo
+  // and gold-api both get 429-ed on cloud ranges), so this single call is the
+  // primary path for both metals now.
   if (cgRes.status === 'fulfilled' && cgRes.value.ok) {
     try {
       const data = await cgRes.value.json() as Record<string, { inr?: number; usd?: number }>;
@@ -118,13 +126,35 @@ async function fetchGoldApiInr(): Promise<{
       }
       if (paxgInr && paxgUsd && paxgUsd > 0) {
         derivedUsdInr = new Decimal(paxgInr).div(paxgUsd);
-        logger.info({ paxgInr, paxgUsd, derivedUsdInr: derivedUsdInr.toString() }, '[commodity] gold + FX from CoinGecko PAXG');
       }
+
+      const kagInr = data['kinesis-silver']?.inr;
+      const kagUsd = data['kinesis-silver']?.usd;
+      if (kagInr) {
+        SILVER = new Decimal(kagInr).div(TROY_OZ_TO_GRAMS);
+      }
+      // Fall back to KAG-derived FX if PAXG didn't provide it.
+      if (!derivedUsdInr && kagInr && kagUsd && kagUsd > 0) {
+        derivedUsdInr = new Decimal(kagInr).div(kagUsd);
+      }
+
+      logger.info(
+        {
+          paxgInr,
+          paxgUsd,
+          kagInr,
+          kagUsd,
+          derivedUsdInr: derivedUsdInr?.toString() ?? null,
+        },
+        '[commodity] gold + silver + FX from CoinGecko',
+      );
     } catch (err) {
-      logger.warn({ err }, '[commodity] CoinGecko PAXG parse failed');
+      logger.warn({ err }, '[commodity] CoinGecko parse failed');
     }
   } else if (cgRes.status === 'rejected') {
-    logger.warn({ err: cgRes.reason }, '[commodity] CoinGecko gold fetch failed');
+    logger.warn({ err: cgRes.reason }, '[commodity] CoinGecko fetch failed');
+  } else if (cgRes.status === 'fulfilled') {
+    logger.warn({ status: cgRes.value.status }, '[commodity] CoinGecko non-200');
   }
 
   // FX resolver — derive once, reuse for both silver (XAG) and gold (XAU) USD paths.
