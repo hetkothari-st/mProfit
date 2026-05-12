@@ -178,9 +178,20 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
     mutationFn: () => rentalApi.undoAutoMatch(receipt.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rental-property', id] }),
   });
+  const unmarkMutation = useMutation({
+    mutationFn: () => rentalApi.unmarkReceived(receipt.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rental-property', id] }),
+  });
+  const unskipMutation = useMutation({
+    mutationFn: () => rentalApi.unskipReceipt(receipt.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rental-property', id] }),
+  });
 
   const isActionable =
     receipt.status === 'EXPECTED' || receipt.status === 'OVERDUE';
+  const isReceived =
+    receipt.status === 'RECEIVED' || receipt.status === 'PARTIAL';
+  const isSkipped = receipt.status === 'SKIPPED';
 
   const expectedAmt = new Decimal(receipt.expectedAmount);
   const receivedAmt = receipt.receivedAmount
@@ -249,6 +260,30 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                 onClick={() => undoMutation.mutate()}
                 disabled={undoMutation.isPending}
                 title="Undo auto-match"
+              >
+                <Undo2 className="h-3 w-3" /> Undo
+              </Button>
+            )}
+            {isReceived && !receipt.autoMatchedFromEventId && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => unmarkMutation.mutate()}
+                disabled={unmarkMutation.isPending}
+                title="Undo mark-received (also deletes cashflow)"
+              >
+                <Undo2 className="h-3 w-3" /> Undo
+              </Button>
+            )}
+            {isSkipped && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => unskipMutation.mutate()}
+                disabled={unskipMutation.isPending}
+                title="Undo skip"
               >
                 <Undo2 className="h-3 w-3" /> Undo
               </Button>

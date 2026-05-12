@@ -13,6 +13,8 @@ import {
   markReceiptReceived,
   skipReceipt,
   undoAutoMatch,
+  unmarkReceived,
+  unskipReceipt,
   listExpenses,
   addExpense,
   removeExpense,
@@ -195,6 +197,18 @@ export async function skipReceiptHandler(req: Request, res: Response) {
 export async function undoAutoMatchHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const row = await undoAutoMatch(req.user.id, req.params.receiptId!);
+  ok(res, row);
+}
+
+export async function unmarkReceivedHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const row = await unmarkReceived(req.user.id, req.params.receiptId!);
+  ok(res, row);
+}
+
+export async function unskipReceiptHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const row = await unskipReceipt(req.user.id, req.params.receiptId!);
   ok(res, row);
 }
 

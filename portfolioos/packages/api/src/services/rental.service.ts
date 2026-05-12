@@ -313,12 +313,24 @@ async function generateReceiptsForTenancy(
 ): Promise<number> {
   const schedule = enumerateMonths(startDate, endDate, rentDueDay);
   if (schedule.length === 0) return 0;
+  // Compute the OVERDUE cutoff once (today − OVERDUE_GRACE_DAYS). Receipts
+  // with dueDate at or before this cutoff are written directly as OVERDUE
+  // instead of EXPECTED so a freshly-created tenancy with a back-dated
+  // startDate (common case: landlord onboards months into an active lease)
+  // immediately surfaces in alerts — without this, the daily 01:00 IST cron
+  // had to run before any past-due alerts would appear, which masked the
+  // backlog for up to 24 hours after onboarding.
+  const overdueCutoff = new Date();
+  overdueCutoff.setUTCDate(overdueCutoff.getUTCDate() - OVERDUE_GRACE_DAYS);
+  overdueCutoff.setUTCHours(0, 0, 0, 0);
   const data: Prisma.RentReceiptCreateManyInput[] = schedule.map((s) => ({
     tenancyId,
     forMonth: s.forMonth,
     expectedAmount: monthlyRent,
     dueDate: s.dueDate,
-    status: RECEIPT_STATUS.EXPECTED,
+    status: s.dueDate <= overdueCutoff
+      ? RECEIPT_STATUS.OVERDUE
+      : RECEIPT_STATUS.EXPECTED,
   }));
   const result = await tx.rentReceipt.createMany({
     data,
@@ -629,6 +641,71 @@ export async function skipReceipt(
       status: RECEIPT_STATUS.SKIPPED,
       notes: reason ?? existing.notes,
     },
+  });
+}
+
+/**
+ * Pick the right "unsettled" status to revert to. If the original dueDate
+ * is past the OVERDUE grace window we land back on OVERDUE so the alert
+ * resurfaces; otherwise we drop to EXPECTED. Used by both undo-received
+ * and undo-skipped paths so a misclick doesn't quietly disappear a
+ * receipt that's still genuinely overdue.
+ */
+function unsettledStatusFor(dueDate: Date): ReceiptStatus {
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - OVERDUE_GRACE_DAYS);
+  cutoff.setUTCHours(0, 0, 0, 0);
+  return dueDate <= cutoff ? RECEIPT_STATUS.OVERDUE : RECEIPT_STATUS.EXPECTED;
+}
+
+/**
+ * Undo a manual "mark received" / "auto-match" click. Resets the receipt
+ * back to EXPECTED or OVERDUE depending on its dueDate, clears the
+ * received fields, and removes any CashFlow row we created when the
+ * mark-received originally fired so the portfolio's cash position
+ * doesn't double-count.
+ */
+export async function unmarkReceived(userId: string, receiptId: string) {
+  const existing = await getReceiptOwned(userId, receiptId);
+  if (
+    existing.status !== RECEIPT_STATUS.RECEIVED &&
+    existing.status !== RECEIPT_STATUS.PARTIAL
+  ) {
+    throw new BadRequestError(
+      'Receipt is not in a received state — nothing to undo',
+    );
+  }
+  const nextStatus = unsettledStatusFor(existing.dueDate);
+  return prisma.$transaction(async (tx) => {
+    if (existing.cashFlowId) {
+      await tx.cashFlow.deleteMany({ where: { id: existing.cashFlowId } });
+    }
+    return tx.rentReceipt.update({
+      where: { id: receiptId },
+      data: {
+        status: nextStatus,
+        receivedAmount: null,
+        receivedOn: null,
+        cashFlowId: null,
+        autoMatchedFromEventId: null,
+      },
+    });
+  });
+}
+
+/**
+ * Undo a manual "skip" click. Drops back to EXPECTED or OVERDUE
+ * depending on dueDate so a skipped-by-mistake receipt re-enters the
+ * alert queue.
+ */
+export async function unskipReceipt(userId: string, receiptId: string) {
+  const existing = await getReceiptOwned(userId, receiptId);
+  if (existing.status !== RECEIPT_STATUS.SKIPPED) {
+    throw new BadRequestError('Receipt is not skipped — nothing to undo');
+  }
+  return prisma.rentReceipt.update({
+    where: { id: receiptId },
+    data: { status: unsettledStatusFor(existing.dueDate) },
   });
 }
 

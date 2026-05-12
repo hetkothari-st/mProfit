@@ -12,6 +12,8 @@ import {
   markReceiptReceivedHandler,
   skipReceiptHandler,
   undoAutoMatchHandler,
+  unmarkReceivedHandler,
+  unskipReceiptHandler,
   listExpensesHandler,
   addExpenseHandler,
   removeExpenseHandler,
@@ -43,6 +45,8 @@ rentalRouter.get('/receipts', asyncHandler(listReceiptsHandler));
 rentalRouter.post('/receipts/:receiptId/mark-received', asyncHandler(markReceiptReceivedHandler));
 rentalRouter.post('/receipts/:receiptId/skip', asyncHandler(skipReceiptHandler));
 rentalRouter.post('/receipts/:receiptId/undo-auto-match', asyncHandler(undoAutoMatchHandler));
+rentalRouter.post('/receipts/:receiptId/unmark-received', asyncHandler(unmarkReceivedHandler));
+rentalRouter.post('/receipts/:receiptId/unskip', asyncHandler(unskipReceiptHandler));
 rentalRouter.post('/receipts/mark-overdue', asyncHandler(markOverdueHandler));
 
 // Expenses

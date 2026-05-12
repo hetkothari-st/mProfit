@@ -239,6 +239,18 @@ export const rentalApi = {
     );
     return unwrap(data);
   },
+  async unmarkReceived(receiptId: string): Promise<RentReceiptDTO> {
+    const { data } = await api.post<ApiResponse<RentReceiptDTO>>(
+      `/api/rental/receipts/${receiptId}/unmark-received`,
+    );
+    return unwrap(data);
+  },
+  async unskipReceipt(receiptId: string): Promise<RentReceiptDTO> {
+    const { data } = await api.post<ApiResponse<RentReceiptDTO>>(
+      `/api/rental/receipts/${receiptId}/unskip`,
+    );
+    return unwrap(data);
+  },
   async markOverdue(): Promise<{ flipped: number }> {
     const { data } = await api.post<ApiResponse<{ flipped: number }>>(
       '/api/rental/receipts/mark-overdue',
