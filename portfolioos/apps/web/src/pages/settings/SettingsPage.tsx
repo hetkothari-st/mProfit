@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
+import { NotificationsSection } from './NotificationsSection';
 
 const schema = z.object({
   name: z.string().min(2).max(100),
@@ -141,6 +142,10 @@ export function SettingsPage() {
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="mt-6">
+        <NotificationsSection />
       </div>
     </div>
   );

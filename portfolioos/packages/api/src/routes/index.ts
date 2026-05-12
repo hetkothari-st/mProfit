@@ -37,6 +37,7 @@ import { forexRouter } from './forex.routes.js';
 import { taxRouter } from './tax.routes.js';
 import { analyticsRouter } from './analytics.routes.js';
 import { userPreferencesRouter } from './userPreferences.routes.js';
+import { notificationsRouter } from './notifications.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -78,4 +79,5 @@ export function registerRoutes(app: Express): void {
   app.use('/api/tax', taxRouter);
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/user/preferences', userPreferencesRouter);
+  app.use('/api/notifications', notificationsRouter);
 }

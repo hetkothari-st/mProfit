@@ -13,9 +13,23 @@
  * operator can audit what went out without spilling PII into the log.
  */
 
-import nodemailer, { type Transporter } from 'nodemailer';
+import nodemailer from 'nodemailer';
 import { env } from '../../config/env.js';
 import { logger } from '../../lib/logger.js';
+
+/**
+ * SMTP config the caller passes in per-send. Per-user creds come from
+ * UserNotificationConfig (via getEmailConfigForUser), with the global
+ * env vars retained as a fallback for solo / dev installations.
+ */
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
+}
 
 export interface SendEmailInput {
   to: string;
@@ -23,47 +37,53 @@ export interface SendEmailInput {
   html: string;
   /** Plain-text fallback. Auto-derived from HTML if absent. */
   text?: string;
-  /** Override the configured SMTP_FROM. Optional. */
-  from?: string;
   /** Reply-To header (e.g. landlord's actual email). */
   replyTo?: string;
+  /**
+   * Per-user SMTP config. When omitted we fall back to env-var SMTP
+   * (legacy / single-tenant mode); when env is also empty the send
+   * returns { sent: false, reason: 'smtp_not_configured' }.
+   */
+  config?: SmtpConfig;
 }
 
 export type SendEmailResult =
   | { sent: true; messageId: string }
   | { sent: false; reason: string };
 
-let cachedTransporter: Transporter | null = null;
-
-function isConfigured(): boolean {
-  return !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
-}
-
-function buildTransporter(): Transporter {
-  if (cachedTransporter) return cachedTransporter;
-  cachedTransporter = nodemailer.createTransport({
+function envFallbackConfig(): SmtpConfig | null {
+  if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) return null;
+  return {
     host: env.SMTP_HOST,
     port: env.SMTP_PORT ?? (env.SMTP_SECURE === 'true' ? 465 : 587),
     secure: env.SMTP_SECURE === 'true',
-    auth: {
-      user: env.SMTP_USER!,
-      pass: env.SMTP_PASS!,
-    },
-  });
-  return cachedTransporter;
+    user: env.SMTP_USER,
+    pass: env.SMTP_PASS,
+    from: env.SMTP_FROM,
+  };
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
-  if (!isConfigured()) {
+  const cfg = input.config ?? envFallbackConfig();
+  if (!cfg) {
     logger.warn(
       { to: input.to, subject: input.subject },
-      '[email] SMTP not configured — skipping send (dry-run)',
+      '[email] no SMTP config — skipping send (dry-run)',
     );
     return { sent: false, reason: 'smtp_not_configured' };
   }
   try {
-    const info = await buildTransporter().sendMail({
-      from: input.from ?? env.SMTP_FROM,
+    // Build a fresh transporter per send so per-user config doesn't
+    // leak across users. nodemailer's connection pool isn't worth the
+    // shared-state risk for a low-volume rent reminder pipeline.
+    const transporter = nodemailer.createTransport({
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      auth: { user: cfg.user, pass: cfg.pass },
+    });
+    const info = await transporter.sendMail({
+      from: cfg.from,
       to: input.to,
       subject: input.subject,
       html: input.html,

@@ -36,6 +36,8 @@ const propertyBody = {
   purchasePrice: moneyString.nullable().optional(),
   currentValue: moneyString.nullable().optional(),
   isActive: z.boolean().optional(),
+  landlordName: z.string().max(200).nullable().optional(),
+  paymentInstructions: z.string().max(2000).nullable().optional(),
 };
 
 const createPropertySchema = z.object(propertyBody);
@@ -48,6 +50,8 @@ const updatePropertySchema = z.object({
   purchasePrice: moneyString.nullable().optional(),
   currentValue: moneyString.nullable().optional(),
   isActive: z.boolean().optional(),
+  landlordName: z.string().max(200).nullable().optional(),
+  paymentInstructions: z.string().max(2000).nullable().optional(),
 });
 
 const createTenancySchema = z.object({

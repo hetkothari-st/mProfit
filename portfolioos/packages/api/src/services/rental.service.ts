@@ -63,6 +63,8 @@ export interface CreatePropertyInput {
   purchasePrice?: string | null;
   currentValue?: string | null;
   isActive?: boolean;
+  landlordName?: string | null;
+  paymentInstructions?: string | null;
 }
 
 export type UpdatePropertyInput = Partial<CreatePropertyInput>;
@@ -248,6 +250,8 @@ export async function createProperty(
       purchasePrice: parseDecimalOptional(input.purchasePrice, 'purchasePrice') ?? null,
       currentValue: parseDecimalOptional(input.currentValue, 'currentValue') ?? null,
       isActive: input.isActive ?? true,
+      landlordName: input.landlordName?.trim() || null,
+      paymentInstructions: input.paymentInstructions?.trim() || null,
     },
   });
 }
@@ -284,6 +288,8 @@ export async function updateProperty(
   if (patch.currentValue !== undefined)
     data.currentValue = parseDecimalOptional(patch.currentValue, 'currentValue');
   if (patch.isActive !== undefined) data.isActive = patch.isActive;
+  if (patch.landlordName !== undefined) data.landlordName = patch.landlordName?.trim() || null;
+  if (patch.paymentInstructions !== undefined) data.paymentInstructions = patch.paymentInstructions?.trim() || null;
 
   return prisma.rentalProperty.update({ where: { id }, data });
 }

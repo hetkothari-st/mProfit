@@ -25,6 +25,10 @@ import { logger } from '../lib/logger.js';
 import { env } from '../config/env.js';
 import { sendEmail } from './notifications/email.service.js';
 import { sendSms } from './notifications/sms.service.js';
+import {
+  getEmailConfigForUser,
+  getUserPaymentInstructions,
+} from './notifications/config.service.js';
 import { markOverdueReceipts } from './rental.service.js';
 
 export const REMINDER_LEAD_DAYS = [5, 3, 1, 0] as const;
@@ -160,13 +164,35 @@ async function enqueueOne(
   leadDays: number,
   daysOverdue: number,
 ): Promise<boolean> {
+  // Resolve landlord name + payment instructions in priority order so a
+  // multi-property user can override per flat without losing the
+  // account-level defaults: per-property → per-user config → env.
+  // `RentalProperty.landlordName`/`paymentInstructions` are nullable so
+  // a blank string falls through to the next tier.
+  const propertyWithExtras = ctx.property as typeof ctx.property & {
+    landlordName?: string | null;
+    paymentInstructions?: string | null;
+  };
+  const userPaymentInstructions = await getUserPaymentInstructions(ctx.property.userId);
+  const userRow = await prisma.user.findUnique({
+    where: { id: ctx.property.userId },
+    select: { name: true },
+  });
+  const landlord =
+    propertyWithExtras.landlordName?.trim()
+    || userRow?.name?.trim()
+    || env.LANDLORD_BRAND_NAME;
+  const paymentInstructions =
+    propertyWithExtras.paymentInstructions?.trim()
+    || userPaymentInstructions?.trim()
+    || env.RENT_PAYMENT_INSTRUCTIONS;
   const vars: TemplateVars = {
     tenantName: ctx.tenancy.tenantName,
     amount: formatINRPlain(new Prisma.Decimal(ctx.receipt.expectedAmount.toString())),
     dueDate: formatIsoDate(ctx.receipt.dueDate),
     property: ctx.property.name,
-    landlord: env.LANDLORD_BRAND_NAME,
-    paymentInstructions: env.RENT_PAYMENT_INSTRUCTIONS,
+    landlord,
+    paymentInstructions,
     leadDays,
     daysOverdue,
   };
@@ -497,10 +523,17 @@ export async function approveAndSendReminder(
       emailStatus = 'failed';
       emailError = 'tenant_email_missing';
     } else {
+      // Per-user SMTP config (encrypted at rest, decrypted in-memory
+      // for this one send). When the user hasn't set one up the email
+      // service falls through to env vars; failing both surfaces
+      // smtp_not_configured.
+      const propertyOwnerId = existing.tenancy.property.userId;
+      const config = await getEmailConfigForUser(propertyOwnerId);
       const res = await sendEmail({
         to: tenantEmail,
         subject: existing.subject,
         html: existing.body,
+        config: config ?? undefined,
       });
       if (res.sent) {
         emailStatus = 'sent';

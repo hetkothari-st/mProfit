@@ -111,6 +111,35 @@ model User {
 
   // UI preferences — sidebar asset class order + visibility per user.
   preferences Json?
+
+  // Per-user transactional notification settings (currently SMTP only —
+  // SMS provider config can land here too when DLT is sorted).
+  notificationConfig UserNotificationConfig?
+}
+
+model UserNotificationConfig {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // SMTP host + port + secure flag. We accept anything the user's
+  // mail provider asks for (Gmail, Brevo, SendGrid, Resend, Mailgun,
+  // self-hosted Postfix, …) — there's no provider list to choose from.
+  smtpHost        String
+  smtpPort        Int
+  smtpSecure      Boolean  @default(false)
+  smtpUser        String
+  // Stored AES-256-GCM encrypted via lib/secrets.ts — never returned
+  // to the client; the settings endpoint masks it as "***" on read.
+  smtpPassEnc     String
+  // What the recipient sees as the "From" header. Most providers
+  // require the email here to match the authenticated mailbox.
+  fromName        String
+  fromEmail       String
+  // Optional default rent payment instructions for this user. The
+  // per-property override on RentalProperty takes precedence when set.
+  paymentInstructions String? @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -1565,6 +1594,13 @@ model RentalProperty {
   purchasePrice Decimal?  @db.Decimal(14, 2)
   currentValue  Decimal?  @db.Decimal(14, 2)
   isActive      Boolean   @default(true)
+  // Per-property landlord display name (signed on rent reminders). Falls
+  // back to the user's profile name if blank.
+  landlordName  String?
+  // Per-property payment instructions (UPI handle, NEFT details, etc.)
+  // shown in rent reminder emails. Falls back to
+  // UserNotificationConfig.paymentInstructions if blank.
+  paymentInstructions String? @db.Text
   createdAt     DateTime  @default(now())
 
   tenancies       Tenancy[]

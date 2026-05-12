@@ -66,6 +66,8 @@ export interface RentalPropertyDTO {
   purchasePrice: string | null;
   currentValue: string | null;
   isActive: boolean;
+  landlordName: string | null;
+  paymentInstructions: string | null;
   createdAt: string;
   tenancies?: TenancyDTO[];
   expenses?: PropertyExpenseDTO[];
@@ -94,6 +96,8 @@ export interface CreatePropertyInput {
   purchasePrice?: string | null;
   currentValue?: string | null;
   isActive?: boolean;
+  landlordName?: string | null;
+  paymentInstructions?: string | null;
 }
 
 export type UpdatePropertyInput = Partial<CreatePropertyInput>;
