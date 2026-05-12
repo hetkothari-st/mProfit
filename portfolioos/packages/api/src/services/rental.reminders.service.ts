@@ -115,11 +115,11 @@ function buildTemplate(vars: TemplateVars): { subject: string; body: string; sms
             <tr><td style="font-size:13px;color:#6b6450;padding:4px 8px;">Property</td>
                 <td style="font-size:14px;text-align:right;padding:4px 8px;">${vars.property}</td></tr>
           </table>
-          ${
+          <!--pay-instructions-->${
             vars.paymentInstructions
               ? `<p style="margin:0 0 12px;font-size:13px;line-height:1.55;color:#3d3a2e;"><strong>Payment instructions:</strong><br>${vars.paymentInstructions.replace(/\n/g, '<br>')}</p>`
               : ''
-          }
+          }<!--/pay-instructions-->
           <p style="margin:24px 0 0;font-size:13px;line-height:1.55;color:#6b6450;">
             If you've already paid, please ignore this message. Reply to this email if you have any questions.
           </p>

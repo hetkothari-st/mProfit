@@ -15,7 +15,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { rentalApi, type RentReminderDTO } from '@/api/rental.api';
-import { notificationsApi } from '@/api/notifications.api';
 
 // Map raw provider/server error codes to landlord-friendly text. Anything
 // not matched falls through unchanged so genuine carrier errors still
@@ -76,13 +75,55 @@ interface PreviewProps {
   onOpenChange: (v: boolean) => void;
 }
 
+// Marker we wrap payment instructions in so the preview dialog can
+// patch them without disturbing the surrounding template. Matches the
+// span the cron template wraps the value with (see rental.reminders
+// .service template — we render through this span when building body).
+const PAY_INSTR_OPEN = '<!--pay-instructions-->';
+const PAY_INSTR_CLOSE = '<!--/pay-instructions-->';
+
+function extractPaymentInstructions(html: string): string {
+  const start = html.indexOf(PAY_INSTR_OPEN);
+  const end = html.indexOf(PAY_INSTR_CLOSE);
+  if (start < 0 || end < 0 || end <= start) return '';
+  const inner = html.slice(start + PAY_INSTR_OPEN.length, end);
+  // Strip the wrapping <p ...>…</p> and the strong-prefix the template adds,
+  // then convert <br> back to newlines so the textarea is readable.
+  return inner
+    .replace(/^.*?<strong>Payment instructions:<\/strong>\s*(<br\s*\/?>)?/i, '')
+    .replace(/<\/p>\s*$/i, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .trim();
+}
+
+function spliceInstructionsIntoBody(html: string, instructions: string): string {
+  const start = html.indexOf(PAY_INSTR_OPEN);
+  const end = html.indexOf(PAY_INSTR_CLOSE);
+  const trimmed = instructions.trim();
+  const replacement = trimmed
+    ? `${PAY_INSTR_OPEN}<p style="margin:0 0 12px;font-size:13px;line-height:1.55;color:#3d3a2e;"><strong>Payment instructions:</strong><br>${trimmed.replace(/\n/g, '<br>')}</p>${PAY_INSTR_CLOSE}`
+    : `${PAY_INSTR_OPEN}${PAY_INSTR_CLOSE}`;
+  if (start < 0 || end < 0) return html; // template lacks marker — leave as-is
+  return html.slice(0, start) + replacement + html.slice(end + PAY_INSTR_CLOSE.length);
+}
+
 function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
   const qc = useQueryClient();
   const [subject, setSubject] = useState(reminder.subject);
   const [smsBody, setSmsBody] = useState(reminder.smsBody);
+  const [instructions, setInstructions] = useState(
+    extractPaymentInstructions(reminder.body),
+  );
+
+  const bodyWithInstructions = spliceInstructionsIntoBody(reminder.body, instructions);
 
   const updateMut = useMutation({
-    mutationFn: () => rentalApi.updateReminder(reminder.id, { subject, smsBody }),
+    mutationFn: () =>
+      rentalApi.updateReminder(reminder.id, {
+        subject,
+        smsBody,
+        body: bodyWithInstructions,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rental-reminders'] });
       toast.success('Reminder updated');
@@ -113,10 +154,25 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
               onChange={(e) => setSubject(e.target.value)}
               className="font-medium"
             />
-            <div className="mt-2 rounded-md border border-border bg-background/50 p-3 max-h-72 overflow-y-auto">
+          </div>
+          <div>
+            <Label>Payment instructions</Label>
+            <textarea
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              placeholder="UPI: yourname@upi · NEFT: HDFC A/c XXXXX1234, IFSC HDFC0001234"
+              className="w-full min-h-[72px] rounded-md border border-border bg-background px-3 py-2 text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Replaces the corresponding section in the email body — preview updates live.
+            </p>
+          </div>
+          <div>
+            <Label>Email preview</Label>
+            <div className="mt-1 rounded-md border border-border bg-background/50 p-3 max-h-72 overflow-y-auto">
               <iframe
                 title="Email preview"
-                srcDoc={reminder.body}
+                srcDoc={bodyWithInstructions}
                 className="w-full h-64 border-0 bg-white"
               />
             </div>
@@ -613,86 +669,6 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
   );
 }
 
-// ── Payment instructions editor ────────────────────────────────────
-
-function PaymentInstructionsEditor() {
-  const qc = useQueryClient();
-  const [draft, setDraft] = useState<string>('');
-  const [loaded, setLoaded] = useState<boolean>(false);
-  const [justSaved, setJustSaved] = useState<boolean>(false);
-
-  const configQuery = useQuery({
-    queryKey: ['notifications', 'config'],
-    queryFn: () => notificationsApi.getConfig(),
-  });
-
-  // Sync server value into the textarea once it loads. We track `loaded`
-  // so we don't clobber the user's in-progress edits on every refetch.
-  if (!loaded && configQuery.data) {
-    setDraft(configQuery.data.paymentInstructions ?? '');
-    setLoaded(true);
-  }
-
-  const saveMut = useMutation({
-    mutationFn: () =>
-      notificationsApi.upsertConfig({
-        paymentInstructions: draft.trim() || null,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications', 'config'] });
-      toast.success('Payment instructions saved');
-      setJustSaved(true);
-      setTimeout(() => setJustSaved(false), 2500);
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Save failed'),
-  });
-
-  const hasPassword = !!configQuery.data?.hasPassword;
-  const dirty = draft !== (configQuery.data?.paymentInstructions ?? '');
-
-  return (
-    <div className="rounded-md border border-border bg-foreground/[0.015] px-4 py-3">
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <Label className="text-xs uppercase tracking-kerned text-muted-foreground">
-          Default payment instructions
-        </Label>
-        {!hasPassword && (
-          <span className="text-[10px] text-amber-700 font-medium">
-            ⚠ Set up email in Settings before sending
-          </span>
-        )}
-      </div>
-      <textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder="UPI: yourname@upi · NEFT: HDFC A/c XXXXX1234, IFSC HDFC0001234"
-        className="w-full min-h-[60px] rounded-md border border-border bg-background px-3 py-2 text-sm"
-      />
-      <p className="text-[11px] text-muted-foreground mt-1">
-        Shown in every tenant reminder email. Edits here apply to all properties.
-      </p>
-      <div className="mt-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => saveMut.mutate()}
-          disabled={(!dirty && !justSaved) || saveMut.isPending}
-          className={justSaved ? 'border-emerald-500 text-emerald-700 bg-emerald-50/60' : undefined}
-        >
-          {saveMut.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : justSaved ? (
-            <Check className="h-3.5 w-3.5 text-emerald-600" />
-          ) : (
-            <Save className="h-3.5 w-3.5" />
-          )}
-          {justSaved ? 'Saved' : 'Save instructions'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ── Panel ──────────────────────────────────────────────────────────
 
 export function RentalRemindersPanel() {
@@ -764,9 +740,6 @@ export function RentalRemindersPanel() {
         </Button>
       </CardHeader>
       <CardContent>
-        <div className="mb-4">
-          <PaymentInstructionsEditor />
-        </div>
         {groups.length === 0 ? (
           <div className="text-sm text-muted-foreground py-3 text-center border border-dashed rounded-md">
             No reminders awaiting approval. The scan runs daily at 09:00 IST,
