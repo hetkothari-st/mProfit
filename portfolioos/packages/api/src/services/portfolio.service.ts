@@ -384,10 +384,62 @@ export async function getHistoricalValuation(
     return best;
   }
 
-  const BUY_TYPES = new Set(['BUY','SIP','SWITCH_IN','BONUS','OPENING_BALANCE','DIVIDEND_REINVEST','MERGER_IN','DEMERGER_IN','RIGHTS_ISSUE']);
+  // Must mirror BUY_TYPES / SELL_TYPES in holdingsProjection.ts so historical
+  // replay produces the same per-asset state as the live projection. Notably
+  // DEPOSIT (FDs, EPF, insurance, salary slips) is a buy; MATURITY/REDEMPTION/
+  // WITHDRAWAL close out positions. Anything else (DIVIDEND_PAYOUT,
+  // INTEREST_RECEIVED, SPLIT) is handled below or ignored for valuation.
+  const BUY_TYPES = new Set([
+    'BUY','SIP','SWITCH_IN','BONUS','OPENING_BALANCE','DIVIDEND_REINVEST',
+    'MERGER_IN','DEMERGER_IN','RIGHTS_ISSUE','DEPOSIT',
+  ]);
+  const SELL_TYPES = new Set([
+    'SELL','SWITCH_OUT','MERGER_OUT','DEMERGER_OUT','REDEMPTION','MATURITY','WITHDRAWAL',
+  ]);
+
+  type HoldingState = { qty: Decimal; cost: Decimal; stockId: string | null };
+
+  function applyTx(state: Map<string, HoldingState>, tx: typeof allTransactions[number]): void {
+    const d = tx.tradeDate.toISOString().slice(0, 10);
+    const key = tx.assetKey ?? `_${tx.stockId ?? d}`;
+    const qty = toDecimal(tx.quantity);
+    const net = toDecimal(tx.netAmount);
+    const h = state.get(key) ?? { qty: new Decimal(0), cost: new Decimal(0), stockId: tx.stockId };
+
+    if (BUY_TYPES.has(tx.transactionType)) {
+      if (tx.transactionType === 'BONUS') {
+        h.qty = h.qty.plus(qty);
+      } else {
+        h.qty = h.qty.plus(qty);
+        h.cost = h.cost.plus(net);
+        invested = invested.plus(net);
+      }
+    } else if (SELL_TYPES.has(tx.transactionType)) {
+      if (h.qty.isZero()) {
+        // Position already closed; matched cost basis already removed. Ignore.
+        state.set(key, h);
+        return;
+      }
+      const sellQty = Decimal.min(qty, h.qty);
+      const avgCost = h.cost.dividedBy(h.qty);
+      const costSold = avgCost.times(sellQty);
+      h.qty = h.qty.minus(sellQty);
+      h.cost = h.cost.minus(costSold);
+      if (h.qty.isZero() || h.qty.isNegative()) {
+        h.qty = new Decimal(0);
+        h.cost = new Decimal(0);
+      }
+    } else if (tx.transactionType === 'SPLIT') {
+      // SPLIT rows carry post-split delta-quantity; cost unchanged.
+      h.qty = h.qty.plus(qty);
+    }
+    // DIVIDEND_PAYOUT / INTEREST_RECEIVED don't affect qty/cost.
+
+    state.set(key, h);
+  }
 
   // Apply all transactions up to windowStart to get the starting state
-  const state = new Map<string, { qty: Decimal; cost: Decimal; stockId: string | null }>();
+  const state = new Map<string, HoldingState>();
   let invested = new Decimal(0);
   const byDate = new Map<string, typeof allTransactions>();
   for (const tx of allTransactions) {
@@ -401,28 +453,19 @@ export async function getHistoricalValuation(
   // applying them here too would double-count (invested 2×, state inflated).
   for (const [d, txns] of [...byDate.entries()].sort()) {
     if (d >= rangeStart) break;
-    for (const tx of txns) {
-      const key = tx.assetKey ?? `_${tx.stockId ?? d}`;
-      const qty = toDecimal(tx.quantity);
-      const net = toDecimal(tx.netAmount);
-      const h = state.get(key) ?? { qty: new Decimal(0), cost: new Decimal(0), stockId: tx.stockId };
-      if (BUY_TYPES.has(tx.transactionType)) {
-        h.qty = h.qty.plus(qty); h.cost = h.cost.plus(net); invested = invested.plus(net);
-      } else {
-        const prev = h.qty;
-        h.qty = Decimal.max(new Decimal(0), h.qty.minus(qty));
-        if (prev.greaterThan(0)) h.cost = h.cost.times(h.qty.dividedBy(prev));
-      }
-      state.set(key, h);
-    }
+    for (const tx of txns) applyTx(state, tx);
   }
 
   // Generate daily samples from rangeStart to today
   function portfolioValueOn(dateStr: string): Decimal {
     let v = new Decimal(0);
     for (const h of state.values()) {
-      if (h.qty.lte(0)) continue;
-      const price = h.stockId ? priceOnOrBefore(h.stockId, dateStr) : null;
+      // Skip truly closed positions (both qty and cost zero). For non-tradable
+      // assets (FDs, insurance, real estate) qty may be 0 with cost > 0, or
+      // qty equals principal — either way `cost` carries the invested value
+      // and `priceOnOrBefore` will return null since stockId is null.
+      if (h.qty.lte(0) && h.cost.lte(0)) continue;
+      const price = h.stockId && h.qty.gt(0) ? priceOnOrBefore(h.stockId, dateStr) : null;
       v = v.plus(price ? h.qty.times(price) : h.cost);
     }
     return v;
@@ -436,20 +479,7 @@ export async function getHistoricalValuation(
     const d = cursor.toISOString().slice(0, 10);
 
     // Apply any transactions on this date
-    for (const tx of byDate.get(d) ?? []) {
-      const key = tx.assetKey ?? `_${tx.stockId ?? d}`;
-      const qty = toDecimal(tx.quantity);
-      const net = toDecimal(tx.netAmount);
-      const h = state.get(key) ?? { qty: new Decimal(0), cost: new Decimal(0), stockId: tx.stockId };
-      if (BUY_TYPES.has(tx.transactionType)) {
-        h.qty = h.qty.plus(qty); h.cost = h.cost.plus(net); invested = invested.plus(net);
-      } else {
-        const prev = h.qty;
-        h.qty = Decimal.max(new Decimal(0), h.qty.minus(qty));
-        if (prev.greaterThan(0)) h.cost = h.cost.times(h.qty.dividedBy(prev));
-      }
-      state.set(key, h);
-    }
+    for (const tx of byDate.get(d) ?? []) applyTx(state, tx);
 
     const value = portfolioValueOn(d);
     // Only emit if we have a meaningful value (skip zero-value pre-investment days)

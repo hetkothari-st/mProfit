@@ -231,16 +231,26 @@ export async function historicalValuation(
       const n = new Decimal(t.netAmount.toString());
       const curQ = qty.get(k) ?? new Decimal(0);
       const curC = cost.get(k) ?? new Decimal(0);
-      if (['BUY', 'SIP', 'SWITCH_IN', 'BONUS', 'MERGER_IN', 'DEMERGER_IN', 'RIGHTS_ISSUE', 'DIVIDEND_REINVEST', 'OPENING_BALANCE'].includes(t.transactionType)) {
+      // Must mirror BUY_TYPES / SELL_TYPES in holdingsProjection.ts. DEPOSIT
+      // covers FDs / EPF / insurance / salary imports — without it those
+      // holdings never enter `qty`/`cost` and the chart flatlines at zero
+      // even when the live projection shows them. BONUS adds qty only.
+      if (['BUY', 'SIP', 'SWITCH_IN', 'BONUS', 'MERGER_IN', 'DEMERGER_IN', 'RIGHTS_ISSUE', 'DIVIDEND_REINVEST', 'OPENING_BALANCE', 'DEPOSIT'].includes(t.transactionType)) {
         qty.set(k, curQ.plus(q));
-        cost.set(k, curC.plus(n));
-      } else if (['SELL', 'SWITCH_OUT', 'REDEMPTION', 'MATURITY', 'MERGER_OUT', 'DEMERGER_OUT'].includes(t.transactionType)) {
+        if (t.transactionType !== 'BONUS') {
+          cost.set(k, curC.plus(n));
+        }
+      } else if (['SELL', 'SWITCH_OUT', 'REDEMPTION', 'MATURITY', 'MERGER_OUT', 'DEMERGER_OUT', 'WITHDRAWAL'].includes(t.transactionType)) {
         if (curQ.greaterThan(0)) {
           const sellQ = Decimal.min(q, curQ);
           const avg = curC.dividedBy(curQ);
-          qty.set(k, curQ.minus(sellQ));
-          cost.set(k, curC.minus(avg.times(sellQ)));
+          const newQ = curQ.minus(sellQ);
+          const newC = curC.minus(avg.times(sellQ));
+          qty.set(k, newQ.isNegative() ? new Decimal(0) : newQ);
+          cost.set(k, newC.isNegative() ? new Decimal(0) : newC);
         }
+      } else if (t.transactionType === 'SPLIT') {
+        qty.set(k, curQ.plus(q));
       }
     }
 
@@ -248,13 +258,16 @@ export async function historicalValuation(
     let totalValue = new Decimal(0);
     let holdingCount = 0;
     for (const [k, q] of qty) {
-      if (q.lessThanOrEqualTo(0)) continue;
-      holdingCount++;
       const c = cost.get(k) ?? new Decimal(0);
+      // Skip truly closed positions only. Non-tradable holdings (FDs, real
+      // estate, insurance) may have qty equal to principal AND no live price
+      // feed — the cost basis IS the value at any historical snapshot.
+      if (q.lessThanOrEqualTo(0) && c.lessThanOrEqualTo(0)) continue;
+      holdingCount++;
       totalCost = totalCost.plus(c);
 
       const meta = keyMap.get(k)!;
-      const price = await priceAt(meta, snap);
+      const price = q.greaterThan(0) ? await priceAt(meta, snap) : null;
       if (price) {
         totalValue = totalValue.plus(q.times(price));
       } else {
