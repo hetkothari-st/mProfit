@@ -122,8 +122,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
     queryKey: ['commodities-live'],
     queryFn: () => assetsApi.commoditiesLive(),
     refetchInterval: 60_000,
-    refetchOnMount: 'always',
-    staleTime: 0,
+    staleTime: 60_000,
   });
 
   const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<FormValues>({

@@ -19,7 +19,9 @@ const PROXIES: Record<CommodityType, { yahooInr: string; yahooUsd: string }> = {
 };
 
 // In-memory cache for live price endpoint — prevents hammering external APIs on every frontend poll.
-// TTL: 60s. Primary: gold-api.com (no key) + exchangerate-api.com. Fallback: Yahoo ETF proxy.
+// TTL: 5 min (spot doesn't tick faster than that in practice). Stale-while-revalidate keeps
+// the endpoint instant even when upstreams are slow: stale cache is returned immediately and
+// a background refresh kicks off.
 interface LiveCache {
   GOLD: Decimal | null;
   SILVER: Decimal | null;
@@ -27,7 +29,8 @@ interface LiveCache {
   fetchedAt: Date;
 }
 let liveCache: LiveCache | null = null;
-const LIVE_CACHE_TTL_MS = 60_000;
+let inflightRefresh: Promise<LiveCache> | null = null;
+const LIVE_CACHE_TTL_MS = 5 * 60_000;
 const TROY_OZ_TO_GRAMS = 31.1035;
 
 // NSE gold ETF symbols — each unit trades at NAV ≈ (1/100 g) × gold price.
@@ -172,28 +175,50 @@ async function fetchYahooBundle(): Promise<{
   return { silverInrPerGram, goldInrPerGramFallback, etfNavs };
 }
 
-export async function fetchLivePrices(): Promise<{
-  GOLD: Decimal | null;
-  SILVER: Decimal | null;
-  etfNavs: Record<string, Decimal>;
-  fetchedAt: Date;
-}> {
-  const now = new Date();
-  if (liveCache && now.getTime() - liveCache.fetchedAt.getTime() < LIVE_CACHE_TTL_MS) {
+async function refreshLivePrices(): Promise<LiveCache> {
+  // Run both upstream paths in parallel; ETF NAVs only come from Yahoo and silver
+  // has a Yahoo fallback, so we always want both regardless of CoinGecko outcome.
+  const [primary, yahoo] = await Promise.all([
+    fetchGoldApiInr(),
+    fetchYahooBundle(),
+  ]);
+  const GOLD = primary.GOLD ?? yahoo.goldInrPerGramFallback;
+  const SILVER = primary.SILVER ?? yahoo.silverInrPerGram;
+  const fresh: LiveCache = { GOLD, SILVER, etfNavs: yahoo.etfNavs, fetchedAt: new Date() };
+  liveCache = fresh;
+  return fresh;
+}
+
+export async function fetchLivePrices(): Promise<LiveCache> {
+  const now = Date.now();
+  // Fresh cache → instant return.
+  if (liveCache && now - liveCache.fetchedAt.getTime() < LIVE_CACHE_TTL_MS) {
     return liveCache;
   }
-
-  // Primary: CoinGecko PAXG for gold per-gram INR (rock-solid, no key).
-  let { GOLD, SILVER } = await fetchGoldApiInr();
-
-  // Yahoo bundle: silver via SI=F + USD/INR, gold fallback via GC=F, ETF NAVs.
-  const yahoo = await fetchYahooBundle();
-  if (!GOLD) GOLD = yahoo.goldInrPerGramFallback;
-  if (!SILVER) SILVER = yahoo.silverInrPerGram;
-
-  liveCache = { GOLD, SILVER, etfNavs: yahoo.etfNavs, fetchedAt: now };
-  return liveCache;
+  // Stale-while-revalidate: hand back the stale snapshot, refresh in the background.
+  if (liveCache) {
+    if (!inflightRefresh) {
+      inflightRefresh = refreshLivePrices()
+        .catch((err) => {
+          logger.warn({ err }, '[commodity] background refresh failed');
+          return liveCache!;
+        })
+        .finally(() => { inflightRefresh = null; });
+    }
+    return liveCache;
+  }
+  // Cold start — must wait. Coalesce concurrent callers onto one fetch.
+  if (!inflightRefresh) {
+    inflightRefresh = refreshLivePrices().finally(() => { inflightRefresh = null; });
+  }
+  return inflightRefresh;
 }
+
+// Warm the cache at module load so the first request after server boot is instant.
+// Failures are non-fatal — the next call will retry.
+void refreshLivePrices().catch((err) => {
+  logger.warn({ err }, '[commodity] warm-up fetch failed');
+});
 
 export async function fetchCommoditySpotInr(
   commodity: CommodityType,

@@ -59,11 +59,11 @@ export function GoldLivePriceWidget() {
   const [silverPurity, setSilverPurity] = useState('999');
   const [silverGrams, setSilverGrams] = useState('');
 
-  const { data, isLoading, isFetching, error, dataUpdatedAt } = useQuery({
+  const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ['commodities-live'],
     queryFn: () => assetsApi.commoditiesLive(),
-    refetchInterval: 30_000,
-    staleTime: 0,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
     retry: 2,
   });
 

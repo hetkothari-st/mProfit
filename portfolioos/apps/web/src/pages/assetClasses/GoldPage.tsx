@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import { Coins, Loader2 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Decimal, type HoldingRow } from '@portfolioos/shared';
 import { SimpleAssetPage } from './SimpleAssetPage';
 import { GoldFormDialog } from './GoldFormDialog';
+import { GoldSilverTopBar } from './GoldSilverTopBar';
 import { assetsApi } from '@/api/assets.api';
 
 function detectCarat(assetName: string | null | undefined): number {
@@ -35,8 +36,9 @@ export function GoldPage() {
   const { data: live, isFetching } = useQuery({
     queryKey: ['commodities-live'],
     queryFn: () => assetsApi.commoditiesLive(),
-    refetchInterval: 30_000,
-    staleTime: 0,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
     retry: 2,
   });
 
@@ -86,16 +88,19 @@ export function GoldPage() {
   );
 
   return (
-    <SimpleAssetPage
-      title="Gold & Silver"
-      description="Track physical gold, sovereign gold bonds, gold ETFs, and silver"
-      icon={Coins}
-      assetClasses={['PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF', 'PHYSICAL_SILVER']}
-      defaultAssetClass="PHYSICAL_GOLD"
-      FormComponent={GoldFormDialog}
-      computeLiveValue={computeLiveValue}
-      liveIndicator={liveIndicator}
-      onHoldingClick={handleHoldingClick}
-    />
+    <>
+      <GoldSilverTopBar />
+      <SimpleAssetPage
+        title="Gold & Silver"
+        description="Track physical gold, sovereign gold bonds, gold ETFs, and silver"
+        icon={Coins}
+        assetClasses={['PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF', 'PHYSICAL_SILVER']}
+        defaultAssetClass="PHYSICAL_GOLD"
+        FormComponent={GoldFormDialog}
+        computeLiveValue={computeLiveValue}
+        liveIndicator={liveIndicator}
+        onHoldingClick={handleHoldingClick}
+      />
+    </>
   );
 }

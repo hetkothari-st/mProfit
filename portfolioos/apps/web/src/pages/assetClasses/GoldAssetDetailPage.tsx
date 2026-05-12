@@ -239,8 +239,8 @@ export function GoldAssetDetailPage() {
   const { data: live } = useQuery({
     queryKey: ['commodities-live'],
     queryFn: () => assetsApi.commoditiesLive(),
-    refetchInterval: 30_000,
-    staleTime: 0,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   });
 
   const { data: txnData, isLoading: txnLoading } = useQuery({
