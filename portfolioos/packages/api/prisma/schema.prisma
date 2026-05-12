@@ -107,6 +107,9 @@ model User {
 
   // Phase 5-Analytics — persisted AI portfolio insights (cards + narrative).
   portfolioInsights PortfolioInsight[]
+
+  // UI preferences — sidebar asset class order + visibility per user.
+  preferences Json?
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
