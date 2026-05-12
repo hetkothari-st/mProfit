@@ -35,6 +35,7 @@ import {
 
 type Tab =
   | 'summary'
+  | 'statements'
   | 'intraday'
   | 'stcg'
   | 'ltcg'
@@ -47,6 +48,7 @@ type Tab =
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'summary', label: 'Summary' },
+  { key: 'statements', label: 'Statements' },
   { key: 'unrealised', label: 'Unrealised P&L' },
   { key: 'intraday', label: 'Intraday' },
   { key: 'stcg', label: 'STCG' },
@@ -121,7 +123,7 @@ function initialTabFromUrl(): Tab {
   if (typeof window === 'undefined') return 'summary';
   const v = new URLSearchParams(window.location.search).get('tab');
   const valid: Tab[] = [
-    'summary', 'intraday', 'stcg', 'ltcg', 'schedule-112a',
+    'summary', 'statements', 'intraday', 'stcg', 'ltcg', 'schedule-112a',
     'income', 'unrealised', 'xirr', 'historical', 'inbox-imports',
   ];
   return (valid as string[]).includes(v ?? '') ? (v as Tab) : 'summary';
@@ -295,6 +297,9 @@ export function ReportsPage() {
       ) : (
         <>
           {tab === 'summary' && <SummaryView data={summaryQ.data} loading={summaryQ.isLoading} />}
+          {tab === 'statements' && (
+            <StatementsView portfolioId={portfolioId} fy={fy} accessToken={accessToken} />
+          )}
           {tab === 'unrealised' && (
             <UnrealisedView data={unrealisedQ.data} loading={unrealisedQ.isLoading} />
           )}
@@ -839,5 +844,140 @@ function HistoricalView({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Statement reports tab ──────────────────────────────────────────────
+//
+// Four downloads — Holdings, Capital Gains, Income, Ledger — rendered
+// through the shared streamPdf/streamExcel pipeline. PDF + Excel each, with
+// the active portfolio + FY pulled from the page's existing filter card so
+// the user doesn't have to re-pick.
+
+interface StatementsViewProps {
+  portfolioId: string;
+  fy: string;
+  accessToken: string | null;
+}
+
+function StatementsView({ portfolioId, fy, accessToken }: StatementsViewProps) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function fetchAndSave(url: string, suggestedFilename: string, key: string) {
+    if (!accessToken) {
+      alert('Not signed in');
+      return;
+    }
+    setBusy(key);
+    try {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!r.ok) throw new Error(await r.text());
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = suggestedFilename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      alert((e as Error).message ?? 'Download failed');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const cards: Array<{
+    key: string;
+    title: string;
+    description: string;
+    buildUrl: (format: 'pdf' | 'xlsx') => string;
+    fyDependent: boolean;
+  }> = [
+    {
+      key: 'holdings',
+      title: 'Holdings Statement',
+      description: 'Per-asset positions grouped by class with avg cost, market value, unrealised P&L and allocation %.',
+      buildUrl: (format) => reportsApi.statementHoldingsUrl(format, [portfolioId]),
+      fyDependent: false,
+    },
+    {
+      key: 'capital-gains',
+      title: 'Capital Gains Statement',
+      description: 'FIFO-matched Intraday, STCG and LTCG sections with FY totals — ready for tax filing.',
+      buildUrl: (format) => reportsApi.statementCapitalGainsUrl(format, [portfolioId], 'all', fy),
+      fyDependent: true,
+    },
+    {
+      key: 'income',
+      title: 'Income Statement',
+      description: 'Dividends, interest and maturity credits split by category with FY totals.',
+      buildUrl: (format) => reportsApi.statementIncomeUrl(format, [portfolioId], fy),
+      fyDependent: true,
+    },
+    {
+      key: 'ledger',
+      title: 'Transaction Ledger',
+      description: 'Chronological book-style ledger of every trade and cash movement with running balance.',
+      buildUrl: (format) => reportsApi.statementLedgerUrl(format, [portfolioId]),
+      fyDependent: false,
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {cards.map((c) => (
+        <Card key={c.key}>
+          <CardContent className="px-5 py-4">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="grid h-9 w-9 place-items-center rounded-md bg-accent/10 text-accent shrink-0">
+                <FileText className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-foreground">{c.title}</h3>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  {c.description}
+                </p>
+                {c.fyDependent && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    FY <span className="font-medium text-foreground">{fy}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy === c.key}
+                onClick={() =>
+                  fetchAndSave(c.buildUrl('pdf'), `portfolioos-${c.key}-${fy}.pdf`, c.key)
+                }
+              >
+                {busy === c.key ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FileDown className="h-3.5 w-3.5" />
+                )}
+                PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy === c.key}
+                onClick={() =>
+                  fetchAndSave(c.buildUrl('xlsx'), `portfolioos-${c.key}-${fy}.xlsx`, c.key)
+                }
+              >
+                {busy === c.key ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FileDown className="h-3.5 w-3.5" />
+                )}
+                Excel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }

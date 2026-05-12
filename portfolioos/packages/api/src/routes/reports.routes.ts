@@ -16,6 +16,10 @@ import {
   getHoldingsExport,
   getDashboardExport,
   getSectionExport,
+  getStatementHoldings,
+  getStatementCapitalGains,
+  getStatementIncome,
+  getStatementLedger,
 } from '../controllers/reports.controller.js';
 
 export const reportsRouter = Router();
@@ -35,3 +39,9 @@ reportsRouter.post('/rebuild-capital-gains', asyncHandler(rebuildCapitalGains));
 reportsRouter.get('/holdings-export', asyncHandler(getHoldingsExport));
 reportsRouter.get('/dashboard-export', asyncHandler(getDashboardExport));
 reportsRouter.get('/section-export', asyncHandler(getSectionExport));
+
+// Statement-style reports (sectioned, FY-grouped, industry-standard layouts).
+reportsRouter.get('/statement/holdings', asyncHandler(getStatementHoldings));
+reportsRouter.get('/statement/capital-gains', asyncHandler(getStatementCapitalGains));
+reportsRouter.get('/statement/income', asyncHandler(getStatementIncome));
+reportsRouter.get('/statement/ledger', asyncHandler(getStatementLedger));

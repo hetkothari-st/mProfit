@@ -22,6 +22,13 @@ import { persistCapitalGainsForPortfolio } from '../services/capitalGains.servic
 import { streamExcel, streamPdf, fmtNum, fmtDate, type ExportColumn, type ExportPayload } from '../services/export.service.js';
 import { buildHoldingsExport } from '../services/reportBuilder/holdingsReport.js';
 import { streamDashboardPdf, streamDashboardExcel, type DashboardScope } from '../services/reportBuilder/dashboardReport.js';
+import { buildHoldingsStatement } from '../services/reportBuilder/statement/holdings.js';
+import {
+  buildCapitalGainsStatement,
+  type CapitalGainsStatementParams,
+} from '../services/reportBuilder/statement/capitalGains.js';
+import { buildIncomeStatement } from '../services/reportBuilder/statement/income.js';
+import { buildLedgerStatement } from '../services/reportBuilder/statement/ledger.js';
 import type { AssetClass } from '@prisma/client';
 
 async function assertOwnedPortfolio(req: Request): Promise<string> {
@@ -521,4 +528,70 @@ async function emit(
   if (format === 'xlsx') return streamExcel(res, payload);
   if (format === 'pdf') return streamPdf(res, payload);
   ok(res, payload);
+}
+
+// ─── Statement-style reports (Indian portfolio reporting conventions) ───────
+//
+// Four reports — Holdings, Capital Gains, Income, Ledger — rendered through
+// the shared streamPdf/streamExcel pipeline so PortfolioOS branding stays
+// consistent. Each accepts comma-separated portfolioIds (empty = all owned
+// portfolios for the user); ownership is verified before any data load.
+
+async function resolveOwnedPortfolioIds(req: Request): Promise<string[]> {
+  const userId = req.user!.id;
+  const raw = (req.query.portfolioIds as string | undefined) ?? '';
+  const ids = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  if (ids.length === 0) return [];
+  const owned = await prisma.portfolio.findMany({
+    where: { id: { in: ids }, userId },
+    select: { id: true },
+  });
+  const ownedSet = new Set(owned.map((p) => p.id));
+  for (const id of ids) {
+    if (!ownedSet.has(id)) throw new ForbiddenError();
+  }
+  return ids;
+}
+
+export async function getStatementHoldings(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const portfolioIds = await resolveOwnedPortfolioIds(req);
+  const asOfStr = req.query.asOf as string | undefined;
+  const asOf = asOfStr ? new Date(asOfStr) : undefined;
+  const payload = await buildHoldingsStatement({ userId, portfolioIds, asOf });
+  await emit(req, res, payload);
+}
+
+export async function getStatementCapitalGains(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const portfolioIds = await resolveOwnedPortfolioIds(req);
+  const fy = getFy(req);
+  const rawKind = ((req.query.kind as string | undefined) ?? 'all').toLowerCase();
+  if (!['all', 'intraday', 'stcg', 'ltcg'].includes(rawKind)) {
+    throw new BadRequestError(`Invalid kind: ${rawKind}`);
+  }
+  const kind = rawKind as CapitalGainsStatementParams['kind'];
+  const payload = await buildCapitalGainsStatement({ userId, portfolioIds, fy, kind });
+  await emit(req, res, payload);
+}
+
+export async function getStatementIncome(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const portfolioIds = await resolveOwnedPortfolioIds(req);
+  const fy = getFy(req);
+  const payload = await buildIncomeStatement({ userId, portfolioIds, fy });
+  await emit(req, res, payload);
+}
+
+export async function getStatementLedger(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const portfolioIds = await resolveOwnedPortfolioIds(req);
+  const fromStr = req.query.from as string | undefined;
+  const toStr = req.query.to as string | undefined;
+  const from = fromStr ? new Date(fromStr) : undefined;
+  const to = toStr ? new Date(toStr) : undefined;
+  if (from && Number.isNaN(from.getTime())) throw new BadRequestError('Invalid `from` date');
+  if (to && Number.isNaN(to.getTime())) throw new BadRequestError('Invalid `to` date');
+  const payload = await buildLedgerStatement({ userId, portfolioIds, from, to });
+  await emit(req, res, payload);
 }

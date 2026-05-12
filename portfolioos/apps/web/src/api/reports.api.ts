@@ -217,4 +217,73 @@ export const reportsApi = {
       qs({ format, scope, portfolioId })
     );
   },
+
+  // Statement-style downloads (sectioned, FY-grouped, industry-standard layouts).
+  statementHoldingsUrl: (
+    format: 'pdf' | 'xlsx',
+    portfolioIds: string[],
+    asOf?: string,
+  ): string => {
+    const base = getApiBaseUrl();
+    return (
+      `${base}/api/reports/statement/holdings` +
+      qs({
+        format,
+        portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
+        asOf,
+      })
+    );
+  },
+
+  statementCapitalGainsUrl: (
+    format: 'pdf' | 'xlsx',
+    portfolioIds: string[],
+    kind: 'all' | 'intraday' | 'stcg' | 'ltcg' = 'all',
+    fy?: string,
+  ): string => {
+    const base = getApiBaseUrl();
+    return (
+      `${base}/api/reports/statement/capital-gains` +
+      qs({
+        format,
+        kind,
+        portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
+        fy,
+      })
+    );
+  },
+
+  statementIncomeUrl: (
+    format: 'pdf' | 'xlsx',
+    portfolioIds: string[],
+    fy?: string,
+  ): string => {
+    const base = getApiBaseUrl();
+    return (
+      `${base}/api/reports/statement/income` +
+      qs({
+        format,
+        portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
+        fy,
+      })
+    );
+  },
+
+  statementLedgerUrl: (
+    format: 'pdf' | 'xlsx',
+    portfolioIds: string[],
+    from?: string,
+    to?: string,
+  ): string => {
+    const base = getApiBaseUrl();
+    return (
+      `${base}/api/reports/statement/ledger` +
+      qs({
+        format,
+        portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
+        from,
+        to,
+      })
+    );
+  },
 };
