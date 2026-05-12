@@ -764,8 +764,14 @@ export function RentalRemindersPanel() {
     mutationFn: () => rentalApi.runReminderScan(),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['rental-reminders'] });
-      toast.success(r.queued > 0 ? `Queued ${r.queued} reminders` : 'No new reminders needed');
+      toast.success(
+        r.queued > 0
+          ? `Queued ${r.queued} reminders`
+          : 'No new reminders to queue — existing pending rows already cover every overdue/upcoming receipt',
+        { duration: 6000 },
+      );
     },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Scan failed', { duration: 8000 }),
   });
 
   const reminders = remindersQuery.data ?? [];

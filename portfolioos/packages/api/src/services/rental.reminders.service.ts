@@ -287,14 +287,24 @@ export async function enqueuePendingReminders(userId?: string): Promise<number> 
   // Step 0a. Promote legacy tenantContact strings to the structured
   // tenantEmail / tenantPhone fields where unambiguous, so reminders
   // can actually send instead of always reporting "missing contact".
-  await migrateLegacyContactsIfNeeded(userId);
+  // Treat this as best-effort: a single bad row (RLS, race, etc.)
+  // must not kill the entire scan.
+  try {
+    await migrateLegacyContactsIfNeeded(userId);
+  } catch (err) {
+    logger.warn({ err, userId }, '[rental.reminders] legacy contact migration skipped');
+  }
   // Step 0b. Flip any EXPECTED-but-past-due receipts to OVERDUE first.
   // Existing tenancies created before generate-time OVERDUE stamping
   // landed have rows that linger in EXPECTED past their dueDate; the
   // upcoming-window scan won't match them and the overdue scan won't
   // see them until cron flips the status. Run the same logic inline so
   // the manual "Run scan" button is enough to surface the backlog.
-  await markOverdueReceipts(userId);
+  try {
+    await markOverdueReceipts(userId);
+  } catch (err) {
+    logger.warn({ err, userId }, '[rental.reminders] markOverdueReceipts skipped');
+  }
 
   const today = startOfDayUtc(new Date());
   let queued = 0;
