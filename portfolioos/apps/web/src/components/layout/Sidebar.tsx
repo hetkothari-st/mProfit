@@ -8,7 +8,6 @@ import {
   Landmark,
   MailOpen,
   PiggyBank,
-  // ShieldCheck — unused while NPS nav item is disabled
   Boxes,
   Car,
   Building2,
@@ -20,7 +19,6 @@ import {
   Settings,
   Receipt,
   Plug,
-  // Mail,
   FileDown,
   Inbox,
   PanelLeftClose,
@@ -39,6 +37,7 @@ import {
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
 import { BudgetGauge } from './BudgetGauge';
+import { AssetClassSectionList } from './AssetClassSectionList';
 
 interface NavItem {
   label: string;
@@ -46,41 +45,35 @@ interface NavItem {
   icon: typeof LayoutDashboard;
 }
 
+export const ASSET_CLASS_ITEMS: NavItem[] = [
+  { label: 'Stocks', to: '/stocks', icon: TrendingUp },
+  { label: 'F & O', to: '/fo', icon: BarChart3 },
+  { label: 'Mutual Funds', to: '/mutual-funds', icon: LineChart },
+  { label: 'Bonds', to: '/bonds', icon: Landmark },
+  { label: 'FDs & RDs', to: '/fds', icon: PiggyBank },
+  { label: 'Gold & Silver', to: '/gold', icon: Coins },
+  { label: 'Crypto', to: '/crypto', icon: Bitcoin },
+  { label: 'Forex', to: '/forex', icon: Globe },
+  { label: 'PPF & EPF', to: '/provident-fund', icon: Wallet },
+  { label: 'Post Office', to: '/post-office', icon: MailOpen },
+  { label: 'Real Estate', to: '/real-estate', icon: Home },
+  { label: 'Rental', to: '/rental', icon: Building2 },
+  { label: 'Vehicles', to: '/vehicles', icon: Car },
+  { label: 'Insurance', to: '/insurance', icon: Shield },
+  { label: 'Loans', to: '/loans', icon: HandCoins },
+  { label: 'Credit Cards', to: '/credit-cards', icon: CreditCard },
+  { label: 'Others', to: '/others', icon: Boxes },
+];
+
+const OVERVIEW_ITEMS: NavItem[] = [
+  { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
+  { label: 'Analytics', to: '/analytics', icon: BarChart3 },
+  { label: 'Portfolios', to: '/portfolios', icon: Briefcase },
+  { label: 'Transactions', to: '/transactions', icon: Receipt },
+  { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },
+];
+
 const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
-  {
-    heading: 'Overview',
-    items: [
-      { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
-      { label: 'Analytics', to: '/analytics', icon: BarChart3 },
-      { label: 'Portfolios', to: '/portfolios', icon: Briefcase },
-      { label: 'Transactions', to: '/transactions', icon: Receipt },
-      { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },
-    ],
-  },
-  {
-    heading: 'Asset Classes',
-    items: [
-      { label: 'Stocks', to: '/stocks', icon: TrendingUp },
-      { label: 'F & O', to: '/fo', icon: BarChart3 },
-      { label: 'Mutual Funds', to: '/mutual-funds', icon: LineChart },
-      { label: 'Bonds', to: '/bonds', icon: Landmark },
-      { label: 'FDs & RDs', to: '/fds', icon: PiggyBank },
-      { label: 'Gold & Silver', to: '/gold', icon: Coins },
-      { label: 'Crypto', to: '/crypto', icon: Bitcoin },
-      { label: 'Forex', to: '/forex', icon: Globe },
-      { label: 'PPF & EPF', to: '/provident-fund', icon: Wallet },
-      // NPS — disabled until NSDL CRA adapter lands (§10.2)
-      // { label: 'NPS', to: '/nps', icon: ShieldCheck },
-      { label: 'Post Office', to: '/post-office', icon: MailOpen },
-      { label: 'Real Estate', to: '/real-estate', icon: Home },
-      { label: 'Rental', to: '/rental', icon: Building2 },
-      { label: 'Vehicles', to: '/vehicles', icon: Car },
-      { label: 'Insurance', to: '/insurance', icon: Shield },
-      { label: 'Loans', to: '/loans', icon: HandCoins },
-      { label: 'Credit Cards', to: '/credit-cards', icon: CreditCard },
-      { label: 'Others', to: '/others', icon: Boxes },
-    ],
-  },
   {
     heading: 'Inbox',
     items: [
@@ -104,6 +97,59 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
 ];
 
 const SIDEBAR_KEY = 'sidebar_collapsed';
+
+function NavSection({ section, collapsed }: { section: { heading?: string; items: NavItem[] }; collapsed: boolean }) {
+  return (
+    <div>
+      {!collapsed && section.heading && (
+        <div className="px-2 mb-2 flex items-center gap-2">
+          <span className="text-[10.5px] uppercase tracking-kerned text-sidebar-foreground/50 font-medium">
+            {section.heading}
+          </span>
+          <span className="flex-1 h-px bg-sidebar-border/60" />
+        </div>
+      )}
+      <ul className="space-y-0.5">
+        {section.items.map((item) => (
+          <li key={item.to}>
+            <NavLink
+              to={item.to}
+              className={({ isActive }) =>
+                cn(
+                  'group/nav nav-rail relative flex items-center gap-3 rounded-md px-3 py-2 text-[14px] transition-all',
+                  'text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/70',
+                  isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
+                  collapsed && 'justify-center px-2',
+                )
+              }
+              title={collapsed ? item.label : undefined}
+              end={item.to === '/dashboard'}
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && !collapsed && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-accent"
+                    />
+                  )}
+                  <item.icon
+                    className={cn(
+                      'h-[18px] w-[18px] shrink-0 transition-colors',
+                      isActive ? 'text-accent' : 'text-sidebar-foreground/60 group-hover/nav:text-sidebar-accent-foreground',
+                    )}
+                    strokeWidth={1.7}
+                  />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+                </>
+              )}
+            </NavLink>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState<boolean>(
@@ -177,56 +223,15 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
-        {NAV_SECTIONS.map((section, sectionIdx) => (
-          <div key={sectionIdx}>
-            {!collapsed && section.heading && (
-              <div className="px-2 mb-2 flex items-center gap-2">
-                <span className="text-[10.5px] uppercase tracking-kerned text-sidebar-foreground/50 font-medium">
-                  {section.heading}
-                </span>
-                <span className="flex-1 h-px bg-sidebar-border/60" />
-              </div>
-            )}
-            <ul className="space-y-0.5">
-              {section.items.map((item) => (
-                <li key={item.to}>
-                  <NavLink
-                    to={item.to}
-                    className={({ isActive }) =>
-                      cn(
-                        'group/nav nav-rail relative flex items-center gap-3 rounded-md px-3 py-2 text-[14px] transition-all',
-                        'text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/70',
-                        isActive &&
-                          'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
-                        collapsed && 'justify-center px-2',
-                      )
-                    }
-                    title={collapsed ? item.label : undefined}
-                    end={item.to === '/dashboard'}
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && !collapsed && (
-                          <span
-                            aria-hidden="true"
-                            className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-accent"
-                          />
-                        )}
-                        <item.icon
-                          className={cn(
-                            'h-[18px] w-[18px] shrink-0 transition-colors',
-                            isActive ? 'text-accent' : 'text-sidebar-foreground/60 group-hover/nav:text-sidebar-accent-foreground',
-                          )}
-                          strokeWidth={1.7}
-                        />
-                        {!collapsed && <span className="truncate">{item.label}</span>}
-                      </>
-                    )}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {/* Overview */}
+        <NavSection section={{ heading: 'Overview', items: OVERVIEW_ITEMS }} collapsed={collapsed} />
+
+        {/* Asset Classes — drag/hide enabled */}
+        <AssetClassSectionList items={ASSET_CLASS_ITEMS} collapsed={collapsed} />
+
+        {/* Inbox + Tools */}
+        {NAV_SECTIONS.map((section, i) => (
+          <NavSection key={i} section={section} collapsed={collapsed} />
         ))}
       </nav>
 

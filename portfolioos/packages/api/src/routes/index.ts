@@ -35,6 +35,7 @@ import { pfRouter } from './pf.routes.js';
 import { forexRouter } from './forex.routes.js';
 import { taxRouter } from './tax.routes.js';
 import { analyticsRouter } from './analytics.routes.js';
+import { userPreferencesRouter } from './userPreferences.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -74,4 +75,5 @@ export function registerRoutes(app: Express): void {
   app.use('/api/forex', forexRouter);
   app.use('/api/tax', taxRouter);
   app.use('/api/analytics', analyticsRouter);
+  app.use('/api/user/preferences', userPreferencesRouter);
 }
