@@ -137,6 +137,7 @@ interface ContactEditorProps {
 
 function ContactEditor({ tenancyId, email, phone, missing }: ContactEditorProps) {
   const qc = useQueryClient();
+  const [editing, setEditing] = useState<boolean>(missing);
   const [draftEmail, setDraftEmail] = useState(email ?? '');
   const [draftPhone, setDraftPhone] = useState(phone ?? '');
 
@@ -150,11 +151,43 @@ function ContactEditor({ tenancyId, email, phone, missing }: ContactEditorProps)
       qc.invalidateQueries({ queryKey: ['rental-reminders'] });
       qc.invalidateQueries({ queryKey: ['rental-property'] });
       toast.success('Tenant contact updated — channels enabled');
+      setEditing(false);
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Save failed'),
   });
 
   const dirty = draftEmail.trim() !== (email ?? '') || draftPhone.trim() !== (phone ?? '');
+  const hasContact = !!email || !!phone;
+
+  // Collapsed read-only view once a contact exists and the landlord isn't
+  // actively editing — keeps the row compact and stops the input fields
+  // from re-rendering after every successful save.
+  if (hasContact && !editing) {
+    return (
+      <div className="flex items-center gap-3 flex-wrap text-sm">
+        {email && (
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <Mail className="h-3.5 w-3.5" />
+            <span className="text-foreground">{email}</span>
+          </span>
+        )}
+        {phone && (
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <MessageSquare className="h-3.5 w-3.5" />
+            <span className="text-foreground">{phone}</span>
+          </span>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 ml-auto"
+          onClick={() => setEditing(true)}
+        >
+          <Pencil className="h-3.5 w-3.5" /> Edit contact
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex flex-wrap items-end gap-2 ${missing ? 'p-3 rounded-md bg-amber-50/40 border border-amber-200' : ''}`}>
@@ -187,6 +220,20 @@ function ContactEditor({ tenancyId, email, phone, missing }: ContactEditorProps)
         {saveMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
         Save contact
       </Button>
+      {hasContact && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setDraftEmail(email ?? '');
+            setDraftPhone(phone ?? '');
+            setEditing(false);
+          }}
+          disabled={saveMut.isPending}
+        >
+          Cancel
+        </Button>
+      )}
     </div>
   );
 }
