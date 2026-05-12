@@ -6,6 +6,11 @@ FROM base AS deps
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
+# pnpm-workspace.yaml declares `eslint-plugin-portfolioos` as a workspace
+# project, so its package.json must exist at install time even though the
+# web build never uses the lint rules — without it `pnpm install` fails
+# with ERR_PNPM_WORKSPACE_PKG_NOT_FOUND.
+COPY eslint-plugin-portfolioos/package.json eslint-plugin-portfolioos/
 RUN pnpm install --frozen-lockfile || pnpm install
 
 FROM base AS build
