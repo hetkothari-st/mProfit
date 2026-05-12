@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -12,25 +12,54 @@ import {
   Trash2,
   Loader2,
   Calculator,
+  User,
+  Users,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
+import { cn } from '@/lib/cn';
 import { vehiclesApi, type VehicleDTO } from '@/api/vehicles.api';
 import { VehicleFormDialog } from './VehicleFormDialog';
 import { SmsPasteDialog } from './SmsPasteDialog';
 import { FuelPricesCard } from './FuelPricesCard';
 
+type ViewMode = 'individual' | 'family';
+const VIEW_MODE_KEY = 'vehicles_view_mode';
+
 export function VehicleListPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [smsOpen, setSmsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    () => (localStorage.getItem(VIEW_MODE_KEY) as ViewMode) || 'individual',
+  );
+
+  function changeViewMode(mode: ViewMode) {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_MODE_KEY, mode);
+  }
 
   const { data: vehicles, isLoading } = useQuery({
     queryKey: ['vehicles'],
     queryFn: () => vehiclesApi.list(),
   });
+
+  // Group vehicles by ownerName for "family" view.
+  const groups = useMemo(() => {
+    const list = vehicles ?? [];
+    const map = new Map<string, VehicleDTO[]>();
+    for (const v of list) {
+      const key = (v.ownerName ?? '').trim() || 'Unassigned';
+      const arr = map.get(key) ?? [];
+      arr.push(v);
+      map.set(key, arr);
+    }
+    return Array.from(map.entries())
+      .map(([owner, items]) => ({ owner, items }))
+      .sort((a, b) => b.items.length - a.items.length);
+  }, [vehicles]);
 
   return (
     <div>
@@ -38,7 +67,42 @@ export function VehicleListPage() {
         title="Vehicles"
         description="Registration, insurance, PUC, fitness — all expiries in one place"
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {/* View mode toggle — individual vs family (grouped by owner) */}
+            <div
+              role="tablist"
+              aria-label="View mode"
+              className="flex items-center rounded-md border border-border/70 bg-background/40 p-0.5"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={viewMode === 'individual'}
+                onClick={() => changeViewMode('individual')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
+                  viewMode === 'individual'
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <User className="h-3 w-3" /> Individual
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={viewMode === 'family'}
+                onClick={() => changeViewMode('family')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
+                  viewMode === 'family'
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Users className="h-3 w-3" /> Family
+              </button>
+            </div>
             <DownloadReportButton type="vehicles" />
             <Button asChild variant="outline">
               <Link to="/vehicles/value">
@@ -82,10 +146,36 @@ export function VehicleListPage() {
         />
       )}
 
-      {!isLoading && (vehicles ?? []).length > 0 && (
+      {!isLoading && (vehicles ?? []).length > 0 && viewMode === 'individual' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {vehicles!.map((v) => (
             <VehicleCard key={v.id} vehicle={v} />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && (vehicles ?? []).length > 0 && viewMode === 'family' && (
+        <div className="space-y-6">
+          {groups.map((g) => (
+            <section key={g.owner}>
+              <div className="mb-3 flex items-center gap-3">
+                <div className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <Users className="h-3.5 w-3.5" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-sm font-semibold tracking-tight">{g.owner}</h3>
+                  <span className="text-[11px] uppercase tracking-kerned text-muted-foreground">
+                    {g.items.length} {g.items.length === 1 ? 'vehicle' : 'vehicles'}
+                  </span>
+                </div>
+                <span className="flex-1 h-px bg-border/60" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {g.items.map((v) => (
+                  <VehicleCard key={v.id} vehicle={v} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
