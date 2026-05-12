@@ -22,10 +22,29 @@ interface BenchmarkSymbol {
   symbol: string;
   name: string;
   exchange: 'NSE' | 'BSE';
+  /**
+   * Yahoo symbols to try in order when fetching history. Indices like
+   * `^NSEI` / `^BSESN` are flaky on Yahoo's public endpoint (returns empty
+   * for many regions / proxy IPs); ETF trackers `NIFTYBEES.NS` / `SENSEX.BO`
+   * are listed instruments that mirror the index 1:1 and reliably return
+   * historical data. We rebase to 100 anyway, so the absolute price level
+   * doesn't matter — only the daily ratio does.
+   */
+  fetchSymbols: string[];
 }
 
-const NIFTY: BenchmarkSymbol = { symbol: '^NSEI', name: 'NIFTY 50', exchange: 'NSE' };
-const SENSEX: BenchmarkSymbol = { symbol: '^BSESN', name: 'BSE SENSEX', exchange: 'BSE' };
+const NIFTY: BenchmarkSymbol = {
+  symbol: '^NSEI',
+  name: 'NIFTY 50',
+  exchange: 'NSE',
+  fetchSymbols: ['^NSEI', 'NIFTYBEES.NS'],
+};
+const SENSEX: BenchmarkSymbol = {
+  symbol: '^BSESN',
+  name: 'BSE SENSEX',
+  exchange: 'BSE',
+  fetchSymbols: ['^BSESN', 'SENSEX.BO'],
+};
 
 const APPSETTING_NIFTY_KEY = 'analytics.nifty50_stock_id';
 const APPSETTING_SENSEX_KEY = 'analytics.sensex_stock_id';
@@ -61,7 +80,7 @@ async function ensureSyntheticStock(
 
 async function refreshSeries(
   stockId: string,
-  symbol: string,
+  meta: BenchmarkSymbol,
   fromDate: Date,
 ): Promise<void> {
   // Pull only rows we don't already have; fetch a small margin earlier
@@ -76,11 +95,7 @@ async function refreshSeries(
     : fromDate;
   const today = new Date();
   if (fetchFrom > today) return;
-  const rows = await yahooHistorical(symbol, fetchFrom, today, '1d');
-  if (rows.length === 0) return;
 
-  // Bulk upsert. Prisma has no native upsertMany on (compound unique), so
-  // we batch createMany with skipDuplicates and let it ignore conflicts.
   interface YahooBar {
     date: Date;
     open?: number;
@@ -89,9 +104,29 @@ async function refreshSeries(
     close?: number;
     volume?: number;
   }
-  const bars = rows as YahooBar[];
+  // Try each fetch symbol in order until one returns data. Yahoo's `^NSEI`
+  // and `^BSESN` indices intermittently return empty arrays — the ETF
+  // trackers (NIFTYBEES.NS, SENSEX.BO) are reliable fallbacks because
+  // they're listed instruments with full daily history. We rebase to 100,
+  // so the price magnitude doesn't matter — only relative movement does.
+  let rows: YahooBar[] = [];
+  let usedSymbol = meta.fetchSymbols[0]!;
+  for (const sym of meta.fetchSymbols) {
+    const fetched = (await yahooHistorical(sym, fetchFrom, today, '1d')) as YahooBar[];
+    if (fetched.length > 0) {
+      rows = fetched;
+      usedSymbol = sym;
+      break;
+    }
+    logger.warn({ symbol: sym, fetchFrom, today }, '[analytics.benchmark] no rows from Yahoo, trying next fallback');
+  }
+  if (rows.length === 0) {
+    logger.error({ stockId, symbols: meta.fetchSymbols }, '[analytics.benchmark] every fallback returned empty — benchmark chart will stay unavailable');
+    return;
+  }
+
   await prisma.stockPrice.createMany({
-    data: bars
+    data: rows
       .filter((r) => r.close != null)
       .map((r) => ({
         stockId,
@@ -104,7 +139,7 @@ async function refreshSeries(
       })),
     skipDuplicates: true,
   });
-  logger.info({ stockId, symbol, count: rows.length }, 'analytics.benchmark.refreshed');
+  logger.info({ stockId, symbol: usedSymbol, count: rows.length }, 'analytics.benchmark.refreshed');
 }
 
 export interface BenchmarkSeries {
@@ -130,8 +165,8 @@ export async function getBenchmarkSeries(periodDays: number): Promise<BenchmarkS
 
   // Refresh first (cheap if already up to date) then read.
   await Promise.all([
-    refreshSeries(niftyId, NIFTY.symbol, from),
-    refreshSeries(sensexId, SENSEX.symbol, from),
+    refreshSeries(niftyId, NIFTY, from),
+    refreshSeries(sensexId, SENSEX, from),
   ]);
 
   const [niftyRows, sensexRows] = await Promise.all([
@@ -190,7 +225,7 @@ export async function getNiftyMonthlyCloses(periodDays: number): Promise<Array<{
   const from = periodDays > 0
     ? new Date(Date.now() - periodDays * 86_400_000)
     : new Date('2018-01-01T00:00:00Z');
-  await refreshSeries(niftyId, NIFTY.symbol, from);
+  await refreshSeries(niftyId, NIFTY, from);
   const rows = await prisma.stockPrice.findMany({
     where: { stockId: niftyId, date: { gte: from } },
     orderBy: { date: 'asc' },

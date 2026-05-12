@@ -143,20 +143,33 @@ async function terminalValue(portfolioId: string, filter: {
   const holdings = await prisma.holdingProjection.findMany({ where });
   let total = new Decimal(0);
   for (const h of holdings) {
-    let price: Decimal | null = null;
-    if (h.currentPrice) {
-      price = toDecimal(h.currentPrice);
-    } else {
-      price = await routePriceLookup({
-        assetClass: h.assetClass,
-        stockId: h.stockId,
-        fundId: h.fundId,
-        isin: h.isin,
-      });
+    // Use the canonical projection value. holdingsProjection.ts already
+    // applies the right valuation per asset class (FD/RD accrual,
+    // NSC/KVP/SCSS compounding, foreign-currency conversion, live-price
+    // qty*price for stocks/MFs/crypto). Falling back to `totalCost` means
+    // non-priced assets still contribute their invested amount as the
+    // terminal flow, so XIRR remains solvable for FD-heavy portfolios.
+    // The old path (re-running routePriceLookup here) silently dropped
+    // every FD/NSC/RD/insurance/real-estate holding and made XIRR null
+    // for users whose portfolio is mostly non-tradable instruments.
+    if (h.currentValue != null) {
+      total = total.plus(toDecimal(h.currentValue));
+      continue;
     }
-    if (!price) continue;
-    const qty = toDecimal(h.quantity);
-    total = total.plus(qty.times(price));
+    // Last-resort: try the legacy price lookup. If both fail we still
+    // surface totalCost so an unpriced position doesn't vanish from the
+    // terminal flow.
+    const price = await routePriceLookup({
+      assetClass: h.assetClass,
+      stockId: h.stockId,
+      fundId: h.fundId,
+      isin: h.isin,
+    });
+    if (price) {
+      total = total.plus(toDecimal(h.quantity).times(price));
+    } else {
+      total = total.plus(toDecimal(h.totalCost));
+    }
   }
   return total;
 }

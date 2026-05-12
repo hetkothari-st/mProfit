@@ -13,6 +13,7 @@ import {
 import { historicalValuation, unrealisedReport, incomeReport } from './reports.service.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
 import { taxHarvestReport } from './tax.service.js';
+import { yahooProfile } from '../priceFeeds/yahooClient.js';
 
 /**
  * Phase 5-Analytics — the snapshot service. Composes the existing per-
@@ -92,6 +93,12 @@ function currentFy(date: Date = new Date()): string {
   return `${year}-${String(year + 1).slice(-2)}`;
 }
 
+function fyStartDate(fy: string): Date {
+  // "2025-26" → 1 April 2025 UTC.
+  const startYear = parseInt(fy.slice(0, 4), 10);
+  return new Date(Date.UTC(startYear, 3, 1));
+}
+
 export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
   const fy = currentFy();
   if (scope.kind === 'portfolio') {
@@ -107,6 +114,11 @@ export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
     const realisedYtd = cg.rows
       .filter((r) => r.financialYear === fy)
       .reduce((a, r) => a.plus(r.gainLoss), ZERO);
+    // Add accrued interest from FD/NSC/RD/PO holdings so the KPI matches
+    // the income-trend chart (both surface silent interest accrual that the
+    // user hasn't logged as INTEREST_RECEIVED transactions).
+    const synth = await accruedInterestByMonth(scope, fyStartDate(fy));
+    const synthTotal = Array.from(synth.values()).reduce((a, v) => a.plus(v), ZERO);
     return {
       xirrOverall: overall.xirr,
       xirr1y: x1.xirr,
@@ -116,7 +128,7 @@ export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
       currentValue: unrealised.totalValue,
       unrealisedPnL: unrealised.unrealisedPnL,
       realisedYtd: realisedYtd.toFixed(4),
-      incomeYtd: income.total,
+      incomeYtd: new Decimal(income.total).plus(synthTotal).toFixed(4),
     };
   }
 
@@ -165,6 +177,11 @@ export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
     .reduce((a, r) => a.plus(r.gainLoss), ZERO);
   const incomeYtd = incomeRes.reduce((a, i) => a.plus(i.total), ZERO);
 
+  // Same synthetic-interest merge as the portfolio scope so cross-portfolio
+  // KPIs match per-portfolio + income-trend chart.
+  const synth = await accruedInterestByMonth(scope, fyStartDate(fy));
+  const synthTotal = Array.from(synth.values()).reduce((a, v) => a.plus(v), ZERO);
+
   return {
     xirrOverall: userXirr.xirr,
     xirr1y: x1,
@@ -174,7 +191,7 @@ export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
     currentValue: totalValue.toFixed(4),
     unrealisedPnL: unrealisedPnL.toFixed(4),
     realisedYtd: realisedYtd.toFixed(4),
-    incomeYtd: incomeYtd.toFixed(4),
+    incomeYtd: incomeYtd.plus(synthTotal).toFixed(4),
   };
 }
 
@@ -240,6 +257,25 @@ export interface TreemapNode {
   pct: number;
 }
 
+// Asset classes whose user-entered assetName is opaque on its own ("borivali"
+// for an NSC, "south flat" for a real-estate holding). Prefixing or suffixing
+// the asset-class label disambiguates the treemap and concentration list.
+const OPAQUE_NAME_CLASSES = new Set([
+  'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'NSC', 'KVP', 'SCSS', 'SSY',
+  'POST_OFFICE_MIS', 'POST_OFFICE_RD', 'POST_OFFICE_TD', 'POST_OFFICE_SAVINGS',
+  'PPF', 'EPF', 'NPS', 'INSURANCE', 'ULIP', 'REAL_ESTATE',
+  'PHYSICAL_GOLD', 'PHYSICAL_SILVER', 'GOLD_BOND', 'CASH', 'OTHER',
+]);
+
+function displayName(assetClass: string, assetName: string | null): string {
+  const cls = labelOf(assetClass);
+  if (!assetName || !assetName.trim()) return cls;
+  if (OPAQUE_NAME_CLASSES.has(assetClass)) {
+    return `${cls} · ${assetName}`;
+  }
+  return assetName;
+}
+
 export async function getAllocationTreemap(scope: AnalyticsScope): Promise<TreemapNode[]> {
   const where: Record<string, unknown> =
     scope.kind === 'portfolio'
@@ -255,7 +291,7 @@ export async function getAllocationTreemap(scope: AnalyticsScope): Promise<Treem
       const v = h.currentValue ? d(h.currentValue) : d(h.totalCost);
       return {
         assetClass: h.assetClass,
-        assetName: h.assetName ?? labelOf(h.assetClass),
+        assetName: displayName(h.assetClass, h.assetName),
         value: v.toFixed(4),
         pct: total.gt(0) ? v.dividedBy(total).times(100).toNumber() : 0,
       };
@@ -292,7 +328,7 @@ export async function getTopWinnersLosers(
       const pnl = value.minus(cost);
       const pct = cost.gt(0) ? pnl.dividedBy(cost).times(100).toNumber() : 0;
       return {
-        assetName: h.assetName ?? labelOf(h.assetClass),
+        assetName: displayName(h.assetClass, h.assetName),
         assetClass: h.assetClass,
         totalCost: cost.toFixed(4),
         currentValue: value.toFixed(4),
@@ -355,10 +391,38 @@ export async function getSectorAllocation(scope: AnalyticsScope): Promise<Sector
   const stockIds = Array.from(
     new Set(holdings.map((h) => h.stockId).filter((id): id is string => !!id)),
   );
-  const stocks = await prisma.stockMaster.findMany({
+  let stocks = await prisma.stockMaster.findMany({
     where: { id: { in: stockIds } },
-    select: { id: true, sector: true },
+    select: { id: true, symbol: true, exchange: true, sector: true },
   });
+
+  // Lazy backfill: StockMaster.sector is null for every stock created by
+  // contract-note / CAS imports because no path ever populated it. Try
+  // Yahoo profile lookups on the missing rows so the next request renders
+  // a real sector pie instead of 100% "Unclassified". Failure to fetch
+  // (network, rate limit, Yahoo missing the sector field) is silent — the
+  // holding just stays Unclassified for this request.
+  const missing = stocks.filter((s) => !s.sector);
+  if (missing.length > 0) {
+    await Promise.all(
+      missing.map(async (s) => {
+        const yahooSymbol = s.exchange === 'BSE' ? `${s.symbol}.BO` : `${s.symbol}.NS`;
+        const profile = await yahooProfile(yahooSymbol);
+        if (profile?.sector) {
+          await prisma.stockMaster.update({
+            where: { id: s.id },
+            data: { sector: profile.sector, industry: profile.industry ?? undefined },
+          });
+        }
+      }),
+    );
+    // Re-read so this request reflects the backfill we just persisted.
+    stocks = await prisma.stockMaster.findMany({
+      where: { id: { in: stockIds } },
+      select: { id: true, symbol: true, exchange: true, sector: true },
+    });
+  }
+
   const sectorByStockId = new Map(stocks.map((s) => [s.id, s.sector || 'Unclassified']));
 
   const bySector = new Map<string, Decimal>();
@@ -420,6 +484,81 @@ export interface IncomeMonthRow {
   total: string;
 }
 
+// Asset classes whose income accrues silently (no per-payment tx is logged).
+// We synthesise a monthly interest stream from HoldingProjection so the
+// income chart isn't permanently empty for users who hold FDs / NSC / KVP /
+// SCSS / RD / SSY without recording explicit INTEREST_RECEIVED rows. The
+// allocation is a linear monthly run-rate (totalAccrued / monthsHeld) rather
+// than the true compounded curve — the chart conveys "you're earning income"
+// without claiming bank-statement accuracy.
+const ACCRUING_INCOME_CLASSES = new Set([
+  'FIXED_DEPOSIT', 'RECURRING_DEPOSIT',
+  'NSC', 'KVP', 'POST_OFFICE_TD', 'SSY', 'POST_OFFICE_RD',
+  'SCSS', 'POST_OFFICE_MIS', 'POST_OFFICE_SAVINGS',
+]);
+
+function monthsBetween(a: Date, b: Date): number {
+  // Inclusive month count, floored at 1 so a same-month deposit still
+  // contributes a per-month run-rate instead of dividing by zero.
+  const months =
+    (b.getUTCFullYear() - a.getUTCFullYear()) * 12 +
+    (b.getUTCMonth() - a.getUTCMonth()) + 1;
+  return Math.max(1, months);
+}
+
+async function accruedInterestByMonth(
+  scope: AnalyticsScope,
+  windowFrom: Date,
+): Promise<Map<string, Decimal>> {
+  const where: Record<string, unknown> = {
+    assetClass: { in: Array.from(ACCRUING_INCOME_CLASSES) },
+    ...(scope.kind === 'portfolio'
+      ? { portfolioId: scope.portfolioId }
+      : { portfolio: { userId: scope.userId } }),
+  };
+  const holdings = await prisma.holdingProjection.findMany({
+    where,
+    select: { portfolioId: true, assetKey: true, currentValue: true, totalCost: true },
+  });
+  if (holdings.length === 0) return new Map();
+
+  // Earliest deposit per (portfolio, assetKey) — anchors the per-month run-rate.
+  const portfolioIds = Array.from(new Set(holdings.map((h) => h.portfolioId)));
+  const firstTxs = await prisma.transaction.groupBy({
+    by: ['portfolioId', 'assetKey'],
+    where: { portfolioId: { in: portfolioIds } },
+    _min: { tradeDate: true },
+  });
+  const firstTxMap = new Map<string, Date>();
+  for (const row of firstTxs) {
+    if (row._min.tradeDate) {
+      firstTxMap.set(`${row.portfolioId}|${row.assetKey}`, row._min.tradeDate);
+    }
+  }
+
+  const today = new Date();
+  const todayMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const byMonth = new Map<string, Decimal>();
+
+  for (const h of holdings) {
+    if (h.currentValue == null) continue;
+    const accrued = d(h.currentValue).minus(d(h.totalCost));
+    if (accrued.lte(0)) continue;
+    const start = firstTxMap.get(`${h.portfolioId}|${h.assetKey}`);
+    if (!start) continue;
+
+    const perMonth = accrued.dividedBy(monthsBetween(start, today));
+    const distStart = start < windowFrom ? windowFrom : start;
+    const cursor = new Date(Date.UTC(distStart.getUTCFullYear(), distStart.getUTCMonth(), 1));
+    while (cursor <= todayMonth) {
+      const key = cursor.toISOString().slice(0, 7);
+      byMonth.set(key, (byMonth.get(key) ?? ZERO).plus(perMonth));
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+  }
+  return byMonth;
+}
+
 export async function getIncomeTrend(
   scope: AnalyticsScope,
   periodDays: number,
@@ -447,6 +586,18 @@ export async function getIncomeTrend(
     else if (t.transactionType === 'MATURITY') cur.maturity = cur.maturity.plus(amt);
     agg.set(month, cur);
   }
+
+  // Merge in synthetic accrued interest from FD/NSC/RD/PO holdings so the
+  // chart isn't empty for portfolios where the user hasn't logged explicit
+  // INTEREST_RECEIVED transactions. Real INTEREST_RECEIVED rows still take
+  // precedence within their month — we add the synthetic stream alongside.
+  const synthetic = await accruedInterestByMonth(scope, from);
+  for (const [month, val] of synthetic) {
+    const cur = agg.get(month) ?? { dividend: ZERO, interest: ZERO, maturity: ZERO };
+    cur.interest = cur.interest.plus(val);
+    agg.set(month, cur);
+  }
+
   return Array.from(agg.entries())
     .map(([month, v]) => ({
       month,

@@ -95,3 +95,32 @@ export async function yahooHistorical(
     return [];
   }
 }
+
+/**
+ * Fetch instrument profile (sector / industry / long name). Used to backfill
+ * StockMaster.sector once a holding lands in the portfolio so the sector
+ * pie can group equity exposure properly. Returns null on any failure —
+ * callers must tolerate missing profile data (Yahoo often omits sector for
+ * mid/small-cap NSE listings).
+ */
+export async function yahooProfile(symbol: string): Promise<{
+  sector: string | null;
+  industry: string | null;
+  longName: string | null;
+} | null> {
+  try {
+    const res = await throttled(() =>
+      yahooFinance.quoteSummary(symbol, { modules: ['summaryProfile', 'price'] }),
+    );
+    const profile = (res as any)?.summaryProfile ?? null;
+    const price = (res as any)?.price ?? null;
+    return {
+      sector: profile?.sector ?? null,
+      industry: profile?.industry ?? null,
+      longName: price?.longName ?? null,
+    };
+  } catch (err) {
+    logger.warn({ err, symbol }, '[yahoo] profile failed');
+    return null;
+  }
+}
