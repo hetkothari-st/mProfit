@@ -6,6 +6,7 @@ import {
   TrendingUp, Wallet, LineChart as LineChartIcon, Percent, Briefcase,
   RefreshCw, Loader2, ArrowRight, Car, Home, Shield,
   AlertTriangle, Bell, CheckCircle2, XCircle, CalendarDays, Layers, ChevronDown,
+  Eye, EyeOff,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -172,6 +173,12 @@ function holdingRoute(h: { id: string; assetClass: string }): string | null {
 export function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string>('ALL');
   const [period, setPeriod] = useState<number>(365);
+  // Net-worth-only privacy toggle. Hidden by default so a screen-share or
+  // co-worker glance doesn't reveal the headline number; everything else on
+  // the page (MetricCards, charts, holdings) stays visible. This is local to
+  // the dashboard — the global `usePrivacyStore` still controls the
+  // page-wide privacy mode via the header toggle.
+  const [netWorthHidden, setNetWorthHidden] = useState<boolean>(true);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const hideSensitive = usePrivacyStore((s) => s.hideSensitive);
@@ -345,15 +352,29 @@ export function DashboardPage() {
           <div className="relative px-7 py-7 sm:px-9 sm:py-8">
             <div className="flex items-start justify-between gap-6 flex-wrap">
               <div className="min-w-0">
-                <p className="text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85 mb-2">
-                  Total Net Worth · Consolidated
-                </p>
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85">
+                    Total Net Worth · Consolidated
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setNetWorthHidden((v) => !v)}
+                    aria-label={netWorthHidden ? 'Show net worth' : 'Hide net worth'}
+                    aria-pressed={!netWorthHidden}
+                    title={netWorthHidden ? 'Show net worth' : 'Hide net worth'}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-accent-ink/70 hover:text-foreground hover:bg-foreground/5 transition-colors"
+                  >
+                    {netWorthHidden
+                      ? <Eye className="h-3.5 w-3.5" strokeWidth={1.7} />
+                      : <EyeOff className="h-3.5 w-3.5" strokeWidth={1.7} />}
+                  </button>
+                </div>
                 <Money
                   hero
                   className="numeric-display-lg text-[clamp(2.4rem,5.6vw,4rem)] leading-[1.02] text-foreground"
                   symbolClassName="text-[0.6em] -translate-y-[0.18em] text-accent"
                 >
-                  {formatINR(nw.totalNetWorth)}
+                  {netWorthHidden ? '₹ • • • • • • •' : formatINR(nw.totalNetWorth)}
                 </Money>
                 <div className="mt-5 flex flex-wrap items-stretch gap-3 text-[11px] text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
