@@ -40,6 +40,8 @@ import { CreditCardListPage } from './pages/creditCards/CreditCardListPage';
 import { CreditCardDetailPage } from './pages/creditCards/CreditCardDetailPage';
 import { RealEstateListPage } from './pages/realEstate/RealEstateListPage';
 import { RealEstateDetailPage } from './pages/realEstate/RealEstateDetailPage';
+import { BankAccountListPage } from './pages/bankAccounts/BankAccountListPage';
+import { BankAccountDetailPage } from './pages/bankAccounts/BankAccountDetailPage';
 import { FixedDepositsPage } from './pages/assetClasses/FixedDepositsPage';
 import { FdDetailPage } from './pages/assetClasses/FdDetailPage';
 import { BondsPage } from './pages/assetClasses/BondsPage';
@@ -120,6 +122,8 @@ export function App() {
         <Route path="/loans/:id" element={<LoanDetailPage />} />
         <Route path="/credit-cards" element={<CreditCardListPage />} />
         <Route path="/credit-cards/:id" element={<CreditCardDetailPage />} />
+        <Route path="/bank-accounts" element={<BankAccountListPage />} />
+        <Route path="/bank-accounts/:id" element={<BankAccountDetailPage />} />
         <Route path="/real-estate" element={<RealEstateListPage />} />
         <Route path="/real-estate/:id" element={<RealEstateDetailPage />} />
         <Route path="/cashflows" element={<CashFlowsPage />} />

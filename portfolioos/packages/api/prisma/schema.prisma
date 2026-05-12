@@ -80,8 +80,9 @@ model User {
   // policy PDFs, …). Reusable across modules via {ownerType, ownerId}.
   documents Document[]
 
-  loans       Loan[]
-  creditCards CreditCard[]
+  loans        Loan[]
+  creditCards  CreditCard[]
+  bankAccounts BankAccount[]
 
   // Phase 5-RealEstate — owned properties (self-occupied / second home / plot / etc).
   // Distinct from RentalProperty (which models the tenancy/receipts side);
@@ -269,6 +270,7 @@ model Portfolio {
   alerts          Alert[]
   brokerAccounts  BrokerAccount[]
   ownedProperties OwnedProperty[]
+  bankAccounts    BankAccount[]
 
   // Phase 4.5 hardening
   holdingProjections HoldingProjection[]
@@ -836,7 +838,14 @@ model CashFlow {
   inrEquivalent Decimal?     @db.Decimal(18, 4)
   createdAt     DateTime     @default(now())
 
+  // Optional attribution to a bank account. Set automatically when projecting
+  // a CanonicalEvent whose accountLast4 matches a known BankAccount.last4 for
+  // the user; nullable for manual cashflows that don't track an account.
+  bankAccountId String?
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+
   @@index([portfolioId, date])
+  @@index([bankAccountId, date])
 }
 
 enum CashFlowType {
@@ -1736,29 +1745,29 @@ model LlmSpend {
 // generated for the user's combined "ALL portfolios" scope.
 
 model PortfolioInsight {
-  id                    String     @id @default(cuid())
-  userId                String
-  user                  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  portfolioId           String?
-  portfolio             Portfolio? @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId String?
+  portfolio   Portfolio? @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
 
   // Snapshot context for staleness detection / audit trail.
-  portfolioValueInr     Decimal    @db.Decimal(18, 4)
-  period                String // '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y' | 'All'
+  portfolioValueInr Decimal @db.Decimal(18, 4)
+  period            String // '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y' | 'All'
 
   // Structured payload — array of InsightCard JSON objects.
   cards                 Json
-  narrative             String     @db.Text
+  narrative             String @db.Text
   // Optional asset-class → percentage map suggested by the model.
   recommendedAllocation Json?
 
   // LLM metadata for audit + cost reconciliation against LlmSpend.
-  model                 String
-  inputTokens           Int
-  outputTokens          Int
-  costInr               Decimal    @db.Decimal(10, 4)
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  costInr      Decimal @db.Decimal(10, 4)
 
-  generatedAt           DateTime   @default(now())
+  generatedAt DateTime @default(now())
 
   @@index([userId, portfolioId, generatedAt])
   @@index([userId, generatedAt])
@@ -2240,6 +2249,75 @@ model CreditCardStatement {
 
   @@unique([cardId, forMonth])
   @@index([dueDate, status])
+}
+
+// ─── BANK ACCOUNTS ─────────────────────────────────────────────────
+//
+// First-class entity (parallel to CreditCard) rather than a CASH-class
+// Holding — bank metadata (IFSC, branch, nominee, joint holders, debit
+// card linkage) doesn't fit the Holding shape. Balances are tracked via
+// a current snapshot on the row plus a BankBalanceSnapshot history so
+// the detail page can chart balance-over-time. Auto-attribution from
+// Gmail/statement-derived CanonicalEvents happens by matching the
+// event's accountLast4 against this user's accounts.
+
+model BankAccount {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId String?
+  portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
+
+  // Core identity — last 4 digits only; no full-PAN/account-no storage.
+  bankName      String // "HDFC Bank"
+  accountType   String // SAVINGS | CURRENT | SALARY | NRE | NRO | OD
+  accountHolder String
+  last4         String // last 4 digits of the account number
+  ifsc          String?
+  branch        String?
+  nickname      String? // user-given label e.g. "Primary salary"
+
+  // Joint holder / nominee
+  jointHolders    String[] @default([])
+  nomineeName     String?
+  nomineeRelation String?
+
+  // Linked debit card
+  debitCardLast4  String?
+  debitCardExpiry String? // MM/YY
+
+  // Balance
+  currentBalance Decimal?  @db.Decimal(14, 2)
+  balanceAsOf    DateTime?
+  balanceSource  String? // "manual" | "statement" | "auto_event"
+
+  // Lifecycle
+  status    String    @default("ACTIVE") // ACTIVE | DORMANT | CLOSED
+  openedOn  DateTime? @db.Date
+  closedOn  DateTime? @db.Date
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  snapshots BankBalanceSnapshot[]
+  cashFlows CashFlow[]
+
+  @@unique([userId, bankName, last4])
+  @@index([userId, status])
+}
+
+model BankBalanceSnapshot {
+  id               String      @id @default(cuid())
+  accountId        String
+  account          BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  asOfDate         DateTime    @db.Date
+  balance          Decimal     @db.Decimal(14, 2)
+  source           String // "manual" | "statement_upload" | "auto_event"
+  canonicalEventId String?
+  note             String?
+  createdAt        DateTime    @default(now())
+
+  @@unique([accountId, asOfDate])
+  @@index([accountId, asOfDate])
 }
 
 // ─── REAL ESTATE — Owned properties ─────────────────────────────────────

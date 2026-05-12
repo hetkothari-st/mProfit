@@ -27,6 +27,7 @@ import {
   Coins,
   Bitcoin,
   Wallet,
+  Banknote,
   CreditCard,
   HandCoins,
   Home,
@@ -46,6 +47,7 @@ interface NavItem {
 }
 
 export const ASSET_CLASS_ITEMS: NavItem[] = [
+  { label: 'Bank Accounts', to: '/bank-accounts', icon: Banknote },
   { label: 'Stocks', to: '/stocks', icon: TrendingUp },
   { label: 'F & O', to: '/fo', icon: BarChart3 },
   { label: 'Mutual Funds', to: '/mutual-funds', icon: LineChart },

@@ -1,4 +1,5 @@
 import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
+import type { ApiResponse } from '@portfolioos/shared';
 import { useAuthStore } from '@/stores/auth.store';
 import { getApiBaseUrl } from './baseUrl';
 
@@ -57,6 +58,16 @@ api.interceptors.response.use(
 function sanitizeMsg(s: string): string {
   // eslint-disable-next-line no-control-regex
   return s.replace(/\[[0-9;]*m/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Strip the ApiResponse envelope. Throws on `{ success: false }` with the
+ * server-supplied error message. Reuse this across all api/*.ts modules
+ * instead of redeclaring a local `unwrap` per file.
+ */
+export function unwrap<T>(data: ApiResponse<T>): T {
+  if (!data.success) throw new Error(data.error);
+  return data.data;
 }
 
 export function apiErrorMessage(err: unknown, fallback = 'Something went wrong'): string {

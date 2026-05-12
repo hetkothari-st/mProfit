@@ -1,10 +1,5 @@
-import { api } from './client';
+import { api, unwrap } from './client';
 import type { ApiResponse } from '@portfolioos/shared';
-
-function unwrap<T>(r: ApiResponse<T>): T {
-  if (!r.success) throw new Error(r.error);
-  return r.data;
-}
 
 // ── DTOs ─────────────────────────────────────────────────────────────
 

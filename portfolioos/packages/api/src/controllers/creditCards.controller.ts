@@ -16,10 +16,7 @@ import {
 } from '../services/creditCards.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
-
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
-const isoMonth = z.string().regex(/^\d{4}-\d{2}$/, 'Expected YYYY-MM');
-const moneyString = z.string().regex(/^\d+(\.\d+)?$/, 'Expected positive decimal string');
+import { isoDate, isoMonth, positiveMoneyString as moneyString } from '../lib/zodMoney.js';
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
 

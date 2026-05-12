@@ -46,6 +46,10 @@ import { recomputeForAsset } from '../services/holdingsProjection.js';
 import { computeAssetKey } from '../services/assetKey.js';
 import { hookAutoMatchRentalCredit } from '../services/rental.service.js';
 import { hookAutoMatchPremiumPayment } from '../services/insurance.service.js';
+import {
+  findAccountByLast4,
+  applyEventToBalance,
+} from '../services/bankAccounts.service.js';
 import { ensureFoInstrument } from '../priceFeeds/nseFoMaster.service.js';
 import { recomputeDerivativePosition } from '../services/derivativePosition.service.js';
 
@@ -215,6 +219,10 @@ async function projectCashFlow(
     event.parserNotes ??
     `${event.eventType} via gmail`;
 
+  // Auto-attribute to a bank account when the canonical event carries an
+  // accountLast4 and exactly one of the user's accounts ends in those digits.
+  const bankAccountId = await findAccountByLast4(event.userId, event.accountLast4);
+
   const created = await prisma.$transaction(async (tx) => {
     const cf = await tx.cashFlow.create({
       data: {
@@ -223,6 +231,7 @@ async function projectCashFlow(
         type: direction,
         amount: event.amount!,
         description,
+        bankAccountId,
       },
       select: { id: true },
     });
@@ -236,6 +245,22 @@ async function projectCashFlow(
     });
     return cf;
   });
+
+  // Bump the bank account's running balance + snapshot the new balance for
+  // the detail page's history chart. Fire-and-forget — projection is already
+  // durable above.
+  if (bankAccountId && event.amount) {
+    void applyEventToBalance(
+      event.userId,
+      bankAccountId,
+      event.amount.toString(),
+      direction,
+      event.eventDate,
+      event.id,
+    ).catch((err) =>
+      logger.warn({ err, eventId: event.id, bankAccountId }, 'bankAccount.balance_apply_failed'),
+    );
+  }
 
   // §8.2 rental auto-match: for inbound credits, check if the amount +
   // date + counterparty matches an expected rent receipt. Never throws —
