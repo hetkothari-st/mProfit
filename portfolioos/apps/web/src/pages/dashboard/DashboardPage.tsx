@@ -30,6 +30,7 @@ import { GmailScanProgressCard } from '@/components/dashboard/GmailScanProgressC
 import { DashboardFxStrip } from '@/pages/forex/DashboardFxStrip';
 import { apiErrorMessage } from '@/api/client';
 import { usePrivacyStore } from '@/stores/privacy.store';
+import { useAssetSectionsStore } from '@/stores/assetSections.store';
 import {
   formatINR,
   formatPercent,
@@ -121,6 +122,45 @@ function assetClassColor(cls: string): string {
   return ASSET_CLASS_COLORS[cls] ?? 'hsl(220 10% 60%)';
 }
 
+// Map an asset class enum to the sidebar section key that controls its visibility
+// on the dashboard. Hidden sidebar sections cascade to: holdings table rows,
+// breakdown pie slices, and the per-section summary cards at the bottom.
+function assetClassSidebarKey(cls: string): string {
+  switch (cls) {
+    case 'EQUITY':            return '/stocks';
+    case 'FUTURES':
+    case 'OPTIONS':           return '/fo';
+    case 'MUTUAL_FUND':
+    case 'ETF':               return '/mutual-funds';
+    case 'BOND':
+    case 'GOVT_BOND':
+    case 'CORPORATE_BOND':    return '/bonds';
+    case 'FIXED_DEPOSIT':
+    case 'RECURRING_DEPOSIT': return '/fds';
+    case 'GOLD_BOND':
+    case 'GOLD_ETF':
+    case 'PHYSICAL_GOLD':
+    case 'PHYSICAL_SILVER':   return '/gold';
+    case 'CRYPTOCURRENCY':    return '/crypto';
+    case 'FOREIGN_EQUITY':
+    case 'FOREX_PAIR':        return '/forex';
+    case 'PPF':
+    case 'EPF':               return '/provident-fund';
+    case 'NSC':
+    case 'KVP':
+    case 'SCSS':
+    case 'SSY':
+    case 'POST_OFFICE_MIS':
+    case 'POST_OFFICE_RD':
+    case 'POST_OFFICE_TD':
+    case 'POST_OFFICE_SAVINGS': return '/post-office';
+    case 'REAL_ESTATE':       return '/real-estate';
+    case 'ULIP':
+    case 'INSURANCE':         return '/insurance';
+    default:                  return '/others';
+  }
+}
+
 // Map a holding to the route that should open when its row is clicked.
 // Asset classes with per-holding detail pages (FD, Gold, Crypto) deep-link
 // to that holding; everything else lands on its list page. Returns null
@@ -185,6 +225,22 @@ export function DashboardPage() {
   // In-session collapse for the alerts bar. Intentionally NOT persisted —
   // every fresh load shows alerts expanded so the user re-sees them.
   const [alertsCollapsed, setAlertsCollapsed] = useState(false);
+
+  // Sidebar asset class preferences — drive dashboard ordering + visibility.
+  const assetSections = useAssetSectionsStore((s) => s.sections);
+  const sectionVisibility = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const s of assetSections) m.set(s.key, s.visible);
+    return m;
+  }, [assetSections]);
+  const sectionOrder = useMemo(() => {
+    const m = new Map<string, number>();
+    assetSections.forEach((s, i) => m.set(s.key, i));
+    return m;
+  }, [assetSections]);
+  const isClassVisible = (cls: string) => sectionVisibility.get(assetClassSidebarKey(cls)) !== false;
+  const isKeyVisible = (key: string) => sectionVisibility.get(key) !== false;
+  const orderOf = (key: string) => sectionOrder.get(key) ?? 999;
 
   const portfoliosQuery = useQuery({
     queryKey: ['portfolios'],
@@ -320,8 +376,13 @@ export function DashboardPage() {
 
   const nw = netWorthQuery.data;
   const chartData = valuationQuery.data ?? [];
-  const topHoldings = (holdingsQuery.data ?? []).slice(0, 10);
-  const pieData = (nw?.allocationBreakdown ?? []).filter((s) => s.numericValue > 0);
+  const allHoldings = holdingsQuery.data ?? [];
+  // Filter out holdings whose asset class section is hidden in the sidebar.
+  const visibleHoldings = allHoldings.filter((h) => isClassVisible(h.assetClass));
+  const topHoldings = visibleHoldings.slice(0, 10);
+  const pieData = (nw?.allocationBreakdown ?? [])
+    .filter((s) => s.numericValue > 0)
+    .filter((s) => isClassVisible(s.key));
   const alerts = nw?.alerts ?? [];
 
   return (
@@ -805,12 +866,13 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Real Estate | Vehicles | Insurance */}
-      {nw && (
+      {/* Real Estate | Vehicles | Insurance — reorder + hide via sidebar prefs */}
+      {nw && (isKeyVisible('/real-estate') || isKeyVisible('/vehicles') || isKeyVisible('/insurance')) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
           {/* Real Estate */}
-          <Card>
+          {isKeyVisible('/real-estate') && (
+          <Card style={{ order: orderOf('/real-estate') }}>
             <CardHeader className="flex-row items-center justify-between pb-2">
               <div className="flex items-center gap-2">
                 <Home className="h-4 w-4 text-muted-foreground" />
@@ -859,9 +921,11 @@ export function DashboardPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* Vehicles */}
-          <Card>
+          {isKeyVisible('/vehicles') && (
+          <Card style={{ order: orderOf('/vehicles') }}>
             <CardHeader className="flex-row items-center justify-between pb-2">
               <div className="flex items-center gap-2">
                 <Car className="h-4 w-4 text-muted-foreground" />
@@ -912,9 +976,11 @@ export function DashboardPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* Insurance */}
-          <Card>
+          {isKeyVisible('/insurance') && (
+          <Card style={{ order: orderOf('/insurance') }}>
             <CardHeader className="flex-row items-center justify-between pb-2">
               <div className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-muted-foreground" />
@@ -969,6 +1035,7 @@ export function DashboardPage() {
               )}
             </CardContent>
           </Card>
+          )}
         </div>
       )}
 
