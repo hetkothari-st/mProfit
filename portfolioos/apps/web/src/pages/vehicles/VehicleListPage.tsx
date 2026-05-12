@@ -63,6 +63,12 @@ export function VehicleListPage() {
         </div>
       )}
 
+      {!isLoading && (
+        <div className="mb-4">
+          <FuelPricesCard defaultRtoCode={vehicles?.[0]?.rtoCode ?? null} />
+        </div>
+      )}
+
       {!isLoading && (vehicles ?? []).length === 0 && (
         <EmptyState
           icon={Car}
@@ -77,16 +83,11 @@ export function VehicleListPage() {
       )}
 
       {!isLoading && (vehicles ?? []).length > 0 && (
-        <>
-          <div className="mb-4">
-            <FuelPricesCard defaultRtoCode={vehicles![0]!.rtoCode} />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {vehicles!.map((v) => (
-              <VehicleCard key={v.id} vehicle={v} />
-            ))}
-          </div>
-        </>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {vehicles!.map((v) => (
+            <VehicleCard key={v.id} vehicle={v} />
+          ))}
+        </div>
       )}
 
       <VehicleFormDialog open={formOpen} onOpenChange={setFormOpen} />
