@@ -6,11 +6,13 @@ import {
   upsertConfigHandler,
   deleteConfigHandler,
   testConfigHandler,
+  statusHandler,
 } from '../controllers/notificationConfig.controller.js';
 
 export const notificationsRouter = Router();
 notificationsRouter.use(authenticate);
 
+notificationsRouter.get('/status', asyncHandler(statusHandler));
 notificationsRouter.get('/config', asyncHandler(getConfigHandler));
 notificationsRouter.put('/config', asyncHandler(upsertConfigHandler));
 notificationsRouter.delete('/config', asyncHandler(deleteConfigHandler));

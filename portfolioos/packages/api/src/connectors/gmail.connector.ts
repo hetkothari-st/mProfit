@@ -10,7 +10,14 @@ import { logger } from '../lib/logger.js';
 import { encryptSecret, decryptSecret } from '../lib/secrets.js';
 import { createImportJob } from '../services/imports/import.service.js';
 
-const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+// readonly for inbox ingestion + send for outbound rent reminders.
+// Existing users who connected before send scope landed will need to
+// reconnect (we force prompt='consent' on every connect, so the next
+// connect picks up the new scope automatically).
+const SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+];
 const ALLOWED_EXT = new Set(['.pdf', '.csv', '.tsv', '.xlsx', '.xls', '.html', '.htm']);
 
 /**

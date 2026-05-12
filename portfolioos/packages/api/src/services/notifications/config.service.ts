@@ -16,6 +16,7 @@ import { prisma } from '../../lib/prisma.js';
 import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
 import type { SmtpConfig } from './email.service.js';
 import { sendEmail } from './email.service.js';
+import { sendViaGmailApi, getGmailSendAccount } from './gmailSender.service.js';
 
 /**
  * Auto-detect SMTP host/port/secure from the user's email domain so the
@@ -200,14 +201,42 @@ export async function getUserPaymentInstructions(userId: string): Promise<string
  * button surfaces a clear error.
  */
 export async function sendTestEmail(userId: string, to: string): Promise<{ ok: boolean; reason?: string }> {
+  const html = `<p>This is a test email from PortfolioOS to confirm your sending setup is working.</p>
+                <p>If you received this, you're good to go — rent reminders will be sent from this address.</p>`;
+  const subject = 'PortfolioOS — test email';
+
+  // Prefer Gmail API (the OAuth path) since the user only had to click
+  // "Connect Gmail". Fall back to SMTP if the user is on a non-Gmail
+  // provider and configured an app password via legacy flow.
+  const gmailAccount = await getGmailSendAccount(userId);
+  if (gmailAccount) {
+    const r = await sendViaGmailApi({ userId, to, subject, html });
+    return r.sent ? { ok: true } : { ok: false, reason: r.reason };
+  }
+
   const config = await getEmailConfigForUser(userId);
-  if (!config) return { ok: false, reason: 'smtp_not_configured' };
-  const result = await sendEmail({
-    to,
-    subject: 'PortfolioOS — test email',
-    html: `<p>This is a test email from PortfolioOS to confirm your SMTP setup is working.</p>
-           <p>If you received this, you're good to go — rent reminders will be sent from this address.</p>`,
-    config,
-  });
+  if (!config) return { ok: false, reason: 'gmail_not_connected' };
+  const result = await sendEmail({ to, subject, html, config });
   return result.sent ? { ok: true } : { ok: false, reason: result.reason };
+}
+
+/**
+ * Returns whether the user has a working email sender (Gmail OAuth or
+ * SMTP config). Used by the Settings UI to decide which CTA to render.
+ */
+export async function getSenderStatus(userId: string): Promise<{
+  gmailConnected: boolean;
+  gmailEmail: string | null;
+  smtpConfigured: boolean;
+}> {
+  const gmail = await getGmailSendAccount(userId);
+  const smtp = await prisma.userNotificationConfig.findUnique({
+    where: { userId },
+    select: { smtpPassEnc: true },
+  });
+  return {
+    gmailConnected: !!gmail,
+    gmailEmail: gmail?.email ?? null,
+    smtpConfigured: !!smtp?.smtpPassEnc,
+  };
 }

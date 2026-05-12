@@ -29,6 +29,7 @@ import {
   getEmailConfigForUser,
   getUserPaymentInstructions,
 } from './notifications/config.service.js';
+import { sendViaGmailApi, getGmailSendAccount } from './notifications/gmailSender.service.js';
 import { markOverdueReceipts } from './rental.service.js';
 
 export const REMINDER_LEAD_DAYS = [5, 3, 1, 0] as const;
@@ -523,24 +524,36 @@ export async function approveAndSendReminder(
       emailStatus = 'failed';
       emailError = 'tenant_email_missing';
     } else {
-      // Per-user SMTP config (encrypted at rest, decrypted in-memory
-      // for this one send). When the user hasn't set one up the email
-      // service falls through to env vars; failing both surfaces
-      // smtp_not_configured.
+      // Two send paths in priority order:
+      //   1. Gmail API via the user's existing OAuth connection — zero
+      //      password input, just a Google consent screen.
+      //   2. SMTP (per-user config / env fallback) — for non-Gmail
+      //      providers or users who haven't connected Gmail yet.
       const propertyOwnerId = existing.tenancy.property.userId;
-      const config = await getEmailConfigForUser(propertyOwnerId);
-      const res = await sendEmail({
-        to: tenantEmail,
-        subject: existing.subject,
-        html: existing.body,
-        config: config ?? undefined,
-      });
+      let res: { sent: boolean; reason?: string };
+      const gmailAccount = await getGmailSendAccount(propertyOwnerId);
+      if (gmailAccount) {
+        res = await sendViaGmailApi({
+          userId: propertyOwnerId,
+          to: tenantEmail,
+          subject: existing.subject,
+          html: existing.body,
+        });
+      } else {
+        const config = await getEmailConfigForUser(propertyOwnerId);
+        res = await sendEmail({
+          to: tenantEmail,
+          subject: existing.subject,
+          html: existing.body,
+          config: config ?? undefined,
+        });
+      }
       if (res.sent) {
         emailStatus = 'sent';
         anySuccess = true;
       } else {
         emailStatus = 'failed';
-        emailError = res.reason;
+        emailError = res.reason ?? 'unknown_send_error';
       }
     }
   } else {

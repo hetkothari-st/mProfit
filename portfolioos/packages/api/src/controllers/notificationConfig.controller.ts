@@ -7,6 +7,7 @@ import {
   upsertNotificationConfig,
   deleteNotificationConfig,
   sendTestEmail,
+  getSenderStatus,
 } from '../services/notifications/config.service.js';
 
 function userId(req: Request): string {
@@ -58,4 +59,9 @@ export async function testConfigHandler(req: Request, res: Response): Promise<vo
   const body = testSchema.parse(req.body ?? {});
   const result = await sendTestEmail(userId(req), body.to);
   ok(res, result);
+}
+
+export async function statusHandler(req: Request, res: Response): Promise<void> {
+  const status = await getSenderStatus(userId(req));
+  ok(res, status);
 }

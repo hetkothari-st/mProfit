@@ -24,7 +24,17 @@ export interface NotificationConfigInput {
   paymentInstructions?: string | null;
 }
 
+export interface SenderStatus {
+  gmailConnected: boolean;
+  gmailEmail: string | null;
+  smtpConfigured: boolean;
+}
+
 export const notificationsApi = {
+  async getStatus(): Promise<SenderStatus> {
+    const { data } = await api.get<ApiResponse<SenderStatus>>('/api/notifications/status');
+    return unwrap(data);
+  },
   async getConfig(): Promise<NotificationConfigDTO | null> {
     const { data } = await api.get<ApiResponse<NotificationConfigDTO | null>>(
       '/api/notifications/config',

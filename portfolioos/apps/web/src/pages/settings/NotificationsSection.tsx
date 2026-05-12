@@ -1,39 +1,40 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Loader2, Send, Trash2, Mail, Check, ExternalLink } from 'lucide-react';
+import { Loader2, Send, Trash2, Mail, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuthStore } from '@/stores/auth.store';
 import { notificationsApi } from '@/api/notifications.api';
+import { gmailApi } from '@/api/gmail.api';
 
 /**
- * Minimal email setup — the user only enters their mail provider's app
- * password. Everything else (SMTP host/port, from address, name) is
- * derived from the auth profile + a domain → provider map on the server.
+ * Zero-password email setup. The landlord clicks "Connect Gmail", grants
+ * consent on Google, and the app sends rent reminders via the Gmail API
+ * using their existing OAuth tokens — same connection that already
+ * powers inbox ingestion. SMTP / app password flow stays available
+ * server-side for non-Gmail users but isn't surfaced here.
  */
 export function NotificationsSection() {
   const qc = useQueryClient();
-  const { user } = useAuthStore();
-  const [appPassword, setAppPassword] = useState<string>('');
   const [testEmail, setTestEmail] = useState<string>('');
 
-  const configQuery = useQuery({
-    queryKey: ['notifications', 'config'],
-    queryFn: () => notificationsApi.getConfig(),
+  const statusQuery = useQuery({
+    queryKey: ['notifications', 'status'],
+    queryFn: () => notificationsApi.getStatus(),
   });
-  const hasConfig = !!configQuery.data?.hasPassword;
 
-  const saveMut = useMutation({
-    mutationFn: () => notificationsApi.upsertConfig({ smtpPass: appPassword }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications', 'config'] });
-      toast.success('Email setup saved');
-      setAppPassword('');
+  const connectMut = useMutation({
+    mutationFn: () => gmailApi.authUrl(),
+    onSuccess: ({ url }) => {
+      // Open Google consent in same tab — the existing /gmail/callback
+      // route handles the redirect + token exchange and brings the user
+      // back to the dashboard.
+      window.location.href = url;
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Save failed'),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Could not start Google sign-in'),
   });
 
   const testMut = useMutation({
@@ -45,53 +46,8 @@ export function NotificationsSection() {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Test failed'),
   });
 
-  const deleteMut = useMutation({
-    mutationFn: () => notificationsApi.deleteConfig(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications', 'config'] });
-      toast.success('Email setup cleared');
-      setAppPassword('');
-    },
-  });
-
-  const emailDomain = user?.email?.split('@')[1]?.toLowerCase() ?? '';
-  const helpLink = (() => {
-    if (emailDomain === 'gmail.com' || emailDomain === 'googlemail.com') {
-      return {
-        label: 'Generate a Google app password',
-        href: 'https://myaccount.google.com/apppasswords',
-      };
-    }
-    if (
-      emailDomain === 'outlook.com'
-      || emailDomain === 'hotmail.com'
-      || emailDomain === 'live.com'
-    ) {
-      return {
-        label: 'Generate a Microsoft app password',
-        href: 'https://account.microsoft.com/security',
-      };
-    }
-    if (emailDomain === 'yahoo.com' || emailDomain === 'yahoo.in') {
-      return {
-        label: 'Generate a Yahoo app password',
-        href: 'https://login.yahoo.com/account/security/app-passwords',
-      };
-    }
-    if (emailDomain === 'icloud.com' || emailDomain === 'me.com') {
-      return {
-        label: 'Generate an iCloud app-specific password',
-        href: 'https://appleid.apple.com/account/manage',
-      };
-    }
-    if (emailDomain === 'zoho.com' || emailDomain === 'zoho.in') {
-      return {
-        label: 'Generate a Zoho app password',
-        href: 'https://accounts.zoho.com/u/h#security/app_password',
-      };
-    }
-    return null;
-  })();
+  const status = statusQuery.data;
+  const connected = !!status?.gmailConnected;
 
   return (
     <Card>
@@ -101,82 +57,35 @@ export function NotificationsSection() {
           <CardTitle>Email notifications</CardTitle>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Used to send rent reminders to tenants on your behalf. We derive
-          the mail server, sender name and address from your account profile —
-          you only need to paste your app password.
+          Rent reminders are sent via your Gmail account. One-time sign-in,
+          no passwords stored.
         </p>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {/* Read-only summary so the user knows what we'll send as */}
-          <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            <span className="text-muted-foreground text-xs">Sending as</span>
-            <span className="font-medium">{user?.name ?? '—'}</span>
-            <span className="text-muted-foreground">·</span>
-            <span className="font-mono text-xs">{user?.email ?? '—'}</span>
-            {hasConfig && (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium ml-auto">
-                <Check className="h-3.5 w-3.5" /> App password saved
+        {statusQuery.isLoading ? (
+          <div className="py-3 flex items-center justify-center">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : connected ? (
+          <div className="space-y-4">
+            <div className="rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 flex flex-wrap items-center gap-3">
+              <Check className="h-4 w-4 text-emerald-700" />
+              <span className="text-sm font-medium">Gmail connected</span>
+              <span className="text-sm font-mono text-muted-foreground">
+                {status?.gmailEmail}
               </span>
-            )}
-          </div>
-
-          <div>
-            <Label>
-              App password
-              {hasConfig && (
-                <span className="text-[10px] text-muted-foreground font-normal ml-2">
-                  (leave blank to keep current)
-                </span>
-              )}
-            </Label>
-            <Input
-              type="password"
-              value={appPassword}
-              onChange={(e) => setAppPassword(e.target.value)}
-              placeholder={hasConfig ? '••••••••••••••••' : 'Paste your provider app password here'}
-              autoComplete="new-password"
-            />
-            {helpLink && (
-              <a
-                href={helpLink.href}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-accent-ink/80 hover:underline inline-flex items-center gap-1 mt-1.5"
-              >
-                {helpLink.label} <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-            {!helpLink && emailDomain && (
-              <p className="text-xs text-amber-700 mt-1.5">
-                We don't have an auto-setup for <strong>@{emailDomain}</strong> yet.
-                Try a Gmail / Outlook / Yahoo / iCloud / Zoho address.
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => saveMut.mutate()}
-              disabled={(!appPassword.trim() && !hasConfig) || saveMut.isPending}
-            >
-              {saveMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Save app password
-            </Button>
-            {hasConfig && (
               <Button
-                variant="outline"
-                onClick={() => deleteMut.mutate()}
-                disabled={deleteMut.isPending}
+                size="sm"
+                variant="ghost"
+                className="ml-auto"
+                onClick={() => connectMut.mutate()}
+                disabled={connectMut.isPending}
               >
-                {deleteMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                Clear
+                Reconnect
               </Button>
-            )}
-          </div>
+            </div>
 
-          {hasConfig && (
-            <div className="pt-3 border-t border-border/60">
+            <div className="pt-2">
               <Label>Send test email</Label>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <Input
@@ -199,9 +108,40 @@ export function NotificationsSection() {
                 Send yourself a test before approving real tenant reminders.
               </p>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Sign in with your Google account to allow PortfolioOS to send rent
+              reminders on your behalf. No password is ever stored — Google
+              grants and revokes access via your account settings.
+            </p>
+            <Button
+              onClick={() => connectMut.mutate()}
+              disabled={connectMut.isPending}
+            >
+              {connectMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <GoogleGlyph />
+              )}
+              Connect Gmail
+            </Button>
+            <p className="text-[11px] text-muted-foreground">
+              You'll be redirected to Google, then back here. We request only
+              the Gmail send + read scopes — nothing else.
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+function GoogleGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
+      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.5-1.7 4.4-5.5 4.4-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.6 3.7 14.5 2.8 12 2.8 6.9 2.8 2.8 6.9 2.8 12s4.1 9.2 9.2 9.2c5.3 0 8.8-3.7 8.8-9 0-.6-.1-1.1-.2-1.6H12z"/>
+    </svg>
   );
 }
