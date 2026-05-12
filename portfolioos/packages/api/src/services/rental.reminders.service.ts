@@ -160,6 +160,16 @@ function startOfDayUtc(d: Date): Date {
  */
 const OVERDUE_LEAD_DAYS_SENTINEL = -1;
 
+// Statuses that mean "user is done with this reminder" — re-running the
+// scan should be allowed to revive them back into the queue with fresh
+// copy so the landlord doesn't have to manually delete + re-scan to
+// retry a failed/rejected/superseded send.
+const REVIVABLE_STATUSES = new Set<string>([
+  REMINDER_STATUS.REJECTED,
+  REMINDER_STATUS.FAILED,
+  REMINDER_STATUS.SUPERSEDED,
+]);
+
 async function enqueueOne(
   ctx: ReceiptWithContext,
   leadDays: number,
@@ -202,28 +212,58 @@ async function enqueueOne(
     email: !!ctx.tenancy.tenantEmail,
     sms: !!ctx.tenancy.tenantPhone,
   };
+
+  // Decide create vs revive vs leave-alone based on existing row state.
+  // Without this branch the unique (receiptId, leadDays) index blocked
+  // every retry — a once-rejected or once-failed reminder couldn't be
+  // re-queued through Run scan, only by deleting the row in SQL.
+  const existing = await prisma.rentReminder.findUnique({
+    where: { receiptId_leadDays: { receiptId: ctx.receipt.id, leadDays } },
+    select: { id: true, status: true },
+  });
   try {
-    await prisma.rentReminder.create({
-      data: {
-        receiptId: ctx.receipt.id,
-        tenancyId: ctx.tenancy.id,
-        leadDays,
-        status: REMINDER_STATUS.PENDING_APPROVAL,
-        channels,
-        subject,
-        body,
-        smsBody,
-      },
-    });
-    return true;
-  } catch (err) {
-    const code = (err as { code?: string })?.code;
-    if (code !== 'P2002') {
-      logger.error(
-        { err, receiptId: ctx.receipt.id, leadDays },
-        '[rental.reminders] failed to enqueue reminder',
-      );
+    if (!existing) {
+      await prisma.rentReminder.create({
+        data: {
+          receiptId: ctx.receipt.id,
+          tenancyId: ctx.tenancy.id,
+          leadDays,
+          status: REMINDER_STATUS.PENDING_APPROVAL,
+          channels,
+          subject,
+          body,
+          smsBody,
+        },
+      });
+      return true;
     }
+    if (REVIVABLE_STATUSES.has(existing.status)) {
+      await prisma.rentReminder.update({
+        where: { id: existing.id },
+        data: {
+          status: REMINDER_STATUS.PENDING_APPROVAL,
+          channels,
+          subject,
+          body,
+          smsBody,
+          emailStatus: null,
+          emailError: null,
+          smsStatus: null,
+          smsError: null,
+          approvedAt: null,
+          sentAt: null,
+        },
+      });
+      return true;
+    }
+    // PENDING_APPROVAL / APPROVED / SENT — leave the row alone so the
+    // user's in-progress edits and successful sends aren't clobbered.
+    return false;
+  } catch (err) {
+    logger.error(
+      { err, receiptId: ctx.receipt.id, leadDays },
+      '[rental.reminders] failed to enqueue reminder',
+    );
     return false;
   }
 }
