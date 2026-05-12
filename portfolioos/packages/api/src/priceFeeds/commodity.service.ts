@@ -95,12 +95,14 @@ async function fetchGoldApiInr(): Promise<{
   let SILVER: Decimal | null = null;
   let derivedUsdInr: Decimal | null = null;
 
-  // Run CoinGecko (gold + derived FX) and gold-api XAG (silver in USD) in parallel.
-  const [cgRes, xagRes] = await Promise.allSettled([
+  // Run CoinGecko (gold + derived FX), gold-api XAU (gold USD fallback), and
+  // gold-api XAG (silver USD) in parallel.
+  const [cgRes, xauRes, xagRes] = await Promise.allSettled([
     fetch(
       'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=inr,usd',
-      { signal: AbortSignal.timeout(8000) },
+      { signal: AbortSignal.timeout(6000) },
     ),
+    fetch('https://api.gold-api.com/price/XAU', { signal: AbortSignal.timeout(5000) }),
     fetch('https://api.gold-api.com/price/XAG', { signal: AbortSignal.timeout(5000) }),
   ]);
 
@@ -125,13 +127,39 @@ async function fetchGoldApiInr(): Promise<{
     logger.warn({ err: cgRes.reason }, '[commodity] CoinGecko gold fetch failed');
   }
 
+  // FX resolver — derive once, reuse for both silver (XAG) and gold (XAU) USD paths.
+  async function getFx(): Promise<Decimal | null> {
+    if (derivedUsdInr) return derivedUsdInr;
+    const fx = await fetchUsdInr();
+    if (fx) derivedUsdInr = fx;
+    return fx;
+  }
+
+  // gold-api.com XAU — USD/oz gold spot fallback for when CoinGecko PAXG fails.
+  if (!GOLD && xauRes.status === 'fulfilled' && xauRes.value.ok) {
+    try {
+      const j = await xauRes.value.json() as { price?: number };
+      if (j.price && j.price > 0) {
+        const fx = await getFx();
+        if (fx) {
+          GOLD = new Decimal(j.price).times(fx).div(TROY_OZ_TO_GRAMS);
+          logger.info({ goldUsd: j.price, usdInr: fx.toString() }, '[commodity] gold from gold-api XAU');
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, '[commodity] gold-api XAU parse failed');
+    }
+  } else if (xauRes.status === 'rejected') {
+    logger.warn({ err: xauRes.reason }, '[commodity] gold-api XAU fetch failed');
+  }
+
   // gold-api.com XAG — USD/oz silver spot. Convert to INR/gram via derived FX
-  // (preferred) or fall back to fetchUsdInr() if CoinGecko didn't yield one.
+  // (preferred) or fetchUsdInr() fallback.
   if (xagRes.status === 'fulfilled' && xagRes.value.ok) {
     try {
       const j = await xagRes.value.json() as { price?: number };
       if (j.price && j.price > 0) {
-        const fx = derivedUsdInr ?? (await fetchUsdInr());
+        const fx = await getFx();
         if (fx) {
           SILVER = new Decimal(j.price).times(fx).div(TROY_OZ_TO_GRAMS);
           logger.info({ silverUsd: j.price, usdInr: fx.toString() }, '[commodity] silver from gold-api XAG');
@@ -202,10 +230,50 @@ async function refreshLivePrices(): Promise<LiveCache> {
     fetchYahooBundle(),
   ]);
   const GOLD = primary.GOLD ?? yahoo.goldInrPerGramFallback;
-  const SILVER = primary.SILVER ?? yahoo.silverInrPerGram;
+
+  // Silver fallback ladder:
+  //   1. gold-api XAG × CoinGecko-derived FX (best — same call as gold)
+  //   2. Yahoo SI=F × Yahoo INR=X (used when CoinGecko or gold-api flakes)
+  //   3. SILVERBEES.NS NAV (each unit ≈ 1g silver; close enough for display)
+  let SILVER = primary.SILVER ?? yahoo.silverInrPerGram;
+  if (!SILVER) {
+    const silverbees = yahoo.etfNavs['SILVERBEES'];
+    if (silverbees) {
+      SILVER = silverbees;
+      logger.info({ silverbees: silverbees.toString() }, '[commodity] silver fallback to SILVERBEES NAV');
+    } else {
+      logger.warn('[commodity] silver unavailable: all sources failed');
+    }
+  }
+
   const fresh: LiveCache = { GOLD, SILVER, etfNavs: yahoo.etfNavs, fetchedAt: new Date() };
   liveCache = fresh;
+  logger.info({
+    gold: GOLD?.toString() ?? 'null',
+    silver: SILVER?.toString() ?? 'null',
+    etfCount: Object.keys(yahoo.etfNavs).length,
+  }, '[commodity] live prices refreshed');
   return fresh;
+}
+
+const EMPTY_CACHE: LiveCache = {
+  GOLD: null,
+  SILVER: null,
+  etfNavs: {},
+  fetchedAt: new Date(0),
+};
+const COLD_WAIT_MS = 4000;
+
+function startRefresh(): Promise<LiveCache> {
+  if (!inflightRefresh) {
+    inflightRefresh = refreshLivePrices()
+      .catch((err) => {
+        logger.warn({ err }, '[commodity] refresh failed');
+        return liveCache ?? EMPTY_CACHE;
+      })
+      .finally(() => { inflightRefresh = null; });
+  }
+  return inflightRefresh;
 }
 
 export async function fetchLivePrices(): Promise<LiveCache> {
@@ -216,28 +284,23 @@ export async function fetchLivePrices(): Promise<LiveCache> {
   }
   // Stale-while-revalidate: hand back the stale snapshot, refresh in the background.
   if (liveCache) {
-    if (!inflightRefresh) {
-      inflightRefresh = refreshLivePrices()
-        .catch((err) => {
-          logger.warn({ err }, '[commodity] background refresh failed');
-          return liveCache!;
-        })
-        .finally(() => { inflightRefresh = null; });
-    }
+    void startRefresh();
     return liveCache;
   }
-  // Cold start — must wait. Coalesce concurrent callers onto one fetch.
-  if (!inflightRefresh) {
-    inflightRefresh = refreshLivePrices().finally(() => { inflightRefresh = null; });
-  }
-  return inflightRefresh;
+  // Cold start — wait briefly on the inflight refresh; if it doesn't finish in
+  // COLD_WAIT_MS, return an empty cache and let the controller fall back to DB.
+  // Prevents the endpoint from hanging when upstreams are slow.
+  const refresh = startRefresh();
+  return Promise.race([
+    refresh,
+    new Promise<LiveCache>((resolve) => setTimeout(() => resolve(EMPTY_CACHE), COLD_WAIT_MS)),
+  ]);
 }
 
 // Warm the cache at module load so the first request after server boot is instant.
-// Failures are non-fatal — the next call will retry.
-void refreshLivePrices().catch((err) => {
-  logger.warn({ err }, '[commodity] warm-up fetch failed');
-});
+// Use the same inflight slot so the first real request piggybacks on this fetch
+// instead of starting a second one.
+void startRefresh();
 
 export async function fetchCommoditySpotInr(
   commodity: CommodityType,

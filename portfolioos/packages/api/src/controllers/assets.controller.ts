@@ -164,11 +164,17 @@ export async function liveCommodityPrices(_req: Request, res: Response) {
     etfPayload[sym] = serializeMoney(price);
   }
 
+  // EMPTY_CACHE uses epoch 0 to signal "no live snapshot yet" — substitute the
+  // current time so the frontend's freshness indicator stays sensible while the
+  // DB fallback is in effect.
+  const fetchedAtIso =
+    fetchedAt.getTime() === 0 ? new Date().toISOString() : fetchedAt.toISOString();
+
   ok(res, {
     GOLD: gold ? serializeMoney(gold) : null,
     SILVER: silver ? serializeMoney(silver) : null,
     etfNavs: etfPayload,
-    fetchedAt: fetchedAt.toISOString(),
+    fetchedAt: fetchedAtIso,
     source: liveGold ? 'live' : 'cached',
   });
 }
