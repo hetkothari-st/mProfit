@@ -18,9 +18,9 @@ const PROXIES: Record<CommodityType, { yahooInr: string; yahooUsd: string }> = {
   PLATINUM: { yahooInr: 'PL=F', yahooUsd: 'PL=F' },
 };
 
-// In-memory cache for live price endpoint — prevents hammering external APIs on every frontend poll.
-// TTL: 5 min (spot doesn't tick faster than that in practice). Stale-while-revalidate keeps
-// the endpoint instant even when upstreams are slow: stale cache is returned immediately and
+// In-memory cache for the live price endpoint. Short TTL so user-visible
+// ticks feel continuous; stale-while-revalidate keeps every request instant
+// even when upstreams are slow — a stale snapshot is returned immediately and
 // a background refresh kicks off.
 interface LiveCache {
   GOLD: Decimal | null;
@@ -30,7 +30,7 @@ interface LiveCache {
 }
 let liveCache: LiveCache | null = null;
 let inflightRefresh: Promise<LiveCache> | null = null;
-const LIVE_CACHE_TTL_MS = 5 * 60_000;
+const LIVE_CACHE_TTL_MS = 15_000;
 const TROY_OZ_TO_GRAMS = 31.1035;
 
 // NSE gold ETF symbols — each unit trades at NAV ≈ (1/100 g) × gold price.
@@ -86,48 +86,67 @@ async function fetchUsdInr(): Promise<Decimal | null> {
   return null;
 }
 
-async function fetchGoldApiInr(): Promise<{ GOLD: Decimal | null; SILVER: Decimal | null }> {
+async function fetchGoldApiInr(): Promise<{
+  GOLD: Decimal | null;
+  SILVER: Decimal | null;
+  derivedUsdInr: Decimal | null;
+}> {
   let GOLD: Decimal | null = null;
   let SILVER: Decimal | null = null;
+  let derivedUsdInr: Decimal | null = null;
 
-  // CoinGecko PAXG (1 troy oz of physical gold) → INR per gram.
-  try {
-    const res = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=inr',
+  // Run CoinGecko (gold + derived FX) and gold-api XAG (silver in USD) in parallel.
+  const [cgRes, xagRes] = await Promise.allSettled([
+    fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=inr,usd',
       { signal: AbortSignal.timeout(8000) },
-    );
-    if (res.ok) {
-      const data = await res.json() as Record<string, { inr?: number }>;
+    ),
+    fetch('https://api.gold-api.com/price/XAG', { signal: AbortSignal.timeout(5000) }),
+  ]);
+
+  // CoinGecko PAXG (1 troy oz physical gold) → INR/gram. Derive USD/INR from
+  // the same response so we don't need a separate FX call for silver.
+  if (cgRes.status === 'fulfilled' && cgRes.value.ok) {
+    try {
+      const data = await cgRes.value.json() as Record<string, { inr?: number; usd?: number }>;
       const paxgInr = data['pax-gold']?.inr;
+      const paxgUsd = data['pax-gold']?.usd;
       if (paxgInr) {
         GOLD = new Decimal(paxgInr).div(TROY_OZ_TO_GRAMS);
-        logger.info({ paxgInr }, '[commodity] gold price from CoinGecko PAXG');
       }
+      if (paxgInr && paxgUsd && paxgUsd > 0) {
+        derivedUsdInr = new Decimal(paxgInr).div(paxgUsd);
+        logger.info({ paxgInr, paxgUsd, derivedUsdInr: derivedUsdInr.toString() }, '[commodity] gold + FX from CoinGecko PAXG');
+      }
+    } catch (err) {
+      logger.warn({ err }, '[commodity] CoinGecko PAXG parse failed');
     }
-  } catch (err) {
-    logger.warn({ err }, '[commodity] CoinGecko gold fetch failed');
+  } else if (cgRes.status === 'rejected') {
+    logger.warn({ err: cgRes.reason }, '[commodity] CoinGecko gold fetch failed');
   }
 
-  // gold-api.com XAU/XAG — free, no key, returns USD/oz spot. Reliable silver
-  // source (CoinGecko has no major silver token). Convert to INR per gram via
-  // USD/INR FX. Try in parallel with the FX lookup.
-  try {
-    const [xagRes, fxRate] = await Promise.all([
-      fetch('https://api.gold-api.com/price/XAG', { signal: AbortSignal.timeout(5000) }),
-      fetchUsdInr(),
-    ]);
-    if (xagRes.ok && fxRate) {
-      const j = await xagRes.json() as { price?: number };
+  // gold-api.com XAG — USD/oz silver spot. Convert to INR/gram via derived FX
+  // (preferred) or fall back to fetchUsdInr() if CoinGecko didn't yield one.
+  if (xagRes.status === 'fulfilled' && xagRes.value.ok) {
+    try {
+      const j = await xagRes.value.json() as { price?: number };
       if (j.price && j.price > 0) {
-        SILVER = new Decimal(j.price).times(fxRate).div(TROY_OZ_TO_GRAMS);
-        logger.info({ silverUsd: j.price, usdInr: fxRate.toString() }, '[commodity] silver from gold-api XAG');
+        const fx = derivedUsdInr ?? (await fetchUsdInr());
+        if (fx) {
+          SILVER = new Decimal(j.price).times(fx).div(TROY_OZ_TO_GRAMS);
+          logger.info({ silverUsd: j.price, usdInr: fx.toString() }, '[commodity] silver from gold-api XAG');
+        } else {
+          logger.warn({ silverUsd: j.price }, '[commodity] silver got USD price but no FX rate');
+        }
       }
+    } catch (err) {
+      logger.warn({ err }, '[commodity] gold-api XAG parse failed');
     }
-  } catch (err) {
-    logger.warn({ err }, '[commodity] gold-api XAG silver fetch failed');
+  } else if (xagRes.status === 'rejected') {
+    logger.warn({ err: xagRes.reason }, '[commodity] gold-api XAG fetch failed');
   }
 
-  return { GOLD, SILVER };
+  return { GOLD, SILVER, derivedUsdInr };
 }
 
 /**

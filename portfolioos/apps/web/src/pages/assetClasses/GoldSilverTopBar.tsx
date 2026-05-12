@@ -35,8 +35,8 @@ export function GoldSilverTopBar() {
   const { data, isFetching, error } = useQuery({
     queryKey: ['commodities-live'],
     queryFn: () => assetsApi.commoditiesLive(),
-    refetchInterval: 60_000,
-    staleTime: 60_000,
+    refetchInterval: 10_000,
+    staleTime: 10_000,
     placeholderData: keepPreviousData,
     retry: 2,
   });
@@ -44,7 +44,7 @@ export function GoldSilverTopBar() {
   const secs = useSecondsAgo(data?.fetchedAt);
 
   return (
-    <div className="sticky top-0 z-30 -mx-6 lg:-mx-10 -mt-7 mb-5 px-6 lg:px-10 py-3 border-b border-border/60 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+    <div className="sticky top-0 z-30 mb-5 px-4 sm:px-5 py-3 rounded-lg border border-border/60 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-sm">
       <div className="flex items-center justify-between gap-6 flex-wrap">
         <div className="flex items-center gap-8 flex-wrap">
           {/* Gold */}

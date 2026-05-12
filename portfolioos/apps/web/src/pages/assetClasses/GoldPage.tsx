@@ -36,8 +36,8 @@ export function GoldPage() {
   const { data: live, isFetching } = useQuery({
     queryKey: ['commodities-live'],
     queryFn: () => assetsApi.commoditiesLive(),
-    refetchInterval: 60_000,
-    staleTime: 60_000,
+    refetchInterval: 10_000,
+    staleTime: 10_000,
     placeholderData: keepPreviousData,
     retry: 2,
   });
@@ -88,19 +88,17 @@ export function GoldPage() {
   );
 
   return (
-    <>
-      <GoldSilverTopBar />
-      <SimpleAssetPage
-        title="Gold & Silver"
-        description="Track physical gold, sovereign gold bonds, gold ETFs, and silver"
-        icon={Coins}
-        assetClasses={['PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF', 'PHYSICAL_SILVER']}
-        defaultAssetClass="PHYSICAL_GOLD"
-        FormComponent={GoldFormDialog}
-        computeLiveValue={computeLiveValue}
-        liveIndicator={liveIndicator}
-        onHoldingClick={handleHoldingClick}
-      />
-    </>
+    <SimpleAssetPage
+      title="Gold & Silver"
+      description="Track physical gold, sovereign gold bonds, gold ETFs, and silver"
+      icon={Coins}
+      assetClasses={['PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF', 'PHYSICAL_SILVER']}
+      defaultAssetClass="PHYSICAL_GOLD"
+      FormComponent={GoldFormDialog}
+      computeLiveValue={computeLiveValue}
+      liveIndicator={liveIndicator}
+      onHoldingClick={handleHoldingClick}
+      topSlot={<GoldSilverTopBar />}
+    />
   );
 }

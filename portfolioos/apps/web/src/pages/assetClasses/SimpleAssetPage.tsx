@@ -49,6 +49,10 @@ interface Props {
    *  multiple distinct products (e.g. FD + RD) and the user wants them
    *  visually separated. Ignored when only one asset class is present. */
   groupHoldingsByClass?: boolean;
+  /** Optional content rendered immediately after the PageHeader (i.e. below
+   *  the title) and before the summary cards. Use for asset-class-specific
+   *  banners like the live commodity rate bar on the Gold & Silver page. */
+  topSlot?: React.ReactNode;
 }
 
 const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
@@ -87,6 +91,7 @@ export function SimpleAssetPage({
   liveIndicator,
   onHoldingClick,
   groupHoldingsByClass,
+  topSlot,
 }: Props) {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
@@ -247,6 +252,8 @@ export function SimpleAssetPage({
           </div>
         }
       />
+
+      {topSlot}
 
       {/* Summary strip */}
       {!isLoading && allHoldings.length > 0 && (
