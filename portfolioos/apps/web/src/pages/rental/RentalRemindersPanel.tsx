@@ -115,15 +115,30 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
   const [instructions, setInstructions] = useState(
     extractPaymentInstructions(reminder.body),
   );
+  // Full-body draft. Starts from the stored body; each keystroke in the
+  // payment-instructions field updates the spliced HTML so the simple
+  // path Just Works without the landlord touching raw HTML. Expanding
+  // "Edit full email" lets advanced users tweak anything they want.
+  const [bodyDraft, setBodyDraft] = useState<string>(reminder.body);
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
 
-  const bodyWithInstructions = spliceInstructionsIntoBody(reminder.body, instructions);
+  // Keep bodyDraft in sync with the instructions textarea unless the
+  // landlord has taken over the advanced editor — once `showAdvanced`
+  // is open we treat the textarea as the source of truth and stop
+  // overwriting it from the instructions splicer.
+  function handleInstructionsChange(next: string) {
+    setInstructions(next);
+    if (!showAdvanced) {
+      setBodyDraft(spliceInstructionsIntoBody(reminder.body, next));
+    }
+  }
 
   const updateMut = useMutation({
     mutationFn: () =>
       rentalApi.updateReminder(reminder.id, {
         subject,
         smsBody,
-        body: bodyWithInstructions,
+        body: bodyDraft,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rental-reminders'] });
@@ -160,23 +175,52 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
             <Label>Payment instructions</Label>
             <textarea
               value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
+              onChange={(e) => handleInstructionsChange(e.target.value)}
               placeholder="UPI: yourname@upi · NEFT: HDFC A/c XXXXX1234, IFSC HDFC0001234"
-              className="w-full min-h-[72px] rounded-md border border-border bg-background px-3 py-2 text-sm"
+              disabled={showAdvanced}
+              className="w-full min-h-[72px] rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-60"
             />
             <p className="text-[11px] text-muted-foreground mt-1">
-              Replaces the corresponding section in the email body — preview updates live.
+              {showAdvanced
+                ? 'Disabled — you\'re editing the full email below. Toggle off to use the simple instructions field again.'
+                : 'Replaces the corresponding section in the email body — preview updates live.'}
             </p>
           </div>
           <div>
-            <Label>Email preview</Label>
+            <div className="flex items-center justify-between">
+              <Label>Email preview</Label>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="text-[11px] text-accent-ink/80 hover:text-foreground hover:underline"
+              >
+                {showAdvanced ? '◀ Use simple instructions' : 'Edit full email ▸'}
+              </button>
+            </div>
             <div className="mt-1 rounded-md border border-border bg-background/50 p-3 max-h-72 overflow-y-auto">
               <iframe
                 title="Email preview"
-                srcDoc={bodyWithInstructions}
+                srcDoc={bodyDraft}
                 className="w-full h-64 border-0 bg-white"
               />
             </div>
+            {showAdvanced && (
+              <div className="mt-2">
+                <Label className="text-[10px] uppercase tracking-kerned text-muted-foreground">
+                  Raw HTML body
+                </Label>
+                <textarea
+                  value={bodyDraft}
+                  onChange={(e) => setBodyDraft(e.target.value)}
+                  spellCheck={false}
+                  className="w-full min-h-[200px] rounded-md border border-border bg-background px-3 py-2 text-[12px] font-mono leading-relaxed"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Edit any part of the email — greeting, body, signature, anything.
+                  The preview above re-renders on every keystroke.
+                </p>
+              </div>
+            )}
           </div>
           <div>
             <Label className="flex items-center gap-1.5">
