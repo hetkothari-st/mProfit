@@ -14,15 +14,13 @@ function userId(req: Request): string {
   return req.user.id;
 }
 
+// Only the app password ever crosses the wire from the form — host /
+// port / user / from-name / from-email are derived server-side from
+// the user's profile (see config.service.ts). Default payment
+// instructions are managed from the rental reminders panel so they
+// land on this route too.
 const configSchema = z.object({
-  smtpHost: z.string().min(1).max(200),
-  smtpPort: z.coerce.number().int().min(1).max(65535),
-  smtpSecure: z.boolean(),
-  smtpUser: z.string().min(1).max(200),
-  // Empty string means "keep existing password". Required only on first save.
   smtpPass: z.string().max(500).optional(),
-  fromName: z.string().min(1).max(200),
-  fromEmail: z.string().email().max(200),
   paymentInstructions: z.string().max(2000).nullable().optional(),
 });
 
@@ -41,7 +39,10 @@ export async function upsertConfigHandler(req: Request, res: Response): Promise<
     const row = await upsertNotificationConfig(userId(req), body);
     ok(res, row);
   } catch (err) {
-    if (err instanceof Error && err.message.includes('password is required')) {
+    if (
+      err instanceof Error
+      && (err.message.includes('password is required') || err.message.includes("can't auto-detect"))
+    ) {
       throw new BadRequestError(err.message);
     }
     throw err;

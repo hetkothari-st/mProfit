@@ -17,15 +17,48 @@ import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
 import type { SmtpConfig } from './email.service.js';
 import { sendEmail } from './email.service.js';
 
+/**
+ * Auto-detect SMTP host/port/secure from the user's email domain so the
+ * landlord never has to type that boilerplate. Returns null for domains
+ * we don't recognise — caller will surface an error asking the user to
+ * either use a supported provider or extend this map.
+ */
+interface SmtpDefaults {
+  host: string;
+  port: number;
+  secure: boolean;
+}
+
+const SMTP_DEFAULTS_BY_DOMAIN: Record<string, SmtpDefaults> = {
+  'gmail.com': { host: 'smtp.gmail.com', port: 587, secure: false },
+  'googlemail.com': { host: 'smtp.gmail.com', port: 587, secure: false },
+  'outlook.com': { host: 'smtp-mail.outlook.com', port: 587, secure: false },
+  'hotmail.com': { host: 'smtp-mail.outlook.com', port: 587, secure: false },
+  'live.com': { host: 'smtp-mail.outlook.com', port: 587, secure: false },
+  'office365.com': { host: 'smtp.office365.com', port: 587, secure: false },
+  'yahoo.com': { host: 'smtp.mail.yahoo.com', port: 587, secure: false },
+  'yahoo.in': { host: 'smtp.mail.yahoo.com', port: 587, secure: false },
+  'icloud.com': { host: 'smtp.mail.me.com', port: 587, secure: false },
+  'me.com': { host: 'smtp.mail.me.com', port: 587, secure: false },
+  'zoho.com': { host: 'smtp.zoho.in', port: 587, secure: false },
+  'zoho.in': { host: 'smtp.zoho.in', port: 587, secure: false },
+};
+
+function smtpDefaultsFor(email: string): SmtpDefaults | null {
+  const at = email.lastIndexOf('@');
+  if (at < 0) return null;
+  const domain = email.slice(at + 1).toLowerCase();
+  return SMTP_DEFAULTS_BY_DOMAIN[domain] ?? null;
+}
+
 export interface NotificationConfigInput {
-  smtpHost: string;
-  smtpPort: number;
-  smtpSecure: boolean;
-  smtpUser: string;
-  /** Plain password; the service encrypts it before storage. */
+  /** Plain password / app password; the service encrypts it before storage. */
   smtpPass?: string;
-  fromName: string;
-  fromEmail: string;
+  /**
+   * Default payment instructions text (UPI handle, bank details, …).
+   * Edited from the rental reminders panel; the property-level field
+   * overrides this when set.
+   */
   paymentInstructions?: string | null;
 }
 
@@ -73,30 +106,51 @@ export async function upsertNotificationConfig(
       : existing?.smtpPassEnc;
 
   if (!smtpPassEnc) {
-    throw new Error('SMTP password is required on first save');
+    throw new Error('App password is required on first save');
+  }
+
+  // Auto-derive every other field from the user's app profile so the
+  // landlord never has to retype name/email/host/port/secure. The profile
+  // email becomes both the smtpUser and the from address — which matches
+  // what every consumer SMTP provider (Gmail / Outlook / Yahoo / iCloud)
+  // requires anyway (envelope FROM must match authenticated mailbox).
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+  if (!user) throw new Error('User not found');
+  const defaults = smtpDefaultsFor(user.email);
+  if (!defaults) {
+    throw new Error(
+      `We can't auto-detect SMTP settings for ${user.email}. ` +
+      'Use a Gmail / Outlook / Yahoo / iCloud / Zoho address, ' +
+      'or ask the admin to add your domain.',
+    );
   }
 
   await prisma.userNotificationConfig.upsert({
     where: { userId },
     update: {
-      smtpHost: input.smtpHost,
-      smtpPort: input.smtpPort,
-      smtpSecure: input.smtpSecure,
-      smtpUser: input.smtpUser,
+      smtpHost: defaults.host,
+      smtpPort: defaults.port,
+      smtpSecure: defaults.secure,
+      smtpUser: user.email,
       smtpPassEnc,
-      fromName: input.fromName,
-      fromEmail: input.fromEmail,
-      paymentInstructions: input.paymentInstructions ?? null,
+      fromName: user.name ?? user.email,
+      fromEmail: user.email,
+      ...(input.paymentInstructions !== undefined
+        ? { paymentInstructions: input.paymentInstructions ?? null }
+        : {}),
     },
     create: {
       userId,
-      smtpHost: input.smtpHost,
-      smtpPort: input.smtpPort,
-      smtpSecure: input.smtpSecure,
-      smtpUser: input.smtpUser,
+      smtpHost: defaults.host,
+      smtpPort: defaults.port,
+      smtpSecure: defaults.secure,
+      smtpUser: user.email,
       smtpPassEnc,
-      fromName: input.fromName,
-      fromEmail: input.fromEmail,
+      fromName: user.name ?? user.email,
+      fromEmail: user.email,
       paymentInstructions: input.paymentInstructions ?? null,
     },
   });

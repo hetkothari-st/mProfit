@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { rentalApi, type RentReminderDTO } from '@/api/rental.api';
+import { notificationsApi } from '@/api/notifications.api';
 
 // Map raw provider/server error codes to landlord-friendly text. Anything
 // not matched falls through unchanged so genuine carrier errors still
@@ -609,6 +610,86 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
   );
 }
 
+// ── Payment instructions editor ────────────────────────────────────
+
+function PaymentInstructionsEditor() {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<string>('');
+  const [loaded, setLoaded] = useState<boolean>(false);
+  const [justSaved, setJustSaved] = useState<boolean>(false);
+
+  const configQuery = useQuery({
+    queryKey: ['notifications', 'config'],
+    queryFn: () => notificationsApi.getConfig(),
+  });
+
+  // Sync server value into the textarea once it loads. We track `loaded`
+  // so we don't clobber the user's in-progress edits on every refetch.
+  if (!loaded && configQuery.data) {
+    setDraft(configQuery.data.paymentInstructions ?? '');
+    setLoaded(true);
+  }
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      notificationsApi.upsertConfig({
+        paymentInstructions: draft.trim() || null,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications', 'config'] });
+      toast.success('Payment instructions saved');
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2500);
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Save failed'),
+  });
+
+  const hasPassword = !!configQuery.data?.hasPassword;
+  const dirty = draft !== (configQuery.data?.paymentInstructions ?? '');
+
+  return (
+    <div className="rounded-md border border-border bg-foreground/[0.015] px-4 py-3">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <Label className="text-xs uppercase tracking-kerned text-muted-foreground">
+          Default payment instructions
+        </Label>
+        {!hasPassword && (
+          <span className="text-[10px] text-amber-700 font-medium">
+            ⚠ Set up email in Settings before sending
+          </span>
+        )}
+      </div>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="UPI: yourname@upi · NEFT: HDFC A/c XXXXX1234, IFSC HDFC0001234"
+        className="w-full min-h-[60px] rounded-md border border-border bg-background px-3 py-2 text-sm"
+      />
+      <p className="text-[11px] text-muted-foreground mt-1">
+        Shown in every tenant reminder email. Edits here apply to all properties.
+      </p>
+      <div className="mt-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => saveMut.mutate()}
+          disabled={(!dirty && !justSaved) || saveMut.isPending}
+          className={justSaved ? 'border-emerald-500 text-emerald-700 bg-emerald-50/60' : undefined}
+        >
+          {saveMut.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : justSaved ? (
+            <Check className="h-3.5 w-3.5 text-emerald-600" />
+          ) : (
+            <Save className="h-3.5 w-3.5" />
+          )}
+          {justSaved ? 'Saved' : 'Save instructions'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Panel ──────────────────────────────────────────────────────────
 
 export function RentalRemindersPanel() {
@@ -680,6 +761,9 @@ export function RentalRemindersPanel() {
         </Button>
       </CardHeader>
       <CardContent>
+        <div className="mb-4">
+          <PaymentInstructionsEditor />
+        </div>
         {groups.length === 0 ? (
           <div className="text-sm text-muted-foreground py-3 text-center border border-dashed rounded-md">
             No reminders awaiting approval. The scan runs daily at 09:00 IST,

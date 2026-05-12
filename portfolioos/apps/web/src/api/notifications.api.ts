@@ -19,14 +19,8 @@ export interface NotificationConfigDTO {
 }
 
 export interface NotificationConfigInput {
-  smtpHost: string;
-  smtpPort: number;
-  smtpSecure: boolean;
-  smtpUser: string;
   /** Empty/omitted = keep existing password. */
   smtpPass?: string;
-  fromName: string;
-  fromEmail: string;
   paymentInstructions?: string | null;
 }
 

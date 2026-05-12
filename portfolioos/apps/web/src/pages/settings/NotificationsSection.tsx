@@ -1,66 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Loader2, Send, Trash2, Mail } from 'lucide-react';
+import { Loader2, Send, Trash2, Mail, Check, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { notificationsApi, type NotificationConfigInput } from '@/api/notifications.api';
+import { useAuthStore } from '@/stores/auth.store';
+import { notificationsApi } from '@/api/notifications.api';
 
-interface FormState extends NotificationConfigInput {}
-
-const DEFAULT_FORM: FormState = {
-  smtpHost: 'smtp.gmail.com',
-  smtpPort: 587,
-  smtpSecure: false,
-  smtpUser: '',
-  smtpPass: '',
-  fromName: '',
-  fromEmail: '',
-  paymentInstructions: '',
-};
-
+/**
+ * Minimal email setup — the user only enters their mail provider's app
+ * password. Everything else (SMTP host/port, from address, name) is
+ * derived from the auth profile + a domain → provider map on the server.
+ */
 export function NotificationsSection() {
   const qc = useQueryClient();
-  const [form, setForm] = useState<FormState>(DEFAULT_FORM);
+  const { user } = useAuthStore();
+  const [appPassword, setAppPassword] = useState<string>('');
   const [testEmail, setTestEmail] = useState<string>('');
 
   const configQuery = useQuery({
     queryKey: ['notifications', 'config'],
     queryFn: () => notificationsApi.getConfig(),
   });
-
-  // Sync server config into form once it loads. Password field stays
-  // blank because the server never sends it back — the "keep existing
-  // password" sentinel is an empty string on save.
-  useEffect(() => {
-    const cfg = configQuery.data;
-    if (cfg) {
-      setForm({
-        smtpHost: cfg.smtpHost,
-        smtpPort: cfg.smtpPort,
-        smtpSecure: cfg.smtpSecure,
-        smtpUser: cfg.smtpUser,
-        smtpPass: '',
-        fromName: cfg.fromName,
-        fromEmail: cfg.fromEmail,
-        paymentInstructions: cfg.paymentInstructions ?? '',
-      });
-    }
-  }, [configQuery.data]);
+  const hasConfig = !!configQuery.data?.hasPassword;
 
   const saveMut = useMutation({
-    mutationFn: () =>
-      notificationsApi.upsertConfig({
-        ...form,
-        smtpPass: form.smtpPass?.trim() || undefined,
-        paymentInstructions: form.paymentInstructions?.trim() || null,
-      }),
+    mutationFn: () => notificationsApi.upsertConfig({ smtpPass: appPassword }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notifications', 'config'] });
-      toast.success('Notification settings saved');
-      setForm((f) => ({ ...f, smtpPass: '' }));
+      toast.success('Email setup saved');
+      setAppPassword('');
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Save failed'),
   });
@@ -78,173 +49,158 @@ export function NotificationsSection() {
     mutationFn: () => notificationsApi.deleteConfig(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notifications', 'config'] });
-      toast.success('Notification settings cleared');
-      setForm(DEFAULT_FORM);
+      toast.success('Email setup cleared');
+      setAppPassword('');
     },
   });
 
-  const hasConfig = !!configQuery.data;
+  const emailDomain = user?.email?.split('@')[1]?.toLowerCase() ?? '';
+  const helpLink = (() => {
+    if (emailDomain === 'gmail.com' || emailDomain === 'googlemail.com') {
+      return {
+        label: 'Generate a Google app password',
+        href: 'https://myaccount.google.com/apppasswords',
+      };
+    }
+    if (
+      emailDomain === 'outlook.com'
+      || emailDomain === 'hotmail.com'
+      || emailDomain === 'live.com'
+    ) {
+      return {
+        label: 'Generate a Microsoft app password',
+        href: 'https://account.microsoft.com/security',
+      };
+    }
+    if (emailDomain === 'yahoo.com' || emailDomain === 'yahoo.in') {
+      return {
+        label: 'Generate a Yahoo app password',
+        href: 'https://login.yahoo.com/account/security/app-passwords',
+      };
+    }
+    if (emailDomain === 'icloud.com' || emailDomain === 'me.com') {
+      return {
+        label: 'Generate an iCloud app-specific password',
+        href: 'https://appleid.apple.com/account/manage',
+      };
+    }
+    if (emailDomain === 'zoho.com' || emailDomain === 'zoho.in') {
+      return {
+        label: 'Generate a Zoho app password',
+        href: 'https://accounts.zoho.com/u/h#security/app_password',
+      };
+    }
+    return null;
+  })();
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <Mail className="h-4 w-4 text-accent-ink/70" />
-          <CardTitle>Email notifications (SMTP)</CardTitle>
+          <CardTitle>Email notifications</CardTitle>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Per-user transactional email config used for rent reminders. Gmail,
-          Brevo, SendGrid, Mailgun, Resend and self-hosted SMTP all work.
+          Used to send rent reminders to tenants on your behalf. We derive
+          the mail server, sender name and address from your account profile —
+          you only need to paste your app password.
         </p>
       </CardHeader>
       <CardContent>
-        <form
-          onSubmit={(e) => { e.preventDefault(); saveMut.mutate(); }}
-          className="space-y-4"
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>SMTP host</Label>
-              <Input
-                value={form.smtpHost}
-                onChange={(e) => setForm({ ...form, smtpHost: e.target.value })}
-                placeholder="smtp.gmail.com"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Port</Label>
-                <Input
-                  type="number"
-                  value={form.smtpPort}
-                  onChange={(e) => setForm({ ...form, smtpPort: Number(e.target.value) })}
-                  required
-                />
-              </div>
-              <div>
-                <Label>Secure (TLS)</Label>
-                <div className="h-10 flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={form.smtpSecure}
-                    onChange={(e) => setForm({ ...form, smtpSecure: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {form.smtpSecure ? '465 / SSL' : '587 / STARTTLS'}
-                  </span>
-                </div>
-              </div>
-            </div>
+        <div className="space-y-4">
+          {/* Read-only summary so the user knows what we'll send as */}
+          <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <span className="text-muted-foreground text-xs">Sending as</span>
+            <span className="font-medium">{user?.name ?? '—'}</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="font-mono text-xs">{user?.email ?? '—'}</span>
+            {hasConfig && (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium ml-auto">
+                <Check className="h-3.5 w-3.5" /> App password saved
+              </span>
+            )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>SMTP username</Label>
-              <Input
-                value={form.smtpUser}
-                onChange={(e) => setForm({ ...form, smtpUser: e.target.value })}
-                placeholder="you@gmail.com"
-                required
-              />
-            </div>
-            <div>
-              <Label>
-                SMTP password{' '}
-                {hasConfig && (
-                  <span className="text-[10px] text-muted-foreground font-normal">
-                    (leave blank to keep current)
-                  </span>
-                )}
-              </Label>
-              <Input
-                type="password"
-                value={form.smtpPass ?? ''}
-                onChange={(e) => setForm({ ...form, smtpPass: e.target.value })}
-                placeholder={hasConfig ? '••••••••' : '16-char app password'}
-                autoComplete="new-password"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>From name</Label>
-              <Input
-                value={form.fromName}
-                onChange={(e) => setForm({ ...form, fromName: e.target.value })}
-                placeholder="Het Kothari"
-                required
-              />
-            </div>
-            <div>
-              <Label>From email</Label>
-              <Input
-                type="email"
-                value={form.fromEmail}
-                onChange={(e) => setForm({ ...form, fromEmail: e.target.value })}
-                placeholder="you@gmail.com"
-                required
-              />
-            </div>
-          </div>
+
           <div>
             <Label>
-              Default payment instructions{' '}
-              <span className="text-[10px] text-muted-foreground font-normal">
-                (per-property override available)
-              </span>
+              App password
+              {hasConfig && (
+                <span className="text-[10px] text-muted-foreground font-normal ml-2">
+                  (leave blank to keep current)
+                </span>
+              )}
             </Label>
-            <textarea
-              value={form.paymentInstructions ?? ''}
-              onChange={(e) => setForm({ ...form, paymentInstructions: e.target.value })}
-              placeholder="UPI: yourname@upi · NEFT: HDFC A/c XXXXX1234, IFSC HDFC0001234"
-              className="w-full min-h-[72px] rounded-md border border-border bg-background px-3 py-2 text-sm"
+            <Input
+              type="password"
+              value={appPassword}
+              onChange={(e) => setAppPassword(e.target.value)}
+              placeholder={hasConfig ? '••••••••••••••••' : 'Paste your provider app password here'}
+              autoComplete="new-password"
             />
+            {helpLink && (
+              <a
+                href={helpLink.href}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-accent-ink/80 hover:underline inline-flex items-center gap-1 mt-1.5"
+              >
+                {helpLink.label} <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+            {!helpLink && emailDomain && (
+              <p className="text-xs text-amber-700 mt-1.5">
+                We don't have an auto-setup for <strong>@{emailDomain}</strong> yet.
+                Try a Gmail / Outlook / Yahoo / iCloud / Zoho address.
+              </p>
+            )}
           </div>
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="submit" disabled={saveMut.isPending}>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => saveMut.mutate()}
+              disabled={(!appPassword.trim() && !hasConfig) || saveMut.isPending}
+            >
               {saveMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Save settings
+              Save app password
             </Button>
             {hasConfig && (
               <Button
-                type="button"
                 variant="outline"
                 onClick={() => deleteMut.mutate()}
                 disabled={deleteMut.isPending}
               >
                 {deleteMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                Clear settings
+                Clear
               </Button>
             )}
           </div>
-        </form>
 
-        {hasConfig && (
-          <div className="mt-6 pt-4 border-t border-border/60">
-            <Label>Send test email</Label>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <Input
-                type="email"
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-                placeholder="your-email@example.com"
-                className="max-w-sm"
-              />
-              <Button
-                variant="outline"
-                onClick={() => testMut.mutate()}
-                disabled={!testEmail || testMut.isPending}
-              >
-                {testMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                Send test
-              </Button>
+          {hasConfig && (
+            <div className="pt-3 border-t border-border/60">
+              <Label>Send test email</Label>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Input
+                  type="email"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  placeholder="your-other-email@example.com"
+                  className="max-w-sm"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => testMut.mutate()}
+                  disabled={!testEmail || testMut.isPending}
+                >
+                  {testMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  Send test
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Send yourself a test before approving real tenant reminders.
+              </p>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1.5">
-              Sends a small test email so you can verify creds before approving real reminders.
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );
