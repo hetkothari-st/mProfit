@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
  * New asset sections added here will auto-appear in existing users' sidebars.
  */
 const ASSET_SECTION_KEYS: string[] = [
+  '/bank-accounts',
   '/stocks',
   '/fo',
   '/mutual-funds',
