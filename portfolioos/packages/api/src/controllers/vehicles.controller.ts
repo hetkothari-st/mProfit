@@ -14,8 +14,10 @@ import {
 } from '../services/vehicles.service.js';
 import { initiateCarInfoScrape, verifyCarInfoOtp } from '../adapters/vehicle/carinfoPlaywright.js';
 import { scanChallansForVehicle } from '../services/challans.service.js';
+import { getFuelPricesForState, getAllStateFuelPrices } from '../priceFeeds/fuel.service.js';
+import { listUniqueStates } from '../priceFeeds/fuelStates.js';
 import { ok } from '../lib/response.js';
-import { UnauthorizedError } from '../lib/errors.js';
+import { UnauthorizedError, BadRequestError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
@@ -249,4 +251,31 @@ export async function carInfoVerify(req: Request, res: Response) {
       message: error.message || 'Verification failed',
     });
   }
+}
+
+// ── Fuel + electricity price endpoints ────────────────────────────────────
+// Per-state, refreshed daily by cron. Not user-scoped data but kept behind
+// the vehicle router so it inherits the same auth middleware (no public
+// endpoint needed). Two routes:
+//   GET /api/vehicles/prices/states      → dropdown list
+//   GET /api/vehicles/prices?state=CODE  → prices for state, or all if blank
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function fuelStates(_req: Request, res: Response) {
+  ok(res, listUniqueStates().map((s) => ({ code: s.code, name: s.name })));
+}
+
+export async function fuelPrices(req: Request, res: Response) {
+  const stateParam = (req.query.state as string | undefined)?.trim();
+  if (!stateParam) {
+    const all = await getAllStateFuelPrices();
+    ok(res, all);
+    return;
+  }
+  if (!/^[A-Za-z-]+$/.test(stateParam) || stateParam.length > 40) {
+    throw new BadRequestError('Invalid state parameter');
+  }
+  const prices = await getFuelPricesForState(stateParam);
+  if (!prices) throw new BadRequestError(`Unknown state: ${stateParam}`);
+  ok(res, prices);
 }

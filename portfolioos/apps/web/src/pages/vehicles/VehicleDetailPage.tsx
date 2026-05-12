@@ -24,6 +24,7 @@ import { vehiclesApi, type ChallanDTO } from '@/api/vehicles.api';
 import { apiErrorMessage } from '@/api/client';
 import { VehicleFormDialog } from './VehicleFormDialog';
 import { SmsPasteDialog } from './SmsPasteDialog';
+import { FuelPricesCard } from './FuelPricesCard';
 
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
@@ -442,6 +443,10 @@ export function VehicleDetailPage() {
             </div>
           </CardContent>
         </Card>
+
+        <div className="lg:col-span-3">
+          <FuelPricesCard defaultRtoCode={vehicle.rtoCode} />
+        </div>
 
         <Card className="lg:col-span-3">
           <CardHeader>

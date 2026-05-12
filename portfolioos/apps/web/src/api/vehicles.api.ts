@@ -124,6 +124,23 @@ export interface ChallanScanResult {
   error?: string;
 }
 
+export interface StateFuelPricesDTO {
+  stateCode: string;
+  stateName: string;
+  petrol: string | null;
+  diesel: string | null;
+  cng: string | null;
+  lpg: string | null;
+  electricity: string | null;
+  fetchedAt: string;
+  petrolDieselSource: 'goodreturns' | 'seed';
+}
+
+export interface StateOption {
+  code: string;
+  name: string;
+}
+
 export const vehiclesApi = {
   async list(): Promise<VehicleDTO[]> {
     const { data } = await api.get<ApiResponse<VehicleDTO[]>>('/api/vehicles');
@@ -187,6 +204,18 @@ export const vehiclesApi = {
     const { data } = await api.post<ApiResponse<any>>(
       '/api/vehicles/carinfo/verify',
       input,
+    );
+    return unwrap(data);
+  },
+  async listStates(): Promise<StateOption[]> {
+    const { data } = await api.get<ApiResponse<StateOption[]>>(
+      '/api/vehicles/prices/states',
+    );
+    return unwrap(data);
+  },
+  async getFuelPrices(state: string): Promise<StateFuelPricesDTO> {
+    const { data } = await api.get<ApiResponse<StateFuelPricesDTO>>(
+      `/api/vehicles/prices?state=${encodeURIComponent(state)}`,
     );
     return unwrap(data);
   },

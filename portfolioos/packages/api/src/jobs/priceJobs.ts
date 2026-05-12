@@ -10,6 +10,7 @@ import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.
 import { syncAllCommodities } from '../priceFeeds/commodity.service.js';
 import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates } from '../priceFeeds/fx.service.js';
+import { syncFuelPrices } from '../priceFeeds/fuel.service.js';
 import { loadNseFoMaster } from '../priceFeeds/nseFoMaster.service.js';
 import { loadNseFoBhavcopy } from '../priceFeeds/nseFoBhavcopy.service.js';
 import {
@@ -30,6 +31,7 @@ const running = {
   foMaster: false,
   foBhavcopy: false,
   foLive: false,
+  fuel: false,
 };
 
 async function runGuarded<K extends keyof typeof running>(
@@ -131,6 +133,10 @@ async function runFoLiveJob(): Promise<void> {
   );
 }
 
+async function runFuelJob(): Promise<void> {
+  await runGuarded('fuel', 'Fuel prices sync', () => syncFuelPrices());
+}
+
 export function startPriceJobs(): void {
   if (process.env.ENABLE_PRICE_CRONS === 'false') {
     logger.info('[cron] price jobs disabled via ENABLE_PRICE_CRONS=false');
@@ -173,8 +179,12 @@ export function startPriceJobs(): void {
   // user polls onto these fetches.
   cron.schedule('* 9-15 * * 1-5', runFoLiveJob, { timezone: TZ });
 
+  // Fuel prices (Goodreturns scrape) — IOCL revises at 6:00 AM IST. Run at
+  // 06:30 to give upstream sites time to publish.
+  cron.schedule('30 6 * * *', runFuelJob, { timezone: TZ });
+
   logger.info(
-    '[cron] scheduled: AMFI@22:00, stockEOD@16:30 MF, intraday 15-min MF, universe Sun 03:00, CA@20:00, commodities@23:30, crypto 30-min, FX hourly, F&O master Sun 03:30, F&O bhavcopy@16:45 MF, F&O live 60s MF — all IST',
+    '[cron] scheduled: AMFI@22:00, stockEOD@16:30 MF, intraday 15-min MF, universe Sun 03:00, CA@20:00, commodities@23:30, crypto 30-min, FX hourly, F&O master Sun 03:30, F&O bhavcopy@16:45 MF, F&O live 60s MF, fuel@06:30 — all IST',
   );
 }
 
@@ -190,4 +200,5 @@ export {
   runFoMasterJob,
   runFoBhavcopyJob,
   runFoLiveJob,
+  runFuelJob,
 };

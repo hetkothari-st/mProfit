@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { vehiclesApi, type VehicleDTO } from '@/api/vehicles.api';
 import { VehicleFormDialog } from './VehicleFormDialog';
 import { SmsPasteDialog } from './SmsPasteDialog';
+import { FuelPricesCard } from './FuelPricesCard';
 
 export function VehicleListPage() {
   const [formOpen, setFormOpen] = useState(false);
@@ -76,11 +77,16 @@ export function VehicleListPage() {
       )}
 
       {!isLoading && (vehicles ?? []).length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {vehicles!.map((v) => (
-            <VehicleCard key={v.id} vehicle={v} />
-          ))}
-        </div>
+        <>
+          <div className="mb-4">
+            <FuelPricesCard defaultRtoCode={vehicles![0]!.rtoCode} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {vehicles!.map((v) => (
+              <VehicleCard key={v.id} vehicle={v} />
+            ))}
+          </div>
+        </>
       )}
 
       <VehicleFormDialog open={formOpen} onOpenChange={setFormOpen} />
