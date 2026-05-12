@@ -405,6 +405,7 @@
   .privacy-mask .money-digits,
   .privacy-mask .money-hero-digits {
     color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
     text-shadow: none !important;
     background: hsl(var(--foreground) / 0.11);
     border-radius: 4px;
@@ -416,6 +417,7 @@
   /* Hide gain/loss sign (+ / -) — reveals directional info */
   .privacy-mask .money-sign {
     color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
     transition: color 180ms ease;
   }
 
@@ -425,13 +427,32 @@
   .privacy-mask .numeric-display:not(:has(.money-digits)),
   .privacy-mask .numeric-display-lg:not(:has(.money-digits)),
   .privacy-mask .numeric:not(:has(.money-digits)),
-  .privacy-mask .tabular-nums:not(:has(.money-digits)) {
+  .privacy-mask .tabular-nums:not(:has(.money-digits)),
+  .privacy-mask .mask-money {
     color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
     text-shadow: none !important;
     background: hsl(var(--foreground) / 0.11);
     border-radius: 4px;
     user-select: none;
     pointer-events: none;
     transition: color 180ms ease, background-color 180ms ease;
+  }
+
+  /* CASCADE: numeric containers often wrap a coloured child element
+     (e.g. `<div class="font-medium text-green-600">{formatINR(...)}</div>`).
+     Without targeting the descendant the child's `color: rgb(...)` wins over
+     the parent's `color: transparent`, so the digits stayed visible even
+     though the wrapper had .tabular-nums. Cascade transparent down to every
+     descendant; suppress their own background so we only get one pill. */
+  .privacy-mask .numeric-display:not(:has(.money-digits)) *,
+  .privacy-mask .numeric-display-lg:not(:has(.money-digits)) *,
+  .privacy-mask .numeric:not(:has(.money-digits)) *,
+  .privacy-mask .tabular-nums:not(:has(.money-digits)) *,
+  .privacy-mask .mask-money * {
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+    text-shadow: none !important;
+    background: transparent !important;
   }
 }

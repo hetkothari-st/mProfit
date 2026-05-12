@@ -28,6 +28,7 @@ import { ConnectGmailCard } from '@/components/dashboard/ConnectGmailCard';
 import { GmailScanProgressCard } from '@/components/dashboard/GmailScanProgressCard';
 import { DashboardFxStrip } from '@/pages/forex/DashboardFxStrip';
 import { apiErrorMessage } from '@/api/client';
+import { usePrivacyStore } from '@/stores/privacy.store';
 import {
   formatINR,
   formatPercent,
@@ -87,6 +88,7 @@ export function DashboardPage() {
   const [period, setPeriod] = useState<number>(365);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const hideSensitive = usePrivacyStore((s) => s.hideSensitive);
 
   const portfoliosQuery = useQuery({
     queryKey: ['portfolios'],
@@ -457,15 +459,16 @@ export function DashboardPage() {
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
                     axisLine={false} tickLine={false} width={72}
                     tickFormatter={(v: number) =>
-                      v >= 10_000_000 ? `₹${(v / 10_000_000).toFixed(1)}Cr`
-                        : v >= 100_000 ? `₹${(v / 100_000).toFixed(1)}L`
-                          : v >= 1_000 ? `₹${(v / 1_000).toFixed(0)}K`
-                            : `₹${v.toFixed(0)}`}
+                      hideSensitive ? '•••'
+                        : v >= 10_000_000 ? `₹${(v / 10_000_000).toFixed(1)}Cr`
+                          : v >= 100_000 ? `₹${(v / 100_000).toFixed(1)}L`
+                            : v >= 1_000 ? `₹${(v / 1_000).toFixed(0)}K`
+                              : `₹${v.toFixed(0)}`}
                   />
                   <Tooltip
                     cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3', strokeOpacity: 0.4 }}
                     contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12, padding: '10px 12px', boxShadow: '0 12px 28px -16px hsl(var(--shadow-color) / 0.35)' }}
-                    formatter={(v: number, name: string) => [formatINR(v.toFixed(4)), name === 'value' ? 'Market value' : 'Invested']}
+                    formatter={(v: number, name: string) => [hideSensitive ? '•••' : formatINR(v.toFixed(4)), name === 'value' ? 'Market value' : 'Invested']}
                     labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: 4, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}
                   />
                   <Area type="monotone" dataKey="invested" stroke="hsl(var(--muted-foreground))" strokeWidth={1.25} strokeDasharray="4 4" fill="url(#gradInvested)" dot={false} />
@@ -500,7 +503,7 @@ export function DashboardPage() {
                       itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
                       labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: 4, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}
                       formatter={(v: number, _n: string, p: { payload?: { percent?: number; label?: string } }) => [
-                        `${formatINR(v.toFixed(4))} (${(p.payload?.percent ?? 0).toFixed(1)}%)`,
+                        hideSensitive ? '•••' : `${formatINR(v.toFixed(4))} (${(p.payload?.percent ?? 0).toFixed(1)}%)`,
                         p.payload?.label ?? _n,
                       ]}
                     />
@@ -514,7 +517,7 @@ export function DashboardPage() {
                         <span className="truncate text-muted-foreground">{labelForKey(s.key)}</span>
                       </div>
                       <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-                        <span className="tabular-nums text-muted-foreground">{formatINR(s.value)}</span>
+                        <Money className="tabular-nums text-muted-foreground">{formatINR(s.value)}</Money>
                         <span className="tabular-nums font-medium w-12 text-right">{s.percent.toFixed(1)}%</span>
                       </div>
                     </div>
@@ -630,25 +633,25 @@ export function DashboardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-muted/50 p-3">
                       <p className="text-xs text-muted-foreground">Property value</p>
-                      <p className="text-base font-semibold mt-0.5">{formatINR(nw.realEstate.totalValue)}</p>
+                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.realEstate.totalValue)}</Money>
                       <p className="text-xs text-muted-foreground">{nw.realEstate.count} {nw.realEstate.count === 1 ? 'property' : 'properties'}</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3">
                       <p className="text-xs text-muted-foreground">Monthly rent</p>
-                      <p className="text-base font-semibold mt-0.5">{formatINR(nw.realEstate.monthlyRent)}</p>
+                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.realEstate.monthlyRent)}</Money>
                       <p className="text-xs text-muted-foreground">active tenancies</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-muted/50 p-3">
                       <p className="text-xs text-muted-foreground">Income YTD</p>
-                      <p className="text-base font-semibold mt-0.5 text-green-600 dark:text-green-400">{formatINR(nw.realEstate.incomeYTD)}</p>
+                      <Money className="text-base font-semibold mt-0.5 block text-green-600 dark:text-green-400">{formatINR(nw.realEstate.incomeYTD)}</Money>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3">
                       <p className="text-xs text-muted-foreground">Net P&L YTD</p>
-                      <p className={`text-base font-semibold mt-0.5 ${toDecimal(nw.realEstate.netYTD).greaterThanOrEqualTo(0) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <Money className={`text-base font-semibold mt-0.5 block ${toDecimal(nw.realEstate.netYTD).greaterThanOrEqualTo(0) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {formatINR(nw.realEstate.netYTD, { showSign: true })}
-                      </p>
+                      </Money>
                     </div>
                   </div>
                   {nw.realEstate.overdueCount > 0 && (
@@ -681,12 +684,12 @@ export function DashboardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-muted/50 p-3">
                       <p className="text-xs text-muted-foreground">Total value</p>
-                      <p className="text-base font-semibold mt-0.5">{formatINR(nw.vehicles.totalValue)}</p>
+                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.vehicles.totalValue)}</Money>
                       <p className="text-xs text-muted-foreground">{nw.vehicles.count} vehicle{nw.vehicles.count !== 1 ? 's' : ''}</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3">
                       <p className="text-xs text-muted-foreground">Pending challans</p>
-                      <p className={`text-base font-semibold mt-0.5 ${nw.vehicles.pendingChallans > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                      <p className={`text-base font-semibold mt-0.5 numeric ${nw.vehicles.pendingChallans > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                         {nw.vehicles.pendingChallans > 0 ? nw.vehicles.pendingChallans : 'None'}
                       </p>
                       <p className="text-xs text-muted-foreground">traffic fines</p>
@@ -734,12 +737,12 @@ export function DashboardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-muted/50 p-3">
                       <p className="text-xs text-muted-foreground">Total sum assured</p>
-                      <p className="text-base font-semibold mt-0.5">{formatINR(nw.insurance.totalSumAssured)}</p>
+                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.insurance.totalSumAssured)}</Money>
                       <p className="text-xs text-muted-foreground">{nw.insurance.activePoliciesCount} active {nw.insurance.activePoliciesCount === 1 ? 'policy' : 'policies'}</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3">
                       <p className="text-xs text-muted-foreground">Annual premium</p>
-                      <p className="text-base font-semibold mt-0.5">{formatINR(nw.insurance.annualPremiumTotal)}</p>
+                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.insurance.annualPremiumTotal)}</Money>
                       <p className="text-xs text-muted-foreground">per year total</p>
                     </div>
                   </div>
@@ -756,7 +759,7 @@ export function DashboardPage() {
                             <div className={`font-semibold ${urgencyColor(r.daysUntil <= 7 ? 'HIGH' : r.daysUntil <= 15 ? 'MEDIUM' : 'LOW')}`}>
                               {r.daysUntil <= 0 ? 'Due now' : `${r.daysUntil}d`}
                             </div>
-                            <div className="text-muted-foreground">{formatINR(r.amount)}</div>
+                            <Money className="text-muted-foreground block">{formatINR(r.amount)}</Money>
                           </div>
                         </div>
                       ))}
