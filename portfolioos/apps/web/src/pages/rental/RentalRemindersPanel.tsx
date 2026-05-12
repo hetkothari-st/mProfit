@@ -22,9 +22,9 @@ import { rentalApi, type RentReminderDTO } from '@/api/rental.api';
 function friendlyError(reason: string): string {
   switch (reason) {
     case 'smtp_not_configured':
-      return 'Email server not configured (set SMTP_HOST/USER/PASS in env)';
+      return 'Email not set up yet — open Settings → Email notifications to add SMTP creds';
     case 'sms_not_configured':
-      return 'SMS provider disabled (set SMS_PROVIDER=twilio + Twilio creds in env)';
+      return 'SMS provider disabled (DLT-registered SMS provider not yet wired)';
     case 'twilio_credentials_missing':
       return 'Twilio credentials missing in env';
     case 'tenant_email_missing':
