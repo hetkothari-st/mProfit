@@ -23,7 +23,10 @@ import { notificationsApi } from '@/api/notifications.api';
 function friendlyError(reason: string): string {
   switch (reason) {
     case 'smtp_not_configured':
-      return 'Email not set up yet — open Settings → Email notifications to add SMTP creds';
+    case 'gmail_not_connected':
+      return 'Connect Gmail in Settings → Email notifications first';
+    case 'gmail_scope_missing_reconnect':
+      return 'Reconnect Gmail in Settings (existing connection is missing the send permission)';
     case 'sms_not_configured':
       return 'SMS provider disabled (DLT-registered SMS provider not yet wired)';
     case 'twilio_credentials_missing':

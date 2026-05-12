@@ -41,10 +41,22 @@ export function NotificationsSection() {
     mutationFn: () => notificationsApi.testEmail(testEmail),
     onSuccess: (r) => {
       if (r.ok) toast.success(`Test email sent to ${testEmail}`);
-      else toast.error(`Test failed — ${r.reason ?? 'unknown'}`, { duration: 8000 });
+      else toast.error(`Test failed — ${friendlyReason(r.reason)}`, { duration: 8000 });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Test failed'),
   });
+
+  function friendlyReason(reason: string | undefined): string {
+    switch (reason) {
+      case 'gmail_not_connected':
+      case 'smtp_not_configured':
+        return 'Connect Gmail above first';
+      case 'gmail_scope_missing_reconnect':
+        return 'Click Reconnect — the current Gmail grant is missing the send permission';
+      default:
+        return reason ?? 'unknown';
+    }
+  }
 
   const status = statusQuery.data;
   const connected = !!status?.gmailConnected;

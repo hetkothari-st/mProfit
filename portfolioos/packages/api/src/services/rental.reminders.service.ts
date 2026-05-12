@@ -524,14 +524,14 @@ export async function approveAndSendReminder(
       emailStatus = 'failed';
       emailError = 'tenant_email_missing';
     } else {
-      // Two send paths in priority order:
-      //   1. Gmail API via the user's existing OAuth connection — zero
-      //      password input, just a Google consent screen.
-      //   2. SMTP (per-user config / env fallback) — for non-Gmail
-      //      providers or users who haven't connected Gmail yet.
+      // Only Gmail OAuth is wired through the UI right now. If the
+      // landlord hasn't connected Gmail, refuse rather than silently
+      // trying a legacy SMTP row whose creds the user can no longer
+      // edit (the new Settings page hides SMTP) — that produced
+      // 535-5.7.8 toasts that nobody could fix.
       const propertyOwnerId = existing.tenancy.property.userId;
-      let res: { sent: boolean; reason?: string };
       const gmailAccount = await getGmailSendAccount(propertyOwnerId);
+      let res: { sent: boolean; reason?: string };
       if (gmailAccount) {
         res = await sendViaGmailApi({
           userId: propertyOwnerId,
@@ -540,13 +540,7 @@ export async function approveAndSendReminder(
           html: existing.body,
         });
       } else {
-        const config = await getEmailConfigForUser(propertyOwnerId);
-        res = await sendEmail({
-          to: tenantEmail,
-          subject: existing.subject,
-          html: existing.body,
-          config: config ?? undefined,
-        });
+        res = { sent: false, reason: 'gmail_not_connected' };
       }
       if (res.sent) {
         emailStatus = 'sent';

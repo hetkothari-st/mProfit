@@ -205,19 +205,18 @@ export async function sendTestEmail(userId: string, to: string): Promise<{ ok: b
                 <p>If you received this, you're good to go — rent reminders will be sent from this address.</p>`;
   const subject = 'PortfolioOS — test email';
 
-  // Prefer Gmail API (the OAuth path) since the user only had to click
-  // "Connect Gmail". Fall back to SMTP if the user is on a non-Gmail
-  // provider and configured an app password via legacy flow.
+  // The supported path is Gmail OAuth ("Connect Gmail"). When that's
+  // not present, refuse the test up-front instead of trying the legacy
+  // SMTP path — most users who land here have a stale app-password
+  // row from earlier testing that silently fails Gmail auth with
+  // "535 Username and Password not accepted", which is the worst
+  // possible error to surface.
   const gmailAccount = await getGmailSendAccount(userId);
-  if (gmailAccount) {
-    const r = await sendViaGmailApi({ userId, to, subject, html });
-    return r.sent ? { ok: true } : { ok: false, reason: r.reason };
+  if (!gmailAccount) {
+    return { ok: false, reason: 'gmail_not_connected' };
   }
-
-  const config = await getEmailConfigForUser(userId);
-  if (!config) return { ok: false, reason: 'gmail_not_connected' };
-  const result = await sendEmail({ to, subject, html, config });
-  return result.sent ? { ok: true } : { ok: false, reason: result.reason };
+  const r = await sendViaGmailApi({ userId, to, subject, html });
+  return r.sent ? { ok: true } : { ok: false, reason: r.reason };
 }
 
 /**
