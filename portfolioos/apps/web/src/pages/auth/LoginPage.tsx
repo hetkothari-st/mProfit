@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 
 const schema = z.object({
   email: z.string().email({ message: 'Enter a valid email address' }),
@@ -116,6 +117,17 @@ export function LoginPage() {
           {loginMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           Sign in
         </Button>
+
+        <div className="relative my-3">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-border" />
+          </div>
+          <div className="relative flex justify-center text-[10px] uppercase tracking-wider">
+            <span className="bg-background px-2 text-muted-foreground">or</span>
+          </div>
+        </div>
+
+        <GoogleSignInButton text="signin_with" />
 
         <p className="text-xs text-center text-muted-foreground pt-2">
           Demo credentials: <span className="font-mono">demo@portfolioos.in</span> /{' '}

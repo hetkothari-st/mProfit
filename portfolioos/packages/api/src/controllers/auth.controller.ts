@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { UserRole, PlanTier } from '@prisma/client';
 import {
   getCurrentUser,
+  loginOrRegisterWithGoogle,
   loginUser,
   logoutAllSessions,
   logoutSession,
@@ -13,6 +14,7 @@ import {
   updateProfile,
 } from '../services/auth.service.js';
 import { created, noContent, ok } from '../lib/response.js';
+// `created` is used by the Google flow when a new user is registered.
 import { UnauthorizedError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 
@@ -119,4 +121,15 @@ export async function patchMe(req: Request, res: Response) {
   const patch = updateProfileSchema.parse(req.body);
   const user = await updateProfile(req.user.id, patch);
   ok(res, user);
+}
+
+export const googleSchema = z.object({
+  idToken: z.string().min(20),
+});
+
+export async function google(req: Request, res: Response) {
+  const { idToken } = googleSchema.parse(req.body);
+  const result = await loginOrRegisterWithGoogle(idToken);
+  if (result.isNew) created(res, result);
+  else ok(res, result);
 }

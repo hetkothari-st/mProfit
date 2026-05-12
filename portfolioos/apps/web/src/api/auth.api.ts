@@ -26,6 +26,14 @@ export const authApi = {
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
+  async loginWithGoogle(idToken: string): Promise<AuthResult & { isNew?: boolean }> {
+    const { data } = await api.post<ApiResponse<AuthResult & { isNew?: boolean }>>(
+      '/api/auth/google',
+      { idToken },
+    );
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
   async logout(refreshToken: string | null): Promise<void> {
     await api.post('/api/auth/logout', refreshToken ? { refreshToken } : {});
   },

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   forgotPassword,
+  google,
   login,
   logout,
   me,
@@ -17,6 +18,7 @@ export const authRouter = Router();
 
 authRouter.post('/register', authLimiter, asyncHandler(register));
 authRouter.post('/login', authLimiter, asyncHandler(login));
+authRouter.post('/google', authLimiter, asyncHandler(google));
 authRouter.post('/refresh', authLimiter, asyncHandler(refresh));
 authRouter.post('/logout', asyncHandler(logout));
 authRouter.post('/forgot-password', authLimiter, asyncHandler(forgotPassword));

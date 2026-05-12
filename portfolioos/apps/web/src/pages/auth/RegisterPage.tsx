@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select';
 import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import { UserRole, PlanTier } from '@portfolioos/shared';
 
 const schema = z
@@ -153,6 +154,17 @@ export function RegisterPage() {
           {registerMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           Create account
         </Button>
+
+        <div className="relative my-3">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-border" />
+          </div>
+          <div className="relative flex justify-center text-[10px] uppercase tracking-wider">
+            <span className="bg-background px-2 text-muted-foreground">or</span>
+          </div>
+        </div>
+
+        <GoogleSignInButton text="signup_with" />
       </form>
     </AuthLayout>
   );
