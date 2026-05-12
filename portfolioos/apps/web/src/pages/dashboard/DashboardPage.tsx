@@ -83,6 +83,43 @@ function labelForKey(key: string): string {
   return ASSET_CLASS_LABELS[key as keyof typeof ASSET_CLASS_LABELS] ?? key.replace(/_/g, ' ');
 }
 
+// Editorial palette per asset class — paired with PIE_COLORS for visual coherence.
+const ASSET_CLASS_COLORS: Record<string, string> = {
+  EQUITY: 'hsl(213 53% 22%)',
+  FUTURES: 'hsl(213 53% 22%)',
+  OPTIONS: 'hsl(213 53% 22%)',
+  MUTUAL_FUND: 'hsl(260 28% 42%)',
+  ETF: 'hsl(260 28% 42%)',
+  BOND: 'hsl(195 40% 34%)',
+  GOVT_BOND: 'hsl(195 40% 34%)',
+  CORPORATE_BOND: 'hsl(195 40% 34%)',
+  FIXED_DEPOSIT: 'hsl(220 25% 50%)',
+  RECURRING_DEPOSIT: 'hsl(220 25% 50%)',
+  NPS: 'hsl(130 35% 34%)',
+  PPF: 'hsl(130 35% 34%)',
+  EPF: 'hsl(130 35% 34%)',
+  PMS: 'hsl(165 30% 36%)',
+  AIF: 'hsl(165 30% 36%)',
+  PRIVATE_EQUITY: 'hsl(165 30% 36%)',
+  REIT: 'hsl(12 50% 44%)',
+  INVIT: 'hsl(12 50% 44%)',
+  GOLD_BOND: 'hsl(36 60% 48%)',
+  GOLD_ETF: 'hsl(36 60% 48%)',
+  PHYSICAL_GOLD: 'hsl(36 60% 48%)',
+  PHYSICAL_SILVER: 'hsl(220 10% 60%)',
+  ULIP: 'hsl(340 35% 40%)',
+  INSURANCE: 'hsl(340 35% 40%)',
+  REAL_ESTATE: 'hsl(12 50% 44%)',
+  CRYPTOCURRENCY: 'hsl(28 70% 54%)',
+  CASH: 'hsl(80 28% 38%)',
+  NSC: 'hsl(50 55% 45%)',
+  ART_COLLECTIBLES: 'hsl(220 10% 60%)',
+  OTHER: 'hsl(220 10% 60%)',
+};
+function assetClassColor(cls: string): string {
+  return ASSET_CLASS_COLORS[cls] ?? 'hsl(220 10% 60%)';
+}
+
 export function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string>('ALL');
   const [period, setPeriod] = useState<number>(365);
@@ -566,75 +603,118 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      {/* Top Holdings */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between pb-2">
-          <CardTitle>Top holdings</CardTitle>
+      {/* Top Holdings — editorial ledger */}
+      <Card className="overflow-hidden">
+        <CardHeader className="flex-row items-end justify-between gap-4 pb-3 border-b border-dashed border-border/60">
+          <div className="space-y-0.5">
+            <CardTitle>Top holdings</CardTitle>
+            <p className="text-xs italic font-serif text-muted-foreground">
+              Ranked by current value{topHoldings.length > 0 ? ` · ${topHoldings.length} position${topHoldings.length === 1 ? '' : 's'}` : ''}
+            </p>
+          </div>
           <Button asChild variant="ghost" size="sm">
             <Link to="/holdings">View all <ArrowRight className="h-3 w-3 ml-1" /></Link>
           </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {holdingsQuery.isLoading ? (
-            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
           ) : topHoldings.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Add transactions to see your top holdings</p>
+            <p className="text-sm italic font-serif text-muted-foreground py-8 text-center">Add transactions to see your top holdings</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full">
                 <thead>
-                  <tr className="border-b text-muted-foreground text-xs">
-                    <th className="text-left py-2 pr-4 font-medium">Asset</th>
-                    <th className="text-left py-2 pr-4 font-medium hidden sm:table-cell">Class</th>
-                    <th className="text-right py-2 pr-4 font-medium hidden md:table-cell">Qty</th>
-                    <th className="text-right py-2 pr-4 font-medium hidden md:table-cell">Avg cost</th>
-                    <th className="text-right py-2 pr-4 font-medium">Value</th>
-                    <th className="text-right py-2 font-medium">P&amp;L</th>
+                  <tr className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70 bg-muted/20">
+                    <th className="w-12 py-2.5 pl-6 font-normal text-left" aria-hidden></th>
+                    <th className="py-2.5 pr-4 font-normal text-left">Asset</th>
+                    <th className="py-2.5 pr-4 font-normal text-left hidden sm:table-cell">Class</th>
+                    <th className="py-2.5 pr-4 font-normal text-right hidden md:table-cell">Qty</th>
+                    <th className="py-2.5 pr-4 font-normal text-right hidden md:table-cell">Avg cost</th>
+                    <th className="py-2.5 pr-4 font-normal text-right">Value</th>
+                    <th className="py-2.5 pr-6 font-normal text-right">Unrealised&nbsp;P&amp;L</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {topHoldings.map((h) => {
+                  {topHoldings.map((h, idx) => {
                     const pnlD = toDecimal(h.unrealisedPnL ?? '0');
                     const pos = pnlD.greaterThan(0), neg = pnlD.lessThan(0);
+                    const color = assetClassColor(h.assetClass);
                     return (
-                      <tr key={h.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                        <td className="py-2.5 pr-4">
-                          <div className="font-medium truncate max-w-[160px]">{h.assetName}</div>
-                          {h.symbol && <div className="text-xs text-muted-foreground">{h.symbol}</div>}
-                        </td>
-                        <td className="py-2.5 pr-4 hidden sm:table-cell">
-                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs">
-                            {ASSET_CLASS_LABELS[h.assetClass] ?? h.assetClass}
+                      <tr
+                        key={h.id}
+                        className="group border-t border-dashed border-border/40 hover:bg-muted/25 transition-colors animate-in fade-in fill-mode-both"
+                        style={{ animationDelay: `${idx * 25}ms`, animationDuration: '350ms' }}
+                      >
+                        {/* Rank + class-coloured hover accent */}
+                        <td className="relative w-12 py-4 pl-6 pr-2 align-middle">
+                          <span
+                            aria-hidden
+                            className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="font-serif italic text-base leading-none text-muted-foreground/55 tabular-nums group-hover:text-foreground/75 transition-colors">
+                            {String(idx + 1).padStart(2, '0')}
                           </span>
                         </td>
-                        <td className="py-2.5 pr-4 text-right tabular-nums text-muted-foreground hidden md:table-cell">
-                          {parseFloat(h.quantity).toLocaleString('en-IN', { maximumFractionDigits: 4 })}
-                        </td>
-                        <td className="py-2.5 pr-4 text-right tabular-nums text-muted-foreground hidden md:table-cell">
-                          {formatINR(h.avgCostPrice)}
-                        </td>
-                        <td className="py-2.5 pr-4 text-right tabular-nums font-medium">
-                          {h.currentValue ? formatINR(h.currentValue) : (
-                            <span>
-                              {formatINR(h.totalCost)}
-                              <span className="block text-xs text-muted-foreground font-normal">cost basis</span>
-                            </span>
+
+                        {/* Asset */}
+                        <td className="py-4 pr-4 align-middle">
+                          <div className="font-serif text-[15px] leading-tight text-foreground truncate max-w-[220px]">{h.assetName}</div>
+                          {h.symbol && (
+                            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mt-0.5">{h.symbol}</div>
                           )}
                         </td>
-                        <td className="py-2.5 text-right tabular-nums">
+
+                        {/* Class — colour dot + italic serif label, not a pill */}
+                        <td className="py-4 pr-4 align-middle hidden sm:table-cell">
+                          <div className="inline-flex items-center gap-2">
+                            <span
+                              aria-hidden
+                              className="h-1.5 w-1.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: color }}
+                            />
+                            <span className="text-xs italic font-serif text-muted-foreground">
+                              {ASSET_CLASS_LABELS[h.assetClass] ?? h.assetClass}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Qty */}
+                        <td className="py-4 pr-4 text-right font-mono text-xs text-muted-foreground tabular-nums hidden md:table-cell">
+                          {parseFloat(h.quantity).toLocaleString('en-IN', { maximumFractionDigits: 4 })}
+                        </td>
+
+                        {/* Avg cost */}
+                        <td className="py-4 pr-4 text-right hidden md:table-cell">
+                          <Money className="font-mono text-xs text-muted-foreground tabular-nums">{formatINR(h.avgCostPrice)}</Money>
+                        </td>
+
+                        {/* Value */}
+                        <td className="py-4 pr-4 text-right align-middle">
+                          <Money className="font-mono text-sm tabular-nums text-foreground">{h.currentValue ? formatINR(h.currentValue) : formatINR(h.totalCost)}</Money>
+                          {!h.currentValue && (
+                            <div className="text-[10px] italic font-serif text-muted-foreground/70 mt-0.5">cost basis</div>
+                          )}
+                        </td>
+
+                        {/* P&L */}
+                        <td className="py-4 pr-6 text-right align-middle">
                           {h.currentValue ? (
                             <>
-                              <div className={`font-medium ${pos ? 'text-green-600 dark:text-green-400' : neg ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
-                                {h.unrealisedPnL ? formatINR(h.unrealisedPnL, { showSign: true }) : '—'}
+                              <div className={`inline-flex items-center justify-end gap-1.5 ${pos ? 'text-positive' : neg ? 'text-negative' : 'text-muted-foreground'}`}>
+                                {pos && <span aria-hidden className="text-[9px] leading-none translate-y-px">▲</span>}
+                                {neg && <span aria-hidden className="text-[9px] leading-none translate-y-px">▼</span>}
+                                <Money className="font-mono text-sm tabular-nums">{h.unrealisedPnL ? formatINR(h.unrealisedPnL, { showSign: true }) : '—'}</Money>
                               </div>
                               {h.unrealisedPnLPct != null && (
-                                <div className={`text-xs ${pos ? 'text-green-600 dark:text-green-400' : neg ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                                <div className={`text-[10px] font-mono tabular-nums mt-1 ${pos ? 'text-positive/75' : neg ? 'text-negative/75' : 'text-muted-foreground'}`}>
                                   {pos ? '+' : ''}{h.unrealisedPnLPct.toFixed(2)}%
                                 </div>
                               )}
                             </>
                           ) : (
-                            <span className="text-xs text-muted-foreground">no price</span>
+                            <span className="text-[10px] italic font-serif text-muted-foreground/70">no price</span>
                           )}
                         </td>
                       </tr>
