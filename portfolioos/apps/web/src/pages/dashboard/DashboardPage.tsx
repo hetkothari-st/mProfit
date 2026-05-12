@@ -867,12 +867,9 @@ export function DashboardPage() {
       </Card>
 
       {/* Real Estate | Vehicles | Insurance — reorder + hide via sidebar prefs */}
-      {nw && (isKeyVisible('/real-estate') || isKeyVisible('/vehicles') || isKeyVisible('/insurance')) && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-          {/* Real Estate */}
-          {isKeyVisible('/real-estate') && (
-          <Card style={{ order: orderOf('/real-estate') }}>
+      {nw && (() => {
+        const realEstateCard = (
+          <Card key="/real-estate">
             <CardHeader className="flex-row items-center justify-between pb-2">
               <div className="flex items-center gap-2">
                 <Home className="h-4 w-4 text-muted-foreground" />
@@ -921,11 +918,10 @@ export function DashboardPage() {
               )}
             </CardContent>
           </Card>
-          )}
+        );
 
-          {/* Vehicles */}
-          {isKeyVisible('/vehicles') && (
-          <Card style={{ order: orderOf('/vehicles') }}>
+        const vehiclesCard = (
+          <Card key="/vehicles">
             <CardHeader className="flex-row items-center justify-between pb-2">
               <div className="flex items-center gap-2">
                 <Car className="h-4 w-4 text-muted-foreground" />
@@ -976,11 +972,10 @@ export function DashboardPage() {
               )}
             </CardContent>
           </Card>
-          )}
+        );
 
-          {/* Insurance */}
-          {isKeyVisible('/insurance') && (
-          <Card style={{ order: orderOf('/insurance') }}>
+        const insuranceCard = (
+          <Card key="/insurance">
             <CardHeader className="flex-row items-center justify-between pb-2">
               <div className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-muted-foreground" />
@@ -1035,9 +1030,24 @@ export function DashboardPage() {
               )}
             </CardContent>
           </Card>
-          )}
-        </div>
-      )}
+        );
+
+        const trio = [
+          { key: '/real-estate', node: realEstateCard },
+          { key: '/vehicles', node: vehiclesCard },
+          { key: '/insurance', node: insuranceCard },
+        ]
+          .filter((c) => isKeyVisible(c.key))
+          .sort((a, b) => orderOf(a.key) - orderOf(b.key));
+
+        if (trio.length === 0) return null;
+
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {trio.map((c) => c.node)}
+          </div>
+        );
+      })()}
 
       {/* Recent transactions */}
       <Card>
