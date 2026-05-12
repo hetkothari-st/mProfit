@@ -178,6 +178,43 @@ async function fetchGoldApiInr(): Promise<{
 }
 
 /**
+ * Direct fetch of an NSE ETF unit price via Yahoo's chart REST endpoint.
+ * This bypasses the yahoo-finance2 library entirely — that library requires a
+ * crumb cookie which Yahoo refuses to serve to many cloud-host IPs (Railway,
+ * Fly, etc.), causing every yahooQuoteRaw() call to silently return empty
+ * arrays. The /v8/chart endpoint serves anyone with a normal User-Agent.
+ *
+ * SBI's SILVERBEES.NS tracks LBMA silver fix; one unit ≈ 1g silver less a
+ * small expense-ratio drag, so the NAV is a usable INR/g silver proxy.
+ */
+async function fetchYahooChartPrice(symbol: string): Promise<Decimal | null> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'application/json,*/*',
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      logger.warn({ symbol, status: res.status }, '[commodity] yahoo chart REST non-200');
+      return null;
+    }
+    const j = (await res.json()) as {
+      chart?: { result?: Array<{ meta?: { regularMarketPrice?: number } }> };
+    };
+    const price = j.chart?.result?.[0]?.meta?.regularMarketPrice;
+    if (typeof price === 'number' && price > 0) return new Decimal(price);
+    return null;
+  } catch (err) {
+    logger.warn({ err, symbol }, '[commodity] yahoo chart REST fetch failed');
+    return null;
+  }
+}
+
+/**
  * Batch-fetch silver spot + gold/silver ETF NAVs in one Yahoo call so each
  * asset type can display the right number (per-gram for physical / SGB, per-
  * unit NAV for ETFs). Silver spot uses SI=F (USD/oz) × USD/INR to avoid the
@@ -223,35 +260,45 @@ async function fetchYahooBundle(): Promise<{
 }
 
 async function refreshLivePrices(): Promise<LiveCache> {
-  // Run both upstream paths in parallel; ETF NAVs only come from Yahoo and silver
-  // has a Yahoo fallback, so we always want both regardless of CoinGecko outcome.
-  const [primary, yahoo] = await Promise.all([
+  // Run all three upstream paths in parallel. Yahoo crumb-based quote API
+  // (used by yahoo-finance2 inside fetchYahooBundle) silently returns empty
+  // arrays from many cloud IPs — Railway included — so we no longer rely on
+  // it alone for silver. The /v8/chart REST endpoint for SILVERBEES.NS has
+  // no crumb requirement and serves any normal User-Agent.
+  const [primary, yahoo, silverbeesDirect] = await Promise.all([
     fetchGoldApiInr(),
     fetchYahooBundle(),
+    fetchYahooChartPrice('SILVERBEES.NS'),
   ]);
   const GOLD = primary.GOLD ?? yahoo.goldInrPerGramFallback;
 
-  // Silver fallback ladder:
+  // Silver fallback ladder (first non-null wins):
   //   1. gold-api XAG × CoinGecko-derived FX (best — same call as gold)
   //   2. Yahoo SI=F × Yahoo INR=X (used when CoinGecko or gold-api flakes)
-  //   3. SILVERBEES.NS NAV (each unit ≈ 1g silver; close enough for display)
-  let SILVER = primary.SILVER ?? yahoo.silverInrPerGram;
+  //   3. SILVERBEES.NS NAV from yahoo-finance2 (one Yahoo call, but crumb-gated)
+  //   4. SILVERBEES.NS NAV via direct /v8/chart REST (no crumb — survives
+  //      Railway / cloud-IP captcha walls)
+  let SILVER = primary.SILVER ?? yahoo.silverInrPerGram ?? yahoo.etfNavs['SILVERBEES'] ?? silverbeesDirect;
+  if (SILVER === silverbeesDirect && silverbeesDirect) {
+    logger.info({ silverbees: silverbeesDirect.toString() }, '[commodity] silver via SILVERBEES /v8/chart');
+  }
   if (!SILVER) {
-    const silverbees = yahoo.etfNavs['SILVERBEES'];
-    if (silverbees) {
-      SILVER = silverbees;
-      logger.info({ silverbees: silverbees.toString() }, '[commodity] silver fallback to SILVERBEES NAV');
-    } else {
-      logger.warn('[commodity] silver unavailable: all sources failed');
-    }
+    logger.warn('[commodity] silver unavailable: all sources failed');
   }
 
-  const fresh: LiveCache = { GOLD, SILVER, etfNavs: yahoo.etfNavs, fetchedAt: new Date() };
+  // ETF NAVs: merge the direct SILVERBEES fetch in so frontend ETF valuations
+  // also keep working when the yahoo-finance2 bundle returns empty.
+  const etfNavs = { ...yahoo.etfNavs };
+  if (!etfNavs['SILVERBEES'] && silverbeesDirect) {
+    etfNavs['SILVERBEES'] = silverbeesDirect;
+  }
+
+  const fresh: LiveCache = { GOLD, SILVER, etfNavs, fetchedAt: new Date() };
   liveCache = fresh;
   logger.info({
     gold: GOLD?.toString() ?? 'null',
     silver: SILVER?.toString() ?? 'null',
-    etfCount: Object.keys(yahoo.etfNavs).length,
+    etfCount: Object.keys(etfNavs).length,
   }, '[commodity] live prices refreshed');
   return fresh;
 }
