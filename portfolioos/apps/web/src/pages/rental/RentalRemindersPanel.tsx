@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Mail, MessageSquare, X, Pencil, Send, Loader2, BellRing, Save } from 'lucide-react';
@@ -16,17 +16,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { rentalApi, type RentReminderDTO } from '@/api/rental.api';
 
-function statusBadge(status: RentReminderDTO['status']): { label: string; cls: string } {
-  switch (status) {
-    case 'PENDING_APPROVAL': return { label: 'Pending', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
-    case 'APPROVED': return { label: 'Sending…', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
-    case 'SENT': return { label: 'Sent', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-    case 'FAILED': return { label: 'Failed', cls: 'bg-red-50 text-red-700 border-red-200' };
-    case 'REJECTED': return { label: 'Rejected', cls: 'bg-gray-50 text-gray-600 border-gray-200' };
-    case 'SUPERSEDED': return { label: 'No longer needed', cls: 'bg-gray-50 text-gray-500 border-gray-200' };
-  }
-}
-
 function leadCopy(leadDays: number, dueDate?: string): string {
   if (leadDays < 0) {
     if (dueDate) {
@@ -41,6 +30,14 @@ function leadCopy(leadDays: number, dueDate?: string): string {
   if (leadDays === 0) return 'Due today';
   if (leadDays === 1) return 'Due tomorrow';
   return `Due in ${leadDays} days`;
+}
+
+function formatMonthLabel(forMonth?: string): string {
+  if (!forMonth) return '—';
+  const [y, m] = forMonth.split('-');
+  if (!y || !m) return forMonth;
+  const date = new Date(Number(y), Number(m) - 1, 1);
+  return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 }
 
 // ── Preview dialog ─────────────────────────────────────────────────
@@ -65,14 +62,13 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Update failed'),
   });
 
-  // Always show both the email and SMS sections so the landlord can review
-  // the rendered content even before adding a tenant email / phone. Send
-  // step verifies recipient presence — the preview is purely for QA.
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Preview reminder</DialogTitle>
+          <DialogTitle>
+            Preview reminder — {formatMonthLabel(reminder.receipt?.forMonth)}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 max-h-[70vh] overflow-y-auto">
           <div>
@@ -130,15 +126,16 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
   );
 }
 
-// ── Inline contact editor (per-row) ────────────────────────────────
+// ── Inline contact editor (per-group) ──────────────────────────────
 
 interface ContactEditorProps {
   tenancyId: string;
   email: string | null;
   phone: string | null;
+  missing: boolean;
 }
 
-function ContactEditor({ tenancyId, email, phone }: ContactEditorProps) {
+function ContactEditor({ tenancyId, email, phone, missing }: ContactEditorProps) {
   const qc = useQueryClient();
   const [draftEmail, setDraftEmail] = useState(email ?? '');
   const [draftPhone, setDraftPhone] = useState(phone ?? '');
@@ -160,7 +157,7 @@ function ContactEditor({ tenancyId, email, phone }: ContactEditorProps) {
   const dirty = draftEmail.trim() !== (email ?? '') || draftPhone.trim() !== (phone ?? '');
 
   return (
-    <div className="mt-2 pt-2 border-t border-border/60 flex flex-wrap items-end gap-2">
+    <div className={`flex flex-wrap items-end gap-2 ${missing ? 'p-3 rounded-md bg-amber-50/40 border border-amber-200' : ''}`}>
       <div className="flex-1 min-w-[200px]">
         <Label className="text-[10px] uppercase tracking-kerned text-muted-foreground">Tenant email</Label>
         <Input
@@ -194,6 +191,188 @@ function ContactEditor({ tenancyId, email, phone }: ContactEditorProps) {
   );
 }
 
+// ── Grouped tenancy block ──────────────────────────────────────────
+
+interface TenancyBlockProps {
+  tenancyId: string;
+  reminders: RentReminderDTO[];
+  onPreview: (id: string) => void;
+}
+
+function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const tenancy = reminders[0]?.tenancy;
+  const property = tenancy?.property;
+  const tenantEmail = tenancy?.tenantEmail ?? null;
+  const tenantPhone = tenancy?.tenantPhone ?? null;
+  const missingContact = !tenantEmail && !tenantPhone;
+
+  const sortedReminders = [...reminders].sort((a, b) => {
+    // Oldest overdue first; upcoming after, soonest first.
+    const aDue = a.receipt?.dueDate ? new Date(a.receipt.dueDate).getTime() : 0;
+    const bDue = b.receipt?.dueDate ? new Date(b.receipt.dueDate).getTime() : 0;
+    return aDue - bDue;
+  });
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setSelected((prev) => (prev.size === sortedReminders.length ? new Set() : new Set(sortedReminders.map((r) => r.id))));
+  }
+
+  const approveAllMut = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.allSettled(ids.map((id) => rentalApi.approveReminder(id)));
+      return results;
+    },
+    onSuccess: (results) => {
+      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
+      const sent = results.filter((r) => r.status === 'fulfilled' && r.value.status === 'SENT').length;
+      const failed = results.length - sent;
+      if (failed === 0) toast.success(`${sent} reminders sent`);
+      else if (sent === 0) toast.error(`All ${failed} failed`);
+      else toast.success(`${sent} sent · ${failed} failed`);
+      setSelected(new Set());
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Approve failed'),
+  });
+
+  const rejectAllMut = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.allSettled(ids.map((id) => rentalApi.rejectReminder(id)));
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
+      toast.success('Reminders rejected');
+      setSelected(new Set());
+    },
+  });
+
+  return (
+    <div className="border border-border rounded-md overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 bg-foreground/[0.02] border-b border-border">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="font-semibold text-[16px]">{tenancy?.tenantName ?? '—'}</span>
+              <span className="text-sm text-muted-foreground">·</span>
+              <span className="text-sm text-muted-foreground">{property?.name ?? '—'}</span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {sortedReminders.length} pending reminder{sortedReminders.length === 1 ? '' : 's'}
+              {missingContact && (
+                <span className="ml-2 text-amber-700 font-medium">
+                  ⚠ Tenant contact missing
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="mt-3">
+          <ContactEditor
+            tenancyId={tenancyId}
+            email={tenantEmail}
+            phone={tenantPhone}
+            missing={missingContact}
+          />
+        </div>
+      </div>
+
+      {/* Month picker */}
+      <div className="px-4 py-2 border-b border-border flex items-center gap-3 flex-wrap bg-background">
+        <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+          <input
+            type="checkbox"
+            checked={selected.size === sortedReminders.length && sortedReminders.length > 0}
+            onChange={toggleAll}
+            className="h-4 w-4"
+          />
+          Select all
+        </label>
+        <span className="text-xs text-muted-foreground">·</span>
+        <span className="text-xs text-muted-foreground">
+          {selected.size} selected
+        </span>
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => rejectAllMut.mutate(Array.from(selected))}
+            disabled={selected.size === 0 || rejectAllMut.isPending}
+          >
+            <X className="h-3.5 w-3.5" /> Reject selected
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => approveAllMut.mutate(Array.from(selected))}
+            disabled={selected.size === 0 || approveAllMut.isPending || missingContact}
+            title={missingContact ? 'Add tenant email or phone above first' : undefined}
+          >
+            {approveAllMut.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
+            Approve &amp; send selected
+          </Button>
+        </div>
+      </div>
+
+      {/* Reminder rows */}
+      <div className="divide-y divide-border">
+        {sortedReminders.map((r) => {
+          const isSelected = selected.has(r.id);
+          const monthLabel = formatMonthLabel(r.receipt?.forMonth);
+          const amount = r.receipt ? formatINR(r.receipt.expectedAmount) : '—';
+          return (
+            <label
+              key={r.id}
+              className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+                isSelected ? 'bg-foreground/[0.04]' : 'hover:bg-foreground/[0.02]'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => toggle(r.id)}
+                className="h-4 w-4 flex-shrink-0"
+              />
+              <div className="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
+                <span className="text-sm font-medium">{monthLabel}</span>
+                <span className="text-xs text-muted-foreground">· {amount}</span>
+                <span className={`text-xs ${r.leadDays < 0 ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
+                  · {leadCopy(r.leadDays, r.receipt?.dueDate)}
+                </span>
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  {r.channels.email && <Mail className="h-3 w-3" />}
+                  {r.channels.sms && <MessageSquare className="h-3 w-3" />}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7"
+                onClick={(e) => { e.preventDefault(); onPreview(r.id); }}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Preview
+              </Button>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Panel ──────────────────────────────────────────────────────────
 
 export function RentalRemindersPanel() {
@@ -206,24 +385,6 @@ export function RentalRemindersPanel() {
     refetchInterval: 60_000,
   });
 
-  const approveMut = useMutation({
-    mutationFn: (id: string) => rentalApi.approveReminder(id),
-    onSuccess: (row) => {
-      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
-      if (row.status === 'SENT') toast.success('Reminder sent');
-      else if (row.status === 'FAILED') toast.error(`Send failed — ${row.emailError ?? row.smsError ?? 'unknown'}`);
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Approve failed'),
-  });
-
-  const rejectMut = useMutation({
-    mutationFn: (id: string) => rentalApi.rejectReminder(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
-      toast.success('Reminder rejected');
-    },
-  });
-
   const scanMut = useMutation({
     mutationFn: () => rentalApi.runReminderScan(),
     onSuccess: (r) => {
@@ -234,6 +395,19 @@ export function RentalRemindersPanel() {
 
   const reminders = remindersQuery.data ?? [];
   const previewing = previewId ? reminders.find((r) => r.id === previewId) : null;
+
+  // Group by tenancyId so the panel collapses N pending receipts for the
+  // same tenant into one card with a month picker, instead of N parallel
+  // rows that all repeat the tenant name + property.
+  const groups = useMemo(() => {
+    const map = new Map<string, RentReminderDTO[]>();
+    for (const r of reminders) {
+      const arr = map.get(r.tenancyId) ?? [];
+      arr.push(r);
+      map.set(r.tenancyId, arr);
+    }
+    return Array.from(map.entries());
+  }, [reminders]);
 
   if (remindersQuery.isLoading) {
     return (
@@ -270,88 +444,21 @@ export function RentalRemindersPanel() {
         </Button>
       </CardHeader>
       <CardContent>
-        {reminders.length === 0 ? (
+        {groups.length === 0 ? (
           <div className="text-sm text-muted-foreground py-3 text-center border border-dashed rounded-md">
             No reminders awaiting approval. The scan runs daily at 09:00 IST,
             or click <strong>Run scan</strong> to check now.
           </div>
         ) : (
-          <div className="space-y-2">
-            {reminders.map((r) => {
-              const badge = statusBadge(r.status);
-              const tenant = r.tenancy?.tenantName ?? '—';
-              const property = r.tenancy?.property?.name ?? '—';
-              const amount = r.receipt
-                ? formatINR(r.receipt.expectedAmount)
-                : '—';
-              const missingContact = !r.channels.email && !r.channels.sms;
-              return (
-                <div
-                  key={r.id}
-                  className="p-3 border border-border rounded-md hover:bg-foreground/[0.02]"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-[15px] truncate">{tenant}</span>
-                        <span className="text-sm text-muted-foreground">·</span>
-                        <span className="text-sm text-muted-foreground truncate">{property}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badge.cls}`}>
-                          {badge.label}
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
-                        <span className={r.leadDays < 0 ? 'text-red-600 font-medium' : ''}>
-                          {leadCopy(r.leadDays, r.receipt?.dueDate)}
-                        </span>
-                        <span>· {amount}</span>
-                        <span className="flex items-center gap-1">
-                          {r.channels.email && <Mail className="h-3 w-3" />}
-                          {r.channels.sms && <MessageSquare className="h-3 w-3" />}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPreviewId(r.id)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" /> Preview
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => rejectMut.mutate(r.id)}
-                        disabled={rejectMut.isPending}
-                      >
-                        <X className="h-3.5 w-3.5" /> Reject
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => approveMut.mutate(r.id)}
-                        disabled={approveMut.isPending || missingContact}
-                        title={missingContact ? 'Add tenant email or phone below first' : undefined}
-                      >
-                        {approveMut.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Send className="h-3.5 w-3.5" />
-                        )}
-                        Approve &amp; send
-                      </Button>
-                    </div>
-                  </div>
-                  {missingContact && r.tenancy && (
-                    <ContactEditor
-                      tenancyId={r.tenancyId}
-                      email={r.tenancy.tenantEmail}
-                      phone={r.tenancy.tenantPhone}
-                    />
-                  )}
-                </div>
-              );
-            })}
+          <div className="space-y-3">
+            {groups.map(([tenancyId, group]) => (
+              <TenancyBlock
+                key={tenancyId}
+                tenancyId={tenancyId}
+                reminders={group}
+                onPreview={setPreviewId}
+              />
+            ))}
           </div>
         )}
       </CardContent>
