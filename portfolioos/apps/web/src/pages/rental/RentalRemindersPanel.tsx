@@ -16,6 +16,30 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { rentalApi, type RentReminderDTO } from '@/api/rental.api';
 
+// Map raw provider/server error codes to landlord-friendly text. Anything
+// not matched falls through unchanged so genuine carrier errors still
+// reach the toast verbatim.
+function friendlyError(reason: string): string {
+  switch (reason) {
+    case 'smtp_not_configured':
+      return 'Email server not configured (set SMTP_HOST/USER/PASS in env)';
+    case 'sms_not_configured':
+      return 'SMS provider disabled (set SMS_PROVIDER=twilio + Twilio creds in env)';
+    case 'twilio_credentials_missing':
+      return 'Twilio credentials missing in env';
+    case 'tenant_email_missing':
+      return 'Tenant email not set';
+    case 'tenant_phone_missing':
+      return 'Tenant phone not set';
+    case 'invalid_phone_format':
+      return 'Tenant phone is not a valid number';
+    case 'no_channels_enabled':
+      return 'No channels enabled — toggle email or SMS first';
+    default:
+      return reason;
+  }
+}
+
 function leadCopy(leadDays: number, dueDate?: string): string {
   if (leadDays < 0) {
     if (dueDate) {
@@ -342,9 +366,25 @@ function TenancyBlock({ tenancyId, reminders, onPreview }: TenancyBlockProps) {
       qc.invalidateQueries({ queryKey: ['rental-reminders'] });
       const sent = results.filter((r) => r.status === 'fulfilled' && r.value.status === 'SENT').length;
       const failed = results.length - sent;
-      if (failed === 0) toast.success(`${sent} reminders sent`);
-      else if (sent === 0) toast.error(`All ${failed} failed`);
-      else toast.success(`${sent} sent · ${failed} failed`);
+      // Pull the actual carrier error so the landlord sees "SMTP not
+      // configured" instead of a meaningless "All 1 failed". Falls back
+      // to a generic message only when neither channel reported.
+      const reasons = results
+        .filter((r): r is PromiseFulfilledResult<RentReminderDTO> => r.status === 'fulfilled')
+        .map((r) => r.value)
+        .filter((row) => row.status === 'FAILED')
+        .flatMap((row) => [row.emailError, row.smsError].filter(Boolean) as string[])
+        .map(friendlyError)
+        .filter((s, i, arr) => arr.indexOf(s) === i);
+      if (failed === 0) {
+        toast.success(`${sent} reminders sent`);
+      } else if (sent === 0) {
+        toast.error(`${failed} failed — ${reasons.join(', ')}`, { duration: 8000 });
+      } else {
+        toast.success(`${sent} sent · ${failed} failed (${reasons.join(', ')})`, {
+          duration: 8000,
+        });
+      }
       setSelected(new Set());
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Approve failed'),
