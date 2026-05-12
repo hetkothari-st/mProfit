@@ -96,6 +96,93 @@ export async function yahooHistorical(
   }
 }
 
+interface ChartBar {
+  date: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+/**
+ * Direct call to Yahoo's public chart endpoint. yahoo-finance2 sometimes
+ * fails on indices and quoteSummary modules because it expects a session
+ * crumb that recent Yahoo versions issue inconsistently. The v8 chart
+ * endpoint is the same one Yahoo's own web charts use — it returns OHLCV
+ * arrays as JSON with no auth, no crumb, just a normal User-Agent.
+ *
+ * Falls back to yahoo-finance2.historical via the caller if this returns
+ * empty so we don't lose any data path that already works.
+ */
+export async function yahooChartDirect(
+  symbol: string,
+  period1: Date,
+  period2: Date,
+  interval: '1d' | '1wk' | '1mo' = '1d',
+): Promise<ChartBar[]> {
+  const p1 = Math.floor(period1.getTime() / 1000);
+  const p2 = Math.floor(period2.getTime() / 1000);
+  const url =
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
+    `?period1=${p1}&period2=${p2}&interval=${interval}&events=history&includeAdjustedClose=false`;
+  try {
+    const res = await throttled(() =>
+      fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'application/json,*/*',
+        },
+      }),
+    );
+    if (!res.ok) {
+      logger.warn({ symbol, status: res.status }, '[yahoo-chart] non-200');
+      return [];
+    }
+    const json = (await res.json()) as {
+      chart?: {
+        result?: Array<{
+          timestamp?: number[];
+          indicators?: {
+            quote?: Array<{
+              open?: (number | null)[];
+              high?: (number | null)[];
+              low?: (number | null)[];
+              close?: (number | null)[];
+              volume?: (number | null)[];
+            }>;
+          };
+        }>;
+        error?: { code?: string; description?: string };
+      };
+    };
+    const result = json.chart?.result?.[0];
+    if (!result) {
+      logger.warn({ symbol, error: json.chart?.error }, '[yahoo-chart] no result');
+      return [];
+    }
+    const timestamps = result.timestamp ?? [];
+    const quote = result.indicators?.quote?.[0] ?? {};
+    const out: ChartBar[] = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      const close = quote.close?.[i];
+      if (close == null) continue;
+      out.push({
+        date: new Date(timestamps[i]! * 1000),
+        open: quote.open?.[i] ?? close,
+        high: quote.high?.[i] ?? close,
+        low: quote.low?.[i] ?? close,
+        close,
+        volume: quote.volume?.[i] ?? 0,
+      });
+    }
+    return out;
+  } catch (err) {
+    logger.warn({ err, symbol }, '[yahoo-chart] fetch failed');
+    return [];
+  }
+}
+
 /**
  * Fetch instrument profile (sector / industry / long name). Used to backfill
  * StockMaster.sector once a holding lands in the portfolio so the sector

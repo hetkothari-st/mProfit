@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { yahooHistorical } from '../priceFeeds/yahooClient.js';
+import { yahooHistorical, yahooChartDirect } from '../priceFeeds/yahooClient.js';
 
 /**
  * Benchmark price series for NIFTY 50 + Sensex, rebased to 100 at period
@@ -109,10 +109,18 @@ async function refreshSeries(
   // trackers (NIFTYBEES.NS, SENSEX.BO) are reliable fallbacks because
   // they're listed instruments with full daily history. We rebase to 100,
   // so the price magnitude doesn't matter — only relative movement does.
+  //
+  // Try the direct v8 chart endpoint first because yahoo-finance2's
+  // `historical` wrapper has been failing for index symbols (silent empty
+  // result, no crumb). The direct endpoint is what Yahoo's public charts
+  // use and works without any auth.
   let rows: YahooBar[] = [];
   let usedSymbol = meta.fetchSymbols[0]!;
   for (const sym of meta.fetchSymbols) {
-    const fetched = (await yahooHistorical(sym, fetchFrom, today, '1d')) as YahooBar[];
+    let fetched: YahooBar[] = await yahooChartDirect(sym, fetchFrom, today, '1d');
+    if (fetched.length === 0) {
+      fetched = (await yahooHistorical(sym, fetchFrom, today, '1d')) as YahooBar[];
+    }
     if (fetched.length > 0) {
       rows = fetched;
       usedSymbol = sym;

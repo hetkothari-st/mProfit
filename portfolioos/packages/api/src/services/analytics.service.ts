@@ -14,6 +14,7 @@ import { historicalValuation, unrealisedReport, incomeReport } from './reports.s
 import { getDashboardNetWorth } from './dashboard.service.js';
 import { taxHarvestReport } from './tax.service.js';
 import { yahooProfile } from '../priceFeeds/yahooClient.js';
+import { sectorFor } from '../data/nseSectors.js';
 
 /**
  * Phase 5-Analytics — the snapshot service. Composes the existing per-
@@ -397,25 +398,43 @@ export async function getSectorAllocation(scope: AnalyticsScope): Promise<Sector
   });
 
   // Lazy backfill: StockMaster.sector is null for every stock created by
-  // contract-note / CAS imports because no path ever populated it. Try
-  // Yahoo profile lookups on the missing rows so the next request renders
-  // a real sector pie instead of 100% "Unclassified". Failure to fetch
-  // (network, rate limit, Yahoo missing the sector field) is silent — the
-  // holding just stays Unclassified for this request.
+  // contract-note / CAS imports because no path ever populated it.
+  //
+  // First pass: consult the bundled NSE sector map. This works for every
+  // common large/mid-cap Indian listing, requires no network, and survives
+  // when Yahoo's quoteSummary refuses to talk to us.
+  //
+  // Second pass: Yahoo profile lookup for anything the static map doesn't
+  // cover. Failure to fetch is silent — the holding stays Unclassified for
+  // this request and we'll try again next time.
   const missing = stocks.filter((s) => !s.sector);
   if (missing.length > 0) {
-    await Promise.all(
-      missing.map(async (s) => {
-        const yahooSymbol = s.exchange === 'BSE' ? `${s.symbol}.BO` : `${s.symbol}.NS`;
-        const profile = await yahooProfile(yahooSymbol);
-        if (profile?.sector) {
-          await prisma.stockMaster.update({
-            where: { id: s.id },
-            data: { sector: profile.sector, industry: profile.industry ?? undefined },
-          });
-        }
-      }),
-    );
+    const stillMissing: typeof missing = [];
+    for (const s of missing) {
+      const localSector = sectorFor(s.symbol);
+      if (localSector) {
+        await prisma.stockMaster.update({
+          where: { id: s.id },
+          data: { sector: localSector },
+        });
+      } else {
+        stillMissing.push(s);
+      }
+    }
+    if (stillMissing.length > 0) {
+      await Promise.all(
+        stillMissing.map(async (s) => {
+          const yahooSymbol = s.exchange === 'BSE' ? `${s.symbol}.BO` : `${s.symbol}.NS`;
+          const profile = await yahooProfile(yahooSymbol);
+          if (profile?.sector) {
+            await prisma.stockMaster.update({
+              where: { id: s.id },
+              data: { sector: profile.sector, industry: profile.industry ?? undefined },
+            });
+          }
+        }),
+      );
+    }
     // Re-read so this request reflects the backfill we just persisted.
     stocks = await prisma.stockMaster.findMany({
       where: { id: { in: stockIds } },
