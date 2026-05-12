@@ -238,13 +238,22 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     }
 
     // ─── PAGE NUMBERS ────────────────────────────────────────────────
+    // Do NOT pass `width` to this text call. PDFKit's `text` routes any
+    // width-bearing call through LineWrapper.wrap(), which at line 3041
+    // checks `if (doc.y > maxY) nextSection()` and triggers a
+    // continueOnNewPage() — appending a blank page per iteration. Our
+    // footer y (pageH - 22 = 820) sits below maxY (= pageH - bottomMargin
+    // = 802), so the wrapper fired every time. `lineBreak: false` is
+    // honoured for wrapping but does not suppress that overflow check.
+    // Centre the string manually via widthOfString to avoid the wrapper.
     const range = doc.bufferedPageRange();
+    doc.font('Helvetica').fontSize(7);
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(range.start + i);
-      doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted).text(
-        `PortfolioOS  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`,
-        ML, pageH - 22, { width: pageW, align: 'center', lineBreak: false },
-      );
+      const txt = `PortfolioOS  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`;
+      const tw  = doc.widthOfString(txt);
+      const tx  = ML + (pageW - tw) / 2;
+      doc.fillColor(BRAND.muted).text(txt, tx, pageH - 22, { lineBreak: false });
     }
 
     doc.flushPages();

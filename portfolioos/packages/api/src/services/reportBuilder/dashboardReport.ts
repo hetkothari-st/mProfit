@@ -760,13 +760,21 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   }
 
   // ─── Page numbers ───────────────────────────────────────────────────────────
+  // CRITICAL: must NOT pass `width` here. PDFKit's `text` routes any call with
+  // a width option through LineWrapper.wrap(), whose very first check is
+  // `if (doc.y > maxY) nextSection()` (pdfkit.js:3041). Our footer y is
+  // `pageH - 22 = 820`, which is below maxY (= pageH - bottomMargin = 802),
+  // so the wrapper synthesises a continueOnNewPage() and an extra blank page
+  // is appended for every iteration. `lineBreak: false` does not help here.
+  // Strip `width` + `align` and centre the string manually via widthOfString.
   const range = doc.bufferedPageRange();
+  doc.font('Helvetica').fontSize(7);
   for (let i = 0; i < range.count; i++) {
     doc.switchToPage(range.start + i);
-    doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted).text(
-      pdfSafe(`PortfolioOS  ·  Comprehensive Report  ·  Page ${i + 1} of ${range.count}`),
-      ML, pageH - 22, { width: W, align: 'center', lineBreak: false },
-    );
+    const txt = pdfSafe(`PortfolioOS  ·  Comprehensive Report  ·  Page ${i + 1} of ${range.count}`);
+    const tw  = doc.widthOfString(txt);
+    const tx  = ML + (W - tw) / 2;
+    doc.fillColor(BRAND.muted).text(txt, tx, pageH - 22, { lineBreak: false });
   }
   doc.flushPages();
   doc.end();
