@@ -170,7 +170,6 @@ export interface RiskMetrics {
 export type InsightCategory =
   | 'diversification'
   | 'tax_optimisation'
-  | 'rebalancing'
   | 'underperformers'
   | 'cash_drag'
   | 'sector_tilt'
@@ -183,7 +182,6 @@ export interface InsightCard {
   severity: InsightSeverity;
   title: string;
   body: string;
-  suggestedAction: string | null;
 }
 
 export interface InsightsResultOk {
@@ -194,7 +192,6 @@ export interface InsightsResultOk {
   costInr: string;
   cards: InsightCard[];
   narrative: string;
-  recommendedAllocation: Record<string, number> | null;
   disclaimer: string;
 }
 

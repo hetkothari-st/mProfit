@@ -34,19 +34,25 @@ import {
 // tsc doesn't copy `.txt` assets into `dist/` so a sibling-file read would
 // crash at runtime in production (Railway, Docker, etc.). To edit, change
 // the literal and ship a new release.
-const SYSTEM_PROMPT = `You are a senior Indian personal finance advisor analysing a portfolio snapshot for an Indian investor. The snapshot is provided as a JSON object in the user message. You will call the tool \`emit_insights\` exactly once with structured findings.
+const SYSTEM_PROMPT = `You produce a NEUTRAL, DESCRIPTIVE analysis of an Indian investor's portfolio snapshot for informational purposes only. This is NOT investment advice. The snapshot is provided as a JSON object in the user message. You will call the tool \`emit_insights\` exactly once with structured findings.
 
-Rules:
+COMPLIANCE — non-negotiable (Indian SEBI investment-advice rules):
+- DESCRIBE, never PRESCRIBE. Every card states a diagnosis or a fact. No card tells the investor to do anything.
+- Banned wording: buy, sell, trim, reduce to X%, redeploy, switch, start/stop SIPs, add/build exposure, rebalance to, book gains, exit, "harvest before <date>", or any imperative directed at the investor.
+- Never pair a named security, fund, or asset with an action. You may state facts about a holding ("TCS shows an unrealised loss of ₹X"); you may NOT suggest acting on it.
+- No personalised target-allocation numbers. Do not output recommended percentages for this investor. A generic educational range is acceptable only as neutral background ("diversified-portfolio frameworks commonly span a range of equity weights by risk profile"), with no number tied to this investor.
+- Convert any urge to recommend into a neutral statement: "your portfolio shows…", "concentration is high relative to…", "a general principle is…", "this allocation differs from a diversified benchmark."
+
+Content rules:
 - All amounts are in INR. Treat numeric fields as strings; do not parse as JS numbers.
 - The portfolio may span equity, mutual funds, FDs, gold, real estate, vehicles, insurance, crypto and other Indian asset classes.
 - Reason from the actual numbers given. Do not invent data. If the snapshot lacks information to support a finding, omit that category.
-- Where you recommend rebalancing, derive a target allocation from the investor's actual mix and observed gaps — do NOT default to a generic 60/40 template. Justify the target briefly in the card body.
-- Tax observations must be India-specific (STCG/LTCG rates post Finance Act 2024, Section 112A exemption ₹1.25L, Section 80C, indexation, etc.).
-- Severity: HIGH = immediate action warranted; MEDIUM = worth reviewing this quarter; LOW = informational.
-- Cards: maximum 7, no duplicates across categories. Each card title ≤ 80 chars; body ≤ 400 chars; suggestedAction ≤ 200 chars.
-- Narrative: 100–200 words, plain prose, no markdown, no bullets, no headers. Speak to the investor in second person.
+- Keep all facts, stats, XIRR, realised/unrealised P&L, losses, and data-quality flags. A ₹0 value likely means missing data — say "verify current values", never "redeploy".
+- Tax: explain how a concept works in general terms (how tax-loss harvesting and carry-forward work, STCG/LTCG rates post Finance Act 2024, Section 112A ₹1.25L exemption, Section 80C, indexation) and state the investor's relevant figures. Do NOT instruct the investor to sell anything or act before any date. End tax observations with "consult a tax professional on timing."
+- Severity: HIGH = significant diagnostic concern; MEDIUM = worth being aware of; LOW = informational. Severity describes the FINDING, not an urgency to act.
+- Cards: maximum 7, no duplicates across categories. Each card title ≤ 80 chars; body ≤ 400 chars. Do NOT emit a rebalancing prescription card.
+- Narrative: 100–200 words, plain prose, no markdown, no bullets, no headers, second person. Describe the portfolio's current state only. Do NOT end with priority actions or a list of things to do.
 - Do NOT emit the "not financial advice" disclaimer yourself — it is rendered separately by the UI.
-- Numeric output keys (percentages in recommendedAllocation) are plain JSON numbers in the 0–100 range and should sum to roughly 100.
 - Currency in output text: use INR / ₹ for INR amounts; never $ unless the snapshot explicitly references a USD field.
 `;
 
@@ -56,7 +62,6 @@ const TOOL_DESCRIPTION = 'Emit structured portfolio insights for the investor.';
 const INSIGHT_CATEGORIES = [
   'diversification',
   'tax_optimisation',
-  'rebalancing',
   'underperformers',
   'cash_drag',
   'sector_tilt',
@@ -73,7 +78,6 @@ export interface InsightCard {
   severity: InsightSeverity;
   title: string;
   body: string;
-  suggestedAction: string | null;
 }
 
 const InsightCardSchema = z.object({
@@ -81,13 +85,11 @@ const InsightCardSchema = z.object({
   severity: z.enum(SEVERITIES),
   title: z.string().max(120),
   body: z.string().max(600),
-  suggestedAction: z.string().max(300).nullable().optional(),
 });
 
 const InsightsPayloadSchema = z.object({
   cards: z.array(InsightCardSchema).max(7),
   narrative: z.string().max(1500),
-  recommendedAllocation: z.record(z.string(), z.number().min(0).max(100)).nullable().optional(),
 });
 
 const TOOL_JSON_SCHEMA = {
@@ -107,15 +109,10 @@ const TOOL_JSON_SCHEMA = {
           severity: { type: 'string', enum: [...SEVERITIES] },
           title: { type: 'string', maxLength: 120 },
           body: { type: 'string', maxLength: 600 },
-          suggestedAction: { type: ['string', 'null'], maxLength: 300 },
         },
       },
     },
     narrative: { type: 'string', maxLength: 1500 },
-    recommendedAllocation: {
-      type: ['object', 'null'],
-      additionalProperties: { type: 'number', minimum: 0, maximum: 100 },
-    },
   },
 } as const;
 
@@ -195,7 +192,6 @@ export interface InsightsResult {
   costInr: string;
   cards: InsightCard[];
   narrative: string;
-  recommendedAllocation: Record<string, number> | null;
   disclaimer: string;
 }
 
@@ -300,7 +296,6 @@ async function findCachedInsight(
     costInr: row.costInr.toString(),
     cards: row.cards as unknown as InsightCard[],
     narrative: row.narrative,
-    recommendedAllocation: (row.recommendedAllocation as Record<string, number> | null) ?? null,
     disclaimer: INSIGHTS_DISCLAIMER,
   };
 }
@@ -442,7 +437,6 @@ export async function getOrGenerateInsights(
     severity: c.severity,
     title: c.title,
     body: c.body,
-    suggestedAction: c.suggestedAction ?? null,
   }));
 
   const row = await prisma.portfolioInsight.create({
@@ -453,7 +447,6 @@ export async function getOrGenerateInsights(
       period,
       cards: cards as unknown as object,
       narrative: data.narrative,
-      recommendedAllocation: data.recommendedAllocation ?? undefined,
       model,
       inputTokens,
       outputTokens,
@@ -482,7 +475,6 @@ export async function getOrGenerateInsights(
     costInr: costInr.toFixed(4),
     cards,
     narrative: data.narrative,
-    recommendedAllocation: (data.recommendedAllocation as Record<string, number> | null) ?? null,
     disclaimer: INSIGHTS_DISCLAIMER,
   };
 }
@@ -509,7 +501,6 @@ export async function getLatestInsight(
     costInr: row.costInr.toString(),
     cards: row.cards as unknown as InsightCard[],
     narrative: row.narrative,
-    recommendedAllocation: (row.recommendedAllocation as Record<string, number> | null) ?? null,
     disclaimer: INSIGHTS_DISCLAIMER,
   };
 }

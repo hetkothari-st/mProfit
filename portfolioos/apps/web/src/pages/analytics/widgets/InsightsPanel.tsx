@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, Loader2, RefreshCw, AlertTriangle, Info, AlertOctagon, ShieldAlert, ArrowRight } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, AlertTriangle, Info, AlertOctagon, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,6 @@ import { apiErrorMessage } from '@/api/client';
 const CATEGORY_LABEL: Record<InsightCategory, string> = {
   diversification: 'Diversification',
   tax_optimisation: 'Tax optimisation',
-  rebalancing: 'Rebalancing',
   underperformers: 'Underperformers',
   cash_drag: 'Cash drag',
   sector_tilt: 'Sector tilt',
@@ -59,12 +58,6 @@ function InsightCardView({ card }: { card: InsightCard }) {
       </div>
       <p className="text-sm font-semibold leading-snug mb-1">{card.title}</p>
       <p className="text-[13px] text-muted-foreground leading-relaxed">{card.body}</p>
-      {card.suggestedAction && (
-        <div className="mt-2 flex items-start gap-1.5 text-[12px] text-foreground">
-          <ArrowRight className="h-3.5 w-3.5 mt-0.5 text-accent" strokeWidth={2} />
-          <span>{card.suggestedAction}</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -200,27 +193,12 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
               {okPayload.narrative}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {okPayload.cards.map((c, i) => (
-                <InsightCardView key={i} card={c} />
-              ))}
+              {okPayload.cards
+                .filter((c) => (c.category as string) !== 'rebalancing')
+                .map((c, i) => (
+                  <InsightCardView key={i} card={c} />
+                ))}
             </div>
-            {okPayload.recommendedAllocation && Object.keys(okPayload.recommendedAllocation).length > 0 && (
-              <div className="rounded-lg border bg-muted/30 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-2">
-                  Suggested target allocation
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-xs">
-                  {Object.entries(okPayload.recommendedAllocation)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([cls, pct]) => (
-                      <div key={cls} className="flex items-center justify-between border rounded px-2 py-1">
-                        <span className="text-muted-foreground">{cls.replace(/_/g, ' ')}</span>
-                        <span className="tabular-nums font-medium">{pct.toFixed(0)}%</span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
             <p className="text-[11px] text-muted-foreground border-t pt-3">
               <span className="font-medium">Disclaimer.</span> {okPayload.disclaimer} Model: {okPayload.model}.
             </p>
