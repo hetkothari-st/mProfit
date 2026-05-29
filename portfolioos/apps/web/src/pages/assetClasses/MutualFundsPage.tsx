@@ -11,6 +11,7 @@ import { DownloadReportButton } from '@/components/reports/DownloadReportButton'
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PriceAsOf } from '@/components/common/PriceAsOf';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { transactionsApi } from '@/api/transactions.api';
@@ -427,7 +428,14 @@ export function MutualFundsPage() {
                       </td>
                       <td className="py-2 pr-4 text-right tabular-nums">{h.quantity}</td>
                       <td className="py-2 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{h.currentPrice != null ? formatINR(h.currentPrice) : '—'}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums">
+                        {h.currentPrice != null ? (
+                          <div className="flex flex-col items-end leading-tight">
+                            <span>{formatINR(h.currentPrice)}</span>
+                            <PriceAsOf asOf={h.priceAsOf} stale={h.stale} />
+                          </div>
+                        ) : '—'}
+                      </td>
                       <td className="py-2 pr-4 text-right tabular-nums">{h.currentValue != null ? formatINR(h.currentValue) : '—'}</td>
                       <td className={`py-2 pr-4 text-right tabular-nums ${h.unrealisedPnL && toDecimal(h.unrealisedPnL).greaterThan(0) ? 'text-positive' : h.unrealisedPnL && toDecimal(h.unrealisedPnL).isNegative() ? 'text-negative' : ''}`}>
                         {h.unrealisedPnL != null ? formatINR(h.unrealisedPnL) : '—'}
