@@ -39,6 +39,7 @@ import { analyticsRouter } from './analytics.routes.js';
 import { userPreferencesRouter } from './userPreferences.routes.js';
 import { notificationsRouter } from './notifications.routes.js';
 import { corporateActionsRouter } from './corporateActions.routes.js';
+import { goalsRouter } from './goals.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -82,4 +83,5 @@ export function registerRoutes(app: Express): void {
   app.use('/api/user/preferences', userPreferencesRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/corporate-actions', corporateActionsRouter);
+  app.use('/api/goals', goalsRouter);
 }

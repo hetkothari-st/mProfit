@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cashflowsApi, type CashFlowDTO } from '@/api/cashflows.api';
+import { CashflowForecastSection } from './CashflowForecastSection';
 
 type Tab = 'all' | 'INFLOW' | 'OUTFLOW';
 
@@ -43,6 +44,8 @@ export function CashFlowsPage() {
         title="Cash Activity"
         description="Bank credits and debits parsed from your connected accounts"
       />
+
+      <CashflowForecastSection />
 
       {/* Tab strip */}
       <div className="flex gap-1 mb-4 border-b">

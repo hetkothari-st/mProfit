@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { ok } from '../lib/response.js';
-import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import {
   getAnalyticsSnapshot,
   getPortfolioValueLine,
@@ -16,6 +16,13 @@ import {
   getLatestInsight,
 } from '../services/analytics.insights.js';
 import { checkBudget } from '../ingestion/llm/budget.js';
+import { getMfOverlap } from '../services/mfOverlap.service.js';
+
+export async function getMfOverlapHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const data = await getMfOverlap(req.user.id);
+  return ok(res, data);
+}
 
 const VALID_PERIODS: Period[] = ['1M', '3M', '6M', '1Y', '3Y', '5Y', 'All'];
 
@@ -62,9 +69,21 @@ export async function getRisk(req: Request, res: Response): Promise<void> {
   const scope = await resolveScope(req);
   const period = parsePeriod(req);
   const days = periodToDays(period);
+  // Volatility, Sharpe and max-drawdown come purely from the portfolio value
+  // line (no external feed). Only beta needs the NIFTY series, which is a
+  // lazy Yahoo fetch that can stall when the index cache is cold and Yahoo is
+  // rate-limiting. Cap that fetch so risk metrics always return promptly —
+  // beta degrades to null instead of leaving the whole card row spinning.
+  const NIFTY_TIMEOUT_MS = 6000;
+  const niftyOrTimeout = Promise.race([
+    getNiftyMonthlyCloses(days).catch(() => [] as Array<{ date: string; close: number }>),
+    new Promise<Array<{ date: string; close: number }>>((resolve) =>
+      setTimeout(() => resolve([]), NIFTY_TIMEOUT_MS),
+    ),
+  ]);
   const [valueLine, niftyMonthly] = await Promise.all([
     getPortfolioValueLine(scope, days),
-    getNiftyMonthlyCloses(days),
+    niftyOrTimeout,
   ]);
   // valueLine is already month-end (historicalValuation emits MONTHLY).
   const portfolioMonthly = monthlyFromDaily(

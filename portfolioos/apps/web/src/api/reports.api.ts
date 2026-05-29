@@ -74,10 +74,15 @@ export interface UnrealisedReport {
 export interface XirrBlock {
   // XIRR rate is dimensionless — fine as a JS number.
   xirr: number | null;
+  // Time-weighted return (Modified Dietz, annualized). Present when the
+  // backend supports it; older callers may still see it as undefined.
+  twr?: number | null;
   cashflowCount: number;
   // Money fields arrive as strings (§3.2); display via fmt() (Decimal-backed).
   totalInvested: string;
   terminalValue: string;
+  spanDays?: number;
+  reliable?: boolean;
 }
 
 export interface XirrReport {
@@ -158,6 +163,10 @@ export const reportsApi = {
       '/api/reports/unrealised' + qs({ portfolioId }),
     );
     return unwrap(data);
+  },
+  userXirr: async (): Promise<XirrBlock> => {
+    const { data } = await api.get<{ data: XirrBlock }>('/api/reports/xirr/user');
+    return data.data;
   },
   xirr: async (portfolioId: string): Promise<XirrReport> => {
     const { data } = await api.get<ApiResponse<XirrReport>>(

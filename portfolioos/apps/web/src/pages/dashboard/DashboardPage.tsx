@@ -24,6 +24,7 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { transactionsApi } from '@/api/transactions.api';
 import { assetsApi } from '@/api/assets.api';
 import { dashboardApi } from '@/api/dashboard.api';
+import { reportsApi } from '@/api/reports.api';
 import { mailboxesApi } from '@/api/mailboxes.api';
 import { ConnectGmailCard } from '@/components/dashboard/ConnectGmailCard';
 import { GmailScanProgressCard } from '@/components/dashboard/GmailScanProgressCard';
@@ -297,6 +298,12 @@ export function DashboardPage() {
     enabled: portfolios.length > 0,
   });
 
+  const userXirrQuery = useQuery({
+    queryKey: ['user-xirr'],
+    queryFn: () => reportsApi.userXirr(),
+    enabled: portfolios.length > 0,
+  });
+
   const holdingsQuery = useQuery({
     queryKey: ['dashboard', 'holdings', selectedId, portfolios.map((p) => p.id).join(',')],
     queryFn: async () => {
@@ -563,6 +570,100 @@ export function DashboardPage() {
         );
       })()}
 
+      {/* Liabilities summary — net worth after loans + CC debt */}
+      {nw && toDecimal(nw.totalLiabilities).greaterThan(0) && (
+        <Card className="reveal">
+          <CardHeader className="flex-row items-center justify-between pb-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">
+                Liabilities · FY {nw.liabilities.financialYear}
+              </p>
+              <CardTitle className="text-[16px]">Loans &amp; credit cards</CardTitle>
+            </div>
+            <Link
+              to="/loans"
+              className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+            >
+              Manage <ArrowRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
+                  Net after debts
+                </div>
+                <Money className="numeric-display text-[19px] text-foreground">
+                  {formatINR(nw.netWorthAfterLiabilities)}
+                </Money>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
+                  Total outstanding
+                </div>
+                <Money className="numeric-display text-[17px] text-negative">
+                  {formatINR(nw.totalLiabilities)}
+                </Money>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
+                  Monthly EMI
+                </div>
+                <Money className="numeric-display text-[17px]">
+                  {formatINR(nw.liabilities.monthlyEmiTotal)}
+                </Money>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  {nw.liabilities.loanCount} loan{nw.liabilities.loanCount === 1 ? '' : 's'}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
+                  Card balance
+                </div>
+                <Money className="numeric-display text-[17px]">
+                  {formatINR(nw.liabilities.totalCreditCardOutstanding)}
+                </Money>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  {nw.liabilities.creditCardCount} card{nw.liabilities.creditCardCount === 1 ? '' : 's'}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
+                  Interest paid YTD
+                </div>
+                <Money className="numeric-display text-[17px] text-negative">
+                  {formatINR(nw.liabilities.interestPaidYTD)}
+                </Money>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Principal: {formatINR(nw.liabilities.principalPaidYTD)}
+                </div>
+              </div>
+            </div>
+            {(nw.liabilities.upcomingEmis.length > 0 || nw.liabilities.overdueEmis.length > 0) && (
+              <div className="mt-4 pt-3 border-t border-border/60 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+                {nw.liabilities.overdueEmis.length > 0 && (
+                  <span className="text-negative">
+                    {nw.liabilities.overdueEmis.length} EMI{nw.liabilities.overdueEmis.length === 1 ? '' : 's'} overdue
+                  </span>
+                )}
+                {(() => {
+                  const next = nw.liabilities.upcomingEmis[0];
+                  if (!next) return null;
+                  return (
+                    <span className="text-muted-foreground">
+                      Next EMI: {next.lenderName} on{' '}
+                      {new Date(next.emiDate).toLocaleDateString('en-IN', {
+                        day: '2-digit', month: 'short',
+                      })}{' '}— {formatINR(next.emiAmount)}
+                    </span>
+                  );
+                })()}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Live FX rates strip — quick glance + click-through to /forex */}
       <DashboardFxStrip />
 
@@ -581,7 +682,14 @@ export function DashboardPage() {
             label="Total invested"
             value={formatINR(totals.totalInvestment)}
             icon={TrendingUp}
-            hint={totals.xirr != null ? `XIRR ${formatPercent(totals.xirr * 100, 1)}` : undefined}
+            hint={(() => {
+              const x = totals.xirr;
+              const t = userXirrQuery.data?.twr;
+              const parts: string[] = [];
+              if (x != null) parts.push(`XIRR ${formatPercent(x * 100, 1)}`);
+              if (t != null) parts.push(`TWR ${formatPercent(t * 100, 1)}`);
+              return parts.length > 0 ? parts.join(' · ') : undefined;
+            })()}
           />
         </div>
         <div className="reveal reveal-delay-3" title="Current value minus invested, across holdings only. Accrual assets contribute earned interest; not annualized.">

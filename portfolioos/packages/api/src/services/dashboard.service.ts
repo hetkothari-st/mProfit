@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
-import { serializeMoney } from '@portfolioos/shared';
+import { serializeMoney, financialYearFromDate } from '@portfolioos/shared';
 import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
 import { computeCardSummary } from './creditCards.service.js';
 
@@ -270,6 +270,19 @@ export async function getDashboardNetWorth(userId: string, portfolioId?: string)
 
   const totalLiabilities = totalOutstanding.plus(totalCreditCardOutstanding);
 
+  // Interest paid YTD across loans (financial year April → March).
+  const currentFy = financialYearFromDate(today);
+  let interestPaidYTD = ZERO;
+  let principalPaidYTD = ZERO;
+  for (const loan of activeLoans) {
+    for (const p of loan.payments) {
+      if (!p.interestPart && !p.principalPart) continue;
+      if (financialYearFromDate(p.paidOn) !== currentFy) continue;
+      if (p.interestPart) interestPaidYTD = interestPaidYTD.plus(d(p.interestPart));
+      if (p.principalPart) principalPaidYTD = principalPaidYTD.plus(d(p.principalPart));
+    }
+  }
+
   // ── 6. Expanded allocation (all tangible assets) ─────────────────────
   const totalTangible = portfolioValue.plus(vehicleValue).plus(rentalValue);
   const allocationBreakdown: Array<{
@@ -446,6 +459,9 @@ export async function getDashboardNetWorth(userId: string, portfolioId?: string)
       loanCount: activeLoans.length,
       creditCardCount: activeCards.length,
       totalCreditCardOutstanding: serializeMoney(totalCreditCardOutstanding),
+      interestPaidYTD: serializeMoney(interestPaidYTD),
+      principalPaidYTD: serializeMoney(principalPaidYTD),
+      financialYear: currentFy,
       upcomingEmis,
       overdueEmis,
     },

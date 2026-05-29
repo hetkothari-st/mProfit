@@ -36,8 +36,37 @@ export interface DashboardAlert {
   daysUntil: number | null;
 }
 
+export interface UpcomingEmi {
+  loanId: string;
+  lenderName: string;
+  emiDate: string;
+  emiAmount: string;
+  daysUntil: number;
+}
+
+export interface OverdueEmi {
+  loanId: string;
+  lenderName: string;
+  daysOverdue: number;
+}
+
+export interface LiabilitiesSummary {
+  totalOutstanding: string;
+  monthlyEmiTotal: string;
+  loanCount: number;
+  creditCardCount: number;
+  totalCreditCardOutstanding: string;
+  interestPaidYTD: string;
+  principalPaidYTD: string;
+  financialYear: string;
+  upcomingEmis: UpcomingEmi[];
+  overdueEmis: OverdueEmi[];
+}
+
 export interface NetWorthResponse {
   totalNetWorth: string;
+  totalLiabilities: string;
+  netWorthAfterLiabilities: string;
   portfolio: {
     currentValue: string;
     totalInvested: string;
@@ -65,6 +94,7 @@ export interface NetWorthResponse {
     annualPremiumTotal: string;
     upcomingRenewals: InsuranceRenewal[];
   };
+  liabilities: LiabilitiesSummary;
   allocationBreakdown: AllocationSlice[];
   alerts: DashboardAlert[];
 }

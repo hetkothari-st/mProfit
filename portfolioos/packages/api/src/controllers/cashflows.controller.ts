@@ -3,6 +3,18 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
+import { getCashflowForecast } from '../services/cashflowForecast.service.js';
+
+const forecastQuery = z.object({
+  horizonMonths: z.coerce.number().int().min(1).max(36).default(12),
+});
+
+export async function getForecast(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const { horizonMonths } = forecastQuery.parse(req.query);
+  const result = await getCashflowForecast(req.user.id, horizonMonths);
+  return ok(res, result);
+}
 
 const listQuery = z.object({
   portfolioId: z.string().optional(),

@@ -34,6 +34,8 @@ import {
   Bug,
   Globe,
   Calculator,
+  Split,
+  Target,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -71,6 +73,7 @@ const OVERVIEW_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
   { label: 'Analytics', to: '/analytics', icon: BarChart3 },
   { label: 'Portfolios', to: '/portfolios', icon: Briefcase },
+  { label: 'Goals', to: '/goals', icon: Target },
   { label: 'Transactions', to: '/transactions', icon: Receipt },
   { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },
 ];
@@ -90,6 +93,7 @@ const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Import', to: '/import', icon: Upload },
       { label: 'Connectors', to: '/connectors', icon: Plug },
       { label: 'CAS', to: '/cas', icon: FileDown },
+      { label: 'Corporate Actions', to: '/corporate-actions', icon: Split },
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
       { label: 'Failures (DLQ)', to: '/import/failures', icon: Bug },

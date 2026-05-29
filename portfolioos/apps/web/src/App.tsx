@@ -20,6 +20,7 @@ import { MailboxesPage } from './pages/mailboxes/MailboxesPage';
 import { GmailCallbackPage } from './pages/mailboxes/GmailCallbackPage';
 import { GmailScanSetupPage } from './pages/mailboxes/GmailScanSetupPage';
 import { CasPage } from './pages/cas/CasPage';
+import { CorporateActionsPage } from './pages/corporateActions/CorporateActionsPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { AnalyticsPage } from './pages/analytics/AnalyticsPage';
 import { TaxPage } from './pages/tax/TaxPage';
@@ -36,6 +37,7 @@ import { InsuranceListPage } from './pages/insurance/InsuranceListPage';
 import { InsuranceDetailPage } from './pages/insurance/InsuranceDetailPage';
 import { LoanListPage } from './pages/loans/LoanListPage';
 import { LoanDetailPage } from './pages/loans/LoanDetailPage';
+import { GoalsPage } from './pages/goals/GoalsPage';
 import { CreditCardListPage } from './pages/creditCards/CreditCardListPage';
 import { CreditCardDetailPage } from './pages/creditCards/CreditCardDetailPage';
 import { RealEstateListPage } from './pages/realEstate/RealEstateListPage';
@@ -120,6 +122,7 @@ export function App() {
         <Route path="/insurance/:id" element={<InsuranceDetailPage />} />
         <Route path="/loans" element={<LoanListPage />} />
         <Route path="/loans/:id" element={<LoanDetailPage />} />
+        <Route path="/goals" element={<GoalsPage />} />
         <Route path="/credit-cards" element={<CreditCardListPage />} />
         <Route path="/credit-cards/:id" element={<CreditCardDetailPage />} />
         <Route path="/bank-accounts" element={<BankAccountListPage />} />
@@ -140,6 +143,7 @@ export function App() {
         <Route path="/gmail/callback" element={<GmailCallbackPage />} />
         <Route path="/gmail/scan-setup" element={<GmailScanSetupPage />} />
         <Route path="/cas" element={<CasPage />} />
+        <Route path="/corporate-actions" element={<CorporateActionsPage />} />
         <Route path="/ingestion" element={<IngestionPage />} />
         <Route path="/ingestion/senders" element={<SendersPage />} />
         <Route path="/ingestion/history" element={<ReviewPage />} />

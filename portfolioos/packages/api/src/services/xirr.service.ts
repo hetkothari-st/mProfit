@@ -178,6 +178,12 @@ async function terminalValue(portfolioId: string, filter: {
 export interface XirrResult {
   // XIRR itself is a dimensionless annualized-rate number (see §14.3).
   xirr: number | null;
+  // Time-weighted return (Modified Dietz, annualized). Annualizes the
+  // total-period return weighted by capital-at-work over time — less
+  // sensitive to the timing of contributions than XIRR. We use Modified
+  // Dietz because we lack daily NAV snapshots needed for the exact
+  // sub-period chain-link variant. SEBI RIA disclosures permit MDR.
+  twr: number | null;
   cashflowCount: number;
   // Invested capital and terminal value are money — emit as strings so
   // IEEE-754 can't re-enter here (§3.2). Consumers rehydrate via toDecimal.
@@ -188,6 +194,55 @@ export interface XirrResult {
   // absolute return until enough history exists.
   spanDays: number;
   reliable: boolean;
+}
+
+/**
+ * Modified Dietz Return — used as a TWR approximation when sub-period
+ * NAVs aren't available. Returns the *annualized* return.
+ *
+ *   MDR = (endValue - beginValue - netCashflow) / (beginValue + Σ w_i · cf_i)
+ *   w_i = (totalDays - daysFromStart_i) / totalDays
+ *
+ * For inception-to-date, beginValue = 0. `flows` should contain only
+ * the intermediate cashflows (NOT the terminal valuation); pass the
+ * terminal as `endValue` separately. Convention matches the rest of
+ * this service: negative cf amount = money INTO the portfolio (buy /
+ * contribution), positive = money OUT (sell / withdrawal).
+ */
+function modifiedDietzAnnualized(
+  flows: CashFlow[],
+  endValue: Decimal,
+  beginValue: Decimal = new Decimal(0),
+): number | null {
+  if (flows.length === 0) return null;
+  const sorted = [...flows].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const startMs = sorted[0]!.date.getTime();
+  const endMs = sorted[sorted.length - 1]!.date.getTime();
+  const totalDays = Math.max(1, (endMs - startMs) / 86_400_000);
+
+  let netContrib = new Decimal(0);
+  let weighted = new Decimal(0);
+  for (const f of sorted) {
+    // Sign flip: cf negative (buy) = positive contribution; positive (sell) = negative contribution.
+    const contrib = f.amount.negated();
+    netContrib = netContrib.plus(contrib);
+    const daysFromStart = (f.date.getTime() - startMs) / 86_400_000;
+    const weight = (totalDays - daysFromStart) / totalDays;
+    weighted = weighted.plus(contrib.times(weight));
+  }
+
+  const denominator = beginValue.plus(weighted);
+  if (denominator.isZero() || denominator.isNegative()) return null;
+  const numerator = endValue.minus(beginValue).minus(netContrib);
+  const mdr = numerator.dividedBy(denominator);
+
+  // Annualize: (1 + MDR)^(365 / totalDays) - 1
+  const periodYears = totalDays / 365.25;
+  if (periodYears <= 0) return null;
+  const base = mdr.plus(1);
+  if (base.lessThanOrEqualTo(0)) return null;
+  const annualized = new Decimal(Math.exp((Math.log(base.toNumber())) / periodYears)).minus(1);
+  return annualized.toNumber();
 }
 
 export async function computePortfolioXirr(
@@ -223,11 +278,13 @@ export async function computePortfolioXirr(
     stockId: opts.stockId,
     fundId: opts.fundId,
   });
+  const flowsForTwr = [...flows];
   if (tv.greaterThan(0)) flows.push({ date: opts.to ?? new Date(), amount: tv });
 
   const span = spanDays(flows.map((f) => f.date));
   return {
     xirr: xirr(flows),
+    twr: modifiedDietzAnnualized(flowsForTwr, tv),
     cashflowCount: flows.length,
     totalInvested: invested.toFixed(4),
     terminalValue: tv.toFixed(4),
@@ -255,11 +312,13 @@ export async function computeUserXirr(userId: string): Promise<XirrResult> {
     }
     tv = tv.plus(await terminalValue(p.id, {}));
   }
+  const flowsForTwr = [...allFlows];
   if (tv.greaterThan(0)) allFlows.push({ date: new Date(), amount: tv });
 
   const span = spanDays(allFlows.map((f) => f.date));
   return {
     xirr: xirr(allFlows),
+    twr: modifiedDietzAnnualized(flowsForTwr, tv),
     cashflowCount: allFlows.length,
     totalInvested: invested.toFixed(4),
     terminalValue: tv.toFixed(4),

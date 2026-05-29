@@ -8,6 +8,7 @@ import {
   getInsightsLatest,
   generateInsights,
   getInsightsSpend,
+  getMfOverlapHandler,
 } from '../controllers/analytics.controller.js';
 
 export const analyticsRouter = Router();
@@ -27,3 +28,6 @@ analyticsRouter.get('/risk', asyncHandler(getRisk));
 analyticsRouter.get('/insights', asyncHandler(getInsightsLatest));
 analyticsRouter.post('/insights/generate', asyncHandler(generateInsights));
 analyticsRouter.get('/insights/spend', asyncHandler(getInsightsSpend));
+
+// Phase 2g — MF direct/regular + portfolio overlap.
+analyticsRouter.get('/mf-overlap', asyncHandler(getMfOverlapHandler));

@@ -33,6 +33,39 @@ export interface ListCashFlowsParams {
   pageSize?: number;
 }
 
+export interface ForecastEvent {
+  id: string;
+  date: string;
+  direction: 'INFLOW' | 'OUTFLOW';
+  source:
+    | 'LOAN_EMI'
+    | 'RENT_DUE'
+    | 'INSURANCE_PREMIUM'
+    | 'FD_MATURITY'
+    | 'RD_MATURITY';
+  description: string;
+  amount: string;
+  refId: string;
+}
+
+export interface MonthlyRollup {
+  month: string;
+  inflow: string;
+  outflow: string;
+  net: string;
+}
+
+export interface ForecastResult {
+  events: ForecastEvent[];
+  monthly: MonthlyRollup[];
+  summary: {
+    totalInflow: string;
+    totalOutflow: string;
+    netCashflow: string;
+    horizonMonths: number;
+  };
+}
+
 export const cashflowsApi = {
   async list(params: ListCashFlowsParams = {}): Promise<CashFlowListResult> {
     const query: Record<string, string> = {};
@@ -44,6 +77,12 @@ export const cashflowsApi = {
     if (params.pageSize !== undefined) query.pageSize = String(params.pageSize);
     const { data } = await api.get<ApiResponse<CashFlowListResult>>('/api/cashflows', {
       params: query,
+    });
+    return unwrap(data);
+  },
+  async forecast(horizonMonths = 12): Promise<ForecastResult> {
+    const { data } = await api.get<ApiResponse<ForecastResult>>('/api/cashflows/forecast', {
+      params: { horizonMonths },
     });
     return unwrap(data);
   },

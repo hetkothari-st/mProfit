@@ -276,4 +276,42 @@ export const analyticsApi = {
     );
     return unwrap(data);
   },
+  async mfOverlap(): Promise<MfOverlapResult> {
+    const { data } = await api.get<ApiResponse<MfOverlapResult>>('/api/analytics/mf-overlap');
+    return unwrap(data);
+  },
 };
+
+export type PlanType = 'DIRECT' | 'REGULAR' | 'UNKNOWN';
+
+export interface MfSchemeRow {
+  fundId: string;
+  schemeCode: string;
+  schemeName: string;
+  amcName: string;
+  category: string;
+  planType: PlanType;
+  totalValue: string;
+  totalCost: string;
+  holdingCount: number;
+}
+
+export interface MfOverlapGroup {
+  canonicalName: string;
+  schemes: MfSchemeRow[];
+  totalValue: string;
+  hasDirectAndRegular: boolean;
+}
+
+export interface MfOverlapResult {
+  schemes: MfSchemeRow[];
+  overlapGroups: MfOverlapGroup[];
+  summary: {
+    schemeCount: number;
+    directCount: number;
+    regularCount: number;
+    overlapGroupCount: number;
+    directRegularDuplicates: number;
+    totalMfValue: string;
+  };
+}

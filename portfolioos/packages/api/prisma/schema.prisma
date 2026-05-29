@@ -109,6 +109,10 @@ model User {
   // Phase 5-Analytics — persisted AI portfolio insights (cards + narrative).
   portfolioInsights PortfolioInsight[]
 
+  // Phase 2c — user-defined financial goals (retirement / education /
+  // home / FIRE / emergency / …). See `Goal` model at end of schema.
+  goals Goal[]
+
   // UI preferences — sidebar asset class order + visibility per user.
   preferences Json?
 
@@ -2676,4 +2680,81 @@ model ExtensionPairing {
 
   @@index([userId, paired])
   @@index([userId, revoked])
+}
+
+// ─── PHASE 2c — FINANCIAL GOALS ───────────────────────────────────
+//
+// User-defined targets (retirement, child education, FIRE corpus, home
+// down-payment, emergency fund). Each goal links to one or more
+// portfolios for progress tracking; the linked portfolios' current
+// value is summed and divided by `targetAmount` to get a completion
+// percentage. SIP attribution (which monthly SIPs contribute to which
+// goal) lives in `Goal.sipPlanIds` as a string[] FK array.
+
+enum GoalCategory {
+  RETIREMENT
+  CHILD_EDUCATION
+  HOME_PURCHASE
+  EMERGENCY_FUND
+  FIRE_CORPUS
+  VEHICLE_PURCHASE
+  TRAVEL
+  WEALTH_BUILDING
+  CUSTOM
+}
+
+enum GoalPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum GoalStatus {
+  ACTIVE
+  ACHIEVED
+  PAUSED
+  ABANDONED
+}
+
+model Goal {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  category        GoalCategory  @default(CUSTOM)
+  priority        GoalPriority  @default(MEDIUM)
+  status          GoalStatus    @default(ACTIVE)
+
+  /// Target corpus required at `targetDate`, in INR.
+  targetAmount    Decimal       @db.Decimal(18, 2)
+  /// Money the user already has earmarked for this goal — manual seed
+  /// when the goal is created (e.g. opening balance from an old FD).
+  initialAmount   Decimal       @db.Decimal(18, 2) @default(0)
+  /// Assumed annual inflation rate (e.g. 0.06 for 6%). Used to render
+  /// "inflation-adjusted target" hints in the UI.
+  inflationRate   Decimal?      @db.Decimal(5, 4)
+  /// Assumed annual return on the corpus. Used by the required-CAGR
+  /// gauge — `(target / current) ^ (1/years) - 1` is the *required*
+  /// return; this column lets the UI flag if expected < required.
+  expectedReturn  Decimal?      @db.Decimal(5, 4)
+
+  /// When the corpus must be ready by (e.g. age 60 for retirement,
+  /// child's 18th birthday for education). Always >= today.
+  targetDate      DateTime      @db.Date
+  startDate       DateTime      @db.Date @default(now())
+
+  /// Portfolios contributing to this goal. Sum of their current value
+  /// → goal progress. Stored as an array because users frequently map
+  /// the same goal to multiple portfolios (one parent, two SIP folios).
+  portfolioIds    String[]      @default([])
+  /// Optional notes (free-text, ≤4000 chars). Stored on the row to
+  /// keep goal-detail reads cheap.
+  notes           String?       @db.Text
+
+  achievedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, targetDate])
 }
