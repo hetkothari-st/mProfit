@@ -9,6 +9,7 @@ import {
   generateInsights,
   getInsightsSpend,
   getMfOverlapHandler,
+  postWhatIf,
 } from '../controllers/analytics.controller.js';
 
 export const analyticsRouter = Router();
@@ -31,3 +32,6 @@ analyticsRouter.get('/insights/spend', asyncHandler(getInsightsSpend));
 
 // Phase 2g — MF direct/regular + portfolio overlap.
 analyticsRouter.get('/mf-overlap', asyncHandler(getMfOverlapHandler));
+
+// 3c — what-if sale simulator (read-only).
+analyticsRouter.post('/what-if', asyncHandler(postWhatIf));

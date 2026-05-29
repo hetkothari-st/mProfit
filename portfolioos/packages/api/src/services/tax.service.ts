@@ -42,7 +42,7 @@ interface TaxRates {
   slabPct: number;
 }
 
-function ratesForDate(d: Date): TaxRates {
+export function ratesForDate(d: Date): TaxRates {
   const isPost = d >= RATE_CHANGE_DATE;
   return {
     stcgEquityPct: isPost ? 20 : 15,

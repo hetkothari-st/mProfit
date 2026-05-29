@@ -17,6 +17,19 @@ import {
 } from '../services/analytics.insights.js';
 import { checkBudget } from '../ingestion/llm/budget.js';
 import { getMfOverlap } from '../services/mfOverlap.service.js';
+import { simulateWhatIf } from '../services/whatIf.service.js';
+
+export async function postWhatIf(req: Request, res: Response): Promise<void> {
+  if (!req.user) throw new UnauthorizedError();
+  const { holdingId, sellQty, sellPrice } = (req.body ?? {}) as {
+    holdingId?: string; sellQty?: number | string; sellPrice?: number | string | null;
+  };
+  if (!holdingId || sellQty == null) {
+    throw new BadRequestError('holdingId and sellQty are required');
+  }
+  const result = await simulateWhatIf(req.user.id, { holdingId, sellQty, sellPrice });
+  ok(res, result);
+}
 
 export async function getMfOverlapHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();

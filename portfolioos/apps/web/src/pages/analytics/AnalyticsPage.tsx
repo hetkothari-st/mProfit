@@ -18,6 +18,7 @@ import { CashflowWaterfall } from './widgets/CashflowWidget';
 import { RiskMetricsCards, AllocationCorrelationGrid } from './widgets/RiskWidget';
 import { LiabilitiesVsAssetsCard } from './widgets/LiabilitiesWidget';
 import { InsightsPanel } from './widgets/InsightsPanel';
+import { WhatIfSimulator } from './widgets/WhatIfSimulator';
 
 const PERIOD_OPTIONS: { label: string; value: Period }[] = [
   { label: '1M', value: '1M' },
@@ -182,6 +183,7 @@ export function AnalyticsPage() {
               valueLine={data.portfolioValueLine}
             />
             <TaxHarvestTable data={data.taxHarvest} />
+            <WhatIfSimulator />
           </div>
         </>
       )}
