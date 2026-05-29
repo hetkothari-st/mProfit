@@ -18,6 +18,7 @@ import { DownloadReportButton } from '@/components/reports/DownloadReportButton'
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PriceAsOf } from '@/components/common/PriceAsOf';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { transactionsApi } from '@/api/transactions.api';
@@ -488,7 +489,12 @@ function StockRow({
         <td className="py-2.5 pr-4 text-right tabular-nums">{h.quantity}</td>
         <td className="py-2.5 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
         <td className="py-2.5 pr-4 text-right tabular-nums font-medium">
-          {h.currentPrice != null ? formatINR(h.currentPrice) : (
+          {h.currentPrice != null ? (
+            <div className="flex flex-col items-end leading-tight">
+              <span>{formatINR(h.currentPrice)}</span>
+              <PriceAsOf asOf={h.priceAsOf} stale={h.stale} />
+            </div>
+          ) : (
             <span className="text-muted-foreground italic text-xs">—</span>
           )}
         </td>

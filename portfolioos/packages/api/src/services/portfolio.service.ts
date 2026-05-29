@@ -12,6 +12,8 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { fetchHistorical, buildYahooSymbol } from '../priceFeeds/yahoo.service.js';
+import { valuationMethodFor } from './valuationMethod.js';
+import { isPriceStale } from './priceStaleness.js';
 
 function toPortfolioDTO(p: Portfolio) {
   return {
@@ -270,6 +272,12 @@ export async function getPortfolioHoldings(userId: string, id: string) {
       currentValue: h.currentValue !== null ? (serializeMoney(h.currentValue) as Money) : null,
       unrealisedPnL: unrealisedPnL !== null ? (serializeMoney(unrealisedPnL) as Money) : null,
       unrealisedPnLPct,
+      // How currentValue is derived (drives UI labeling): MARKET rows show
+      // live P&L + a freshness badge; ACCRUAL rows show "accrued" returns and
+      // no daily/MTM delta; PAYOUT/COST rows have no market move.
+      valuationMethod: valuationMethodFor(h.assetClass),
+      priceAsOf: h.priceAsOf ? h.priceAsOf.toISOString() : null,
+      stale: isPriceStale(h.assetClass, h.priceAsOf),
       xirr: null as number | null,
       holdingPeriodDays: null as number | null,
     };

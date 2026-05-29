@@ -67,6 +67,14 @@ export interface HoldingRow {
   currentValue: Money | null;
   unrealisedPnL: Money | null;
   unrealisedPnLPct: number | null;
+  // How currentValue is derived. MARKET → live quote (show freshness + daily
+  // move); ACCRUAL → compounded interest (label "accrued", no MTM delta);
+  // PAYOUT/COST → no market move.
+  valuationMethod?: 'MARKET' | 'ACCRUAL' | 'PAYOUT' | 'COST';
+  // ISO date of the market price behind currentValue (MARKET rows only).
+  priceAsOf?: string | null;
+  // True when a MARKET price is older than its class freshness tolerance.
+  stale?: boolean;
   xirr: number | null;
   holdingPeriodDays: number | null;
 }
