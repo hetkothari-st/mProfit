@@ -12,6 +12,7 @@ import {
   type Period,
   type AnalyticsSnapshot,
 } from './analytics.service.js';
+import { actionForCategory, type InsightAction } from './insightActions.js';
 
 /**
  * Phase 5-Analytics — AI Insights generator.
@@ -78,6 +79,15 @@ export interface InsightCard {
   severity: InsightSeverity;
   title: string;
   body: string;
+  // 3a — a neutral navigation CTA to the tool that addresses this finding.
+  // Derived from category at read time (not stored), so cached cards get it
+  // too. Never prescriptive — see insightActions.ts.
+  action?: InsightAction | null;
+}
+
+/** Attach the deterministic navigation CTA to each card (read-time enrichment). */
+function withActions(cards: InsightCard[]): InsightCard[] {
+  return cards.map((c) => ({ ...c, action: actionForCategory(c.category) }));
 }
 
 const InsightCardSchema = z.object({
@@ -294,7 +304,7 @@ async function findCachedInsight(
     generatedAt: row.generatedAt.toISOString(),
     model: row.model,
     costInr: row.costInr.toString(),
-    cards: row.cards as unknown as InsightCard[],
+    cards: withActions(row.cards as unknown as InsightCard[]),
     narrative: row.narrative,
     disclaimer: INSIGHTS_DISCLAIMER,
   };
@@ -473,7 +483,7 @@ export async function getOrGenerateInsights(
     generatedAt: row.generatedAt.toISOString(),
     model,
     costInr: costInr.toFixed(4),
-    cards,
+    cards: withActions(cards),
     narrative: data.narrative,
     disclaimer: INSIGHTS_DISCLAIMER,
   };
@@ -499,7 +509,7 @@ export async function getLatestInsight(
     generatedAt: row.generatedAt.toISOString(),
     model: row.model,
     costInr: row.costInr.toString(),
-    cards: row.cards as unknown as InsightCard[],
+    cards: withActions(row.cards as unknown as InsightCard[]),
     narrative: row.narrative,
     disclaimer: INSIGHTS_DISCLAIMER,
   };

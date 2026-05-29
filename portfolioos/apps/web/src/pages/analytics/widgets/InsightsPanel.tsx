@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Loader2, RefreshCw, AlertTriangle, Info, AlertOctagon, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -58,6 +59,15 @@ function InsightCardView({ card }: { card: InsightCard }) {
       </div>
       <p className="text-sm font-semibold leading-snug mb-1">{card.title}</p>
       <p className="text-[13px] text-muted-foreground leading-relaxed">{card.body}</p>
+      {card.action && (
+        <Link
+          to={card.action.href}
+          className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline"
+        >
+          {card.action.label}
+          <span aria-hidden>→</span>
+        </Link>
+      )}
     </div>
   );
 }

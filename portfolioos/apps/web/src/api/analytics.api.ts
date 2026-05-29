@@ -179,11 +179,18 @@ export type InsightCategory =
 
 export type InsightSeverity = 'HIGH' | 'MEDIUM' | 'LOW';
 
+export interface InsightAction {
+  kind: 'NAVIGATE';
+  label: string;
+  href: string;
+}
+
 export interface InsightCard {
   category: InsightCategory;
   severity: InsightSeverity;
   title: string;
   body: string;
+  action?: InsightAction | null;
 }
 
 export interface InsightsResultOk {
