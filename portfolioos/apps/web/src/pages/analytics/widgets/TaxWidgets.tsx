@@ -161,6 +161,23 @@ export function TaxHarvestTable({ data }: { data: TaxHarvestSummary }) {
             </p>
           </div>
         </div>
+        {Number(data.savings?.taxSaved ?? 0) > 0 && (
+          <div className="rounded-lg border border-positive/30 bg-positive/5 p-3 mb-4">
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-xs text-muted-foreground">Potential tax offset by harvesting available losses</p>
+                <p className="text-lg font-semibold text-positive mt-0.5">{formatINR(data.savings.taxSaved)}</p>
+              </div>
+              <p className="text-[11px] text-muted-foreground tabular-nums">
+                Tax before {formatINR(data.savings.taxBefore)} → after {formatINR(data.savings.taxAfter)}
+                {' · '}STCG {data.savings.stcgRatePct}% · LTCG {data.savings.ltcgRatePct}% over {formatINR(data.savings.ltcgExemption)}
+              </p>
+            </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Informational estimate of capital-gains offset under current set-off rules — not advice. Loss set-off and timing have conditions; consult a tax professional.
+            </p>
+          </div>
+        )}
         {data.candidates.length === 0 ? (
           <p className="text-sm text-muted-foreground py-2 text-center">No loss-making holdings to harvest.</p>
         ) : (
