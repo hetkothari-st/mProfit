@@ -119,3 +119,14 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
 
   return applied;
 }
+
+/** Apply across every portfolio owned by a user (the /corporate-actions/apply endpoint). */
+export async function applyCorporateActionsForUser(userId: string): Promise<number> {
+  const portfolios = await prisma.portfolio.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+  let applied = 0;
+  for (const p of portfolios) applied += await applyCorporateActionsForPortfolio(p.id);
+  return applied;
+}
