@@ -13,6 +13,11 @@ import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { serializeMoney } from '@portfolioos/shared';
+import {
+  progressPct as calcProgressPct,
+  inflationAdjustedTarget as calcInflationTarget,
+  requiredCagr as calcRequiredCagr,
+} from './goalMath.js';
 
 export const GOAL_CATEGORIES = [
   'RETIREMENT',
@@ -187,28 +192,17 @@ async function withProgress(userId: string, goal: RawGoal) {
   }
 
   const currentValue = initial.plus(portfolioValue);
-  const progressPct = target.greaterThan(0) ? currentValue.dividedBy(target).times(100) : ZERO;
   const remaining = target.minus(currentValue);
-
-  // Inflation-adjusted target — future value of `targetAmount` at the
-  // `targetDate`. Used so users see the real corpus they'll need.
   const years = yearsUntil(goal.targetDate);
-  const inflationAdjustedTarget = goal.inflationRate
-    ? target.times(new Decimal(1).plus(d(goal.inflationRate)).pow(Math.max(years, 0)))
-    : null;
 
-  // Required CAGR: (target / current) ^ (1/years) - 1.
-  // Falls back to null when current value is zero or target date is past.
-  let requiredCagr: Decimal | null = null;
-  if (currentValue.greaterThan(0) && years > 0) {
-    const ratio = target.dividedBy(currentValue);
-    if (ratio.greaterThan(0)) {
-      // Decimal.js lacks fractional pow; use exp/ln approximation.
-      const lnRatio = new Decimal(Math.log(ratio.toNumber()));
-      const lnAnnualized = lnRatio.dividedBy(years);
-      requiredCagr = new Decimal(Math.exp(lnAnnualized.toNumber())).minus(1);
-    }
-  }
+  // All three derived via the unit-tested goalMath helpers (single source of
+  // truth — see goalMath.test.ts).
+  const inflationAdjustedTarget = calcInflationTarget(
+    target,
+    goal.inflationRate ? d(goal.inflationRate) : null,
+    years,
+  );
+  const requiredCagr = calcRequiredCagr(target, currentValue, years); // number | null
 
   return {
     id: goal.id,
@@ -231,15 +225,15 @@ async function withProgress(userId: string, goal: RawGoal) {
     // Computed fields
     currentValue: serializeMoney(currentValue),
     remaining: serializeMoney(remaining.lessThan(0) ? ZERO : remaining),
-    progressPct: Math.min(100, progressPct.toNumber()),
+    progressPct: calcProgressPct(currentValue, target),
     yearsRemaining: Math.max(0, years),
     inflationAdjustedTarget: inflationAdjustedTarget
       ? serializeMoney(inflationAdjustedTarget)
       : null,
-    requiredCagr: requiredCagr ? requiredCagr.toNumber() : null,
+    requiredCagr,
     isOnTrack:
-      requiredCagr && goal.expectedReturn
-        ? requiredCagr.lessThanOrEqualTo(d(goal.expectedReturn))
+      requiredCagr != null && goal.expectedReturn
+        ? requiredCagr <= d(goal.expectedReturn).toNumber()
         : null,
   };
 }

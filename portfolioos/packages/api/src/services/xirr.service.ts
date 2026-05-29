@@ -209,7 +209,7 @@ export interface XirrResult {
  * this service: negative cf amount = money INTO the portfolio (buy /
  * contribution), positive = money OUT (sell / withdrawal).
  */
-function modifiedDietzAnnualized(
+export function modifiedDietzAnnualized(
   flows: CashFlow[],
   endValue: Decimal,
   beginValue: Decimal = new Decimal(0),
