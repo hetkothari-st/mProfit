@@ -87,6 +87,10 @@ export interface KpiBlock {
   unrealisedPnL: string;
   realisedYtd: string;
   incomeYtd: string;
+  // Overall-XIRR reliability: false when the cashflow span is < 90 days, in
+  // which case annualization is unstable and the UI shows absolute return.
+  xirrReliable: boolean;
+  xirrSpanDays: number;
 }
 
 function currentFy(date: Date = new Date()): string {
@@ -130,6 +134,8 @@ export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
       unrealisedPnL: unrealised.unrealisedPnL,
       realisedYtd: realisedYtd.toFixed(4),
       incomeYtd: new Decimal(income.total).plus(synthTotal).toFixed(4),
+      xirrReliable: overall.reliable,
+      xirrSpanDays: overall.spanDays,
     };
   }
 
@@ -193,6 +199,8 @@ export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
     unrealisedPnL: unrealisedPnL.toFixed(4),
     realisedYtd: realisedYtd.toFixed(4),
     incomeYtd: incomeYtd.plus(synthTotal).toFixed(4),
+    xirrReliable: userXirr.reliable,
+    xirrSpanDays: userXirr.spanDays,
   };
 }
 

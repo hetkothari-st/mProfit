@@ -34,9 +34,13 @@ export function KpiCards({ kpis }: { kpis: KpiBlock }) {
       />
       <MetricCard
         label="XIRR overall"
-        value={pct(kpis.xirrOverall)}
+        value={kpis.xirrReliable ? pct(kpis.xirrOverall) : '—'}
         icon={TrendingUp}
-        hint={`1Y ${pct(kpis.xirr1y, 1)} · 3Y ${pct(kpis.xirr3y, 1)} · 5Y ${pct(kpis.xirr5y, 1)}`}
+        hint={
+          kpis.xirrReliable
+            ? `1Y ${pct(kpis.xirr1y, 1)} · 3Y ${pct(kpis.xirr3y, 1)} · 5Y ${pct(kpis.xirr5y, 1)}`
+            : `Annualized return needs ${Math.max(0, 90 - kpis.xirrSpanDays)} more days · absolute ${formatPercent(unrealisedPct, 2, true)}`
+        }
       />
       <MetricCard
         label="Realised P&L (FY)"
