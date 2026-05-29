@@ -42,3 +42,26 @@ export function requiredCagr(target: Decimal, current: Decimal, years: number): 
   const lnAnnualized = Math.log(ratio.toNumber()) / years;
   return Math.exp(lnAnnualized) - 1;
 }
+
+/**
+ * Asset classes that count toward an EMERGENCY_FUND goal. An emergency fund
+ * must be liquid / near-liquid — cash, deposits, post-office savings. Equity,
+ * crypto, MFs, gold and real estate are excluded: they're volatile and/or
+ * illiquid, so counting a whole equity+crypto portfolio as "emergency fund"
+ * overstates readiness. Non-emergency goals count the full linked value.
+ */
+const LIQUID_EMERGENCY_CLASSES: ReadonlySet<string> = new Set<string>([
+  'CASH', 'FIXED_DEPOSIT', 'RECURRING_DEPOSIT',
+  'POST_OFFICE_SAVINGS', 'POST_OFFICE_RD', 'POST_OFFICE_TD',
+]);
+
+export function isLiquidForEmergencyFund(assetClass: string): boolean {
+  return LIQUID_EMERGENCY_CLASSES.has(assetClass);
+}
+
+/** Asset classes counted toward a goal of the given category. */
+export function eligibleClassesForGoal(category: string): readonly string[] | null {
+  // null = count everything (no class restriction).
+  if (category === 'EMERGENCY_FUND') return Array.from(LIQUID_EMERGENCY_CLASSES);
+  return null;
+}

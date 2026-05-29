@@ -17,7 +17,9 @@ import {
   progressPct as calcProgressPct,
   inflationAdjustedTarget as calcInflationTarget,
   requiredCagr as calcRequiredCagr,
+  eligibleClassesForGoal,
 } from './goalMath.js';
+import type { Prisma } from '@prisma/client';
 
 export const GOAL_CATEGORIES = [
   'RETIREMENT',
@@ -180,8 +182,16 @@ async function withProgress(userId: string, goal: RawGoal) {
     });
     const ownedIds = owned.map((p) => p.id);
     if (ownedIds.length > 0) {
+      // Emergency-fund goals only count liquid/near-liquid holdings (cash,
+      // deposits, PO savings) — not the whole equity+crypto portfolio, which
+      // would overstate readiness. Other goals count the full linked value.
+      const eligible = eligibleClassesForGoal(goal.category);
+      const where: Prisma.HoldingProjectionWhereInput = { portfolioId: { in: ownedIds } };
+      if (eligible) {
+        where.assetClass = { in: eligible as unknown as Prisma.EnumAssetClassFilter['in'] };
+      }
       const projections = await prisma.holdingProjection.findMany({
-        where: { portfolioId: { in: ownedIds } },
+        where,
         select: { currentValue: true, totalCost: true },
       });
       for (const p of projections) {

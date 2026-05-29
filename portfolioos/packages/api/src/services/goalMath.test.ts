@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
-import { progressPct, inflationAdjustedTarget, requiredCagr } from './goalMath.js';
+import {
+  progressPct, inflationAdjustedTarget, requiredCagr,
+  isLiquidForEmergencyFund, eligibleClassesForGoal,
+} from './goalMath.js';
 
 const D = (n: number | string) => new Decimal(n);
 
@@ -41,5 +44,25 @@ describe('requiredCagr', () => {
   });
   it('returns null when target date is not in the future', () => {
     expect(requiredCagr(D(2000000), D(1000000), 0)).toBeNull();
+  });
+});
+
+describe('emergency-fund liquidity', () => {
+  it('counts cash and deposits as liquid', () => {
+    expect(isLiquidForEmergencyFund('CASH')).toBe(true);
+    expect(isLiquidForEmergencyFund('FIXED_DEPOSIT')).toBe(true);
+    expect(isLiquidForEmergencyFund('RECURRING_DEPOSIT')).toBe(true);
+  });
+  it('excludes volatile / illiquid classes', () => {
+    expect(isLiquidForEmergencyFund('EQUITY')).toBe(false);
+    expect(isLiquidForEmergencyFund('CRYPTOCURRENCY')).toBe(false);
+    expect(isLiquidForEmergencyFund('REAL_ESTATE')).toBe(false);
+    expect(isLiquidForEmergencyFund('PHYSICAL_GOLD')).toBe(false);
+  });
+  it('restricts only EMERGENCY_FUND goals; others count everything', () => {
+    expect(eligibleClassesForGoal('EMERGENCY_FUND')).toContain('FIXED_DEPOSIT');
+    expect(eligibleClassesForGoal('EMERGENCY_FUND')).not.toContain('EQUITY');
+    expect(eligibleClassesForGoal('RETIREMENT')).toBeNull();
+    expect(eligibleClassesForGoal('CUSTOM')).toBeNull();
   });
 });
