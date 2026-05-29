@@ -34,12 +34,19 @@ export function KpiCards({ kpis }: { kpis: KpiBlock }) {
       />
       <MetricCard
         label="XIRR overall"
-        value={kpis.xirrReliable ? pct(kpis.xirrOverall) : '—'}
+        // Only suppress when the API explicitly flags it unreliable. If the
+        // field is absent (older API build / version skew) fall back to showing
+        // the value rather than a bare "—".
+        value={kpis.xirrReliable === false ? '—' : pct(kpis.xirrOverall)}
         icon={TrendingUp}
         hint={
-          kpis.xirrReliable
-            ? `1Y ${pct(kpis.xirr1y, 1)} · 3Y ${pct(kpis.xirr3y, 1)} · 5Y ${pct(kpis.xirr5y, 1)}`
-            : `Annualized return needs ${Math.max(0, 90 - kpis.xirrSpanDays)} more days · absolute ${formatPercent(unrealisedPct, 2, true)}`
+          kpis.xirrReliable === false
+            ? `Annualized return needs ${
+                Number.isFinite(kpis.xirrSpanDays)
+                  ? `${Math.max(0, 90 - kpis.xirrSpanDays)} more days`
+                  : 'more history'
+              } · absolute ${formatPercent(unrealisedPct, 2, true)}`
+            : `1Y ${pct(kpis.xirr1y, 1)} · 3Y ${pct(kpis.xirr3y, 1)} · 5Y ${pct(kpis.xirr5y, 1)}`
         }
       />
       <MetricCard
