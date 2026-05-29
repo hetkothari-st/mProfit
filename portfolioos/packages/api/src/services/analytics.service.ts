@@ -762,6 +762,18 @@ export interface TaxHarvestSummary {
   ltcgLossAvailable: string;
   realisedStcgInFy: string;
   realisedLtcgInFy: string;
+  // Optimiser output: tax that the harvestable losses could offset this FY.
+  savings: {
+    taxBefore: string;
+    taxAfter: string;
+    taxSaved: string;
+    applied: { stclVsStcg: string; stclVsLtcg: string; ltclVsLtcg: string };
+    lossUtilised: string;
+    lossUnused: string;
+    stcgRatePct: number;
+    ltcgRatePct: number;
+    ltcgExemption: string;
+  };
   candidates: Array<{
     portfolioName: string;
     assetName: string;
@@ -785,6 +797,7 @@ export async function getTaxHarvestSummary(scope: AnalyticsScope): Promise<TaxHa
     ltcgLossAvailable: r.totals.ltcgLossAvailable,
     realisedStcgInFy: r.totals.realisedStcgInFy,
     realisedLtcgInFy: r.totals.realisedLtcgInFy,
+    savings: r.savings,
     candidates: filtered
       .filter((row) => new Decimal(row.unrealisedPnL).lt(0))
       .slice(0, 20)

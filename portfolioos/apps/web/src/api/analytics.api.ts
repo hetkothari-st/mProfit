@@ -106,6 +106,17 @@ export interface TaxHarvestSummary {
   ltcgLossAvailable: string;
   realisedStcgInFy: string;
   realisedLtcgInFy: string;
+  savings: {
+    taxBefore: string;
+    taxAfter: string;
+    taxSaved: string;
+    applied: { stclVsStcg: string; stclVsLtcg: string; ltclVsLtcg: string };
+    lossUtilised: string;
+    lossUnused: string;
+    stcgRatePct: number;
+    ltcgRatePct: number;
+    ltcgExemption: string;
+  };
   candidates: Array<{
     portfolioName: string;
     assetName: string;

@@ -8,6 +8,7 @@ import {
   type CapitalGainRow,
 } from './capitalGains.service.js';
 import { buildSchedule43Report } from './reports/schedule43.report.js';
+import { computeHarvestSavings } from './taxHarvestMath.js';
 
 /**
  * Tax module — user-level (cross-portfolio) tax reporting.
@@ -569,6 +570,19 @@ export async function taxHarvestReport(userId: string, fy?: string) {
     return ap.minus(bp).toNumber();
   });
 
+  // Optimiser: how much tax the harvestable losses could offset against the
+  // gains already realised this FY (informational — see taxHarvestMath).
+  const rates = fy ? ratesForFy(fy) : ratesForDate(now);
+  const savings = computeHarvestSavings({
+    realisedStcg,
+    realisedLtcg,
+    stcgLossAvailable,
+    ltcgLossAvailable,
+    stcgRate: rates.stcgEquityPct / 100,
+    ltcgRate: rates.ltcgEquityPct / 100,
+    ltcgExemption: rates.ltcgEquityExemption,
+  });
+
   return {
     rows: out,
     totals: {
@@ -577,6 +591,12 @@ export async function taxHarvestReport(userId: string, fy?: string) {
       ltcgLossAvailable: ltcgLossAvailable.toString(),
       realisedStcgInFy: realisedStcg.toString(),
       realisedLtcgInFy: realisedLtcg.toString(),
+    },
+    savings: {
+      ...savings,
+      stcgRatePct: rates.stcgEquityPct,
+      ltcgRatePct: rates.ltcgEquityPct,
+      ltcgExemption: rates.ltcgEquityExemption.toString(),
     },
     count: out.length,
   };
