@@ -197,6 +197,63 @@ function randomId(): string {
   );
 }
 
+/**
+ * Backfill historical daily NAVs for one scheme from mfapi.in (a free AMFI
+ * history mirror), storing rows into `MFNav` from `fromDate` onward.
+ *
+ * `loadAmfiNavToDb` only ingests the single current NAVAll.txt snapshot, so
+ * MFNav has no history before the day the daily cron first ran — the same
+ * gap crypto has. This fills it on demand for historical valuation. Returns
+ * the number of NAV rows inserted (0 on any failure; callers must tolerate
+ * missing history).
+ */
+export async function backfillMfNavHistory(
+  fundId: string,
+  schemeCode: string,
+  fromDate: Date,
+): Promise<number> {
+  interface MfApiResponse {
+    data?: Array<{ date: string; nav: string }>;
+  }
+  let data: Array<{ date: string; nav: string }> = [];
+  try {
+    const res = await request(`https://api.mfapi.in/mf/${encodeURIComponent(schemeCode)}`, {
+      method: 'GET',
+      headers: { accept: 'application/json', 'user-agent': 'PortfolioOS/0.2' },
+    });
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      logger.warn({ schemeCode, status: res.statusCode }, '[amfi] history fetch non-2xx');
+      return 0;
+    }
+    data = ((await res.body.json()) as MfApiResponse).data ?? [];
+  } catch (err) {
+    logger.warn({ err, schemeCode }, '[amfi] history fetch failed');
+    return 0;
+  }
+  if (data.length === 0) return 0;
+
+  const fromMs = fromDate.getTime();
+  const rows: { fundId: string; date: Date; nav: string }[] = [];
+  for (const d of data) {
+    // mfapi.in dates are "DD-MM-YYYY".
+    const [dd, mm, yyyy] = d.date.split('-');
+    if (!dd || !mm || !yyyy) continue;
+    const date = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
+    if (date.getTime() < fromMs) continue;
+    const nav = new Decimal(d.nav);
+    if (nav.isNaN() || nav.lte(0)) continue;
+    rows.push({ fundId, date, nav: nav.toString() });
+  }
+  if (rows.length === 0) return 0;
+
+  const created = await prisma.mFNav.createMany({
+    data: rows,
+    skipDuplicates: true,
+  });
+  logger.info({ schemeCode, fundId, inserted: created.count }, '[amfi] history backfilled');
+  return created.count;
+}
+
 export async function getLatestNavForFund(fundId: string): Promise<Decimal | null> {
   const latest = await prisma.mFNav.findFirst({
     where: { fundId },

@@ -15,6 +15,8 @@ export interface KpiBlock {
   unrealisedPnL: string;
   realisedYtd: string;
   incomeYtd: string;
+  xirrReliable: boolean;
+  xirrSpanDays: number;
 }
 
 export interface AllocationSlice {

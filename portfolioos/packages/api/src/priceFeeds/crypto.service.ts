@@ -99,6 +99,88 @@ export async function syncCryptoPrices(): Promise<CryptoSyncResult> {
   return { updated, skipped };
 }
 
+/**
+ * Backfill daily historical INR prices for a coin via CoinGecko's
+ * `market_chart` endpoint, storing one row per UTC date into `CryptoPrice`.
+ *
+ * `syncCryptoPrices` only ever writes today's price forward, so any chart
+ * that needs a past valuation (e.g. the analytics drift line) has no data
+ * before the day the daily sync first ran. This fills that gap on demand.
+ *
+ * CoinGecko returns hourly points for short ranges and daily for >90 days;
+ * we collapse to the last observation per UTC day so both shapes persist as
+ * clean daily rows. Returns the number of rows upserted (0 on any failure —
+ * callers must tolerate missing history).
+ */
+export async function backfillCryptoHistory(
+  coinGeckoId: string,
+  fromDate: Date,
+): Promise<number> {
+  const coin = await prisma.cryptoMaster.upsert({
+    where: { coinGeckoId },
+    update: {},
+    create: { coinGeckoId, symbol: coinGeckoId.toUpperCase(), name: coinGeckoId },
+  });
+
+  const days = Math.max(1, Math.ceil((Date.now() - fromDate.getTime()) / 86_400_000));
+  const url = `${COINGECKO_BASE}/coins/${encodeURIComponent(coinGeckoId)}/market_chart?vs_currency=inr&days=${days}`;
+  let prices: [number, number][] = [];
+  try {
+    const res = await request(url, {
+      method: 'GET',
+      headers: { accept: 'application/json', 'user-agent': 'PortfolioOS/0.2' },
+    });
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      logger.warn({ coinGeckoId, status: res.statusCode }, '[crypto] history fetch non-2xx');
+      return 0;
+    }
+    const json = (await res.body.json()) as { prices?: [number, number][] };
+    prices = json.prices ?? [];
+  } catch (err) {
+    logger.warn({ err, coinGeckoId }, '[crypto] history fetch failed');
+    return 0;
+  }
+  if (prices.length === 0) return 0;
+
+  // Collapse to last price per UTC date.
+  const byDate = new Map<string, { date: Date; price: number }>();
+  for (const [ms, price] of prices) {
+    if (price == null) continue;
+    const d = new Date(ms);
+    d.setUTCHours(0, 0, 0, 0);
+    byDate.set(d.toISOString().slice(0, 10), { date: d, price });
+  }
+
+  let upserted = 0;
+  for (const { date, price } of byDate.values()) {
+    await prisma.cryptoPrice.upsert({
+      where: { cryptoId_date: { cryptoId: coin.id, date } },
+      update: { priceInr: new Decimal(price) },
+      create: { cryptoId: coin.id, date, priceInr: new Decimal(price) },
+    });
+    upserted++;
+  }
+  logger.info({ coinGeckoId, upserted }, '[crypto] history backfilled');
+  return upserted;
+}
+
+/**
+ * Price of a coin at (or just before) a date, for historical valuation.
+ * Resolves CryptoMaster by its CoinGecko slug (stored in Transaction.isin).
+ */
+export async function getCryptoPriceAt(
+  coinGeckoId: string,
+  date: Date,
+): Promise<Decimal | null> {
+  const coin = await prisma.cryptoMaster.findUnique({ where: { coinGeckoId } });
+  if (!coin) return null;
+  const row = await prisma.cryptoPrice.findFirst({
+    where: { cryptoId: coin.id, date: { lte: date } },
+    orderBy: { date: 'desc' },
+  });
+  return row ? new Decimal(row.priceInr.toString()) : null;
+}
+
 export async function getLatestCryptoPrice(cryptoId: string): Promise<Decimal | null> {
   const row = await prisma.cryptoPrice.findFirst({
     where: { cryptoId },

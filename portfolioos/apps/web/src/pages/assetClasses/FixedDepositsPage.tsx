@@ -206,6 +206,8 @@ function PnLDisplay({ holding }: { holding: FDHolding }) {
           ({pos ? '+' : ''}{pct.toFixed(2)}%)
         </span>
       )}
+      {/* Interest accrual, not a market move — label it so the % isn't misread. */}
+      <span className="ml-1 text-[9px] uppercase tracking-wide text-muted-foreground/70">accrued</span>
     </span>
   );
 }

@@ -83,18 +83,22 @@ async function refreshSeries(
   meta: BenchmarkSymbol,
   fromDate: Date,
 ): Promise<void> {
-  // Pull only rows we don't already have; fetch a small margin earlier
-  // than the existing latest so partial days get re-confirmed.
-  const latest = await prisma.stockPrice.findFirst({
-    where: { stockId },
-    orderBy: { date: 'desc' },
-    select: { date: true },
-  });
-  const fetchFrom = latest
-    ? new Date(Math.min(latest.date.getTime() + 86_400_000, fromDate.getTime()))
-    : fromDate;
   const today = new Date();
-  if (fetchFrom > today) return;
+  if (fromDate > today) return;
+
+  // Coverage gate: if the requested window is already well-populated, skip the
+  // network call. Otherwise fetch the WHOLE window from `fromDate` — not just
+  // forward of the latest stored row. The old "latest + 1 day" pointer could
+  // leave an under-filled window looking "fresh" (a few recent rows present)
+  // while the period the user asked for stayed empty → "unavailable". A
+  // coverage check on the actual window is robust to that.
+  const have = await prisma.stockPrice.count({
+    where: { stockId, date: { gte: fromDate } },
+  });
+  const calDays = Math.max(1, Math.ceil((today.getTime() - fromDate.getTime()) / 86_400_000));
+  // ~5/7 of calendar days are trading days; 40% of those is enough to plot.
+  if (have >= calDays * (5 / 7) * 0.4) return;
+  const fetchFrom = fromDate;
 
   interface YahooBar {
     date: Date;

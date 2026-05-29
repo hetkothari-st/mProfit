@@ -2,6 +2,7 @@ import { Decimal, toDecimal } from '@portfolioos/shared';
 import type { Transaction, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';
+import { spanDays, isXirrReliable } from './xirr.reliability.js';
 
 /**
  * Internal cashflow representation. Amounts are Decimal to avoid IEEE-754
@@ -182,6 +183,11 @@ export interface XirrResult {
   // IEEE-754 can't re-enter here (§3.2). Consumers rehydrate via toDecimal.
   totalInvested: string;
   terminalValue: string;
+  // Calendar days between earliest and latest cashflow. Annualization is
+  // unstable below MIN_XIRR_DAYS — `reliable` lets the UI fall back to the
+  // absolute return until enough history exists.
+  spanDays: number;
+  reliable: boolean;
 }
 
 export async function computePortfolioXirr(
@@ -219,11 +225,14 @@ export async function computePortfolioXirr(
   });
   if (tv.greaterThan(0)) flows.push({ date: opts.to ?? new Date(), amount: tv });
 
+  const span = spanDays(flows.map((f) => f.date));
   return {
     xirr: xirr(flows),
     cashflowCount: flows.length,
     totalInvested: invested.toFixed(4),
     terminalValue: tv.toFixed(4),
+    spanDays: span,
+    reliable: isXirrReliable(span),
   };
 }
 
@@ -248,11 +257,14 @@ export async function computeUserXirr(userId: string): Promise<XirrResult> {
   }
   if (tv.greaterThan(0)) allFlows.push({ date: new Date(), amount: tv });
 
+  const span = spanDays(allFlows.map((f) => f.date));
   return {
     xirr: xirr(allFlows),
     cashflowCount: allFlows.length,
     totalInvested: invested.toFixed(4),
     terminalValue: tv.toFixed(4),
+    spanDays: span,
+    reliable: isXirrReliable(span),
   };
 }
 

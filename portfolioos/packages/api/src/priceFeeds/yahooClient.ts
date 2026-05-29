@@ -127,14 +127,25 @@ export async function yahooChartDirect(
     `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
     `?period1=${p1}&period2=${p2}&interval=${interval}&events=history&includeAdjustedClose=false`;
   try {
-    const res = await throttled(() =>
-      fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept: 'application/json,*/*',
-        },
-      }),
-    );
+    // Yahoo rate-limits by IP (429). A 429 is transient — treating it as "no
+    // data" (returning []) is what makes a chart go permanently "unavailable"
+    // after a burst (e.g. the daily price cron). Retry with exponential
+    // backoff before giving up, mirroring yahooQuoteRaw.
+    let res: Response | null = null;
+    for (let attempt = 0; ; attempt++) {
+      res = await throttled(() =>
+        fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Accept: 'application/json,*/*',
+          },
+        }),
+      );
+      if (res.status !== 429 || attempt >= MAX_RETRIES) break;
+      const wait = BACKOFF_MS * Math.pow(2, attempt);
+      logger.warn({ symbol, attempt, wait }, '[yahoo-chart] rate-limited, backing off');
+      await sleep(wait);
+    }
     if (!res.ok) {
       logger.warn({ symbol, status: res.status }, '[yahoo-chart] non-200');
       return [];

@@ -7,6 +7,7 @@ import {
   financialYearOf,
 } from './capitalGains.service.js';
 import { computePortfolioXirr, computeRollingXirr } from './xirr.service.js';
+import { getCryptoPriceAt } from '../priceFeeds/crypto.service.js';
 
 // ─── Capital gains reports ─────────────────────────────────────────
 
@@ -205,15 +206,16 @@ export async function historicalValuation(
   // Value = qty * price at that date from historical feeds; falls back to cost.
   const keyMap = new Map<
     string,
-    { assetClass: AssetClass; stockId: string | null; fundId: string | null }
+    { assetClass: AssetClass; stockId: string | null; fundId: string | null; isin: string | null }
   >();
   for (const t of txs) {
-    const k = `${t.assetClass}|${t.stockId ?? ''}|${t.fundId ?? ''}`;
+    const k = valuationKeyOf(t);
     if (!keyMap.has(k)) {
       keyMap.set(k, {
         assetClass: t.assetClass,
         stockId: t.stockId,
         fundId: t.fundId,
+        isin: t.isin,
       });
     }
   }
@@ -226,7 +228,7 @@ export async function historicalValuation(
     const cost = new Map<string, Decimal>();
     for (const t of txs) {
       if (t.tradeDate > snap) break;
-      const k = `${t.assetClass}|${t.stockId ?? ''}|${t.fundId ?? ''}`;
+      const k = valuationKeyOf(t);
       const q = new Decimal(t.quantity.toString());
       const n = new Decimal(t.netAmount.toString());
       const curQ = qty.get(k) ?? new Decimal(0);
@@ -286,8 +288,23 @@ export async function historicalValuation(
   return { points };
 }
 
+/**
+ * Stable per-holding key for historical valuation. Stocks/funds key on their
+ * master id; crypto (which has neither) keys on its CoinGecko slug stored in
+ * `isin`, so distinct coins don't collapse into one bucket.
+ */
+function valuationKeyOf(t: {
+  assetClass: AssetClass;
+  stockId: string | null;
+  fundId: string | null;
+  isin: string | null;
+}): string {
+  const cryptoSlug = !t.stockId && !t.fundId ? (t.isin ?? '') : '';
+  return `${t.assetClass}|${t.stockId ?? ''}|${t.fundId ?? ''}|${cryptoSlug}`;
+}
+
 async function priceAt(
-  meta: { assetClass: AssetClass; stockId: string | null; fundId: string | null },
+  meta: { assetClass: AssetClass; stockId: string | null; fundId: string | null; isin: string | null },
   date: Date,
 ): Promise<Decimal | null> {
   if (meta.fundId) {
@@ -303,6 +320,9 @@ async function priceAt(
       orderBy: { date: 'desc' },
     });
     return row ? new Decimal(row.close.toString()) : null;
+  }
+  if (meta.assetClass === 'CRYPTOCURRENCY' && meta.isin) {
+    return getCryptoPriceAt(meta.isin, date);
   }
   return null;
 }

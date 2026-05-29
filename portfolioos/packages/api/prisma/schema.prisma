@@ -1401,6 +1401,9 @@ model HoldingProjection {
   currentValue  Decimal?   @db.Decimal(18, 4)
   unrealisedPnL Decimal?   @db.Decimal(18, 4)
   realisedPnL   Decimal    @default(0) @db.Decimal(18, 4)
+  // Date of the market price used for currentValue. Null for accrual/cost
+  // assets (no market feed). Drives the stale-price badge (isPriceStale).
+  priceAsOf     DateTime?
   computedAt    DateTime   @default(now())
   sourceTxCount Int
 

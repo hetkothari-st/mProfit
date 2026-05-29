@@ -568,6 +568,9 @@ async function refreshPricesForRows(rows: Array<{
       patch.currentPrice = price.toString();
       patch.currentValue = currentValue.toString();
       patch.unrealisedPnL = pnl.toString();
+      // Stamp when this market price was applied so the UI can flag stale
+      // quotes (isPriceStale). Refresh-time is a safe lower bound on freshness.
+      patch.priceAsOf = new Date();
       didPatch = true;
     }
     if (!didPatch) continue;

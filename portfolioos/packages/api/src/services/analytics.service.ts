@@ -11,6 +11,7 @@ import {
   computeUserCapitalGains,
 } from './capitalGains.service.js';
 import { historicalValuation, unrealisedReport, incomeReport } from './reports.service.js';
+import { ensureHistoricalPricesForPortfolio } from './analytics.priceBackfill.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
 import { taxHarvestReport } from './tax.service.js';
 import { yahooProfile } from '../priceFeeds/yahooClient.js';
@@ -87,6 +88,10 @@ export interface KpiBlock {
   unrealisedPnL: string;
   realisedYtd: string;
   incomeYtd: string;
+  // Overall-XIRR reliability: false when the cashflow span is < 90 days, in
+  // which case annualization is unstable and the UI shows absolute return.
+  xirrReliable: boolean;
+  xirrSpanDays: number;
 }
 
 function currentFy(date: Date = new Date()): string {
@@ -130,6 +135,8 @@ export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
       unrealisedPnL: unrealised.unrealisedPnL,
       realisedYtd: realisedYtd.toFixed(4),
       incomeYtd: new Decimal(income.total).plus(synthTotal).toFixed(4),
+      xirrReliable: overall.reliable,
+      xirrSpanDays: overall.spanDays,
     };
   }
 
@@ -193,6 +200,8 @@ export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
     unrealisedPnL: unrealisedPnL.toFixed(4),
     realisedYtd: realisedYtd.toFixed(4),
     incomeYtd: incomeYtd.plus(synthTotal).toFixed(4),
+    xirrReliable: userXirr.reliable,
+    xirrSpanDays: userXirr.spanDays,
   };
 }
 
@@ -636,11 +645,37 @@ export interface ValuationPoint {
   value: string;
 }
 
+/**
+ * Earliest date we need historical prices for, per portfolio: the period
+ * cutoff, but never earlier than the portfolio's first transaction (so an
+ * "All" window doesn't trigger a fetch reaching back years before any data).
+ */
+async function backfillWindowStart(portfolioId: string, periodDays: number): Promise<Date> {
+  const first = await prisma.transaction.findFirst({
+    where: { portfolioId },
+    orderBy: { tradeDate: 'asc' },
+    select: { tradeDate: true },
+  });
+  const firstTx = first?.tradeDate ?? new Date(Date.now() - 365 * 86_400_000);
+  if (periodDays <= 0) return firstTx;
+  const cutoff = new Date(Date.now() - periodDays * 86_400_000);
+  return cutoff > firstTx ? cutoff : firstTx;
+}
+
 export async function getPortfolioValueLine(
   scope: AnalyticsScope,
   periodDays: number,
 ): Promise<ValuationPoint[]> {
   const pids = await portfolioIdsFor(scope);
+  // Backfill real historical prices (stocks/MF/crypto) over the displayed
+  // window before valuing snapshots — otherwise past months fall back to
+  // cost and the drift line reads a flat 0%. Best-effort; never throws.
+  await Promise.all(
+    pids.map(async (pid) => {
+      const fromDate = await backfillWindowStart(pid, periodDays);
+      await ensureHistoricalPricesForPortfolio(pid, fromDate);
+    }),
+  );
   const series = await Promise.all(
     pids.map((pid) => historicalValuation(pid, 'MONTHLY').then((r) => r.points)),
   );

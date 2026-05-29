@@ -37,6 +37,7 @@ import {
   ASSET_CLASS_LABELS,
   Decimal,
   toDecimal,
+  valuationMethodFor,
 } from '@portfolioos/shared';
 
 const PERIOD_OPTIONS = [
@@ -414,7 +415,10 @@ export function DashboardPage() {
             <div className="flex items-start justify-between gap-6 flex-wrap">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-2">
-                  <p className="text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85">
+                  <p
+                    className="text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85"
+                    title="Gross: investments + real estate + vehicles, before loans & credit-card liabilities."
+                  >
                     Total Net Worth · Consolidated
                   </p>
                   <button
@@ -564,7 +568,7 @@ export function DashboardPage() {
 
       {/* Investment metric cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="reveal reveal-delay-1">
+        <div className="reveal reveal-delay-1" title="Tradable + accrual holdings only. Excludes real estate, vehicles and insurance (those sit in Total Net Worth).">
           <MetricCard
             label="Portfolio value"
             value={formatINR(totals.currentValue)}
@@ -572,7 +576,7 @@ export function DashboardPage() {
             hint={`${totals.holdingCount} holdings`}
           />
         </div>
-        <div className="reveal reveal-delay-2">
+        <div className="reveal reveal-delay-2" title="Sum of cost basis across all holdings (what you put in).">
           <MetricCard
             label="Total invested"
             value={formatINR(totals.totalInvestment)}
@@ -580,7 +584,7 @@ export function DashboardPage() {
             hint={totals.xirr != null ? `XIRR ${formatPercent(totals.xirr * 100, 1)}` : undefined}
           />
         </div>
-        <div className="reveal reveal-delay-3">
+        <div className="reveal reveal-delay-3" title="Current value minus invested, across holdings only. Accrual assets contribute earned interest; not annualized.">
           <MetricCard
             label="Unrealised P&L"
             value={formatINR(totals.unrealisedPnL, { showSign: true })}
@@ -591,7 +595,7 @@ export function DashboardPage() {
             }}
           />
         </div>
-        <div className="reveal reveal-delay-4">
+        <div className="reveal reveal-delay-4" title="Day move on market-priced holdings only (equities, MF, crypto, gold). Accrual/cost assets have no intraday change.">
           <MetricCard
             label="Today's change"
             value={formatINR(totals.todaysChange, { showSign: true })}
@@ -849,6 +853,11 @@ export function DashboardPage() {
                               {h.unrealisedPnLPct != null && (
                                 <div className={`text-[10px] tabular-nums mt-0.5 ${pos ? 'text-positive/75' : neg ? 'text-negative/75' : 'text-muted-foreground'}`}>
                                   {pos ? '+' : ''}{h.unrealisedPnLPct.toFixed(2)}%
+                                </div>
+                              )}
+                              {valuationMethodFor(h.assetClass) !== 'MARKET' && (
+                                <div className="text-[9px] uppercase tracking-wide text-muted-foreground/70 mt-0.5">
+                                  {valuationMethodFor(h.assetClass) === 'ACCRUAL' ? 'accrued' : 'at cost'}
                                 </div>
                               )}
                             </>
