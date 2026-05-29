@@ -7,6 +7,7 @@ import { refreshAllHoldingPrices } from '../services/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
 import { loadBseEquityUniverse } from '../priceFeeds/bseUniverse.service.js';
 import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.js';
+import { runCorporateActionApplyAll } from './corporateActionApplyJob.js';
 import { syncAllCommodities } from '../priceFeeds/commodity.service.js';
 import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates } from '../priceFeeds/fx.service.js';
@@ -92,7 +93,12 @@ async function runUniverseSync(): Promise<void> {
 }
 
 async function runCorpActionsJob(): Promise<void> {
-  await runGuarded('corpActions', 'Corporate actions sync', loadNseCorporateActions);
+  await runGuarded('corpActions', 'Corporate actions sync', async () => {
+    const fetched = await loadNseCorporateActions();
+    // Fold newly-fetched splits/bonuses into holdings (idempotent).
+    const applied = await runCorporateActionApplyAll();
+    return { fetched, applied };
+  });
 }
 
 async function runCommoditiesJob(): Promise<void> {
