@@ -208,7 +208,7 @@ export function BankAccountListPage() {
       {isLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="aspect-[1.586/1] rounded-xl bg-muted/40 animate-pulse" />
+            <div key={i} className="aspect-[1.05/1] rounded-md bg-muted/40 animate-pulse" />
           ))}
         </div>
       )}
@@ -233,7 +233,7 @@ export function BankAccountListPage() {
             {accounts.map((a) => (
               <div key={a.id}>
                 {confirmDeleteId === a.id ? (
-                  <div className="aspect-[1.586/1] rounded-xl border border-destructive/40 bg-destructive/5 flex flex-col items-center justify-center gap-3 p-4">
+                  <div className="aspect-[1.05/1] rounded-md border border-destructive/40 bg-destructive/5 flex flex-col items-center justify-center gap-3 p-4">
                     <p className="text-sm text-center">
                       Delete <span className="font-medium">{a.bankName}</span> account ending{' '}
                       <span className="font-mono">{a.last4}</span>?
