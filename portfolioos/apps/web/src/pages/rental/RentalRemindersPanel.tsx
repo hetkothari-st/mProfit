@@ -614,57 +614,69 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
         </div>
       </div>
 
-      {/* Month picker + channel toggles + actions */}
-      <div className="px-4 py-2 border-b border-border flex items-center gap-3 flex-wrap bg-background">
-        <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
-          <input
-            type="checkbox"
-            checked={selected.size === sortedReminders.length && sortedReminders.length > 0}
-            onChange={toggleAll}
-            className="h-4 w-4"
-          />
-          Select all
-        </label>
-        <span className="text-xs text-muted-foreground">·</span>
-        <span className="text-xs text-muted-foreground">
-          {selected.size} selected
-        </span>
+      {/* Month picker + channel toggles + actions.
+          On phones each cluster stacks into its own row; from sm: up the
+          wrapper groups use `display:contents` so the children flow into a
+          single flex row exactly as before (desktop unchanged). */}
+      <div className="px-4 py-2 border-b border-border bg-background flex flex-col items-stretch gap-2.5 sm:flex-row sm:items-center sm:gap-3 sm:flex-wrap">
+        {/* Selection cluster */}
+        <div className="flex items-center gap-3 sm:contents">
+          <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selected.size === sortedReminders.length && sortedReminders.length > 0}
+              onChange={toggleAll}
+              className="h-4 w-4"
+            />
+            Select all
+          </label>
+          <span className="hidden sm:inline text-xs text-muted-foreground">·</span>
+          <span className="text-xs text-muted-foreground">
+            {selected.size} selected
+          </span>
+        </div>
 
         {/* Channel toggles — disabled when the corresponding recipient
             doesn't exist so the landlord can't pick a channel they
             haven't filled in. */}
-        <span className="text-xs text-muted-foreground ml-2">· Send via</span>
-        <label
-          className={`flex items-center gap-1.5 text-xs cursor-pointer ${effectiveEmail ? '' : 'opacity-40 cursor-not-allowed'}`}
-          title={effectiveEmail ? undefined : 'Add tenant email above'}
-        >
-          <input
-            type="checkbox"
-            checked={sendEmail && effectiveEmail}
-            onChange={(e) => setSendEmail(e.target.checked)}
-            disabled={!effectiveEmail}
-            className="h-3.5 w-3.5"
-          />
-          <Mail className="h-3 w-3" /> Email
-        </label>
-        <label
-          className={`flex items-center gap-1.5 text-xs cursor-pointer ${effectivePhone ? '' : 'opacity-40 cursor-not-allowed'}`}
-          title={effectivePhone ? undefined : 'Add tenant phone above'}
-        >
-          <input
-            type="checkbox"
-            checked={sendSms && effectivePhone}
-            onChange={(e) => setSendSms(e.target.checked)}
-            disabled={!effectivePhone}
-            className="h-3.5 w-3.5"
-          />
-          <MessageSquare className="h-3 w-3" /> SMS
-        </label>
+        <div className="flex items-center gap-3 flex-wrap sm:contents">
+          <span className="text-xs text-muted-foreground sm:ml-2">
+            <span className="hidden sm:inline">· </span>Send via
+          </span>
+          <label
+            className={`flex items-center gap-1.5 text-xs cursor-pointer ${effectiveEmail ? '' : 'opacity-40 cursor-not-allowed'}`}
+            title={effectiveEmail ? undefined : 'Add tenant email above'}
+          >
+            <input
+              type="checkbox"
+              checked={sendEmail && effectiveEmail}
+              onChange={(e) => setSendEmail(e.target.checked)}
+              disabled={!effectiveEmail}
+              className="h-3.5 w-3.5"
+            />
+            <Mail className="h-3 w-3" /> Email
+          </label>
+          <label
+            className={`flex items-center gap-1.5 text-xs cursor-pointer ${effectivePhone ? '' : 'opacity-40 cursor-not-allowed'}`}
+            title={effectivePhone ? undefined : 'Add tenant phone above'}
+          >
+            <input
+              type="checkbox"
+              checked={sendSms && effectivePhone}
+              onChange={(e) => setSendSms(e.target.checked)}
+              disabled={!effectivePhone}
+              className="h-3.5 w-3.5"
+            />
+            <MessageSquare className="h-3 w-3" /> SMS
+          </label>
+        </div>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        {/* Actions — full-width split on phones, right-aligned on desktop */}
+        <div className="flex items-center gap-1.5 sm:ml-auto">
           <Button
             variant="outline"
             size="sm"
+            className="flex-1 sm:flex-none"
             onClick={() => rejectAllMut.mutate(Array.from(selected))}
             disabled={selected.size === 0 || rejectAllMut.isPending}
           >
@@ -672,6 +684,7 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
           </Button>
           <Button
             size="sm"
+            className="flex-1 sm:flex-none"
             onClick={() => approveAllMut.mutate(Array.from(selected))}
             disabled={
               selected.size === 0
@@ -731,7 +744,7 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7"
+                className="h-7 shrink-0"
                 onClick={(e) => { e.preventDefault(); onPreview(r.id); }}
               >
                 <Pencil className="h-3.5 w-3.5" /> Preview
