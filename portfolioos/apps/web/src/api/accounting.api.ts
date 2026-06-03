@@ -181,4 +181,9 @@ export const accountingApi = {
     const { data } = await api.get<ApiResponse<Partial<CreateVoucherInput> & { transactionId: string }>>(`/api/accounting/suggest/transaction/${txnId}`);
     return unwrap(data);
   },
+
+  async generateFromActivity(): Promise<{ created: number; skipped: number; errors: number; total: number }> {
+    const { data } = await api.post<ApiResponse<{ created: number; skipped: number; errors: number; total: number }>>('/api/accounting/generate-from-activity');
+    return unwrap(data);
+  },
 };

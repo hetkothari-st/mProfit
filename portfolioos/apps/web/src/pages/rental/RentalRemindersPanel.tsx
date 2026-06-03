@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Mail, MessageSquare, X, Pencil, Send, Loader2, BellRing, Save, Check } from 'lucide-react';
+import { Mail, MessageSquare, X, Pencil, Send, Loader2, BellRing, Save, Check, ChevronDown } from 'lucide-react';
 import { formatINR } from '@portfolioos/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/cn';
 import { rentalApi, type RentReminderDTO } from '@/api/rental.api';
 import { gmailApi } from '@/api/gmail.api';
 
@@ -824,6 +825,9 @@ export function RentalRemindersPanel() {
   const qc = useQueryClient();
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [reconnectOpen, setReconnectOpen] = useState(false);
+  // Default collapsed — keeps the rental page above the fold even when many
+  // reminders are queued. Click the header to expand.
+  const [expanded, setExpanded] = useState(false);
 
   const remindersQuery = useQuery({
     queryKey: ['rental-reminders', 'pending'],
@@ -873,48 +877,66 @@ export function RentalRemindersPanel() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <div className="flex items-center gap-2.5">
-          <BellRing className="h-5 w-5 text-accent-ink/70" />
-          <CardTitle className="text-[20px] font-semibold">
-            Pending tenant reminders
+      <CardHeader className="flex flex-row items-center justify-between pb-3 gap-3">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-controls="rental-reminders-body"
+          className="flex flex-1 items-center gap-2.5 min-w-0 text-left rounded-md -mx-2 px-2 py-1 hover:bg-foreground/[0.03] focus-ring transition-colors"
+        >
+          <BellRing className="h-5 w-5 text-accent-ink/70 shrink-0" />
+          <CardTitle className="text-[20px] font-semibold flex items-center gap-3 min-w-0">
+            <span>Pending tenant reminders</span>
             {reminders.length > 0 && (
-              <span className="ml-3 text-sm text-muted-foreground font-normal">
+              <span className="inline-flex items-center rounded-full bg-accent/15 text-accent-ink ring-1 ring-accent/30 text-xs font-medium px-2 py-0.5">
                 {reminders.length} awaiting approval
               </span>
             )}
           </CardTitle>
-        </div>
+          <ChevronDown
+            className={cn(
+              'h-4 w-4 text-muted-foreground shrink-0 ml-auto transition-transform',
+              expanded ? 'rotate-180' : 'rotate-0',
+            )}
+            strokeWidth={1.9}
+          />
+        </button>
         <Button
           variant="outline"
           size="sm"
-          onClick={() => scanMut.mutate()}
+          onClick={(e) => {
+            e.stopPropagation();
+            scanMut.mutate();
+          }}
           disabled={scanMut.isPending}
         >
           {scanMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
           Run scan
         </Button>
       </CardHeader>
-      <CardContent>
-        {groups.length === 0 ? (
-          <div className="text-sm text-muted-foreground py-3 text-center border border-dashed rounded-md">
-            No reminders awaiting approval. The scan runs daily at 09:00 IST,
-            or click <strong>Run scan</strong> to check now.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {groups.map(([tenancyId, group]) => (
-              <TenancyBlock
-                key={tenancyId}
-                tenancyId={tenancyId}
-                reminders={group}
-                onPreview={setPreviewId}
-                onReconnectNeeded={() => setReconnectOpen(true)}
-              />
-            ))}
-          </div>
-        )}
-      </CardContent>
+      {expanded && (
+        <CardContent id="rental-reminders-body">
+          {groups.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-3 text-center border border-dashed rounded-md">
+              No reminders awaiting approval. The scan runs daily at 09:00 IST,
+              or click <strong>Run scan</strong> to check now.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {groups.map(([tenancyId, group]) => (
+                <TenancyBlock
+                  key={tenancyId}
+                  tenancyId={tenancyId}
+                  reminders={group}
+                  onPreview={setPreviewId}
+                  onReconnectNeeded={() => setReconnectOpen(true)}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      )}
       {previewing && (
         <ReminderPreviewDialog
           reminder={previewing}
