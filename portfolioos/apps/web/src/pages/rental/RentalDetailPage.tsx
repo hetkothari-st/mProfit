@@ -113,6 +113,7 @@ function MarkReceivedDialog({
       rentalApi.markReceived(receipt.id, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rental-property', id] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       onOpenChange(false);
     },
   });
@@ -170,21 +171,25 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
   const qc = useQueryClient();
   const [markOpen, setMarkOpen] = useState(false);
 
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ['rental-property', id] });
+    qc.invalidateQueries({ queryKey: ['dashboard'] });
+  };
   const skipMutation = useMutation({
     mutationFn: () => rentalApi.skipReceipt(receipt.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rental-property', id] }),
+    onSuccess: invalidateAll,
   });
   const undoMutation = useMutation({
     mutationFn: () => rentalApi.undoAutoMatch(receipt.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rental-property', id] }),
+    onSuccess: invalidateAll,
   });
   const unmarkMutation = useMutation({
     mutationFn: () => rentalApi.unmarkReceived(receipt.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rental-property', id] }),
+    onSuccess: invalidateAll,
   });
   const unskipMutation = useMutation({
     mutationFn: () => rentalApi.unskipReceipt(receipt.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rental-property', id] }),
+    onSuccess: invalidateAll,
   });
 
   const isActionable =

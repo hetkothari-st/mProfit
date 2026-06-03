@@ -117,6 +117,7 @@ function PaymentDialog({
       qc.invalidateQueries({ queryKey: ['loan-summary', loanId] });
       qc.invalidateQueries({ queryKey: ['loan-amortization', loanId] });
       qc.invalidateQueries({ queryKey: ['loans'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Payment recorded');
       if (form.paymentType === 'PREPAYMENT') onPrepaymentRecorded?.();
       onOpenChange(false);
@@ -459,6 +460,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
       qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
       qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
       qc.invalidateQueries({ queryKey: ['loans'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Payment removed');
     },
     onError: () => toast.error('Failed to remove payment'),
@@ -586,6 +588,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
     qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
     qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
     qc.invalidateQueries({ queryKey: ['loans'] });
+    qc.invalidateQueries({ queryKey: ['dashboard'] });
   };
 
   const markPaid = useMutation({

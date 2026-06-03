@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Briefcase,
@@ -180,7 +180,12 @@ export function Sidebar() {
       {/* brand mark + collapse */}
       <div className="flex items-center justify-between px-4 h-[72px] border-b border-sidebar-border/70">
         {!collapsed && (
-          <div className="flex items-center gap-3 min-w-0">
+          <Link
+            to="/dashboard"
+            aria-label="Go to dashboard"
+            title="Dashboard"
+            className="flex items-center gap-3 min-w-0 rounded-md focus-ring transition-opacity hover:opacity-90"
+          >
             <div
               aria-hidden="true"
               className="relative h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm shrink-0"
@@ -201,19 +206,21 @@ export function Sidebar() {
                 Wealth · Ledger
               </div>
             </div>
-          </div>
+          </Link>
         )}
         {collapsed && (
-          <div
-            aria-hidden="true"
-            className="mx-auto h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm"
+          <Link
+            to="/dashboard"
+            aria-label="Go to dashboard"
+            title="Dashboard"
+            className="mx-auto h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm focus-ring transition-opacity hover:opacity-90"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 4v16" />
               <path d="M5 4h8a4.5 4.5 0 0 1 0 9H5" />
               <path d="M14 13l4 7" />
             </svg>
-          </div>
+          </Link>
         )}
         <button
           type="button"

@@ -88,6 +88,7 @@ function AddPremiumDialog({
     mutationFn: (input: AddPremiumInput) => insuranceApi.addPremium(policyId, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['insurance-policy', policyId] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       onOpenChange(false);
       setForm({ paidOn: '', amount: '', periodFrom: '', periodTo: '' });
     },
@@ -459,7 +460,10 @@ function PremiumHistory({
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => insuranceApi.removePremium(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['insurance-policy', policy.id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['insurance-policy', policy.id] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 
   const totalPaid = paidRows.reduce(
