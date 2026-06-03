@@ -189,4 +189,40 @@ export const finfactorApi = {
     );
     return unwrap(data);
   },
+  async lifeInsuranceLinkedAccounts(body: { uniqueIdentifier: string }): Promise<unknown> {
+    const { data } = await api.post<ApiResponse<unknown>>(
+      '/api/integrations/finfactor/life-insurance/linked-accounts',
+      body,
+    );
+    return unwrap(data);
+  },
+  async lifeInsuranceStatement(body: InsuranceStatementBody): Promise<unknown> {
+    const { data } = await api.post<ApiResponse<unknown>>(
+      '/api/integrations/finfactor/life-insurance/statement',
+      body,
+    );
+    return unwrap(data);
+  },
+  async generalInsuranceLinkedAccounts(body: { uniqueIdentifier: string }): Promise<unknown> {
+    const { data } = await api.post<ApiResponse<unknown>>(
+      '/api/integrations/finfactor/general-insurance/linked-accounts',
+      body,
+    );
+    return unwrap(data);
+  },
+  async generalInsuranceStatement(body: InsuranceStatementBody): Promise<unknown> {
+    const { data } = await api.post<ApiResponse<unknown>>(
+      '/api/integrations/finfactor/general-insurance/statement',
+      body,
+    );
+    return unwrap(data);
+  },
 };
+
+export interface InsuranceStatementBody {
+  uniqueIdentifier: string;
+  accountId?: string;
+  txnOrder?: 'ASC' | 'DESC';
+  dateRangeFrom?: string;
+  dateRangeTo?: string;
+}

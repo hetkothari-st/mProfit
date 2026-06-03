@@ -35,6 +35,12 @@ import {
 } from '../integrations/finfactor/consent.service.js';
 import { syncFinvuMutualFunds } from '../integrations/finfactor/sync.service.js';
 import {
+  fetchGeneralInsuranceLinkedAccounts,
+  fetchGeneralInsuranceStatement,
+  fetchLifeInsuranceLinkedAccounts,
+  fetchLifeInsuranceStatement,
+} from '../integrations/finfactor/insurance.service.js';
+import {
   handleCohortWebhook,
   handleConsentWebhook,
   handleDataWebhook,
@@ -280,3 +286,45 @@ export const postDataWebhook = makeWebhookHandler('data');
 export const postHistoricalWebhook = makeWebhookHandler('historical');
 export const postCohortWebhook = makeWebhookHandler('cohort');
 export const postSubscriptionWebhook = makeWebhookHandler('subscription');
+
+// ─── Insurance (life + general) ─────────────────────────────────────────────
+
+const insuranceLinkedSchema = z.object({
+  uniqueIdentifier: z.string().min(1),
+});
+
+const insuranceStatementSchema = z.object({
+  uniqueIdentifier: z.string().min(1),
+  accountId: z.string().optional(),
+  txnOrder: z.enum(['ASC', 'DESC']).optional(),
+  dateRangeFrom: z.string().optional(),
+  dateRangeTo: z.string().optional(),
+});
+
+export async function postLifeInsuranceLinkedAccounts(req: Request, res: Response) {
+  ensureAuth(req);
+  const body = insuranceLinkedSchema.parse(req.body);
+  const data = await fetchLifeInsuranceLinkedAccounts(body);
+  ok(res, data);
+}
+
+export async function postLifeInsuranceStatement(req: Request, res: Response) {
+  ensureAuth(req);
+  const body = insuranceStatementSchema.parse(req.body);
+  const data = await fetchLifeInsuranceStatement(body);
+  ok(res, data);
+}
+
+export async function postGeneralInsuranceLinkedAccounts(req: Request, res: Response) {
+  ensureAuth(req);
+  const body = insuranceLinkedSchema.parse(req.body);
+  const data = await fetchGeneralInsuranceLinkedAccounts(body);
+  ok(res, data);
+}
+
+export async function postGeneralInsuranceStatement(req: Request, res: Response) {
+  ensureAuth(req);
+  const body = insuranceStatementSchema.parse(req.body);
+  const data = await fetchGeneralInsuranceStatement(body);
+  ok(res, data);
+}
