@@ -508,7 +508,7 @@ export function DashboardPage() {
             <div className="my-6 rule-ornament"><span /></div>
 
             {/* Breakdown row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-0 gap-y-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-5 md:gap-x-0">
               {[
                 { label: 'Investments', value: nw.portfolio.currentValue, color: 'hsl(213 53% 22%)', show: true },
                 { label: 'Real Estate', value: nw.realEstate.totalValue, color: 'hsl(130 35% 34%)', show: toDecimal(nw.realEstate.totalValue).greaterThan(0) },
@@ -519,7 +519,7 @@ export function DashboardPage() {
                 .map((item, i, arr) => (
                   <div
                     key={item.label}
-                    className={`min-w-0 px-5 ${i === 0 ? 'pl-0' : ''} ${i < arr.length - 1 ? 'md:border-r md:border-border/60' : ''}`}
+                    className={`min-w-0 md:px-5 ${i === 0 ? 'md:pl-0' : ''} ${i < arr.length - 1 ? 'md:border-r md:border-border/60' : ''}`}
                   >
                     <div className="flex items-center gap-2 mb-1.5">
                       <span className="inline-block h-2 w-2 rounded-[1px] rotate-45 flex-shrink-0" style={{ background: item.color }} />
