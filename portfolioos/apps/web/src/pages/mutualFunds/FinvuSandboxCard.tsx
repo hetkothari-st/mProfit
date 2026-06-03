@@ -2,14 +2,13 @@
  * Finvu (Finfactor) sandbox card.
  *
  * Lets the operator hit every Wealthscape MF endpoint from the UI so
- * the sandbox round-trip is visible without curl. Defaults are the
- * documented dummy `uniqueIdentifier` from the Finfactor sandbox; users
- * can override before each call.
+ * the sandbox round-trip is visible without curl. The default
+ * uniqueIdentifier is the documented dummy from the Finfactor sandbox.
  *
- * Headline numbers from /mutual-fund/insights are rendered as tiles
- * (current value, invested, XIRR, holdings) so the panel looks like
- * the rest of the app — the full upstream JSON is collapsed beneath
- * for verification.
+ * Each endpoint's response is rendered by a dedicated view component
+ * (insights → charts + holdings table, statement → txn table with
+ * filters, etc). The raw JSON stays available as a collapsible footer
+ * so the operator can still verify every key Finfactor returns.
  */
 
 import { useState } from 'react';
@@ -20,9 +19,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { formatINR, toDecimal } from '@portfolioos/shared';
 import { finfactorApi } from '@/api/finfactor.api';
 import { apiErrorMessage } from '@/api/client';
+import { InsightsView } from './finvu/InsightsView';
+import { LinkedAccountsView } from './finvu/LinkedAccountsView';
+import { HoldingFolioView } from './finvu/HoldingFolioView';
+import { StatementView } from './finvu/StatementView';
+import { AnalysisView } from './finvu/AnalysisView';
 
 const SAMPLE_UID = '96696595XX';
 
@@ -34,40 +37,20 @@ type EndpointKey =
   | 'statement'
   | 'analysis';
 
-interface OverallSummary {
-  totalHoldings?: number;
-  foliosCount?: number;
-  currentValue?: number;
-  investedValue?: number;
-  absoluteReturn?: number;
-  absoluteReturnPercentage?: number;
-  xirr?: number;
-}
-
-function isObj(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null;
-}
-
-function getOverallSummary(insights: unknown): OverallSummary | null {
-  if (!isObj(insights)) return null;
-  const s = insights['overallSummary'];
-  if (!isObj(s)) return null;
-  return s as OverallSummary;
-}
-
-function asNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string') {
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
+const BUTTONS: Array<{ key: EndpointKey; label: string; hint: string }> = [
+  { key: 'insights', label: 'MF insights', hint: 'KPIs + distribution charts + holdings table' },
+  { key: 'insightsNoPii', label: 'Insights (no PII)', hint: 'same view, PAN / mobile masked' },
+  { key: 'linkedAccounts', label: 'Linked accounts', hint: 'FIP-grouped account list' },
+  { key: 'linkedAccountsHoldingFolio', label: 'Holding folio', hint: 'per-scheme folio breakdown' },
+  { key: 'statement', label: 'Statement', hint: 'transaction table with filters' },
+  { key: 'analysis', label: 'Analysis', hint: 'category and type pies' },
+];
 
 export function FinvuSandboxCard() {
   const [uid, setUid] = useState(SAMPLE_UID);
   const [active, setActive] = useState<EndpointKey | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [lastEndpoint, setLastEndpoint] = useState<EndpointKey | null>(null);
+  const [rawOpen, setRawOpen] = useState(false);
   const [result, setResult] = useState<unknown>(null);
 
   const statusQ = useQuery({
@@ -96,7 +79,7 @@ export function FinvuSandboxCard() {
     },
     onSuccess: (data, key) => {
       setResult(data);
-      setExpanded(true);
+      setLastEndpoint(key);
       toast.success(`Finvu /${key} ✓`);
     },
     onError: (err) => {
@@ -105,18 +88,9 @@ export function FinvuSandboxCard() {
     onSettled: () => setActive(null),
   });
 
-  const overall = result ? getOverallSummary(result) : null;
   const configured = statusQ.data?.configured ?? false;
   const demoMode = statusQ.data?.demoMode ?? false;
-
-  const buttons: Array<{ key: EndpointKey; label: string; hint: string }> = [
-    { key: 'insights', label: 'MF insights', hint: 'overallSummary + holdings' },
-    { key: 'insightsNoPii', label: 'Insights (no PII)', hint: 'same, with PAN/mobile masked' },
-    { key: 'linkedAccounts', label: 'Linked accounts', hint: 'FIP-level account list' },
-    { key: 'linkedAccountsHoldingFolio', label: 'Holding folio', hint: 'per-folio breakdown' },
-    { key: 'statement', label: 'Statement', hint: 'transaction list (DESC)' },
-    { key: 'analysis', label: 'Analysis', hint: 'category / type rollup' },
-  ];
+  const activeLabel = BUTTONS.find((b) => b.key === lastEndpoint)?.label ?? null;
 
   return (
     <Card>
@@ -126,8 +100,9 @@ export function FinvuSandboxCard() {
             <Plug className="h-5 w-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-base font-semibold flex items-center gap-2">
-              Finvu (Account Aggregator) <span className="text-xs text-muted-foreground font-normal">via Finfactor Wealthscape</span>
+            <h3 className="text-base font-semibold flex items-center gap-2 flex-wrap">
+              Finvu (Account Aggregator){' '}
+              <span className="text-xs text-muted-foreground font-normal">via Finfactor Wealthscape</span>
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Pull mutual fund holdings, folios, transactions and insights from the user's linked AAs.
@@ -155,8 +130,6 @@ export function FinvuSandboxCard() {
             <div>
               Demo mode is active — every call returns the documented sample payload from
               <code className="font-mono"> docs.finfactor.in/wealth-scape</code>. No upstream request is made.
-              Set <code className="font-mono">FINFACTOR_DEMO_MODE=false</code> + a real{' '}
-              <code className="font-mono">FINFACTOR_API_TOKEN</code> to hit the sandbox UAT.
             </div>
           </div>
         )}
@@ -165,9 +138,9 @@ export function FinvuSandboxCard() {
           <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
             <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
             <div>
-              Set <code className="font-mono">FINFACTOR_API_TOKEN</code> in the API env to enable sandbox calls,
-              or <code className="font-mono">FINFACTOR_DEMO_MODE=true</code> for canned responses. Base URL:{' '}
-              <code className="font-mono">{statusQ.data.baseUrl}</code>
+              Set <code className="font-mono">FINFACTOR_API_TOKEN</code> in the API env to enable sandbox
+              calls, or <code className="font-mono">FINFACTOR_DEMO_MODE=true</code> for canned responses.
+              Base URL: <code className="font-mono">{statusQ.data.baseUrl}</code>
             </div>
           </div>
         )}
@@ -188,10 +161,10 @@ export function FinvuSandboxCard() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {buttons.map((b) => (
+          {BUTTONS.map((b) => (
             <Button
               key={b.key}
-              variant="outline"
+              variant={lastEndpoint === b.key ? 'default' : 'outline'}
               size="sm"
               disabled={!configured || mutation.isPending || !uid.trim()}
               onClick={() => mutation.mutate(b.key)}
@@ -204,71 +177,30 @@ export function FinvuSandboxCard() {
               )}
               <span className="flex flex-col items-start text-left ml-2">
                 <span className="text-sm font-medium">{b.label}</span>
-                <span className="text-[10.5px] text-muted-foreground font-normal">{b.hint}</span>
+                <span
+                  className={`text-[10.5px] font-normal ${
+                    lastEndpoint === b.key
+                      ? 'text-primary-foreground/80'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {b.hint}
+                </span>
               </span>
             </Button>
           ))}
         </div>
 
-        {overall && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2">
-            <SummaryTile
-              label="Current value"
-              value={overall.currentValue}
-              format="money"
-            />
-            <SummaryTile
-              label="Invested"
-              value={overall.investedValue}
-              format="money"
-            />
-            <SummaryTile
-              label="Absolute return"
-              value={overall.absoluteReturn}
-              format="money"
-              tone={
-                asNumber(overall.absoluteReturn) != null && asNumber(overall.absoluteReturn)! >= 0
-                  ? 'positive'
-                  : 'negative'
-              }
-            />
-            <SummaryTile
-              label="XIRR"
-              value={overall.xirr}
-              format="pct"
-              tone={
-                asNumber(overall.xirr) != null && asNumber(overall.xirr)! >= 0
-                  ? 'positive'
-                  : 'negative'
-              }
-            />
-            <SummaryTile label="Holdings" value={overall.totalHoldings} format="int" />
-            <SummaryTile label="Folios" value={overall.foliosCount} format="int" />
-            <SummaryTile
-              label="Abs return %"
-              value={overall.absoluteReturnPercentage}
-              format="pct"
-            />
-          </div>
-        )}
-
-        {result !== null && (
-          <div className="rounded-md border border-border bg-muted/30">
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
-            >
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
-              />
-              Raw response
-            </button>
-            {expanded && (
-              <pre className="max-h-[480px] overflow-auto px-3 pb-3 text-[11px] font-mono leading-relaxed text-foreground/80">
-                {JSON.stringify(result, null, 2)}
-              </pre>
-            )}
+        {result !== null && lastEndpoint && (
+          <div className="border-t border-border/60 pt-4 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h4 className="text-base font-semibold">{activeLabel}</h4>
+              <span className="text-[10.5px] uppercase tracking-kerned text-muted-foreground">
+                Endpoint response
+              </span>
+            </div>
+            {renderEndpointView(lastEndpoint, result)}
+            <RawJsonPanel data={result} open={rawOpen} onToggle={() => setRawOpen((v) => !v)} />
           </div>
         )}
       </CardContent>
@@ -276,32 +208,47 @@ export function FinvuSandboxCard() {
   );
 }
 
-function SummaryTile({
-  label,
-  value,
-  format,
-  tone,
-}: {
-  label: string;
-  value: unknown;
-  format: 'money' | 'pct' | 'int';
-  tone?: 'positive' | 'negative';
-}) {
-  const n = asNumber(value);
-  let display = '—';
-  if (n != null) {
-    if (format === 'money') display = formatINR(toDecimal(n).toFixed(2));
-    else if (format === 'pct') display = `${n.toFixed(2)}%`;
-    else display = String(Math.trunc(n));
+function renderEndpointView(key: EndpointKey, data: unknown) {
+  switch (key) {
+    case 'insights':
+      return <InsightsView data={data} />;
+    case 'insightsNoPii':
+      return <InsightsView data={data} masked />;
+    case 'linkedAccounts':
+      return <LinkedAccountsView data={data} />;
+    case 'linkedAccountsHoldingFolio':
+      return <HoldingFolioView data={data} />;
+    case 'statement':
+      return <StatementView data={data} />;
+    case 'analysis':
+      return <AnalysisView data={data} />;
   }
-  const toneCls =
-    tone === 'positive' ? 'text-positive' : tone === 'negative' ? 'text-negative' : '';
+}
+
+function RawJsonPanel({
+  data,
+  open,
+  onToggle,
+}: {
+  data: unknown;
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <div className="rounded-lg border border-border/70 bg-card/40 p-3">
-      <div className="text-[10px] uppercase tracking-kerned text-muted-foreground font-medium">
-        {label}
-      </div>
-      <div className={`mt-1 text-[18px] font-semibold tabular-nums ${toneCls}`}>{display}</div>
+    <div className="rounded-md border border-border bg-muted/30">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+      >
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        Raw upstream JSON (for debugging)
+      </button>
+      {open && (
+        <pre className="max-h-[480px] overflow-auto px-3 pb-3 text-[11px] font-mono leading-relaxed text-foreground/80">
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }
