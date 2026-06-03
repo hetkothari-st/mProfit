@@ -88,10 +88,10 @@ export function ConcentrationCard({ rows }: { rows: ConcentrationRow[] }) {
                     {r.pct.toFixed(1)}% · cum {r.cumulativePct.toFixed(1)}%
                   </span>
                 </div>
-                <div className="h-1.5 bg-muted/60 rounded-full overflow-hidden">
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full"
-                    style={{ width: `${Math.min(r.pct, 100)}%`, background: 'hsl(213 53% 22%)' }}
+                    className="h-full rounded-full bg-accent"
+                    style={{ width: `${Math.min(r.pct, 100)}%` }}
                   />
                 </div>
               </div>

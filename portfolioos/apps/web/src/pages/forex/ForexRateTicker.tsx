@@ -58,7 +58,7 @@ export function ForexRateTicker() {
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">No rates yet — hit refresh.</p>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {rows.map((r) => (
             <div
               key={`${r.base}${r.quote}`}
