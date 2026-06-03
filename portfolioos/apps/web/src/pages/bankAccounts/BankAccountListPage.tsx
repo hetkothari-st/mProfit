@@ -34,7 +34,7 @@ function SummaryStrip({ accounts }: { accounts: BankAccountDTO[] }) {
   const dormantOrClosed = accounts.length - active.length;
 
   return (
-    <div className="grid grid-cols-3 gap-3 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
       {[
         {
           label: 'Total balance',
@@ -58,7 +58,7 @@ function SummaryStrip({ accounts }: { accounts: BankAccountDTO[] }) {
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
               {m.label}
             </p>
-            <p className={`text-xl font-semibold tabular-nums mt-1 ${m.className ?? ''}`}>
+            <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${m.className ?? ''}`}>
               {m.value}
             </p>
             <p className="text-xs text-muted-foreground">{m.sub}</p>

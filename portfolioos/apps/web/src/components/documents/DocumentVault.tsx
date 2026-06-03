@@ -239,7 +239,7 @@ export function DocumentVault({ ownerType, ownerId, title = 'Documents', default
                     )}
                   </div>
                   {!isRenaming && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-1">
                       {viewable && (
                         <Button
                           size="sm"

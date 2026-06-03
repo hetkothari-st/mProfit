@@ -106,7 +106,7 @@ function ForexPairPnlSection({ portfolioIds }: { portfolioIds: string[] }) {
             Net realised across all pairs: <span className="font-mono tabular-nums">{formatINR(totalRealised.toFixed(2))}</span>
           </p>
         </div>
-        <table className="w-full text-sm">
+        <table className="w-full text-sm rtable">
           <thead className="border-b border-border bg-muted/20 text-left text-xs text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Pair</th>
@@ -122,18 +122,19 @@ function ForexPairPnlSection({ portfolioIds }: { portfolioIds: string[] }) {
               const pnl = new Decimal(r.realisedPnl);
               return (
                 <tr key={`${r.portfolioId}-${r.pair}-${r.financialYear}-${i}`} className="border-b border-border/50 last:border-0">
-                  <td className="px-3 py-2 font-medium">{r.pair}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.financialYear}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{r.buyQty}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{r.sellQty}</td>
+                  <td data-label="Pair" className="px-3 py-2 font-medium">{r.pair}</td>
+                  <td data-label="FY" className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.financialYear}</td>
+                  <td data-label="Buy qty" className="px-3 py-2 text-right font-mono tabular-nums">{r.buyQty}</td>
+                  <td data-label="Sell qty" className="px-3 py-2 text-right font-mono tabular-nums">{r.sellQty}</td>
                   <td
+                    data-label="Realised P&L"
                     className={`px-3 py-2 text-right font-mono tabular-nums ${
                       pnl.gt(0) ? 'text-green-600 dark:text-green-400' : pnl.lt(0) ? 'text-destructive' : ''
                     }`}
                   >
                     {formatINR(pnl.toFixed(2))}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">{r.unrealisedPosition}</td>
+                  <td data-label="Open position" className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">{r.unrealisedPosition}</td>
                 </tr>
               );
             })}

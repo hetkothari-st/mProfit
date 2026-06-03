@@ -46,9 +46,9 @@ export function GmailScanSetupPage() {
         title="Choose how far back to scan"
         description="We'll look for every PDF, XLSX, XLS or CSV attachment in your Gmail between these dates."
       />
-      <Card className="max-w-xl">
-        <CardContent className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+      <Card className="max-w-xl max-w-full">
+        <CardContent className="p-4 sm:p-6 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="from" className="text-xs">Scan from</Label>
               <Input
@@ -87,7 +87,7 @@ export function GmailScanSetupPage() {
             <Calendar className="h-3.5 w-3.5" />
             Scans all attachments (PDF, XLSX, XLS, CSV) in your inbox. Both dates inclusive.
           </div>
-          <div className="flex gap-2 justify-end">
+          <div className="flex flex-wrap gap-2 justify-end">
             <Button variant="ghost" onClick={() => nav('/dashboard')}>Skip for now</Button>
             <Button onClick={() => start.mutate()} disabled={start.isPending}>
               {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Start scan'}

@@ -48,7 +48,7 @@ export function PortfolioListPage() {
         title="Portfolios"
         description="Group holdings by goal, strategy, or account. Bundle multiple portfolios into a family group for a consolidated view."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={handleCreateGroup} disabled={!hasPortfolios}>
               <Users className="h-4 w-4" /> New group
             </Button>
@@ -150,7 +150,7 @@ function PortfolioCard({
           <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-kerned text-muted-foreground">{portfolio.type}</div>
             <div className="flex items-center gap-1.5 mt-1">
-              <h3 className="font-display text-[30px] font-bold tracking-wide leading-tight truncate">{portfolio.name}</h3>
+              <h3 className="font-display text-[22px] sm:text-[30px] font-bold tracking-wide leading-tight truncate">{portfolio.name}</h3>
               {portfolio.isDefault && <Star className="h-3.5 w-3.5 fill-accent text-accent shrink-0" />}
             </div>
             {portfolio.description && (
@@ -203,7 +203,7 @@ function GroupCard({
               <Users className="h-3 w-3" /> Group
             </div>
             <div className="flex items-center gap-1.5 mt-1">
-              <h3 className="font-display text-[30px] font-bold tracking-wide leading-tight truncate">{group.name}</h3>
+              <h3 className="font-display text-[22px] sm:text-[30px] font-bold tracking-wide leading-tight truncate">{group.name}</h3>
             </div>
             {group.description && (
               <p className="text-[12.5px] text-muted-foreground mt-1 line-clamp-2">

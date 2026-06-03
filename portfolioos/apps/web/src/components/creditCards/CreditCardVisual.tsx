@@ -130,8 +130,8 @@ function CardChip() {
 export function CreditCardVisual({ card, size = 'md' }: { card: CreditCardDTO; size?: 'md' | 'lg' }) {
   const palette: PaletteVars = (card.network ? PALETTES[card.network] : undefined) ?? DEFAULT_PALETTE;
   const dim = card.status !== 'ACTIVE' ? 'grayscale opacity-70' : '';
-  const numberSize = size === 'lg' ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg';
-  const padding = size === 'lg' ? 'p-6' : 'p-4 sm:p-5';
+  const numberSize = size === 'lg' ? 'text-lg sm:text-xl md:text-2xl' : 'text-sm sm:text-base md:text-lg';
+  const padding = size === 'lg' ? 'p-4 sm:p-6' : 'p-3 sm:p-4 md:p-5';
 
   // Masked dots use slightly different opacity per palette so they stay visible
   // on both dark and light surfaces.

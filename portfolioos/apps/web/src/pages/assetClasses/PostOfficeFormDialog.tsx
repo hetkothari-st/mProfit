@@ -389,7 +389,7 @@ export function PostOfficeFormDialog({ open, onOpenChange, initial, defaultPortf
           {!isEdit && (
             <div className="space-y-1.5">
               <Label>Scheme</Label>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 {SCHEME_ORDER.map((s) => (
                   <label
                     key={s}

@@ -339,7 +339,7 @@ function FDCard({
               <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
                 Principal
               </p>
-              <p className="numeric-display-lg money-digits text-2xl mt-0.5">
+              <p className="numeric-display-lg money-digits text-xl sm:text-2xl mt-0.5 break-words">
                 {formatINR(holding.totalCost)}
               </p>
               <div className="mt-2.5 grid grid-cols-3 gap-x-3">
@@ -512,7 +512,7 @@ function RDCard({
               <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
                 Deposited
               </p>
-              <p className="numeric-display-lg money-digits text-2xl mt-0.5">
+              <p className="numeric-display-lg money-digits text-xl sm:text-2xl mt-0.5 break-words">
                 {formatINR(holding.totalCost)}
               </p>
               <div className="mt-2.5 grid grid-cols-3 gap-x-3">
@@ -723,7 +723,7 @@ export function FixedDepositsPage() {
         title="Fixed & Recurring Deposits"
         description="Track FDs and RDs across banks — one-time deposits or monthly installments."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <DownloadReportButton type="holdings" assetClasses={['FIXED_DEPOSIT', 'RECURRING_DEPOSIT']} />
             <div className="relative" ref={addMenuRef}>
             <Button onClick={() => setAddMenuOpen((v) => !v)}>
@@ -754,7 +754,7 @@ export function FixedDepositsPage() {
 
       {/* Summary strip */}
       {!isLoading && allHoldings.length > 0 && (
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           {([
             { label: 'Total Invested', value: formatINR(totalInvested.toString()), sub: `${allHoldings.length} deposit${allHoldings.length === 1 ? '' : 's'}`, valueClass: '' },
             { label: 'Current Value', value: formatINR(totalValue.toString()), sub: 'live valuation', valueClass: '' },
@@ -770,7 +770,7 @@ export function FixedDepositsPage() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
                   {m.label}
                 </p>
-                <p className={`text-xl font-semibold tabular-nums mt-1 ${m.valueClass}`}>
+                <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${m.valueClass}`}>
                   {m.value}
                 </p>
                 <p className="text-xs text-muted-foreground">{m.sub}</p>

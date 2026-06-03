@@ -179,7 +179,7 @@ export function BondFormDialog({ open, onOpenChange, initial, defaultPortfolioId
           </div>
 
           {/* Bond type + Transaction type */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Bond Type</Label>
               <Select {...register('assetClass')} className="w-full">
@@ -195,7 +195,7 @@ export function BondFormDialog({ open, onOpenChange, initial, defaultPortfolioId
           </div>
 
           {/* Bond name + ISIN */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1 col-span-2 sm:col-span-1">
               <Label>Bond Name / Issuer <span className="text-destructive">*</span></Label>
               <Input {...register('assetName')} placeholder="e.g. 7.26% GOI 2033" />
@@ -208,7 +208,7 @@ export function BondFormDialog({ open, onOpenChange, initial, defaultPortfolioId
           </div>
 
           {/* Date + Quantity + Price */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label>Date <span className="text-destructive">*</span></Label>
               <Input type="date" {...register('tradeDate')} />
@@ -235,7 +235,7 @@ export function BondFormDialog({ open, onOpenChange, initial, defaultPortfolioId
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                 <Info className="h-3.5 w-3.5" /> Bond Details
               </p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label>Coupon Rate (% p.a.)</Label>
                   <Input type="number" step="0.01" min="0" max="100" {...register('interestRate')} placeholder="7.26" />

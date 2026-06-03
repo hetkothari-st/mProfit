@@ -418,7 +418,7 @@ export function DashboardPage() {
         title="Your financial portrait"
         description="A complete, hand-curated view of every asset, liability, and signal — engineered for investors who read between the lines."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} className="w-52">
               <option value="ALL">All portfolios ({portfolios.length})</option>
               {portfolios.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -435,7 +435,7 @@ export function DashboardPage() {
       {/* Net Worth Hero — editorial */}
       {nw && (
         <Card tone="hero" className="reveal">
-          <div className="relative px-7 py-7 sm:px-9 sm:py-8">
+          <div className="relative px-4 py-5 sm:px-7 sm:py-7 md:px-9 md:py-8">
             <div className="flex items-start justify-between gap-6 flex-wrap">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-2">
@@ -460,7 +460,7 @@ export function DashboardPage() {
                 </div>
                 <Money
                   hero
-                  className="numeric-display-lg text-[clamp(2.4rem,5.6vw,4rem)] leading-[1.02] text-foreground"
+                  className="numeric-display-lg text-[clamp(1.8rem,5.6vw,4rem)] leading-[1.02] text-foreground break-words"
                   symbolClassName="text-[0.6em] -translate-y-[0.18em] text-accent"
                 >
                   {netWorthHidden ? '₹ • • • • • • •' : formatINR(nw.totalNetWorth)}
@@ -597,12 +597,12 @@ export function DashboardPage() {
       {/* Liabilities summary — net worth after loans + CC debt */}
       {nw && toDecimal(nw.totalLiabilities).greaterThan(0) && (
         <Card className="reveal">
-          <CardHeader className="flex-row items-start justify-between pb-4">
+          <CardHeader className="flex-row items-start justify-between pb-4 flex-wrap gap-2">
             <div>
               <p className="text-[11px] uppercase tracking-kerned text-accent-ink/80 mb-1.5">
                 Liabilities · FY {nw.liabilities.financialYear}
               </p>
-              <CardTitle className="text-[22px] font-semibold tracking-tight">
+              <CardTitle className="text-[20px] sm:text-[22px] font-semibold tracking-tight">
                 Loans &amp; credit cards
               </CardTitle>
             </div>
@@ -614,7 +614,7 @@ export function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 overflow-hidden">
               {/* Net after debts — highlighted */}
               <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/10 via-accent/5 to-transparent p-4">
                 <div className="flex items-center gap-2 mb-2">
@@ -625,7 +625,7 @@ export function DashboardPage() {
                     Net after debts
                   </div>
                 </div>
-                <Money className="numeric-display text-[26px] leading-tight font-semibold text-foreground block">
+                <Money className="numeric-display text-[22px] sm:text-[26px] leading-tight font-semibold text-foreground block break-words">
                   {formatINR(nw.netWorthAfterLiabilities)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -643,7 +643,7 @@ export function DashboardPage() {
                     Total outstanding
                   </div>
                 </div>
-                <Money className="numeric-display text-[22px] leading-tight font-semibold text-negative block">
+                <Money className="numeric-display text-[20px] sm:text-[22px] leading-tight font-semibold text-negative block break-words">
                   {formatINR(nw.totalLiabilities)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -661,7 +661,7 @@ export function DashboardPage() {
                     Monthly EMI
                   </div>
                 </div>
-                <Money className="numeric-display text-[22px] leading-tight font-semibold block">
+                <Money className="numeric-display text-[20px] sm:text-[22px] leading-tight font-semibold block break-words">
                   {formatINR(nw.liabilities.monthlyEmiTotal)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -679,7 +679,7 @@ export function DashboardPage() {
                     Card balance
                   </div>
                 </div>
-                <Money className="numeric-display text-[22px] leading-tight font-semibold block">
+                <Money className="numeric-display text-[20px] sm:text-[22px] leading-tight font-semibold block break-words">
                   {formatINR(nw.liabilities.totalCreditCardOutstanding)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -697,7 +697,7 @@ export function DashboardPage() {
                     Interest paid YTD
                   </div>
                 </div>
-                <Money className="numeric-display text-[22px] leading-tight font-semibold text-negative block">
+                <Money className="numeric-display text-[20px] sm:text-[22px] leading-tight font-semibold text-negative block break-words">
                   {formatINR(nw.liabilities.interestPaidYTD)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -1236,7 +1236,7 @@ export function DashboardPage() {
         if (trio.length === 0) return null;
 
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {trio.map((c) => c.node)}
           </div>
         );

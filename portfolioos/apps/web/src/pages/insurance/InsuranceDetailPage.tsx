@@ -258,7 +258,7 @@ function HealthCoverPanel({ policy }: { policy: InsurancePolicyDTO }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-2xl">Health coverage details</CardTitle>
+        <CardTitle className="text-xl sm:text-2xl">Health coverage details</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         {hc.members && hc.members.length > 0 && (
@@ -324,7 +324,7 @@ function ClaimsTable({
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-2xl">Claims</CardTitle>
+        <CardTitle className="text-xl sm:text-2xl">Claims</CardTitle>
         <Button size="sm" variant="outline" onClick={onAdd}>
           <Plus className="h-3.5 w-3.5 mr-1" /> Add
         </Button>
@@ -474,7 +474,7 @@ function PremiumHistory({
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-2xl">
+        <CardTitle className="text-xl sm:text-2xl">
           Premium history
           {paidRows.length > 0 && (
             <span className="ml-3 text-xs font-normal text-muted-foreground">
@@ -496,7 +496,7 @@ function PremiumHistory({
           <p className="text-xs text-muted-foreground">No premium schedule (single-premium or no start date).</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="rtable w-full text-xs">
               <thead>
                 <tr className="border-b text-muted-foreground">
                   <th className="text-left font-medium py-2 px-2 w-8">#</th>
@@ -513,19 +513,19 @@ function PremiumHistory({
                   const periodToIso = isoDate(row.periodTo);
                   return (
                     <tr key={row.index} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="py-2 px-2 text-muted-foreground tabular-nums">{row.index}</td>
-                      <td className="py-2 px-2">
+                      <td data-label="#" className="py-2 px-2 text-muted-foreground tabular-nums">{row.index}</td>
+                      <td data-label="Period" className="py-2 px-2">
                         {formatDate(periodFromIso)} → {formatDate(periodToIso)}
                       </td>
-                      <td className="py-2 px-2 text-muted-foreground">
+                      <td data-label="Due date" className="py-2 px-2 text-muted-foreground">
                         {formatDate(periodFromIso)}
                       </td>
-                      <td className="py-2 px-2 text-right font-medium tabular-nums">
+                      <td data-label="Amount" className="py-2 px-2 text-right font-medium tabular-nums">
                         {row.payment
                           ? formatINR(row.payment.amount)
                           : <span className="text-muted-foreground">{formatINR(policy.premiumAmount)}</span>}
                       </td>
-                      <td className="py-2 px-2">
+                      <td data-label="Status" className="py-2 px-2">
                         {row.status === 'PAID' && (
                           <span className="inline-flex items-center gap-1 text-positive">
                             <CheckCircle2 className="h-3.5 w-3.5" />
@@ -545,7 +545,7 @@ function PremiumHistory({
                           </span>
                         )}
                       </td>
-                      <td className="py-2 px-2 text-right">
+                      <td data-label="Action" className="py-2 px-2 text-right">
                         {row.payment ? (
                           <Button
                             size="sm"
@@ -663,7 +663,7 @@ export function InsuranceDetailPage() {
       })()}
 
       {/* Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
           { label: 'Status', value: policy.status.toLowerCase(), className: statusColor },
           { label: 'Sum assured', value: formatINR(policy.sumAssured) },
@@ -682,7 +682,7 @@ export function InsuranceDetailPage() {
       </div>
 
       {/* Dates row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         <Card><CardContent className="px-4 py-3">
           <p className="text-xs text-muted-foreground">Start date</p>
           <p className="text-sm font-medium mt-1">{formatDate(policy.startDate)}</p>

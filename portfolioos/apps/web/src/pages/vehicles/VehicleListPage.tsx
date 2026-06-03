@@ -67,7 +67,7 @@ export function VehicleListPage() {
         title="Vehicles"
         description="Registration, insurance, PUC, fitness — all expiries in one place"
         actions={
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center">
             {/* View mode toggle — individual vs family (grouped by owner) */}
             <div
               role="tablist"

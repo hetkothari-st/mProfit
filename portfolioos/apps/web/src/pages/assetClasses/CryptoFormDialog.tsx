@@ -306,7 +306,7 @@ export function CryptoFormDialog({
           </div>
 
           {/* Exchange + Network */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Exchange / Platform</Label>
               <Select {...register('exchange')} className="w-full">
@@ -330,7 +330,7 @@ export function CryptoFormDialog({
           </div>
 
           {/* Date + Qty + Price */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label>Date <span className="text-destructive">*</span></Label>
               <Input type="date" {...register('tradeDate')} />

@@ -110,7 +110,7 @@ export function LrsTab() {
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-medium text-foreground">LRS utilisation</h3>
               {util && (
@@ -164,7 +164,7 @@ export function LrsTab() {
         ) : (
           <Card>
             <CardContent className="p-0">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm rtable">
                 <thead className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">Date</th>
@@ -179,19 +179,19 @@ export function LrsTab() {
                 <tbody>
                   {remittancesQ.data.map((r: LrsRemittanceDTO) => (
                     <tr key={r.id} className="border-b border-border/50 last:border-0">
-                      <td className="px-3 py-2 font-mono text-xs">{r.remittanceDate.slice(0, 10)}</td>
-                      <td className="px-3 py-2">{r.purpose}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{r.bankName ?? '—'}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      <td data-label="Date" className="px-3 py-2 font-mono text-xs">{r.remittanceDate.slice(0, 10)}</td>
+                      <td data-label="Purpose" className="px-3 py-2">{r.purpose}</td>
+                      <td data-label="Bank" className="px-3 py-2 text-muted-foreground">{r.bankName ?? '—'}</td>
+                      <td data-label="Foreign" className="px-3 py-2 text-right font-mono tabular-nums">
                         {formatCurrency(r.foreignAmount, r.currency)}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      <td data-label="INR equiv" className="px-3 py-2 text-right font-mono tabular-nums">
                         {formatINR(r.inrEquivalent)}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      <td data-label="TCS" className="px-3 py-2 text-right font-mono tabular-nums">
                         {new Decimal(r.tcsDeducted).gt(0) ? formatINR(r.tcsDeducted) : '—'}
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td data-fullrow className="px-3 py-2 text-right">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -217,7 +217,7 @@ export function LrsTab() {
           <h3 className="mb-2 text-sm font-medium text-foreground">TCS credits</h3>
           <Card>
             <CardContent className="p-0">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm rtable">
                 <thead className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">FY</th>
@@ -229,12 +229,12 @@ export function LrsTab() {
                 <tbody>
                   {tcsQ.data.map((t) => (
                     <tr key={t.id} className="border-b border-border/50 last:border-0">
-                      <td className="px-3 py-2 font-mono text-xs">{t.financialYear}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{t.collectorName ?? '—'}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      <td data-label="FY" className="px-3 py-2 font-mono text-xs">{t.financialYear}</td>
+                      <td data-label="Collector" className="px-3 py-2 text-muted-foreground">{t.collectorName ?? '—'}</td>
+                      <td data-label="TAN" className="px-3 py-2 font-mono text-xs text-muted-foreground">
                         {t.tan ?? '—'}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      <td data-label="Amount" className="px-3 py-2 text-right font-mono tabular-nums">
                         {formatINR(t.tcsAmount)}
                       </td>
                     </tr>
@@ -341,7 +341,7 @@ function LrsDialog({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label htmlFor="currency">Currency</Label>
               <select

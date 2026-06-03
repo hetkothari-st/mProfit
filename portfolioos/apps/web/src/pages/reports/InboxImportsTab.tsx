@@ -160,7 +160,7 @@ export function InboxImportsTab() {
           <Select
             value={senderFilter}
             onChange={(e) => setSenderFilter(e.target.value)}
-            className="h-8 text-xs w-56"
+            className="h-8 text-xs w-full sm:w-56"
           >
             <option value="">All senders</option>
             {(sendersQ.data ?? []).map((s) => (
@@ -170,14 +170,14 @@ export function InboxImportsTab() {
           <Select
             value={docTypeFilter}
             onChange={(e) => setDocTypeFilter(e.target.value)}
-            className="h-8 text-xs w-44"
+            className="h-8 text-xs w-full sm:w-44"
           >
             <option value="">All doc types</option>
             {INBOX_DOC_TYPES.filter((t) => t !== 'NOT_FINANCIAL').map((t) => (
               <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
             ))}
           </Select>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-2">
             {someSelected && (
               <>
                 <span className="text-xs text-muted-foreground">{selected.size} selected</span>
@@ -196,7 +196,7 @@ export function InboxImportsTab() {
 
       <Card>
         <CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="rtable w-full text-sm">
             <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-2 py-2 w-8"></th>

@@ -131,7 +131,7 @@ export function PortfolioGroupDetailPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm rtable">
                 <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="text-left font-medium px-4 py-2">Asset</th>
@@ -147,29 +147,30 @@ export function PortfolioGroupDetailPage() {
                 <tbody className="divide-y">
                   {holdings.map((h) => (
                     <tr key={h.id} className="hover:bg-muted/30">
-                      <td className="px-4 py-2">
+                      <td data-label="Asset" className="px-4 py-2">
                         <div className="font-medium">{h.assetName}</div>
                         {h.symbol && (
                           <div className="text-xs text-muted-foreground">{h.symbol}</div>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-muted-foreground">
+                      <td data-label="Class" className="px-4 py-2 text-muted-foreground">
                         {ASSET_CLASS_LABELS[h.assetClass] ?? h.assetClass}
                       </td>
-                      <td className="px-4 py-2 text-right numeric">
+                      <td data-label="Qty" className="px-4 py-2 text-right numeric">
                         {formatQuantity(h.quantity)}
                       </td>
-                      <td className="px-4 py-2 text-right numeric">
+                      <td data-label="Avg cost" className="px-4 py-2 text-right numeric">
                         {formatINR(h.avgCostPrice)}
                       </td>
-                      <td className="px-4 py-2 text-right numeric">{formatINR(h.totalCost)}</td>
-                      <td className="px-4 py-2 text-right numeric">
+                      <td data-label="Invested" className="px-4 py-2 text-right numeric">{formatINR(h.totalCost)}</td>
+                      <td data-label="CMP" className="px-4 py-2 text-right numeric">
                         {formatINR(h.currentPrice)}
                       </td>
-                      <td className="px-4 py-2 text-right numeric">
+                      <td data-label="Value" className="px-4 py-2 text-right numeric">
                         {formatINR(h.currentValue)}
                       </td>
                       <td
+                        data-label="P&L"
                         className={`px-4 py-2 text-right numeric ${
                           h.unrealisedPnL && toDecimal(h.unrealisedPnL).greaterThan(0)
                             ? 'text-positive'

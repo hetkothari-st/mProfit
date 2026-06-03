@@ -83,7 +83,7 @@ function MetricCard({ label, value, sub, className = '' }: { label: string; valu
     <Card>
       <CardContent className="px-4 py-3">
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{label}</p>
-        <p className={`text-xl font-semibold tabular-nums mt-1 ${className}`}>{value}</p>
+        <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${className}`}>{value}</p>
         {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
       </CardContent>
     </Card>
@@ -301,7 +301,7 @@ function StatementTable({ card }: { card: CreditCardDTO }) {
             <p className="text-xs text-muted-foreground">No statements recorded yet</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="rtable w-full text-xs">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 pr-4 text-muted-foreground font-medium">Month</th>
@@ -322,12 +322,12 @@ function StatementTable({ card }: { card: CreditCardDTO }) {
                     return (
                       <tr key={s.id}
                         className={`border-b last:border-0 ${isOverdue ? 'bg-negative/5' : s.status === 'PAID' ? 'bg-positive/5' : ''}`}>
-                        <td className="py-2 pr-4 font-medium">{formatMonth(s.forMonth)}</td>
-                        <td className="py-2 pr-4 text-right tabular-nums font-medium">{formatINR(s.statementAmount)}</td>
-                        <td className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
+                        <td data-label="Month" className="py-2 pr-4 font-medium">{formatMonth(s.forMonth)}</td>
+                        <td data-label="Statement" className="py-2 pr-4 text-right tabular-nums font-medium">{formatINR(s.statementAmount)}</td>
+                        <td data-label="Min due" className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
                           {s.minimumDue ? formatINR(s.minimumDue) : '—'}
                         </td>
-                        <td className="py-2 pr-4">
+                        <td data-label="Due date" className="py-2 pr-4">
                           <span>{formatDate(s.dueDate)}</span>
                           {s.status !== 'PAID' && (
                             <span className={`ml-1.5 text-xs ${
@@ -337,16 +337,16 @@ function StatementTable({ card }: { card: CreditCardDTO }) {
                             </span>
                           )}
                         </td>
-                        <td className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
+                        <td data-label="Paid" className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
                           {s.paidAmount ? formatINR(s.paidAmount) : '—'}
                         </td>
-                        <td className="py-2 pr-4 text-muted-foreground">{formatDate(s.paidOn)}</td>
-                        <td className="py-2 pr-4">
+                        <td data-label="Paid on" className="py-2 pr-4 text-muted-foreground">{formatDate(s.paidOn)}</td>
+                        <td data-label="Status" className="py-2 pr-4">
                           <span className={`font-medium capitalize ${STATEMENT_STATUS_COLORS[s.status] ?? ''}`}>
                             {s.status.toLowerCase()}
                           </span>
                         </td>
-                        <td className="py-2">
+                        <td data-label="" data-fullrow className="py-2">
                           {confirmDeleteId === s.id ? (
                             <div className="flex gap-1 justify-end">
                               <Button size="sm" variant="destructive" className="h-5 px-1.5 text-xs"
@@ -422,7 +422,7 @@ export function CreditCardDetailPage() {
     return (
       <div>
         <PageHeader title="Loading…" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="h-24 animate-pulse bg-muted/60" />
           ))}
@@ -452,12 +452,12 @@ export function CreditCardDetailPage() {
       />
 
       {/* Card visual */}
-      <div className="mb-4 max-w-md">
+      <div className="mb-4 w-full max-w-md">
         <CreditCardVisual card={card} size="lg" />
       </div>
 
       {/* Summary metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <MetricCard
           label="Credit limit"
           value={formatINR(card.creditLimit)}

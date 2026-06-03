@@ -346,8 +346,8 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
                 <Car className="w-8 h-8 text-primary" />
               </div>
               <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-bold tracking-tight uppercase">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="text-lg sm:text-xl font-bold tracking-tight uppercase">
                     {watch('registrationNo')}
                   </h3>
                   <div className="px-2 py-0.5 rounded text-[10px] font-bold border bg-background">

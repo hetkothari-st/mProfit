@@ -394,7 +394,7 @@ function PropertyCard({
           {/* Top: name + actions + occupancy stamp */}
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="min-w-0 flex-1">
-              <h3 className="font-sans font-semibold text-[28px] leading-[1.1] tracking-[-0.02em] text-foreground truncate">
+              <h3 className="font-sans font-semibold text-xl sm:text-[28px] leading-[1.1] tracking-[-0.02em] text-foreground truncate">
                 {property.name}
               </h3>
               {property.address && (
@@ -442,7 +442,7 @@ function PropertyCard({
                     <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
                       Monthly rent
                     </p>
-                    <p className="numeric-display-lg money-digits text-2xl mt-0.5">
+                    <p className="numeric-display-lg money-digits text-xl sm:text-2xl mt-0.5 break-words">
                       {formatINR(monthlyRent.toString())}
                     </p>
                   </div>
@@ -503,7 +503,7 @@ function SummaryStrip({ properties }: { properties: RentalPropertyDTO[] }) {
   }, new Decimal(0));
 
   return (
-    <div className="grid grid-cols-3 gap-3 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
       {[
         {
           label: 'Active tenancies',
@@ -528,7 +528,7 @@ function SummaryStrip({ properties }: { properties: RentalPropertyDTO[] }) {
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
               {m.label}
             </p>
-            <p className={`text-xl font-semibold tabular-nums mt-1 ${m.className ?? ''}`}>
+            <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${m.className ?? ''}`}>
               {m.value}
             </p>
             <p className="text-xs text-muted-foreground">{m.sub}</p>
@@ -570,7 +570,7 @@ export function RentalListPage() {
         title="Rental Properties"
         description="Track properties, tenancies, rent receipts, and expenses"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <DownloadReportButton type="rental" />
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" /> Add property
@@ -614,7 +614,7 @@ export function RentalListPage() {
             <div key={p.id}>
               {confirmDeleteId === p.id ? (
                 <Card className="border-destructive">
-                  <CardContent className="p-5 flex items-center justify-between gap-3">
+                  <CardContent className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm font-medium">Delete "{p.name}"?</p>
                     <div className="flex gap-2">
                       <Button variant="destructive" size="sm" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(p.id)}>

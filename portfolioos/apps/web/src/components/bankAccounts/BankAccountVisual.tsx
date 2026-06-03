@@ -233,9 +233,9 @@ export function BankAccountVisual({
   const palette = resolvePalette(account.bankName);
   const hideSensitive = usePrivacyStore((s) => s.hideSensitive);
   const dim = account.status !== 'ACTIVE' ? 'grayscale opacity-75' : '';
-  const padding = size === 'lg' ? 'p-6' : 'p-4 sm:p-5';
-  const acctNumberSize = size === 'lg' ? 'text-xl' : 'text-base sm:text-lg';
-  const balanceSize = size === 'lg' ? 'text-3xl' : 'text-2xl';
+  const padding = size === 'lg' ? 'p-4 sm:p-6' : 'p-4 sm:p-5';
+  const acctNumberSize = size === 'lg' ? 'text-base sm:text-xl' : 'text-base sm:text-lg';
+  const balanceSize = size === 'lg' ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl';
 
   return (
     <div

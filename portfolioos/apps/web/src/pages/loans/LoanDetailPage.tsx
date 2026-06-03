@@ -78,7 +78,7 @@ function MetricCard({ label, value, sub, className = '' }: { label: string; valu
     <Card>
       <CardContent className="px-4 py-3">
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{label}</p>
-        <p className={`text-xl font-semibold tabular-nums mt-1 ${className}`}>{value}</p>
+        <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${className}`}>{value}</p>
         {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
       </CardContent>
     </Card>
@@ -484,7 +484,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-2xl">
+        <CardTitle className="text-xl sm:text-2xl">
           Payment history
           <span className="ml-2 text-xs font-normal text-muted-foreground">
             {loan.payments.length} records
@@ -493,7 +493,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
       </CardHeader>
       <CardContent>
         <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="rtable w-full text-xs">
             <thead className="sticky top-0 bg-card z-10">
               <tr className="border-b">
                 <th className="text-left py-2 pr-4 text-muted-foreground font-medium bg-card">Date</th>
@@ -508,18 +508,18 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
             <tbody>
               {loan.payments.map((p) => (
                 <tr key={p.id} className="border-b last:border-0 group">
-                  <td className="py-2 pr-4 tabular-nums">{formatDate(p.paidOn)}</td>
-                  <td className={`py-2 pr-4 font-medium ${PAYMENT_TYPE_COLORS[p.paymentType] ?? ''}`}>
+                  <td data-label="Date" className="py-2 pr-4 tabular-nums">{formatDate(p.paidOn)}</td>
+                  <td data-label="Type" className={`py-2 pr-4 font-medium ${PAYMENT_TYPE_COLORS[p.paymentType] ?? ''}`}>
                     {PAYMENT_TYPE_LABELS[p.paymentType] ?? p.paymentType}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums font-medium">{formatINR(p.amount)}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
+                  <td data-label="Amount" className="py-2 pr-4 text-right tabular-nums font-medium">{formatINR(p.amount)}</td>
+                  <td data-label="Principal" className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
                     {p.principalPart ? formatINR(p.principalPart) : '—'}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
+                  <td data-label="Interest" className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
                     {p.interestPart ? formatINR(p.interestPart) : '—'}
                   </td>
-                  <td className="py-2 pr-4 text-muted-foreground">{p.notes ?? '—'}</td>
+                  <td data-label="Note" className="py-2 pr-4 text-muted-foreground">{p.notes ?? '—'}</td>
                   <td className="py-2">
                     {confirmDeletePayId === p.id ? (
                       <div className="flex gap-1">
@@ -627,7 +627,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-2xl">
+        <CardTitle className="text-xl sm:text-2xl">
           Amortization schedule
           <span className="ml-2 text-xs font-normal text-muted-foreground">{rows.length} months</span>
         </CardTitle>
@@ -643,7 +643,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
       </CardHeader>
       <CardContent>
         <div ref={scrollRef} className="max-h-[600px] overflow-y-auto overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="rtable w-full text-xs">
             <thead className="sticky top-0 bg-card z-10">
               <tr className="border-b">
                 <th className="text-left py-2 pr-3 text-muted-foreground font-medium w-12 bg-card">#</th>
@@ -670,14 +670,14 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
                   pendingMonth === row.month && (markPaid.isPending || undoPaid.isPending);
                 return (
                   <tr key={row.month} data-month={row.month} className={`border-b last:border-0 ${rowCls}`}>
-                    <td className="py-1.5 pr-3 tabular-nums text-muted-foreground">{row.month}</td>
-                    <td className="py-1.5 pr-3 tabular-nums">{formatDate(row.date)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{formatINR(row.openingBalance)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums font-medium">{formatINR(row.emiAmount)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-positive">{formatINR(row.principalPart)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-muted-foreground">{formatINR(row.interestPart)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{formatINR(row.closingBalance)}</td>
-                    <td className="py-1.5 pr-3">
+                    <td data-label="#" className="py-1.5 pr-3 tabular-nums text-muted-foreground">{row.month}</td>
+                    <td data-label="Date" className="py-1.5 pr-3 tabular-nums">{formatDate(row.date)}</td>
+                    <td data-label="Opening" className="py-1.5 pr-3 text-right tabular-nums">{formatINR(row.openingBalance)}</td>
+                    <td data-label="EMI" className="py-1.5 pr-3 text-right tabular-nums font-medium">{formatINR(row.emiAmount)}</td>
+                    <td data-label="Principal" className="py-1.5 pr-3 text-right tabular-nums text-positive">{formatINR(row.principalPart)}</td>
+                    <td data-label="Interest" className="py-1.5 pr-3 text-right tabular-nums text-muted-foreground">{formatINR(row.interestPart)}</td>
+                    <td data-label="Closing" className="py-1.5 pr-3 text-right tabular-nums">{formatINR(row.closingBalance)}</td>
+                    <td data-label="Status" className="py-1.5 pr-3">
                       {row.isPaid ? (
                         <span className="text-positive font-medium">Paid {row.paidOn ? formatDate(row.paidOn) : ''}</span>
                       ) : isOverdue ? (
@@ -686,7 +686,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
                         <span className="text-muted-foreground">Upcoming</span>
                       )}
                     </td>
-                    <td className="py-1.5 text-right">
+                    <td data-label="Action" className="py-1.5 text-right">
                       {row.isPaid ? (
                         <Button
                           size="sm"
@@ -809,7 +809,7 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
       {/* Outstanding balance trajectory */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-2xl">Outstanding balance over time</CardTitle>
+          <CardTitle className="text-xl sm:text-2xl">Outstanding balance over time</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={240}>
@@ -857,11 +857,11 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Principal vs Interest stacked area */}
-        <Card className="md:col-span-2">
+        <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-2xl">EMI split — principal vs interest</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl">EMI split — principal vs interest</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
@@ -925,7 +925,7 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
         {/* Total cost donut */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-2xl">Total cost</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl">Total cost</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={180}>
@@ -1049,7 +1049,7 @@ export function LoanDetailPage() {
     return (
       <div>
         <PageHeader title="Loading…" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="h-24 animate-pulse bg-muted/60" />
           ))}
@@ -1105,7 +1105,7 @@ export function LoanDetailPage() {
       )}
 
       {/* Summary metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <MetricCard
           label="Outstanding balance"
           value={summary ? formatINR(summary.outstandingBalance) : '…'}

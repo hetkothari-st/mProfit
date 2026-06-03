@@ -186,8 +186,8 @@ export function MailboxesPage() {
               </a>{' '}
               instead of your real password. IMAP must be enabled in your Gmail settings.
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="col-span-1 sm:col-span-2">
                 <Label>Label</Label>
                 <Input
                   value={form.label ?? ''}
@@ -210,7 +210,7 @@ export function MailboxesPage() {
                   onChange={(e) => setForm({ ...form, port: Number(e.target.value) })}
                 />
               </div>
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2">
                 <Label>Username (email)</Label>
                 <Input
                   type="email"
@@ -218,7 +218,7 @@ export function MailboxesPage() {
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
                 />
               </div>
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2">
                 <Label>Password / App password</Label>
                 <Input
                   type="password"
@@ -241,7 +241,7 @@ export function MailboxesPage() {
                   placeholder="noreply@camsonline.com"
                 />
               </div>
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2">
                 <Label>Subject filter (optional)</Label>
                 <Input
                   value={form.subjectFilter ?? ''}
@@ -250,7 +250,7 @@ export function MailboxesPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-1">
               <Button
                 variant="outline"
                 onClick={() => testMut.mutate()}

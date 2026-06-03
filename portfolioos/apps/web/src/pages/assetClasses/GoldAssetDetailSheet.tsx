@@ -36,7 +36,7 @@ function StatCard({ label, value, sub, positive }: {
   return (
     <div className="rounded-lg border bg-card p-3">
       <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1">{label}</p>
-      <p className={`text-lg font-bold tabular-nums ${positive === true ? 'text-green-600 dark:text-green-400' : positive === false ? 'text-red-600 dark:text-red-400' : ''}`}>
+      <p className={`text-base sm:text-lg font-bold tabular-nums break-words ${positive === true ? 'text-green-600 dark:text-green-400' : positive === false ? 'text-red-600 dark:text-red-400' : ''}`}>
         {value}
       </p>
       {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}

@@ -52,7 +52,7 @@ function StatCell({ icon, label, unit, value, tone }: StatCellProps) {
         <span className={tone}>{icon}</span>
         <span>{label}</span>
       </div>
-      <div className="mt-1 text-lg font-semibold tabular-nums">
+      <div className="mt-1 text-base sm:text-lg font-semibold tabular-nums">
         {formatRupees(value)}
       </div>
       <div className="text-[10px] text-muted-foreground">{unit}</div>
@@ -140,7 +140,7 @@ export function FuelPricesCard({ defaultRtoCode }: FuelPricesCardProps) {
           )}
 
           {data && (
-            <div className="flex-1 flex flex-wrap lg:flex-nowrap divide-x-0">
+            <div className="flex-1 flex flex-wrap divide-x-0">
               <StatCell
                 icon={<Fuel className="h-3.5 w-3.5" />}
                 label="Petrol"

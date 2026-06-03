@@ -116,7 +116,7 @@ export function MfOverlapCard() {
             All MF schemes ({schemes.length})
           </div>
           <div className="border rounded-md overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rtable">
               <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="text-left px-3 py-1.5">Scheme</th>
@@ -128,14 +128,14 @@ export function MfOverlapCard() {
               <tbody className="divide-y">
                 {schemes.map((s) => (
                   <tr key={s.fundId} className="hover:bg-muted/30">
-                    <td className="px-3 py-1.5">{s.schemeName}</td>
-                    <td className="px-3 py-1.5 text-muted-foreground">{s.amcName}</td>
-                    <td className="px-3 py-1.5">
+                    <td data-label="Scheme" className="px-3 py-1.5">{s.schemeName}</td>
+                    <td data-label="AMC" className="px-3 py-1.5 text-muted-foreground">{s.amcName}</td>
+                    <td data-label="Plan" className="px-3 py-1.5">
                       <Badge variant="outline" className={`text-[10px] ${PLAN_TONE[s.planType]}`}>
                         {s.planType}
                       </Badge>
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{formatINR(s.totalValue)}</td>
+                    <td data-label="Value" className="px-3 py-1.5 text-right tabular-nums">{formatINR(s.totalValue)}</td>
                   </tr>
                 ))}
               </tbody>

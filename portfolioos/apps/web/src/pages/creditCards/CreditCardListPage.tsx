@@ -76,7 +76,7 @@ function SummaryStrip({ cards }: { cards: CreditCardDTO[] }) {
     : totalOutstanding.div(totalLimit).mul(100).toNumber();
 
   return (
-    <div className="grid grid-cols-3 gap-3 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
       {[
         { label: 'Total credit limit', value: formatINR(totalLimit.toString()), sub: `across ${active.length} active cards` },
         { label: 'Total outstanding', value: formatINR(totalOutstanding.toString()), sub: 'combined across active cards' },
@@ -90,7 +90,7 @@ function SummaryStrip({ cards }: { cards: CreditCardDTO[] }) {
         <Card key={m.label}>
           <CardContent className="px-4 py-3">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{m.label}</p>
-            <p className={`text-xl font-semibold tabular-nums mt-1 ${m.className ?? ''}`}>{m.value}</p>
+            <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${m.className ?? ''}`}>{m.value}</p>
             <p className="text-xs text-muted-foreground">{m.sub}</p>
           </CardContent>
         </Card>

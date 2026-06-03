@@ -31,7 +31,7 @@ export function ImportDropzone({ onUpload, uploading }: Props) {
         setDragOver(true);
       }}
       onDragLeave={() => setDragOver(false)}
-      className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+      className={`relative border-2 border-dashed rounded-lg p-4 sm:p-8 text-center transition-colors ${
         dragOver ? 'border-primary bg-primary/5' : 'border-muted bg-muted/20'
       }`}
     >

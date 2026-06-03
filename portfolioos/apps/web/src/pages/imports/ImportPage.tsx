@@ -182,9 +182,9 @@ export function ImportPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex-row items-center justify-between gap-3">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
           <CardTitle>Import history</CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {someSelected && (
               <>
                 <span className="text-xs text-muted-foreground">{selected.size} selected</span>
@@ -224,7 +224,7 @@ export function ImportPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="rtable w-full text-sm">
                 <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-4 py-2 w-8">
@@ -252,14 +252,14 @@ export function ImportPage() {
                     const isRunning = status === 'PROCESSING' || status === 'PENDING';
                     return (
                       <tr key={j.id} className={`hover:bg-muted/30 ${selected.has(j.id) ? 'bg-accent/20' : ''}`}>
-                        <td className="px-4 py-2 w-8">
+                        <td data-label="" className="px-4 py-2 w-8">
                           <button onClick={() => toggleOne(j.id)} className="flex items-center text-muted-foreground hover:text-foreground">
                             {selected.has(j.id)
                               ? <CheckSquare className="h-4 w-4 text-primary" />
                               : <Square className="h-4 w-4" />}
                           </button>
                         </td>
-                        <td className="px-4 py-2">
+                        <td data-label="File" className="px-4 py-2">
                           <div className="max-w-xs">
                             <div className="flex items-center gap-2">
                               <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -267,10 +267,10 @@ export function ImportPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-2 text-xs text-muted-foreground">
+                        <td data-label="Type" className="px-4 py-2 text-xs text-muted-foreground">
                           {j.type.replace(/_/g, ' ')}
                         </td>
-                        <td className="px-4 py-2">
+                        <td data-label="Status" className="px-4 py-2">
                           {pwErr ? (
                             <button
                               className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 transition-colors"
@@ -289,17 +289,17 @@ export function ImportPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums">{j.totalRows ?? '—'}</td>
-                        <td className="px-4 py-2 text-right tabular-nums text-positive">
+                        <td data-label="Rows" className="px-4 py-2 text-right tabular-nums">{j.totalRows ?? '—'}</td>
+                        <td data-label="Success" className="px-4 py-2 text-right tabular-nums text-positive">
                           {j.successRows ?? '—'}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-negative">
+                        <td data-label="Failed" className="px-4 py-2 text-right tabular-nums text-negative">
                           {j.failedRows ?? '—'}
                         </td>
-                        <td className="px-4 py-2 text-xs text-muted-foreground">
+                        <td data-label="Uploaded" className="px-4 py-2 text-xs text-muted-foreground">
                           {new Date(j.createdAt).toLocaleString()}
                         </td>
-                        <td className="px-4 py-2">
+                        <td data-fullrow className="px-4 py-2">
                           <div className="flex justify-end gap-1">
                             {!pwErr && ((j.failedRows ?? 0) > 0 || (j.errorLog?.parserWarnings?.length ?? 0) > 0 || (j.errorLog?.rowErrors?.length ?? 0) > 0) && (
                               <Button

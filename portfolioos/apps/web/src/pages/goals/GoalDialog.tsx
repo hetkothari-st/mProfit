@@ -176,7 +176,7 @@ export function GoalDialog({ open, existing, portfolios, onClose, onSaved }: Pro
             <Input id="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="category">Category</Label>
               <Select
@@ -211,7 +211,7 @@ export function GoalDialog({ open, existing, portfolios, onClose, onSaved }: Pro
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="target">Target amount (₹)</Label>
               <Input

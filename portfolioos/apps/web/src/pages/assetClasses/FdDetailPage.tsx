@@ -229,7 +229,7 @@ function InstallmentSchedule({
       </CardHeader>
       <CardContent>
         <div className="max-h-[500px] overflow-y-auto overflow-x-auto rounded-md border">
-          <table className="w-full text-xs">
+          <table className="w-full text-xs rtable">
             <thead className="sticky top-0 bg-muted/50 backdrop-blur z-10">
               <tr className="border-b">
                 <th className="text-left py-2 px-3 font-medium text-muted-foreground w-10">#</th>
@@ -247,16 +247,16 @@ function InstallmentSchedule({
                 const rowCls = paid ? 'bg-emerald-50/40 dark:bg-emerald-950/10' : r.isOverdue ? 'bg-rose-50/40 dark:bg-rose-950/10' : '';
                 return (
                   <tr key={r.month} className={`border-b last:border-0 ${rowCls}`}>
-                    <td className="py-1.5 px-3 tabular-nums text-muted-foreground">{r.month}</td>
-                    <td className="py-1.5 px-3 tabular-nums">{formatDate(r.dueDate)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatINR(r.expectedAmount.toString())}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums text-muted-foreground hidden sm:table-cell">
+                    <td data-label="" className="py-1.5 px-3 tabular-nums text-muted-foreground">{r.month}</td>
+                    <td data-label="Due date" className="py-1.5 px-3 tabular-nums">{formatDate(r.dueDate)}</td>
+                    <td data-label="Installment" className="py-1.5 px-3 text-right tabular-nums font-medium">{formatINR(r.expectedAmount.toString())}</td>
+                    <td data-label="Cumulative principal" className="py-1.5 px-3 text-right tabular-nums text-muted-foreground hidden sm:table-cell">
                       {formatINR(r.cumulativePrincipal.toString())}
                     </td>
-                    <td className="py-1.5 px-3 text-right tabular-nums text-muted-foreground hidden md:table-cell">
+                    <td data-label="Projected value" className="py-1.5 px-3 text-right tabular-nums text-muted-foreground hidden md:table-cell">
                       {formatINR(r.projectedValue.toString())}
                     </td>
-                    <td className="py-1.5 px-3">
+                    <td data-label="Status" className="py-1.5 px-3">
                       {paid ? (
                         <span className="text-emerald-600 dark:text-emerald-400 font-medium">
                           Paid {r.paidTxn?.tradeDate ? formatDate(r.paidTxn.tradeDate) : ''}
@@ -267,7 +267,7 @@ function InstallmentSchedule({
                         <span className="text-muted-foreground">Upcoming</span>
                       )}
                     </td>
-                    <td className="py-1.5 px-3 text-right">
+                    <td data-fullrow className="py-1.5 px-3 text-right">
                       {paid ? (
                         <Button
                           size="sm" variant="ghost"
@@ -337,7 +337,7 @@ function PaymentHistory({
       </CardHeader>
       <CardContent>
         <div className="max-h-[500px] overflow-y-auto overflow-x-auto rounded-md border">
-          <table className="w-full text-xs">
+          <table className="w-full text-xs rtable">
             <thead className="sticky top-0 bg-muted/50 backdrop-blur z-10">
               <tr className="border-b">
                 <th className="text-left py-2 px-3 font-medium text-muted-foreground">Date</th>
@@ -353,8 +353,8 @@ function PaymentHistory({
                 const isSynthetic = !t;
                 return (
                   <tr key={r.key} className={`border-b last:border-0 group hover:bg-muted/20 ${isSynthetic ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}>
-                    <td className="py-2 px-3 tabular-nums">{formatDate(r.date)}</td>
-                    <td className={`py-2 px-3 font-medium ${TXN_COLORS[r.type] ?? ''}`}>
+                    <td data-label="Date" className="py-2 px-3 tabular-nums">{formatDate(r.date)}</td>
+                    <td data-label="Type" className={`py-2 px-3 font-medium ${TXN_COLORS[r.type] ?? ''}`}>
                       <span className="inline-flex items-center gap-1.5">
                         {TXN_LABEL[r.type] ?? r.type}
                         {isSynthetic && (
@@ -365,14 +365,14 @@ function PaymentHistory({
                         )}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-right tabular-nums font-medium"
+                    <td data-label="Amount" className="py-2 px-3 text-right tabular-nums font-medium"
                       style={isSynthetic ? { color: CHART_INTEREST } : undefined}>
                       {isSynthetic ? '+' : ''}{formatINR(r.amount.toString())}
                     </td>
-                    <td className="py-2 px-3 text-muted-foreground hidden md:table-cell max-w-[200px] truncate">
+                    <td data-label="Notes" className="py-2 px-3 text-muted-foreground hidden md:table-cell max-w-[200px] truncate">
                       {r.notes ?? (isSynthetic ? 'Computed from rate & frequency' : '—')}
                     </td>
-                    <td className="py-2 px-3 text-right">
+                    <td data-fullrow className="py-2 px-3 text-right">
                       {isSynthetic ? (
                         <span className="text-[10px] text-muted-foreground/60">—</span>
                       ) : confirmId === t!.id ? (
@@ -720,7 +720,7 @@ export function FdDetailPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Sticky nav */}
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b px-4 sm:px-6 py-3 flex items-center gap-3">
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b px-4 sm:px-6 py-3 flex items-center gap-3 flex-wrap">
         <Button variant="ghost" size="sm" className="gap-1.5 -ml-2" onClick={() => navigate('/fds')}>
           <ArrowLeft className="h-4 w-4" />
           FDs & RDs
@@ -772,9 +772,9 @@ export function FdDetailPage() {
               </div>
               {rate != null && (
                 <div className="text-right shrink-0">
-                  <p className="font-display text-5xl text-accent leading-none tabular-nums">
+                  <p className="font-display text-4xl sm:text-5xl text-accent leading-none tabular-nums">
                     {rate.toString()}
-                    <span className="text-2xl align-top">%</span>
+                    <span className="text-xl sm:text-2xl align-top">%</span>
                   </p>
                   <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.28em] text-muted-foreground">
                     per annum

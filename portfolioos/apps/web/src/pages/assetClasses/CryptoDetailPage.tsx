@@ -25,7 +25,7 @@ function Stat({ label, value, sub, highlight }: { label: string; value: string; 
   return (
     <div className="rounded-xl border bg-card px-4 py-3">
       <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
-      <p className={`text-xl font-bold tabular-nums mt-0.5
+      <p className={`text-lg sm:text-xl font-bold tabular-nums mt-0.5 break-words
         ${highlight === 'positive' ? 'text-emerald-600 dark:text-emerald-400' : highlight === 'negative' ? 'text-rose-600 dark:text-rose-400' : ''}`}>
         {value}
       </p>
@@ -107,7 +107,7 @@ export function CryptoDetailPage() {
         <p className="font-medium text-sm truncate">{displayName}</p>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6">
         {/* ── Hero ── */}
         <div className="grid lg:grid-cols-[auto_1fr] gap-6 mb-8 items-start">
           {/* Coin badge */}
@@ -157,7 +157,7 @@ export function CryptoDetailPage() {
                   </span>
                 )}
               </div>
-              <p className="text-4xl font-bold tabular-nums">
+              <p className="text-2xl sm:text-4xl font-bold tabular-nums break-words">
                 {currentInr ? formatINR(currentInr.toString()) : '—'}
               </p>
               <div className="flex items-baseline gap-4 mt-1.5">
@@ -192,7 +192,7 @@ export function CryptoDetailPage() {
                   : <TrendingDown className="h-5 w-5 text-rose-600 dark:text-rose-400 shrink-0" />}
                 <div>
                   <p className="text-xs text-muted-foreground">Unrealised P&L</p>
-                  <p className={`text-lg font-bold tabular-nums ${isGain ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                  <p className={`text-base sm:text-lg font-bold tabular-nums break-words ${isGain ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
                     {isGain ? '+' : ''}{formatINR(pnl.toString())}
                     {pnlPct != null && (
                       <span className="text-sm font-normal ml-2 opacity-80">
