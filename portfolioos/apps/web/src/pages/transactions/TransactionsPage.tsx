@@ -80,7 +80,7 @@ export function TransactionsPage() {
             />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm rtable">
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground uppercase tracking-wide border-b">
                     <th className="py-2 pr-4">Date</th>
@@ -99,8 +99,8 @@ export function TransactionsPage() {
                       className="border-b last:border-0 hover:bg-accent/20 cursor-pointer"
                       onClick={() => { setEditing(r); setOpen(true); }}
                     >
-                      <td className="py-2 pr-4 tabular-nums">{r.tradeDate}</td>
-                      <td className="py-2 pr-4">
+                      <td data-label="Date" className="py-2 pr-4 tabular-nums">{r.tradeDate}</td>
+                      <td data-label="Type" className="py-2 pr-4">
                         <span
                           className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${
                             r.transactionType === 'BUY' || r.transactionType === 'SIP' || r.transactionType === 'SWITCH_IN'
@@ -113,16 +113,16 @@ export function TransactionsPage() {
                           {r.transactionType.replace(/_/g, ' ')}
                         </span>
                       </td>
-                      <td className="py-2 pr-4">
+                      <td data-label="Asset" className="py-2 pr-4">
                         <div className="font-medium truncate max-w-xs">{r.assetName}</div>
                         <div className="text-xs text-muted-foreground">
                           {r.symbol ?? r.schemeCode ?? r.isin ?? r.assetClass}
                         </div>
                       </td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{formatQuantity(r.quantity)}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{formatINR(r.price)}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums font-medium">{formatINR(r.netAmount)}</td>
-                      <td className="py-2 pr-4 text-muted-foreground">{r.broker ?? '—'}</td>
+                      <td data-label="Qty" className="py-2 pr-4 text-right tabular-nums">{formatQuantity(r.quantity)}</td>
+                      <td data-label="Price" className="py-2 pr-4 text-right tabular-nums">{formatINR(r.price)}</td>
+                      <td data-label="Net" className="py-2 pr-4 text-right tabular-nums font-medium">{formatINR(r.netAmount)}</td>
+                      <td data-label="Broker" className="py-2 pr-4 text-muted-foreground">{r.broker ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>

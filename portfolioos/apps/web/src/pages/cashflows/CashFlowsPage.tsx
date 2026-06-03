@@ -125,7 +125,7 @@ export function CashFlowsPage() {
           )}
 
           {!isLoading && items.length > 0 && (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rtable">
               <thead>
                 <tr className="border-b text-xs text-muted-foreground">
                   <th className="text-left px-4 py-2 font-medium w-[120px]">Date</th>
@@ -185,10 +185,10 @@ function CashFlowRow({ cf }: { cf: CashFlowDTO }) {
 
   return (
     <tr className="hover:bg-muted/40 transition-colors">
-      <td className="px-4 py-3 text-muted-foreground tabular-nums whitespace-nowrap">
+      <td data-label="Date" className="px-4 py-3 text-muted-foreground tabular-nums whitespace-nowrap">
         {dateStr}
       </td>
-      <td className="px-4 py-3">
+      <td data-label="Description" className="px-4 py-3">
         <div className="flex items-center gap-2">
           <div
             className={[
@@ -207,10 +207,11 @@ function CashFlowRow({ cf }: { cf: CashFlowDTO }) {
           </span>
         </div>
       </td>
-      <td className="px-4 py-3 text-muted-foreground hidden md:table-cell truncate max-w-[160px]">
+      <td data-label="Portfolio" className="px-4 py-3 text-muted-foreground hidden md:table-cell truncate max-w-[160px]">
         {cf.portfolioName}
       </td>
       <td
+        data-label="Amount"
         className={[
           'px-4 py-3 text-right tabular-nums font-medium',
           isInflow ? 'text-positive' : 'text-negative',

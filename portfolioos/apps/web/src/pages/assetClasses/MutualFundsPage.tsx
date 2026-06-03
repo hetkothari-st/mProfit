@@ -407,7 +407,7 @@ export function MutualFundsPage() {
           {/* Holdings */}
           <Card className="mb-8">
             <CardContent className="p-4 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm rtable">
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground uppercase tracking-wide border-b">
                     <th className="py-2 pr-4">Scheme</th>
@@ -423,13 +423,13 @@ export function MutualFundsPage() {
                 <tbody>
                   {mfs.map((h: HoldingRow & { portfolioName: string; portfolioId: string }) => (
                     <tr key={h.id} className="border-b last:border-0 hover:bg-accent/20">
-                      <td className="py-2 pr-4">
+                      <td data-label="Scheme" className="py-2 pr-4">
                         <div className="font-medium truncate max-w-sm">{h.assetName}</div>
                         <div className="text-xs text-muted-foreground">{h.symbol ?? h.isin ?? ''}</div>
                       </td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{h.quantity}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums">
+                      <td data-label="Units" className="py-2 pr-4 text-right tabular-nums">{h.quantity}</td>
+                      <td data-label="Avg cost" className="py-2 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
+                      <td data-label="NAV" className="py-2 pr-4 text-right tabular-nums">
                         {h.currentPrice != null ? (
                           <div className="flex flex-col items-end leading-tight">
                             <span>{formatINR(h.currentPrice)}</span>
@@ -437,14 +437,14 @@ export function MutualFundsPage() {
                           </div>
                         ) : '—'}
                       </td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{h.currentValue != null ? formatINR(h.currentValue) : '—'}</td>
-                      <td className={`py-2 pr-4 text-right tabular-nums ${h.unrealisedPnL && toDecimal(h.unrealisedPnL).greaterThan(0) ? 'text-positive' : h.unrealisedPnL && toDecimal(h.unrealisedPnL).isNegative() ? 'text-negative' : ''}`}>
+                      <td data-label="Value" className="py-2 pr-4 text-right tabular-nums">{h.currentValue != null ? formatINR(h.currentValue) : '—'}</td>
+                      <td data-label="P&L" className={`py-2 pr-4 text-right tabular-nums ${h.unrealisedPnL && toDecimal(h.unrealisedPnL).greaterThan(0) ? 'text-positive' : h.unrealisedPnL && toDecimal(h.unrealisedPnL).isNegative() ? 'text-negative' : ''}`}>
                         {h.unrealisedPnL != null ? formatINR(h.unrealisedPnL) : '—'}
                       </td>
-                      <td className={`py-2 pr-4 text-right tabular-nums ${(h.unrealisedPnLPct ?? 0) > 0 ? 'text-positive' : (h.unrealisedPnLPct ?? 0) < 0 ? 'text-negative' : ''}`}>
+                      <td data-label="%" className={`py-2 pr-4 text-right tabular-nums ${(h.unrealisedPnLPct ?? 0) > 0 ? 'text-positive' : (h.unrealisedPnLPct ?? 0) < 0 ? 'text-negative' : ''}`}>
                         {h.unrealisedPnLPct != null ? formatPercent(h.unrealisedPnLPct) : '—'}
                       </td>
-                      <td className="py-2 pr-4 text-xs text-muted-foreground">{h.portfolioName}</td>
+                      <td data-label="Portfolio" className="py-2 pr-4 text-xs text-muted-foreground">{h.portfolioName}</td>
                     </tr>
                   ))}
                 </tbody>

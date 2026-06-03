@@ -331,7 +331,7 @@ export function StocksPage() {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm rtable">
                 <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
                   <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     <th className="py-2 pl-3 pr-2 w-8 font-semibold"></th>
@@ -469,11 +469,11 @@ function StockRow({
         }`}
         onClick={onToggle}
       >
-        <td className="relative py-2.5 pl-3 pr-2 text-muted-foreground">
+        <td data-label="" className="relative py-2.5 pl-3 pr-2 text-muted-foreground">
           <span className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${edgeCls}`} />
           {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </td>
-        <td className="py-2.5 pr-4">
+        <td data-label="Symbol" className="py-2.5 pr-4">
           <span className="inline-flex items-center gap-1.5">
             <span className="font-mono font-semibold tracking-wide text-foreground">
               {h.symbol ?? '—'}
@@ -485,10 +485,10 @@ function StockRow({
             )}
           </span>
         </td>
-        <td className="py-2.5 pr-4 truncate max-w-xs text-muted-foreground">{h.assetName}</td>
-        <td className="py-2.5 pr-4 text-right tabular-nums">{h.quantity}</td>
-        <td className="py-2.5 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
-        <td className="py-2.5 pr-4 text-right tabular-nums font-medium">
+        <td data-label="Name" className="py-2.5 pr-4 truncate max-w-xs text-muted-foreground">{h.assetName}</td>
+        <td data-label="Qty" className="py-2.5 pr-4 text-right tabular-nums">{h.quantity}</td>
+        <td data-label="Avg cost" className="py-2.5 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
+        <td data-label="LTP" className="py-2.5 pr-4 text-right tabular-nums font-medium">
           {h.currentPrice != null ? (
             <div className="flex flex-col items-end leading-tight">
               <span>{formatINR(h.currentPrice)}</span>
@@ -498,22 +498,22 @@ function StockRow({
             <span className="text-muted-foreground italic text-xs">—</span>
           )}
         </td>
-        <td className="py-2.5 pr-4 text-right tabular-nums">
+        <td data-label="Value" className="py-2.5 pr-4 text-right tabular-nums">
           {h.currentValue != null ? formatINR(h.currentValue) : '—'}
         </td>
-        <td className={`py-2.5 pr-4 text-right tabular-nums font-medium ${pnlCls}`}>
+        <td data-label="P&L" className={`py-2.5 pr-4 text-right tabular-nums font-medium ${pnlCls}`}>
           {h.unrealisedPnL != null ? formatINR(h.unrealisedPnL) : '—'}
         </td>
-        <td className={`py-2.5 pr-4 text-right tabular-nums ${pnlPctCls}`}>
+        <td data-label="%" className={`py-2.5 pr-4 text-right tabular-nums ${pnlPctCls}`}>
           {pnlPct != null ? formatPercent(pnlPct) : '—'}
         </td>
-        <td className="py-2.5 pr-4 text-xs text-muted-foreground truncate max-w-[180px]">
+        <td data-label="Portfolios" className="py-2.5 pr-4 text-xs text-muted-foreground truncate max-w-[180px]">
           {h.portfolioNames.join(', ')}
         </td>
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={10} className="bg-muted/20 dark:bg-muted/10 p-0 border-t border-border">
+          <td data-fullrow colSpan={10} className="bg-muted/20 dark:bg-muted/10 p-0 border-t border-border">
             <div className="px-4 py-4 space-y-4">
               {portfolioBreakdown.length > 1 && (
                 <PortfolioBreakdown rows={portfolioBreakdown} />
