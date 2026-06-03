@@ -10,6 +10,7 @@ import {
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { useEffect, useCallback } from 'react';
+import { cn } from '@/lib/cn';
 import { useAssetSectionsStore } from '@/stores/assetSections.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { SortableAssetClassItem } from './SortableAssetClassItem';
@@ -109,7 +110,7 @@ export function AssetClassSectionList({ items, collapsed }: Props) {
         modifiers={[restrictToVerticalAxis]}
       >
         <SortableContext items={displayPrefs.map((s) => s.key)} strategy={verticalListSortingStrategy}>
-          <ul className="space-y-0.5">
+          <ul className={cn(collapsed ? 'flex flex-col items-center gap-1' : 'space-y-0.5')}>
             {displayPrefs.map((pref) => {
               const navItem = itemMap.get(pref.key);
               if (!navItem) return null;

@@ -115,17 +115,26 @@ function NavSection({ section, collapsed }: { section: { heading?: string; items
           <span className="flex-1 h-px bg-sidebar-border/60" />
         </div>
       )}
-      <ul className="space-y-0.5">
+      <ul className={cn(collapsed ? 'flex flex-col items-center gap-1' : 'space-y-0.5')}>
         {section.items.map((item) => (
           <li key={item.to}>
             <NavLink
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  'group/nav nav-rail relative flex items-center gap-3 rounded-md px-3 py-2 text-[14px] transition-all',
-                  'text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/70',
-                  isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
-                  collapsed && 'justify-center px-2',
+                  'group/nav nav-rail relative transition-all text-sidebar-foreground/80 hover:text-sidebar-accent-foreground',
+                  collapsed
+                    ? cn(
+                        'flex items-center justify-center h-10 w-10 rounded-lg',
+                        isActive
+                          ? 'bg-accent/15 ring-1 ring-accent/40 text-accent'
+                          : 'hover:bg-sidebar-accent/70',
+                      )
+                    : cn(
+                        'flex items-center gap-3 rounded-md px-3 py-2 text-[14px]',
+                        'hover:bg-sidebar-accent/70',
+                        isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
+                      ),
                 )
               }
               title={collapsed ? item.label : undefined}
@@ -141,7 +150,8 @@ function NavSection({ section, collapsed }: { section: { heading?: string; items
                   )}
                   <item.icon
                     className={cn(
-                      'h-[18px] w-[18px] shrink-0 transition-colors',
+                      'shrink-0 transition-colors',
+                      collapsed ? 'h-[19px] w-[19px]' : 'h-[18px] w-[18px]',
                       isActive ? 'text-accent' : 'text-sidebar-foreground/60 group-hover/nav:text-sidebar-accent-foreground',
                     )}
                     strokeWidth={1.7}
@@ -178,8 +188,8 @@ export function Sidebar() {
       )}
     >
       {/* brand mark + collapse */}
-      <div className="flex items-center justify-between px-4 h-[72px] border-b border-sidebar-border/70">
-        {!collapsed && (
+      {!collapsed ? (
+        <div className="flex items-center justify-between px-4 h-[72px] border-b border-sidebar-border/70">
           <Link
             to="/dashboard"
             aria-label="Go to dashboard"
@@ -207,13 +217,22 @@ export function Sidebar() {
               </div>
             </div>
           </Link>
-        )}
-        {collapsed && (
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="p-1.5 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors focus-ring"
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-2 px-2 py-3 border-b border-sidebar-border/70">
           <Link
             to="/dashboard"
             aria-label="Go to dashboard"
             title="Dashboard"
-            className="mx-auto h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm focus-ring transition-opacity hover:opacity-90"
+            className="h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm focus-ring transition-opacity hover:opacity-90"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 4v16" />
@@ -221,30 +240,37 @@ export function Sidebar() {
               <path d="M14 13l4 7" />
             </svg>
           </Link>
-        )}
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          className={cn(
-            'p-1.5 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors focus-ring',
-            collapsed && 'absolute top-4 right-2',
-          )}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="p-1.5 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors focus-ring"
+            aria-label="Expand sidebar"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
-      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+      <nav
+        className={cn(
+          'flex-1 overflow-y-auto py-4',
+          collapsed ? 'px-2 space-y-3' : 'px-3 space-y-5',
+        )}
+      >
         {/* Overview */}
         <NavSection section={{ heading: 'Overview', items: OVERVIEW_ITEMS }} collapsed={collapsed} />
+
+        {collapsed && <div className="mx-3 h-px bg-sidebar-border/50" />}
 
         {/* Asset Classes — drag/hide enabled */}
         <AssetClassSectionList items={ASSET_CLASS_ITEMS} collapsed={collapsed} />
 
         {/* Inbox + Tools */}
         {NAV_SECTIONS.map((section, i) => (
-          <NavSection key={i} section={section} collapsed={collapsed} />
+          <div key={i}>
+            {collapsed && <div className="mx-3 h-px bg-sidebar-border/50 mb-3" />}
+            <NavSection section={section} collapsed={collapsed} />
+          </div>
         ))}
       </nav>
 
