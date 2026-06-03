@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { cn } from '@/lib/cn';
 import { BudgetGauge } from './BudgetGauge';
 import { AssetClassSectionList } from './AssetClassSectionList';
 import { NavSection, OVERVIEW_ITEMS, ASSET_CLASS_ITEMS, NAV_SECTIONS } from './navItems';
@@ -14,8 +15,8 @@ export function SidebarNav({
   return (
     <div className="flex flex-col h-full">
       {/* brand mark + collapse */}
-      <div className="flex items-center justify-between px-4 h-[72px] border-b border-sidebar-border/70">
-        {!collapsed && (
+      {!collapsed ? (
+        <div className="flex items-center justify-between px-4 h-[72px] border-b border-sidebar-border/70">
           <Link
             to="/dashboard"
             aria-label="Go to dashboard"
@@ -43,13 +44,15 @@ export function SidebarNav({
               </div>
             </div>
           </Link>
-        )}
-        {collapsed && (
+          {renderToggle}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-2 px-2 py-3 border-b border-sidebar-border/70">
           <Link
             to="/dashboard"
             aria-label="Go to dashboard"
             title="Dashboard"
-            className="mx-auto h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm focus-ring transition-opacity hover:opacity-90"
+            className="h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm focus-ring transition-opacity hover:opacity-90"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 4v16" />
@@ -57,20 +60,30 @@ export function SidebarNav({
               <path d="M14 13l4 7" />
             </svg>
           </Link>
-        )}
-        {renderToggle}
-      </div>
+          {renderToggle}
+        </div>
+      )}
 
-      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+      <nav
+        className={cn(
+          'flex-1 overflow-y-auto py-4',
+          collapsed ? 'px-2 space-y-3' : 'px-3 space-y-5',
+        )}
+      >
         {/* Overview */}
         <NavSection section={{ heading: 'Overview', items: OVERVIEW_ITEMS }} collapsed={collapsed} />
+
+        {collapsed && <div className="mx-3 h-px bg-sidebar-border/50" />}
 
         {/* Asset Classes — drag/hide enabled */}
         <AssetClassSectionList items={ASSET_CLASS_ITEMS} collapsed={collapsed} />
 
         {/* Inbox + Tools */}
         {NAV_SECTIONS.map((section, i) => (
-          <NavSection key={i} section={section} collapsed={collapsed} />
+          <div key={i}>
+            {collapsed && <div className="mx-3 h-px bg-sidebar-border/50 mb-3" />}
+            <NavSection section={section} collapsed={collapsed} />
+          </div>
         ))}
       </nav>
 

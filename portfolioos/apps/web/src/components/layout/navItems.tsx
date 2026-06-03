@@ -108,17 +108,26 @@ export function NavSection({ section, collapsed }: { section: { heading?: string
           <span className="flex-1 h-px bg-sidebar-border/60" />
         </div>
       )}
-      <ul className="space-y-0.5">
+      <ul className={cn(collapsed ? 'flex flex-col items-center gap-1' : 'space-y-0.5')}>
         {section.items.map((item) => (
-          <li key={item.to}>
+          <li key={item.to} className={collapsed ? '' : 'block'}>
             <NavLink
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  'group/nav nav-rail relative flex items-center gap-3 rounded-md px-3 py-2 text-[14px] transition-all',
-                  'text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/70',
-                  isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
-                  collapsed && 'justify-center px-2',
+                  'group/nav nav-rail relative transition-all text-sidebar-foreground/80 hover:text-sidebar-accent-foreground',
+                  collapsed
+                    ? cn(
+                        'flex items-center justify-center h-10 w-10 rounded-lg',
+                        isActive
+                          ? 'bg-accent/15 ring-1 ring-accent/40 text-accent'
+                          : 'hover:bg-sidebar-accent/70',
+                      )
+                    : cn(
+                        'flex items-center gap-3 rounded-md px-3 py-2 text-[14px]',
+                        'hover:bg-sidebar-accent/70',
+                        isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
+                      ),
                 )
               }
               title={collapsed ? item.label : undefined}
@@ -134,7 +143,8 @@ export function NavSection({ section, collapsed }: { section: { heading?: string
                   )}
                   <item.icon
                     className={cn(
-                      'h-[18px] w-[18px] shrink-0 transition-colors',
+                      'shrink-0 transition-colors',
+                      collapsed ? 'h-[19px] w-[19px]' : 'h-[18px] w-[18px]',
                       isActive ? 'text-accent' : 'text-sidebar-foreground/60 group-hover/nav:text-sidebar-accent-foreground',
                     )}
                     strokeWidth={1.7}
