@@ -20,7 +20,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { finfactorApi } from '@/api/finfactor.api';
+import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
+import { Select } from '@/components/ui/select';
 import { InsightsView } from './finvu/InsightsView';
 import { LinkedAccountsView } from './finvu/LinkedAccountsView';
 import { HoldingFolioView } from './finvu/HoldingFolioView';
@@ -115,8 +117,23 @@ export function FinvuSandboxCard() {
   const demoMode = statusQ.data?.demoMode ?? false;
   const activeLabel = BUTTONS.find((b) => b.key === lastEndpoint)?.label ?? null;
 
+  // Sentinel value for the "auto / Finvu Imports" option in the picker —
+  // keeps the data attribute simple while we send `undefined` to the API.
+  const NEW_PORTFOLIO = '__new__';
+  const [importPortfolioId, setImportPortfolioId] = useState<string>(NEW_PORTFOLIO);
+
+  const portfoliosQ = useQuery({
+    queryKey: ['portfolios'],
+    queryFn: () => portfoliosApi.list(),
+    staleTime: 30_000,
+  });
+
   const importMut = useMutation({
-    mutationFn: () => finfactorApi.syncMutualFunds({ uniqueIdentifier: uid }),
+    mutationFn: () =>
+      finfactorApi.syncMutualFunds({
+        uniqueIdentifier: uid,
+        ...(importPortfolioId !== NEW_PORTFOLIO ? { portfolioId: importPortfolioId } : {}),
+      }),
     onSuccess: (r) => {
       toast.success(
         r.transactionsCreated > 0
@@ -231,30 +248,54 @@ export function FinvuSandboxCard() {
           ))}
         </div>
 
-        <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 space-y-3">
           <div className="flex items-start gap-2 text-xs">
             <Download className="h-4 w-4 mt-0.5 text-accent shrink-0" />
             <div>
               <div className="font-medium text-foreground">Import into PortfolioOS</div>
               <div className="text-muted-foreground">
-                Projects every Finvu MF holding + statement row into the {' '}
-                <code className="font-mono">Finvu Imports</code> portfolio as real transactions.
-                Idempotent — re-running skips already-imported rows.
+                Projects every Finvu MF holding + statement row into the selected portfolio
+                as real transactions. Idempotent — re-running skips already-imported rows
+                (matched by Finvu txnId).
               </div>
             </div>
           </div>
-          <Button
-            size="sm"
-            onClick={() => importMut.mutate()}
-            disabled={!configured || importMut.isPending || !uid.trim()}
-          >
-            {importMut.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Download className="h-3.5 w-3.5" />
-            )}
-            {importMut.isPending ? 'Importing…' : 'Import to portfolio'}
-          </Button>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[220px]">
+              <Label className="text-[10.5px] uppercase tracking-kerned text-muted-foreground font-medium">
+                Destination portfolio
+              </Label>
+              <Select
+                className="mt-1"
+                value={importPortfolioId}
+                onChange={(e) => setImportPortfolioId(e.target.value)}
+                disabled={portfoliosQ.isLoading || importMut.isPending}
+              >
+                <option value={NEW_PORTFOLIO}>+ New "Finvu Imports" portfolio (auto-create)</option>
+                {(portfoliosQ.data ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Pick any existing portfolio to merge Finvu txns into it; or let us create a
+                dedicated <code className="font-mono">Finvu Imports</code> bucket on first run.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => importMut.mutate()}
+              disabled={!configured || importMut.isPending || !uid.trim()}
+            >
+              {importMut.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              {importMut.isPending ? 'Importing…' : 'Import to portfolio'}
+            </Button>
+          </div>
         </div>
 
         {result !== null && lastEndpoint && (
