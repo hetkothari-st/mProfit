@@ -432,3 +432,97 @@ export function isFinfactorDemoMode(): boolean {
   const v = process.env['FINFACTOR_DEMO_MODE'];
   return v === 'true' || v === '1' || v === 'yes';
 }
+
+// Benchmark trailing returns — Finfactor returns an envelope with `data`
+// keyed by benchmark code and an inner ranges map. The legend tells us
+// which benchmark code maps to which display name.
+export const DEMO_BENCHMARK_TRAILING = {
+  status: { code: 200, message: 'OK' },
+  data: {
+    OB163: {
+      benchmarkCode: 'OB163',
+      benchmarkName: 'NIFTY 50 TRI',
+      asOf: '2025-10-21',
+      ranges: {
+        '1M': { return: 2.45, absoluteReturn: 540.12 },
+        '3M': { return: 7.32, absoluteReturn: 1620.85 },
+        '6M': { return: 12.87, absoluteReturn: 2840.4 },
+        '9M': { return: 18.42, absoluteReturn: 4072.55 },
+        '1Y': { return: 22.18, absoluteReturn: 4901.5 },
+        '2Y': { return: 41.6, absoluteReturn: 9198.2 },
+        '3Y': { return: 56.74, absoluteReturn: 12546.18 },
+        '5Y': { return: 92.18, absoluteReturn: 20384.55 },
+        '7Y': { return: 134.5, absoluteReturn: 29742.0 },
+        '10Y': { return: 210.6, absoluteReturn: 46582.45 },
+      },
+    },
+    OB48: {
+      benchmarkCode: 'OB48',
+      benchmarkName: 'NIFTY Midcap 150 TRI',
+      asOf: '2025-10-21',
+      ranges: {
+        '1M': { return: 3.18, absoluteReturn: 702.4 },
+        '3M': { return: 9.85, absoluteReturn: 2179.65 },
+        '6M': { return: 17.42, absoluteReturn: 3852.78 },
+        '9M': { return: 24.91, absoluteReturn: 5510.45 },
+        '1Y': { return: 31.48, absoluteReturn: 6962.4 },
+        '2Y': { return: 58.42, absoluteReturn: 12918.55 },
+        '3Y': { return: 72.91, absoluteReturn: 16124.18 },
+        '5Y': { return: 145.6, absoluteReturn: 32197.5 },
+        '7Y': { return: 198.4, absoluteReturn: 43872.4 },
+        '10Y': { return: 312.5, absoluteReturn: 69112.0 },
+      },
+    },
+    OB97: {
+      benchmarkCode: 'OB97',
+      benchmarkName: 'CRISIL Composite Bond Index',
+      asOf: '2025-10-21',
+      ranges: {
+        '1M': { return: 0.62, absoluteReturn: 137.1 },
+        '3M': { return: 1.85, absoluteReturn: 409.18 },
+        '6M': { return: 3.74, absoluteReturn: 826.91 },
+        '9M': { return: 5.68, absoluteReturn: 1255.42 },
+        '1Y': { return: 7.62, absoluteReturn: 1685.4 },
+        '2Y': { return: 15.4, absoluteReturn: 3404.55 },
+        '3Y': { return: 23.18, absoluteReturn: 5126.7 },
+        '5Y': { return: 41.78, absoluteReturn: 9234.45 },
+        '7Y': { return: 62.15, absoluteReturn: 13742.8 },
+        '10Y': { return: 96.4, absoluteReturn: 21307.0 },
+      },
+    },
+  },
+  legend_info: {
+    return: 'Cumulative percentage return over the range',
+    absoluteReturn: 'Absolute INR return on a notional ₹100,000 investment',
+  },
+};
+
+// Point-to-point comparison between two dates.
+export const DEMO_BENCHMARK_POINT_TO_POINT = {
+  status: { code: 200, message: 'OK' },
+  data: {
+    OB48: {
+      benchmarkCode: 'OB48',
+      benchmarkName: 'NIFTY Midcap 150 TRI',
+      point_1: { date: '2024-02-01', value: 23485.42 },
+      point_2: { date: '2024-02-29', value: 24218.91 },
+      absoluteChange: 733.49,
+      percentageChange: 3.12,
+      days: 28,
+    },
+    OB163: {
+      benchmarkCode: 'OB163',
+      benchmarkName: 'NIFTY 50 TRI',
+      point_1: { date: '2024-02-01', value: 30215.18 },
+      point_2: { date: '2024-02-29', value: 30874.45 },
+      absoluteChange: 659.27,
+      percentageChange: 2.18,
+      days: 28,
+    },
+  },
+  legend_info: {
+    point_1: 'Start date NAV / index value',
+    point_2: 'End date NAV / index value',
+    percentageChange: 'Percentage change point_1 → point_2',
+  },
+};

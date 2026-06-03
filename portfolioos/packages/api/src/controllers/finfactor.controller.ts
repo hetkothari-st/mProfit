@@ -16,6 +16,8 @@ import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import { finfactorBaseUrl, isFinfactorConfigured } from '../integrations/finfactor/client.js';
 import { isFinfactorDemoMode } from '../integrations/finfactor/demo.js';
 import {
+  fetchBenchmarkPointToPoint,
+  fetchBenchmarkTrailing,
   fetchMfAnalysis,
   fetchMfHoldingsByIsin,
   fetchMfInsights,
@@ -54,6 +56,18 @@ const analysisSchema = baseSchema.extend({
   filterCdslNsdl: z.boolean().optional(),
   filterZeroValueAccounts: z.boolean().optional(),
   filterZeroValueHoldings: z.boolean().optional(),
+});
+
+const benchmarkTrailingSchema = z.object({
+  benchmarks: z.string().min(1, 'benchmarks is required (comma-separated codes)'),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD'),
+  ranges: z.string().min(1, 'ranges is required (e.g. "1M,3M,1Y")'),
+});
+
+const benchmarkP2PSchema = z.object({
+  benchmarks: z.string().min(1, 'benchmarks is required'),
+  point_1: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'point_1 must be YYYY-MM-DD'),
+  point_2: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'point_2 must be YYYY-MM-DD'),
 });
 
 function ensureAuth(req: Request): void {
@@ -122,5 +136,19 @@ export async function postMfHoldingByIsin(req: Request, res: Response) {
   if (!isin) throw new BadRequestError('isin path param required');
   const body = linkedAccountsSchema.parse(req.body);
   const data = await fetchMfHoldingsByIsin(isin, body);
+  ok(res, data);
+}
+
+export async function postBenchmarkTrailing(req: Request, res: Response) {
+  ensureAuth(req);
+  const body = benchmarkTrailingSchema.parse(req.body);
+  const data = await fetchBenchmarkTrailing(body);
+  ok(res, data);
+}
+
+export async function postBenchmarkPointToPoint(req: Request, res: Response) {
+  ensureAuth(req);
+  const body = benchmarkP2PSchema.parse(req.body);
+  const data = await fetchBenchmarkPointToPoint(body);
   ok(res, data);
 }

@@ -81,3 +81,24 @@ export type MfStatementResponse = Array<Record<string, unknown>>;
 export type MfAnalysisResponse = Record<string, unknown>;
 
 export type MfHoldingFolioResponse = Record<string, unknown>;
+
+export interface BenchmarkTrailingRequest {
+  benchmarks: string; // comma-separated codes e.g. "OB163,OB48"
+  from: string; // YYYY-MM-DD
+  ranges: string; // comma-separated e.g. "1M,3M,6M,1Y"
+}
+
+export interface BenchmarkPointToPointRequest {
+  benchmarks: string;
+  point_1: string; // YYYY-MM-DD
+  point_2: string; // YYYY-MM-DD
+}
+
+export interface FinfactorEnvelope<T> {
+  status?: { code?: number; message?: string };
+  data?: T;
+  legend_info?: Record<string, unknown>;
+}
+
+export type BenchmarkTrailingResponse = FinfactorEnvelope<Record<string, unknown>>;
+export type BenchmarkPointToPointResponse = FinfactorEnvelope<Record<string, unknown>>;

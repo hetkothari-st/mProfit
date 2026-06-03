@@ -45,6 +45,18 @@ export interface MfStatementBody {
   filterCdslNsdl?: boolean;
 }
 
+export interface BenchmarkTrailingBody {
+  benchmarks: string;
+  from: string;
+  ranges: string;
+}
+
+export interface BenchmarkPointToPointBody {
+  benchmarks: string;
+  point_1: string;
+  point_2: string;
+}
+
 export const finfactorApi = {
   async status(): Promise<FinfactorStatus> {
     const { data } = await api.get<ApiResponse<FinfactorStatus>>('/api/integrations/finfactor/status');
@@ -77,6 +89,20 @@ export const finfactorApi = {
   async mfHoldingByIsin(isin: string, body: MfLinkedAccountsBody): Promise<unknown> {
     const { data } = await api.post<ApiResponse<unknown>>(
       `/api/integrations/finfactor/mf/holdings/${encodeURIComponent(isin)}`,
+      body,
+    );
+    return unwrap(data);
+  },
+  async benchmarkTrailing(body: BenchmarkTrailingBody): Promise<unknown> {
+    const { data } = await api.post<ApiResponse<unknown>>(
+      '/api/integrations/finfactor/mf/benchmark/trailing',
+      body,
+    );
+    return unwrap(data);
+  },
+  async benchmarkPointToPoint(body: BenchmarkPointToPointBody): Promise<unknown> {
+    const { data } = await api.post<ApiResponse<unknown>>(
+      '/api/integrations/finfactor/mf/benchmark/point-to-point',
       body,
     );
     return unwrap(data);

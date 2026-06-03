@@ -3,6 +3,8 @@ import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
 import {
   getFinfactorStatus,
+  postBenchmarkPointToPoint,
+  postBenchmarkTrailing,
   postMfAnalysis,
   postMfHoldingByIsin,
   postMfInsights,
@@ -25,3 +27,5 @@ finfactorRouter.post('/mf/linked-accounts/holding-folio', asyncHandler(postMfLin
 finfactorRouter.post('/mf/statement', asyncHandler(postMfStatement));
 finfactorRouter.post('/mf/analysis', asyncHandler(postMfAnalysis));
 finfactorRouter.post('/mf/holdings/:isin', asyncHandler(postMfHoldingByIsin));
+finfactorRouter.post('/mf/benchmark/trailing', asyncHandler(postBenchmarkTrailing));
+finfactorRouter.post('/mf/benchmark/point-to-point', asyncHandler(postBenchmarkPointToPoint));
