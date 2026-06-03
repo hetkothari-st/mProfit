@@ -95,11 +95,11 @@ export function OnboardingWizard({ onComplete }: Props) {
         </div>
 
         {/* Step card */}
-        <div className="rounded-xl border bg-card shadow-sm p-8">
+        <div className="rounded-xl border bg-card shadow-sm p-4 sm:p-8">
           {currentStep === 'portfolio' && (
             <div>
               <Briefcase className="h-10 w-10 text-primary mb-4" />
-              <h2 className="text-2xl font-semibold mb-1">{STEPS[0].title}</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[0].title}</h2>
               <p className="text-muted-foreground mb-6">{STEPS[0].subtitle}</p>
               <div className="mb-6">
                 <Label>Portfolio name</Label>
@@ -124,7 +124,7 @@ export function OnboardingWizard({ onComplete }: Props) {
           {currentStep === 'gmail' && (
             <div>
               <Mail className="h-10 w-10 text-primary mb-4" />
-              <h2 className="text-2xl font-semibold mb-1">{STEPS[1].title}</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[1].title}</h2>
               <p className="text-muted-foreground mb-6">{STEPS[1].subtitle}</p>
               <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 mb-6">
                 PortfolioOS connects to Gmail with read-only access to import transaction alerts from your bank, broker, and insurer emails.
@@ -143,7 +143,7 @@ export function OnboardingWizard({ onComplete }: Props) {
           {currentStep === 'senders' && (
             <div>
               <Users className="h-10 w-10 text-primary mb-4" />
-              <h2 className="text-2xl font-semibold mb-1">{STEPS[2].title}</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[2].title}</h2>
               <p className="text-muted-foreground mb-6">{STEPS[2].subtitle}</p>
               <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 mb-6">
                 After connecting Gmail, PortfolioOS will scan your inbox to discover financial email senders — HDFC alerts, Zerodha trade confirmations, LIC premium notices, and more.
@@ -161,7 +161,7 @@ export function OnboardingWizard({ onComplete }: Props) {
           {currentStep === 'import' && (
             <div>
               <FileUp className="h-10 w-10 text-primary mb-4" />
-              <h2 className="text-2xl font-semibold mb-1">{STEPS[3].title}</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[3].title}</h2>
               <p className="text-muted-foreground mb-6">{STEPS[3].subtitle}</p>
               <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 mb-6">
                 Download a Consolidated Account Statement (CAS) from CAMS or KFintech and upload it here to instantly import all your mutual fund holdings.
@@ -181,7 +181,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               <div className="h-16 w-16 rounded-full bg-primary/15 grid place-items-center mx-auto mb-4">
                 <Check className="h-8 w-8 text-primary" />
               </div>
-              <h2 className="text-2xl font-semibold mb-2">You're all set!</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-2">You're all set!</h2>
               <p className="text-muted-foreground mb-8">
                 Your portfolio is ready. Add transactions manually, import more statements, or wait for Gmail to start pulling in your transaction emails.
               </p>

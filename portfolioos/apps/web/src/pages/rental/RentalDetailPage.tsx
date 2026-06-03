@@ -206,13 +206,13 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
   return (
     <>
       <tr className="hover:bg-muted/30 transition-colors group">
-        <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground whitespace-nowrap">
+        <td data-label="Month" className="px-4 py-3 text-sm tabular-nums text-muted-foreground whitespace-nowrap">
           {receipt.forMonth}
         </td>
-        <td className="px-4 py-3 text-sm tabular-nums text-right">
+        <td data-label="Expected" className="px-4 py-3 text-sm tabular-nums text-right">
           {formatINR(expectedAmt.toString())}
         </td>
-        <td className="px-4 py-3 text-sm tabular-nums text-right">
+        <td data-label="Received" className="px-4 py-3 text-sm tabular-nums text-right">
           {receivedAmt ? (
             <span
               className={
@@ -225,16 +225,16 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
             <span className="text-muted-foreground">—</span>
           )}
         </td>
-        <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground whitespace-nowrap">
+        <td data-label="Due" className="px-4 py-3 text-sm tabular-nums text-muted-foreground whitespace-nowrap">
           {new Date(receipt.dueDate).toLocaleDateString('en-IN', {
             day: '2-digit',
             month: 'short',
           })}
         </td>
-        <td className="px-4 py-3">
+        <td data-label="Status" className="px-4 py-3">
           <ReceiptStatusBadge status={receipt.status} />
         </td>
-        <td className="px-4 py-3">
+        <td data-fullrow className="px-4 py-3">
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {isActionable && (
               <>
@@ -362,7 +362,7 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-right shrink-0">
+        <div className="flex flex-wrap items-center gap-3 text-right shrink-0">
           {totalReceived.gt(0) && (
             <div>
               <p className="text-xs text-muted-foreground">Total received</p>
@@ -381,7 +381,7 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
 
       {expanded && receipts.length > 0 && (
         <div className="border-t max-h-[400px] overflow-y-auto overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm rtable">
             <thead className="sticky top-0 z-10">
               <tr className="border-b text-xs text-muted-foreground">
                 <th className="text-left px-4 py-2 font-medium bg-muted">Month</th>
@@ -717,7 +717,7 @@ function PnLPanel({ propertyId }: { propertyId: string }) {
   const pnl = new Decimal(data.netPnL);
 
   return (
-    <div className="grid grid-cols-3 gap-3 text-sm">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
       <div className="rounded-lg border p-3">
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">
           FY {fy}–{String(fy + 1).slice(2)}
@@ -828,7 +828,7 @@ export function RentalDetailPage() {
           .filter(Boolean)
           .join(' · ')}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setAddExpenseOpen(true)}>
               <TrendingDown className="h-4 w-4" /> Add expense
             </Button>
@@ -891,7 +891,7 @@ export function RentalDetailPage() {
             </CardContent>
           ) : (
             <CardContent className="p-0">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm rtable">
                 <thead>
                   <tr className="border-b text-xs text-muted-foreground">
                     <th className="text-left px-4 py-2 font-medium w-[110px]">Date</th>
@@ -906,21 +906,21 @@ export function RentalDetailPage() {
                 <tbody className="divide-y">
                   {(property.expenses ?? []).map((e) => (
                     <tr key={e.id} className="hover:bg-muted/30 transition-colors group">
-                      <td className="px-4 py-3 tabular-nums text-muted-foreground whitespace-nowrap">
+                      <td data-label="Date" className="px-4 py-3 tabular-nums text-muted-foreground whitespace-nowrap">
                         {new Date(e.paidOn).toLocaleDateString('en-IN', {
                           day: '2-digit',
                           month: 'short',
                           year: 'numeric',
                         })}
                       </td>
-                      <td className="px-4 py-3">{EXPENSE_LABELS[e.expenseType] ?? e.expenseType}</td>
-                      <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                      <td data-label="Type" className="px-4 py-3">{EXPENSE_LABELS[e.expenseType] ?? e.expenseType}</td>
+                      <td data-label="Description" className="px-4 py-3 text-muted-foreground hidden md:table-cell">
                         {e.description ?? '—'}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-negative font-medium">
+                      <td data-label="Amount" className="px-4 py-3 text-right tabular-nums text-negative font-medium">
                         −{formatINR(e.amount)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-fullrow className="px-4 py-3">
                         <Button
                           variant="ghost"
                           size="sm"

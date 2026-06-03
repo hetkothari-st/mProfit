@@ -221,7 +221,7 @@ export function ConnectorsPage() {
           return (
             <Card key={b.id}>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between gap-2">
+                <CardTitle className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Plug className="h-4 w-4" />
                     {b.name}

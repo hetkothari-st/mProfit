@@ -79,7 +79,7 @@ export function PortfolioDetailPage() {
         title={portfolio?.name ?? 'Portfolio'}
         description={portfolio?.description ?? undefined}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               onClick={() => refreshMutation.mutate()}

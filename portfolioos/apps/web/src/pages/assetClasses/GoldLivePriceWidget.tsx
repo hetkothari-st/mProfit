@@ -83,8 +83,8 @@ export function GoldLivePriceWidget() {
   return (
     <Card className="mb-6 border-amber-200/60 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/60 to-yellow-50/30 dark:from-amber-950/20 dark:to-yellow-950/10">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <CardTitle className="text-base font-semibold">Live Rates</CardTitle>
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               {isFetching ? (
@@ -126,7 +126,7 @@ export function GoldLivePriceWidget() {
                 <span className="text-lg">🪙</span>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Gold (24K base)</p>
-                  <p className="text-2xl font-bold tabular-nums text-amber-700 dark:text-amber-400">
+                  <p className="text-xl sm:text-2xl font-bold tabular-nums text-amber-700 dark:text-amber-400 break-words">
                     {data?.GOLD ? formatPrice(data.GOLD) : '—'}
                     <span className="text-sm font-normal text-muted-foreground ml-1">/gram</span>
                   </p>
@@ -171,7 +171,7 @@ export function GoldLivePriceWidget() {
                   <TrendingUp className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground">Estimated value</p>
-                    <p className="text-lg font-bold tabular-nums text-amber-700 dark:text-amber-300">
+                    <p className="text-base sm:text-lg font-bold tabular-nums text-amber-700 dark:text-amber-300 break-words">
                       {formatPrice(goldTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -188,7 +188,7 @@ export function GoldLivePriceWidget() {
                 <span className="text-lg">🥈</span>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Silver (999 base)</p>
-                  <p className="text-2xl font-bold tabular-nums text-slate-600 dark:text-slate-300">
+                  <p className="text-xl sm:text-2xl font-bold tabular-nums text-slate-600 dark:text-slate-300 break-words">
                     {data?.SILVER ? formatPrice(data.SILVER) : '—'}
                     <span className="text-sm font-normal text-muted-foreground ml-1">/gram</span>
                   </p>
@@ -233,7 +233,7 @@ export function GoldLivePriceWidget() {
                   <TrendingUp className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground">Estimated value</p>
-                    <p className="text-lg font-bold tabular-nums text-slate-700 dark:text-slate-200">
+                    <p className="text-base sm:text-lg font-bold tabular-nums text-slate-700 dark:text-slate-200 break-words">
                       {formatPrice(silverTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">

@@ -113,7 +113,7 @@ export function CorporateActionsPage() {
         title="Corporate Actions"
         description="Splits, bonuses, dividends, mergers and rights across your holdings — detected, applied, and pending your review."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => syncMutation.mutate()} disabled={busy}>
               {syncMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               <span className="ml-1.5">Sync from NSE</span>
@@ -127,7 +127,7 @@ export function CorporateActionsPage() {
       />
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <MetricCard label="Total actions" value={String(summary?.total ?? 0)} icon={Split} />
         <MetricCard label="Applied" value={String(summary?.applied ?? 0)} icon={CheckCircle2} hint="Folded into holdings" />
         <MetricCard label="Pending" value={String(summary?.pending ?? 0)} icon={Clock} hint="Will apply on next sync" />
@@ -216,7 +216,7 @@ export function CorporateActionsPage() {
             />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="rtable w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground text-xs">
                     <th className="text-left py-2 pr-3 font-medium">Asset</th>
@@ -232,23 +232,23 @@ export function CorporateActionsPage() {
                 <tbody>
                   {rows.map((r: CorporateActionRow) => (
                     <tr key={`${r.caId}-${r.holdingId}`} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="py-2 pr-3">
+                      <td data-label="Asset" className="py-2 pr-3">
                         <div className="font-medium">{r.stockSymbol ?? r.stockName ?? r.assetName ?? '—'}</div>
                         {r.stockName && r.stockSymbol && <div className="text-[11px] text-muted-foreground truncate max-w-[180px]">{r.stockName}</div>}
                       </td>
-                      <td className="py-2 pr-3">{TYPE_LABELS[r.type]}</td>
-                      <td className="py-2 pr-3 hidden sm:table-cell tabular-nums text-muted-foreground">{fmtDate(r.exDate)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
+                      <td data-label="Type" className="py-2 pr-3">{TYPE_LABELS[r.type]}</td>
+                      <td data-label="Ex-date" className="py-2 pr-3 hidden sm:table-cell tabular-nums text-muted-foreground">{fmtDate(r.exDate)}</td>
+                      <td data-label="Ratio / Amount" className="py-2 pr-3 text-right tabular-nums">
                         {r.ratio ? `${r.ratio}×` : r.amount ? `${formatINR(r.amount)}/sh` : '—'}
                       </td>
-                      <td className="py-2 pr-3 text-right tabular-nums hidden md:table-cell">{r.qtyHeld}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
+                      <td data-label="Qty held" className="py-2 pr-3 text-right tabular-nums hidden md:table-cell">{r.qtyHeld}</td>
+                      <td data-label="Impact" className="py-2 pr-3 text-right tabular-nums">
                         {r.qtyDelta ? <span className="text-positive">+{r.qtyDelta} sh</span>
                           : r.cashImpact ? <span className="text-positive">{formatINR(r.cashImpact)}</span>
                           : <span className="text-muted-foreground">—</span>}
                       </td>
-                      <td className="py-2 pr-3 hidden lg:table-cell text-xs text-muted-foreground truncate max-w-[140px]">{r.portfolioName}</td>
-                      <td className="py-2 text-right"><StatusBadge status={r.status} /></td>
+                      <td data-label="Portfolio" className="py-2 pr-3 hidden lg:table-cell text-xs text-muted-foreground truncate max-w-[140px]">{r.portfolioName}</td>
+                      <td data-label="Status" className="py-2 text-right"><StatusBadge status={r.status} /></td>
                     </tr>
                   ))}
                 </tbody>

@@ -208,14 +208,14 @@ function CostBar({ invested, current, accent }: { invested: Decimal; current: De
           <div className="relative flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
             <div className={`absolute inset-y-0 left-0 ${investedColor} rounded-full transition-all duration-700`} style={{ width: `${investedPct}%` }} />
           </div>
-          <span className="font-semibold text-sm tabular-nums w-32 text-right">{formatINR(invested.toString())}</span>
+          <span className="font-semibold text-sm tabular-nums w-24 sm:w-32 text-right break-words">{formatINR(invested.toString())}</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="w-20 text-[10px] tracking-[0.18em] uppercase text-muted-foreground">Today</span>
           <div className="relative flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
             <div className={`absolute inset-y-0 left-0 ${currentColor} rounded-full transition-all duration-700`} style={{ width: `${currentPct}%` }} />
           </div>
-          <span className="font-semibold text-sm tabular-nums w-32 text-right">{formatINR(current.toString())}</span>
+          <span className="font-semibold text-sm tabular-nums w-24 sm:w-32 text-right break-words">{formatINR(current.toString())}</span>
         </div>
       </div>
     </div>
@@ -353,10 +353,10 @@ export function GoldAssetDetailPage() {
         <p className="font-medium text-sm truncate">{displayName || assetName}</p>
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-10 sm:py-14">
 
         {/* ────────────── HERO ────────────── */}
-        <div className={`grid gap-10 lg:gap-16 mb-12 sm:mb-16 ${allPhotos.length > 0 ? 'lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]' : 'lg:grid-cols-1'}`}>
+        <div className={`grid gap-8 sm:gap-10 lg:gap-16 mb-8 sm:mb-12 sm:mb-16 ${allPhotos.length > 0 ? 'lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]' : 'lg:grid-cols-1'}`}>
 
           {/* Left — imagery */}
           <div className="w-full max-w-md mx-auto lg:mx-0">
@@ -388,7 +388,7 @@ export function GoldAssetDetailPage() {
                 </div>
               )}
               <div className="min-w-0">
-                <h1 className="text-[2.4rem] sm:text-[3.2rem] font-bold leading-[1.05] tracking-tight">
+                <h1 className="text-[1.8rem] sm:text-[2.4rem] sm:text-[3.2rem] font-bold leading-[1.05] tracking-tight break-words">
                   {displayName || assetName}
                 </h1>
                 {holding.isin && (
@@ -417,7 +417,7 @@ export function GoldAssetDetailPage() {
                   </span>
                 )}
               </div>
-              <p className={`text-[3.6rem] sm:text-[4.6rem] font-bold leading-none tabular-nums tracking-tight ${
+              <p className={`text-[2.4rem] sm:text-[3.6rem] sm:text-[4.6rem] font-bold leading-none tabular-nums tracking-tight break-words ${
                 accent === 'gold' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-700 dark:text-slate-200'
               }`}>
                 {currentVal ? formatINR(currentVal.toString()) : '—'}
@@ -481,7 +481,7 @@ export function GoldAssetDetailPage() {
             <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/60">Live snapshot</span>
           </header>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-border/60">
+          <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-border/60">
             <Ledger
               label="Invested"
               value={formatINR(holding.totalCost)}
@@ -526,24 +526,24 @@ export function GoldAssetDetailPage() {
         </section>
 
         {/* ────────────── PROVENANCE ────────────── */}
-        <section className="grid sm:grid-cols-3 gap-3 mb-12">
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8 sm:mb-12">
           <div className="rounded-xl border bg-[hsl(var(--card))]/60 p-5">
             <div className="flex items-center gap-2 text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
               <Calendar className="h-3 w-3" /> First Acquired
             </div>
-            <p className="mt-2 text-xl font-semibold tabular-nums">{firstTxnDate ?? '—'}</p>
+            <p className="mt-2 text-lg sm:text-xl font-semibold tabular-nums">{firstTxnDate ?? '—'}</p>
           </div>
           <div className="rounded-xl border bg-[hsl(var(--card))]/60 p-5">
             <div className="flex items-center gap-2 text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
               <Activity className="h-3 w-3" /> Last Activity
             </div>
-            <p className="mt-2 text-xl font-semibold tabular-nums">{lastTxnDate ?? '—'}</p>
+            <p className="mt-2 text-lg sm:text-xl font-semibold tabular-nums">{lastTxnDate ?? '—'}</p>
           </div>
           <div className="rounded-xl border bg-[hsl(var(--card))]/60 p-5">
             <div className="flex items-center gap-2 text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
               <Scale className="h-3 w-3" /> Net Position
             </div>
-            <p className="mt-2 text-xl font-semibold tabular-nums">
+            <p className="mt-2 text-lg sm:text-xl font-semibold tabular-nums break-words">
               {formatINR(totalBought.minus(totalSold).toString())}
             </p>
             <p className="text-[11px] text-muted-foreground/70 mt-0.5 tabular-nums">
@@ -554,10 +554,10 @@ export function GoldAssetDetailPage() {
 
         {/* ────────────── TRANSACTIONS ────────────── */}
         <section>
-          <header className="flex items-baseline justify-between mb-5">
+          <header className="flex items-baseline justify-between mb-5 flex-wrap gap-2">
             <div>
               <p className="text-[10px] tracking-[0.28em] uppercase text-muted-foreground/80 font-medium">Provenance Log</p>
-              <h2 className="text-2xl font-bold mt-1">Transactions</h2>
+              <h2 className="text-xl sm:text-2xl font-bold mt-1">Transactions</h2>
             </div>
             <p className="text-xs text-muted-foreground tabular-nums">
               {transactions.length} {transactions.length === 1 ? 'entry' : 'entries'}
@@ -626,7 +626,7 @@ export function GoldAssetDetailPage() {
                       {/* Amount + edit */}
                       <div className="text-right shrink-0 flex items-center gap-2">
                         <div>
-                          <p className="text-lg font-semibold tabular-nums leading-tight">{formatINR(amount.toString())}</p>
+                          <p className="text-base sm:text-lg font-semibold tabular-nums leading-tight break-words">{formatINR(amount.toString())}</p>
                           {txnPhotos.length > 1 && (
                             <p className="text-[10px] tracking-wider uppercase text-muted-foreground/60 mt-0.5">{txnPhotos.length} photos</p>
                           )}

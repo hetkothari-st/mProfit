@@ -345,7 +345,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
           )}
           className="space-y-4"
         >
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="portfolioId">Portfolio</Label>
               <Select id="portfolioId" className="mt-1" {...register('portfolioId')}>
@@ -368,7 +368,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label htmlFor="assetClass">Asset class</Label>
               <Select id="assetClass" className="mt-1" {...register('assetClass')}>
@@ -399,7 +399,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
           </div>
 
           {assetClass !== 'EQUITY' && assetClass !== 'ETF' && assetClass !== 'MUTUAL_FUND' && assetClass !== 'FOREIGN_EQUITY' && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="assetName">Asset name</Label>
                 <Input id="assetName" className="mt-1" {...register('assetName')} />
@@ -416,7 +416,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
           {(assetClass === 'FOREIGN_EQUITY' || assetClass === 'FOREX_PAIR') && (
             <div className="rounded-md border border-amber-300/40 bg-amber-50/30 p-3 dark:border-amber-700/40 dark:bg-amber-900/10">
               <p className="mb-2 text-xs font-medium text-foreground">Foreign currency</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="currency">Currency</Label>
                   <Select id="currency" className="mt-1" {...register('currency')}>
@@ -443,7 +443,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label htmlFor="tradeDate">Trade date</Label>
               <Input id="tradeDate" type="date" className="mt-1" {...register('tradeDate')} />
@@ -463,7 +463,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
 
           <details className="rounded-md border px-3 py-2 text-sm">
             <summary className="cursor-pointer font-medium">Charges (optional)</summary>
-            <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
                 <Label htmlFor="brokerage" className="text-xs">Brokerage</Label>
                 <Input id="brokerage" type="number" step="0.01" className="mt-1 tabular-nums" {...register('brokerage')} />
@@ -504,7 +504,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
             <Textarea id="narration" rows={2} className="mt-1" {...register('narration')} />
           </div>
 
-          <div className="rounded-md bg-muted/40 px-3 py-2 text-sm grid grid-cols-3 gap-2">
+          <div className="rounded-md bg-muted/40 px-3 py-2 text-sm grid grid-cols-3 sm:grid-cols-3 gap-2">
             <div>
               <div className="text-xs text-muted-foreground">Gross</div>
               <div className="tabular-nums font-medium">{formatINR(grossD.toFixed(4))}</div>

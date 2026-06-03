@@ -198,7 +198,7 @@ export function CatalogBrief({ product, compact = false }: BriefProps) {
         {!compact && (
           <>
             {(product.sumAssuredRange || product.ageBand || product.policyTermYears) && (
-              <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                 {product.sumAssuredRange && (
                   <div className="rounded-md bg-muted/40 px-2 py-1.5">
                     <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Sum assured</p>

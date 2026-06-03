@@ -151,7 +151,7 @@ export function ForexCashTab() {
       ) : (
         <Card>
           <CardContent className="p-0">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rtable">
               <thead className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Currency</th>
@@ -167,21 +167,21 @@ export function ForexCashTab() {
                   const inr = inrEquiv(b.currency, b.balance);
                   return (
                     <tr key={b.id} className="border-b border-border/50 last:border-0">
-                      <td className="px-3 py-2 font-medium">{b.currency}</td>
-                      <td className="px-3 py-2 text-muted-foreground">
+                      <td data-label="Currency" className="px-3 py-2 font-medium">{b.currency}</td>
+                      <td data-label="Account" className="px-3 py-2 text-muted-foreground">
                         {b.accountLabel ?? '—'}
                         {b.accountLast4 && (
                           <span className="ml-2 font-mono text-xs">·· {b.accountLast4}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-muted-foreground">{b.bankName ?? '—'}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      <td data-label="Bank" className="px-3 py-2 text-muted-foreground">{b.bankName ?? '—'}</td>
+                      <td data-label="Balance" className="px-3 py-2 text-right font-mono tabular-nums">
                         {formatCurrency(b.balance, b.currency)}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      <td data-label="INR equivalent" className="px-3 py-2 text-right font-mono tabular-nums">
                         {inr ? formatINR(inr) : '—'}
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td data-fullrow className="px-3 py-2 text-right">
                         <Button
                           variant="ghost"
                           size="sm"

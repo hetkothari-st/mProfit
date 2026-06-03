@@ -182,7 +182,7 @@ export function TaxHarvestTable({ data }: { data: TaxHarvestSummary }) {
           <p className="text-sm text-muted-foreground py-2 text-center">No loss-making holdings to harvest.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rtable">
               <thead>
                 <tr className="border-b text-muted-foreground text-xs">
                   <th className="text-left py-1.5 pr-3 font-medium">Asset</th>
@@ -195,15 +195,15 @@ export function TaxHarvestTable({ data }: { data: TaxHarvestSummary }) {
               <tbody>
                 {data.candidates.map((c, i) => (
                   <tr key={`${c.assetName}-${i}`} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                    <td className="py-2 pr-3 truncate max-w-[200px] font-medium">{c.assetName}</td>
-                    <td className="py-2 pr-3 hidden sm:table-cell text-xs text-muted-foreground">{c.portfolioName}</td>
-                    <td className="py-2 pr-3 hidden md:table-cell text-xs">{ASSET_CLASS_LABELS[c.assetClass as keyof typeof ASSET_CLASS_LABELS] ?? c.assetClass}</td>
-                    <td className="py-2 pr-3 text-xs">
+                    <td data-label="Asset" className="py-2 pr-3 truncate max-w-[200px] font-medium">{c.assetName}</td>
+                    <td data-label="Portfolio" className="py-2 pr-3 hidden sm:table-cell text-xs text-muted-foreground">{c.portfolioName}</td>
+                    <td data-label="Class" className="py-2 pr-3 hidden md:table-cell text-xs">{ASSET_CLASS_LABELS[c.assetClass as keyof typeof ASSET_CLASS_LABELS] ?? c.assetClass}</td>
+                    <td data-label="Bucket" className="py-2 pr-3 text-xs">
                       <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5">
                         {c.classification.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="py-2 text-right tabular-nums text-red-600 dark:text-red-400 font-medium">
+                    <td data-label="Unrealised loss" className="py-2 text-right tabular-nums text-red-600 dark:text-red-400 font-medium">
                       {formatINR(c.unrealisedPnL)}
                     </td>
                   </tr>

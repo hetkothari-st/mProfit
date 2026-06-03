@@ -191,7 +191,7 @@ export function PfExtensionPairPage() {
                   {code}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <div className="flex items-center justify-between flex-wrap gap-2 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Timer className="h-3.5 w-3.5" />
                   Expires in{' '}
@@ -249,7 +249,7 @@ export function PfExtensionPairPage() {
             {activePairings.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center justify-between py-2 border-b last:border-0"
+                className="flex items-center justify-between flex-wrap gap-3 py-2 border-b last:border-0"
               >
                 <div className="text-sm">
                   <p className="font-medium">Extension ···{p.bearerLast8 ?? '????????'}</p>

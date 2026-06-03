@@ -367,7 +367,7 @@ export function VehicleValuePage() {
                   <div className="text-xs uppercase tracking-wide text-muted-foreground">
                     Estimated {txnType === 'SELL' ? 'sell' : 'buy'} price ({partyType.toLowerCase()})
                   </div>
-                  <div className="text-4xl font-bold mt-1 numeric">
+                  <div className="text-2xl sm:text-4xl font-bold mt-1 numeric break-words">
                     {adjustedPrice ? formatINR(adjustedPrice) : '—'}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
@@ -398,7 +398,7 @@ export function VehicleValuePage() {
                   <CardTitle className="text-base">Price by condition</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
                     {(
                       [
                         { key: 'bad', label: 'Bad', tone: 'text-red-600' },
@@ -428,7 +428,7 @@ export function VehicleValuePage() {
                   <CardTitle className="text-base">Projections</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                     {(
                       [
                         { key: 'future1y', label: 'Future (1 year)' },

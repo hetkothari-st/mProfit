@@ -34,7 +34,7 @@ export function CapitalGainPanel({ propertyId }: Props) {
   return (
     <Card>
       <CardContent className="p-5 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           <Stat label="Sale price" value={formatINR(cg.salePrice)} />
           <Stat label="Net proceeds" value={formatINR(cg.netSaleProceeds)} sub="after brokerage" />
           <Stat label="Total cost basis" value={formatINR(cg.totalCostBasis)} sub="incl. duties + fees" />
@@ -54,7 +54,7 @@ export function CapitalGainPanel({ propertyId }: Props) {
             <p className="text-xs text-muted-foreground border-t pt-3">
               Bought on or before 23-Jul-2024. Finance Act 2024 lets you choose either method:
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <RegimeBox
                 title="Option A — Indexed @ 20%"
                 gainLabel="Indexed gain"

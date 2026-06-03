@@ -89,7 +89,7 @@ export function PfManualUploadDialog({ accountId, onClose }: Props) {
               <p className="text-sm text-green-600 font-medium">{result}</p>
             )}
 
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 flex-wrap">
               <Button variant="outline" onClick={onClose} disabled={passwordRetry.uploading}>
                 {result ? 'Close' : 'Cancel'}
               </Button>

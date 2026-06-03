@@ -227,8 +227,8 @@ export function ReportsPage() {
       />
 
       <Card className="mb-4">
-        <CardContent className="pt-4 flex flex-wrap items-end gap-3">
-          <div className="min-w-[220px]">
+        <CardContent className="p-4 sm:pt-4 flex flex-wrap items-end gap-3">
+          <div className="min-w-[180px] w-full sm:w-auto sm:min-w-[220px]">
             <Label>Portfolio</Label>
             <Select
               className="mt-1"
@@ -355,7 +355,7 @@ function RecentEmailImports() {
 
   return (
     <Card className="mt-6">
-      <CardHeader className="flex-row items-center justify-between">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Mail className="h-4 w-4 text-accent" /> Recent imports from email
         </CardTitle>
@@ -440,7 +440,7 @@ function SummaryView({ data, loading }: { data: ReturnType<typeof reportsApi.sum
   if (loading) return <Loading />;
   if (!data) return null;
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Portfolio</CardTitle>
@@ -491,7 +491,7 @@ function SummaryView({ data, loading }: { data: ReturnType<typeof reportsApi.sum
         </CardHeader>
         <CardContent>
           <div className="overflow-auto">
-            <table className="text-sm w-full">
+            <table className="rtable text-sm w-full">
               <thead>
                 <tr className="border-b bg-muted/30">
                   <th className="text-left p-2">FY</th>
@@ -506,11 +506,11 @@ function SummaryView({ data, loading }: { data: ReturnType<typeof reportsApi.sum
                   .sort(([a], [b]) => (a < b ? 1 : -1))
                   .map(([k, v]) => (
                     <tr key={k} className="border-b">
-                      <td className="p-2 font-medium">{k}</td>
-                      <td className="p-2 text-right">₹{fmt(v.intraday)}</td>
-                      <td className="p-2 text-right">₹{fmt(v.stcg)}</td>
-                      <td className="p-2 text-right">₹{fmt(v.ltcg)}</td>
-                      <td className="p-2 text-right">₹{fmt(v.taxable)}</td>
+                      <td data-label="FY" className="p-2 font-medium">{k}</td>
+                      <td data-label="Intraday" className="p-2 text-right">₹{fmt(v.intraday)}</td>
+                      <td data-label="STCG" className="p-2 text-right">₹{fmt(v.stcg)}</td>
+                      <td data-label="LTCG" className="p-2 text-right">₹{fmt(v.ltcg)}</td>
+                      <td data-label="Taxable" className="p-2 text-right">₹{fmt(v.taxable)}</td>
                     </tr>
                   ))}
                 {Object.keys(data.capitalGainsByFy).length === 0 && (
@@ -555,7 +555,7 @@ function UnrealisedView({
       </CardHeader>
       <CardContent>
         <div className="overflow-auto">
-          <table className="text-sm w-full">
+          <table className="rtable text-sm w-full">
             <thead>
               <tr className="border-b bg-muted/30">
                 <th className="text-left p-2">Asset</th>
@@ -572,14 +572,15 @@ function UnrealisedView({
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.id} className="border-b">
-                  <td className="p-2">{r.assetName ?? r.isin ?? '—'}</td>
-                  <td className="p-2 text-xs text-muted-foreground">{r.assetClass}</td>
-                  <td className="p-2 text-right">{fmt(r.quantity, 4)}</td>
-                  <td className="p-2 text-right">{fmt(r.avgCostPrice)}</td>
-                  <td className="p-2 text-right">{fmt(r.currentPrice)}</td>
-                  <td className="p-2 text-right">{fmt(r.totalCost)}</td>
-                  <td className="p-2 text-right">{fmt(r.currentValue)}</td>
+                  <td data-label="Asset" className="p-2">{r.assetName ?? r.isin ?? '—'}</td>
+                  <td data-label="Class" className="p-2 text-xs text-muted-foreground">{r.assetClass}</td>
+                  <td data-label="Qty" className="p-2 text-right">{fmt(r.quantity, 4)}</td>
+                  <td data-label="Avg" className="p-2 text-right">{fmt(r.avgCostPrice)}</td>
+                  <td data-label="CMP" className="p-2 text-right">{fmt(r.currentPrice)}</td>
+                  <td data-label="Invested" className="p-2 text-right">{fmt(r.totalCost)}</td>
+                  <td data-label="Value" className="p-2 text-right">{fmt(r.currentValue)}</td>
                   <td
+                    data-label="P&L"
                     className={cn(
                       'p-2 text-right',
                       isNonNegativeMoney(r.unrealisedPnL) ? 'text-positive' : 'text-negative',
@@ -587,7 +588,7 @@ function UnrealisedView({
                   >
                     {fmt(r.unrealisedPnL)}
                   </td>
-                  <td className="p-2 text-right">{r.pctReturn}%</td>
+                  <td data-label="%" className="p-2 text-right">{r.pctReturn}%</td>
                 </tr>
               ))}
             </tbody>
@@ -641,7 +642,7 @@ function GainsView({
       </CardHeader>
       <CardContent>
         <div className="overflow-auto">
-          <table className="text-sm w-full">
+          <table className="rtable text-sm w-full">
             <thead>
               <tr className="border-b bg-muted/30">
                 <th className="text-left p-2">Asset</th>
@@ -659,15 +660,16 @@ function GainsView({
             <tbody>
               {data.rows.map((r, i) => (
                 <tr key={i} className="border-b">
-                  <td className="p-2">{r.assetName || r.isin || '—'}</td>
-                  <td className="p-2">{r.buyDate.slice(0, 10)}</td>
-                  <td className="p-2">{r.sellDate.slice(0, 10)}</td>
-                  <td className="p-2 text-right">{fmt(r.quantity, 4)}</td>
-                  <td className="p-2 text-right">{fmt(r.buyPrice)}</td>
-                  <td className="p-2 text-right">{fmt(r.sellPrice)}</td>
-                  <td className="p-2 text-right">{fmt(r.buyAmount)}</td>
-                  <td className="p-2 text-right">{fmt(r.sellAmount)}</td>
+                  <td data-label="Asset" className="p-2">{r.assetName || r.isin || '—'}</td>
+                  <td data-label="Buy Date" className="p-2">{r.buyDate.slice(0, 10)}</td>
+                  <td data-label="Sell Date" className="p-2">{r.sellDate.slice(0, 10)}</td>
+                  <td data-label="Qty" className="p-2 text-right">{fmt(r.quantity, 4)}</td>
+                  <td data-label="Buy ₹" className="p-2 text-right">{fmt(r.buyPrice)}</td>
+                  <td data-label="Sell ₹" className="p-2 text-right">{fmt(r.sellPrice)}</td>
+                  <td data-label="Cost" className="p-2 text-right">{fmt(r.buyAmount)}</td>
+                  <td data-label="Proceeds" className="p-2 text-right">{fmt(r.sellAmount)}</td>
                   <td
+                    data-label="Gain/Loss"
                     className={cn(
                       'p-2 text-right',
                       isNonNegativeMoney(r.gainLoss) ? 'text-positive' : 'text-negative',
@@ -675,7 +677,7 @@ function GainsView({
                   >
                     {fmt(r.gainLoss)}
                   </td>
-                  <td className="p-2 text-right">{fmt(r.taxableGain)}</td>
+                  <td data-label="Taxable" className="p-2 text-right">{fmt(r.taxableGain)}</td>
                 </tr>
               ))}
               {data.rows.length === 0 && (
@@ -712,7 +714,7 @@ function IncomeView({
       </CardHeader>
       <CardContent>
         <div className="overflow-auto">
-          <table className="text-sm w-full">
+          <table className="rtable text-sm w-full">
             <thead>
               <tr className="border-b bg-muted/30">
                 <th className="text-left p-2">Date</th>
@@ -725,11 +727,11 @@ function IncomeView({
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.id} className="border-b">
-                  <td className="p-2">{r.date.slice(0, 10)}</td>
-                  <td className="p-2 text-xs">{r.type}</td>
-                  <td className="p-2">{r.assetName}</td>
-                  <td className="p-2 text-right">{fmt(r.amount)}</td>
-                  <td className="p-2 text-xs text-muted-foreground">{r.narration ?? ''}</td>
+                  <td data-label="Date" className="p-2">{r.date.slice(0, 10)}</td>
+                  <td data-label="Type" className="p-2 text-xs">{r.type}</td>
+                  <td data-label="Asset" className="p-2">{r.assetName}</td>
+                  <td data-label="Amount" className="p-2 text-right">{fmt(r.amount)}</td>
+                  <td data-label="Narration" className="p-2 text-xs text-muted-foreground">{r.narration ?? ''}</td>
                 </tr>
               ))}
               {data.rows.length === 0 && (
@@ -768,7 +770,7 @@ function XirrView({
         <CardTitle className="text-sm">Annualized Returns (XIRR)</CardTitle>
       </CardHeader>
       <CardContent>
-        <table className="text-sm w-full">
+        <table className="rtable text-sm w-full">
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="text-left p-2">Window</th>
@@ -781,11 +783,11 @@ function XirrView({
           <tbody>
             {rows.map((r) => (
               <tr key={r.label} className="border-b">
-                <td className="p-2">{r.label}</td>
-                <td className="p-2 text-right font-medium">{fmtPct(r.b.xirr)}</td>
-                <td className="p-2 text-right">₹{fmt(r.b.totalInvested)}</td>
-                <td className="p-2 text-right">₹{fmt(r.b.terminalValue)}</td>
-                <td className="p-2 text-right">{r.b.cashflowCount}</td>
+                <td data-label="Window" className="p-2">{r.label}</td>
+                <td data-label="XIRR" className="p-2 text-right font-medium">{fmtPct(r.b.xirr)}</td>
+                <td data-label="Invested" className="p-2 text-right">₹{fmt(r.b.totalInvested)}</td>
+                <td data-label="Terminal Value" className="p-2 text-right">₹{fmt(r.b.terminalValue)}</td>
+                <td data-label="Cashflows" className="p-2 text-right">{r.b.cashflowCount}</td>
               </tr>
             ))}
           </tbody>
@@ -811,7 +813,7 @@ function HistoricalView({
       </CardHeader>
       <CardContent>
         <div className="overflow-auto">
-          <table className="text-sm w-full">
+          <table className="rtable text-sm w-full">
             <thead>
               <tr className="border-b bg-muted/30">
                 <th className="text-left p-2">Month-end</th>
@@ -823,10 +825,10 @@ function HistoricalView({
             <tbody>
               {data.points.map((p) => (
                 <tr key={p.date} className="border-b">
-                  <td className="p-2">{p.date.slice(0, 10)}</td>
-                  <td className="p-2 text-right">{fmt(p.cost)}</td>
-                  <td className="p-2 text-right">{fmt(p.value)}</td>
-                  <td className="p-2 text-right">{p.holdings}</td>
+                  <td data-label="Month-end" className="p-2">{p.date.slice(0, 10)}</td>
+                  <td data-label="Cost" className="p-2 text-right">{fmt(p.cost)}</td>
+                  <td data-label="Value" className="p-2 text-right">{fmt(p.value)}</td>
+                  <td data-label="Holdings" className="p-2 text-right">{p.holdings}</td>
                 </tr>
               ))}
               {data.points.length === 0 && (
@@ -920,7 +922,7 @@ function StatementsView({ portfolioId, fy, accessToken }: StatementsViewProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {cards.map((c) => (
         <Card key={c.key}>
           <CardContent className="px-5 py-4">

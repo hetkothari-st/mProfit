@@ -80,11 +80,11 @@ function AutoFetchSection() {
 
   return (
     <div className="mt-6 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Auto-fetch accounts (EPFO portal)
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button size="sm" variant="ghost" asChild>
             <Link to="/provident-fund/extension" className="flex items-center gap-1">
               <PlugZap className="h-3.5 w-3.5" />
@@ -123,13 +123,13 @@ function AutoFetchSection() {
             <div key={a.id} className="space-y-1">
               {/* Nudge banner — shown when balance is stale and not snoozed */}
               {isNudgeable(a) && (
-                <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm flex items-center justify-between gap-3">
+                <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm flex items-start sm:items-center justify-between gap-3 flex-wrap">
                   <span className="text-yellow-800 dark:text-yellow-300">
                     {daysSinceRefresh(a) != null
                       ? `Last refreshed ${daysSinceRefresh(a)} days ago — refresh to keep data current.`
                       : 'Balance has never been refreshed — tap to fetch now.'}
                   </span>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="flex gap-2 flex-wrap">
                     <Button
                       size="sm"
                       variant="outline"
@@ -153,7 +153,7 @@ function AutoFetchSection() {
               )}
 
               <Card className="hover:shadow-sm transition-shadow">
-                <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
+                <CardContent className="py-3 px-4 flex items-center justify-between gap-3 flex-wrap">
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">
                       {a.holderName}{' '}

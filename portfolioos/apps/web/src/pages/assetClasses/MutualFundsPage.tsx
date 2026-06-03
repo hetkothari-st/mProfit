@@ -196,7 +196,7 @@ export function MutualFundsPage() {
         title="Mutual Funds"
         description="MF holdings across all portfolios, priced from AMFI NAV"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <DownloadReportButton type="holdings" assetClasses={['MUTUAL_FUND']} />
             <Button onClick={() => setSyncDialogOpen(true)}>
               <Download className="h-4 w-4" /> Sync MF via CASParser
@@ -380,7 +380,7 @@ export function MutualFundsPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[
               { label: 'Current value', value: formatINR(totalValueD.toFixed(4)) },
               { label: 'Invested', value: formatINR(totalCostD.toFixed(4)) },
@@ -398,7 +398,7 @@ export function MutualFundsPage() {
               <Card key={m.label}>
                 <CardContent className="p-4">
                   <div className="text-xs text-muted-foreground">{m.label}</div>
-                  <div className={`text-xl font-semibold mt-1 tabular-nums ${m.cls ?? ''}`}>{m.value}</div>
+                  <div className={`text-lg sm:text-xl font-semibold mt-1 tabular-nums break-words ${m.cls ?? ''}`}>{m.value}</div>
                 </CardContent>
               </Card>
             ))}
@@ -459,7 +459,7 @@ export function MutualFundsPage() {
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Transactions</h3>
           <div className="rounded-md border overflow-x-auto overflow-y-auto max-h-[600px]">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rtable">
               <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-sm">
                 <tr className="border-b">
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Date</th>
@@ -478,20 +478,20 @@ export function MutualFundsPage() {
                   const isDeleting = deleteMutation.isPending && confirmDeleteId === txn.id;
                   return (
                     <tr key={txn.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{txn.tradeDate}</td>
-                      <td className="px-4 py-3">
+                      <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">{txn.tradeDate}</td>
+                      <td data-label="Scheme" className="px-4 py-3">
                         <p className="font-medium truncate max-w-[180px]">{txn.assetName ?? '—'}</p>
                         {txn.isin && <p className="text-xs text-muted-foreground">{txn.isin}</p>}
                       </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
+                      <td data-label="Type" className="px-4 py-3 hidden sm:table-cell">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${['BUY','DEPOSIT','DIVIDEND_PAYOUT','DIVIDEND_REINVEST','SIP','BONUS'].includes(txn.transactionType) ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
                           {TXN_TYPE_LABELS[txn.transactionType] ?? txn.transactionType}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell text-muted-foreground">{new Decimal(txn.quantity).toFixed(3)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell text-muted-foreground">{formatINR(txn.price)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums font-medium">{formatINR(amount.toString())}</td>
-                      <td className="px-4 py-3">
+                      <td data-label="Units" className="px-4 py-3 text-right tabular-nums hidden sm:table-cell text-muted-foreground">{new Decimal(txn.quantity).toFixed(3)}</td>
+                      <td data-label="NAV" className="px-4 py-3 text-right tabular-nums hidden md:table-cell text-muted-foreground">{formatINR(txn.price)}</td>
+                      <td data-label="Amount" className="px-4 py-3 text-right tabular-nums font-medium">{formatINR(amount.toString())}</td>
+                      <td data-fullrow className="px-4 py-3">
                         {isConfirmDelete ? (
                           <div className="flex items-center gap-1 justify-end">
                             <span className="text-xs text-muted-foreground whitespace-nowrap">Sure?</span>

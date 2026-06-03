@@ -97,7 +97,7 @@ export function RegisterPage() {
           {errors.email && <p className="text-xs text-negative mt-1">{errors.email.message}</p>}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label htmlFor="password">Password</Label>
             <Input
@@ -126,7 +126,7 @@ export function RegisterPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label htmlFor="role">I am</Label>
             <Select id="role" className="mt-1" {...register('role')}>

@@ -279,7 +279,7 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
           <CardContent>
             <div
               className={cn(
-                'text-2xl font-semibold',
+                'text-xl sm:text-2xl font-semibold break-words',
                 isNonNegativeMoney(data.totalRealisedGain) ? 'text-positive' : 'text-negative',
               )}
             >
@@ -293,7 +293,7 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
             <CardTitle className="text-sm">Estimated Tax Liability</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold">₹{fmt(data.totalEstimatedTax)}</div>
+            <div className="text-xl sm:text-2xl font-semibold break-words">₹{fmt(data.totalEstimatedTax)}</div>
             <div className="text-xs text-muted-foreground mt-1">
               Excludes surcharge & cess
             </div>
@@ -304,7 +304,7 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
             <CardTitle className="text-sm">Effective Rate</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold">
+            <div className="text-xl sm:text-2xl font-semibold break-words">
               {(() => {
                 const g = toDecimal(data.totalRealisedGain);
                 if (g.isZero() || g.isNegative()) return '—';
@@ -322,7 +322,7 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
           <CardTitle className="text-sm">Capital Gains Breakdown</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <table className="text-sm w-full">
+          <table className="text-sm w-full rtable">
             <thead>
               <tr className="border-b bg-muted/30">
                 <th className="text-left p-2">Section</th>
@@ -335,68 +335,68 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
             </thead>
             <tbody>
               <tr className="border-b">
-                <td className="p-2 font-medium">Sec. 111A</td>
-                <td className="p-2">STCG on listed equity (STT paid)</td>
-                <td className={cn('p-2 text-right', isNonNegativeMoney(cg.section111A_stcgEquity.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Section" className="p-2 font-medium">Sec. 111A</td>
+                <td data-label="Description" className="p-2">STCG on listed equity (STT paid)</td>
+                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.section111A_stcgEquity.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.section111A_stcgEquity.gain)}
                 </td>
-                <td className="p-2 text-right">₹{fmt(cg.section111A_stcgEquity.gain)}</td>
-                <td className="p-2 text-right">{data.rates.stcgEquityPct}%</td>
-                <td className="p-2 text-right font-medium">₹{fmt(cg.section111A_stcgEquity.tax)}</td>
+                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section111A_stcgEquity.gain)}</td>
+                <td data-label="Rate" className="p-2 text-right">{data.rates.stcgEquityPct}%</td>
+                <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.section111A_stcgEquity.tax)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 font-medium">Sec. 112A</td>
-                <td className="p-2">
+                <td data-label="Section" className="p-2 font-medium">Sec. 112A</td>
+                <td data-label="Description" className="p-2">
                   LTCG on listed equity (exemption ₹{fmt(cg.section112A_ltcgEquity.exemption, 0)})
                 </td>
-                <td className={cn('p-2 text-right', isNonNegativeMoney(cg.section112A_ltcgEquity.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.section112A_ltcgEquity.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.section112A_ltcgEquity.gain)}
                 </td>
-                <td className="p-2 text-right">₹{fmt(cg.section112A_ltcgEquity.taxable)}</td>
-                <td className="p-2 text-right">{data.rates.ltcgEquityPct}%</td>
-                <td className="p-2 text-right font-medium">₹{fmt(cg.section112A_ltcgEquity.tax)}</td>
+                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section112A_ltcgEquity.taxable)}</td>
+                <td data-label="Rate" className="p-2 text-right">{data.rates.ltcgEquityPct}%</td>
+                <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.section112A_ltcgEquity.tax)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 font-medium">Sec. 112</td>
-                <td className="p-2">LTCG on other assets (indexed 20% / non-indexed 12.5%)</td>
-                <td className={cn('p-2 text-right', isNonNegativeMoney(cg.section112_ltcgOther.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Section" className="p-2 font-medium">Sec. 112</td>
+                <td data-label="Description" className="p-2">LTCG on other assets (indexed 20% / non-indexed 12.5%)</td>
+                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.section112_ltcgOther.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.section112_ltcgOther.gain)}
                 </td>
-                <td className="p-2 text-right">₹{fmt(cg.section112_ltcgOther.taxable)}</td>
-                <td className="p-2 text-right">mixed</td>
-                <td className="p-2 text-right font-medium">₹{fmt(cg.section112_ltcgOther.tax)}</td>
+                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section112_ltcgOther.taxable)}</td>
+                <td data-label="Rate" className="p-2 text-right">mixed</td>
+                <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.section112_ltcgOther.tax)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 font-medium">Slab</td>
-                <td className="p-2">STCG on non-equity (debt, bonds, gold, etc.)</td>
-                <td className={cn('p-2 text-right', isNonNegativeMoney(cg.stcgOther.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Section" className="p-2 font-medium">Slab</td>
+                <td data-label="Description" className="p-2">STCG on non-equity (debt, bonds, gold, etc.)</td>
+                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.stcgOther.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.stcgOther.gain)}
                 </td>
-                <td className="p-2 text-right">₹{fmt(cg.stcgOther.gain)}</td>
-                <td className="p-2 text-right">{data.rates.slabPct}%</td>
-                <td className="p-2 text-right font-medium">₹{fmt(cg.stcgOther.tax)}</td>
+                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.stcgOther.gain)}</td>
+                <td data-label="Rate" className="p-2 text-right">{data.rates.slabPct}%</td>
+                <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.stcgOther.tax)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 font-medium">Sec. 43(5)</td>
-                <td className="p-2">Intraday speculative business income</td>
-                <td className={cn('p-2 text-right', isNonNegativeMoney(cg.intradaySpeculative.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Section" className="p-2 font-medium">Sec. 43(5)</td>
+                <td data-label="Description" className="p-2">Intraday speculative business income</td>
+                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.intradaySpeculative.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.intradaySpeculative.gain)}
                 </td>
-                <td className="p-2 text-right">₹{fmt(cg.intradaySpeculative.gain)}</td>
-                <td className="p-2 text-right">{data.rates.slabPct}%</td>
-                <td className="p-2 text-right font-medium">₹{fmt(cg.intradaySpeculative.tax)}</td>
+                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.intradaySpeculative.gain)}</td>
+                <td data-label="Rate" className="p-2 text-right">{data.rates.slabPct}%</td>
+                <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.intradaySpeculative.tax)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 font-medium">Sec. 43(5)</td>
-                <td className="p-2">
+                <td data-label="Section" className="p-2 font-medium">Sec. 43(5)</td>
+                <td data-label="Description" className="p-2">
                   F&O non-speculative {data.fnoBusinessIncome.auditApplicable && <span className="text-xs text-amber-600 ml-1">· Sec. 44AB audit</span>}
                 </td>
-                <td className={cn('p-2 text-right', isNonNegativeMoney(data.fnoBusinessIncome.netPnl) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(data.fnoBusinessIncome.netPnl) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(data.fnoBusinessIncome.netPnl)}
                 </td>
-                <td className="p-2 text-right">₹{fmt(data.fnoBusinessIncome.netPnl)}</td>
-                <td className="p-2 text-right">{data.rates.slabPct}%</td>
-                <td className="p-2 text-right font-medium">₹{fmt(data.fnoBusinessIncome.tax)}</td>
+                <td data-label="Taxable" className="p-2 text-right">₹{fmt(data.fnoBusinessIncome.netPnl)}</td>
+                <td data-label="Rate" className="p-2 text-right">{data.rates.slabPct}%</td>
+                <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(data.fnoBusinessIncome.tax)}</td>
               </tr>
             </tbody>
             <tfoot>
@@ -417,7 +417,7 @@ function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading:
           <CardTitle className="text-sm">Other Income (taxed at slab — outside this estimate)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
             <div>
               <div className="text-xs text-muted-foreground">Dividends</div>
               <div className="font-medium">₹{fmt(data.otherIncome.dividend)}</div>
@@ -474,7 +474,7 @@ function GainsView({
       </CardHeader>
       <CardContent>
         <div className="overflow-auto">
-          <table className="text-sm w-full">
+          <table className="text-sm w-full rtable">
             <thead>
               <tr className="border-b bg-muted/30">
                 <th className="text-left p-2">Asset</th>
@@ -492,19 +492,20 @@ function GainsView({
             <tbody>
               {data.rows.map((r, i) => (
                 <tr key={i} className="border-b">
-                  <td className="p-2">{r.assetName || r.isin || '—'}</td>
-                  <td className="p-2 text-xs text-muted-foreground">{r.isin ?? '—'}</td>
-                  <td className="p-2">{r.buyDate.slice(0, 10)}</td>
-                  <td className="p-2">{r.sellDate.slice(0, 10)}</td>
-                  <td className="p-2 text-right">{fmt(r.quantity, 4)}</td>
-                  <td className="p-2 text-right">{fmt(r.buyAmount)}</td>
-                  <td className="p-2 text-right">{fmt(r.sellAmount)}</td>
+                  <td data-label="Asset" className="p-2">{r.assetName || r.isin || '—'}</td>
+                  <td data-label="ISIN" className="p-2 text-xs text-muted-foreground">{r.isin ?? '—'}</td>
+                  <td data-label="Buy" className="p-2">{r.buyDate.slice(0, 10)}</td>
+                  <td data-label="Sell" className="p-2">{r.sellDate.slice(0, 10)}</td>
+                  <td data-label="Qty" className="p-2 text-right">{fmt(r.quantity, 4)}</td>
+                  <td data-label="Cost" className="p-2 text-right">{fmt(r.buyAmount)}</td>
+                  <td data-label="Proceeds" className="p-2 text-right">{fmt(r.sellAmount)}</td>
                   {showIndexed && (
-                    <td className="p-2 text-right">
+                    <td data-label="Indexed Cost" className="p-2 text-right">
                       {r.indexedCostOfAcquisition ? fmt(r.indexedCostOfAcquisition) : '—'}
                     </td>
                   )}
                   <td
+                    data-label="Gain/Loss"
                     className={cn(
                       'p-2 text-right',
                       isNonNegativeMoney(r.gainLoss) ? 'text-positive' : 'text-negative',
@@ -512,7 +513,7 @@ function GainsView({
                   >
                     {fmt(r.gainLoss)}
                   </td>
-                  <td className="p-2 text-right">{fmt(r.taxableGain)}</td>
+                  <td data-label="Taxable" className="p-2 text-right">{fmt(r.taxableGain)}</td>
                 </tr>
               ))}
               {data.rows.length === 0 && (
@@ -543,7 +544,7 @@ function Schedule43View({ data, loading }: { data: Schedule43Report | undefined;
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 text-sm">
             <div>
               <div className="text-xs text-muted-foreground">Gross Profit</div>
               <div className="font-medium text-positive">₹{fmt(ns.grossProfit)}</div>
@@ -586,7 +587,7 @@ function Schedule43View({ data, loading }: { data: Schedule43Report | undefined;
         </CardHeader>
         <CardContent>
           <div className="overflow-auto">
-            <table className="text-sm w-full">
+            <table className="text-sm w-full rtable">
               <thead>
                 <tr className="border-b bg-muted/30">
                   <th className="text-left p-2">Underlying</th>
@@ -602,16 +603,16 @@ function Schedule43View({ data, loading }: { data: Schedule43Report | undefined;
               <tbody>
                 {data.perInstrumentRows.map((r, i) => (
                   <tr key={i} className="border-b">
-                    <td className="p-2">{r.underlying}</td>
-                    <td className="p-2 text-xs">{r.instrumentType}</td>
-                    <td className="p-2">{r.strikePrice ?? '—'}</td>
-                    <td className="p-2">{r.expiryDate.slice(0, 10)}</td>
-                    <td className="p-2 text-xs">{r.side}</td>
-                    <td className={cn('p-2 text-right', isNonNegativeMoney(r.realizedPnl) ? 'text-positive' : 'text-negative')}>
+                    <td data-label="Underlying" className="p-2">{r.underlying}</td>
+                    <td data-label="Type" className="p-2 text-xs">{r.instrumentType}</td>
+                    <td data-label="Strike" className="p-2">{r.strikePrice ?? '—'}</td>
+                    <td data-label="Expiry" className="p-2">{r.expiryDate.slice(0, 10)}</td>
+                    <td data-label="Side" className="p-2 text-xs">{r.side}</td>
+                    <td data-label="P&L" className={cn('p-2 text-right', isNonNegativeMoney(r.realizedPnl) ? 'text-positive' : 'text-negative')}>
                       {fmt(r.realizedPnl)}
                     </td>
-                    <td className="p-2 text-right">{fmt(r.turnover)}</td>
-                    <td className="p-2 text-right">{r.closedTradeCount}</td>
+                    <td data-label="Turnover" className="p-2 text-right">{fmt(r.turnover)}</td>
+                    <td data-label="Trades" className="p-2 text-right">{r.closedTradeCount}</td>
                   </tr>
                 ))}
                 {data.perInstrumentRows.length === 0 && (
@@ -642,7 +643,7 @@ function IncomeView({ data, loading }: { data: TaxIncomeReport | undefined; load
       </CardHeader>
       <CardContent>
         <div className="overflow-auto">
-          <table className="text-sm w-full">
+          <table className="text-sm w-full rtable">
             <thead>
               <tr className="border-b bg-muted/30">
                 <th className="text-left p-2">Date</th>
@@ -656,12 +657,12 @@ function IncomeView({ data, loading }: { data: TaxIncomeReport | undefined; load
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.id} className="border-b">
-                  <td className="p-2">{r.date.slice(0, 10)}</td>
-                  <td className="p-2 text-xs">{r.type}</td>
-                  <td className="p-2 text-xs">{r.portfolioName}</td>
-                  <td className="p-2">{r.assetName}</td>
-                  <td className="p-2 text-right">{fmt(r.amount)}</td>
-                  <td className="p-2 text-xs text-muted-foreground">{r.narration ?? ''}</td>
+                  <td data-label="Date" className="p-2">{r.date.slice(0, 10)}</td>
+                  <td data-label="Type" className="p-2 text-xs">{r.type}</td>
+                  <td data-label="Portfolio" className="p-2 text-xs">{r.portfolioName}</td>
+                  <td data-label="Asset" className="p-2">{r.assetName}</td>
+                  <td data-label="Amount" className="p-2 text-right">{fmt(r.amount)}</td>
+                  <td data-label="Narration" className="p-2 text-xs text-muted-foreground">{r.narration ?? ''}</td>
                 </tr>
               ))}
               {data.rows.length === 0 && (
@@ -690,7 +691,7 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
             <CardTitle className="text-sm">Total Unrealised Loss</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold text-negative">₹{fmt(data.totals.unrealisedLoss)}</div>
+            <div className="text-xl sm:text-2xl font-semibold text-negative break-words">₹{fmt(data.totals.unrealisedLoss)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -698,7 +699,7 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
             <CardTitle className="text-sm">STCG Loss Available</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold">₹{fmt(data.totals.stcgLossAvailable)}</div>
+            <div className="text-xl sm:text-2xl font-semibold break-words">₹{fmt(data.totals.stcgLossAvailable)}</div>
             <div className="text-xs text-muted-foreground mt-1">
               Realised STCG this FY: ₹{fmt(data.totals.realisedStcgInFy)}
             </div>
@@ -709,7 +710,7 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
             <CardTitle className="text-sm">LTCG Loss Available</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold">₹{fmt(data.totals.ltcgLossAvailable)}</div>
+            <div className="text-xl sm:text-2xl font-semibold break-words">₹{fmt(data.totals.ltcgLossAvailable)}</div>
             <div className="text-xs text-muted-foreground mt-1">
               Realised LTCG this FY: ₹{fmt(data.totals.realisedLtcgInFy)}
             </div>
@@ -723,7 +724,7 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
         </CardHeader>
         <CardContent>
           <div className="overflow-auto">
-            <table className="text-sm w-full">
+            <table className="text-sm w-full rtable">
               <thead>
                 <tr className="border-b bg-muted/30">
                   <th className="text-left p-2">Asset</th>
@@ -742,15 +743,16 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
               <tbody>
                 {data.rows.map((r, i) => (
                   <tr key={i} className="border-b">
-                    <td className="p-2">{r.assetName || r.isin || '—'}</td>
-                    <td className="p-2 text-xs text-muted-foreground">{r.assetClass}</td>
-                    <td className="p-2 text-xs">{r.portfolioName}</td>
-                    <td className="p-2 text-right">{fmt(r.quantity, 4)}</td>
-                    <td className="p-2 text-right">{fmt(r.avgCostPrice)}</td>
-                    <td className="p-2 text-right">{fmt(r.currentPrice)}</td>
-                    <td className="p-2 text-right">{fmt(r.totalCost)}</td>
-                    <td className="p-2 text-right">{fmt(r.currentValue)}</td>
+                    <td data-label="Asset" className="p-2">{r.assetName || r.isin || '—'}</td>
+                    <td data-label="Class" className="p-2 text-xs text-muted-foreground">{r.assetClass}</td>
+                    <td data-label="Portfolio" className="p-2 text-xs">{r.portfolioName}</td>
+                    <td data-label="Qty" className="p-2 text-right">{fmt(r.quantity, 4)}</td>
+                    <td data-label="Avg" className="p-2 text-right">{fmt(r.avgCostPrice)}</td>
+                    <td data-label="CMP" className="p-2 text-right">{fmt(r.currentPrice)}</td>
+                    <td data-label="Invested" className="p-2 text-right">{fmt(r.totalCost)}</td>
+                    <td data-label="Value" className="p-2 text-right">{fmt(r.currentValue)}</td>
                     <td
+                      data-label="P&L"
                       className={cn(
                         'p-2 text-right',
                         isNonNegativeMoney(r.unrealisedPnL) ? 'text-positive' : 'text-negative',
@@ -758,8 +760,8 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
                     >
                       {fmt(r.unrealisedPnL)}
                     </td>
-                    <td className="p-2 text-right">{r.pctReturn}%</td>
-                    <td className="p-2 text-xs">
+                    <td data-label="%" className="p-2 text-right">{r.pctReturn}%</td>
+                    <td data-label="Classification" className="p-2 text-xs">
                       <span
                         className={cn(
                           'inline-flex items-center rounded px-1.5 py-0.5 font-medium',

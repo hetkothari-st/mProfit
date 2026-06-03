@@ -87,7 +87,7 @@ export function SettingsPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input id="email" className="mt-1" value={user?.email ?? ''} disabled />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="phone">Phone</Label>
                   <Input id="phone" className="mt-1" {...register('phone')} />

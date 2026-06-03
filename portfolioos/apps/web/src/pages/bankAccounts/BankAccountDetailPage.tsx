@@ -210,7 +210,7 @@ export function BankAccountDetailPage() {
                 Available balance
               </p>
               <p
-                className={`text-4xl font-semibold tabular-nums ${hideSensitive ? 'money-digits' : ''}`}
+                className={`text-2xl sm:text-4xl font-semibold tabular-nums break-words ${hideSensitive ? 'money-digits' : ''}`}
               >
                 {account.currentBalance ? formatINR(account.currentBalance) : '—'}
               </p>
@@ -356,7 +356,7 @@ export function BankAccountDetailPage() {
             Recorded balances
           </h2>
           <div className="rounded-md border overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rtable">
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Date</th>
@@ -373,21 +373,21 @@ export function BankAccountDetailPage() {
               <tbody>
                 {[...snapshots].reverse().map((s) => (
                   <tr key={s.id} className="border-b last:border-0 hover:bg-muted/20">
-                    <td className="px-4 py-2.5 text-muted-foreground">
+                    <td data-label="Date" className="px-4 py-2.5 text-muted-foreground">
                       {new Date(s.asOfDate).toLocaleDateString('en-IN', {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric',
                       })}
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums font-medium">
+                    <td data-label="Balance" className="px-4 py-2.5 text-right tabular-nums font-medium">
                       {formatINR(s.balance)}
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground capitalize">
+                    <td data-label="Source" className="px-4 py-2.5 text-muted-foreground capitalize">
                       {s.source.replace('_', ' ')}
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{s.note ?? '—'}</td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td data-label="Note" className="px-4 py-2.5 text-muted-foreground">{s.note ?? '—'}</td>
+                    <td data-fullrow className="px-4 py-2.5 text-right">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -414,7 +414,7 @@ export function BankAccountDetailPage() {
             Recent activity
           </h2>
           <div className="rounded-md border overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rtable">
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Date</th>
@@ -431,14 +431,14 @@ export function BankAccountDetailPage() {
                   const isInflow = cf.type === 'INFLOW';
                   return (
                     <tr key={cf.id} className="border-b last:border-0 hover:bg-muted/20">
-                      <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                      <td data-label="Date" className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
                         {new Date(cf.date).toLocaleDateString('en-IN', {
                           day: '2-digit',
                           month: 'short',
                           year: 'numeric',
                         })}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td data-label="Description" className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           {isInflow ? (
                             <ArrowDownRight className="h-3.5 w-3.5 text-positive shrink-0" />
@@ -449,6 +449,7 @@ export function BankAccountDetailPage() {
                         </div>
                       </td>
                       <td
+                        data-label="Amount"
                         className={`px-4 py-2.5 text-right tabular-nums font-medium ${
                           isInflow ? 'text-positive' : 'text-negative'
                         }`}

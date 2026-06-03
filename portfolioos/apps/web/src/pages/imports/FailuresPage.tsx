@@ -126,7 +126,7 @@ export function FailuresPage() {
         description="Rows that couldn't be parsed into a transaction. Review the payload, correct the file, and retry — or enter the transaction manually."
       />
 
-      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+      <div className="flex flex-wrap items-center justify-between mb-4 gap-3">
         <Link
           to="/import"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -198,7 +198,7 @@ export function FailuresPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="rtable w-full text-sm">
                   <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="text-left font-medium px-4 py-2">Adapter</th>
@@ -216,23 +216,23 @@ export function FailuresPage() {
                         className="hover:bg-muted/30 cursor-pointer"
                         onClick={() => setDetail(r)}
                       >
-                        <td className="px-4 py-2 font-mono text-xs">
+                        <td data-label="Adapter" className="px-4 py-2 font-mono text-xs">
                           <div>{r.sourceAdapter}</div>
                           <div className="text-muted-foreground">v{r.adapterVersion}</div>
                         </td>
-                        <td className="px-4 py-2 text-xs text-muted-foreground max-w-[28ch] truncate">
+                        <td data-label="Source" className="px-4 py-2 text-xs text-muted-foreground max-w-[28ch] truncate">
                           {r.sourceRef}
                         </td>
-                        <td className="px-4 py-2 max-w-[40ch]">
+                        <td data-label="Error" className="px-4 py-2 max-w-[40ch]">
                           <div className="flex items-start gap-1.5">
                             <AlertTriangle className="h-3 w-3 mt-0.5 text-negative shrink-0" />
                             <span className="truncate">{r.errorMessage}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-2 text-xs text-muted-foreground">
+                        <td data-label="When" className="px-4 py-2 text-xs text-muted-foreground">
                           {new Date(r.createdAt).toLocaleString()}
                         </td>
-                        <td className="px-4 py-2">
+                        <td data-label="Status" className="px-4 py-2">
                           {r.resolvedAt ? (
                             <span className="inline-flex items-center gap-1 text-xs text-positive">
                               <CheckCircle2 className="h-3 w-3" />
@@ -246,7 +246,7 @@ export function FailuresPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-muted-foreground">
+                        <td data-label="" className="px-4 py-2 text-muted-foreground">
                           <ChevronRight className="h-3 w-3" />
                         </td>
                       </tr>
@@ -281,7 +281,7 @@ export function FailuresPage() {
           </DialogHeader>
           {detail && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 <Field label="Adapter" value={`${detail.sourceAdapter} v${detail.adapterVersion}`} mono />
                 <Field label="Created" value={new Date(detail.createdAt).toLocaleString()} />
                 <Field label="Source" value={detail.sourceRef} mono wrap />

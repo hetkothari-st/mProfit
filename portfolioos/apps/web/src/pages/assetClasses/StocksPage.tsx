@@ -220,7 +220,7 @@ export function StocksPage() {
         title="Stocks"
         description="Equity holdings aggregated across all portfolios"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <DownloadReportButton type="holdings" assetClasses={['EQUITY']} />
             <Button variant="outline" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
               {refreshMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -242,7 +242,7 @@ export function StocksPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[
               { label: 'Current value', value: formatINR(totalValueD.toFixed(4)) },
               { label: 'Invested', value: formatINR(totalCostD.toFixed(4)) },
@@ -273,7 +273,7 @@ export function StocksPage() {
                   <div className="text-[10px] text-muted-foreground uppercase tracking-[0.16em] font-semibold">
                     {m.label}
                   </div>
-                  <div className={`text-xl font-semibold mt-1 tabular-nums ${m.cls ?? ''}`}>
+                  <div className={`text-lg sm:text-xl font-semibold mt-1 tabular-nums break-words ${m.cls ?? ''}`}>
                     {m.value}
                   </div>
                 </CardContent>
@@ -544,7 +544,7 @@ function PortfolioBreakdown({
         Per-portfolio breakdown
       </div>
       <div className="overflow-x-auto rounded border border-border bg-card">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rtable">
           <thead className="bg-muted/40 dark:bg-muted/20">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-3 pr-2 py-1.5 font-semibold">Portfolio</th>
@@ -561,14 +561,14 @@ function PortfolioBreakdown({
                 key={`${r.portfolioId}:${r.id}`}
                 className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
               >
-                <td className="pl-3 pr-2 py-1.5 font-medium">{r.portfolioName}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{r.quantity}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{formatINR(r.avgCostPrice)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{formatINR(r.totalCost)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">
+                <td data-label="Portfolio" className="pl-3 pr-2 py-1.5 font-medium">{r.portfolioName}</td>
+                <td data-label="Qty" className="px-2 py-1.5 text-right tabular-nums">{r.quantity}</td>
+                <td data-label="Avg cost" className="px-2 py-1.5 text-right tabular-nums">{formatINR(r.avgCostPrice)}</td>
+                <td data-label="Total cost" className="px-2 py-1.5 text-right tabular-nums">{formatINR(r.totalCost)}</td>
+                <td data-label="Current value" className="px-2 py-1.5 text-right tabular-nums">
                   {r.currentValue != null ? formatINR(r.currentValue) : '—'}
                 </td>
-                <td className={`px-2 py-1.5 text-right tabular-nums ${pnlClassFor(r.unrealisedPnL)}`}>
+                <td data-label="P&L" className={`px-2 py-1.5 text-right tabular-nums ${pnlClassFor(r.unrealisedPnL)}`}>
                   {r.unrealisedPnL != null ? formatINR(r.unrealisedPnL) : '—'}
                 </td>
               </tr>
@@ -635,7 +635,7 @@ function StockTransactions({
         Transactions ({txns.length})
       </div>
       <div className="overflow-x-auto rounded border border-border bg-card">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rtable">
           <thead className="bg-muted/40 dark:bg-muted/20">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-3 pr-2 py-1.5 font-semibold">Date</th>
@@ -656,21 +656,21 @@ function StockTransactions({
                   key={txn.id}
                   className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
                 >
-                  <td className="pl-3 pr-2 py-1.5 whitespace-nowrap tabular-nums text-muted-foreground">
+                  <td data-label="Date" className="pl-3 pr-2 py-1.5 whitespace-nowrap tabular-nums text-muted-foreground">
                     <span className="text-accent/60 mr-1.5">▸</span>
                     {txn.tradeDate}
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td data-label="Type" className="px-2 py-1.5">
                     <TxnTypePill type={txn.transactionType} />
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
+                  <td data-label="Qty" className="px-2 py-1.5 text-right tabular-nums">
                     {new Decimal(txn.quantity).toFixed(3)}
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{formatINR(txn.price)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums font-semibold">
+                  <td data-label="Price" className="px-2 py-1.5 text-right tabular-nums">{formatINR(txn.price)}</td>
+                  <td data-label="Amount" className="px-2 py-1.5 text-right tabular-nums font-semibold">
                     {formatINR(amount.toString())}
                   </td>
-                  <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                  <td data-fullrow className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
                     {isConfirmDelete ? (
                       <div className="flex items-center gap-1 justify-end">
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap">

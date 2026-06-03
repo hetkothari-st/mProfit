@@ -374,7 +374,7 @@ function ConnectStep({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <CardTitle className="flex items-center gap-2">
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-positive/20 text-positive text-xs font-bold">
             <Check className="h-3.5 w-3.5" />
@@ -642,7 +642,7 @@ function DiscoveryCard({
       ) : (
         <div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="w-8 px-3 py-1.5 text-left">
@@ -685,6 +685,7 @@ function DiscoveryCard({
                       }}
                     >
                       <td
+                        data-label=""
                         className="px-3 py-2"
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -700,7 +701,7 @@ function DiscoveryCard({
                           }}
                         />
                       </td>
-                      <td className="px-3 py-2">
+                      <td data-label="Sender" className="px-3 py-2">
                         <div className="font-medium text-sm">
                           {s.displayName ?? s.address}
                         </div>
@@ -708,7 +709,7 @@ function DiscoveryCard({
                           {s.address}
                         </div>
                       </td>
-                      <td className="px-3 py-2">
+                      <td data-label="Match" className="px-3 py-2">
                         {s.seedMatch ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-accent">
                             <CheckCircle2 className="h-3 w-3" />
@@ -720,10 +721,10 @@ function DiscoveryCard({
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs">
+                      <td data-label="Score" className="px-3 py-2 text-right font-mono text-xs">
                         {s.score.toFixed(1)}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs">
+                      <td data-label="Mail" className="px-3 py-2 text-right font-mono text-xs">
                         {s.messageCount}
                       </td>
                     </tr>
@@ -865,7 +866,7 @@ function ReviewStep({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2">
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-accent text-accent-foreground text-xs font-bold">
@@ -891,7 +892,7 @@ function ReviewStep({
             {autoCommitCandidates.map((s) => (
               <div
                 key={s.id}
-                className="flex items-center justify-between gap-3 text-sm"
+                className="flex flex-wrap items-center justify-between gap-3 text-sm"
               >
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-accent" />
@@ -1058,7 +1059,7 @@ function EventDetailDialog({
         </DialogHeader>
         {event && (
           <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
               <DetailField label="Type" value={event.eventType} />
               <DetailField label="Status" value={event.status} />
               <DetailField label="Event date" value={event.eventDate} />

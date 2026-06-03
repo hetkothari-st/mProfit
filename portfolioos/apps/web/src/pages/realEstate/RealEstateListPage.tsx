@@ -676,7 +676,7 @@ function PropertyCard({
         <CardContent className="p-5 relative">
           <div className="flex items-start justify-between gap-3 mb-1">
             <div className="min-w-0 flex-1">
-              <h3 className="font-sans font-semibold text-[28px] leading-[1.1] tracking-[-0.02em] text-foreground truncate">
+              <h3 className="font-sans font-semibold text-xl sm:text-[28px] leading-[1.1] tracking-[-0.02em] text-foreground truncate">
                 {property.name}
               </h3>
               <p className="font-display-italic text-lg text-muted-foreground mt-2.5">
@@ -715,7 +715,7 @@ function PropertyCard({
               <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
                 Current value
               </p>
-              <p className="numeric-display-lg money-digits text-3xl mt-1">
+              <p className="numeric-display-lg money-digits text-2xl sm:text-3xl mt-1 break-words">
                 {formatINR(property.currentValue)}
               </p>
               {totalCostBasisOf(property).greaterThan(0) && (
@@ -831,7 +831,7 @@ export function RealEstateListPage() {
         title="Real Estate"
         description="Properties you own — homes, plots, commercial. Manual current value, capital-gain on sale, document vault."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <DownloadReportButton type="holdings" assetClasses={['REAL_ESTATE']} />
             <Button onClick={() => { setEditProperty(null); setCreateOpen(true); }}>
               <Plus className="h-4 w-4" /> Add property
@@ -869,7 +869,7 @@ export function RealEstateListPage() {
             <div key={p.id}>
               {confirmDeleteId === p.id ? (
                 <Card className="border-destructive">
-                  <CardContent className="p-5 flex items-center justify-between gap-3">
+                  <CardContent className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm font-medium">Delete "{p.name}"?</p>
                     <div className="flex gap-2">
                       <Button

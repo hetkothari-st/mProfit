@@ -131,7 +131,7 @@ function CoinHoldingCard({
       {/* Current value */}
       <div>
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Current Value</p>
-        <p className="text-2xl font-bold tabular-nums leading-tight">
+        <p className="text-xl sm:text-2xl font-bold tabular-nums leading-tight break-words">
           {currentInr ? formatINR(currentInr.toString()) : '—'}
         </p>
         {currentUsd && (
@@ -281,7 +281,7 @@ export function CryptoPage() {
         title="Cryptocurrency"
         description="Track Bitcoin, Ethereum, and other digital assets with live prices"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <DownloadReportButton type="holdings" assetClasses={['CRYPTOCURRENCY']} />
             <Button onClick={openAdd}>
               <Plus className="h-4 w-4" /> Add Crypto
@@ -299,7 +299,7 @@ export function CryptoPage() {
           <Card>
             <CardContent className="px-4 py-3">
               <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Invested</p>
-              <p className="text-xl font-semibold tabular-nums mt-1">{formatINR(totalInvested.toString())}</p>
+              <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words">{formatINR(totalInvested.toString())}</p>
             </CardContent>
           </Card>
           <Card>
@@ -313,7 +313,7 @@ export function CryptoPage() {
                   live
                 </span>
               </div>
-              <p className="text-xl font-semibold tabular-nums mt-1">{formatINR(totalValue.toString())}</p>
+              <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words">{formatINR(totalValue.toString())}</p>
               {!totalUsd.isZero() && (
                 <p className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
                   {formatUSD(totalUsd)}
@@ -324,7 +324,7 @@ export function CryptoPage() {
           <Card>
             <CardContent className="px-4 py-3">
               <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Unrealised P&L</p>
-              <p className={`text-xl font-semibold tabular-nums mt-1 ${totalPnL.gte(0) ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+              <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${totalPnL.gte(0) ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {totalPnL.gte(0) ? '+' : ''}{formatINR(totalPnL.toString())}
               </p>
               {pnlPct != null && (
@@ -337,7 +337,7 @@ export function CryptoPage() {
           <Card>
             <CardContent className="px-4 py-3">
               <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Coins held</p>
-              <p className="text-xl font-semibold tabular-nums mt-1">{holdings.length}</p>
+              <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1">{holdings.length}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {holdings.filter((h) => h.live).length} with live prices
               </p>
@@ -390,7 +390,7 @@ export function CryptoPage() {
             <span className="text-xs text-muted-foreground">({transactions.length})</span>
           </div>
           <div className="rounded-md border overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rtable">
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Date</th>
@@ -411,8 +411,8 @@ export function CryptoPage() {
                   const sym = (txn.symbol ?? txn.isin ?? txn.assetName ?? '??').toString().toUpperCase().slice(0, 4);
                   return (
                     <tr key={txn.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{txn.tradeDate}</td>
-                      <td className="px-4 py-3">
+                      <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">{txn.tradeDate}</td>
+                      <td data-label="Coin" className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <CoinAvatar symbol={sym} size="sm" />
                           <div className="min-w-0">
@@ -421,7 +421,7 @@ export function CryptoPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
+                      <td data-label="Type" className="px-4 py-3 hidden sm:table-cell">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
                           ${isCredit
                             ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
@@ -433,16 +433,16 @@ export function CryptoPage() {
                           : txn.transactionType}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell text-muted-foreground">
+                      <td data-label="Qty" className="px-4 py-3 text-right tabular-nums hidden sm:table-cell text-muted-foreground">
                         {new Decimal(txn.quantity).toFixed(6)}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell text-muted-foreground">
+                      <td data-label="Price" className="px-4 py-3 text-right tabular-nums hidden md:table-cell text-muted-foreground">
                         {formatINR(txn.price)}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums font-medium">
+                      <td data-label="Amount" className="px-4 py-3 text-right tabular-nums font-medium">
                         {formatINR(amount.toString())}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-fullrow className="px-4 py-3">
                         {isDelete ? (
                           <div className="flex items-center gap-1 justify-end">
                             <span className="text-xs text-muted-foreground whitespace-nowrap">Sure?</span>

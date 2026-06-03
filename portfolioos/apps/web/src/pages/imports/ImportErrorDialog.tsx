@@ -50,7 +50,7 @@ export function ImportErrorDialog({ job, onClose }: Props) {
               Row errors ({log!.rowErrors!.length})
             </div>
             <div className="max-h-64 overflow-y-auto border rounded-md">
-              <table className="w-full text-sm">
+              <table className="rtable w-full text-sm">
                 <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="text-left font-medium px-3 py-1.5">Row</th>
@@ -60,8 +60,8 @@ export function ImportErrorDialog({ job, onClose }: Props) {
                 <tbody className="divide-y">
                   {log!.rowErrors!.map((e, i) => (
                     <tr key={i}>
-                      <td className="px-3 py-1.5 tabular-nums">{e.row}</td>
-                      <td className="px-3 py-1.5 text-muted-foreground">{e.reason}</td>
+                      <td data-label="Row" className="px-3 py-1.5 tabular-nums">{e.row}</td>
+                      <td data-label="Reason" className="px-3 py-1.5 text-muted-foreground">{e.reason}</td>
                     </tr>
                   ))}
                 </tbody>

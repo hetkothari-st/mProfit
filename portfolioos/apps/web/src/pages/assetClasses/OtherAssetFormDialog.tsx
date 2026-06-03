@@ -224,7 +224,7 @@ export function OtherAssetFormDialog({ open, onOpenChange, initial, defaultPortf
           </div>
 
           {/* Name + ISIN */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Asset Name <span className="text-destructive">*</span></Label>
               <Input {...register('assetName')} placeholder="e.g. Helios Capital PMS" />
@@ -237,7 +237,7 @@ export function OtherAssetFormDialog({ open, onOpenChange, initial, defaultPortf
           </div>
 
           {/* Date + Qty + Price */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label>Date <span className="text-destructive">*</span></Label>
               <Input type="date" {...register('tradeDate')} />
@@ -264,7 +264,7 @@ export function OtherAssetFormDialog({ open, onOpenChange, initial, defaultPortf
             <Textarea {...register('narration')} placeholder="Optional notes…" rows={2} />
           </div>
 
-          <DialogFooter className="flex items-center justify-between pt-2">
+          <DialogFooter className="flex items-center justify-between pt-2 flex-wrap gap-2">
             <div>
               {isEdit && !showDeleteConfirm && (
                 <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive"

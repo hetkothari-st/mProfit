@@ -122,7 +122,7 @@ function KpiCard({
           <div className="text-[10px] text-muted-foreground uppercase tracking-[0.14em] font-semibold">
             {label}
           </div>
-          <div className={`text-xl font-semibold mt-1 tabular-nums ${accent ?? ''}`}>{value}</div>
+          <div className={`text-lg sm:text-xl font-semibold mt-1 tabular-nums break-words ${accent ?? ''}`}>{value}</div>
         </div>
         <Icon className="h-8 w-8 text-muted-foreground/40" />
       </CardContent>
@@ -370,7 +370,7 @@ export function FuturesOptionsPage() {
       />
 
       {summaryQ.data && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard label="Open positions" value={String(summaryQ.data.openCount)} icon={Activity} />
           <KpiCard
             label="Realized P&L"
@@ -723,7 +723,7 @@ function ContractTrades({ trades }: { trades: FoTrade[] }) {
   const sorted = [...trades].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
   return (
     <div className="overflow-x-auto rounded border border-border bg-background/60">
-      <table className="w-full text-xs">
+      <table className="w-full text-xs rtable">
         <thead className="bg-muted/40">
           <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
             <th className="text-left px-2.5 py-1.5 font-semibold">Date</th>
@@ -737,8 +737,8 @@ function ContractTrades({ trades }: { trades: FoTrade[] }) {
         <tbody>
           {sorted.map((t) => (
             <tr key={t.id} className="border-t border-border/60">
-              <td className="px-2.5 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">{t.tradeDate}</td>
-              <td className="px-2.5 py-1.5">
+              <td data-label="Date" className="px-2.5 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">{t.tradeDate}</td>
+              <td data-label="Side" className="px-2.5 py-1.5">
                 <span
                   className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                     t.transactionType === 'BUY'
@@ -749,10 +749,10 @@ function ContractTrades({ trades }: { trades: FoTrade[] }) {
                   {t.transactionType}
                 </span>
               </td>
-              <td className="px-2.5 py-1.5 text-right tabular-nums">{t.quantity}</td>
-              <td className="px-2.5 py-1.5 text-right tabular-nums">{fmtINR(t.price)}</td>
-              <td className="px-2.5 py-1.5 text-right tabular-nums font-medium">{fmtINR(t.netAmount)}</td>
-              <td className="px-2.5 py-1.5 text-xs text-muted-foreground">{t.broker ?? '—'}</td>
+              <td data-label="Qty" className="px-2.5 py-1.5 text-right tabular-nums">{t.quantity}</td>
+              <td data-label="Price" className="px-2.5 py-1.5 text-right tabular-nums">{fmtINR(t.price)}</td>
+              <td data-label="Net" className="px-2.5 py-1.5 text-right tabular-nums font-medium">{fmtINR(t.netAmount)}</td>
+              <td data-label="Broker" className="px-2.5 py-1.5 text-xs text-muted-foreground">{t.broker ?? '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -969,7 +969,7 @@ function UnderlyingTrades({ trades }: { trades: FoTrade[] }) {
         Transactions ({trades.length})
       </div>
       <div className="overflow-x-auto rounded border border-border bg-card">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rtable">
           <thead className="bg-muted/40 dark:bg-muted/20">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-3 pr-2 py-1.5 font-semibold">Date</th>
@@ -989,24 +989,24 @@ function UnderlyingTrades({ trades }: { trades: FoTrade[] }) {
                 key={t.id}
                 className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
               >
-                <td className="pl-3 pr-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
+                <td data-label="Date" className="pl-3 pr-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
                   <span className="text-accent/60 mr-1.5">▸</span>
                   {t.tradeDate}
                 </td>
-                <td className="px-2 py-1.5 font-sans">
+                <td data-label="Side" className="px-2 py-1.5 font-sans">
                   <SideTagBadge side={t.transactionType} />
                 </td>
-                <td className="px-2 py-1.5 truncate max-w-[260px] text-[11px]">{t.assetName ?? '—'}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
-                <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
+                <td data-label="Instrument" className="px-2 py-1.5 truncate max-w-[260px] text-[11px]">{t.assetName ?? '—'}</td>
+                <td data-label="Strike" className="px-2 py-1.5 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
+                <td data-label="Expiry" className="px-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
                   {t.expiryDate ?? '—'}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{t.quantity}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{fmtINR(t.price)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums font-semibold">
+                <td data-label="Qty" className="px-2 py-1.5 text-right tabular-nums">{t.quantity}</td>
+                <td data-label="Price" className="px-2 py-1.5 text-right tabular-nums">{fmtINR(t.price)}</td>
+                <td data-label="Net" className="px-2 py-1.5 text-right tabular-nums font-semibold">
                   {fmtINR(t.netAmount)}
                 </td>
-                <td className="px-2 py-1.5 text-[11px] text-muted-foreground font-sans">
+                <td data-label="Broker" className="px-2 py-1.5 text-[11px] text-muted-foreground font-sans">
                   {t.broker ?? '—'}
                 </td>
               </tr>
@@ -1096,7 +1096,7 @@ function FuturesLedger({
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm rtable">
           <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="w-7 pl-3 pr-2 py-2"></th>
@@ -1126,10 +1126,10 @@ function FuturesLedger({
                   className={`border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors cursor-pointer ${isOpen ? 'bg-muted/30 dark:bg-muted/15' : ''}`}
                   onClick={() => toggle(p.id)}
                 >
-                  <td className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
+                  <td data-label="" className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </td>
-                  <td className="relative pl-4 pr-2 py-2.5">
+                  <td data-label="Contract" className="relative pl-4 pr-2 py-2.5">
                     <span
                       className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
                         long
@@ -1144,10 +1144,10 @@ function FuturesLedger({
                       FUT
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-xs font-sans">
+                  <td data-label="Side" className="px-3 py-2.5 text-xs font-sans">
                     <SideArrow qty={p.netQuantity} />
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td data-label="Expiry" className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground tabular-nums">{p.expiryDate}</span>
                       {(p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') && (
@@ -1155,7 +1155,7 @@ function FuturesLedger({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
+                  <td data-label="Net Qty" className="px-3 py-2.5 text-right tabular-nums">
                     <span
                       className={
                         long
@@ -1169,11 +1169,11 @@ function FuturesLedger({
                       {p.netQuantity}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                  <td data-label="Lot" className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                     ×{p.lotSize}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{fmtINR(p.avgEntryPrice)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold">
+                  <td data-label="Avg Entry" className="px-3 py-2.5 text-right tabular-nums">{fmtINR(p.avgEntryPrice)}</td>
+                  <td data-label="LTP" className="px-3 py-2.5 text-right tabular-nums font-semibold">
                     {p.mtmPrice ? (
                       fmtINR(p.mtmPrice)
                     ) : (
@@ -1182,20 +1182,20 @@ function FuturesLedger({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{fmtINR(p.totalCost)}</td>
-                  <td className={`px-3 py-2.5 text-right tabular-nums ${pnlClass(p.realizedPnl)}`}>
+                  <td data-label="Notional" className="px-3 py-2.5 text-right tabular-nums">{fmtINR(p.totalCost)}</td>
+                  <td data-label="Realized" className={`px-3 py-2.5 text-right tabular-nums ${pnlClass(p.realizedPnl)}`}>
                     {fmtINR(p.realizedPnl)}
                   </td>
-                  <td className={`px-3 py-2.5 text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
+                  <td data-label="Unrealized" className={`px-3 py-2.5 text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
                     {p.unrealizedPnl ? fmtINR(p.unrealizedPnl) : '—'}
                   </td>
-                  <td className="px-3 py-2.5 font-sans">
+                  <td data-label="Status" className="px-3 py-2.5 font-sans">
                     <StatusPill status={p.status} />
                   </td>
                 </tr>
                 {isOpen && (
                   <tr className="bg-muted/15 dark:bg-muted/10">
-                    <td colSpan={12} className="px-4 py-3 font-sans">
+                    <td colSpan={12} data-fullrow className="px-4 py-3 font-sans">
                       <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
                         Transactions ({tradesForThis.length})
                       </div>
@@ -1304,7 +1304,7 @@ function OptionsChain({
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm rtable">
           <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="w-7 pl-3 pr-2 py-2"></th>
@@ -1335,10 +1335,10 @@ function OptionsChain({
                   className={`border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors cursor-pointer ${isOpen ? 'bg-muted/30 dark:bg-muted/15' : ''}`}
                   onClick={() => toggle(p.id)}
                 >
-                  <td className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
+                  <td data-label="" className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </td>
-                  <td className="relative pl-4 pr-2 py-2.5">
+                  <td data-label="Underlying" className="relative pl-4 pr-2 py-2.5">
                     <span
                       className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
                         isCall
@@ -1348,18 +1348,18 @@ function OptionsChain({
                     />
                     <span className="font-semibold tracking-wide text-foreground">{p.underlying}</span>
                   </td>
-                  <td className="px-2 py-2.5 font-sans">
+                  <td data-label="Type" className="px-2 py-2.5 font-sans">
                     <ContractTypeBadge instrumentType={p.instrumentType} />
                   </td>
-                  <td className="px-3 py-2.5 text-right">
+                  <td data-label="Strike" className="px-3 py-2.5 text-right">
                     <span className="inline-block text-xs font-semibold tabular-nums px-2 py-0.5 rounded bg-muted text-foreground ring-1 ring-border">
                       {p.strikePrice ?? '—'}
                     </span>
                   </td>
-                  <td className="px-2 py-2.5 text-center">
+                  <td data-label="Payoff" className="px-2 py-2.5 text-center">
                     <PayoffCell type={isCall ? 'CALL' : 'PUT'} />
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td data-label="Expiry" className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground tabular-nums">{p.expiryDate}</span>
                       {(p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') && (
@@ -1367,7 +1367,7 @@ function OptionsChain({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
+                  <td data-label="Net Qty" className="px-3 py-2.5 text-right tabular-nums">
                     <span
                       className={
                         qty.isPositive()
@@ -1381,11 +1381,11 @@ function OptionsChain({
                       {p.netQuantity}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                  <td data-label="Lot" className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                     ×{p.lotSize}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{fmtINR(p.avgEntryPrice)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold">
+                  <td data-label="Premium" className="px-3 py-2.5 text-right tabular-nums">{fmtINR(p.avgEntryPrice)}</td>
+                  <td data-label="LTP" className="px-3 py-2.5 text-right tabular-nums font-semibold">
                     {p.mtmPrice ? (
                       fmtINR(p.mtmPrice)
                     ) : (
@@ -1394,20 +1394,20 @@ function OptionsChain({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{fmtINR(p.totalCost)}</td>
-                  <td className={`px-3 py-2.5 text-right tabular-nums ${pnlClass(p.realizedPnl)}`}>
+                  <td data-label="Outlay" className="px-3 py-2.5 text-right tabular-nums">{fmtINR(p.totalCost)}</td>
+                  <td data-label="Realized" className={`px-3 py-2.5 text-right tabular-nums ${pnlClass(p.realizedPnl)}`}>
                     {fmtINR(p.realizedPnl)}
                   </td>
-                  <td className={`px-3 py-2.5 text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
+                  <td data-label="Unrealized" className={`px-3 py-2.5 text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
                     {p.unrealizedPnl ? fmtINR(p.unrealizedPnl) : '—'}
                   </td>
-                  <td className="px-3 py-2.5 font-sans">
+                  <td data-label="Status" className="px-3 py-2.5 font-sans">
                     <StatusPill status={p.status} />
                   </td>
                 </tr>
                 {isOpen && (
                   <tr className="bg-muted/15 dark:bg-muted/10">
-                    <td colSpan={14} className="px-4 py-3 font-sans">
+                    <td colSpan={14} data-fullrow className="px-4 py-3 font-sans">
                       <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
                         Transactions ({tradesForThis.length})
                       </div>
@@ -1452,7 +1452,7 @@ function TapeSection({ trades, limit }: { trades: FoTrade[]; limit?: number }) {
         </div>
       </div>
       <div className="h-[420px] overflow-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm rtable">
           <thead className="bg-muted/40 dark:bg-muted/20 sticky top-0 z-10">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-4 pr-2 py-2 font-semibold">Date</th>
@@ -1474,24 +1474,24 @@ function TapeSection({ trades, limit }: { trades: FoTrade[]; limit?: number }) {
                   i % 2 === 1 ? 'bg-muted/20 dark:bg-muted/10' : ''
                 }`}
               >
-                <td className="pl-4 pr-2 py-2 whitespace-nowrap text-muted-foreground tabular-nums">
+                <td data-label="Date" className="pl-4 pr-2 py-2 whitespace-nowrap text-muted-foreground tabular-nums">
                   <span className="text-accent/60 mr-1.5">▸</span>
                   {t.tradeDate}
                 </td>
-                <td className="px-3 py-2 font-sans">
+                <td data-label="Side" className="px-3 py-2 font-sans">
                   <SideTagBadge side={t.transactionType} />
                 </td>
-                <td className="px-3 py-2 truncate max-w-[280px] text-xs">{t.assetName ?? '—'}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
-                <td className="px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums">
+                <td data-label="Instrument" className="px-3 py-2 truncate max-w-[280px] text-xs">{t.assetName ?? '—'}</td>
+                <td data-label="Strike" className="px-3 py-2 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
+                <td data-label="Expiry" className="px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums">
                   {t.expiryDate ?? '—'}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{t.quantity}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtINR(t.price)}</td>
-                <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                <td data-label="Qty" className="px-3 py-2 text-right tabular-nums">{t.quantity}</td>
+                <td data-label="Price" className="px-3 py-2 text-right tabular-nums">{fmtINR(t.price)}</td>
+                <td data-label="Net" className="px-3 py-2 text-right tabular-nums font-semibold">
                   {fmtINR(t.netAmount)}
                 </td>
-                <td className="px-3 py-2 text-xs text-muted-foreground font-sans">
+                <td data-label="Broker" className="px-3 py-2 text-xs text-muted-foreground font-sans">
                   {t.broker ?? '—'}
                 </td>
               </tr>
@@ -1525,7 +1525,7 @@ function PnlStatement({
 }) {
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         {Object.entries(data.summaryByFy).map(([fy, s]) => (
           <Card
             key={fy}
@@ -1535,7 +1535,7 @@ function PnlStatement({
               <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground font-semibold">
                 FY {fy}
               </div>
-              <div className="text-lg font-semibold mt-1 tabular-nums">
+              <div className="text-base sm:text-lg font-semibold mt-1 tabular-nums break-words">
                 <span className={pnlClass(s.totalPnl)}>{fmtINR(s.totalPnl)}</span>
               </div>
               <div className="text-xs text-muted-foreground mt-1 tabular-nums">
@@ -1549,7 +1549,7 @@ function PnlStatement({
         ))}
       </div>
       <div className="overflow-x-auto rounded border border-border">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm rtable">
           <thead className="bg-muted/50 dark:bg-muted/30 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left px-3 py-2 font-semibold">Underlying</th>
@@ -1566,8 +1566,8 @@ function PnlStatement({
           <tbody className="font-mono">
             {data.rows.map((r, i) => (
               <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
-                <td className="px-3 py-2 font-semibold">{r.underlying}</td>
-                <td className="px-3 py-2 font-sans">
+                <td data-label="Underlying" className="px-3 py-2 font-semibold">{r.underlying}</td>
+                <td data-label="Type" className="px-3 py-2 font-sans">
                   {r.instrumentType === 'FUTURES' ? (
                     <ContractTypeBadge instrumentType="FUTURES" />
                   ) : r.instrumentType === 'CALL' ? (
@@ -1578,17 +1578,17 @@ function PnlStatement({
                     <span className="text-xs text-muted-foreground">{r.instrumentType}</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{r.strikePrice ?? '—'}</td>
-                <td className="px-3 py-2 tabular-nums text-muted-foreground">{r.expiryDate}</td>
-                <td className="px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">
+                <td data-label="Strike" className="px-3 py-2 text-right tabular-nums">{r.strikePrice ?? '—'}</td>
+                <td data-label="Expiry" className="px-3 py-2 tabular-nums text-muted-foreground">{r.expiryDate}</td>
+                <td data-label="Side" className="px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">
                   {r.side}
                 </td>
-                <td className="px-3 py-2 tabular-nums">{r.financialYear}</td>
-                <td className={`px-3 py-2 text-right tabular-nums font-semibold ${pnlClass(r.realizedPnl)}`}>
+                <td data-label="FY" className="px-3 py-2 tabular-nums">{r.financialYear}</td>
+                <td data-label="Realized P&L" className={`px-3 py-2 text-right tabular-nums font-semibold ${pnlClass(r.realizedPnl)}`}>
                   {fmtINR(r.realizedPnl)}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtINR(r.turnover)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{r.closedTradeCount}</td>
+                <td data-label="Turnover" className="px-3 py-2 text-right tabular-nums">{fmtINR(r.turnover)}</td>
+                <td data-label="Trades" className="px-3 py-2 text-right tabular-nums">{r.closedTradeCount}</td>
               </tr>
             ))}
           </tbody>

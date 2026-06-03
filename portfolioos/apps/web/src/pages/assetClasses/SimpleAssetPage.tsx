@@ -222,7 +222,7 @@ export function SimpleAssetPage({
         title={title}
         description={description}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <DownloadReportButton type="holdings" assetClasses={assetClasses} />
             {formOptions && formOptions.length > 0 ? (
               <div className="relative" ref={addMenuRef}>
@@ -342,7 +342,7 @@ export function SimpleAssetPage({
             Transactions
           </h3>
           <div className="rounded-md border overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rtable">
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Date</th>
@@ -361,10 +361,10 @@ export function SimpleAssetPage({
                   const isDeleting = deleteMutation.isPending && confirmDeleteId === txn.id;
                   return (
                     <tr key={txn.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                      <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                         {txn.tradeDate}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-label="Name" className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           {txn.photos && txn.photos.length > 0 && (
                             <div className="flex gap-1.5 shrink-0">
@@ -388,7 +388,7 @@ export function SimpleAssetPage({
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
+                      <td data-label="Type" className="px-4 py-3 hidden sm:table-cell">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
                           ${['BUY','DEPOSIT','INTEREST_RECEIVED','OPENING_BALANCE','MATURITY'].includes(txn.transactionType)
                             ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
@@ -396,16 +396,16 @@ export function SimpleAssetPage({
                           {TXN_TYPE_LABELS[txn.transactionType] ?? txn.transactionType}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell text-muted-foreground">
+                      <td data-label="Qty" className="px-4 py-3 text-right tabular-nums hidden sm:table-cell text-muted-foreground">
                         {new Decimal(txn.quantity).toFixed(3)}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell text-muted-foreground">
+                      <td data-label="Price" className="px-4 py-3 text-right tabular-nums hidden md:table-cell text-muted-foreground">
                         {formatINR(txn.price)}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums font-medium">
+                      <td data-label="Amount" className="px-4 py-3 text-right tabular-nums font-medium">
                         {formatINR(amount.toString())}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-fullrow className="px-4 py-3">
                         {isConfirmDelete ? (
                           <div className="flex items-center gap-1 justify-end">
                             <span className="text-xs text-muted-foreground whitespace-nowrap">Sure?</span>
@@ -500,7 +500,7 @@ function HoldingsSection({
         </div>
       )}
       <div className="rounded-md border overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm rtable">
           <thead>
             <tr className="border-b bg-muted/40">
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Name</th>
@@ -527,31 +527,31 @@ function HoldingsSection({
                   className={`border-b last:border-0 hover:bg-muted/20 transition-colors ${onHoldingClick ? 'cursor-pointer' : ''}`}
                   onClick={() => onHoldingClick?.(h)}
                 >
-                  <td className="px-4 py-3">
+                  <td data-label="Name" className="px-4 py-3">
                     <p className="font-medium truncate max-w-[180px]">{h.assetName}</p>
                     {h.isin && <p className="text-xs text-muted-foreground">{h.isin}</p>}
                   </td>
                   {showTypeColumn && (
-                    <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground text-xs">
+                    <td data-label="Type" className="px-4 py-3 hidden sm:table-cell text-muted-foreground text-xs">
                       {ASSET_CLASS_LABELS[h.assetClass as AssetClass] ?? h.assetClass}
                     </td>
                   )}
-                  <td className="px-4 py-3 hidden md:table-cell text-muted-foreground text-xs">
+                  <td data-label="Portfolio" className="px-4 py-3 hidden md:table-cell text-muted-foreground text-xs">
                     {h.portfolioName}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  <td data-label="Qty / Units" className="px-4 py-3 text-right tabular-nums">
                     {new Decimal(h.quantity).toFixed(2)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell">
+                  <td data-label="Avg cost" className="px-4 py-3 text-right tabular-nums hidden sm:table-cell">
                     {formatINR(h.avgCostPrice)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-medium">
+                  <td data-label="Invested" className="px-4 py-3 text-right tabular-nums font-medium">
                     {formatINR(h.totalCost)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
+                  <td data-label="Current" className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
                     {h.currentValue ? formatINR(h.currentValue) : '—'}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
+                  <td data-label="P&L" className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
                     {pnl ? (
                       <span className={pnl.gte(0) ? 'text-positive' : 'text-negative'}>
                         {pnl.gte(0) ? '+' : ''}

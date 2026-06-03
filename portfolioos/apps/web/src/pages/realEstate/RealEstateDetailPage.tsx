@@ -150,7 +150,7 @@ export function RealEstateDetailPage() {
         }
         description={`${PROPERTY_TYPE_LABELS[property.propertyType]} · ${PROPERTY_STATUS_LABELS[property.status]}`}
         actions={
-          <>
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4" /> Edit
             </Button>
@@ -174,7 +174,7 @@ export function RealEstateDetailPage() {
                 </Button>
               </>
             )}
-          </>
+          </div>
         }
       />
 
@@ -192,7 +192,7 @@ export function RealEstateDetailPage() {
                 Rentals tab. Cost basis and capital-gain stay here.
               </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <Button asChild size="sm" variant="outline">
                 <Link to={`/rental/${property.rentalPropertyId}`}>
                   Open rental record <ExternalLink className="h-3.5 w-3.5" />
@@ -215,13 +215,13 @@ export function RealEstateDetailPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <Card>
           <CardContent className="px-4 py-3">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
               Current value
             </p>
-            <p className="text-xl font-semibold tabular-nums mt-1">
+            <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words">
               {property.currentValue ? formatINR(property.currentValue) : '—'}
             </p>
             {property.currentValueAsOf && (
@@ -236,7 +236,7 @@ export function RealEstateDetailPage() {
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
               Total cost basis
             </p>
-            <p className="text-xl font-semibold tabular-nums mt-1">{formatINR(cost.toString())}</p>
+            <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words">{formatINR(cost.toString())}</p>
             <p className="text-xs text-muted-foreground">incl. duties + fees</p>
           </CardContent>
         </Card>
@@ -246,7 +246,7 @@ export function RealEstateDetailPage() {
               {isSold ? 'Realised gain (raw)' : 'Unrealised gain'}
             </p>
             <p
-              className={`text-xl font-semibold tabular-nums mt-1 ${
+              className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${
                 gainPositive ? 'text-positive' : gain.isZero() ? '' : 'text-negative'
               }`}
             >

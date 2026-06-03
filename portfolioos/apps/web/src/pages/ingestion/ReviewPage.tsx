@@ -242,7 +242,7 @@ export function ReviewPage() {
             {autoCommitCandidates.map((s) => (
               <div
                 key={s.id}
-                className="flex items-center justify-between gap-3 text-sm"
+                className="flex flex-wrap items-center justify-between gap-3 text-sm"
               >
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-accent" />
@@ -268,7 +268,7 @@ export function ReviewPage() {
         </Card>
       )}
 
-      <div className="flex gap-1 mb-4">
+      <div className="flex flex-wrap gap-1 mb-4">
         {(Object.keys(TAB_STATUSES) as Tab[]).map((t) => (
           <Button
             key={t}
@@ -515,7 +515,7 @@ function EventDetailDialog({
         </DialogHeader>
         {event && (
           <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
               <DetailField label="Type" value={event.eventType} />
               <DetailField label="Status" value={event.status} />
               <DetailField label="Event date" value={event.eventDate} />

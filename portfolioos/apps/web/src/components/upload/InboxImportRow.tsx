@@ -39,7 +39,7 @@ export function InboxImportRow({
   const isPendingApproval = doc.status === 'PENDING_APPROVAL';
   return (
     <tr className={`border-t ${selected ? 'bg-accent/20' : 'hover:bg-muted/30'}`}>
-      <td className="px-2 py-2 w-8">
+      <td data-label="" className="px-2 py-2 w-8">
         <input
           type="checkbox"
           checked={selected}
@@ -47,21 +47,21 @@ export function InboxImportRow({
           disabled={!isPendingApproval}
         />
       </td>
-      <td className="px-2 py-2">
+      <td data-label="File" className="px-2 py-2">
         <button onClick={onPreview} className="flex items-center gap-2 hover:underline text-left">
           <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="font-medium truncate max-w-[280px]">{doc.fileName}</span>
         </button>
       </td>
-      <td className="px-2 py-2 text-xs text-muted-foreground truncate max-w-[200px]">{doc.fromAddress}</td>
-      <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">
+      <td data-label="From" className="px-2 py-2 text-xs text-muted-foreground truncate max-w-[200px]">{doc.fromAddress}</td>
+      <td data-label="Date" className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">
         {new Date(doc.receivedAt).toLocaleDateString()}
       </td>
-      <td className="px-2 py-2 text-xs text-muted-foreground">{doc.classifiedDocType ?? '—'}</td>
-      <td className="px-2 py-2 text-xs text-muted-foreground tabular-nums">
+      <td data-label="Type" className="px-2 py-2 text-xs text-muted-foreground">{doc.classifiedDocType ?? '—'}</td>
+      <td data-label="Confidence" className="px-2 py-2 text-xs text-muted-foreground tabular-nums">
         {doc.classifierConfidence ? `${Math.round(parseFloat(doc.classifierConfidence) * 100)}%` : '—'}
       </td>
-      <td className="px-2 py-2">
+      <td data-label="Status" className="px-2 py-2">
         <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_CLASSES[doc.status] ?? ''}`}>
           {doc.status === 'CLASSIFYING' || doc.status === 'IMPORTING' ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -75,7 +75,7 @@ export function InboxImportRow({
           {GMAIL_DOC_STATUS_LABELS[doc.status]}
         </span>
       </td>
-      <td className="px-2 py-2">
+      <td data-fullrow className="px-2 py-2">
         <div className="flex items-center justify-end gap-1">
           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onPreview}>
             <Eye className="h-3 w-3" /> Preview
