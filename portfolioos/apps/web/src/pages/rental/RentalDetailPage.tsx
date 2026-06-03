@@ -166,6 +166,26 @@ function MarkReceivedDialog({
 
 // ── Receipt row ───────────────────────────────────────────────────────
 
+// Cosmetic row tones — keep light but visible so the table reads from
+// a glance instead of needing the user to parse status pills.
+const ROW_TONES: Record<RentReceiptDTO['status'], string> = {
+  EXPECTED: '',
+  RECEIVED: 'bg-positive/[0.04]',
+  PARTIAL: 'bg-amber-500/[0.05]',
+  OVERDUE: 'bg-negative/[0.05]',
+  SKIPPED: 'bg-muted/40 text-muted-foreground',
+};
+
+function formatRentMonth(forMonth: string): string {
+  // Input is "YYYY-MM" — render as "Jan 2027" so it reads more like a
+  // statement and less like a database key.
+  const [y, m] = forMonth.split('-');
+  if (!y || !m) return forMonth;
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  if (Number.isNaN(d.getTime())) return forMonth;
+  return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+}
+
 function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
@@ -202,58 +222,83 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
   const receivedAmt = receipt.receivedAmount
     ? new Decimal(receipt.receivedAmount)
     : null;
+  const monthLabel = formatRentMonth(receipt.forMonth);
 
   return (
     <>
-      <tr className="hover:bg-muted/30 transition-colors group">
-        <td data-label="Month" className="px-4 py-3 text-sm tabular-nums text-muted-foreground whitespace-nowrap">
-          {receipt.forMonth}
+      <tr className={`group transition-colors ${ROW_TONES[receipt.status]} hover:bg-muted/40`}>
+        <td data-label="Month" className="px-4 py-3 whitespace-nowrap">
+          <div className="text-sm font-medium text-foreground">{monthLabel}</div>
+          <div className="text-[10.5px] text-muted-foreground tabular-nums">
+            {receipt.forMonth}
+          </div>
         </td>
-        <td data-label="Expected" className="px-4 py-3 text-sm tabular-nums text-right">
+        <td data-label="Expected" className="px-4 py-3 text-sm tabular-nums text-right font-medium">
           {formatINR(expectedAmt.toString())}
         </td>
         <td data-label="Received" className="px-4 py-3 text-sm tabular-nums text-right">
           {receivedAmt ? (
-            <span
-              className={
-                receivedAmt.lt(expectedAmt) ? 'text-amber-600' : 'text-positive'
-              }
-            >
-              {formatINR(receivedAmt.toString())}
-            </span>
+            <div>
+              <div
+                className={
+                  receivedAmt.lt(expectedAmt)
+                    ? 'text-amber-600 font-medium'
+                    : 'text-positive font-medium'
+                }
+              >
+                {formatINR(receivedAmt.toString())}
+              </div>
+              {receivedAmt.lt(expectedAmt) && (
+                <div className="text-[10.5px] text-amber-600">
+                  short by {formatINR(expectedAmt.minus(receivedAmt).toString())}
+                </div>
+              )}
+              {receipt.autoMatchedFromEventId && (
+                <div className="text-[10.5px] text-accent-ink italic">auto-matched</div>
+              )}
+            </div>
           ) : (
             <span className="text-muted-foreground">—</span>
           )}
         </td>
-        <td data-label="Due" className="px-4 py-3 text-sm tabular-nums text-muted-foreground whitespace-nowrap">
-          {new Date(receipt.dueDate).toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-          })}
+        <td data-label="Due" className="px-4 py-3 text-sm tabular-nums whitespace-nowrap">
+          <div className="text-foreground">
+            {new Date(receipt.dueDate).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+            })}
+          </div>
+          <div className="text-[10.5px] text-muted-foreground">
+            {new Date(receipt.dueDate).toLocaleDateString('en-IN', { weekday: 'short' })}
+          </div>
         </td>
         <td data-label="Status" className="px-4 py-3">
           <ReceiptStatusBadge status={receipt.status} />
         </td>
-        <td data-fullrow className="px-4 py-3">
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <td data-fullrow className="px-4 py-3 text-right">
+          <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
             {isActionable && (
               <>
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-7 text-xs"
+                  className="h-7 text-xs hover:text-positive"
                   onClick={() => setMarkOpen(true)}
+                  title="Mark as received"
                 >
-                  <CheckCircle2 className="h-3 w-3" /> Received
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline ml-1">Received</span>
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-7 text-xs"
+                  className="h-7 text-xs hover:text-muted-foreground"
                   onClick={() => skipMutation.mutate()}
                   disabled={skipMutation.isPending}
+                  title="Skip this month"
                 >
-                  <SkipForward className="h-3 w-3" /> Skip
+                  <SkipForward className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline ml-1">Skip</span>
                 </Button>
               </>
             )}
@@ -261,36 +306,39 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 text-xs"
+                className="h-7 text-xs hover:text-negative"
                 onClick={() => undoMutation.mutate()}
                 disabled={undoMutation.isPending}
                 title="Undo auto-match"
               >
-                <Undo2 className="h-3 w-3" /> Undo
+                <Undo2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline ml-1">Undo</span>
               </Button>
             )}
             {isReceived && !receipt.autoMatchedFromEventId && (
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 text-xs"
+                className="h-7 text-xs hover:text-negative"
                 onClick={() => unmarkMutation.mutate()}
                 disabled={unmarkMutation.isPending}
                 title="Undo mark-received (also deletes cashflow)"
               >
-                <Undo2 className="h-3 w-3" /> Undo
+                <Undo2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline ml-1">Undo</span>
               </Button>
             )}
             {isSkipped && (
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 text-xs"
+                className="h-7 text-xs hover:text-foreground"
                 onClick={() => unskipMutation.mutate()}
                 disabled={unskipMutation.isPending}
                 title="Undo skip"
               >
-                <Undo2 className="h-3 w-3" /> Undo
+                <Undo2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline ml-1">Undo</span>
               </Button>
             )}
           </div>
@@ -309,47 +357,81 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
 
 // ── Tenancy card ──────────────────────────────────────────────────────
 
+function tenantInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]!.toUpperCase())
+    .join('') || '?';
+}
+
 function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
   const [expanded, setExpanded] = useState(tenancy.isActive);
   const receipts = tenancy.rentReceipts ?? [];
   const overdueCount = receipts.filter((r) => r.status === 'OVERDUE').length;
+  const expectedCount = receipts.filter((r) => r.status === 'EXPECTED').length;
+  const receivedCount = receipts.filter(
+    (r) => r.status === 'RECEIVED' || r.status === 'PARTIAL',
+  ).length;
+  const skippedCount = receipts.filter((r) => r.status === 'SKIPPED').length;
   const totalReceived = receipts
     .filter((r) => r.status === 'RECEIVED' || r.status === 'PARTIAL')
     .reduce(
       (sum, r) => sum.plus(new Decimal(r.receivedAmount ?? '0')),
       new Decimal(0),
     );
+  const totalExpectedAll = receipts.reduce(
+    (sum, r) => sum.plus(new Decimal(r.expectedAmount)),
+    new Decimal(0),
+  );
+  const collectionPct = totalExpectedAll.gt(0)
+    ? totalReceived.dividedBy(totalExpectedAll).times(100).toDecimalPlaces(1).toNumber()
+    : 0;
+  const initials = tenantInitials(tenancy.tenantName);
 
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="rounded-xl border border-border/70 bg-card/40 overflow-hidden">
       <button
         type="button"
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors text-left"
+        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors text-left"
         onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
       >
-        <div className="flex items-center gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-sm">{tenancy.tenantName}</span>
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            aria-hidden="true"
+            className={`h-10 w-10 rounded-full grid place-items-center shrink-0 text-[11px] font-semibold tracking-wide ring-1 ${
+              tenancy.isActive
+                ? 'bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground ring-accent/40'
+                : 'bg-muted text-muted-foreground ring-border'
+            }`}
+          >
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-[15px] truncate">{tenancy.tenantName}</span>
               {tenancy.isActive ? (
-                <span className="text-xs bg-positive/10 text-positive px-1.5 py-0.5 rounded font-medium">
+                <span className="text-[10px] uppercase tracking-kerned bg-positive/10 text-positive px-1.5 py-0.5 rounded-full font-medium ring-1 ring-positive/20">
                   Active
                 </span>
               ) : (
-                <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                <span className="text-[10px] uppercase tracking-kerned bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full ring-1 ring-border">
                   Ended
                 </span>
               )}
               {overdueCount > 0 && (
-                <span className="text-xs bg-negative/10 text-negative px-1.5 py-0.5 rounded font-medium">
+                <span className="text-[10px] uppercase tracking-kerned bg-negative/10 text-negative px-1.5 py-0.5 rounded-full font-medium ring-1 ring-negative/20">
                   {overdueCount} overdue
                 </span>
               )}
             </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-              <span className="tabular-nums">
-                {formatINR(tenancy.monthlyRent)}/mo
+            <div className="text-[11.5px] text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
+              <span className="font-medium text-foreground tabular-nums">
+                {formatINR(tenancy.monthlyRent)}
               </span>
+              <span className="text-muted-foreground">/mo</span>
               <span>·</span>
               <span>
                 {new Date(tenancy.startDate).toLocaleDateString('en-IN', {
@@ -359,53 +441,147 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
                 {tenancy.endDate &&
                   ` → ${new Date(tenancy.endDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`}
               </span>
+              {receipts.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="tabular-nums">
+                    {receivedCount}/{receipts.length} collected
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-right shrink-0">
-          {totalReceived.gt(0) && (
-            <div>
-              <p className="text-xs text-muted-foreground">Total received</p>
-              <p className="text-sm font-semibold text-positive tabular-nums">
-                {formatINR(totalReceived.toString())}
-              </p>
-            </div>
-          )}
-          {expanded ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
+        <div className="flex items-center gap-4 text-right shrink-0">
+          <div className="hidden sm:block">
+            <p className="text-[10px] uppercase tracking-kerned text-muted-foreground">
+              Total received
+            </p>
+            <p className="text-sm font-semibold text-positive tabular-nums">
+              {formatINR(totalReceived.toString())}
+            </p>
+          </div>
+          <div
+            className={`grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-transform ${
+              expanded ? 'bg-muted rotate-180' : ''
+            }`}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </div>
         </div>
       </button>
 
-      {expanded && receipts.length > 0 && (
-        <div className="border-t max-h-[400px] overflow-y-auto overflow-x-auto">
-          <table className="w-full text-sm rtable">
-            <thead className="sticky top-0 z-10">
-              <tr className="border-b text-xs text-muted-foreground">
-                <th className="text-left px-4 py-2 font-medium bg-muted">Month</th>
-                <th className="text-right px-4 py-2 font-medium bg-muted">Expected</th>
-                <th className="text-right px-4 py-2 font-medium bg-muted">Received</th>
-                <th className="text-left px-4 py-2 font-medium bg-muted">Due</th>
-                <th className="text-left px-4 py-2 font-medium bg-muted">Status</th>
-                <th className="px-4 py-2 bg-muted" />
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {receipts.map((r) => (
-                <ReceiptRow key={r.id} receipt={r} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {expanded && (
+        <>
+          {receipts.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-4 py-3 border-t border-border/60 bg-muted/20">
+              <SummaryTile
+                label="Collection"
+                value={`${collectionPct.toFixed(1)}%`}
+                hint={`${formatINR(totalReceived.toString())} of ${formatINR(totalExpectedAll.toString())}`}
+                tone={collectionPct >= 90 ? 'positive' : collectionPct >= 60 ? 'neutral' : 'warn'}
+                progress={collectionPct}
+              />
+              <SummaryTile
+                label="Received"
+                value={String(receivedCount)}
+                hint={
+                  receivedCount === 1 ? '1 payment' : `${receivedCount} payments`
+                }
+                tone="positive"
+              />
+              <SummaryTile
+                label="Expected"
+                value={String(expectedCount)}
+                hint={expectedCount === 1 ? '1 month upcoming' : `${expectedCount} months upcoming`}
+                tone="neutral"
+              />
+              <SummaryTile
+                label={overdueCount > 0 ? 'Overdue' : 'Skipped'}
+                value={String(overdueCount > 0 ? overdueCount : skippedCount)}
+                hint={overdueCount > 0 ? 'Past due' : 'Marked skip'}
+                tone={overdueCount > 0 ? 'negative' : 'neutral'}
+              />
+            </div>
+          )}
 
-      {expanded && receipts.length === 0 && (
-        <div className="border-t px-4 py-6 text-center text-sm text-muted-foreground">
-          No receipts generated yet
+          {receipts.length > 0 ? (
+            <div className="border-t border-border/60 max-h-[420px] overflow-y-auto overflow-x-auto">
+              <table className="w-full text-sm rtable">
+                <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
+                  <tr className="border-b border-border/60 text-[10.5px] uppercase tracking-kerned text-muted-foreground">
+                    <th className="text-left px-4 py-2 font-medium">Month</th>
+                    <th className="text-right px-4 py-2 font-medium">Expected</th>
+                    <th className="text-right px-4 py-2 font-medium">Received</th>
+                    <th className="text-left px-4 py-2 font-medium">Due</th>
+                    <th className="text-left px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {receipts.map((r) => (
+                    <ReceiptRow key={r.id} receipt={r} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="border-t border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+              No receipts generated yet
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function SummaryTile({
+  label,
+  value,
+  hint,
+  tone,
+  progress,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone: 'positive' | 'negative' | 'warn' | 'neutral';
+  progress?: number;
+}) {
+  const toneCls =
+    tone === 'positive'
+      ? 'text-positive'
+      : tone === 'negative'
+      ? 'text-negative'
+      : tone === 'warn'
+      ? 'text-amber-600'
+      : 'text-foreground';
+  const barCls =
+    tone === 'positive'
+      ? 'bg-positive'
+      : tone === 'negative'
+      ? 'bg-negative'
+      : tone === 'warn'
+      ? 'bg-amber-500'
+      : 'bg-accent';
+  return (
+    <div className="rounded-lg bg-card/60 border border-border/60 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-kerned text-muted-foreground font-medium">
+        {label}
+      </div>
+      <div className={`mt-0.5 text-[18px] font-semibold tabular-nums leading-tight ${toneCls}`}>
+        {value}
+      </div>
+      {progress != null && (
+        <div className="mt-1.5 h-1 w-full rounded-full bg-muted overflow-hidden">
+          <div
+            className={`h-full ${barCls} transition-all`}
+            style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+          />
         </div>
       )}
+      {hint && <div className="mt-1 text-[10.5px] text-muted-foreground truncate">{hint}</div>}
     </div>
   );
 }
