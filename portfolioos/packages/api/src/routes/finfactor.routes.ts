@@ -23,6 +23,10 @@ import {
   postMfStatement,
   postSubscriptionWebhook,
   postSyncMutualFunds,
+  postLifeInsuranceLinkedAccounts,
+  postLifeInsuranceStatement,
+  postGeneralInsuranceLinkedAccounts,
+  postGeneralInsuranceStatement,
 } from '../controllers/finfactor.controller.js';
 
 export const finfactorRouter = Router();
@@ -50,6 +54,12 @@ finfactorRouter.post('/consent/decrypt-ecres', asyncHandler(postDecryptEcres));
 
 // Sync — project Finvu MF data into PortfolioOS holdings.
 finfactorRouter.post('/sync/mf', asyncHandler(postSyncMutualFunds));
+
+// Insurance — life + general.
+finfactorRouter.post('/life-insurance/linked-accounts', asyncHandler(postLifeInsuranceLinkedAccounts));
+finfactorRouter.post('/life-insurance/statement', asyncHandler(postLifeInsuranceStatement));
+finfactorRouter.post('/general-insurance/linked-accounts', asyncHandler(postGeneralInsuranceLinkedAccounts));
+finfactorRouter.post('/general-insurance/statement', asyncHandler(postGeneralInsuranceStatement));
 
 // Webhooks — unauthenticated, HMAC-verified inside the handler. Mounted
 // on a separate router so the authenticate middleware above doesn't gate
