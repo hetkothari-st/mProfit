@@ -662,24 +662,55 @@ export function InsuranceDetailPage() {
         ) : null;
       })()}
 
-      {/* Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        {[
-          { label: 'Status', value: policy.status.toLowerCase(), className: statusColor },
-          { label: 'Sum assured', value: formatINR(policy.sumAssured) },
-          { label: 'Premium', value: `${formatINR(policy.premiumAmount)} / ${policy.premiumFrequency.toLowerCase()}` },
-          { label: 'Next due', value: policy.nextPremiumDue ? formatDate(policy.nextPremiumDue) : '—' },
-        ].map((m) => (
-          <Card key={m.label}>
-            <CardContent className="px-4 py-3">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">{m.label}</p>
-              <p className={`text-sm font-semibold mt-1 tabular-nums capitalize ${m.className ?? ''}`}>
-                {m.value}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Overview.
+          `Next due` is derived from the same schedule that powers the
+          premium-history table — picking the earliest non-PAID row.
+          Falls back to `policy.nextPremiumDue` (stored field) only when
+          the schedule is empty (e.g. SINGLE premium policies). Without
+          this, the tile and the table were free to disagree because
+          the stored field is manual and gets stale. */}
+      {(() => {
+        const sched = buildSchedule(policy);
+        const nextUnpaid = sched.find((r) => r.status !== 'PAID');
+        const nextDueDate = nextUnpaid?.dueDate ?? (policy.nextPremiumDue ? new Date(policy.nextPremiumDue) : null);
+        const nextDueLabel = nextDueDate ? formatDate(nextDueDate.toISOString()) : '—';
+        const nextDueClass =
+          nextUnpaid?.status === 'OVERDUE' ? 'text-negative' : 'text-foreground';
+        const nextDueHint =
+          nextUnpaid?.status === 'OVERDUE'
+            ? 'Overdue'
+            : nextUnpaid?.status === 'UPCOMING'
+            ? 'Upcoming'
+            : null;
+        const tiles = [
+          { label: 'Status', value: policy.status.toLowerCase(), className: statusColor, hint: null as string | null },
+          { label: 'Sum assured', value: formatINR(policy.sumAssured), className: '', hint: null },
+          {
+            label: 'Premium',
+            value: `${formatINR(policy.premiumAmount)} / ${policy.premiumFrequency.toLowerCase()}`,
+            className: '',
+            hint: null,
+          },
+          { label: 'Next due', value: nextDueLabel, className: nextDueClass, hint: nextDueHint },
+        ];
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            {tiles.map((m) => (
+              <Card key={m.label}>
+                <CardContent className="px-4 py-3">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">{m.label}</p>
+                  <p className={`text-sm font-semibold mt-1 tabular-nums capitalize ${m.className}`}>
+                    {m.value}
+                  </p>
+                  {m.hint && (
+                    <p className="text-[10.5px] text-muted-foreground mt-0.5 normal-case">{m.hint}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Dates row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
