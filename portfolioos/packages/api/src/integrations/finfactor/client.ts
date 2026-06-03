@@ -20,6 +20,7 @@
 
 import { request } from 'undici';
 import { BadRequestError } from '../../lib/errors.js';
+import { isFinfactorDemoMode } from './demo.js';
 
 const DEFAULT_BASE_URL = 'https://dhanaprayoga.fiu.finfactor.in';
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -28,8 +29,14 @@ export function finfactorBaseUrl(): string {
   return process.env['FINFACTOR_BASE_URL'] ?? DEFAULT_BASE_URL;
 }
 
+/**
+ * Treat the integration as configured when either:
+ *   (a) FINFACTOR_API_TOKEN is set (real upstream call), or
+ *   (b) FINFACTOR_DEMO_MODE=true is set (UI-only dummy fixtures).
+ * Lets the operator demo the panel without a live channel token.
+ */
 export function isFinfactorConfigured(): boolean {
-  return Boolean(process.env['FINFACTOR_API_TOKEN']);
+  return Boolean(process.env['FINFACTOR_API_TOKEN']) || isFinfactorDemoMode();
 }
 
 function getToken(): string {

@@ -107,6 +107,7 @@ export function FinvuSandboxCard() {
 
   const overall = result ? getOverallSummary(result) : null;
   const configured = statusQ.data?.configured ?? false;
+  const demoMode = statusQ.data?.demoMode ?? false;
 
   const buttons: Array<{ key: EndpointKey; label: string; hint: string }> = [
     { key: 'insights', label: 'MF insights', hint: 'overallSummary + holdings' },
@@ -136,22 +137,37 @@ export function FinvuSandboxCard() {
           {statusQ.data && (
             <span
               className={`text-[10px] uppercase tracking-kerned px-2 py-1 rounded-full font-medium ${
-                configured
+                demoMode
+                  ? 'bg-accent/15 text-accent-ink ring-1 ring-accent/30'
+                  : configured
                   ? 'bg-positive/10 text-positive ring-1 ring-positive/20'
                   : 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/20'
               }`}
             >
-              {configured ? 'Configured' : 'Token missing'}
+              {demoMode ? 'Demo mode' : configured ? 'Configured' : 'Token missing'}
             </span>
           )}
         </div>
+
+        {statusQ.data && demoMode && (
+          <div className="flex items-start gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-xs text-accent-ink">
+            <Sparkles className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            <div>
+              Demo mode is active — every call returns the documented sample payload from
+              <code className="font-mono"> docs.finfactor.in/wealth-scape</code>. No upstream request is made.
+              Set <code className="font-mono">FINFACTOR_DEMO_MODE=false</code> + a real{' '}
+              <code className="font-mono">FINFACTOR_API_TOKEN</code> to hit the sandbox UAT.
+            </div>
+          </div>
+        )}
 
         {statusQ.data && !configured && (
           <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
             <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
             <div>
-              Set <code className="font-mono">FINFACTOR_API_TOKEN</code> in the API env to enable sandbox calls.
-              Base URL: <code className="font-mono">{statusQ.data.baseUrl}</code>
+              Set <code className="font-mono">FINFACTOR_API_TOKEN</code> in the API env to enable sandbox calls,
+              or <code className="font-mono">FINFACTOR_DEMO_MODE=true</code> for canned responses. Base URL:{' '}
+              <code className="font-mono">{statusQ.data.baseUrl}</code>
             </div>
           </div>
         )}

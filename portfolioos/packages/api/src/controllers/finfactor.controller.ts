@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import { finfactorBaseUrl, isFinfactorConfigured } from '../integrations/finfactor/client.js';
+import { isFinfactorDemoMode } from '../integrations/finfactor/demo.js';
 import {
   fetchMfAnalysis,
   fetchMfHoldingsByIsin,
@@ -68,6 +69,7 @@ export async function getFinfactorStatus(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   ok(res, {
     configured: isFinfactorConfigured(),
+    demoMode: isFinfactorDemoMode(),
     baseUrl: finfactorBaseUrl(),
   });
 }

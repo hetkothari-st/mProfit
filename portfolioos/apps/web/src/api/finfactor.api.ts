@@ -17,6 +17,7 @@ function unwrap<T>(data: ApiResponse<T>): T {
 
 export interface FinfactorStatus {
   configured: boolean;
+  demoMode: boolean;
   baseUrl: string;
 }
 
