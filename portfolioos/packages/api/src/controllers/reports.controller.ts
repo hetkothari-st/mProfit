@@ -669,3 +669,35 @@ export async function getStatementLedger(req: Request, res: Response) {
   const payload = await buildLedgerStatement({ userId, portfolioIds, from, to });
   await emit(req, res, payload);
 }
+
+// ─── Specialised reports — grandfathering / demat-wise / M2M ───────
+
+import {
+  grandfatheringReport,
+  dematHoldingReport,
+  m2mReport,
+} from '../services/specialReports.service.js';
+
+export async function getGrandfatheringReport(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const fy = (req.query.fy as string | undefined)?.trim() || undefined;
+  const data = await grandfatheringReport(userId, fy);
+  ok(res, data);
+}
+
+export async function getDematHoldingReport(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const data = await dematHoldingReport(userId);
+  ok(res, data);
+}
+
+export async function getM2MReport(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const asOfStr = (req.query.asOf as string | undefined)?.trim();
+  const asOf = asOfStr ? new Date(asOfStr) : undefined;
+  if (asOf && Number.isNaN(asOf.getTime())) {
+    throw new BadRequestError('Invalid `asOf` date');
+  }
+  const data = await m2mReport(userId, asOf);
+  ok(res, data);
+}

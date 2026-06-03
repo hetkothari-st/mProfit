@@ -25,6 +25,9 @@ import { reportsApi } from '@/api/reports.api';
 import { importsApi } from '@/api/imports.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { InboxImportsTab } from './InboxImportsTab';
+import { GrandfatheringView } from './GrandfatheringView';
+import { DematHoldingView } from './DematHoldingView';
+import { M2MReportView } from './M2MReportView';
 import {
   Decimal,
   toDecimal,
@@ -40,20 +43,26 @@ type Tab =
   | 'stcg'
   | 'ltcg'
   | 'schedule-112a'
+  | 'grandfathering'
   | 'income'
   | 'unrealised'
   | 'xirr'
   | 'historical'
+  | 'demat'
+  | 'm2m'
   | 'inbox-imports';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'summary', label: 'Summary' },
   { key: 'statements', label: 'Statements' },
   { key: 'unrealised', label: 'Unrealised P&L' },
+  { key: 'm2m', label: 'M2M' },
+  { key: 'demat', label: 'Demat holdings' },
   { key: 'intraday', label: 'Intraday' },
   { key: 'stcg', label: 'STCG' },
   { key: 'ltcg', label: 'LTCG' },
   { key: 'schedule-112a', label: 'Schedule 112A' },
+  { key: 'grandfathering', label: 'Grandfathering' },
   { key: 'income', label: 'Income' },
   { key: 'xirr', label: 'XIRR' },
   { key: 'historical', label: 'Historical' },
@@ -123,8 +132,8 @@ function initialTabFromUrl(): Tab {
   if (typeof window === 'undefined') return 'summary';
   const v = new URLSearchParams(window.location.search).get('tab');
   const valid: Tab[] = [
-    'summary', 'statements', 'intraday', 'stcg', 'ltcg', 'schedule-112a',
-    'income', 'unrealised', 'xirr', 'historical', 'inbox-imports',
+    'summary', 'statements', 'intraday', 'stcg', 'ltcg', 'schedule-112a', 'grandfathering',
+    'income', 'unrealised', 'xirr', 'historical', 'demat', 'm2m', 'inbox-imports',
   ];
   return (valid as string[]).includes(v ?? '') ? (v as Tab) : 'summary';
 }
@@ -287,6 +296,12 @@ export function ReportsPage() {
 
       {tab === 'inbox-imports' ? (
         <InboxImportsTab />
+      ) : tab === 'grandfathering' ? (
+        <GrandfatheringView fy={fy} />
+      ) : tab === 'demat' ? (
+        <DematHoldingView />
+      ) : tab === 'm2m' ? (
+        <M2MReportView />
       ) : !portfolioId ? (
         <div className="text-sm text-muted-foreground p-6 text-center">
           Select a portfolio to view reports.

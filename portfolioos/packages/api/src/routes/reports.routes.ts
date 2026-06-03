@@ -20,6 +20,9 @@ import {
   getStatementCapitalGains,
   getStatementIncome,
   getStatementLedger,
+  getGrandfatheringReport,
+  getDematHoldingReport,
+  getM2MReport,
 } from '../controllers/reports.controller.js';
 
 export const reportsRouter = Router();
@@ -45,3 +48,8 @@ reportsRouter.get('/statement/holdings', asyncHandler(getStatementHoldings));
 reportsRouter.get('/statement/capital-gains', asyncHandler(getStatementCapitalGains));
 reportsRouter.get('/statement/income', asyncHandler(getStatementIncome));
 reportsRouter.get('/statement/ledger', asyncHandler(getStatementLedger));
+
+// Specialised reports — Indian-broker layouts (grandfathering / demat / M2M).
+reportsRouter.get('/grandfathering', asyncHandler(getGrandfatheringReport));
+reportsRouter.get('/demat-holdings', asyncHandler(getDematHoldingReport));
+reportsRouter.get('/m2m', asyncHandler(getM2MReport));

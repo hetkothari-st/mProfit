@@ -295,4 +295,106 @@ export const reportsApi = {
       })
     );
   },
+  async grandfathering(fy?: string): Promise<GrandfatheringReport> {
+    const { data } = await api.get<ApiResponse<GrandfatheringReport>>(
+      '/api/reports/grandfathering' + (fy ? `?fy=${encodeURIComponent(fy)}` : ''),
+    );
+    return unwrap(data);
+  },
+  async dematHoldings(): Promise<DematHoldingReport> {
+    const { data } = await api.get<ApiResponse<DematHoldingReport>>('/api/reports/demat-holdings');
+    return unwrap(data);
+  },
+  async m2m(asOf?: string): Promise<M2MReport> {
+    const { data } = await api.get<ApiResponse<M2MReport>>(
+      '/api/reports/m2m' + (asOf ? `?asOf=${encodeURIComponent(asOf)}` : ''),
+    );
+    return unwrap(data);
+  },
 };
+
+export interface GrandfatheringRow {
+  scriptName: string;
+  isin: string | null;
+  buyDate: string;
+  buyQty: string;
+  buyRate: string;
+  buyAmount: string;
+  fmvOn31Jan2018: string | null;
+  sellDate: string;
+  sellQty: string;
+  sellRate: string;
+  sellAmount: string;
+  gainLoss: string;
+  gain: string;
+  loss: string;
+}
+export interface GrandfatheringReport {
+  scope: { kind: 'user'; userId: string; financialYear: string | null };
+  rows: GrandfatheringRow[];
+  totals: {
+    buyQty: string;
+    buyAmount: string;
+    sellQty: string;
+    sellAmount: string;
+    gain: string;
+    loss: string;
+    net: string;
+  };
+}
+
+export interface DematHoldingRow {
+  brokerName: string;
+  scriptName: string;
+  isin: string | null;
+  balanceQty: string;
+}
+export interface DematMovementRow {
+  brokerName: string;
+  scriptName: string;
+  isin: string | null;
+  date: string;
+  kind: 'OPENING' | 'IN' | 'OUT';
+  reason: string;
+  inQty: string;
+  outQty: string;
+  balanceQty: string;
+}
+export interface DematHoldingReport {
+  scope: { kind: 'user'; userId: string };
+  rows: DematHoldingRow[];
+  movements: DematMovementRow[];
+  grandTotal: string;
+}
+
+export interface M2MRow {
+  segment: 'EQUITY' | 'FNO';
+  scriptName: string;
+  isin: string | null;
+  closingDate: string;
+  qty: string;
+  purRate: string;
+  purValue: string;
+  bhavRate: string | null;
+  valuation: string | null;
+  unrealisedPnL: string | null;
+  noOfDays: number;
+  actualRoiPct: number | null;
+  monthlyRoiPct: number | null;
+  annualRoiPct: number | null;
+  cagrPct: number | null;
+}
+export interface M2MSummary {
+  purValue: string;
+  valuation: string;
+  unrealisedPnL: string;
+}
+export interface M2MReport {
+  scope: { kind: 'user'; userId: string };
+  asOfDate: string;
+  equityRows: M2MRow[];
+  fnoRows: M2MRow[];
+  equityTotals: M2MSummary;
+  fnoTotals: M2MSummary;
+  grandTotal: M2MSummary;
+}
