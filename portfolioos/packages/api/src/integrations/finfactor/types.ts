@@ -102,3 +102,25 @@ export interface FinfactorEnvelope<T> {
 
 export type BenchmarkTrailingResponse = FinfactorEnvelope<Record<string, unknown>>;
 export type BenchmarkPointToPointResponse = FinfactorEnvelope<Record<string, unknown>>;
+
+// ─── Insurance ────────────────────────────────────────────────────
+//
+// Life + General insurance share an identical-shape request/response
+// envelope; only the policy block differs (life has surrenderValue /
+// tenureYears, general has covers[] / vehicles[]). We type both as
+// pass-through records so the UI can render whatever Finfactor sends.
+
+export interface InsuranceLinkedAccountsRequest {
+  uniqueIdentifier: string;
+}
+
+export interface InsuranceStatementRequest {
+  uniqueIdentifier: string;
+  accountId?: string;
+  txnOrder?: 'ASC' | 'DESC';
+  dateRangeFrom?: string;
+  dateRangeTo?: string;
+}
+
+export type InsuranceLinkedAccountsResponse = Record<string, unknown>;
+export type InsuranceStatementResponse = Array<Record<string, unknown>>;

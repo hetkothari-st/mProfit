@@ -48,6 +48,7 @@ import {
   inferCatalogId,
 } from '@/components/insurance/InsuranceCatalogPicker';
 import { findCatalogProduct, type CatalogProduct } from '@/data/insuranceCatalog';
+import { FinvuInsuranceCard } from './FinvuInsuranceCard';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -742,6 +743,10 @@ export function InsuranceListPage() {
           )}
         </>
       )}
+
+      <div className="mt-8">
+        <FinvuInsuranceCard />
+      </div>
 
       <CreatePolicyDialog
         open={createOpen}
