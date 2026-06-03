@@ -18,6 +18,7 @@ import {
   getPnLHandler,
   getBalanceSheetHandler,
   suggestVoucherHandler,
+  generateFromActivityHandler,
 } from '../controllers/accounting.controller.js';
 
 export const accountingRouter = Router();
@@ -48,3 +49,6 @@ accountingRouter.get('/reports/balance-sheet', asyncHandler(getBalanceSheetHandl
 
 // Auto-suggest voucher from transaction
 accountingRouter.get('/suggest/transaction/:txnId', asyncHandler(suggestVoucherHandler));
+
+// Bulk auto-generate vouchers from existing activity (idempotent)
+accountingRouter.post('/generate-from-activity', asyncHandler(generateFromActivityHandler));

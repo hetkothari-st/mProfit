@@ -3,11 +3,21 @@ import type { AssetClass, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import {
   computePortfolioCapitalGains,
+  computeUserCapitalGains,
   type CapitalGainRow,
   financialYearOf,
 } from './capitalGains.service.js';
-import { computePortfolioXirr, computeRollingXirr } from './xirr.service.js';
+import {
+  computePortfolioXirr,
+  computeRollingXirr,
+  computeUserXirr,
+} from './xirr.service.js';
 import { getCryptoPriceAt } from '../priceFeeds/crypto.service.js';
+
+async function listUserPortfolioIds(userId: string): Promise<string[]> {
+  const ps = await prisma.portfolio.findMany({ where: { userId }, select: { id: true } });
+  return ps.map((p) => p.id);
+}
 
 // ─── Capital gains reports ─────────────────────────────────────────
 
@@ -374,5 +384,253 @@ export async function portfolioSummary(portfolioId: string) {
       threeYear: xirr3y.xirr,
       fiveYear: xirr5y.xirr,
     },
+  };
+}
+
+// ─── User-scoped (all-portfolios) reports ─────────────────────────────
+//
+// Aggregate the per-portfolio reports across every portfolio owned by
+// the user. Controllers route `portfolioId=all` requests here so the
+// page can show a combined view instead of forcing a single-portfolio
+// pick (which often shows zeros when the default is an empty book).
+
+export async function userIntradayReport(userId: string, fy?: string) {
+  const { rows } = await computeUserCapitalGains(userId);
+  const filtered = filterRows(rows, { financialYear: fy, type: 'INTRADAY' });
+  const totalGain = filtered.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
+  return { rows: filtered, totalGain: totalGain.toString(), count: filtered.length };
+}
+
+export async function userStcgReport(userId: string, fy?: string) {
+  const { rows } = await computeUserCapitalGains(userId);
+  const filtered = filterRows(rows, { financialYear: fy, type: 'SHORT_TERM' });
+  const totalGain = filtered.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
+  const taxable = filtered.reduce((s, r) => s.plus(r.taxableGain), new Decimal(0));
+  return {
+    rows: filtered,
+    totalGain: totalGain.toString(),
+    taxable: taxable.toString(),
+    count: filtered.length,
+  };
+}
+
+export async function userLtcgReport(userId: string, fy?: string) {
+  const { rows } = await computeUserCapitalGains(userId);
+  const filtered = filterRows(rows, { financialYear: fy, type: 'LONG_TERM' });
+  const totalGain = filtered.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
+  const taxable = filtered.reduce((s, r) => s.plus(r.taxableGain), new Decimal(0));
+  return {
+    rows: filtered,
+    totalGain: totalGain.toString(),
+    taxable: taxable.toString(),
+    count: filtered.length,
+  };
+}
+
+export async function userSchedule112AReport(userId: string, fy?: string) {
+  const { rows } = await computeUserCapitalGains(userId);
+  const filtered = rows.filter((r) => {
+    if (fy && r.financialYear !== fy) return false;
+    if (r.capitalGainType !== 'LONG_TERM') return false;
+    return (
+      r.assetClass === 'EQUITY' ||
+      r.assetClass === 'ETF' ||
+      r.assetClass === 'MUTUAL_FUND'
+    );
+  });
+  const totalGain = filtered.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
+  const exemptionLimit = new Decimal(100000);
+  const taxable = Decimal.max(totalGain.minus(exemptionLimit), new Decimal(0));
+  return {
+    rows: filtered,
+    totalGain: totalGain.toString(),
+    exemptionLimit: exemptionLimit.toString(),
+    taxable: taxable.toString(),
+    count: filtered.length,
+  };
+}
+
+export async function userIncomeReport(userId: string, fy?: string) {
+  const txs = await prisma.transaction.findMany({
+    where: {
+      portfolio: { userId },
+      transactionType: { in: Array.from(INCOME_TYPES) },
+    },
+    orderBy: { tradeDate: 'asc' },
+  });
+  const filtered = fy ? txs.filter((t) => financialYearOf(t.tradeDate) === fy) : txs;
+  let dividend = new Decimal(0);
+  let interest = new Decimal(0);
+  let maturity = new Decimal(0);
+  for (const t of filtered) {
+    const amt = new Decimal(t.netAmount.toString());
+    if (t.transactionType === 'DIVIDEND_PAYOUT') dividend = dividend.plus(amt);
+    else if (t.transactionType === 'INTEREST_RECEIVED') interest = interest.plus(amt);
+    else if (t.transactionType === 'MATURITY') maturity = maturity.plus(amt);
+  }
+  return {
+    rows: filtered.map((t) => ({
+      id: t.id,
+      date: t.tradeDate,
+      type: t.transactionType,
+      assetName: t.assetName ?? '',
+      amount: t.netAmount.toString(),
+      narration: t.narration ?? null,
+    })),
+    dividend: dividend.toString(),
+    interest: interest.toString(),
+    maturity: maturity.toString(),
+    total: dividend.plus(interest).plus(maturity).toString(),
+    count: filtered.length,
+  };
+}
+
+export async function userUnrealisedReport(userId: string) {
+  const holdings = await prisma.holdingProjection.findMany({
+    where: { portfolio: { userId } },
+    orderBy: { computedAt: 'desc' },
+  });
+  let totalCost = new Decimal(0);
+  let totalValue = new Decimal(0);
+  const rows = holdings.map((h) => {
+    const cost = new Decimal(h.totalCost.toString());
+    const value = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+    totalCost = totalCost.plus(cost);
+    totalValue = totalValue.plus(value);
+    const pnl = value.minus(cost);
+    const pct = cost.isZero() ? '0' : pnl.dividedBy(cost).times(100).toFixed(2);
+    return {
+      id: h.id,
+      assetClass: h.assetClass,
+      assetName: h.assetName,
+      isin: h.isin,
+      quantity: h.quantity.toString(),
+      avgCostPrice: h.avgCostPrice.toString(),
+      currentPrice: h.currentPrice?.toString() ?? null,
+      totalCost: cost.toString(),
+      currentValue: value.toString(),
+      unrealisedPnL: pnl.toString(),
+      pctReturn: pct,
+    };
+  });
+  const totalPnl = totalValue.minus(totalCost);
+  return {
+    rows,
+    totalCost: totalCost.toString(),
+    totalValue: totalValue.toString(),
+    unrealisedPnL: totalPnl.toString(),
+    count: rows.length,
+  };
+}
+
+export async function userHistoricalValuation(
+  userId: string,
+  granularity: 'MONTHLY' | 'QUARTERLY' = 'MONTHLY',
+): Promise<{ points: HistoricalValuationPoint[] }> {
+  const ids = await listUserPortfolioIds(userId);
+  if (ids.length === 0) return { points: [] };
+  const perPortfolio = await Promise.all(
+    ids.map((id) => historicalValuation(id, granularity)),
+  );
+  // Bucket by month-end (YYYY-MM-DD) and sum cost/value.
+  const map = new Map<string, { date: Date; cost: Decimal; value: Decimal; holdings: number }>();
+  for (const r of perPortfolio) {
+    for (const p of r.points) {
+      const key = p.date.toISOString().slice(0, 10);
+      const cur = map.get(key);
+      const cost = new Decimal(p.cost);
+      const value = new Decimal(p.value);
+      if (cur) {
+        cur.cost = cur.cost.plus(cost);
+        cur.value = cur.value.plus(value);
+        cur.holdings += p.holdings;
+      } else {
+        map.set(key, { date: p.date, cost, value, holdings: p.holdings });
+      }
+    }
+  }
+  const points = Array.from(map.values())
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .map((p) => ({
+      date: p.date,
+      cost: p.cost.toString(),
+      value: p.value.toString(),
+      holdings: p.holdings,
+    }));
+  return { points };
+}
+
+export async function userSummary(userId: string) {
+  const [unrealised, cg, xirrOverall, xirr1y, xirr3y, xirr5y, portfolios] = await Promise.all([
+    userUnrealisedReport(userId),
+    computeUserCapitalGains(userId),
+    computeUserXirr(userId),
+    userRollingXirr(userId, 1),
+    userRollingXirr(userId, 3),
+    userRollingXirr(userId, 5),
+    prisma.portfolio.findMany({ where: { userId }, select: { id: true, currency: true } }),
+  ]);
+  const txCount = await prisma.transaction.count({ where: { portfolio: { userId } } });
+  const holdingCount = await prisma.holdingProjection.count({ where: { portfolio: { userId } } });
+  const currency = portfolios[0]?.currency ?? 'INR';
+  return {
+    portfolio: {
+      id: 'all',
+      name: 'All portfolios',
+      currency,
+    },
+    counts: { transactions: txCount, holdings: holdingCount },
+    unrealised: {
+      totalCost: unrealised.totalCost,
+      totalValue: unrealised.totalValue,
+      unrealisedPnL: unrealised.unrealisedPnL,
+    },
+    capitalGainsByFy: Object.fromEntries(
+      Object.entries(cg.summaryByFy).map(([fy, v]) => [
+        fy,
+        {
+          intraday: v.intraday.toString(),
+          stcg: v.stcg.toString(),
+          ltcg: v.ltcg.toString(),
+          taxable: v.taxable.toString(),
+        },
+      ]),
+    ),
+    xirr: {
+      overall: xirrOverall.xirr,
+      oneYear: xirr1y.xirr,
+      threeYear: xirr3y.xirr,
+      fiveYear: xirr5y.xirr,
+    },
+  };
+}
+
+// Rolling user-XIRR — mirrors computeRollingXirr() but at user scope.
+async function userRollingXirr(userId: string, years: 1 | 3 | 5) {
+  const to = new Date();
+  const from = new Date(to);
+  from.setUTCFullYear(from.getUTCFullYear() - years);
+  const ids = await listUserPortfolioIds(userId);
+  if (ids.length === 0) {
+    return { xirr: null as number | null };
+  }
+  const each = await Promise.all(ids.map((id) => computeRollingXirr(id, years)));
+  // Re-merge cashflows: each per-portfolio result already has summed terminal
+  // value within its window. We use a value-weighted average of the XIRRs by
+  // invested capital so a tiny side-portfolio doesn't skew the headline.
+  let weightedSum = 0;
+  let totalWeight = 0;
+  for (const e of each) {
+    if (e.xirr == null) continue;
+    const w = parseFloat(e.totalInvested);
+    if (!isFinite(w) || w <= 0) continue;
+    weightedSum += e.xirr * w;
+    totalWeight += w;
+  }
+  const blended = totalWeight > 0 ? weightedSum / totalWeight : null;
+  return {
+    xirr: blended,
+    from,
+    to,
   };
 }

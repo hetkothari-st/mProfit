@@ -942,7 +942,7 @@ export function DashboardPage() {
             <p className="text-sm text-muted-foreground py-8 text-center">Add transactions to see your top holdings</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full rtable">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70 bg-muted/20">
                     <th className="w-10 py-2 pl-6 font-normal text-left" aria-hidden></th>
@@ -974,7 +974,7 @@ export function DashboardPage() {
                         style={{ animationDelay: `${idx * 25}ms`, animationDuration: '350ms' }}
                       >
                         {/* Rank + class-coloured hover accent */}
-                        <td className="relative w-10 py-2 pl-6 pr-2 align-middle">
+                        <td data-label="" className="relative w-10 py-2 pl-6 pr-2 align-middle">
                           <span
                             aria-hidden
                             className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r opacity-0 group-hover:opacity-100 transition-opacity"
@@ -986,7 +986,7 @@ export function DashboardPage() {
                         </td>
 
                         {/* Asset */}
-                        <td className="py-2 pr-4 align-middle">
+                        <td data-label="Asset" className="py-2 pr-4 align-middle">
                           <div className="text-sm font-medium leading-tight text-foreground truncate max-w-[220px]">{h.assetName}</div>
                           {h.symbol && (
                             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mt-0.5">{h.symbol}</div>
@@ -994,7 +994,7 @@ export function DashboardPage() {
                         </td>
 
                         {/* Class — colour dot + label */}
-                        <td className="py-2 pr-4 align-middle hidden sm:table-cell">
+                        <td data-label="Class" className="py-2 pr-4 align-middle hidden sm:table-cell">
                           <div className="inline-flex items-center gap-2">
                             <span
                               aria-hidden
@@ -1008,17 +1008,17 @@ export function DashboardPage() {
                         </td>
 
                         {/* Qty */}
-                        <td className="py-2 pr-4 text-right text-xs text-muted-foreground tabular-nums hidden md:table-cell">
+                        <td data-label="Qty" className="py-2 pr-4 text-right text-xs text-muted-foreground tabular-nums hidden md:table-cell">
                           {parseFloat(h.quantity).toLocaleString('en-IN', { maximumFractionDigits: 4 })}
                         </td>
 
                         {/* Avg cost */}
-                        <td className="py-2 pr-4 text-right hidden md:table-cell">
+                        <td data-label="Avg cost" className="py-2 pr-4 text-right hidden md:table-cell">
                           <Money className="text-xs text-muted-foreground tabular-nums">{formatINR(h.avgCostPrice)}</Money>
                         </td>
 
                         {/* Value */}
-                        <td className="py-2 pr-4 text-right align-middle">
+                        <td data-label="Value" className="py-2 pr-4 text-right align-middle">
                           <Money className="text-sm font-medium tabular-nums text-foreground">{h.currentValue ? formatINR(h.currentValue) : formatINR(h.totalCost)}</Money>
                           {!h.currentValue && (
                             <div className="text-[10px] text-muted-foreground/70 mt-0.5">cost basis</div>
@@ -1026,7 +1026,7 @@ export function DashboardPage() {
                         </td>
 
                         {/* P&L */}
-                        <td className="py-2 pr-6 text-right align-middle">
+                        <td data-label="Unrealised P&L" className="py-2 pr-6 text-right align-middle">
                           {h.currentValue ? (
                             <>
                               <div className={`inline-flex items-center justify-end gap-1.5 ${pos ? 'text-positive' : neg ? 'text-negative' : 'text-muted-foreground'}`}>

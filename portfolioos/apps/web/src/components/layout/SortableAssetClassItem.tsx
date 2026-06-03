@@ -32,7 +32,11 @@ export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onTog
   };
 
   return (
-    <li ref={setNodeRef} style={style} className="flex items-center">
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={cn('flex items-center', collapsed && 'justify-center')}
+    >
       {isEditing && !collapsed && (
         <button
           type="button"
@@ -49,11 +53,21 @@ export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onTog
         to={item.to}
         className={({ isActive }) =>
           cn(
-            'group/nav nav-rail relative flex items-center gap-3 rounded-md px-3 py-2 text-[14px] transition-all flex-1 min-w-0',
-            'text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/70',
-            isActive && !isEditing && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
-            isEditing && !pref.visible && 'opacity-40',
-            collapsed && 'justify-center px-2',
+            'group/nav nav-rail relative transition-all text-sidebar-foreground/80 hover:text-sidebar-accent-foreground',
+            collapsed
+              ? cn(
+                  'flex items-center justify-center h-10 w-10 rounded-lg',
+                  isActive && !isEditing
+                    ? 'bg-accent/15 ring-1 ring-accent/40 text-accent'
+                    : 'hover:bg-sidebar-accent/70',
+                  isEditing && !pref.visible && 'opacity-40',
+                )
+              : cn(
+                  'flex items-center gap-3 rounded-md px-3 py-2 text-[14px] flex-1 min-w-0',
+                  'hover:bg-sidebar-accent/70',
+                  isActive && !isEditing && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
+                  isEditing && !pref.visible && 'opacity-40',
+                ),
           )
         }
         title={collapsed ? item.label : undefined}
@@ -70,7 +84,8 @@ export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onTog
             )}
             <item.icon
               className={cn(
-                'h-[18px] w-[18px] shrink-0 transition-colors',
+                'shrink-0 transition-colors',
+                collapsed ? 'h-[19px] w-[19px]' : 'h-[18px] w-[18px]',
                 isActive && !isEditing
                   ? 'text-accent'
                   : 'text-sidebar-foreground/60 group-hover/nav:text-sidebar-accent-foreground',

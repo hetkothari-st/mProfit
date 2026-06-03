@@ -12,6 +12,14 @@ import {
   unrealisedReport,
   historicalValuation,
   portfolioSummary,
+  userIntradayReport,
+  userStcgReport,
+  userLtcgReport,
+  userSchedule112AReport,
+  userIncomeReport,
+  userUnrealisedReport,
+  userHistoricalValuation,
+  userSummary,
 } from '../services/reports.service.js';
 import {
   computePortfolioXirr,
@@ -41,6 +49,29 @@ async function assertOwnedPortfolio(req: Request): Promise<string> {
   return portfolioId;
 }
 
+/**
+ * Scope resolver — accepts `portfolioId=all` (or `ALL`) for cross-portfolio
+ * views, otherwise verifies ownership of the single portfolio.
+ */
+type ReportScope =
+  | { kind: 'one'; portfolioId: string; userId: string }
+  | { kind: 'all'; userId: string };
+
+async function resolveScope(req: Request): Promise<ReportScope> {
+  const userId = req.user!.id;
+  const portfolioId =
+    (req.query.portfolioId as string | undefined) ??
+    (req.params.portfolioId as string | undefined);
+  if (!portfolioId) throw new BadRequestError('portfolioId required');
+  if (portfolioId === 'all' || portfolioId === 'ALL') {
+    return { kind: 'all', userId };
+  }
+  const p = await prisma.portfolio.findUnique({ where: { id: portfolioId } });
+  if (!p) throw new NotFoundError('Portfolio not found');
+  if (p.userId !== userId) throw new ForbiddenError();
+  return { kind: 'one', portfolioId, userId };
+}
+
 function getFy(req: Request): string | undefined {
   const fy = req.query.fy as string | undefined;
   return fy?.trim() || undefined;
@@ -56,47 +87,59 @@ function getFormat(req: Request): 'json' | 'xlsx' | 'pdf' {
 // ─── Handlers ─────────────────────────────────────────────────────
 
 export async function getSummary(req: Request, res: Response) {
-  const portfolioId = await assertOwnedPortfolio(req);
-  const data = await portfolioSummary(portfolioId);
+  const scope = await resolveScope(req);
+  const data = scope.kind === 'all'
+    ? await userSummary(scope.userId)
+    : await portfolioSummary(scope.portfolioId);
   ok(res, data);
 }
 
 export async function getIntraday(req: Request, res: Response) {
-  const portfolioId = await assertOwnedPortfolio(req);
+  const scope = await resolveScope(req);
   const fy = getFy(req);
-  const data = await intradayReport(portfolioId, fy);
+  const data = scope.kind === 'all'
+    ? await userIntradayReport(scope.userId, fy)
+    : await intradayReport(scope.portfolioId, fy);
   if (getFormat(req) === 'json') return ok(res, data);
   await exportCapitalGains(req, res, 'Intraday', data, fy);
 }
 
 export async function getStcg(req: Request, res: Response) {
-  const portfolioId = await assertOwnedPortfolio(req);
+  const scope = await resolveScope(req);
   const fy = getFy(req);
-  const data = await stcgReport(portfolioId, fy);
+  const data = scope.kind === 'all'
+    ? await userStcgReport(scope.userId, fy)
+    : await stcgReport(scope.portfolioId, fy);
   if (getFormat(req) === 'json') return ok(res, data);
   await exportCapitalGains(req, res, 'Short-Term Capital Gains', data, fy);
 }
 
 export async function getLtcg(req: Request, res: Response) {
-  const portfolioId = await assertOwnedPortfolio(req);
+  const scope = await resolveScope(req);
   const fy = getFy(req);
-  const data = await ltcgReport(portfolioId, fy);
+  const data = scope.kind === 'all'
+    ? await userLtcgReport(scope.userId, fy)
+    : await ltcgReport(scope.portfolioId, fy);
   if (getFormat(req) === 'json') return ok(res, data);
   await exportCapitalGains(req, res, 'Long-Term Capital Gains', data, fy);
 }
 
 export async function get112A(req: Request, res: Response) {
-  const portfolioId = await assertOwnedPortfolio(req);
+  const scope = await resolveScope(req);
   const fy = getFy(req);
-  const data = await schedule112AReport(portfolioId, fy);
+  const data = scope.kind === 'all'
+    ? await userSchedule112AReport(scope.userId, fy)
+    : await schedule112AReport(scope.portfolioId, fy);
   if (getFormat(req) === 'json') return ok(res, data);
   await exportCapitalGains(req, res, 'Schedule 112A', data, fy);
 }
 
 export async function getIncome(req: Request, res: Response) {
-  const portfolioId = await assertOwnedPortfolio(req);
+  const scope = await resolveScope(req);
   const fy = getFy(req);
-  const data = await incomeReport(portfolioId, fy);
+  const data = scope.kind === 'all'
+    ? await userIncomeReport(scope.userId, fy)
+    : await incomeReport(scope.portfolioId, fy);
   if (getFormat(req) === 'json') return ok(res, data);
   const columns: ExportColumn[] = [
     { key: 'date', header: 'Date', width: 12, formatter: fmtDate },
@@ -120,8 +163,10 @@ export async function getIncome(req: Request, res: Response) {
 }
 
 export async function getUnrealised(req: Request, res: Response) {
-  const portfolioId = await assertOwnedPortfolio(req);
-  const data = await unrealisedReport(portfolioId);
+  const scope = await resolveScope(req);
+  const data = scope.kind === 'all'
+    ? await userUnrealisedReport(scope.userId)
+    : await unrealisedReport(scope.portfolioId);
   if (getFormat(req) === 'json') return ok(res, data);
   const columns: ExportColumn[] = [
     { key: 'assetClass', header: 'Class', width: 14 },
@@ -147,11 +192,25 @@ export async function getUnrealised(req: Request, res: Response) {
 }
 
 export async function getXirr(req: Request, res: Response) {
-  const portfolioId = await assertOwnedPortfolio(req);
-  const overall = await computePortfolioXirr(portfolioId);
-  const oneY = await computeRollingXirr(portfolioId, 1);
-  const threeY = await computeRollingXirr(portfolioId, 3);
-  const fiveY = await computeRollingXirr(portfolioId, 5);
+  const scope = await resolveScope(req);
+  if (scope.kind === 'all') {
+    const overall = await computeUserXirr(scope.userId);
+    // Per-period XIRR across portfolios uses computeUserXirr-style aggregation
+    // by re-running with a windowed cashflow set; the simplest path is to
+    // expose only the headline number for "all" and leave 1/3/5Y rolling
+    // figures null. The Reports page already tolerates nulls (`fmtPct`).
+    ok(res, {
+      overall,
+      oneYear: { xirr: null, totalInvested: '0', terminalValue: '0', cashflowCount: 0 },
+      threeYear: { xirr: null, totalInvested: '0', terminalValue: '0', cashflowCount: 0 },
+      fiveYear: { xirr: null, totalInvested: '0', terminalValue: '0', cashflowCount: 0 },
+    });
+    return;
+  }
+  const overall = await computePortfolioXirr(scope.portfolioId);
+  const oneY = await computeRollingXirr(scope.portfolioId, 1);
+  const threeY = await computeRollingXirr(scope.portfolioId, 3);
+  const fiveY = await computeRollingXirr(scope.portfolioId, 5);
   ok(res, { overall, oneYear: oneY, threeYear: threeY, fiveYear: fiveY });
 }
 
@@ -162,11 +221,13 @@ export async function getUserXirr(req: Request, res: Response) {
 }
 
 export async function getHistoricalValuation(req: Request, res: Response) {
-  const portfolioId = await assertOwnedPortfolio(req);
+  const scope = await resolveScope(req);
   const granularity = (req.query.granularity as string | undefined) === 'QUARTERLY'
     ? 'QUARTERLY'
     : 'MONTHLY';
-  const data = await historicalValuation(portfolioId, granularity);
+  const data = scope.kind === 'all'
+    ? await userHistoricalValuation(scope.userId, granularity)
+    : await historicalValuation(scope.portfolioId, granularity);
   ok(res, data);
 }
 
@@ -181,9 +242,12 @@ export async function rebuildCapitalGains(req: Request, res: Response) {
 export async function getHoldingsExport(req: Request, res: Response) {
   const userId = req.user!.id;
 
-  // portfolioIds: comma-separated list, or empty for all
+  // portfolioIds: comma-separated list, or empty for all. `all` is also
+  // accepted as a meta-token meaning every portfolio the user owns — same
+  // semantics as the empty list.
   const rawIds  = (req.query.portfolioIds as string | undefined) ?? '';
-  const portfolioIds = rawIds ? rawIds.split(',').map(s => s.trim()).filter(Boolean) : [];
+  let portfolioIds = rawIds ? rawIds.split(',').map(s => s.trim()).filter(Boolean) : [];
+  if (portfolioIds.some((id) => id === 'all' || id === 'ALL')) portfolioIds = [];
 
   // Verify ownership of every requested portfolio
   if (portfolioIds.length > 0) {
@@ -286,9 +350,16 @@ export async function getHoldingsExport(req: Request, res: Response) {
 
 export async function getDashboardExport(req: Request, res: Response) {
   const userId      = req.user!.id;
-  const portfolioId = req.query.portfolioId as string | undefined;
+  let portfolioId = req.query.portfolioId as string | undefined;
   const rawScope    = (req.query.scope as string | undefined) ?? 'all';
-  const scope: DashboardScope = rawScope === 'single' ? 'single' : 'all';
+  let scope: DashboardScope = rawScope === 'single' ? 'single' : 'all';
+
+  // `portfolioId=all` short-circuits to scope=all so the caller doesn't have
+  // to pass both query params correctly.
+  if (portfolioId === 'all' || portfolioId === 'ALL') {
+    scope = 'all';
+    portfolioId = undefined;
+  }
 
   // If scope = single, verify portfolio ownership
   if (scope === 'single' && portfolioId) {
@@ -541,7 +612,10 @@ async function resolveOwnedPortfolioIds(req: Request): Promise<string[]> {
   const userId = req.user!.id;
   const raw = (req.query.portfolioIds as string | undefined) ?? '';
   const ids = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
-  if (ids.length === 0) return [];
+  // `all` is a meta-token meaning "every portfolio the user owns" — same
+  // semantics as the empty list. The cross-portfolio Reports page sends
+  // `[all]` here so a single statement download spans every book.
+  if (ids.length === 0 || ids.some((id) => id === 'all' || id === 'ALL')) return [];
   const owned = await prisma.portfolio.findMany({
     where: { id: { in: ids }, userId },
     select: { id: true },

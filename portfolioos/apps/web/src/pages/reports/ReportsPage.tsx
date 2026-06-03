@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -132,19 +132,15 @@ function initialTabFromUrl(): Tab {
 export function ReportsPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const [tab, setTab] = useState<Tab>(initialTabFromUrl);
-  const [portfolioId, setPortfolioId] = useState<string>('');
+  // Default to the cross-portfolio view so a brand-new user (or one whose
+  // first portfolio happens to be empty) sees real numbers, not zeros.
+  const [portfolioId, setPortfolioId] = useState<string>('all');
   const [fy, setFy] = useState<string>(currentFy());
 
   const { data: portfolios } = useQuery({
     queryKey: ['portfolios'],
     queryFn: () => portfoliosApi.list(),
   });
-
-  useMemo(() => {
-    if (!portfolioId && portfolios && portfolios.length > 0) {
-      setPortfolioId(portfolios[0]!.id);
-    }
-  }, [portfolios, portfolioId]);
 
   const summaryQ = useQuery({
     queryKey: ['report-summary', portfolioId],
@@ -239,6 +235,7 @@ export function ReportsPage() {
               value={portfolioId}
               onChange={(e) => setPortfolioId(e.target.value)}
             >
+              <option value="all">All portfolios</option>
               {portfolios?.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}

@@ -17,6 +17,7 @@ import {
   getPnL,
   getBalanceSheet,
   suggestVoucherForTransaction,
+  generateVouchersFromActivity,
 } from '../services/accounting.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
@@ -187,4 +188,12 @@ export async function suggestVoucherHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const suggestion = await suggestVoucherForTransaction(req.user.id, req.params['txnId']!);
   ok(res, suggestion);
+}
+
+// ─── Bulk auto-generation ─────────────────────────────────────────────────────
+
+export async function generateFromActivityHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const result = await generateVouchersFromActivity(req.user.id);
+  ok(res, result);
 }
