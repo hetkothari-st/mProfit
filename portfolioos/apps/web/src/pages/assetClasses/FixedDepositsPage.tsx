@@ -754,7 +754,7 @@ export function FixedDepositsPage() {
 
       {/* Summary strip */}
       {!isLoading && allHoldings.length > 0 && (
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           {([
             { label: 'Total Invested', value: formatINR(totalInvested.toString()), sub: `${allHoldings.length} deposit${allHoldings.length === 1 ? '' : 's'}`, valueClass: '' },
             { label: 'Current Value', value: formatINR(totalValue.toString()), sub: 'live valuation', valueClass: '' },
@@ -770,7 +770,7 @@ export function FixedDepositsPage() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
                   {m.label}
                 </p>
-                <p className={`text-xl font-semibold tabular-nums mt-1 ${m.valueClass}`}>
+                <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${m.valueClass}`}>
                   {m.value}
                 </p>
                 <p className="text-xs text-muted-foreground">{m.sub}</p>

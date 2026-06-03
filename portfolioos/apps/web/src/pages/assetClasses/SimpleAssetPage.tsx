@@ -257,7 +257,7 @@ export function SimpleAssetPage({
 
       {/* Summary strip */}
       {!isLoading && allHoldings.length > 0 && (
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           {[
             { label: 'Invested', value: formatINR(totalInvested.toString()), extra: null },
             { label: 'Current value', value: formatINR(totalValue.toString()), extra: liveIndicator ?? null },
@@ -276,7 +276,7 @@ export function SimpleAssetPage({
                   </p>
                   {m.extra}
                 </div>
-                <p className={`text-xl font-semibold tabular-nums mt-1 ${m.className ?? ''}`}>
+                <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${m.className ?? ''}`}>
                   {m.value}
                 </p>
               </CardContent>
