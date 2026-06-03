@@ -58,24 +58,24 @@ export function ForexRateTicker() {
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">No rates yet — hit refresh.</p>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {rows.map((r) => (
             <div
               key={`${r.base}${r.quote}`}
-              className="flex items-center justify-between rounded border border-border/50 bg-background/50 px-3 py-2 text-xs"
+              className="flex items-center justify-between gap-2 rounded border border-border/50 bg-background/50 px-3 py-2 text-xs min-w-0 overflow-hidden"
             >
-              <span className="flex items-center gap-1.5 font-medium text-foreground">
-                <span>{CURRENCY_FLAGS[r.base] ?? ''}</span>
-                <span>
+              <span className="flex items-center gap-1.5 font-medium text-foreground min-w-0">
+                <span className="shrink-0">{CURRENCY_FLAGS[r.base] ?? ''}</span>
+                <span className="truncate">
                   {r.base}/{r.quote}
                 </span>
               </span>
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 shrink-0">
                 <span className="font-mono tabular-nums text-foreground">
                   {Number(r.rate).toFixed(r.quote === 'INR' ? 4 : 6)}
                 </span>
                 <span
-                  className={`rounded px-1 py-0.5 text-[9px] uppercase tracking-wider ${
+                  className={`shrink-0 rounded px-1 py-0.5 text-[9px] uppercase tracking-wider ${
                     r.source === 'RBI' || r.source === 'FRANKFURTER'
                       ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                       : r.source === 'DERIVED'
