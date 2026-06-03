@@ -6,7 +6,7 @@ import {
   TrendingUp, Wallet, LineChart as LineChartIcon, Percent, Briefcase,
   RefreshCw, Loader2, ArrowRight, Car, Home, Shield,
   AlertTriangle, Bell, CheckCircle2, XCircle, CalendarDays, Layers, ChevronDown,
-  Eye, EyeOff,
+  Eye, EyeOff, CreditCard, HandCoins, Receipt, Scale,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -597,76 +597,119 @@ export function DashboardPage() {
       {/* Liabilities summary — net worth after loans + CC debt */}
       {nw && toDecimal(nw.totalLiabilities).greaterThan(0) && (
         <Card className="reveal">
-          <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardHeader className="flex-row items-start justify-between pb-4">
             <div>
-              <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">
+              <p className="text-[11px] uppercase tracking-kerned text-accent-ink/80 mb-1.5">
                 Liabilities · FY {nw.liabilities.financialYear}
               </p>
-              <CardTitle className="text-[16px]">Loans &amp; credit cards</CardTitle>
+              <CardTitle className="text-[22px] font-semibold tracking-tight">
+                Loans &amp; credit cards
+              </CardTitle>
             </div>
             <Link
               to="/loans"
-              className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+              className="text-sm text-primary hover:underline inline-flex items-center gap-1.5 font-medium"
             >
-              Manage <ArrowRight className="h-3 w-3" />
+              Manage <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-3">
-              <div>
-                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
-                  Net after debts
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {/* Net after debts — highlighted */}
+              <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/10 via-accent/5 to-transparent p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-7 w-7 rounded-md grid place-items-center bg-accent/15 text-accent-ink">
+                    <Scale className="h-3.5 w-3.5" strokeWidth={1.9} />
+                  </div>
+                  <div className="text-[10.5px] uppercase tracking-kerned text-muted-foreground font-medium">
+                    Net after debts
+                  </div>
                 </div>
-                <Money className="numeric-display text-[19px] text-foreground">
+                <Money className="numeric-display text-[26px] leading-tight font-semibold text-foreground block">
                   {formatINR(nw.netWorthAfterLiabilities)}
                 </Money>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
-                  Total outstanding
+                <div className="text-[11px] text-muted-foreground mt-1">
+                  Assets minus liabilities
                 </div>
-                <Money className="numeric-display text-[17px] text-negative">
+              </div>
+
+              {/* Total outstanding */}
+              <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-7 w-7 rounded-md grid place-items-center bg-negative/10 text-negative">
+                    <Receipt className="h-3.5 w-3.5" strokeWidth={1.9} />
+                  </div>
+                  <div className="text-[10.5px] uppercase tracking-kerned text-muted-foreground font-medium">
+                    Total outstanding
+                  </div>
+                </div>
+                <Money className="numeric-display text-[22px] leading-tight font-semibold text-negative block">
                   {formatINR(nw.totalLiabilities)}
                 </Money>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
-                  Monthly EMI
+                <div className="text-[11px] text-muted-foreground mt-1">
+                  Across all debts
                 </div>
-                <Money className="numeric-display text-[17px]">
+              </div>
+
+              {/* Monthly EMI */}
+              <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-7 w-7 rounded-md grid place-items-center bg-muted/70 text-foreground/80">
+                    <HandCoins className="h-3.5 w-3.5" strokeWidth={1.9} />
+                  </div>
+                  <div className="text-[10.5px] uppercase tracking-kerned text-muted-foreground font-medium">
+                    Monthly EMI
+                  </div>
+                </div>
+                <Money className="numeric-display text-[22px] leading-tight font-semibold block">
                   {formatINR(nw.liabilities.monthlyEmiTotal)}
                 </Money>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
+                <div className="text-[11px] text-muted-foreground mt-1">
                   {nw.liabilities.loanCount} loan{nw.liabilities.loanCount === 1 ? '' : 's'}
                 </div>
               </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
-                  Card balance
+
+              {/* Card balance */}
+              <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-7 w-7 rounded-md grid place-items-center bg-muted/70 text-foreground/80">
+                    <CreditCard className="h-3.5 w-3.5" strokeWidth={1.9} />
+                  </div>
+                  <div className="text-[10.5px] uppercase tracking-kerned text-muted-foreground font-medium">
+                    Card balance
+                  </div>
                 </div>
-                <Money className="numeric-display text-[17px]">
+                <Money className="numeric-display text-[22px] leading-tight font-semibold block">
                   {formatINR(nw.liabilities.totalCreditCardOutstanding)}
                 </Money>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
+                <div className="text-[11px] text-muted-foreground mt-1">
                   {nw.liabilities.creditCardCount} card{nw.liabilities.creditCardCount === 1 ? '' : 's'}
                 </div>
               </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-1">
-                  Interest paid YTD
+
+              {/* Interest paid YTD */}
+              <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-7 w-7 rounded-md grid place-items-center bg-negative/10 text-negative">
+                    <Percent className="h-3.5 w-3.5" strokeWidth={1.9} />
+                  </div>
+                  <div className="text-[10.5px] uppercase tracking-kerned text-muted-foreground font-medium">
+                    Interest paid YTD
+                  </div>
                 </div>
-                <Money className="numeric-display text-[17px] text-negative">
+                <Money className="numeric-display text-[22px] leading-tight font-semibold text-negative block">
                   {formatINR(nw.liabilities.interestPaidYTD)}
                 </Money>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
+                <div className="text-[11px] text-muted-foreground mt-1">
                   Principal: {formatINR(nw.liabilities.principalPaidYTD)}
                 </div>
               </div>
             </div>
             {(nw.liabilities.upcomingEmis.length > 0 || nw.liabilities.overdueEmis.length > 0) && (
-              <div className="mt-4 pt-3 border-t border-border/60 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+              <div className="mt-5 pt-4 border-t border-border/60 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px]">
                 {nw.liabilities.overdueEmis.length > 0 && (
-                  <span className="text-negative">
+                  <span className="inline-flex items-center gap-1.5 font-medium text-negative">
+                    <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2} />
                     {nw.liabilities.overdueEmis.length} EMI{nw.liabilities.overdueEmis.length === 1 ? '' : 's'} overdue
                   </span>
                 )}
@@ -674,11 +717,20 @@ export function DashboardPage() {
                   const next = nw.liabilities.upcomingEmis[0];
                   if (!next) return null;
                   return (
-                    <span className="text-muted-foreground">
-                      Next EMI: {next.lenderName} on{' '}
-                      {new Date(next.emiDate).toLocaleDateString('en-IN', {
-                        day: '2-digit', month: 'short',
-                      })}{' '}— {formatINR(next.emiAmount)}
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                      <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} />
+                      <span>
+                        Next EMI:{' '}
+                        <span className="text-foreground font-medium">{next.lenderName}</span>
+                        {' '}on{' '}
+                        <span className="text-foreground font-medium">
+                          {new Date(next.emiDate).toLocaleDateString('en-IN', {
+                            day: '2-digit', month: 'short',
+                          })}
+                        </span>
+                        {' '}—{' '}
+                        <span className="text-foreground font-medium">{formatINR(next.emiAmount)}</span>
+                      </span>
                     </span>
                   );
                 })()}
