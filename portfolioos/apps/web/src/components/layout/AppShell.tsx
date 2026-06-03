@@ -1,6 +1,9 @@
-import { Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { MobileNavDrawer } from './MobileNavDrawer';
+import { MobileTabBar } from './MobileTabBar';
 import { GmailAutoConnectBanner } from './GmailAutoConnectBanner';
 import { ScanProvider } from '@/context/ScanContext';
 import { usePrivacyStore } from '@/stores/privacy.store';
@@ -10,19 +13,29 @@ export function AppShell() {
   const { hideSensitive } = usePrivacyStore();
   useTokenRefresh();
 
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const location = useLocation();
+
+  // Close the mobile drawer whenever the route changes (e.g. user taps a nav link).
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname]);
+
   return (
     <ScanProvider>
       <div className={`h-screen flex overflow-hidden bg-background ${hideSensitive ? 'privacy-mask' : ''}`}>
         <Sidebar />
+        <MobileNavDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <Header />
+          <Header onOpenMenu={() => setDrawerOpen(true)} />
           <GmailAutoConnectBanner />
           <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-[1480px] px-6 py-7 lg:px-10">
+            <div className="mx-auto w-full max-w-[1480px] px-6 py-7 lg:px-10 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] md:pb-7">
               <Outlet />
             </div>
           </main>
         </div>
+        <MobileTabBar onOpenMenu={() => setDrawerOpen(true)} />
       </div>
     </ScanProvider>
   );
