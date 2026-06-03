@@ -23,6 +23,7 @@ import { ImportDropzone } from '@/pages/imports/ImportDropzone';
 import { MFCasparserDialog } from '@/pages/mutualFunds/MFCasparserDialog';
 import { MFCasMailbackDialog } from '@/pages/mutualFunds/MFCasMailbackDialog';
 import { MfOverlapCard } from '@/pages/mutualFunds/MfOverlapCard';
+import { FinvuSandboxCard } from '@/pages/mutualFunds/FinvuSandboxCard';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
 import { useUploadWithPasswordRetry } from '@/hooks/useUploadWithPasswordRetry';
 import { formatINR, formatPercent, Decimal, toDecimal } from '@portfolioos/shared';
@@ -519,6 +520,10 @@ export function MutualFundsPage() {
           </div>
         </div>
       )}
+
+      <div className="mt-6">
+        <FinvuSandboxCard />
+      </div>
 
       <div className="mt-6">
         <MfOverlapCard />
