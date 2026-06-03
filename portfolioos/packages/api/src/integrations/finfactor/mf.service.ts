@@ -14,6 +14,8 @@
 
 import { finfactorPost } from './client.js';
 import {
+  DEMO_BENCHMARK_POINT_TO_POINT,
+  DEMO_BENCHMARK_TRAILING,
   DEMO_MF_ANALYSIS,
   DEMO_MF_HOLDING_BY_ISIN,
   DEMO_MF_INSIGHTS,
@@ -24,6 +26,10 @@ import {
   isFinfactorDemoMode,
 } from './demo.js';
 import type {
+  BenchmarkPointToPointRequest,
+  BenchmarkPointToPointResponse,
+  BenchmarkTrailingRequest,
+  BenchmarkTrailingResponse,
   MfAnalysisRequest,
   MfAnalysisResponse,
   MfHoldingFolioRequest,
@@ -97,6 +103,30 @@ export function fetchMfHoldingsByIsin(
   if (isFinfactorDemoMode()) return Promise.resolve(DEMO_MF_HOLDING_BY_ISIN as MfHoldingFolioResponse);
   return finfactorPost<MfHoldingFolioRequest, MfHoldingFolioResponse>(
     `/pfm/api/v2/mutual-fund/holdings/isins/${encodeURIComponent(isin)}/insights`,
+    body,
+  );
+}
+
+export function fetchBenchmarkTrailing(
+  body: BenchmarkTrailingRequest,
+): Promise<BenchmarkTrailingResponse> {
+  if (isFinfactorDemoMode()) {
+    return Promise.resolve(DEMO_BENCHMARK_TRAILING as BenchmarkTrailingResponse);
+  }
+  return finfactorPost<BenchmarkTrailingRequest, BenchmarkTrailingResponse>(
+    '/pfm/api/v2/mutual-fund/benchmark/comparison/trailing',
+    body,
+  );
+}
+
+export function fetchBenchmarkPointToPoint(
+  body: BenchmarkPointToPointRequest,
+): Promise<BenchmarkPointToPointResponse> {
+  if (isFinfactorDemoMode()) {
+    return Promise.resolve(DEMO_BENCHMARK_POINT_TO_POINT as BenchmarkPointToPointResponse);
+  }
+  return finfactorPost<BenchmarkPointToPointRequest, BenchmarkPointToPointResponse>(
+    '/pfm/api/v2/mutual-fund/benchmark/comparison/point-to-point',
     body,
   );
 }

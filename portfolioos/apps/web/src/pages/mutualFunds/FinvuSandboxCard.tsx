@@ -26,8 +26,14 @@ import { LinkedAccountsView } from './finvu/LinkedAccountsView';
 import { HoldingFolioView } from './finvu/HoldingFolioView';
 import { StatementView } from './finvu/StatementView';
 import { AnalysisView } from './finvu/AnalysisView';
+import { BenchmarkTrailingView, BenchmarkP2PView } from './finvu/BenchmarkView';
 
 const SAMPLE_UID = '96696595XX';
+const SAMPLE_BENCHMARKS = 'OB163,OB48,OB97';
+const SAMPLE_TRAILING_RANGES = '1M,3M,6M,9M,1Y,2Y,3Y,5Y,7Y,10Y';
+const TODAY_ISO = '2025-10-21';
+const P2P_FROM = '2024-02-01';
+const P2P_TO = '2024-02-29';
 
 type EndpointKey =
   | 'insights'
@@ -35,7 +41,9 @@ type EndpointKey =
   | 'linkedAccounts'
   | 'linkedAccountsHoldingFolio'
   | 'statement'
-  | 'analysis';
+  | 'analysis'
+  | 'benchmarkTrailing'
+  | 'benchmarkPointToPoint';
 
 const BUTTONS: Array<{ key: EndpointKey; label: string; hint: string }> = [
   { key: 'insights', label: 'MF insights', hint: 'KPIs + distribution charts + holdings table' },
@@ -44,6 +52,8 @@ const BUTTONS: Array<{ key: EndpointKey; label: string; hint: string }> = [
   { key: 'linkedAccountsHoldingFolio', label: 'Holding folio', hint: 'per-scheme folio breakdown' },
   { key: 'statement', label: 'Statement', hint: 'transaction table with filters' },
   { key: 'analysis', label: 'Analysis', hint: 'category and type pies' },
+  { key: 'benchmarkTrailing', label: 'Benchmark trailing', hint: '% returns by range (1M…10Y)' },
+  { key: 'benchmarkPointToPoint', label: 'Benchmark P2P', hint: 'value between two dates' },
 ];
 
 export function FinvuSandboxCard() {
@@ -75,6 +85,18 @@ export function FinvuSandboxCard() {
           return finfactorApi.mfStatement({ uniqueIdentifier: uid, txnOrder: 'DESC' });
         case 'analysis':
           return finfactorApi.mfAnalysis({ uniqueIdentifier: uid });
+        case 'benchmarkTrailing':
+          return finfactorApi.benchmarkTrailing({
+            benchmarks: SAMPLE_BENCHMARKS,
+            from: TODAY_ISO,
+            ranges: SAMPLE_TRAILING_RANGES,
+          });
+        case 'benchmarkPointToPoint':
+          return finfactorApi.benchmarkPointToPoint({
+            benchmarks: SAMPLE_BENCHMARKS,
+            point_1: P2P_FROM,
+            point_2: P2P_TO,
+          });
       }
     },
     onSuccess: (data, key) => {
@@ -222,6 +244,10 @@ function renderEndpointView(key: EndpointKey, data: unknown) {
       return <StatementView data={data} />;
     case 'analysis':
       return <AnalysisView data={data} />;
+    case 'benchmarkTrailing':
+      return <BenchmarkTrailingView data={data} />;
+    case 'benchmarkPointToPoint':
+      return <BenchmarkP2PView data={data} />;
   }
 }
 
