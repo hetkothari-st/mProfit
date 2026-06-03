@@ -433,6 +433,33 @@ export function isFinfactorDemoMode(): boolean {
   return v === 'true' || v === '1' || v === 'yes';
 }
 
+// Demo consent fixtures — initiate returns a fake redirect URL we
+// short-circuit on the frontend so the operator can walk through the
+// flow without an actual Finvu environment.
+export function demoConsentInitiate(opts: { fiTypes: string[]; fipIds: string[] }) {
+  const handle = `demo-handle-${Math.floor(1e7 + Math.random() * 9e7)}`;
+  return {
+    consentHandle: handle,
+    redirectUrl: `https://demo.finvu.example/consent?handle=${handle}`,
+    ConsentHandle: handle,
+    fiTypes: opts.fiTypes,
+    fipIds: opts.fipIds,
+    status: { code: 200, message: 'OK' },
+  };
+}
+
+export function demoConsentApproved(handle: string) {
+  return {
+    consentHandle: handle,
+    consentId: `demo-consent-${handle.slice(-6)}`,
+    status: 'APPROVED',
+    approvedAt: '2025-10-21T10:00:00.000Z',
+    expiresAt: '2027-10-21T10:00:00.000Z',
+    fiTypes: ['MUTUAL_FUNDS'],
+    fipIds: ['fip@cdsl', 'fip@cams'],
+  };
+}
+
 // Benchmark trailing returns — Finfactor returns an envelope with `data`
 // keyed by benchmark code and an inner ranges map. The legend tells us
 // which benchmark code maps to which display name.

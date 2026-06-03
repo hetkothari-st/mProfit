@@ -12,8 +12,8 @@
  */
 
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChevronDown, Loader2, Sparkles, Plug, AlertTriangle } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronDown, Loader2, Sparkles, Plug, AlertTriangle, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -110,9 +110,27 @@ export function FinvuSandboxCard() {
     onSettled: () => setActive(null),
   });
 
+  const qc = useQueryClient();
   const configured = statusQ.data?.configured ?? false;
   const demoMode = statusQ.data?.demoMode ?? false;
   const activeLabel = BUTTONS.find((b) => b.key === lastEndpoint)?.label ?? null;
+
+  const importMut = useMutation({
+    mutationFn: () => finfactorApi.syncMutualFunds({ uniqueIdentifier: uid }),
+    onSuccess: (r) => {
+      toast.success(
+        r.transactionsCreated > 0
+          ? `Imported ${r.transactionsCreated} txns into "${r.portfolioName}" (${r.fundsUpserted} funds, ${r.transactionsSkipped} skipped)`
+          : `Nothing new — every Finvu txn already projected (${r.transactionsSkipped} skipped)`,
+        { duration: 6000 },
+      );
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['holdings'] });
+      qc.invalidateQueries({ queryKey: ['mutual-funds'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err)),
+  });
 
   return (
     <Card>
@@ -211,6 +229,32 @@ export function FinvuSandboxCard() {
               </span>
             </Button>
           ))}
+        </div>
+
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-2 text-xs">
+            <Download className="h-4 w-4 mt-0.5 text-accent shrink-0" />
+            <div>
+              <div className="font-medium text-foreground">Import into PortfolioOS</div>
+              <div className="text-muted-foreground">
+                Projects every Finvu MF holding + statement row into the {' '}
+                <code className="font-mono">Finvu Imports</code> portfolio as real transactions.
+                Idempotent — re-running skips already-imported rows.
+              </div>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => importMut.mutate()}
+            disabled={!configured || importMut.isPending || !uid.trim()}
+          >
+            {importMut.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            {importMut.isPending ? 'Importing…' : 'Import to portfolio'}
+          </Button>
         </div>
 
         {result !== null && lastEndpoint && (

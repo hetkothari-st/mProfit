@@ -11,6 +11,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { FinvuConsentCard } from './FinvuConsentCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -416,6 +417,10 @@ export function ConnectorsPage() {
           />
         </div>
       )}
+
+      <div className="mt-8">
+        <FinvuConsentCard />
+      </div>
     </div>
   );
 }

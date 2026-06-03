@@ -119,6 +119,10 @@ model User {
   // Per-user transactional notification settings (currently SMTP only —
   // SMS provider config can land here too when DLT is sorted).
   notificationConfig UserNotificationConfig?
+
+  // Account Aggregator consents — currently Finfactor (Finvu) only;
+  // future AA partners stamp the `provider` column.
+  aaConsents AaConsent[]
 }
 
 model UserNotificationConfig {
@@ -2757,4 +2761,44 @@ model Goal {
 
   @@index([userId, status])
   @@index([userId, targetDate])
+}
+
+// ─── ACCOUNT AGGREGATOR CONSENTS ──────────────────────────────────
+//
+// One row per consent issued through an Account Aggregator (currently
+// Finfactor / Finvu). The redirect URL points the user at the Finvu
+// flow; once they approve, Finfactor pushes a /webhook/consent event,
+// and the FIU passes back the `ecres` param on the callback URL.
+// State machine:
+//   INITIATED   – submit-consent-request-plus called, awaiting Finvu
+//   PENDING     – user has the redirect open
+//   APPROVED    – consent live; can call insights / statement
+//   REJECTED    – user rejected
+//   EXPIRED     – consent expired (Finvu sends webhook)
+//   REVOKED     – we called submit-consent-revoke-request
+
+model AaConsent {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider      String   @default("finfactor")
+  consentHandle String?
+  consentId     String?
+  status        String   @default("INITIATED")
+  fiTypes       String[]
+  fipIds        String[]
+  purposeCode   String?
+  purposeText   String?
+  redirectUrl   String?
+  ecres         String?
+  initiatedAt   DateTime  @default(now())
+  approvedAt    DateTime?
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  lastSyncedAt  DateTime?
+  metadata      Json?
+
+  @@unique([userId, consentHandle])
+  @@index([userId, status])
+  @@index([provider, status])
 }
