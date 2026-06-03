@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogOut, User, ChevronDown, Sun, Moon, Bell, Eye, EyeOff } from 'lucide-react';
+import { LogOut, User, ChevronDown, Sun, Moon, Bell, Eye, EyeOff, Menu } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
@@ -9,7 +9,7 @@ import { authApi } from '@/api/auth.api';
 import { alertsApi } from '@/api/alerts.api';
 import { cn } from '@/lib/cn';
 
-export function Header() {
+export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { user, refreshToken, clearSession } = useAuthStore();
@@ -45,7 +45,15 @@ export function Header() {
 
   return (
     <header className="relative h-16 shrink-0 border-b border-border/70 bg-card/70 backdrop-blur-md flex items-center justify-between px-6 lg:px-10">
-      <div className="flex items-baseline gap-4 min-w-0">
+      <div className="flex items-center gap-3 min-w-0">
+        <button
+          type="button"
+          onClick={onOpenMenu}
+          aria-label="Open navigation menu"
+          className="md:hidden h-9 w-9 -ml-1 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors focus-ring"
+        >
+          <Menu className="h-5 w-5" strokeWidth={1.7} />
+        </button>
         <div className="leading-tight min-w-0">
           <p className="text-[10px] uppercase tracking-kerned text-muted-foreground/80">
             {today}
