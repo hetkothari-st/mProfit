@@ -26,6 +26,23 @@ import {
   fetchMfLinkedAccountsHoldingFolio,
   fetchMfStatement,
 } from '../integrations/finfactor/mf.service.js';
+import {
+  approveConsentDemo,
+  decryptEcres,
+  initiateConsent,
+  listUserConsents,
+  revokeConsent,
+} from '../integrations/finfactor/consent.service.js';
+import { syncFinvuMutualFunds } from '../integrations/finfactor/sync.service.js';
+import {
+  handleCohortWebhook,
+  handleConsentWebhook,
+  handleDataWebhook,
+  handleHistoricalWebhook,
+  handleSubscriptionWebhook,
+  pickSignatureHeader,
+  verifyWebhookSignature,
+} from '../integrations/finfactor/webhooks.service.js';
 
 const baseSchema = z.object({
   uniqueIdentifier: z.string().min(1, 'uniqueIdentifier is required'),
@@ -152,3 +169,114 @@ export async function postBenchmarkPointToPoint(req: Request, res: Response) {
   const data = await fetchBenchmarkPointToPoint(body);
   ok(res, data);
 }
+
+// ─── Consent ────────────────────────────────────────────────────────────────
+
+const consentInitiateSchema = z.object({
+  fiTypes: z.array(z.string()).optional(),
+  fipIds: z.array(z.string()).optional(),
+  purposeCode: z.string().optional(),
+  purposeText: z.string().optional(),
+  durationDays: z.number().int().positive().optional(),
+  customerIdentifier: z.string().optional(),
+});
+
+export async function postConsentInitiate(req: Request, res: Response) {
+  ensureAuth(req);
+  const body = consentInitiateSchema.parse(req.body ?? {});
+  const result = await initiateConsent(req.user!.id, body);
+  ok(res, result);
+}
+
+export async function getConsents(req: Request, res: Response) {
+  ensureAuth(req);
+  const consents = await listUserConsents(req.user!.id);
+  ok(res, consents);
+}
+
+export async function postConsentRevoke(req: Request, res: Response) {
+  ensureAuth(req);
+  const handle = req.params['handle'];
+  if (!handle) throw new BadRequestError('consent handle path param required');
+  const result = await revokeConsent(req.user!.id, handle);
+  ok(res, result);
+}
+
+export async function postConsentApproveDemo(req: Request, res: Response) {
+  ensureAuth(req);
+  if (!isFinfactorDemoMode()) {
+    throw new BadRequestError('consent demo-approve is only available in demo mode');
+  }
+  const handle = req.params['handle'];
+  if (!handle) throw new BadRequestError('consent handle path param required');
+  const result = await approveConsentDemo(req.user!.id, handle);
+  ok(res, result);
+}
+
+const ecresSchema = z.object({ ecres: z.string().min(1) });
+export async function postDecryptEcres(req: Request, res: Response) {
+  ensureAuth(req);
+  const { ecres } = ecresSchema.parse(req.body ?? {});
+  const decoded = await decryptEcres(ecres);
+  ok(res, decoded);
+}
+
+// ─── Sync (project Finvu MF data into portfolio holdings) ───────────────────
+
+const syncSchema = z.object({
+  uniqueIdentifier: z.string().min(1),
+  portfolioId: z.string().optional(),
+});
+
+export async function postSyncMutualFunds(req: Request, res: Response) {
+  ensureAuth(req);
+  const body = syncSchema.parse(req.body ?? {});
+  const result = await syncFinvuMutualFunds(req.user!.id, body);
+  ok(res, result);
+}
+
+// ─── Webhook handlers (unauthenticated; HMAC-verified) ──────────────────────
+//
+// Mounted on a separate router because they cannot use the `authenticate`
+// middleware — Finvu doesn't supply our JWT. Each handler verifies the
+// X-Finfactor-Signature header against FINFACTOR_WEBHOOK_SECRET and then
+// dispatches to the service-level handler.
+
+type WebhookKind = 'consent' | 'data' | 'historical' | 'cohort' | 'subscription';
+
+function makeWebhookHandler(kind: WebhookKind) {
+  return async function (req: Request, res: Response) {
+    const signature = pickSignatureHeader(req.headers as Record<string, string | string[] | undefined>);
+    const rawBody = JSON.stringify(req.body ?? {});
+    if (!verifyWebhookSignature(rawBody, signature)) {
+      res.status(401);
+      ok(res, { ok: false, reason: 'invalid_signature' });
+      return;
+    }
+    let result;
+    switch (kind) {
+      case 'consent':
+        result = await handleConsentWebhook(req.body);
+        break;
+      case 'data':
+        result = await handleDataWebhook(req.body);
+        break;
+      case 'historical':
+        result = await handleHistoricalWebhook(req.body);
+        break;
+      case 'cohort':
+        result = await handleCohortWebhook(req.body);
+        break;
+      case 'subscription':
+        result = await handleSubscriptionWebhook(req.body);
+        break;
+    }
+    ok(res, result);
+  };
+}
+
+export const postConsentWebhook = makeWebhookHandler('consent');
+export const postDataWebhook = makeWebhookHandler('data');
+export const postHistoricalWebhook = makeWebhookHandler('historical');
+export const postCohortWebhook = makeWebhookHandler('cohort');
+export const postSubscriptionWebhook = makeWebhookHandler('subscription');

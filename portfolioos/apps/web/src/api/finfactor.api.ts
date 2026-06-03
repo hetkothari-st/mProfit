@@ -57,6 +57,56 @@ export interface BenchmarkPointToPointBody {
   point_2: string;
 }
 
+export interface ConsentInitiateBody {
+  fiTypes?: string[];
+  fipIds?: string[];
+  purposeCode?: string;
+  purposeText?: string;
+  durationDays?: number;
+  customerIdentifier?: string;
+}
+
+export interface AaConsentDTO {
+  id: string;
+  userId: string;
+  provider: string;
+  consentHandle: string | null;
+  consentId: string | null;
+  status: string;
+  fiTypes: string[];
+  fipIds: string[];
+  purposeCode: string | null;
+  purposeText: string | null;
+  redirectUrl: string | null;
+  initiatedAt: string;
+  approvedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastSyncedAt: string | null;
+}
+
+export interface ConsentInitiateResult {
+  consent: AaConsentDTO;
+  upstream: unknown;
+  demoMode: boolean;
+}
+
+export interface SyncBody {
+  uniqueIdentifier: string;
+  portfolioId?: string;
+}
+
+export interface SyncResult {
+  insightsHoldings: number;
+  statementRows: number;
+  fundsUpserted: number;
+  transactionsCreated: number;
+  transactionsSkipped: number;
+  portfolioId: string;
+  portfolioName: string;
+  durationMs: number;
+}
+
 export const finfactorApi = {
   async status(): Promise<FinfactorStatus> {
     const { data } = await api.get<ApiResponse<FinfactorStatus>>('/api/integrations/finfactor/status');
@@ -103,6 +153,38 @@ export const finfactorApi = {
   async benchmarkPointToPoint(body: BenchmarkPointToPointBody): Promise<unknown> {
     const { data } = await api.post<ApiResponse<unknown>>(
       '/api/integrations/finfactor/mf/benchmark/point-to-point',
+      body,
+    );
+    return unwrap(data);
+  },
+  async consentInitiate(body: ConsentInitiateBody): Promise<ConsentInitiateResult> {
+    const { data } = await api.post<ApiResponse<ConsentInitiateResult>>(
+      '/api/integrations/finfactor/consent/initiate',
+      body,
+    );
+    return unwrap(data);
+  },
+  async listConsents(): Promise<AaConsentDTO[]> {
+    const { data } = await api.get<ApiResponse<AaConsentDTO[]>>(
+      '/api/integrations/finfactor/consent',
+    );
+    return unwrap(data);
+  },
+  async revokeConsent(handle: string): Promise<AaConsentDTO> {
+    const { data } = await api.post<ApiResponse<AaConsentDTO>>(
+      `/api/integrations/finfactor/consent/${encodeURIComponent(handle)}/revoke`,
+    );
+    return unwrap(data);
+  },
+  async approveConsentDemo(handle: string): Promise<AaConsentDTO> {
+    const { data } = await api.post<ApiResponse<AaConsentDTO>>(
+      `/api/integrations/finfactor/consent/${encodeURIComponent(handle)}/approve-demo`,
+    );
+    return unwrap(data);
+  },
+  async syncMutualFunds(body: SyncBody): Promise<SyncResult> {
+    const { data } = await api.post<ApiResponse<SyncResult>>(
+      '/api/integrations/finfactor/sync/mf',
       body,
     );
     return unwrap(data);
