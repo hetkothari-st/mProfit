@@ -503,6 +503,8 @@
     padding: 0.35rem 0;
     border: 0;
     width: auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   table.rtable td::before {
@@ -514,6 +516,13 @@
     color: hsl(var(--muted-foreground));
     font-weight: 600;
     flex-shrink: 0;
+    max-width: 45%;
+  }
+
+  /* Let the value side shrink so long content (descriptions, names) wraps
+     or ellipsizes inside the card instead of bleeding past its edge. */
+  table.rtable td > * {
+    min-width: 0;
   }
 
   /* Cells with no label (data-label="") drop the label column. */

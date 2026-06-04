@@ -672,11 +672,11 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
         </div>
 
         {/* Actions — full-width split on phones, right-aligned on desktop */}
-        <div className="flex items-center gap-1.5 sm:ml-auto">
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:ml-auto">
           <Button
             variant="outline"
             size="sm"
-            className="flex-1 sm:flex-none"
+            className="w-full justify-center sm:w-auto"
             onClick={() => rejectAllMut.mutate(Array.from(selected))}
             disabled={selected.size === 0 || rejectAllMut.isPending}
           >
@@ -684,7 +684,7 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
           </Button>
           <Button
             size="sm"
-            className="flex-1 sm:flex-none"
+            className="w-full justify-center sm:w-auto"
             onClick={() => approveAllMut.mutate(Array.from(selected))}
             disabled={
               selected.size === 0

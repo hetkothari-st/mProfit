@@ -67,12 +67,12 @@ export function VehicleListPage() {
         title="Vehicles"
         description="Registration, insurance, PUC, fitness — all expiries in one place"
         actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            {/* View mode toggle — individual vs family (grouped by owner) */}
+          <div className="flex flex-col gap-2 w-full sm:flex-row sm:flex-wrap sm:items-center sm:w-auto">
+            {/* Row 1 (mobile): view-mode toggle always on its own line */}
             <div
               role="tablist"
               aria-label="View mode"
-              className="flex items-center rounded-md border border-border/70 bg-background/40 p-0.5"
+              className="flex items-center self-start rounded-md border border-border/70 bg-background/40 p-0.5"
             >
               <button
                 type="button"
@@ -103,18 +103,21 @@ export function VehicleListPage() {
                 <Users className="h-3 w-3" /> Family
               </button>
             </div>
-            <DownloadReportButton type="vehicles" />
-            <Button asChild variant="outline">
-              <Link to="/vehicles/value">
-                <Calculator className="h-4 w-4" /> Get valuation
-              </Link>
-            </Button>
-            <Button variant="outline" onClick={() => setSmsOpen(true)}>
-              <MessageSquareShare className="h-4 w-4" /> Paste SMS
-            </Button>
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus className="h-4 w-4" /> Add vehicle
-            </Button>
+            {/* Row 2 (mobile): action buttons wrap in a tidy row */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <DownloadReportButton type="vehicles" />
+              <Button asChild variant="outline">
+                <Link to="/vehicles/value">
+                  <Calculator className="h-4 w-4" /> Get valuation
+                </Link>
+              </Button>
+              <Button variant="outline" onClick={() => setSmsOpen(true)}>
+                <MessageSquareShare className="h-4 w-4" /> Paste SMS
+              </Button>
+              <Button className="sm:w-auto w-full" onClick={() => setFormOpen(true)}>
+                <Plus className="h-4 w-4" /> Add vehicle
+              </Button>
+            </div>
           </div>
         }
       />

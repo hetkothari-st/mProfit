@@ -217,7 +217,7 @@ export function FinvuSandboxCard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
           {BUTTONS.map((b) => (
             <Button
               key={b.key}
@@ -225,17 +225,17 @@ export function FinvuSandboxCard() {
               size="sm"
               disabled={!configured || mutation.isPending || !uid.trim()}
               onClick={() => mutation.mutate(b.key)}
-              className="justify-start h-auto py-2"
+              className="justify-start h-auto py-2 min-w-0 w-full"
             >
               {active === b.key ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
               ) : (
-                <Sparkles className="h-3.5 w-3.5" />
+                <Sparkles className="h-3.5 w-3.5 shrink-0" />
               )}
-              <span className="flex flex-col items-start text-left ml-2">
-                <span className="text-sm font-medium">{b.label}</span>
+              <span className="flex flex-col items-start text-left ml-2 min-w-0 w-full">
+                <span className="text-sm font-medium leading-snug">{b.label}</span>
                 <span
-                  className={`text-[10.5px] font-normal ${
+                  className={`text-xs leading-snug break-words min-w-0 font-normal ${
                     lastEndpoint === b.key
                       ? 'text-primary-foreground/80'
                       : 'text-muted-foreground'
