@@ -23,6 +23,18 @@ import {
   getGrandfatheringReport,
   getDematHoldingReport,
   getM2MReport,
+  downloadGrandfathering,
+  downloadDematHoldings,
+  downloadM2M,
+  downloadTrialBalance,
+  downloadAccountLedger,
+  downloadProfitLoss,
+  downloadBalanceSheet,
+  downloadSchedule112A,
+  downloadMFCapitalGain,
+  downloadDailyTransactions,
+  downloadShortLongSpec,
+  downloadIncomeReport,
 } from '../controllers/reports.controller.js';
 
 export const reportsRouter = Router();
@@ -53,3 +65,17 @@ reportsRouter.get('/statement/ledger', asyncHandler(getStatementLedger));
 reportsRouter.get('/grandfathering', asyncHandler(getGrandfatheringReport));
 reportsRouter.get('/demat-holdings', asyncHandler(getDematHoldingReport));
 reportsRouter.get('/m2m', asyncHandler(getM2MReport));
+
+// Tax / MIS downloads — PDF + Excel only, no inline UI.
+reportsRouter.get('/download/grandfathering', asyncHandler(downloadGrandfathering));
+reportsRouter.get('/download/demat-holdings', asyncHandler(downloadDematHoldings));
+reportsRouter.get('/download/m2m', asyncHandler(downloadM2M));
+reportsRouter.get('/download/trial-balance', asyncHandler(downloadTrialBalance));
+reportsRouter.get('/download/account-ledger', asyncHandler(downloadAccountLedger));
+reportsRouter.get('/download/profit-loss', asyncHandler(downloadProfitLoss));
+reportsRouter.get('/download/balance-sheet', asyncHandler(downloadBalanceSheet));
+reportsRouter.get('/download/schedule-112a', asyncHandler(downloadSchedule112A));
+reportsRouter.get('/download/mf-capital-gain', asyncHandler(downloadMFCapitalGain));
+reportsRouter.get('/download/daily-transactions', asyncHandler(downloadDailyTransactions));
+reportsRouter.get('/download/short-long-spec', asyncHandler(downloadShortLongSpec));
+reportsRouter.get('/download/income-report', asyncHandler(downloadIncomeReport));
