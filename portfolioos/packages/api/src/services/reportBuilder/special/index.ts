@@ -1,15 +1,24 @@
 /**
- * Tax / MIS report builders.
+ * Tax / MIS report layout builders.
  *
- * Each function returns an ExportPayload the existing streamPdf /
- * streamExcel pipeline can serialise into a download. Layouts mirror
- * the legacy mProfit desktop reports the user shared.
+ * Each function returns a `MprofitLayout` that the new streamMprofitPdf
+ * / streamMprofitExcel can serialise into a pixel-close match of the
+ * legacy desktop screenshots the user shared. Pink/blue/yellow/green
+ * banded rows, two-level column headers, Indian lakh/crore numbers,
+ * negatives in parens.
  */
 
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../../lib/prisma.js';
-import type { ExportPayload, ExportSection } from '../../export.service.js';
-import { fmtNum, fmtDate } from '../../export.service.js';
+import {
+  fmtDateDDMMYYYY,
+  indianInt,
+  indianMoney,
+  type ColumnDef,
+  type MprofitLayout,
+  type SubGroup,
+  type ReportSection,
+} from '../mprofitStyle.js';
 import {
   grandfatheringReport,
   dematHoldingReport,
@@ -20,13 +29,14 @@ import {
   stcgReport,
   ltcgReport,
   schedule112AReport,
-  incomeReport,
   userIntradayReport,
   userStcgReport,
   userLtcgReport,
   userSchedule112AReport,
+  userIncomeReport,
+  incomeReport,
 } from '../../reports.service.js';
-import { computeUserCapitalGains } from '../../capitalGains.service.js';
+import { computeUserCapitalGains, type CapitalGainRow } from '../../capitalGains.service.js';
 import {
   getTrialBalance,
   getAccountLedger,
@@ -35,414 +45,772 @@ import {
   listAccountsFlat,
 } from '../../accounting.service.js';
 
-const indianFmt = (v: unknown) => fmtNum(v);
-const pctFmt = (v: unknown) =>
-  v == null || v === '' || !Number.isFinite(Number(v)) ? '—' : `${Number(v).toFixed(2)}%`;
+async function userMember(userId: string): Promise<{ family: string; member: string; pan: string | undefined }> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true, pan: true },
+  });
+  const member = u?.name ?? u?.email ?? 'Member';
+  return {
+    family: member, // family roll-up not yet implemented (Phase C in memory)
+    member,
+    pan: u?.pan ?? undefined,
+  };
+}
+
+const MONEY = (v: unknown) => indianMoney(v);
+const INT = (v: unknown) => indianInt(v);
+const DATE = (v: unknown) => fmtDateDDMMYYYY(v);
+
+// ─── Helper: group CapitalGainRow[] by assetName ─────────────────
+
+function groupCG(rows: CapitalGainRow[]): Array<{ name: string; rows: CapitalGainRow[] }> {
+  const m = new Map<string, CapitalGainRow[]>();
+  for (const r of rows) {
+    const arr = m.get(r.assetName) ?? [];
+    arr.push(r);
+    m.set(r.assetName, arr);
+  }
+  return Array.from(m.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([name, rs]) => ({ name, rows: rs }));
+}
 
 // ─── 1. Grandfathering LTCG ───────────────────────────────────────
 
-export async function buildGrandfatheringPayload(
-  userId: string,
-  fy?: string,
-): Promise<ExportPayload> {
+export async function buildGrandfatheringLayout(userId: string, fy?: string): Promise<MprofitLayout> {
+  const m = await userMember(userId);
   const r = await grandfatheringReport(userId, fy);
+
+  // Group rows by script
+  const byScript = new Map<string, typeof r.rows>();
+  for (const row of r.rows) {
+    const arr = byScript.get(row.scriptName) ?? [];
+    arr.push(row);
+    byScript.set(row.scriptName, arr);
+  }
+
+  const groups: SubGroup[] = Array.from(byScript.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([scriptName, rows]) => {
+      const tot = rows.reduce(
+        (acc, x) => ({
+          buyQty: acc.buyQty.plus(x.buyQty),
+          buyAmt: acc.buyAmt.plus(x.buyAmount),
+          sellQty: acc.sellQty.plus(x.sellQty),
+          sellAmt: acc.sellAmt.plus(x.sellAmount),
+          gain: acc.gain.plus(x.gain),
+          loss: acc.loss.plus(x.loss),
+        }),
+        { buyQty: new Decimal(0), buyAmt: new Decimal(0), sellQty: new Decimal(0), sellAmt: new Decimal(0), gain: new Decimal(0), loss: new Decimal(0) },
+      );
+      return {
+        header: scriptName,
+        rows: rows.map((row) => ({
+          cells: {
+            scriptName: 'SHARE INVESTMENT (EQUITY) A/C',
+            buyDate: row.buyDate,
+            buyQty: row.buyQty,
+            buyRate: row.buyRate,
+            buyAmount: row.buyAmount,
+            fmv: row.fmvOn31Jan2018 ?? '',
+            sellDate: row.sellDate,
+            sellQty: row.sellQty,
+            sellRate: row.sellRate,
+            sellAmount: row.sellAmount,
+            gainLoss: row.gainLoss,
+            gain: row.gain,
+            loss: row.loss,
+          },
+        })),
+        subtotal: {
+          label: `Total For ${scriptName}`,
+          values: {
+            buyQty: tot.buyQty.toString(),
+            buyAmount: tot.buyAmt.toString(),
+            sellQty: tot.sellQty.toString(),
+            sellAmount: tot.sellAmt.toString(),
+            gainLoss: tot.gain.minus(tot.loss).toString(),
+            gain: tot.gain.toString(),
+            loss: tot.loss.toString(),
+          },
+        },
+      };
+    });
+
+  const columns: ColumnDef[] = [
+    { key: 'scriptName', label: 'Script Name', width: 14, align: 'left' },
+    { key: 'buyDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
+    { key: 'buyAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
+    { key: 'fmv', label: 'FMV', width: 7, align: 'right', formatter: (v) => (v ? MONEY(v) : '') },
+    { key: 'sellDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
+    { key: 'sellAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
+    { key: 'gainLoss', label: 'Gain/Loss', width: 8, align: 'right', formatter: MONEY, signed: true },
+    { key: 'gain', label: 'Gain', width: 7, align: 'right', formatter: (v) => (new Decimal(String(v ?? 0)).gt(0) ? MONEY(v) : '') },
+    { key: 'loss', label: 'Loss', width: 7, align: 'right', formatter: (v) => (new Decimal(String(v ?? 0)).gt(0) ? MONEY(v) : '') },
+  ];
+
   return {
-    title: 'Grandfathering Report — Sec 112A',
-    subtitle: fy ? `Financial Year ${fy}` : 'All financial years',
-    filenameStem: `grandfathering-ltcg${fy ? `-${fy}` : ''}`,
-    meta: { 'Financial Year': fy ?? 'All', Scope: 'All portfolios' },
-    columns: [
-      { key: 'scriptName', header: 'Script Name', width: 34 },
-      { key: 'buyDate', header: 'Buy Date', width: 12, formatter: fmtDate },
-      { key: 'buyQty', header: 'Buy Qty', width: 10, formatter: (v) => indianFmt(v) },
-      { key: 'buyRate', header: 'Buy Rate', width: 12, formatter: (v) => indianFmt(v) },
-      { key: 'buyAmount', header: 'Buy Amount', width: 14, formatter: (v) => indianFmt(v) },
-      { key: 'fmvOn31Jan2018', header: 'FMV 31-Jan-2018', width: 14, formatter: (v) => v ? indianFmt(v) : '—' },
-      { key: 'sellDate', header: 'Sell Date', width: 12, formatter: fmtDate },
-      { key: 'sellQty', header: 'Sell Qty', width: 10, formatter: (v) => indianFmt(v) },
-      { key: 'sellRate', header: 'Sell Rate', width: 12, formatter: (v) => indianFmt(v) },
-      { key: 'sellAmount', header: 'Sell Amount', width: 14, formatter: (v) => indianFmt(v) },
-      { key: 'gainLoss', header: 'Gain / Loss', width: 14, formatter: (v) => indianFmt(v) },
+    reportTitle: `Grandfathering Report ${r.scope.financialYear ? `(FY ${r.scope.financialYear})` : ''}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    financialYear: r.scope.financialYear ?? 'All',
+    headerRow1: [
+      { label: 'Script Name', spanCols: 1 },
+      { label: 'Opening / Purchase', spanCols: 4 },
+      { label: '31st Jan 2018', spanCols: 1 },
+      { label: 'Sale', spanCols: 4 },
+      { label: 'LTCG', spanCols: 3 },
     ],
-    rows: r.rows as unknown as Array<Record<string, unknown>>,
-    footer: {
-      'Total Buy Qty': indianFmt(r.totals.buyQty),
-      'Total Buy Amount': indianFmt(r.totals.buyAmount),
-      'Total Sell Amount': indianFmt(r.totals.sellAmount),
-      'Net Gain / Loss': indianFmt(r.totals.net),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [{ groups }],
+    grandTotal: {
+      label: 'Grand Total',
+      values: {
+        buyQty: r.totals.buyQty,
+        buyAmount: r.totals.buyAmount,
+        sellQty: r.totals.sellQty,
+        sellAmount: r.totals.sellAmount,
+        gainLoss: r.totals.net,
+        gain: r.totals.gain,
+        loss: r.totals.loss,
+      },
     },
+    filenameStem: `grandfathering-ltcg${fy ? `-${fy}` : ''}`,
   };
 }
 
 // ─── 2. Demat-wise holdings ───────────────────────────────────────
 
-export async function buildDematHoldingsPayload(userId: string): Promise<ExportPayload> {
+export async function buildDematHoldingsLayout(userId: string): Promise<MprofitLayout> {
+  const m = await userMember(userId);
   const r = await dematHoldingReport(userId);
+
+  // Group movements by broker → script. We render the screenshot's
+  // "Dated movements" variant since it's the visually richer one.
+  const byBroker = new Map<string, Map<string, typeof r.movements>>();
+  for (const mv of r.movements) {
+    let inner = byBroker.get(mv.brokerName);
+    if (!inner) {
+      inner = new Map();
+      byBroker.set(mv.brokerName, inner);
+    }
+    const arr = inner.get(mv.scriptName) ?? [];
+    arr.push(mv);
+    inner.set(mv.scriptName, arr);
+  }
+
+  const sections: ReportSection[] = Array.from(byBroker.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([brokerName, scriptMap]) => ({
+      banner: brokerName,
+      groups: Array.from(scriptMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([scriptName, movements]) => {
+          const sumIn = movements.reduce((s, x) => s.plus(x.inQty), new Decimal(0));
+          const sumOut = movements.reduce((s, x) => s.plus(x.outQty), new Decimal(0));
+          const balance = sumIn.minus(sumOut);
+          return {
+            header: scriptName,
+            rows: movements.map((mv) => ({
+              cells: {
+                date: mv.kind === 'OPENING' ? '' : mv.date,
+                reason: mv.reason,
+                inQty: mv.inQty === '0' ? '0' : mv.inQty,
+                outQty: mv.outQty === '0' ? '0' : mv.outQty,
+                balanceQty: mv.balanceQty,
+              },
+              bg: mv.kind === 'OPENING' ? '#FFE3E6' : undefined,
+            })),
+            subtotal: {
+              label: 'Script Total',
+              values: {
+                inQty: sumIn.toString(),
+                outQty: sumOut.toString(),
+                balanceQty: balance.toString(),
+              },
+            },
+          };
+        }),
+    }));
+
+  const columns: ColumnDef[] = [
+    { key: 'date', label: 'Date', width: 12, align: 'center', formatter: DATE },
+    { key: 'reason', label: 'Demat Account / Script Name', width: 38, align: 'left' },
+    { key: 'inQty', label: 'In Qty.', width: 16, align: 'right', formatter: INT },
+    { key: 'outQty', label: 'Out Qty.', width: 16, align: 'right', formatter: INT },
+    { key: 'balanceQty', label: 'Balance Qty.', width: 18, align: 'right', formatter: INT, signed: true },
+  ];
+
   return {
-    title: 'Physical / Demat Accountwise Stock Report',
-    subtitle: `As of ${new Date().toISOString().slice(0, 10)}`,
-    filenameStem: 'demat-accountwise-holdings',
-    columns: [
-      { key: 'brokerName', header: 'Demat Account', width: 28 },
-      { key: 'scriptName', header: 'Script Name', width: 32 },
-      { key: 'isin', header: 'ISIN', width: 16 },
-      { key: 'balanceQty', header: 'Balance Qty', width: 14, formatter: (v) => indianFmt(v) },
-    ],
-    rows: r.rows as unknown as Array<Record<string, unknown>>,
-    footer: {
-      'Brokers': String(new Set(r.rows.map((x) => x.brokerName)).size),
-      'Open positions': String(r.rows.length),
-      'Total balance qty': indianFmt(r.grandTotal),
+    reportTitle: `Physical/Demat Accountwise Stock Report As On ${new Date().toLocaleDateString('en-IN')}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections,
+    grandTotal: {
+      label: 'Grand Total',
+      values: { balanceQty: r.grandTotal },
     },
-    additionalSections: r.movements.length > 0
-      ? [
-          {
-            title: 'Dated movements',
-            columns: [
-              { key: 'date', header: 'Date', width: 12, formatter: fmtDate },
-              { key: 'brokerName', header: 'Demat Account', width: 22 },
-              { key: 'scriptName', header: 'Script Name', width: 28 },
-              { key: 'reason', header: 'Reason', width: 14 },
-              { key: 'inQty', header: 'In', width: 10, formatter: (v) => indianFmt(v) },
-              { key: 'outQty', header: 'Out', width: 10, formatter: (v) => indianFmt(v) },
-              { key: 'balanceQty', header: 'Balance', width: 12, formatter: (v) => indianFmt(v) },
-            ],
-            rows: r.movements as unknown as Array<Record<string, unknown>>,
-          },
-        ]
-      : undefined,
+    filenameStem: 'demat-accountwise-holdings',
   };
 }
 
 // ─── 3. M2M Equity + F&O ──────────────────────────────────────────
 
-export async function buildM2MPayload(userId: string, asOf?: Date): Promise<ExportPayload> {
+export async function buildM2MLayout(userId: string, asOf?: Date): Promise<MprofitLayout> {
+  const m = await userMember(userId);
   const r = await m2mReport(userId, asOf);
-  const allRows = [...r.equityRows, ...r.fnoRows];
-  return {
-    title: 'M2M Report — Equity + F&O',
-    subtitle: `As of ${r.asOfDate}`,
-    filenameStem: `m2m-${r.asOfDate}`,
-    meta: { 'As of': r.asOfDate, Scope: 'All portfolios' },
-    columns: [
-      { key: 'segment', header: 'Segment', width: 10 },
-      { key: 'scriptName', header: 'Script Name', width: 32 },
-      { key: 'closingDate', header: 'Closing Date', width: 12, formatter: fmtDate },
-      { key: 'qty', header: 'Qty', width: 10, formatter: (v) => indianFmt(v) },
-      { key: 'purRate', header: 'Pur Rate', width: 11, formatter: (v) => indianFmt(v) },
-      { key: 'purValue', header: 'Pur Value', width: 13, formatter: (v) => indianFmt(v) },
-      { key: 'bhavRate', header: 'Bhav Rate', width: 11, formatter: (v) => indianFmt(v) },
-      { key: 'valuation', header: 'Valuation', width: 13, formatter: (v) => indianFmt(v) },
-      { key: 'unrealisedPnL', header: 'Unrealised G/L', width: 14, formatter: (v) => indianFmt(v) },
-      { key: 'noOfDays', header: 'Days', width: 8 },
-      { key: 'actualRoiPct', header: 'Actual ROI %', width: 11, formatter: (v) => pctFmt(v) },
-      { key: 'monthlyRoiPct', header: 'Monthly ROI %', width: 12, formatter: (v) => pctFmt(v) },
-      { key: 'annualRoiPct', header: 'Annual ROI %', width: 12, formatter: (v) => pctFmt(v) },
-      { key: 'cagrPct', header: 'CAGR %', width: 10, formatter: (v) => pctFmt(v) },
-    ],
-    rows: allRows as unknown as Array<Record<string, unknown>>,
-    footer: {
-      'Equity Value': indianFmt(r.equityTotals.valuation),
-      'F&O Value': indianFmt(r.fnoTotals.valuation),
-      'Total Cost': indianFmt(r.grandTotal.purValue),
-      'Unrealised G/L': indianFmt(r.grandTotal.unrealisedPnL),
-    },
-  };
-}
 
-// ─── 4. Trial Balance ─────────────────────────────────────────────
-
-export async function buildTrialBalancePayload(
-  userId: string,
-  asOf?: string,
-): Promise<ExportPayload> {
-  const rows = await getTrialBalance(userId, asOf);
-  const totalDr = rows.reduce((s, r) => s.plus(r.totalDebit), new Decimal(0));
-  const totalCr = rows.reduce((s, r) => s.plus(r.totalCredit), new Decimal(0));
-  return {
-    title: 'Trial Balance',
-    subtitle: asOf ? `As of ${asOf}` : `As of ${new Date().toISOString().slice(0, 10)}`,
-    filenameStem: `trial-balance${asOf ? `-${asOf}` : ''}`,
-    columns: [
-      { key: 'code', header: 'Code', width: 10 },
-      { key: 'name', header: 'Particulars', width: 38 },
-      { key: 'type', header: 'Type', width: 12 },
-      { key: 'openingBalance', header: 'Opening', width: 14, formatter: indianFmt },
-      { key: 'totalDebit', header: 'Debit', width: 14, formatter: indianFmt },
-      { key: 'totalCredit', header: 'Credit', width: 14, formatter: indianFmt },
-      { key: 'closingBalance', header: 'Closing', width: 14, formatter: indianFmt },
-    ],
-    rows: rows as unknown as Array<Record<string, unknown>>,
-    footer: {
-      'Total Debit': indianFmt(totalDr.toFixed(4)),
-      'Total Credit': indianFmt(totalCr.toFixed(4)),
-      Difference: indianFmt(totalDr.minus(totalCr).toFixed(4)),
-    },
-  };
-}
-
-// ─── 5. Account Ledger (all accounts as separate sections) ────────
-
-export async function buildAccountLedgerPayload(
-  userId: string,
-  opts: { accountId?: string; from?: string; to?: string },
-): Promise<ExportPayload> {
-  // If accountId given → single ledger; else → all accounts as
-  // additional sections.
-  if (opts.accountId) {
-    const ledger = await getAccountLedger(userId, opts.accountId, opts);
+  function rowCells(row: typeof r.equityRows[number]) {
     return {
-      title: `Account Ledger — ${ledger.account.code} ${ledger.account.name}`,
-      subtitle: `${opts.from ?? 'beginning'} → ${opts.to ?? 'today'}`,
-      filenameStem: `ledger-${ledger.account.code}`,
-      columns: [
-        { key: 'date', header: 'Date', width: 12, formatter: fmtDate },
-        { key: 'voucherNo', header: 'Voucher No.', width: 14 },
-        { key: 'voucherType', header: 'Type', width: 12 },
-        { key: 'narration', header: 'Narration', width: 38 },
-        { key: 'debit', header: 'Debit', width: 14, formatter: indianFmt },
-        { key: 'credit', header: 'Credit', width: 14, formatter: indianFmt },
-        { key: 'balance', header: 'Balance', width: 14, formatter: indianFmt },
-      ],
-      rows: ledger.entries as unknown as Array<Record<string, unknown>>,
-      footer: {
-        Opening: indianFmt(ledger.openingBalance),
-        Closing: indianFmt(ledger.closingBalance),
-      },
+      scriptName: row.scriptName,
+      closingDate: row.closingDate,
+      qty: row.qty,
+      purRate: row.purRate,
+      purValue: row.purValue,
+      bhavRate: row.bhavRate ?? '',
+      valuation: row.valuation ?? '',
+      unrealisedPnL: row.unrealisedPnL ?? '',
+      noOfDays: row.noOfDays,
+      actualRoi: row.actualRoiPct,
+      monthlyRoi: row.monthlyRoiPct,
+      annualRoi: row.annualRoiPct,
+      cagr: row.cagrPct,
     };
   }
 
-  const accounts = await listAccountsFlat(userId);
-  const sections: ExportSection[] = [];
-  for (const a of accounts) {
-    const l = await getAccountLedger(userId, a.id, opts);
-    if (l.entries.length === 0) continue;
-    sections.push({
-      title: `${a.code} — ${a.name}`,
-      columns: [
-        { key: 'date', header: 'Date', width: 12, formatter: fmtDate },
-        { key: 'voucherNo', header: 'Voucher', width: 14 },
-        { key: 'narration', header: 'Narration', width: 38 },
-        { key: 'debit', header: 'Debit', width: 14, formatter: indianFmt },
-        { key: 'credit', header: 'Credit', width: 14, formatter: indianFmt },
-        { key: 'balance', header: 'Balance', width: 14, formatter: indianFmt },
-      ],
-      rows: l.entries as unknown as Array<Record<string, unknown>>,
+  // Group by script per segment, with per-script subtotal
+  function buildSection(label: string, rows: typeof r.equityRows): ReportSection {
+    const byScript = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const arr = byScript.get(row.scriptName) ?? [];
+      arr.push(row);
+      byScript.set(row.scriptName, arr);
+    }
+    const groups: SubGroup[] = Array.from(byScript.entries()).map(([name, rs]) => {
+      const tQty = rs.reduce((s, x) => s.plus(x.qty), new Decimal(0));
+      const tPur = rs.reduce((s, x) => s.plus(x.purValue), new Decimal(0));
+      const tVal = rs.reduce((s, x) => s.plus(x.valuation ?? '0'), new Decimal(0));
+      const tPnl = rs.reduce((s, x) => s.plus(x.unrealisedPnL ?? '0'), new Decimal(0));
+      return {
+        rows: rs.map((row) => ({ cells: rowCells(row) })),
+        subtotal: {
+          label: `Total : ${name}`,
+          values: {
+            qty: tQty.toString(),
+            purValue: tPur.toString(),
+            valuation: tVal.toString(),
+            unrealisedPnL: tPnl.toString(),
+          },
+        },
+      };
     });
+    return { banner: label, groups };
   }
-  return {
-    title: 'Account Ledger — All Accounts',
-    subtitle: `${opts.from ?? 'beginning'} → ${opts.to ?? 'today'}`,
-    filenameStem: 'account-ledger-all',
-    columns: [
-      { key: 'code', header: 'Code', width: 10 },
-      { key: 'name', header: 'Account', width: 40 },
-      { key: 'type', header: 'Type', width: 12 },
-    ],
-    rows: accounts,
-    additionalSections: sections,
-    mainSectionLabel: 'Chart of Accounts',
-  };
-}
 
-// ─── 6. Profit & Loss ─────────────────────────────────────────────
+  const sections: ReportSection[] = [];
+  if (r.equityRows.length) sections.push(buildSection('Equity', r.equityRows));
+  if (r.fnoRows.length) sections.push(buildSection('F & O', r.fnoRows));
 
-export async function buildProfitLossPayload(
-  userId: string,
-  opts: { from?: string; to?: string },
-): Promise<ExportPayload> {
-  const pl = await getPnL(userId, opts.from, opts.to);
-  // Reshape income + expense into a Particulars / Debit / Credit table
-  // styled like the legacy P&L statement.
-  const rows: Array<{ debitParticulars: string; debit: string; creditParticulars: string; credit: string }> = [];
-  const maxLen = Math.max(pl.income.length, pl.expense.length);
-  for (let i = 0; i < maxLen; i++) {
-    rows.push({
-      debitParticulars: pl.expense[i] ? `To ${pl.expense[i]!.name}` : '',
-      debit: pl.expense[i] ? indianFmt(pl.expense[i]!.closingBalance) : '',
-      creditParticulars: pl.income[i] ? `By ${pl.income[i]!.name}` : '',
-      credit: pl.income[i] ? indianFmt(pl.income[i]!.closingBalance) : '',
-    });
-  }
-  return {
-    title: 'Profit & Loss Statement',
-    subtitle: `${opts.from ?? 'beginning'} → ${opts.to ?? 'today'}`,
-    filenameStem: `profit-loss${opts.from ? `-${opts.from}` : ''}`,
-    columns: [
-      { key: 'debitParticulars', header: 'Particulars (Debit)', width: 38 },
-      { key: 'debit', header: 'Amount', width: 16 },
-      { key: 'creditParticulars', header: 'Particulars (Credit)', width: 38 },
-      { key: 'credit', header: 'Amount', width: 16 },
-    ],
-    rows,
-    footer: {
-      'Total Income': indianFmt(pl.totalIncome),
-      'Total Expense': indianFmt(pl.totalExpense),
-      [parseFloat(pl.netProfit) >= 0 ? 'Net Profit' : 'Net Loss']: indianFmt(pl.netProfit),
-    },
-  };
-}
+  const pct = (v: unknown) =>
+    v == null || v === '' || !Number.isFinite(Number(v))
+      ? ''
+      : indianMoney(v, 2);
 
-// ─── 7. Balance Sheet ─────────────────────────────────────────────
-
-export async function buildBalanceSheetPayload(
-  userId: string,
-  asOf?: string,
-): Promise<ExportPayload> {
-  const bs = await getBalanceSheet(userId, asOf);
-  // Two-column statement: Liabilities | Assets
-  const rows: Array<{ liability: string; lAmount: string; asset: string; aAmount: string }> = [];
-  const maxLen = Math.max(bs.liabilities.length + bs.equity.length + 1, bs.assets.length);
-  const liabRows = [
-    ...bs.liabilities.map((l) => ({ name: l.name, amount: l.closingBalance })),
-    ...bs.equity.map((e) => ({ name: e.name, amount: e.closingBalance })),
-    { name: 'Retained Earnings', amount: bs.retainedEarnings },
+  const columns: ColumnDef[] = [
+    { key: 'scriptName', label: 'Script Name', width: 16, align: 'left' },
+    { key: 'closingDate', label: 'Closing Date', width: 7, align: 'center', formatter: DATE },
+    { key: 'qty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'purRate', label: 'Pur Rate', width: 7, align: 'right', formatter: MONEY },
+    { key: 'purValue', label: 'Pur Value', width: 8, align: 'right', formatter: MONEY },
+    { key: 'bhavRate', label: 'Bhav Rate', width: 7, align: 'right', formatter: MONEY },
+    { key: 'valuation', label: 'Valuation', width: 8, align: 'right', formatter: MONEY },
+    { key: 'unrealisedPnL', label: 'Unreal. G/L', width: 8, align: 'right', formatter: MONEY, signed: true },
+    { key: 'noOfDays', label: 'Days', width: 4, align: 'right' },
+    { key: 'actualRoi', label: 'Actual %', width: 6, align: 'right', formatter: pct, signed: true },
+    { key: 'monthlyRoi', label: 'Monthly %', width: 6, align: 'right', formatter: pct, signed: true },
+    { key: 'annualRoi', label: 'Annual %', width: 6, align: 'right', formatter: pct, signed: true },
+    { key: 'cagr', label: 'CAGR %', width: 6, align: 'right', formatter: pct, signed: true },
   ];
-  for (let i = 0; i < maxLen; i++) {
-    rows.push({
-      liability: liabRows[i]?.name ?? '',
-      lAmount: liabRows[i] ? indianFmt(liabRows[i]!.amount) : '',
-      asset: bs.assets[i]?.name ?? '',
-      aAmount: bs.assets[i] ? indianFmt(bs.assets[i]!.closingBalance) : '',
-    });
-  }
-  const totalLiab = new Decimal(bs.totalLiabilities).plus(bs.totalEquity).toString();
+
   return {
-    title: 'Balance Sheet',
-    subtitle: asOf ? `As of ${asOf}` : `As of ${new Date().toISOString().slice(0, 10)}`,
-    filenameStem: `balance-sheet${asOf ? `-${asOf}` : ''}`,
-    columns: [
-      { key: 'liability', header: 'Liabilities', width: 38 },
-      { key: 'lAmount', header: 'Amt in ₹', width: 16 },
-      { key: 'asset', header: 'Assets', width: 38 },
-      { key: 'aAmount', header: 'Amt in ₹', width: 16 },
+    reportTitle: `M2M (ALL) report as on ${r.asOfDate}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: [
+      { label: 'Script Name', spanCols: 1 },
+      { label: 'Closing Date', spanCols: 1 },
+      { label: 'Average', spanCols: 3 },
+      { label: 'Bhav Rate', spanCols: 1 },
+      { label: 'Valuation', spanCols: 1 },
+      { label: 'Unreal. G/L', spanCols: 1 },
+      { label: 'UN-Realised ROI', spanCols: 5 },
     ],
-    rows,
-    footer: {
-      'Total Liabilities + Equity': indianFmt(totalLiab),
-      'Total Assets': indianFmt(bs.totalAssets),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections,
+    grandTotal: {
+      label: 'Grand Total',
+      values: {
+        purValue: r.grandTotal.purValue,
+        valuation: r.grandTotal.valuation,
+        unrealisedPnL: r.grandTotal.unrealisedPnL,
+      },
     },
+    filenameStem: `m2m-${r.asOfDate}`,
   };
 }
 
-// ─── 8. ITR Schedule 112A — exact ITR layout ──────────────────────
+// ─── Helper for capital-gain-style reports (STCG / LTCG / Spec) ───
 
-export async function buildSchedule112APayload(
+function cgColumns(): ColumnDef[] {
+  return [
+    { key: 'scriptName', label: 'Script Name', width: 14, align: 'left' },
+    { key: 'buyDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyRate', label: 'Rate', width: 7, align: 'right', formatter: MONEY },
+    { key: 'buyAmount', label: 'Amount', width: 9, align: 'right', formatter: MONEY },
+    { key: 'sellDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellRate', label: 'Rate', width: 7, align: 'right', formatter: MONEY },
+    { key: 'sellAmount', label: 'Amount', width: 9, align: 'right', formatter: MONEY },
+    { key: 'gainLoss', label: 'Gain/Loss', width: 9, align: 'right', formatter: MONEY, signed: true },
+    { key: 'gain', label: 'Gain', width: 8, align: 'right', formatter: (v) => (new Decimal(String(v ?? 0)).gt(0) ? MONEY(v) : '') },
+    { key: 'loss', label: 'Loss', width: 8, align: 'right', formatter: (v) => (new Decimal(String(v ?? 0)).gt(0) ? MONEY(v) : '') },
+  ];
+}
+
+function cgHeaderRow1() {
+  return [
+    { label: 'Script Name', spanCols: 1 },
+    { label: 'Opening / Purchase', spanCols: 4 },
+    { label: 'Sale', spanCols: 4 },
+    { label: 'Gain / Loss', spanCols: 3 },
+  ];
+}
+
+function buildCgSection(rows: CapitalGainRow[]): ReportSection {
+  const groups: SubGroup[] = groupCG(rows).map((g) => {
+    const tot = g.rows.reduce(
+      (acc, r) => ({
+        buyQty: acc.buyQty.plus(r.quantity),
+        buyAmt: acc.buyAmt.plus(r.buyAmount),
+        sellQty: acc.sellQty.plus(r.quantity),
+        sellAmt: acc.sellAmt.plus(r.sellAmount),
+        gain: acc.gain.plus(r.gainLoss.isPositive() ? r.gainLoss : 0),
+        loss: acc.loss.plus(r.gainLoss.isNegative() ? r.gainLoss.negated() : 0),
+      }),
+      { buyQty: new Decimal(0), buyAmt: new Decimal(0), sellQty: new Decimal(0), sellAmt: new Decimal(0), gain: new Decimal(0), loss: new Decimal(0) },
+    );
+    return {
+      header: g.name,
+      rows: g.rows.map((r) => ({
+        cells: {
+          scriptName: 'SHARE INVESTMENT (EQUITY) A/C',
+          buyDate: r.buyDate,
+          buyQty: r.quantity.toString(),
+          buyRate: r.buyPrice.toString(),
+          buyAmount: r.buyAmount.toString(),
+          sellDate: r.sellDate,
+          sellQty: r.quantity.toString(),
+          sellRate: r.sellPrice.toString(),
+          sellAmount: r.sellAmount.toString(),
+          gainLoss: r.gainLoss.toString(),
+          gain: r.gainLoss.isPositive() ? r.gainLoss.toString() : '0',
+          loss: r.gainLoss.isNegative() ? r.gainLoss.negated().toString() : '0',
+        },
+      })),
+      subtotal: {
+        label: `Total For ${g.name}`,
+        values: {
+          buyQty: tot.buyQty.toString(),
+          buyAmount: tot.buyAmt.toString(),
+          sellQty: tot.sellQty.toString(),
+          sellAmount: tot.sellAmt.toString(),
+          gainLoss: tot.gain.minus(tot.loss).toString(),
+          gain: tot.gain.toString(),
+          loss: tot.loss.toString(),
+        },
+      },
+    };
+  });
+  return { banner: 'SHARE INVESTMENT (EQUITY) A/C', groups };
+}
+
+// ─── 4. Short Term / Long Term / Speculation (unified) ────────────
+
+export async function buildShortLongSpecLayout(
   userId: string,
   fy?: string,
   portfolioId?: string,
-): Promise<ExportPayload> {
-  const r = portfolioId
-    ? await schedule112AReport(portfolioId, fy)
-    : await userSchedule112AReport(userId, fy);
-  const ITR_ROWS = r.rows.map((row) => ({
-    listed: 'Listed',
-    category: 'Equity Shares',
-    longShort: 'Long term',
-    name: row.assetName,
-    sale: row.sellAmount,
-    cost: row.buyAmount,
-    fmv: null,
-    expenses: 0,
-    transferDate: row.sellDate,
-    acquisitionDate: row.buyDate,
-    qty: row.quantity,
-    sellRate: row.sellPrice,
-    gain: row.gainLoss,
-  }));
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const intraday = portfolioId ? await intradayReport(portfolioId, fy) : await userIntradayReport(userId, fy);
+  const st = portfolioId ? await stcgReport(portfolioId, fy) : await userStcgReport(userId, fy);
+  const lt = portfolioId ? await ltcgReport(portfolioId, fy) : await userLtcgReport(userId, fy);
+
+  const sections: ReportSection[] = [];
+  if (intraday.rows.length) {
+    const sec = buildCgSection(intraday.rows);
+    sec.banner = 'Speculation (Intraday)';
+    sections.push(sec);
+  }
+  if (st.rows.length) {
+    const sec = buildCgSection(st.rows);
+    sec.banner = 'Short Term';
+    sections.push(sec);
+  }
+  if (lt.rows.length) {
+    const sec = buildCgSection(lt.rows);
+    sec.banner = 'Long Term';
+    sections.push(sec);
+  }
+
+  const tIntra = new Decimal(intraday.totalGain);
+  const tST = new Decimal(st.totalGain);
+  const tLT = new Decimal(lt.totalGain);
+
   return {
-    title: 'Income Tax — Schedule 112A LTCG Submission',
-    subtitle: fy ? `Financial Year ${fy}` : 'All financial years',
-    filenameStem: `itr-schedule-112a${fy ? `-${fy}` : ''}`,
-    meta: { 'Financial Year': fy ?? 'All', Section: '112A (LTCG on equity)' },
-    columns: [
-      { key: 'listed', header: 'Listed / Unlisted', width: 14 },
-      { key: 'category', header: 'Category', width: 14 },
-      { key: 'longShort', header: 'Long / Short', width: 12 },
-      { key: 'name', header: 'Name of Company', width: 32 },
-      { key: 'transferDate', header: 'Date of Transfer', width: 14, formatter: fmtDate },
-      { key: 'acquisitionDate', header: 'Date of Acquisition', width: 14, formatter: fmtDate },
-      { key: 'qty', header: 'Qty', width: 10, formatter: indianFmt },
-      { key: 'sellRate', header: 'Sale Rate', width: 12, formatter: indianFmt },
-      { key: 'sale', header: 'Sale Amount', width: 14, formatter: indianFmt },
-      { key: 'cost', header: 'Cost of Acquisition', width: 14, formatter: indianFmt },
-      { key: 'expenses', header: 'Expenses', width: 10, formatter: indianFmt },
-      { key: 'gain', header: 'Gain / Loss', width: 14, formatter: indianFmt },
-    ],
-    rows: ITR_ROWS,
-    footer: {
-      'Total Sale': indianFmt(r.rows.reduce((s, x) => s.plus(x.sellAmount), new Decimal(0)).toFixed(2)),
-      'Total Cost': indianFmt(r.rows.reduce((s, x) => s.plus(x.buyAmount), new Decimal(0)).toFixed(2)),
-      'Total Gain': indianFmt(r.totalGain),
-      'Exemption (₹1L)': indianFmt(r.exemptionLimit ?? '100000'),
-      'Taxable': indianFmt(r.taxable ?? '0'),
+    reportTitle: `Capital Gain — Short / Long / Speculation ${fy ? `(FY ${fy})` : ''}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    financialYear: fy ?? 'All',
+    headerRow1: cgHeaderRow1(),
+    headerRow2: cgColumns().map((c) => ({ label: c.label, align: c.align })),
+    columns: cgColumns(),
+    sections,
+    grandTotal: {
+      label: 'Grand Total',
+      values: { gainLoss: tIntra.plus(tST).plus(tLT).toString() },
     },
+    filenameStem: `short-long-speculation${fy ? `-${fy}` : ''}`,
   };
 }
 
-// ─── 9. MF capital gain (short + long combined) ───────────────────
+// ─── 5. Trial Balance ─────────────────────────────────────────────
 
-export async function buildMFCapitalGainPayload(
+export async function buildTrialBalanceLayout(userId: string, asOf?: string): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const rows = await getTrialBalance(userId, asOf);
+  const tDr = rows.reduce((s, r) => s.plus(r.totalDebit), new Decimal(0));
+  const tCr = rows.reduce((s, r) => s.plus(r.totalCredit), new Decimal(0));
+
+  const columns: ColumnDef[] = [
+    { key: 'name', label: 'Particulars', width: 38, align: 'left' },
+    { key: 'totalDebit', label: 'Debit', width: 14, align: 'right', formatter: MONEY },
+    { key: 'totalCredit', label: 'Credit', width: 14, align: 'right', formatter: MONEY },
+  ];
+
+  return {
+    reportTitle: `Trial Balance As On ${asOf ?? new Date().toLocaleDateString('en-IN')}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [
+      {
+        groups: [
+          {
+            rows: rows
+              .filter((r) => Number(r.totalDebit) !== 0 || Number(r.totalCredit) !== 0)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((r) => ({
+                cells: {
+                  name: r.name.toUpperCase(),
+                  totalDebit: Number(r.totalDebit) > 0 ? r.totalDebit : '',
+                  totalCredit: Number(r.totalCredit) > 0 ? r.totalCredit : '',
+                },
+              })),
+          },
+        ],
+      },
+    ],
+    grandTotal: {
+      label: 'Grand Total',
+      values: { totalDebit: tDr.toString(), totalCredit: tCr.toString() },
+    },
+    filenameStem: `trial-balance${asOf ? `-${asOf}` : ''}`,
+  };
+}
+
+// ─── 6. Account Ledger ────────────────────────────────────────────
+
+export async function buildAccountLedgerLayout(
+  userId: string,
+  opts: { accountId?: string; from?: string; to?: string },
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const accounts = await listAccountsFlat(userId);
+  const groups: SubGroup[] = [];
+  for (const a of accounts) {
+    const led = await getAccountLedger(userId, a.id, opts);
+    if (led.entries.length === 0) continue;
+    groups.push({
+      header: `${a.code} — ${a.name}`,
+      rows: led.entries.map((e) => ({
+        cells: {
+          date: e.date,
+          voucher: `${e.voucherType} ${e.voucherNo}`,
+          narration: e.narration ?? '',
+          debit: e.debit ?? '',
+          credit: e.credit ?? '',
+          balance: e.balance,
+        },
+      })),
+      subtotal: {
+        label: 'Closing balance',
+        values: { balance: led.closingBalance },
+      },
+    });
+  }
+
+  const columns: ColumnDef[] = [
+    { key: 'date', label: 'Date', width: 8, align: 'center', formatter: DATE },
+    { key: 'voucher', label: 'Voucher', width: 12, align: 'left' },
+    { key: 'narration', label: 'Narration', width: 34, align: 'left' },
+    { key: 'debit', label: 'Debit', width: 10, align: 'right', formatter: MONEY },
+    { key: 'credit', label: 'Credit', width: 10, align: 'right', formatter: MONEY },
+    { key: 'balance', label: 'Balance', width: 12, align: 'right', formatter: MONEY, signed: true },
+  ];
+
+  return {
+    reportTitle: `Account Ledger From ${opts.from ?? '—'} To ${opts.to ?? new Date().toLocaleDateString('en-IN')}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [{ groups }],
+    filenameStem: 'account-ledger-all',
+  };
+}
+
+// ─── 7. Profit & Loss ─────────────────────────────────────────────
+
+export async function buildProfitLossLayout(
+  userId: string,
+  opts: { from?: string; to?: string },
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const pl = await getPnL(userId, opts.from, opts.to);
+  const maxLen = Math.max(pl.income.length, pl.expense.length);
+  const rows: Array<{
+    cells: Record<string, unknown>;
+  }> = [];
+  for (let i = 0; i < maxLen; i++) {
+    rows.push({
+      cells: {
+        debitParticulars: pl.expense[i] ? `TO ${pl.expense[i]!.name.toUpperCase()}` : '',
+        debit: pl.expense[i]?.closingBalance ?? '',
+        creditParticulars: pl.income[i] ? `BY ${pl.income[i]!.name.toUpperCase()}` : '',
+        credit: pl.income[i]?.closingBalance ?? '',
+      },
+    });
+  }
+
+  const columns: ColumnDef[] = [
+    { key: 'debitParticulars', label: 'Particulars', width: 32, align: 'left' },
+    { key: 'debit', label: 'Debit', width: 12, align: 'right', formatter: MONEY },
+    { key: 'creditParticulars', label: 'Particulars', width: 32, align: 'left' },
+    { key: 'credit', label: 'Credit', width: 12, align: 'right', formatter: MONEY },
+  ];
+
+  return {
+    reportTitle: `Profit & Loss Report As On ${opts.to ?? new Date().toLocaleDateString('en-IN')}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [{ groups: [{ rows }] }],
+    grandTotal: {
+      label: parseFloat(pl.netProfit) >= 0 ? 'Net Profit' : 'Net Loss',
+      values: { debit: pl.totalExpense, credit: pl.totalIncome },
+    },
+    filenameStem: `profit-loss${opts.from ? `-${opts.from}` : ''}`,
+  };
+}
+
+// ─── 8. Balance Sheet ─────────────────────────────────────────────
+
+export async function buildBalanceSheetLayout(userId: string, asOf?: string): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const bs = await getBalanceSheet(userId, asOf);
+  const liabilities = [
+    ...bs.liabilities.map((x) => ({ name: x.name, amount: x.closingBalance })),
+    ...bs.equity.map((x) => ({ name: x.name, amount: x.closingBalance })),
+    { name: 'Retained Earnings (P&L)', amount: bs.retainedEarnings },
+  ];
+  const assets = bs.assets.map((x) => ({ name: x.name, amount: x.closingBalance }));
+  const maxLen = Math.max(liabilities.length, assets.length);
+  const rows: Array<{ cells: Record<string, unknown> }> = [];
+  for (let i = 0; i < maxLen; i++) {
+    rows.push({
+      cells: {
+        liability: liabilities[i]?.name.toUpperCase() ?? '',
+        lAmount: liabilities[i]?.amount ?? '',
+        asset: assets[i]?.name.toUpperCase() ?? '',
+        aAmount: assets[i]?.amount ?? '',
+      },
+    });
+  }
+
+  const columns: ColumnDef[] = [
+    { key: 'liability', label: 'Liabilities', width: 32, align: 'left' },
+    { key: 'lAmount', label: 'Amt. in Rs.', width: 13, align: 'right', formatter: MONEY, signed: true },
+    { key: 'asset', label: 'Assets', width: 32, align: 'left' },
+    { key: 'aAmount', label: 'Amt. in Rs.', width: 13, align: 'right', formatter: MONEY, signed: true },
+  ];
+
+  const totalLiab = new Decimal(bs.totalLiabilities).plus(bs.totalEquity);
+  return {
+    reportTitle: `Balance Sheet Report As On ${asOf ?? new Date().toLocaleDateString('en-IN')}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [{ groups: [{ rows }] }],
+    grandTotal: {
+      label: 'Grand Total',
+      values: { lAmount: totalLiab.toString(), aAmount: bs.totalAssets },
+    },
+    filenameStem: `balance-sheet${asOf ? `-${asOf}` : ''}`,
+  };
+}
+
+// ─── 9. ITR Schedule 112A ─────────────────────────────────────────
+
+export async function buildSchedule112ALayout(
   userId: string,
   fy?: string,
-): Promise<ExportPayload> {
+  portfolioId?: string,
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const r = portfolioId ? await schedule112AReport(portfolioId, fy) : await userSchedule112AReport(userId, fy);
+  const rows = r.rows.map((row) => ({
+    cells: {
+      listed: 'Listed',
+      category: 'Equity Shares',
+      term: 'Long term',
+      name: row.assetName,
+      sale: row.sellAmount,
+      cost: row.buyAmount,
+      fmv: '',
+      expenses: '0',
+      transferDate: row.sellDate,
+      acquisitionDate: row.buyDate,
+      qty: row.quantity.toString(),
+      sellRate: row.sellPrice.toString(),
+      gain: row.gainLoss.toString(),
+    },
+  }));
+
+  const totalSale = r.rows.reduce((s, x) => s.plus(x.sellAmount), new Decimal(0));
+  const totalCost = r.rows.reduce((s, x) => s.plus(x.buyAmount), new Decimal(0));
+
+  const columns: ColumnDef[] = [
+    { key: 'listed', label: 'Listed/Unlisted', width: 9, align: 'left' },
+    { key: 'category', label: 'Category', width: 9, align: 'left' },
+    { key: 'term', label: 'Long/Short Term', width: 9, align: 'left' },
+    { key: 'name', label: 'Name of Company', width: 18, align: 'left' },
+    { key: 'sale', label: 'Sale Amount', width: 9, align: 'right', formatter: MONEY },
+    { key: 'cost', label: 'Cost of Acq.', width: 9, align: 'right', formatter: MONEY },
+    { key: 'fmv', label: 'FMV', width: 7, align: 'right' },
+    { key: 'expenses', label: 'Expenses', width: 7, align: 'right' },
+    { key: 'transferDate', label: 'Transfer Date', width: 8, align: 'center', formatter: DATE },
+    { key: 'acquisitionDate', label: 'Acq. Date', width: 8, align: 'center', formatter: DATE },
+    { key: 'qty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellRate', label: 'Sell Rate', width: 7, align: 'right', formatter: MONEY },
+    { key: 'gain', label: 'Gain/Loss', width: 8, align: 'right', formatter: MONEY, signed: true },
+  ];
+
+  return {
+    reportTitle: `Income Tax — Schedule 112A LTCG ${fy ? `(FY ${fy})` : ''}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    financialYear: fy ?? 'All',
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [{ groups: [{ rows }] }],
+    grandTotal: {
+      label: 'Grand Total',
+      values: {
+        sale: totalSale.toString(),
+        cost: totalCost.toString(),
+        gain: r.totalGain,
+      },
+    },
+    filenameStem: `itr-schedule-112a${fy ? `-${fy}` : ''}`,
+  };
+}
+
+// ─── 10. MF capital gain (short + long) ───────────────────────────
+
+export async function buildMFCapitalGainLayout(userId: string, fy?: string): Promise<MprofitLayout> {
+  const m = await userMember(userId);
   const { rows } = await computeUserCapitalGains(userId);
   const filtered = rows.filter(
     (r) =>
       (r.assetClass === 'MUTUAL_FUND' || r.assetClass === 'ETF') &&
       (!fy || r.financialYear === fy),
   );
+  const stcgRows = filtered.filter((r) => r.capitalGainType !== 'LONG_TERM');
+  const ltcgRows = filtered.filter((r) => r.capitalGainType === 'LONG_TERM');
+  const sections: ReportSection[] = [];
+  if (stcgRows.length) {
+    const sec = buildCgSection(stcgRows);
+    sec.banner = 'Short Term';
+    sections.push(sec);
+  }
+  if (ltcgRows.length) {
+    const sec = buildCgSection(ltcgRows);
+    sec.banner = 'Long Term';
+    sections.push(sec);
+  }
   const totalGain = filtered.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
-  const stcg = filtered
-    .filter((r) => r.capitalGainType === 'SHORT_TERM')
-    .reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
-  const ltcg = filtered
-    .filter((r) => r.capitalGainType === 'LONG_TERM')
-    .reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
 
   return {
-    title: 'Mutual Fund Capital Gain — Short + Long Term',
-    subtitle: fy ? `Financial Year ${fy}` : 'All financial years',
+    reportTitle: `Capital Gain - Loss Mutual Fund As on ${new Date().toLocaleDateString('en-IN')}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    financialYear: fy ?? 'All',
+    headerRow1: cgHeaderRow1(),
+    headerRow2: cgColumns().map((c) => ({ label: c.label, align: c.align })),
+    columns: cgColumns(),
+    sections,
+    grandTotal: { label: 'Grand Total', values: { gainLoss: totalGain.toString() } },
     filenameStem: `mf-capital-gain${fy ? `-${fy}` : ''}`,
-    meta: { 'Financial Year': fy ?? 'All', 'Asset Class': 'MUTUAL_FUND + ETF' },
-    columns: [
-      { key: 'assetName', header: 'Script Name', width: 34 },
-      { key: 'capitalGainType', header: 'Type', width: 12 },
-      { key: 'buyDate', header: 'Buy Date', width: 12, formatter: fmtDate },
-      { key: 'quantity', header: 'Qty', width: 10, formatter: indianFmt },
-      { key: 'buyPrice', header: 'Buy Rate', width: 12, formatter: indianFmt },
-      { key: 'buyAmount', header: 'Buy Amount', width: 14, formatter: indianFmt },
-      { key: 'sellDate', header: 'Sell Date', width: 12, formatter: fmtDate },
-      { key: 'sellPrice', header: 'Sell Rate', width: 12, formatter: indianFmt },
-      { key: 'sellAmount', header: 'Sell Amount', width: 14, formatter: indianFmt },
-      { key: 'gainLoss', header: 'Gain / Loss', width: 14, formatter: indianFmt },
-    ],
-    rows: filtered.map((r) => ({
-      ...r,
-      buyDate: r.buyDate.toISOString().slice(0, 10),
-      sellDate: r.sellDate.toISOString().slice(0, 10),
-      quantity: r.quantity.toString(),
-      buyPrice: r.buyPrice.toString(),
-      buyAmount: r.buyAmount.toString(),
-      sellPrice: r.sellPrice.toString(),
-      sellAmount: r.sellAmount.toString(),
-      gainLoss: r.gainLoss.toString(),
-    })),
-    footer: {
-      'STCG': indianFmt(stcg.toFixed(2)),
-      'LTCG': indianFmt(ltcg.toFixed(2)),
-      'Total': indianFmt(totalGain.toFixed(2)),
-      Count: String(filtered.length),
-    },
   };
 }
 
-// ─── 10. Daily transactions — broker bill register ───────────────
+// ─── 11. Daily transactions (Broker Bill Register) ────────────────
 
-export async function buildDailyTransactionsPayload(
+export async function buildDailyTransactionsLayout(
   userId: string,
   opts: { from?: string; to?: string },
-): Promise<ExportPayload> {
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
   const where: Record<string, unknown> = { portfolio: { userId } };
   if (opts.from || opts.to) {
     where['tradeDate'] = {
@@ -454,130 +822,107 @@ export async function buildDailyTransactionsPayload(
     where,
     orderBy: [{ broker: 'asc' }, { tradeDate: 'asc' }],
   });
-  const rows = txs.map((t) => ({
-    broker: t.broker ?? 'Self',
-    tradeDate: t.tradeDate.toISOString().slice(0, 10),
-    transactionType: t.transactionType,
-    assetClass: t.assetClass,
-    assetName: t.assetName ?? '—',
-    isin: t.isin ?? '',
-    quantity: t.quantity.toString(),
-    price: t.price.toString(),
-    netAmount: t.netAmount.toString(),
-  }));
-  const totalNet = rows.reduce(
-    (s, r) => s.plus(r.netAmount),
-    new Decimal(0),
-  );
-
-  return {
-    title: 'Broker Bill Register — Daily Transactions',
-    subtitle: `${opts.from ?? 'beginning'} → ${opts.to ?? 'today'}`,
-    filenameStem: `broker-bill-register${opts.from ? `-${opts.from}` : ''}`,
-    columns: [
-      { key: 'broker', header: 'Broker', width: 22 },
-      { key: 'tradeDate', header: 'Date', width: 12, formatter: fmtDate },
-      { key: 'transactionType', header: 'Type', width: 12 },
-      { key: 'assetClass', header: 'Class', width: 12 },
-      { key: 'assetName', header: 'Script', width: 32 },
-      { key: 'quantity', header: 'Qty', width: 10, formatter: indianFmt },
-      { key: 'price', header: 'Rate', width: 12, formatter: indianFmt },
-      { key: 'netAmount', header: 'Net Amount', width: 14, formatter: indianFmt },
-    ],
-    rows,
-    footer: {
-      'Transactions': String(rows.length),
-      'Brokers': String(new Set(rows.map((r) => r.broker)).size),
-      'Net flow': indianFmt(totalNet.toFixed(2)),
-    },
-  };
-}
-
-// ─── 11. Short / Long / Speculation — unified equity capital gain ─
-
-export async function buildShortLongSpecPayload(
-  userId: string,
-  fy?: string,
-  portfolioId?: string,
-): Promise<ExportPayload> {
-  const intraday = portfolioId
-    ? await intradayReport(portfolioId, fy)
-    : await userIntradayReport(userId, fy);
-  const stcg = portfolioId ? await stcgReport(portfolioId, fy) : await userStcgReport(userId, fy);
-  const ltcg = portfolioId ? await ltcgReport(portfolioId, fy) : await userLtcgReport(userId, fy);
-
-  function mapRows(label: string, rows: typeof intraday.rows) {
-    return rows.map((r) => ({
-      kind: label,
-      assetName: r.assetName,
-      buyDate: r.buyDate.toISOString().slice(0, 10),
-      sellDate: r.sellDate.toISOString().slice(0, 10),
-      quantity: r.quantity.toString(),
-      buyAmount: r.buyAmount.toString(),
-      sellAmount: r.sellAmount.toString(),
-      gainLoss: r.gainLoss.toString(),
-    }));
+  const byBroker = new Map<string, typeof txs>();
+  for (const t of txs) {
+    const k = t.broker ?? 'Self';
+    const arr = byBroker.get(k) ?? [];
+    arr.push(t);
+    byBroker.set(k, arr);
   }
-  const combined = [
-    ...mapRows('Speculation (Intraday)', intraday.rows),
-    ...mapRows('Short Term', stcg.rows),
-    ...mapRows('Long Term', ltcg.rows),
+  const sections: ReportSection[] = Array.from(byBroker.entries()).map(([broker, list]) => ({
+    banner: broker,
+    groups: [{
+      rows: list.map((t) => ({
+        cells: {
+          tradeDate: t.tradeDate.toISOString().slice(0, 10),
+          type: t.transactionType,
+          script: t.assetName ?? '—',
+          qty: t.quantity.toString(),
+          rate: t.price.toString(),
+          gross: t.grossAmount.toString(),
+          brokerage: t.brokerage.toString(),
+          net: t.netAmount.toString(),
+        },
+      })),
+      subtotal: {
+        label: `Total: ${broker}`,
+        values: {
+          gross: list.reduce((s, t) => s.plus(t.grossAmount.toString()), new Decimal(0)).toString(),
+          brokerage: list.reduce((s, t) => s.plus(t.brokerage.toString()), new Decimal(0)).toString(),
+          net: list.reduce((s, t) => s.plus(t.netAmount.toString()), new Decimal(0)).toString(),
+        },
+      },
+    }],
+  }));
+
+  const columns: ColumnDef[] = [
+    { key: 'tradeDate', label: 'Date', width: 8, align: 'center', formatter: DATE },
+    { key: 'type', label: 'Type', width: 8, align: 'left' },
+    { key: 'script', label: 'Script Name', width: 24, align: 'left' },
+    { key: 'qty', label: 'Qty', width: 6, align: 'right', formatter: INT },
+    { key: 'rate', label: 'Rate', width: 8, align: 'right', formatter: MONEY },
+    { key: 'gross', label: 'Gross Amt.', width: 9, align: 'right', formatter: MONEY },
+    { key: 'brokerage', label: 'Brokerage', width: 8, align: 'right', formatter: MONEY },
+    { key: 'net', label: 'Net Amount', width: 10, align: 'right', formatter: MONEY, signed: true },
   ];
-  const totalIntra = new Decimal(intraday.totalGain);
-  const totalST = new Decimal(stcg.totalGain);
-  const totalLT = new Decimal(ltcg.totalGain);
 
   return {
-    title: 'Short Term / Long Term / Speculation Report',
-    subtitle: fy ? `Financial Year ${fy}` : 'All financial years',
-    filenameStem: `short-long-speculation${fy ? `-${fy}` : ''}`,
-    columns: [
-      { key: 'kind', header: 'Bucket', width: 18 },
-      { key: 'assetName', header: 'Script', width: 32 },
-      { key: 'buyDate', header: 'Buy Date', width: 12, formatter: fmtDate },
-      { key: 'sellDate', header: 'Sell Date', width: 12, formatter: fmtDate },
-      { key: 'quantity', header: 'Qty', width: 10, formatter: indianFmt },
-      { key: 'buyAmount', header: 'Buy Amount', width: 14, formatter: indianFmt },
-      { key: 'sellAmount', header: 'Sell Amount', width: 14, formatter: indianFmt },
-      { key: 'gainLoss', header: 'Gain / Loss', width: 14, formatter: indianFmt },
-    ],
-    rows: combined,
-    footer: {
-      Speculation: indianFmt(totalIntra.toFixed(2)),
-      STCG: indianFmt(totalST.toFixed(2)),
-      LTCG: indianFmt(totalLT.toFixed(2)),
-      Total: indianFmt(totalIntra.plus(totalST).plus(totalLT).toFixed(2)),
-    },
+    reportTitle: `BrokerBill Register As On ${new Date().toLocaleDateString('en-IN')}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections,
+    filenameStem: `broker-bill-register${opts.from ? `-${opts.from}` : ''}`,
   };
 }
 
-// ─── 12. Income (dividends/interest/maturity) ─────────────────────
+// ─── 12. Income (dividends / interest / maturity) ─────────────────
 
-export async function buildIncomeReportPayload(
+export async function buildIncomeReportLayout(
   userId: string,
   fy?: string,
   portfolioId?: string,
-): Promise<ExportPayload> {
-  const r = portfolioId
-    ? await incomeReport(portfolioId, fy)
-    : await import('../../reports.service.js').then((m) => m.userIncomeReport(userId, fy));
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const r = portfolioId ? await incomeReport(portfolioId, fy) : await userIncomeReport(userId, fy);
+  const columns: ColumnDef[] = [
+    { key: 'date', label: 'Date', width: 8, align: 'center', formatter: DATE },
+    { key: 'type', label: 'Type', width: 12, align: 'left' },
+    { key: 'assetName', label: 'Script', width: 28, align: 'left' },
+    { key: 'amount', label: 'Amount', width: 10, align: 'right', formatter: MONEY },
+    { key: 'narration', label: 'Narration', width: 32, align: 'left' },
+  ];
   return {
-    title: 'Income Statement — Dividends · Interest · Maturity',
-    subtitle: fy ? `Financial Year ${fy}` : 'All financial years',
-    filenameStem: `income-report${fy ? `-${fy}` : ''}`,
-    columns: [
-      { key: 'date', header: 'Date', width: 12, formatter: fmtDate },
-      { key: 'type', header: 'Type', width: 14 },
-      { key: 'assetName', header: 'Script', width: 32 },
-      { key: 'amount', header: 'Amount', width: 14, formatter: indianFmt },
-      { key: 'narration', header: 'Narration', width: 40 },
+    reportTitle: `Income Report ${fy ? `(FY ${fy})` : ''}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    financialYear: fy ?? 'All',
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [
+      {
+        groups: [{
+          rows: r.rows.map((row) => ({
+            cells: {
+              date: row.date,
+              type: row.type,
+              assetName: row.assetName,
+              amount: row.amount,
+              narration: row.narration ?? '',
+            },
+          })),
+        }],
+      },
     ],
-    rows: r.rows,
-    footer: {
-      Dividend: indianFmt(r.dividend),
-      Interest: indianFmt(r.interest),
-      Maturity: indianFmt(r.maturity),
-      Total: indianFmt(r.total),
+    grandTotal: {
+      label: 'Grand Total',
+      values: { amount: r.total },
     },
+    filenameStem: `income-report${fy ? `-${fy}` : ''}`,
   };
 }

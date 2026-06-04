@@ -703,37 +703,45 @@ export async function getM2MReport(req: Request, res: Response) {
 }
 
 // ─── Specialised report DOWNLOADS — PDF / Excel only ───────────────
+// Layout matches the legacy mProfit desktop screenshots: pink banded
+// headers, sky-blue script banners, yellow per-script totals, green
+// grand totals, Indian lakh/crore formatting. See mprofitStyle.ts.
 
 import {
-  buildGrandfatheringPayload,
-  buildDematHoldingsPayload,
-  buildM2MPayload,
-  buildTrialBalancePayload,
-  buildAccountLedgerPayload,
-  buildProfitLossPayload,
-  buildBalanceSheetPayload,
-  buildSchedule112APayload,
-  buildMFCapitalGainPayload,
-  buildDailyTransactionsPayload,
-  buildShortLongSpecPayload,
-  buildIncomeReportPayload,
+  buildGrandfatheringLayout,
+  buildDematHoldingsLayout,
+  buildM2MLayout,
+  buildTrialBalanceLayout,
+  buildAccountLedgerLayout,
+  buildProfitLossLayout,
+  buildBalanceSheetLayout,
+  buildSchedule112ALayout,
+  buildMFCapitalGainLayout,
+  buildDailyTransactionsLayout,
+  buildShortLongSpecLayout,
+  buildIncomeReportLayout,
 } from '../services/reportBuilder/special/index.js';
+import {
+  streamMprofitPdf,
+  streamMprofitExcel,
+  type MprofitLayout,
+} from '../services/reportBuilder/mprofitStyle.js';
 
-async function emitSpecial(req: Request, res: Response, payload: ExportPayload) {
+async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {
   const format = getFormat(req);
-  if (format === 'xlsx') return streamExcel(res, payload);
-  return streamPdf(res, payload);
+  if (format === 'xlsx') return streamMprofitExcel(res, layout);
+  return streamMprofitPdf(res, layout);
 }
 
 export async function downloadGrandfathering(req: Request, res: Response) {
   const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
-  await emitSpecial(req, res, await buildGrandfatheringPayload(userId, fy));
+  await emitMprofit(req, res, await buildGrandfatheringLayout(userId, fy));
 }
 
 export async function downloadDematHoldings(req: Request, res: Response) {
   const userId = req.user!.id;
-  await emitSpecial(req, res, await buildDematHoldingsPayload(userId));
+  await emitMprofit(req, res, await buildDematHoldingsLayout(userId));
 }
 
 export async function downloadM2M(req: Request, res: Response) {
@@ -741,13 +749,13 @@ export async function downloadM2M(req: Request, res: Response) {
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitSpecial(req, res, await buildM2MPayload(userId, asOf));
+  await emitMprofit(req, res, await buildM2MLayout(userId, asOf));
 }
 
 export async function downloadTrialBalance(req: Request, res: Response) {
   const userId = req.user!.id;
   const asOf = (req.query.asOf as string | undefined)?.trim() || undefined;
-  await emitSpecial(req, res, await buildTrialBalancePayload(userId, asOf));
+  await emitMprofit(req, res, await buildTrialBalanceLayout(userId, asOf));
 }
 
 export async function downloadAccountLedger(req: Request, res: Response) {
@@ -755,20 +763,20 @@ export async function downloadAccountLedger(req: Request, res: Response) {
   const accountId = (req.query.accountId as string | undefined)?.trim() || undefined;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitSpecial(req, res, await buildAccountLedgerPayload(userId, { accountId, from, to }));
+  await emitMprofit(req, res, await buildAccountLedgerLayout(userId, { accountId, from, to }));
 }
 
 export async function downloadProfitLoss(req: Request, res: Response) {
   const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitSpecial(req, res, await buildProfitLossPayload(userId, { from, to }));
+  await emitMprofit(req, res, await buildProfitLossLayout(userId, { from, to }));
 }
 
 export async function downloadBalanceSheet(req: Request, res: Response) {
   const userId = req.user!.id;
   const asOf = (req.query.asOf as string | undefined)?.trim() || undefined;
-  await emitSpecial(req, res, await buildBalanceSheetPayload(userId, asOf));
+  await emitMprofit(req, res, await buildBalanceSheetLayout(userId, asOf));
 }
 
 export async function downloadSchedule112A(req: Request, res: Response) {
@@ -776,20 +784,20 @@ export async function downloadSchedule112A(req: Request, res: Response) {
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
   const portfolioId = (req.query.portfolioId as string | undefined)?.trim();
   const pid = portfolioId && portfolioId !== 'all' ? portfolioId : undefined;
-  await emitSpecial(req, res, await buildSchedule112APayload(userId, fy, pid));
+  await emitMprofit(req, res, await buildSchedule112ALayout(userId, fy, pid));
 }
 
 export async function downloadMFCapitalGain(req: Request, res: Response) {
   const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
-  await emitSpecial(req, res, await buildMFCapitalGainPayload(userId, fy));
+  await emitMprofit(req, res, await buildMFCapitalGainLayout(userId, fy));
 }
 
 export async function downloadDailyTransactions(req: Request, res: Response) {
   const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitSpecial(req, res, await buildDailyTransactionsPayload(userId, { from, to }));
+  await emitMprofit(req, res, await buildDailyTransactionsLayout(userId, { from, to }));
 }
 
 export async function downloadShortLongSpec(req: Request, res: Response) {
@@ -797,7 +805,7 @@ export async function downloadShortLongSpec(req: Request, res: Response) {
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
   const portfolioId = (req.query.portfolioId as string | undefined)?.trim();
   const pid = portfolioId && portfolioId !== 'all' ? portfolioId : undefined;
-  await emitSpecial(req, res, await buildShortLongSpecPayload(userId, fy, pid));
+  await emitMprofit(req, res, await buildShortLongSpecLayout(userId, fy, pid));
 }
 
 export async function downloadIncomeReport(req: Request, res: Response) {
@@ -805,5 +813,5 @@ export async function downloadIncomeReport(req: Request, res: Response) {
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
   const portfolioId = (req.query.portfolioId as string | undefined)?.trim();
   const pid = portfolioId && portfolioId !== 'all' ? portfolioId : undefined;
-  await emitSpecial(req, res, await buildIncomeReportPayload(userId, fy, pid));
+  await emitMprofit(req, res, await buildIncomeReportLayout(userId, fy, pid));
 }
