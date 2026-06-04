@@ -351,7 +351,7 @@ export async function buildM2MLayout(userId: string, asOf?: Date): Promise<Mprof
   ];
 
   return {
-    reportTitle: `M2M (ALL) report as on ${r.asOfDate}`,
+    reportTitle: `M2M (ALL) report as on ${fmtDateDDMMYYYY(r.asOfDate)}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -1905,6 +1905,10 @@ export async function buildScriptwiseQtywiseLayout(
   for (const t of txs) {
     const k = keyOf(t);
     const b = getBucket(t);
+    // "In window" = inside [from, to]. With no `from`, the entire
+    // history is in-window (opening stays 0) — otherwise the report
+    // shows everything as Opening with empty Purchase/Sale columns.
+    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
     if (fromDate && t.tradeDate.getTime() >= fromDate.getTime() && !snapped.has(k)) {
       b.openingQty = b.runningQty;
       b.openingValue = b.runningValue;
@@ -1913,14 +1917,14 @@ export async function buildScriptwiseQtywiseLayout(
     const q = new Decimal(t.quantity.toString());
     const net = new Decimal(t.netAmount.toString());
     if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (fromDate && t.tradeDate.getTime() >= fromDate.getTime()) {
+      if (inWindow) {
         b.buyQty = b.buyQty.plus(q);
         b.buyValue = b.buyValue.plus(net);
       }
       b.runningQty = b.runningQty.plus(q);
       b.runningValue = b.runningValue.plus(net);
     } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-      if (fromDate && t.tradeDate.getTime() >= fromDate.getTime()) {
+      if (inWindow) {
         b.sellQty = b.sellQty.plus(q);
         b.sellValue = b.sellValue.plus(net);
       }
@@ -1931,13 +1935,14 @@ export async function buildScriptwiseQtywiseLayout(
     }
   }
 
-  // For buckets with NO transactions inside window, opening still
-  // needs to be the running state at end of pre-window. Snap any that
-  // weren't snapped (e.g. assets with only pre-window history).
-  for (const [k, b] of buckets) {
-    if (!snapped.has(k)) {
-      b.openingQty = b.runningQty;
-      b.openingValue = b.runningValue;
+  // Buckets with no in-window transactions: opening = full running
+  // state at end of pre-window. Only relevant when fromDate is set.
+  if (fromDate) {
+    for (const [k, b] of buckets) {
+      if (!snapped.has(k)) {
+        b.openingQty = b.runningQty;
+        b.openingValue = b.runningValue;
+      }
     }
   }
 
@@ -2343,5 +2348,1555 @@ export async function buildMfM2MLayout(
     columns,
     sections: [{ groups }],
     filenameStem: `mf-m2m-${cutoff.toISOString().slice(0, 10)}`,
+  };
+}
+
+// ─── 22. Financial Ledger ─────────────────────────────────────────
+//
+// Account-by-account ledger with extra Investment Type / Bill-Voucher
+// / Cheque columns. Reads VoucherEntry + Transaction. One section per
+// account (sky-blue banner), opening row, transaction rows, total row.
+
+export async function buildFinancialLedgerLayout(
+  userId: string,
+  opts: { from?: string; to?: string; accountId?: string },
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const fromDate = opts.from ? new Date(opts.from) : null;
+  const toDate = opts.to ? new Date(opts.to) : new Date();
+
+  const accountsWhere: Record<string, unknown> = { userId };
+  if (opts.accountId) accountsWhere['id'] = opts.accountId;
+  const accounts = await prisma.account.findMany({
+    where: accountsWhere,
+    orderBy: { name: 'asc' },
+  });
+
+  const sections: ReportSection[] = [];
+  for (const a of accounts) {
+    // VoucherEntry stores debit + credit account on the same row;
+    // map presence-on-debit-side → debit amount, presence-on-credit-side
+    // → credit amount.
+    const entries = await prisma.voucherEntry.findMany({
+      where: {
+        OR: [{ debitAccountId: a.id }, { creditAccountId: a.id }],
+        voucher: {
+          userId,
+          ...(fromDate || toDate ? {
+            date: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          } : {}),
+        },
+      },
+      include: { voucher: true },
+      orderBy: { voucher: { date: 'asc' } },
+    });
+    if (entries.length === 0) continue;
+
+    let opening = new Decimal(0);
+    if (fromDate) {
+      const priorEntries = await prisma.voucherEntry.findMany({
+        where: {
+          OR: [{ debitAccountId: a.id }, { creditAccountId: a.id }],
+          voucher: { userId, date: { lt: fromDate } },
+        },
+      });
+      for (const e of priorEntries) {
+        const amt = new Decimal(e.amount.toString());
+        if (e.debitAccountId === a.id) opening = opening.plus(amt);
+        else opening = opening.minus(amt);
+      }
+    }
+
+    let running = opening;
+    const rows: BodyRowLite[] = [{
+      cells: {
+        investmentType: '',
+        billNo: '',
+        date: '',
+        cheque: '',
+        narration: 'Opening...',
+        debit: opening.greaterThan(0) ? opening.toString() : '',
+        credit: opening.lessThan(0) ? opening.abs().toString() : '',
+        balance: opening.abs().toString(),
+        drCr: opening.greaterThanOrEqualTo(0) ? 'Dr.' : 'Cr.',
+      },
+    }];
+    for (const e of entries) {
+      const amt = new Decimal(e.amount.toString());
+      const isDebit = e.debitAccountId === a.id;
+      const debit = isDebit ? amt : new Decimal(0);
+      const credit = isDebit ? new Decimal(0) : amt;
+      running = running.plus(debit).minus(credit);
+      rows.push({
+        cells: {
+          investmentType: e.voucher.type ?? '',
+          billNo: e.voucher.voucherNo,
+          date: e.voucher.date.toISOString().slice(0, 10),
+          cheque: '',
+          narration: e.narration ?? e.voucher.narration ?? '',
+          debit: debit.greaterThan(0) ? debit.toString() : '',
+          credit: credit.greaterThan(0) ? credit.toString() : '',
+          balance: running.abs().toString(),
+          drCr: running.greaterThanOrEqualTo(0) ? 'Dr.' : 'Cr.',
+        },
+      });
+    }
+    sections.push({ banner: a.name, groups: [{ rows }] });
+  }
+
+  const columns: ColumnDef[] = [
+    { key: 'investmentType', label: 'Investment Type', width: 8, align: 'left' },
+    { key: 'billNo', label: 'Bill / Vocher', width: 7, align: 'left' },
+    { key: 'date', label: 'Date', width: 7, align: 'center', formatter: DATE },
+    { key: 'cheque', label: 'Cheque', width: 5, align: 'center' },
+    { key: 'narration', label: 'Narration', width: 28, align: 'left' },
+    { key: 'debit', label: 'Debit', width: 10, align: 'right', formatter: MONEY },
+    { key: 'credit', label: 'Credit', width: 10, align: 'right', formatter: MONEY },
+    { key: 'balance', label: 'Balance', width: 10, align: 'right', formatter: MONEY },
+    { key: 'drCr', label: '', width: 3, align: 'center' },
+  ];
+
+  return {
+    reportTitle: `Account Ledger From ${opts.from ? fmtDateDDMMYYYY(opts.from) : '—'} To ${opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY()}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections,
+    filenameStem: `financial-ledger${opts.from ? `-${opts.from}` : ''}`,
+  };
+}
+
+// ─── 23. Closing Balance Report ───────────────────────────────────
+//
+// As-of holdings, segmented by asset class. Shows asset name, first
+// acquisition date, qty, weighted-avg pur price, total invested,
+// current price + value, ISIN. Grand total at the foot.
+
+export async function buildClosingBalanceLayout(
+  userId: string,
+  asOf?: Date,
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const cutoff = asOf ?? new Date();
+
+  const holdings = await prisma.holdingProjection.findMany({
+    where: { portfolio: { userId } },
+    orderBy: [{ assetClass: 'asc' }, { assetName: 'asc' }],
+  });
+
+  // First-acquisition date per asset = earliest BUY txn for that asset.
+  const txs = await prisma.transaction.findMany({
+    where: {
+      portfolio: { userId },
+      tradeDate: { lte: cutoff },
+    },
+    select: { assetKey: true, assetName: true, tradeDate: true, transactionType: true },
+    orderBy: { tradeDate: 'asc' },
+  });
+  const firstDate = new Map<string, Date>();
+  for (const t of txs) {
+    if (!BUY_TXN_TYPES.has(t.transactionType)) continue;
+    const k = t.assetKey ?? `name:${t.assetName ?? ''}`;
+    if (!firstDate.has(k)) firstDate.set(k, t.tradeDate);
+  }
+
+  const byClass = new Map<string, typeof holdings>();
+  for (const h of holdings) {
+    const arr = byClass.get(h.assetClass) ?? [];
+    arr.push(h);
+    byClass.set(h.assetClass, arr);
+  }
+
+  // Each asset class becomes its OWN report — but the mProfit layout
+  // splits into separate windows. We compress into sections with
+  // banners (Equity / Mutual Fund / F & O).
+  const sections: ReportSection[] = [];
+  let grandQty = new Decimal(0);
+  let grandInvested = new Decimal(0);
+  let grandValue = new Decimal(0);
+  for (const [assetClass, list] of byClass) {
+    const tot = list.reduce(
+      (acc, h) => ({
+        qty: acc.qty.plus(new Decimal(h.quantity.toString())),
+        invested: acc.invested.plus(new Decimal(h.totalCost.toString())),
+        value: acc.value.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString())),
+      }),
+      { qty: new Decimal(0), invested: new Decimal(0), value: new Decimal(0) },
+    );
+    grandQty = grandQty.plus(tot.qty);
+    grandInvested = grandInvested.plus(tot.invested);
+    grandValue = grandValue.plus(tot.value);
+    sections.push({
+      banner: `${assetClass.replace(/_/g, ' ')} — Closing Balance As On ${fmtDateDDMMYYYY(cutoff)}`,
+      groups: [{
+        rows: list.map((h) => {
+          const k = h.assetKey;
+          const acqDate = firstDate.get(k);
+          return {
+            cells: {
+              assetName: h.assetName ?? '—',
+              acqDate: acqDate ? acqDate.toISOString().slice(0, 10) : '',
+              qty: h.quantity.toString(),
+              purPrice: h.avgCostPrice.toString(),
+              invested: h.totalCost.toString(),
+              currPrice: h.currentPrice?.toString() ?? '',
+              currValue: h.currentValue?.toString() ?? '',
+              isin: h.isin ?? '',
+            },
+          };
+        }),
+        subtotal: {
+          label: `Total: ${assetClass.replace(/_/g, ' ')}`,
+          values: {
+            qty: tot.qty.toString(),
+            invested: tot.invested.toString(),
+            currValue: tot.value.toString(),
+          },
+        },
+      }],
+    });
+  }
+
+  const columns: ColumnDef[] = [
+    { key: 'assetName', label: 'Asset Name', width: 22, align: 'left' },
+    { key: 'acqDate', label: 'Date of Acquisition', width: 8, align: 'center', formatter: DATE },
+    { key: 'qty', label: 'Quantity', width: 7, align: 'right', formatter: (v) => indianMoney(v, 4) },
+    { key: 'purPrice', label: 'Pur. Price', width: 7, align: 'right', formatter: MONEY },
+    { key: 'invested', label: 'Amount Invested', width: 9, align: 'right', formatter: MONEY },
+    { key: 'currPrice', label: 'Curr. Price', width: 7, align: 'right', formatter: (v) => v ? MONEY(v) : '—' },
+    { key: 'currValue', label: 'Curr. Value', width: 9, align: 'right', formatter: MONEY },
+    { key: 'isin', label: 'ISIN No', width: 9, align: 'left' },
+  ];
+
+  return {
+    reportTitle: `Closing Balance Report As On ${fmtDateDDMMYYYY(cutoff)}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections,
+    grandTotal: {
+      label: 'Grand Total',
+      values: {
+        qty: grandQty.toString(),
+        invested: grandInvested.toString(),
+        currValue: grandValue.toString(),
+      },
+    },
+    filenameStem: `closing-balance-${cutoff.toISOString().slice(0, 10)}`,
+  };
+}
+
+// ─── 24. Top Holdings Report ──────────────────────────────────────
+//
+// Top 5 per asset class by amount invested. Layout: section banner =
+// asset class, top 5 rows, "Grand Total For Top 5 X Positions" row.
+// % weightage = invested / (sum of invested in that class).
+
+export async function buildTopHoldingsLayout(userId: string): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const holdings = await prisma.holdingProjection.findMany({
+    where: { portfolio: { userId } },
+  });
+
+  const byClass = new Map<string, typeof holdings>();
+  for (const h of holdings) {
+    const arr = byClass.get(h.assetClass) ?? [];
+    arr.push(h);
+    byClass.set(h.assetClass, arr);
+  }
+
+  const sections: ReportSection[] = [];
+  for (const [assetClass, list] of byClass) {
+    const sorted = [...list].sort((a, b) =>
+      new Decimal(b.totalCost.toString()).comparedTo(new Decimal(a.totalCost.toString())),
+    );
+    const top5 = sorted.slice(0, 5);
+    const totalInClass = list.reduce(
+      (s, h) => s.plus(new Decimal(h.totalCost.toString())),
+      new Decimal(0),
+    );
+    const tot = top5.reduce(
+      (acc, h) => ({
+        qty: acc.qty.plus(new Decimal(h.quantity.toString())),
+        invested: acc.invested.plus(new Decimal(h.totalCost.toString())),
+        bseValue: acc.bseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0)),
+        nseValue: acc.nseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0)),
+      }),
+      { qty: new Decimal(0), invested: new Decimal(0), bseValue: new Decimal(0), nseValue: new Decimal(0) },
+    );
+    const label = assetClass === 'EQUITY' || assetClass === 'ETF'
+      ? 'Stocks'
+      : assetClass === 'MUTUAL_FUND'
+        ? 'Mutual Funds'
+        : assetClass === 'FUTURES' || assetClass === 'OPTIONS'
+          ? 'Derivatives'
+          : assetClass === 'COMMODITY' ? 'MCX' : assetClass;
+    sections.push({
+      banner: label,
+      groups: [{
+        rows: top5.map((h) => {
+          const invested = new Decimal(h.totalCost.toString());
+          const weight = totalInClass.greaterThan(0) ? invested.dividedBy(totalInClass).times(100) : new Decimal(0);
+          const currValue = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+          return {
+            cells: {
+              scriptName: h.assetName ?? '—',
+              qty: h.quantity.toString(),
+              invested: invested.toString(),
+              weight: weight.toFixed(2) + '%',
+              bseValue: currValue.toString(),
+              nseValue: currValue.toString(),
+            },
+          };
+        }),
+        subtotal: {
+          label: `Grand Total For Top 5 ${label} Positions`,
+          values: {
+            qty: tot.qty.toString(),
+            invested: tot.invested.toString(),
+            bseValue: tot.bseValue.toString(),
+            nseValue: tot.nseValue.toString(),
+          },
+        },
+      }],
+    });
+  }
+
+  const columns: ColumnDef[] = [
+    { key: 'scriptName', label: 'Script Name', width: 28, align: 'left' },
+    { key: 'qty', label: 'Quantity / Units', width: 9, align: 'right', formatter: (v) => indianMoney(v, 4) },
+    { key: 'invested', label: 'Amount invested', width: 11, align: 'right', formatter: MONEY },
+    { key: 'weight', label: '% weightage', width: 7, align: 'right' },
+    { key: 'bseValue', label: 'BSE current value', width: 11, align: 'right', formatter: MONEY },
+    { key: 'nseValue', label: 'NSE current value', width: 11, align: 'right', formatter: MONEY },
+  ];
+
+  return {
+    reportTitle: `Top Holdings Report`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections,
+    filenameStem: `top-holdings-${todayDDMMYYYY()}`,
+  };
+}
+
+// ─── 25. Sector Wise Allocation ───────────────────────────────────
+//
+// Two-mode: sector-only rollup OR sector → script drill-down.
+// `mode=sector` (default) lists each sector once with totals; mode=script
+// groups scripts under their sector banner with per-sector subtotals.
+
+export async function buildSectorWiseAllocationLayout(
+  userId: string,
+  mode: 'sector' | 'script' = 'sector',
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const holdings = await prisma.holdingProjection.findMany({
+    where: { portfolio: { userId }, assetClass: { in: ['EQUITY', 'ETF'] } },
+  });
+
+  // Sector lookup via StockMaster — HoldingProjection has no stock
+  // relation but stores stockId.
+  const stockIds = holdings.map((h) => h.stockId).filter((id): id is string => !!id);
+  const sectorById = new Map<string, string>();
+  if (stockIds.length > 0) {
+    const stocks = await prisma.stockMaster.findMany({
+      where: { id: { in: stockIds } },
+      select: { id: true, sector: true },
+    });
+    for (const s of stocks) {
+      if (s.sector) sectorById.set(s.id, s.sector);
+    }
+  }
+
+  const totalInvested = holdings.reduce(
+    (s, h) => s.plus(new Decimal(h.totalCost.toString())),
+    new Decimal(0),
+  );
+  const sectorOf = (h: typeof holdings[number]): string =>
+    (h.stockId && sectorById.get(h.stockId)) ?? 'UNCLASSIFIED';
+
+  if (mode === 'sector') {
+    const bySector = new Map<string, { qty: Decimal; invested: Decimal; bseValue: Decimal; nseValue: Decimal }>();
+    for (const h of holdings) {
+      const s = sectorOf(h).toUpperCase();
+      const rec = bySector.get(s) ?? { qty: new Decimal(0), invested: new Decimal(0), bseValue: new Decimal(0), nseValue: new Decimal(0) };
+      rec.qty = rec.qty.plus(new Decimal(h.quantity.toString()));
+      rec.invested = rec.invested.plus(new Decimal(h.totalCost.toString()));
+      const v = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+      rec.bseValue = rec.bseValue.plus(v);
+      rec.nseValue = rec.nseValue.plus(v);
+      bySector.set(s, rec);
+    }
+    const rows = Array.from(bySector.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([sector, rec]) => ({
+        cells: {
+          sectorName: sector,
+          qty: rec.qty.toString(),
+          invested: rec.invested.toString(),
+          weight: (totalInvested.greaterThan(0)
+            ? rec.invested.dividedBy(totalInvested).times(100).toFixed(2)
+            : '0.00') + '%',
+          bseValue: rec.bseValue.toString(),
+          nseValue: rec.nseValue.toString(),
+        },
+      }));
+    const columns: ColumnDef[] = [
+      { key: 'sectorName', label: 'Sector Name', width: 28, align: 'left' },
+      { key: 'qty', label: 'Quantity / Units', width: 9, align: 'right', formatter: (v) => indianMoney(v, 4) },
+      { key: 'invested', label: 'Amount Invested', width: 11, align: 'right', formatter: MONEY },
+      { key: 'weight', label: '% weightage', width: 7, align: 'right' },
+      { key: 'bseValue', label: 'BSE current value', width: 11, align: 'right', formatter: MONEY },
+      { key: 'nseValue', label: 'NSE current value', width: 11, align: 'right', formatter: MONEY },
+    ];
+    return {
+      reportTitle: `Sector Wise Allocation`,
+      family: m.family,
+      member: m.member,
+      pan: m.pan,
+      headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+      headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+      columns,
+      sections: [{ groups: [{ rows }] }],
+      filenameStem: `sector-allocation-${todayDDMMYYYY()}`,
+    };
+  }
+
+  // mode === 'script'
+  const bySector = new Map<string, typeof holdings>();
+  for (const h of holdings) {
+    const s = sectorOf(h).toUpperCase();
+    const arr = bySector.get(s) ?? [];
+    arr.push(h);
+    bySector.set(s, arr);
+  }
+  const sections: ReportSection[] = Array.from(bySector.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([sector, list]) => {
+      const tot = list.reduce(
+        (acc, h) => ({
+          qty: acc.qty.plus(new Decimal(h.quantity.toString())),
+          invested: acc.invested.plus(new Decimal(h.totalCost.toString())),
+          bseValue: acc.bseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0)),
+          nseValue: acc.nseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0)),
+        }),
+        { qty: new Decimal(0), invested: new Decimal(0), bseValue: new Decimal(0), nseValue: new Decimal(0) },
+      );
+      return {
+        banner: sector,
+        groups: [{
+          rows: list.map((h) => {
+            const invested = new Decimal(h.totalCost.toString());
+            const weight = totalInvested.greaterThan(0)
+              ? invested.dividedBy(totalInvested).times(100).toFixed(2)
+              : '0.00';
+            const v = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+            return {
+              cells: {
+                scriptName: h.assetName ?? '—',
+                qty: h.quantity.toString(),
+                invested: invested.toString(),
+                weight: weight + '%',
+                bseValue: v.toString(),
+                nseValue: v.toString(),
+              },
+            };
+          }),
+          subtotal: {
+            label: `Grand Total ${sector}`,
+            values: {
+              qty: tot.qty.toString(),
+              invested: tot.invested.toString(),
+              bseValue: tot.bseValue.toString(),
+              nseValue: tot.nseValue.toString(),
+            },
+          },
+        }],
+      };
+    });
+  const columns: ColumnDef[] = [
+    { key: 'scriptName', label: 'Script Name', width: 28, align: 'left' },
+    { key: 'qty', label: 'Quantity / Units', width: 9, align: 'right', formatter: (v) => indianMoney(v, 4) },
+    { key: 'invested', label: 'Amount invested', width: 11, align: 'right', formatter: MONEY },
+    { key: 'weight', label: '% weightage', width: 7, align: 'right' },
+    { key: 'bseValue', label: 'BSE current value', width: 11, align: 'right', formatter: MONEY },
+    { key: 'nseValue', label: 'NSE current value', width: 11, align: 'right', formatter: MONEY },
+  ];
+  return {
+    reportTitle: `Sector Wise Allocation (Script Drill-down)`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections,
+    filenameStem: `sector-allocation-script-${todayDDMMYYYY()}`,
+  };
+}
+
+// ─── 26. Contract Notes Summary Report ────────────────────────────
+//
+// One row per contract note (Transaction.orderNo + broker). Payable
+// if user bought (net out-flow), Receivable if sold (net in-flow).
+
+export async function buildContractNotesSummaryLayout(
+  userId: string,
+  asOf?: Date,
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const cutoff = asOf ?? new Date();
+  const txs = await prisma.transaction.findMany({
+    where: {
+      portfolio: { userId },
+      tradeDate: { lte: cutoff },
+      orderNo: { not: null },
+    },
+    orderBy: { tradeDate: 'desc' },
+  });
+
+  const byNote = new Map<string, { broker: string; date: Date; orderNo: string; total: Decimal; isBuy: boolean }>();
+  for (const t of txs) {
+    const key = `${t.broker ?? 'SELF-BROKER A/C'}::${t.orderNo}`;
+    let rec = byNote.get(key);
+    if (!rec) {
+      rec = {
+        broker: t.broker ?? 'SELF-BROKER A/C',
+        date: t.tradeDate,
+        orderNo: t.orderNo!,
+        total: new Decimal(0),
+        isBuy: BUY_TXN_TYPES.has(t.transactionType),
+      };
+      byNote.set(key, rec);
+    }
+    rec.total = rec.total.plus(new Decimal(t.netAmount.toString()));
+  }
+
+  const rows: BodyRowLite[] = Array.from(byNote.values())
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .map((rec) => ({
+      cells: {
+        date: rec.date.toISOString().slice(0, 10),
+        broker: rec.broker,
+        contractNoteNo: rec.orderNo,
+        type: rec.isBuy ? 'Payable' : 'Receivable',
+        amount: rec.total.abs().toString(),
+      },
+    }));
+
+  const columns: ColumnDef[] = [
+    { key: 'date', label: 'Date', width: 9, align: 'center', formatter: DATE },
+    { key: 'broker', label: 'Broker Name', width: 28, align: 'left' },
+    { key: 'contractNoteNo', label: 'Contract Note No', width: 16, align: 'left' },
+    { key: 'type', label: 'Payable/Receivable', width: 12, align: 'left' },
+    { key: 'amount', label: 'Amount', width: 12, align: 'right', formatter: MONEY },
+  ];
+
+  return {
+    reportTitle: `Contract Notes Summary Report As On ${fmtDateDDMMYYYY(cutoff)} (Equity)`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [{ groups: [{ rows }] }],
+    filenameStem: `contract-notes-summary-${cutoff.toISOString().slice(0, 10)}`,
+  };
+}
+
+// ─── Helpers for capital-gain summary reports (27, 28, 30, 31) ────
+
+// Cut-off for the 22-July-2024 LTCG rate change (Budget 2024). Sells
+// up to and including 22-Jul-2024 use the old 10% / 20% schedule;
+// 23-Jul-2024 onwards uses the new 12.5% schedule. Several reports
+// split the column accordingly.
+const LTCG_RATE_CHANGE_CUTOFF = new Date('2024-07-22T23:59:59.999Z');
+
+type ScriptBucket = {
+  assetName: string;
+  isin: string | null;
+  openQty: Decimal;
+  openValue: Decimal;
+  buyQty: Decimal;
+  buyValue: Decimal;
+  sellQty: Decimal;
+  sellValue: Decimal;
+  closingQty: Decimal;
+  closingValue: Decimal;
+  capitalGL: Decimal;
+  shortTerm: Decimal;
+  longTerm: Decimal;
+  speculation: Decimal;
+  speculationGain: Decimal;
+  speculationLoss: Decimal;
+  shortTermUpto22Jul: Decimal;
+  longTermUpto22Jul: Decimal;
+  shortTermOnward23Jul: Decimal;
+  longTermOnward23Jul: Decimal;
+};
+
+function emptyBucket(name: string, isin: string | null): ScriptBucket {
+  return {
+    assetName: name,
+    isin,
+    openQty: new Decimal(0), openValue: new Decimal(0),
+    buyQty: new Decimal(0), buyValue: new Decimal(0),
+    sellQty: new Decimal(0), sellValue: new Decimal(0),
+    closingQty: new Decimal(0), closingValue: new Decimal(0),
+    capitalGL: new Decimal(0),
+    shortTerm: new Decimal(0), longTerm: new Decimal(0),
+    speculation: new Decimal(0),
+    speculationGain: new Decimal(0), speculationLoss: new Decimal(0),
+    shortTermUpto22Jul: new Decimal(0), longTermUpto22Jul: new Decimal(0),
+    shortTermOnward23Jul: new Decimal(0), longTermOnward23Jul: new Decimal(0),
+  };
+}
+
+// ─── 27. Brokerwise Capital Gain/Loss ─────────────────────────────
+
+export async function buildBrokerwiseCapitalGainLayout(
+  userId: string,
+  opts: { from?: string; to?: string },
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const fromDate = opts.from ? new Date(opts.from) : null;
+  const toDate = opts.to ? new Date(opts.to) : new Date();
+
+  // Realised gains per (broker, asset) — pull from CapitalGain rows,
+  // join broker via sellTransaction.
+  const { rows: cgRows } = await computeUserCapitalGains(userId);
+  const txs = await prisma.transaction.findMany({
+    where: {
+      portfolio: { userId },
+      tradeDate: { lte: toDate },
+    },
+    orderBy: { tradeDate: 'asc' },
+  });
+  const txById = new Map(txs.map((t) => [t.id, t]));
+
+  // Bucket by (broker, scriptName).
+  const buckets = new Map<string, Map<string, ScriptBucket>>();
+  const getBucket = (broker: string, name: string, isin: string | null): ScriptBucket => {
+    let inner = buckets.get(broker);
+    if (!inner) {
+      inner = new Map();
+      buckets.set(broker, inner);
+    }
+    let b = inner.get(name);
+    if (!b) {
+      b = emptyBucket(name, isin);
+      inner.set(name, b);
+    }
+    return b;
+  };
+
+  // Walk txs to fill opening / purchase / sale columns + closing qty.
+  for (const t of txs) {
+    const broker = t.broker ?? 'SELF-BROKER A/C';
+    const b = getBucket(broker, t.assetName ?? '—', t.isin);
+    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
+    const q = new Decimal(t.quantity.toString());
+    const net = new Decimal(t.netAmount.toString());
+    if (BUY_TXN_TYPES.has(t.transactionType)) {
+      if (!inWindow) {
+        b.openQty = b.openQty.plus(q);
+        b.openValue = b.openValue.plus(net);
+      } else {
+        b.buyQty = b.buyQty.plus(q);
+        b.buyValue = b.buyValue.plus(net);
+      }
+      b.closingQty = b.closingQty.plus(q);
+      b.closingValue = b.closingValue.plus(net);
+    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
+      if (inWindow) {
+        b.sellQty = b.sellQty.plus(q);
+        b.sellValue = b.sellValue.plus(net);
+      }
+      const avg = b.closingQty.isZero() ? new Decimal(0) : b.closingValue.dividedBy(b.closingQty);
+      b.closingQty = b.closingQty.minus(q);
+      b.closingValue = b.closingValue.minus(avg.times(q));
+    }
+  }
+
+  // Apply CG rows for ST/LT/Speculation split + 22-July cutoff.
+  for (const r of cgRows) {
+    if (fromDate && r.sellDate.getTime() < fromDate.getTime()) continue;
+    if (r.sellDate.getTime() > toDate.getTime()) continue;
+    const sellTx = txById.get(r.sellTransactionId);
+    const broker = sellTx?.broker ?? 'SELF-BROKER A/C';
+    const b = getBucket(broker, r.assetName, r.isin);
+    b.capitalGL = b.capitalGL.plus(r.gainLoss);
+    if (r.capitalGainType === 'INTRADAY') {
+      b.speculation = b.speculation.plus(r.gainLoss);
+      if (r.gainLoss.greaterThanOrEqualTo(0)) {
+        b.speculationGain = b.speculationGain.plus(r.gainLoss);
+      } else {
+        b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
+      }
+    } else if (r.capitalGainType === 'SHORT_TERM') {
+      b.shortTerm = b.shortTerm.plus(r.gainLoss);
+      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) {
+        b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
+      } else {
+        b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
+      }
+    } else if (r.capitalGainType === 'LONG_TERM') {
+      b.longTerm = b.longTerm.plus(r.gainLoss);
+      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) {
+        b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
+      } else {
+        b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
+      }
+    }
+  }
+
+  const sections: ReportSection[] = Array.from(buckets.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([broker, byName]) => {
+      const list = Array.from(byName.values()).sort((a, b) => a.assetName.localeCompare(b.assetName));
+      const tot = list.reduce((acc, b) => ({
+        openQty: acc.openQty.plus(b.openQty), openValue: acc.openValue.plus(b.openValue),
+        buyQty: acc.buyQty.plus(b.buyQty), buyValue: acc.buyValue.plus(b.buyValue),
+        sellQty: acc.sellQty.plus(b.sellQty), sellValue: acc.sellValue.plus(b.sellValue),
+        closingQty: acc.closingQty.plus(b.closingQty), closingValue: acc.closingValue.plus(b.closingValue),
+        capitalGL: acc.capitalGL.plus(b.capitalGL),
+        shortTerm: acc.shortTerm.plus(b.shortTerm), longTerm: acc.longTerm.plus(b.longTerm),
+        speculation: acc.speculation.plus(b.speculation),
+      }), {
+        openQty: new Decimal(0), openValue: new Decimal(0),
+        buyQty: new Decimal(0), buyValue: new Decimal(0),
+        sellQty: new Decimal(0), sellValue: new Decimal(0),
+        closingQty: new Decimal(0), closingValue: new Decimal(0),
+        capitalGL: new Decimal(0),
+        shortTerm: new Decimal(0), longTerm: new Decimal(0),
+        speculation: new Decimal(0),
+      });
+      return {
+        banner: broker,
+        groups: [{
+          rows: list.map((b) => ({
+            cells: {
+              scriptName: b.assetName,
+              openQty: b.openQty.toString(),
+              openRate: b.openQty.isZero() ? '' : b.openValue.dividedBy(b.openQty).toString(),
+              openAmount: b.openValue.toString(),
+              buyQty: b.buyQty.toString(),
+              buyRate: b.buyQty.isZero() ? '' : b.buyValue.dividedBy(b.buyQty).toString(),
+              buyAmount: b.buyValue.toString(),
+              sellQty: b.sellQty.toString(),
+              sellRate: b.sellQty.isZero() ? '' : b.sellValue.dividedBy(b.sellQty).toString(),
+              sellAmount: b.sellValue.toString(),
+              closingQty: b.closingQty.toString(),
+              closingRate: b.closingQty.isZero() ? '' : b.closingValue.dividedBy(b.closingQty).toString(),
+              closingValue: b.closingValue.toString(),
+              capitalGL: b.capitalGL.toString(),
+              shortTerm: b.shortTerm.toString(),
+              longTerm: b.longTerm.toString(),
+              speculation: b.speculation.toString(),
+            },
+          })),
+          subtotal: {
+            label: `Grand Total For ${broker}`,
+            values: {
+              openQty: tot.openQty.toString(),
+              openAmount: tot.openValue.toString(),
+              buyQty: tot.buyQty.toString(),
+              buyAmount: tot.buyValue.toString(),
+              sellQty: tot.sellQty.toString(),
+              sellAmount: tot.sellValue.toString(),
+              closingQty: tot.closingQty.toString(),
+              closingValue: tot.closingValue.toString(),
+              capitalGL: tot.capitalGL.toString(),
+              shortTerm: tot.shortTerm.toString(),
+              longTerm: tot.longTerm.toString(),
+              speculation: tot.speculation.toString(),
+            },
+          },
+        }],
+      };
+    });
+
+  const columns: ColumnDef[] = [
+    { key: 'scriptName', label: 'Script Name', width: 18, align: 'left' },
+    { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'openRate', label: 'Rate', width: 6, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'openAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyRate', label: 'Rate', width: 6, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'buyAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellRate', label: 'Rate', width: 6, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'sellAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
+    { key: 'closingQty', label: 'Qty', width: 5, align: 'right', formatter: INT, signed: true },
+    { key: 'closingRate', label: 'Rate', width: 6, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'closingValue', label: 'Value', width: 8, align: 'right', formatter: MONEY, signed: true },
+    { key: 'capitalGL', label: 'Capital Gain/Loss', width: 9, align: 'right', formatter: MONEY, signed: true },
+    { key: 'shortTerm', label: 'Short Term', width: 8, align: 'right', formatter: MONEY, signed: true },
+    { key: 'longTerm', label: 'Long Term', width: 8, align: 'right', formatter: MONEY, signed: true },
+    { key: 'speculation', label: 'Speculation', width: 8, align: 'right', formatter: MONEY, signed: true },
+  ];
+
+  return {
+    reportTitle: `Brokerwise Capital Gain - Loss As On ${opts.from ? fmtDateDDMMYYYY(opts.from) : '—'} To ${fmtDateDDMMYYYY(toDate)} (Equity)`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: [
+      { label: 'Script Name', spanCols: 1 },
+      { label: 'Opening', spanCols: 3 },
+      { label: 'Purchase', spanCols: 3 },
+      { label: 'Sale', spanCols: 3 },
+      { label: 'Closing=Op+Pur-Sell(+/-)Capital G/L', spanCols: 3 },
+      { label: 'Capital Gain/Loss', spanCols: 1 },
+      { label: 'Gain/Loss', spanCols: 3 },
+    ],
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections,
+    filenameStem: `brokerwise-capital-gain${opts.from ? `-${opts.from}` : ''}`,
+  };
+}
+
+// ─── 28. Tax PnL Summary ──────────────────────────────────────────
+//
+// Same shape as Brokerwise but rolled up across all brokers.
+
+export async function buildTaxPnLLayout(
+  userId: string,
+  opts: { from?: string; to?: string },
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const fromDate = opts.from ? new Date(opts.from) : null;
+  const toDate = opts.to ? new Date(opts.to) : new Date();
+
+  const { rows: cgRows } = await computeUserCapitalGains(userId);
+  const txs = await prisma.transaction.findMany({
+    where: { portfolio: { userId }, tradeDate: { lte: toDate } },
+    orderBy: { tradeDate: 'asc' },
+  });
+
+  const byScript = new Map<string, ScriptBucket>();
+  const getB = (name: string, isin: string | null): ScriptBucket => {
+    let b = byScript.get(name);
+    if (!b) {
+      b = emptyBucket(name, isin);
+      byScript.set(name, b);
+    }
+    return b;
+  };
+
+  for (const t of txs) {
+    const b = getB(t.assetName ?? '—', t.isin);
+    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
+    const q = new Decimal(t.quantity.toString());
+    const net = new Decimal(t.netAmount.toString());
+    if (BUY_TXN_TYPES.has(t.transactionType)) {
+      if (!inWindow) {
+        b.openQty = b.openQty.plus(q);
+        b.openValue = b.openValue.plus(net);
+      } else {
+        b.buyQty = b.buyQty.plus(q);
+        b.buyValue = b.buyValue.plus(net);
+      }
+      b.closingQty = b.closingQty.plus(q);
+      b.closingValue = b.closingValue.plus(net);
+    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
+      if (inWindow) {
+        b.sellQty = b.sellQty.plus(q);
+        b.sellValue = b.sellValue.plus(net);
+      }
+      const avg = b.closingQty.isZero() ? new Decimal(0) : b.closingValue.dividedBy(b.closingQty);
+      b.closingQty = b.closingQty.minus(q);
+      b.closingValue = b.closingValue.minus(avg.times(q));
+    }
+  }
+
+  for (const r of cgRows) {
+    if (fromDate && r.sellDate.getTime() < fromDate.getTime()) continue;
+    if (r.sellDate.getTime() > toDate.getTime()) continue;
+    const b = getB(r.assetName, r.isin);
+    b.capitalGL = b.capitalGL.plus(r.gainLoss);
+    if (r.capitalGainType === 'INTRADAY') {
+      b.speculation = b.speculation.plus(r.gainLoss);
+      if (r.gainLoss.greaterThanOrEqualTo(0)) b.speculationGain = b.speculationGain.plus(r.gainLoss);
+      else b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
+    } else if (r.capitalGainType === 'SHORT_TERM') {
+      b.shortTerm = b.shortTerm.plus(r.gainLoss);
+      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
+      else b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
+    } else if (r.capitalGainType === 'LONG_TERM') {
+      b.longTerm = b.longTerm.plus(r.gainLoss);
+      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
+      else b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
+    }
+  }
+
+  const list = Array.from(byScript.values()).sort((a, b) => a.assetName.localeCompare(b.assetName));
+  const tot = list.reduce((acc, b) => ({
+    openQty: acc.openQty.plus(b.openQty), openValue: acc.openValue.plus(b.openValue),
+    buyQty: acc.buyQty.plus(b.buyQty), buyValue: acc.buyValue.plus(b.buyValue),
+    sellQty: acc.sellQty.plus(b.sellQty), sellValue: acc.sellValue.plus(b.sellValue),
+    closingQty: acc.closingQty.plus(b.closingQty), closingValue: acc.closingValue.plus(b.closingValue),
+    capitalGL: acc.capitalGL.plus(b.capitalGL),
+    shortTerm: acc.shortTerm.plus(b.shortTerm),
+    longTerm: acc.longTerm.plus(b.longTerm),
+    speculation: acc.speculation.plus(b.speculation),
+    specGain: acc.specGain.plus(b.speculationGain),
+    specLoss: acc.specLoss.plus(b.speculationLoss),
+    stUp: acc.stUp.plus(b.shortTermUpto22Jul),
+    ltUp: acc.ltUp.plus(b.longTermUpto22Jul),
+    stOn: acc.stOn.plus(b.shortTermOnward23Jul),
+    ltOn: acc.ltOn.plus(b.longTermOnward23Jul),
+  }), {
+    openQty: new Decimal(0), openValue: new Decimal(0),
+    buyQty: new Decimal(0), buyValue: new Decimal(0),
+    sellQty: new Decimal(0), sellValue: new Decimal(0),
+    closingQty: new Decimal(0), closingValue: new Decimal(0),
+    capitalGL: new Decimal(0),
+    shortTerm: new Decimal(0), longTerm: new Decimal(0),
+    speculation: new Decimal(0),
+    specGain: new Decimal(0), specLoss: new Decimal(0),
+    stUp: new Decimal(0), ltUp: new Decimal(0),
+    stOn: new Decimal(0), ltOn: new Decimal(0),
+  });
+
+  const columns: ColumnDef[] = [
+    { key: 'scriptName', label: 'Script Name', width: 16, align: 'left' },
+    { key: 'openQty', label: 'Qty', width: 4, align: 'right', formatter: INT },
+    { key: 'openRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'openAmount', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
+    { key: 'buyQty', label: 'Qty', width: 4, align: 'right', formatter: INT },
+    { key: 'buyRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'buyAmount', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
+    { key: 'sellQty', label: 'Qty', width: 4, align: 'right', formatter: INT },
+    { key: 'sellRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'sellAmount', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
+    { key: 'closingQty', label: 'Qty', width: 4, align: 'right', formatter: INT, signed: true },
+    { key: 'closingRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'closingValue', label: 'Value', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'capitalGL', label: 'Capital G/L', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'shortTerm', label: 'Short Term', width: 6, align: 'right', formatter: MONEY, signed: true },
+    { key: 'longTerm', label: 'Long Term', width: 6, align: 'right', formatter: MONEY, signed: true },
+    { key: 'speculation', label: 'Speculation', width: 6, align: 'right', formatter: MONEY, signed: true },
+    { key: 'specGain', label: 'Spec Gain', width: 6, align: 'right', formatter: MONEY },
+    { key: 'specLoss', label: 'Spec Loss', width: 6, align: 'right', formatter: MONEY },
+    { key: 'stUp', label: 'Short Term (Upto 22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'ltUp', label: 'Long Term (Upto 22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+  ];
+
+  return {
+    reportTitle: `Capital Gain - Loss (Equity) Summary Report As on ${fmtDateDDMMYYYY(toDate)}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    financialYear: opts.from && opts.to ? `${opts.from} → ${opts.to}` : undefined,
+    headerRow1: [
+      { label: 'Script Name', spanCols: 1 },
+      { label: 'Opening', spanCols: 3 },
+      { label: 'Purchase', spanCols: 3 },
+      { label: 'Sale', spanCols: 3 },
+      { label: 'Closing=Op+Pur-Sell(+/-) G/L', spanCols: 3 },
+      { label: 'Capital Gain/Loss', spanCols: 1 },
+      { label: 'Gain/Loss', spanCols: 5 },
+      { label: 'Upto 22 July 2024', spanCols: 2 },
+    ],
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [{
+      groups: [{
+        rows: list.map((b) => ({
+          cells: {
+            scriptName: b.assetName,
+            openQty: b.openQty.toString(),
+            openRate: b.openQty.isZero() ? '' : b.openValue.dividedBy(b.openQty).toString(),
+            openAmount: b.openValue.toString(),
+            buyQty: b.buyQty.toString(),
+            buyRate: b.buyQty.isZero() ? '' : b.buyValue.dividedBy(b.buyQty).toString(),
+            buyAmount: b.buyValue.toString(),
+            sellQty: b.sellQty.toString(),
+            sellRate: b.sellQty.isZero() ? '' : b.sellValue.dividedBy(b.sellQty).toString(),
+            sellAmount: b.sellValue.toString(),
+            closingQty: b.closingQty.toString(),
+            closingRate: b.closingQty.isZero() ? '' : b.closingValue.dividedBy(b.closingQty).toString(),
+            closingValue: b.closingValue.toString(),
+            capitalGL: b.capitalGL.toString(),
+            shortTerm: b.shortTerm.toString(),
+            longTerm: b.longTerm.toString(),
+            speculation: b.speculation.toString(),
+            specGain: b.speculationGain.toString(),
+            specLoss: b.speculationLoss.toString(),
+            stUp: b.shortTermUpto22Jul.toString(),
+            ltUp: b.longTermUpto22Jul.toString(),
+          },
+        })),
+      }],
+    }],
+    grandTotal: {
+      label: 'Grand Total',
+      values: {
+        openQty: tot.openQty.toString(),
+        openAmount: tot.openValue.toString(),
+        buyQty: tot.buyQty.toString(),
+        buyAmount: tot.buyValue.toString(),
+        sellQty: tot.sellQty.toString(),
+        sellAmount: tot.sellValue.toString(),
+        closingQty: tot.closingQty.toString(),
+        closingValue: tot.closingValue.toString(),
+        capitalGL: tot.capitalGL.toString(),
+        shortTerm: tot.shortTerm.toString(),
+        longTerm: tot.longTerm.toString(),
+        speculation: tot.speculation.toString(),
+        specGain: tot.specGain.toString(),
+        specLoss: tot.specLoss.toString(),
+        stUp: tot.stUp.toString(),
+        ltUp: tot.ltUp.toString(),
+      },
+    },
+    filenameStem: `tax-pnl${opts.from ? `-${opts.from}` : ''}`,
+  };
+}
+
+// ─── 29. STT 10 DB Report ─────────────────────────────────────────
+//
+// Every transaction that incurred Securities Transaction Tax,
+// grouped by broker. Bill No (= orderNo), bill date, qty, gross rate,
+// gross amount, STT, type (Bought / Sold).
+
+export async function buildStt10DbLayout(
+  userId: string,
+  asOf?: Date,
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+  const cutoff = asOf ?? new Date();
+  const txs = await prisma.transaction.findMany({
+    where: {
+      portfolio: { userId },
+      tradeDate: { lte: cutoff },
+    },
+    orderBy: [{ broker: 'asc' }, { tradeDate: 'asc' }],
+  });
+
+  const byBroker = new Map<string, typeof txs>();
+  for (const t of txs) {
+    const b = t.broker ?? 'SELF-BROKER A/C';
+    const arr = byBroker.get(b) ?? [];
+    arr.push(t);
+    byBroker.set(b, arr);
+  }
+
+  const sections: ReportSection[] = [];
+  let grandGross = new Decimal(0);
+  let grandStt = new Decimal(0);
+  for (const [broker, list] of byBroker) {
+    const totalGross = list.reduce((s, t) => s.plus(new Decimal(t.grossAmount.toString())), new Decimal(0));
+    const totalStt = list.reduce((s, t) => s.plus(new Decimal(t.stt.toString())), new Decimal(0));
+    grandGross = grandGross.plus(totalGross);
+    grandStt = grandStt.plus(totalStt);
+    sections.push({
+      banner: broker,
+      groups: [{
+        rows: list.map((t) => ({
+          cells: {
+            broker,
+            script: t.assetName ?? '—',
+            billNo: t.orderNo ?? '',
+            billDate: t.tradeDate.toISOString().slice(0, 10),
+            qty: t.quantity.toString(),
+            grossRate: t.price.toString(),
+            grossAmount: t.grossAmount.toString(),
+            stt: t.stt.toString(),
+            type: BUY_TXN_TYPES.has(t.transactionType)
+              ? 'Bought'
+              : SELL_TXN_TYPES.has(t.transactionType) ? 'Sold' : t.transactionType,
+          },
+        })),
+        subtotal: {
+          label: `Total: ${broker}`,
+          values: {
+            grossAmount: totalGross.toString(),
+            stt: totalStt.toString(),
+          },
+        },
+      }],
+    });
+  }
+
+  const columns: ColumnDef[] = [
+    { key: 'broker', label: 'Broker Name', width: 14, align: 'left' },
+    { key: 'script', label: 'Script Name', width: 18, align: 'left' },
+    { key: 'billNo', label: 'Bill No', width: 9, align: 'left' },
+    { key: 'billDate', label: 'Bill Date', width: 8, align: 'center', formatter: DATE },
+    { key: 'qty', label: 'Qty', width: 6, align: 'right', formatter: (v) => indianMoney(v, 4) },
+    { key: 'grossRate', label: 'Gross Rate', width: 8, align: 'right', formatter: MONEY },
+    { key: 'grossAmount', label: 'Gross Amount', width: 9, align: 'right', formatter: MONEY },
+    { key: 'stt', label: 'STT', width: 7, align: 'right', formatter: MONEY },
+    { key: 'type', label: 'Type', width: 7, align: 'left' },
+  ];
+
+  return {
+    reportTitle: `STT Equity As On ${fmtDateDDMMYYYY(cutoff)} (Equity)`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections,
+    grandTotal: {
+      label: 'Grand Total',
+      values: {
+        grossAmount: grandGross.toString(),
+        stt: grandStt.toString(),
+      },
+    },
+    filenameStem: `stt-10db-${cutoff.toISOString().slice(0, 10)}`,
+  };
+}
+
+// ─── 30. Capital Gains FIFO ───────────────────────────────────────
+//
+// Per-script capital gain summary with full Upto / Onward 22-July
+// split. Uses the same data flow as Tax PnL but extra ST/LT-onward
+// columns and section-wise sub-totals per equity / share trading.
+
+export async function buildCapitalGainsFifoLayout(
+  userId: string,
+  opts: { from?: string; to?: string },
+): Promise<MprofitLayout> {
+  // The data engine is identical to Tax PnL — re-use it and just swap
+  // the column set + add the Onward 23-July columns.
+  const m = await userMember(userId);
+  const fromDate = opts.from ? new Date(opts.from) : null;
+  const toDate = opts.to ? new Date(opts.to) : new Date();
+
+  const { rows: cgRows } = await computeUserCapitalGains(userId);
+  const txs = await prisma.transaction.findMany({
+    where: { portfolio: { userId }, tradeDate: { lte: toDate } },
+    orderBy: { tradeDate: 'asc' },
+  });
+
+  const byScript = new Map<string, ScriptBucket>();
+  const getB = (name: string, isin: string | null): ScriptBucket => {
+    let b = byScript.get(name);
+    if (!b) {
+      b = emptyBucket(name, isin);
+      byScript.set(name, b);
+    }
+    return b;
+  };
+
+  for (const t of txs) {
+    const b = getB(t.assetName ?? '—', t.isin);
+    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
+    const q = new Decimal(t.quantity.toString());
+    const net = new Decimal(t.netAmount.toString());
+    if (BUY_TXN_TYPES.has(t.transactionType)) {
+      if (!inWindow) {
+        b.openQty = b.openQty.plus(q);
+        b.openValue = b.openValue.plus(net);
+      } else {
+        b.buyQty = b.buyQty.plus(q);
+        b.buyValue = b.buyValue.plus(net);
+      }
+      b.closingQty = b.closingQty.plus(q);
+      b.closingValue = b.closingValue.plus(net);
+    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
+      if (inWindow) {
+        b.sellQty = b.sellQty.plus(q);
+        b.sellValue = b.sellValue.plus(net);
+      }
+      const avg = b.closingQty.isZero() ? new Decimal(0) : b.closingValue.dividedBy(b.closingQty);
+      b.closingQty = b.closingQty.minus(q);
+      b.closingValue = b.closingValue.minus(avg.times(q));
+    }
+  }
+  for (const r of cgRows) {
+    if (fromDate && r.sellDate.getTime() < fromDate.getTime()) continue;
+    if (r.sellDate.getTime() > toDate.getTime()) continue;
+    const b = getB(r.assetName, r.isin);
+    b.capitalGL = b.capitalGL.plus(r.gainLoss);
+    if (r.capitalGainType === 'INTRADAY') {
+      b.speculation = b.speculation.plus(r.gainLoss);
+      if (r.gainLoss.greaterThanOrEqualTo(0)) b.speculationGain = b.speculationGain.plus(r.gainLoss);
+      else b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
+    } else if (r.capitalGainType === 'SHORT_TERM') {
+      b.shortTerm = b.shortTerm.plus(r.gainLoss);
+      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
+      else b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
+    } else if (r.capitalGainType === 'LONG_TERM') {
+      b.longTerm = b.longTerm.plus(r.gainLoss);
+      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
+      else b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
+    }
+  }
+
+  const list = Array.from(byScript.values()).sort((a, b) => a.assetName.localeCompare(b.assetName));
+  const tot = list.reduce((acc, b) => ({
+    capitalGL: acc.capitalGL.plus(b.capitalGL),
+    shortTerm: acc.shortTerm.plus(b.shortTerm),
+    longTerm: acc.longTerm.plus(b.longTerm),
+    speculation: acc.speculation.plus(b.speculation),
+    specGain: acc.specGain.plus(b.speculationGain),
+    specLoss: acc.specLoss.plus(b.speculationLoss),
+    stUp: acc.stUp.plus(b.shortTermUpto22Jul),
+    ltUp: acc.ltUp.plus(b.longTermUpto22Jul),
+    stOn: acc.stOn.plus(b.shortTermOnward23Jul),
+    ltOn: acc.ltOn.plus(b.longTermOnward23Jul),
+  }), {
+    capitalGL: new Decimal(0), shortTerm: new Decimal(0), longTerm: new Decimal(0),
+    speculation: new Decimal(0), specGain: new Decimal(0), specLoss: new Decimal(0),
+    stUp: new Decimal(0), ltUp: new Decimal(0), stOn: new Decimal(0), ltOn: new Decimal(0),
+  });
+
+  const columns: ColumnDef[] = [
+    { key: 'scriptName', label: 'Script Name', width: 14, align: 'left' },
+    { key: 'closingQty', label: 'Qty', width: 4, align: 'right', formatter: INT, signed: true },
+    { key: 'closingRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'closingValue', label: 'Value', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'capitalGL', label: 'Capital G/L', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'shortTerm', label: 'Short Term', width: 6, align: 'right', formatter: MONEY, signed: true },
+    { key: 'longTerm', label: 'Long Term', width: 6, align: 'right', formatter: MONEY, signed: true },
+    { key: 'speculation', label: 'Speculation', width: 6, align: 'right', formatter: MONEY, signed: true },
+    { key: 'specGain', label: 'Spec Gain', width: 6, align: 'right', formatter: MONEY },
+    { key: 'specLoss', label: 'Spec Loss', width: 6, align: 'right', formatter: MONEY },
+    { key: 'stUp', label: 'Short Term (≤22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'ltUp', label: 'Long Term (≤22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'stOn', label: 'Short Term (≥23-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'ltOn', label: 'Long Term (≥23-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+  ];
+
+  return {
+    reportTitle: `Capital Gain - Loss (Equity) Summary Report As on ${fmtDateDDMMYYYY(toDate)}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    headerRow1: [
+      { label: 'Script Name', spanCols: 1 },
+      { label: 'Closing=Op+Pur-Sell(+/-) G/L', spanCols: 3 },
+      { label: 'Capital Gain/Loss', spanCols: 1 },
+      { label: 'Gain/Loss', spanCols: 5 },
+      { label: 'Upto 22 July 2024', spanCols: 2 },
+      { label: 'Onward 23 July 2024', spanCols: 2 },
+    ],
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [{
+      groups: [{
+        rows: list.map((b) => ({
+          cells: {
+            scriptName: b.assetName,
+            closingQty: b.closingQty.toString(),
+            closingRate: b.closingQty.isZero() ? '' : b.closingValue.dividedBy(b.closingQty).toString(),
+            closingValue: b.closingValue.toString(),
+            capitalGL: b.capitalGL.toString(),
+            shortTerm: b.shortTerm.toString(),
+            longTerm: b.longTerm.toString(),
+            speculation: b.speculation.toString(),
+            specGain: b.speculationGain.toString(),
+            specLoss: b.speculationLoss.toString(),
+            stUp: b.shortTermUpto22Jul.toString(),
+            ltUp: b.longTermUpto22Jul.toString(),
+            stOn: b.shortTermOnward23Jul.toString(),
+            ltOn: b.longTermOnward23Jul.toString(),
+          },
+        })),
+      }],
+    }],
+    grandTotal: {
+      label: 'Grand Total: SHARE INVESTMENT (EQUITY) A/C',
+      values: {
+        capitalGL: tot.capitalGL.toString(),
+        shortTerm: tot.shortTerm.toString(),
+        longTerm: tot.longTerm.toString(),
+        speculation: tot.speculation.toString(),
+        specGain: tot.specGain.toString(),
+        specLoss: tot.specLoss.toString(),
+        stUp: tot.stUp.toString(),
+        ltUp: tot.ltUp.toString(),
+        stOn: tot.stOn.toString(),
+        ltOn: tot.ltOn.toString(),
+      },
+    },
+    filenameStem: `capital-gains-fifo${opts.from ? `-${opts.from}` : ''}`,
+  };
+}
+
+// ─── 31. Advance Tax Summary ──────────────────────────────────────
+//
+// Per-script gain/loss with Grandfathering cost + 31-Jan-2018 FMV
+// rate. Bottom section: Period-Wise Stock Profit Summary, splitting
+// realised gains by advance-tax instalment due dates:
+//   01-Apr → 15-Jun     (1st instalment, 15%)
+//   16-Jun → 15-Sep     (2nd instalment, 45%)
+//   16-Sep → 15-Dec     (3rd instalment, 75%)
+//   16-Dec → 15-Mar     (4th instalment, 100%)
+//   16-Mar → 31-Mar
+//   01-Apr → 31-Mar     (full FY)
+
+export async function buildAdvanceTaxSummaryLayout(
+  userId: string,
+  opts: { fy?: string },
+): Promise<MprofitLayout> {
+  const m = await userMember(userId);
+
+  // Resolve FY window. Default = current Indian FY.
+  const fyToBoundary = (fy?: string): { fromDate: Date; toDate: Date; label: string } => {
+    if (fy) {
+      const [a, b] = fy.split('-');
+      const ay = parseInt(a!, 10);
+      const fromY = ay;
+      const toY = b!.length === 2 ? 2000 + parseInt(b!, 10) : parseInt(b!, 10);
+      return {
+        fromDate: new Date(`${fromY}-04-01T00:00:00.000Z`),
+        toDate: new Date(`${toY}-03-31T23:59:59.999Z`),
+        label: fy,
+      };
+    }
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const fromY = now.getUTCMonth() + 1 >= 4 ? y : y - 1;
+    return {
+      fromDate: new Date(`${fromY}-04-01T00:00:00.000Z`),
+      toDate: new Date(`${fromY + 1}-03-31T23:59:59.999Z`),
+      label: `${fromY}-${String(fromY + 1).slice(2)}`,
+    };
+  };
+  const { fromDate, toDate, label: fyLabel } = fyToBoundary(opts.fy);
+  const fyStartYear = fromDate.getUTCFullYear();
+
+  const { rows: cgRows } = await computeUserCapitalGains(userId);
+  const txs = await prisma.transaction.findMany({
+    where: { portfolio: { userId }, tradeDate: { lte: toDate } },
+    orderBy: { tradeDate: 'asc' },
+  });
+
+  const byScript = new Map<string, {
+    name: string; isin: string | null;
+    openQty: Decimal; openValue: Decimal;
+    buyQty: Decimal; buyValue: Decimal;
+    sellQty: Decimal; sellValue: Decimal;
+    gainLoss: Decimal; gain: Decimal; loss: Decimal;
+    fmv31Jan2018: Decimal | null; gfCost: Decimal;
+    shortTerm: Decimal; longTerm: Decimal; speculation: Decimal;
+  }>();
+  const getB = (name: string, isin: string | null) => {
+    let b = byScript.get(name);
+    if (!b) {
+      b = {
+        name, isin,
+        openQty: new Decimal(0), openValue: new Decimal(0),
+        buyQty: new Decimal(0), buyValue: new Decimal(0),
+        sellQty: new Decimal(0), sellValue: new Decimal(0),
+        gainLoss: new Decimal(0), gain: new Decimal(0), loss: new Decimal(0),
+        fmv31Jan2018: null, gfCost: new Decimal(0),
+        shortTerm: new Decimal(0), longTerm: new Decimal(0), speculation: new Decimal(0),
+      };
+      byScript.set(name, b);
+    }
+    return b;
+  };
+
+  for (const t of txs) {
+    const b = getB(t.assetName ?? '—', t.isin);
+    const inWindow = t.tradeDate.getTime() >= fromDate.getTime() && t.tradeDate.getTime() <= toDate.getTime();
+    const q = new Decimal(t.quantity.toString());
+    const net = new Decimal(t.netAmount.toString());
+    if (BUY_TXN_TYPES.has(t.transactionType)) {
+      if (!inWindow) {
+        b.openQty = b.openQty.plus(q);
+        b.openValue = b.openValue.plus(net);
+      } else {
+        b.buyQty = b.buyQty.plus(q);
+        b.buyValue = b.buyValue.plus(net);
+      }
+    } else if (SELL_TXN_TYPES.has(t.transactionType) && inWindow) {
+      b.sellQty = b.sellQty.plus(q);
+      b.sellValue = b.sellValue.plus(net);
+    }
+  }
+
+  // FMV on 31-Jan-2018 for grandfathering.
+  const isins = Array.from(new Set(
+    Array.from(byScript.values()).map((b) => b.isin).filter((i): i is string => !!i),
+  ));
+  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
+
+  // CG rows in FY window.
+  for (const r of cgRows) {
+    if (r.sellDate.getTime() < fromDate.getTime() || r.sellDate.getTime() > toDate.getTime()) continue;
+    const b = getB(r.assetName, r.isin);
+    const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
+    const adjusted = adjustGainForGrandfathering(
+      r.buyDate, r.quantity, r.buyAmount, r.sellAmount, r.gainLoss, fmv,
+    );
+    b.gainLoss = b.gainLoss.plus(adjusted);
+    if (adjusted.greaterThanOrEqualTo(0)) b.gain = b.gain.plus(adjusted);
+    else b.loss = b.loss.plus(adjusted.abs());
+    if (fmv && r.buyDate.getTime() <= new Date('2018-01-31T23:59:59.999Z').getTime()) {
+      b.fmv31Jan2018 = fmv;
+      b.gfCost = b.gfCost.plus(fmv.times(r.quantity));
+    }
+    if (r.capitalGainType === 'INTRADAY') b.speculation = b.speculation.plus(adjusted);
+    else if (r.capitalGainType === 'SHORT_TERM') b.shortTerm = b.shortTerm.plus(adjusted);
+    else if (r.capitalGainType === 'LONG_TERM') b.longTerm = b.longTerm.plus(adjusted);
+  }
+
+  const list = Array.from(byScript.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const tot = list.reduce((acc, b) => ({
+    openQty: acc.openQty.plus(b.openQty), openValue: acc.openValue.plus(b.openValue),
+    buyQty: acc.buyQty.plus(b.buyQty), buyValue: acc.buyValue.plus(b.buyValue),
+    sellQty: acc.sellQty.plus(b.sellQty), sellValue: acc.sellValue.plus(b.sellValue),
+    gainLoss: acc.gainLoss.plus(b.gainLoss), gain: acc.gain.plus(b.gain), loss: acc.loss.plus(b.loss),
+    gfCost: acc.gfCost.plus(b.gfCost),
+    shortTerm: acc.shortTerm.plus(b.shortTerm), longTerm: acc.longTerm.plus(b.longTerm),
+    speculation: acc.speculation.plus(b.speculation),
+  }), {
+    openQty: new Decimal(0), openValue: new Decimal(0),
+    buyQty: new Decimal(0), buyValue: new Decimal(0),
+    sellQty: new Decimal(0), sellValue: new Decimal(0),
+    gainLoss: new Decimal(0), gain: new Decimal(0), loss: new Decimal(0),
+    gfCost: new Decimal(0),
+    shortTerm: new Decimal(0), longTerm: new Decimal(0), speculation: new Decimal(0),
+  });
+
+  // Period-wise stock profit summary (advance-tax instalments).
+  const periods = [
+    { label: `01/04/${fyStartYear} TO 15/06/${fyStartYear}`, from: new Date(`${fyStartYear}-04-01`), to: new Date(`${fyStartYear}-06-15T23:59:59.999Z`) },
+    { label: `16/06/${fyStartYear} TO 15/09/${fyStartYear}`, from: new Date(`${fyStartYear}-06-16`), to: new Date(`${fyStartYear}-09-15T23:59:59.999Z`) },
+    { label: `16/09/${fyStartYear} TO 15/12/${fyStartYear}`, from: new Date(`${fyStartYear}-09-16`), to: new Date(`${fyStartYear}-12-15T23:59:59.999Z`) },
+    { label: `16/12/${fyStartYear} TO 15/03/${fyStartYear + 1}`, from: new Date(`${fyStartYear}-12-16`), to: new Date(`${fyStartYear + 1}-03-15T23:59:59.999Z`) },
+    { label: `16/03/${fyStartYear + 1} TO 31/03/${fyStartYear + 1}`, from: new Date(`${fyStartYear + 1}-03-16`), to: new Date(`${fyStartYear + 1}-03-31T23:59:59.999Z`) },
+    { label: `01/04/${fyStartYear} TO 31/03/${fyStartYear + 1}`, from: fromDate, to: toDate },
+  ];
+  const periodRows: BodyRowLite[] = periods.map((p) => {
+    let gainLoss = new Decimal(0);
+    let gain = new Decimal(0);
+    let loss = new Decimal(0);
+    let gfCost = new Decimal(0);
+    let shortTerm = new Decimal(0);
+    let longTerm = new Decimal(0);
+    let speculation = new Decimal(0);
+    for (const r of cgRows) {
+      if (r.sellDate.getTime() < p.from.getTime() || r.sellDate.getTime() > p.to.getTime()) continue;
+      const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
+      const adj = adjustGainForGrandfathering(r.buyDate, r.quantity, r.buyAmount, r.sellAmount, r.gainLoss, fmv);
+      gainLoss = gainLoss.plus(adj);
+      if (adj.greaterThanOrEqualTo(0)) gain = gain.plus(adj);
+      else loss = loss.plus(adj.abs());
+      if (fmv) gfCost = gfCost.plus(fmv.times(r.quantity));
+      if (r.capitalGainType === 'INTRADAY') speculation = speculation.plus(adj);
+      else if (r.capitalGainType === 'SHORT_TERM') shortTerm = shortTerm.plus(adj);
+      else if (r.capitalGainType === 'LONG_TERM') longTerm = longTerm.plus(adj);
+    }
+    return {
+      cells: {
+        scriptName: p.label,
+        gainLoss: gainLoss.toString(),
+        gain: gain.toString(),
+        loss: loss.greaterThan(0) ? loss.negated().toString() : '',
+        gfCost: gfCost.toString(),
+        shortTerm: shortTerm.toString(),
+        longTerm: longTerm.toString(),
+        speculation: speculation.toString(),
+      },
+    };
+  });
+
+  const columns: ColumnDef[] = [
+    { key: 'scriptName', label: 'Script Name', width: 18, align: 'left' },
+    { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'openValue', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyValue', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellValue', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
+    { key: 'gainLoss', label: 'Gain/Loss', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'gain', label: 'Gain', width: 6, align: 'right', formatter: MONEY },
+    { key: 'loss', label: 'Loss', width: 6, align: 'right', formatter: MONEY, signed: true },
+    { key: 'fmv31Jan2018', label: '31st January 2018', width: 7, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'gfCost', label: 'Grandfathered Cost', width: 8, align: 'right', formatter: MONEY },
+    { key: 'shortTerm', label: 'Short Term', width: 6, align: 'right', formatter: MONEY, signed: true },
+    { key: 'longTerm', label: 'Long Term', width: 6, align: 'right', formatter: MONEY, signed: true },
+    { key: 'speculation', label: 'Speculation', width: 6, align: 'right', formatter: MONEY, signed: true },
+  ];
+
+  return {
+    reportTitle: `Advance Tax Calculation (Equity) As on ${fmtDateDDMMYYYY(toDate)}`,
+    family: m.family,
+    member: m.member,
+    pan: m.pan,
+    financialYear: fyLabel,
+    headerRow1: [
+      { label: 'Script Name', spanCols: 1 },
+      { label: 'Opening', spanCols: 2 },
+      { label: 'Purchase', spanCols: 2 },
+      { label: 'Sale', spanCols: 2 },
+      { label: 'Gain/Loss', spanCols: 8 },
+    ],
+    headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
+    columns,
+    sections: [
+      {
+        groups: [{
+          rows: list.map((b) => ({
+            cells: {
+              scriptName: b.name,
+              openQty: b.openQty.toString(),
+              openValue: b.openValue.toString(),
+              buyQty: b.buyQty.toString(),
+              buyValue: b.buyValue.toString(),
+              sellQty: b.sellQty.toString(),
+              sellValue: b.sellValue.toString(),
+              gainLoss: b.gainLoss.toString(),
+              gain: b.gain.toString(),
+              loss: b.loss.greaterThan(0) ? b.loss.negated().toString() : '',
+              fmv31Jan2018: b.fmv31Jan2018?.toString() ?? '',
+              gfCost: b.gfCost.toString(),
+              shortTerm: b.shortTerm.toString(),
+              longTerm: b.longTerm.toString(),
+              speculation: b.speculation.toString(),
+            },
+          })),
+        }],
+      },
+      {
+        banner: 'Period Wise Stock Profit Summary',
+        groups: [{ rows: periodRows }],
+      },
+    ],
+    grandTotal: {
+      label: 'Grand Total',
+      values: {
+        openQty: tot.openQty.toString(),
+        openValue: tot.openValue.toString(),
+        buyQty: tot.buyQty.toString(),
+        buyValue: tot.buyValue.toString(),
+        sellQty: tot.sellQty.toString(),
+        sellValue: tot.sellValue.toString(),
+        gainLoss: tot.gainLoss.toString(),
+        gain: tot.gain.toString(),
+        loss: tot.loss.greaterThan(0) ? tot.loss.negated().toString() : '',
+        gfCost: tot.gfCost.toString(),
+        shortTerm: tot.shortTerm.toString(),
+        longTerm: tot.longTerm.toString(),
+        speculation: tot.speculation.toString(),
+      },
+    },
+    filenameStem: `advance-tax-summary${opts.fy ? `-${opts.fy}` : ''}`,
   };
 }

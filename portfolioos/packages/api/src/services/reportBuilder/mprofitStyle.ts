@@ -166,7 +166,10 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${layout.filenameStem}.pdf"`);
 
-    const doc = new PDFDocument({ margin: 28, size: 'A4', layout: 'landscape', bufferPages: true });
+    // Wide reports (>14 columns) get a Legal-landscape canvas so headers
+    // stop chopping. A4 landscape is plenty for the typical 8-12 col report.
+    const pageSize: 'A4' | 'LEGAL' = layout.columns.length > 14 ? 'LEGAL' : 'A4';
+    const doc = new PDFDocument({ margin: 24, size: pageSize, layout: 'landscape', bufferPages: true });
     doc.on('end', resolve);
     doc.on('error', reject);
     res.on('error', reject);
@@ -240,31 +243,33 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     }
 
     // ── Render header rows ───────────────────────────────────────
+    // Both header rows get a uniform height so the bottom of the
+    // header is flush even when individual labels wrap to 2 lines.
+    // Wrapping is allowed (lineBreak: true) — chopping long labels
+    // like "SECURITY TRANSACTION TAX" looks worse than letting them
+    // break.
     function renderHeader(y: number): number {
-      const rowH = 18;
-      // Row 1 — groups + spanning leaves
+      const rowH = 22;
       let cursorX = ML;
       let leafIdx = 0;
-      const usedTwoRows: boolean[] = []; // per-row1 entry whether it has children
       for (const grp of layout.headerRow1) {
         const w = colWs.slice(leafIdx, leafIdx + grp.spanCols).reduce((a, b) => a + b, 0);
         const isLeaf = grp.spanCols === 1;
         const cellH = isLeaf ? rowH * 2 : rowH;
         doc.rect(cursorX, y, w, cellH)
           .fillAndStroke(grp.bg ?? MPROFIT_PALETTE.bandPink, MPROFIT_PALETTE.border);
-        doc.font(PDF_FONT_BOLD).fontSize(8.5).fillColor(MPROFIT_PALETTE.ink)
-          .text(pdfSafe(grp.label), cursorX + 2, y + (cellH / 2) - 4, {
-            width: w - 4, align: 'center', lineBreak: false, ellipsis: true,
+        const textY = isLeaf ? y + (cellH / 2) - 8 : y + 4;
+        doc.font(PDF_FONT_BOLD).fontSize(8).fillColor(MPROFIT_PALETTE.ink)
+          .text(pdfSafe(grp.label), cursorX + 2, textY, {
+            width: w - 4, height: cellH - 4, align: 'center',
+            lineBreak: true, ellipsis: true,
           });
-        usedTwoRows.push(isLeaf);
         cursorX += w;
         leafIdx += grp.spanCols;
       }
 
-      // Row 2 — child cells (only where row1 entry had spanCols > 1)
       let cur2X = ML;
       let r2 = 0;
-      let r1 = 0;
       for (const grp of layout.headerRow1) {
         if (grp.spanCols === 1) {
           cur2X += colWs[r2]!;
@@ -275,15 +280,15 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
             const sub = layout.headerRow2[r2];
             doc.rect(cur2X, y + rowH, w, rowH)
               .fillAndStroke(MPROFIT_PALETTE.bandPink, MPROFIT_PALETTE.border);
-            doc.font(PDF_FONT_BOLD).fontSize(8.5).fillColor(MPROFIT_PALETTE.ink)
-              .text(pdfSafe(sub?.label ?? ''), cur2X + 2, y + rowH + 5, {
-                width: w - 4, align: sub?.align ?? 'center', lineBreak: false, ellipsis: true,
+            doc.font(PDF_FONT_BOLD).fontSize(8).fillColor(MPROFIT_PALETTE.ink)
+              .text(pdfSafe(sub?.label ?? ''), cur2X + 2, y + rowH + 4, {
+                width: w - 4, height: rowH - 4, align: sub?.align ?? 'center',
+                lineBreak: true, ellipsis: true,
               });
             cur2X += w;
             r2 += 1;
           }
         }
-        r1 += 1;
       }
       return y + rowH * 2;
     }
@@ -299,6 +304,25 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     }
 
     cy = renderHeader(cy);
+
+    // PDFKit's `lineBreak: false` is unreliable when `width` is set:
+    // text still wraps to a second line when it overflows. Pre-truncate
+    // the string here so cell contents never wrap.
+    function fitToWidth(s: string, fontSize: number, w: number, bold: boolean): string {
+      if (!s) return '';
+      doc.font(bold ? PDF_FONT_BOLD : PDF_FONT).fontSize(fontSize);
+      if (doc.widthOfString(s) <= w) return s;
+      let lo = 0;
+      let hi = s.length;
+      const ell = '…';
+      const ellW = doc.widthOfString(ell);
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >>> 1;
+        if (doc.widthOfString(s.slice(0, mid)) + ellW <= w) lo = mid;
+        else hi = mid - 1;
+      }
+      return s.slice(0, lo) + ell;
+    }
 
     // ── Render body rows ────────────────────────────────────────
     function renderBodyRow(
@@ -324,12 +348,12 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
           doc.moveTo(x, y).lineTo(x, y + rowH)
             .strokeColor(MPROFIT_PALETTE.border).lineWidth(0.4).stroke();
         }
+        const safe = fitToWidth(pdfSafe(display), 8, w - 6, bold);
         doc.font(bold ? PDF_FONT_BOLD : PDF_FONT).fontSize(8).fillColor(textColor)
-          .text(pdfSafe(display), x + 3, y + 4, {
+          .text(safe, x + 3, y + 4, {
             width: w - 6,
             align: c.align ?? 'left',
             lineBreak: false,
-            ellipsis: true,
           });
       }
       return y + rowH;
@@ -341,6 +365,57 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
       doc.rect(ML, y, pageW, rowH).fillAndStroke(bg, MPROFIT_PALETTE.border);
       doc.font(bold ? PDF_FONT_BOLD : PDF_FONT).fontSize(8.5).fillColor(MPROFIT_PALETTE.ink)
         .text(pdfSafe(text), ML + 6, y + 5, { width: pageW - 12, lineBreak: false, ellipsis: true });
+      return y + rowH;
+    }
+
+    // Render a subtotal / grand-total row. Label auto-spans across the
+    // first N columns until it fits — protects narrow first columns
+    // (e.g. "Sr No") from chopping "Grand Total" into "Gr..." or
+    // dropping it entirely when a numeric formatter is applied.
+    function renderTotalRow(
+      y: number,
+      label: string,
+      values: Record<string, unknown>,
+      bg: string,
+    ): number {
+      const rowH = 18;
+      if (y + rowH > BOT) y = newPage();
+      doc.rect(ML, y, pageW, rowH).fillAndStroke(bg, MPROFIT_PALETTE.border);
+
+      doc.font(PDF_FONT_BOLD).fontSize(8.5);
+      const labelW = doc.widthOfString(label) + 12;
+      let spanCols = 1;
+      let runningW = colWs[0]!;
+      while (runningW < labelW && spanCols < layout.columns.length) {
+        const nextCol = layout.columns[spanCols]!;
+        const nextVal = values[nextCol.key];
+        if (nextVal != null && nextVal !== '') break;
+        runningW += colWs[spanCols]!;
+        spanCols += 1;
+      }
+      doc.fillColor(MPROFIT_PALETTE.ink)
+        .text(fitToWidth(pdfSafe(label), 8.5, runningW - 8, true), ML + 4, y + 5, {
+          width: runningW - 8, align: 'left', lineBreak: false,
+        });
+
+      for (let i = spanCols; i < layout.columns.length; i++) {
+        const c = layout.columns[i]!;
+        const x = colXs[i]!;
+        const w = colWs[i]!;
+        const raw = values[c.key];
+        const display = c.formatter ? c.formatter(raw) : raw == null ? '' : String(raw);
+        let textColor: string = MPROFIT_PALETTE.ink;
+        if (c.signed && typeof display === 'string' && isParensNegative(display)) {
+          textColor = MPROFIT_PALETTE.negative;
+        }
+        doc.moveTo(x, y).lineTo(x, y + rowH)
+          .strokeColor(MPROFIT_PALETTE.border).lineWidth(0.4).stroke();
+        const safe = fitToWidth(pdfSafe(display), 8.5, w - 6, true);
+        doc.font(PDF_FONT_BOLD).fontSize(8.5).fillColor(textColor)
+          .text(safe, x + 3, y + 5, {
+            width: w - 6, align: c.align ?? 'right', lineBreak: false,
+          });
+      }
       return y + rowH;
     }
 
@@ -356,25 +431,22 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
           cy = renderBodyRow(cy, r.cells, r.bg ?? MPROFIT_PALETTE.white);
         }
         if (g.subtotal) {
-          const cells = { ...g.subtotal.values, __label__: g.subtotal.label };
-          // Inject label into first columns until they fill — render across first cell.
-          cy = renderBodyRow(
+          cy = renderTotalRow(
             cy,
-            { [layout.columns[0]!.key]: g.subtotal.label, ...g.subtotal.values },
+            g.subtotal.label,
+            g.subtotal.values,
             MPROFIT_PALETTE.subtotalYellow,
-            true,
           );
-          void cells;
         }
       }
     }
 
     if (layout.grandTotal) {
-      cy = renderBodyRow(
+      cy = renderTotalRow(
         cy,
-        { [layout.columns[0]!.key]: layout.grandTotal.label, ...layout.grandTotal.values },
+        layout.grandTotal.label,
+        layout.grandTotal.values,
         MPROFIT_PALETTE.grandGreen,
-        true,
       );
     }
 

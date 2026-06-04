@@ -44,6 +44,16 @@ import {
   downloadScriptwiseQtywise,
   downloadContractNoteCharges,
   downloadMfM2M,
+  downloadFinancialLedger,
+  downloadClosingBalance,
+  downloadTopHoldings,
+  downloadSectorAllocation,
+  downloadContractNotesSummary,
+  downloadBrokerwiseCapitalGain,
+  downloadTaxPnL,
+  downloadStt10Db,
+  downloadCapitalGainsFifo,
+  downloadAdvanceTaxSummary,
 } from '../controllers/reports.controller.js';
 
 export const reportsRouter = Router();
@@ -97,3 +107,13 @@ reportsRouter.get('/download/family-wise-holdings', asyncHandler(downloadFamilyW
 reportsRouter.get('/download/scriptwise-qtywise', asyncHandler(downloadScriptwiseQtywise));
 reportsRouter.get('/download/contract-note-charges', asyncHandler(downloadContractNoteCharges));
 reportsRouter.get('/download/mf-m2m', asyncHandler(downloadMfM2M));
+reportsRouter.get('/download/financial-ledger', asyncHandler(downloadFinancialLedger));
+reportsRouter.get('/download/closing-balance', asyncHandler(downloadClosingBalance));
+reportsRouter.get('/download/top-holdings', asyncHandler(downloadTopHoldings));
+reportsRouter.get('/download/sector-allocation', asyncHandler(downloadSectorAllocation));
+reportsRouter.get('/download/contract-notes-summary', asyncHandler(downloadContractNotesSummary));
+reportsRouter.get('/download/brokerwise-capital-gain', asyncHandler(downloadBrokerwiseCapitalGain));
+reportsRouter.get('/download/tax-pnl', asyncHandler(downloadTaxPnL));
+reportsRouter.get('/download/stt-10db', asyncHandler(downloadStt10Db));
+reportsRouter.get('/download/capital-gains-fifo', asyncHandler(downloadCapitalGainsFifo));
+reportsRouter.get('/download/advance-tax-summary', asyncHandler(downloadAdvanceTaxSummary));

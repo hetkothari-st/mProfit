@@ -216,6 +216,96 @@ const REPORTS: ReportDef[] = [
     params: ['asOf'],
     filename: 'mf-m2m',
   },
+  {
+    key: 'financial-ledger',
+    title: 'Financial Ledger',
+    description:
+      'Per-account ledger with Investment Type / Bill–Voucher / Cheque columns. Opening balance, voucher rows, running Dr/Cr balance.',
+    endpoint: 'financial-ledger',
+    params: ['from', 'to'],
+    filename: 'financial-ledger',
+  },
+  {
+    key: 'closing-balance',
+    title: 'Closing Balance Report',
+    description:
+      'As-of holdings split by Equity / Mutual Fund / F&O. Date of acquisition + ISIN + amount invested + current value.',
+    endpoint: 'closing-balance',
+    params: ['asOf'],
+    filename: 'closing-balance',
+  },
+  {
+    key: 'top-holdings',
+    title: 'Top Holdings Report',
+    description:
+      'Top 5 positions per segment (Stocks / Derivatives / Mutual Funds / MCX) with % weightage and BSE/NSE current value.',
+    endpoint: 'top-holdings',
+    params: [],
+    filename: 'top-holdings',
+  },
+  {
+    key: 'sector-allocation',
+    title: 'Sector Wise Allocation',
+    description:
+      'Rollup of equity holdings by sector (from StockMaster.sector). Quantity, amount invested, % weightage, BSE/NSE values.',
+    endpoint: 'sector-allocation',
+    params: [],
+    filename: 'sector-allocation',
+  },
+  {
+    key: 'contract-notes-summary',
+    title: 'Contract Notes Summary',
+    description:
+      'One row per contract note: date, broker, contract note no, Payable / Receivable, net amount.',
+    endpoint: 'contract-notes-summary',
+    params: ['asOf'],
+    filename: 'contract-notes-summary',
+  },
+  {
+    key: 'brokerwise-capital-gain',
+    title: 'Brokerwise Capital G/L',
+    description:
+      'Per broker → script Opening + Purchase + Sale + Closing + Capital G/L + STCG/LTCG/Speculation breakdown.',
+    endpoint: 'brokerwise-capital-gain',
+    params: ['from', 'to'],
+    filename: 'brokerwise-capital-gain',
+  },
+  {
+    key: 'tax-pnl',
+    title: 'Tax P&L Summary',
+    description:
+      'Family-level capital gain summary. Opening, Purchase, Sale, Closing, Capital G/L plus ST/LT/Spec split and Upto 22-Jul-24 columns.',
+    endpoint: 'tax-pnl',
+    params: ['from', 'to'],
+    filename: 'tax-pnl',
+  },
+  {
+    key: 'stt-10db',
+    title: 'STT 10 DB Report',
+    description:
+      'Broker-grouped transactions with bill no, date, qty, gross rate, gross amount, STT, type. Auditable STT trail for Form 10DB.',
+    endpoint: 'stt-10db',
+    params: ['asOf'],
+    filename: 'stt-10db',
+  },
+  {
+    key: 'capital-gains-fifo',
+    title: 'Capital Gains — FIFO',
+    description:
+      'Per-script FIFO realised G/L with ST / LT / Speculation breakdown plus Upto 22-Jul-24 and Onward 23-Jul-24 cuts (Budget 2024 LTCG rate change).',
+    endpoint: 'capital-gains-fifo',
+    params: ['from', 'to'],
+    filename: 'capital-gains-fifo',
+  },
+  {
+    key: 'advance-tax-summary',
+    title: 'Advance Tax Summary',
+    description:
+      'Per-script + period-wise gain split by advance-tax instalment due dates (15-Jun / 15-Sep / 15-Dec / 15-Mar). Grandfathered cost where applicable.',
+    endpoint: 'advance-tax-summary',
+    params: ['fy'],
+    filename: 'advance-tax-summary',
+  },
 ];
 
 function currentFy(): string {
