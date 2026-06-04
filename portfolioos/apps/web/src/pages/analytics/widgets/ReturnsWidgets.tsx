@@ -34,7 +34,7 @@ function HoldingRankTable({ title, rows, kind }: { title: string; rows: HoldingR
               <thead>
                 <tr className="border-b text-muted-foreground text-xs">
                   <th className="text-left py-1.5 pr-3 font-medium">Asset</th>
-                  <th className="text-left py-1.5 pr-3 font-medium hidden sm:table-cell">Class</th>
+                  <th className="text-left py-1.5 pr-3 font-medium max-sm:hidden sm:table-cell">Class</th>
                   <th className="text-right py-1.5 pr-3 font-medium">Value</th>
                   <th className="text-right py-1.5 font-medium">Return</th>
                 </tr>
@@ -42,8 +42,8 @@ function HoldingRankTable({ title, rows, kind }: { title: string; rows: HoldingR
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={`${r.assetName}-${i}`} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                    <td data-label="Asset" className="py-2 pr-3 truncate max-w-[180px] font-medium">{r.assetName}</td>
-                    <td data-label="Class" className="py-2 pr-3 hidden sm:table-cell text-xs text-muted-foreground">{ClassLabel(r.assetClass)}</td>
+                    <td data-label="Asset" className="py-2 pr-3 sm:truncate sm:max-w-[180px] min-w-0 break-words font-medium">{r.assetName}</td>
+                    <td data-label="Class" className="py-2 pr-3 max-sm:!hidden sm:table-cell text-xs text-muted-foreground">{ClassLabel(r.assetClass)}</td>
                     <td data-label="Value" className="py-2 pr-3 text-right tabular-nums">{formatINR(r.currentValue)}</td>
                     <td data-label="Return" className={`py-2 text-right tabular-nums font-medium ${r.pnlPct >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       {formatPercent(r.pnlPct, 2, true)}

@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
+import { AutoFitText } from '@/components/ui/AutoFitText';
 import { cn } from '@/lib/cn';
 
 interface MetricCardProps {
@@ -31,18 +32,20 @@ export function MetricCard({ label, value, icon: Icon, trend, hint }: MetricCard
           <div className="text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
             {label}
           </div>
-          {isMoney ? (
-            <Money
-              className="numeric-display mt-3 text-[26px] leading-[1.05] tracking-tight text-foreground"
-              symbolClassName="text-[0.66em] -translate-y-[0.14em] text-accent/85"
-            >
-              {value}
-            </Money>
-          ) : (
-            <div className="numeric-display mt-3 text-[26px] leading-[1.05] tracking-tight text-foreground">
-              {value}
-            </div>
-          )}
+          <AutoFitText className="mt-3">
+            {isMoney ? (
+              <Money
+                className="numeric-display text-[26px] leading-[1.05] tracking-tight text-foreground"
+                symbolClassName="text-[0.66em] -translate-y-[0.14em] text-accent/85"
+              >
+                {value}
+              </Money>
+            ) : (
+              <div className="numeric-display text-[26px] leading-[1.05] tracking-tight text-foreground">
+                {value}
+              </div>
+            )}
+          </AutoFitText>
           {hint && (
             <div className="mt-1.5 text-[11.5px] text-muted-foreground">{hint}</div>
           )}

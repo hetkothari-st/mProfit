@@ -520,4 +520,13 @@
     justify-content: flex-start;
     text-align: left;
   }
+
+  /* Columns explicitly hidden on small screens (Tailwind `hidden sm:table-cell`
+     etc.) must STAY hidden in card mode. The rules above force `display:flex`
+     on every <td>, which would otherwise resurrect those desktop-only columns
+     as extra label:value rows inside each card. Keep them collapsed. */
+  table.rtable td.hidden,
+  table.rtable th.hidden {
+    display: none !important;
+  }
 }
