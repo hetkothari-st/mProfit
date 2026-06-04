@@ -135,6 +135,42 @@ const REPORTS: ReportDef[] = [
     params: ['fy'],
     filename: 'income-report',
   },
+  {
+    key: 'holdings-summary',
+    title: 'Portfolio Holdings Summary',
+    description:
+      'Cross-asset valuation as-of-today — equity, MF, FD, bonds, gold, crypto in one banded report with per-class subtotals and grand total.',
+    endpoint: 'holdings-summary',
+    params: [],
+    filename: 'holdings-summary',
+  },
+  {
+    key: 'performance',
+    title: 'XIRR / TWR Performance',
+    description:
+      'Per-portfolio invested vs current value with absolute return, XIRR and Modified Dietz TWR. Last row rolls up the whole user.',
+    endpoint: 'performance',
+    params: [],
+    filename: 'performance-xirr',
+  },
+  {
+    key: 'tax-summary',
+    title: 'Tax Summary (Form 16 helper)',
+    description:
+      'Annual rollup of intraday, STCG, LTCG, Sec 112A and IFOS income mapped to the cells of ITR-2 / ITR-3.',
+    endpoint: 'tax-summary',
+    params: ['fy'],
+    filename: 'tax-summary',
+  },
+  {
+    key: 'cash-flow',
+    title: 'Cash Flow Statement',
+    description:
+      'Period inflows vs outflows by category. T-account layout with net cash surplus / deficit balancing entry, so both sides tally.',
+    endpoint: 'cash-flow',
+    params: ['from', 'to'],
+    filename: 'cash-flow',
+  },
 ];
 
 function currentFy(): string {

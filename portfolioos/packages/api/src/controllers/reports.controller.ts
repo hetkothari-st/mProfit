@@ -720,6 +720,10 @@ import {
   buildDailyTransactionsLayout,
   buildShortLongSpecLayout,
   buildIncomeReportLayout,
+  buildPortfolioHoldingsSummaryLayout,
+  buildPerformanceLayout,
+  buildTaxSummaryLayout,
+  buildCashFlowStatementLayout,
 } from '../services/reportBuilder/special/index.js';
 import {
   streamMprofitPdf,
@@ -814,4 +818,29 @@ export async function downloadIncomeReport(req: Request, res: Response) {
   const portfolioId = (req.query.portfolioId as string | undefined)?.trim();
   const pid = portfolioId && portfolioId !== 'all' ? portfolioId : undefined;
   await emitMprofit(req, res, await buildIncomeReportLayout(userId, fy, pid));
+}
+
+export async function downloadHoldingsSummary(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const portfolioId = (req.query.portfolioId as string | undefined)?.trim();
+  const pid = portfolioId && portfolioId !== 'all' ? portfolioId : undefined;
+  await emitMprofit(req, res, await buildPortfolioHoldingsSummaryLayout(userId, pid));
+}
+
+export async function downloadPerformance(req: Request, res: Response) {
+  const userId = req.user!.id;
+  await emitMprofit(req, res, await buildPerformanceLayout(userId));
+}
+
+export async function downloadTaxSummary(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const fy = (req.query.fy as string | undefined)?.trim() || undefined;
+  await emitMprofit(req, res, await buildTaxSummaryLayout(userId, fy));
+}
+
+export async function downloadCashFlow(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const from = (req.query.from as string | undefined)?.trim() || undefined;
+  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  await emitMprofit(req, res, await buildCashFlowStatementLayout(userId, { from, to }));
 }
