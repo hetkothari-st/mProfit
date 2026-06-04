@@ -722,8 +722,8 @@ function ContractTrades({ trades }: { trades: FoTrade[] }) {
   }
   const sorted = [...trades].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
   return (
-    <div className="overflow-x-auto rounded border border-border bg-background/60">
-      <table className="w-full text-xs rtable">
+    <div className="overflow-x-auto -mx-2 sm:mx-0 rounded border border-border bg-background/60">
+      <table className="w-full min-w-[420px] text-xs">
         <thead className="bg-muted/40">
           <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
             <th className="text-left px-2.5 py-1.5 font-semibold">Date</th>
@@ -968,8 +968,8 @@ function UnderlyingTrades({ trades }: { trades: FoTrade[] }) {
       <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
         Transactions ({trades.length})
       </div>
-      <div className="overflow-x-auto rounded border border-border bg-card">
-        <table className="w-full text-xs rtable">
+      <div className="overflow-x-auto -mx-2 sm:mx-0 rounded border border-border bg-card">
+        <table className="w-full min-w-[600px] text-xs">
           <thead className="bg-muted/40 dark:bg-muted/20">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-3 pr-2 py-1.5 font-semibold">Date</th>
@@ -1095,8 +1095,8 @@ function FuturesLedger({
           </div>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm rtable">
+      <div className="overflow-x-auto -mx-2 sm:mx-0">
+        <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="w-7 pl-3 pr-2 py-2"></th>
@@ -1129,9 +1129,9 @@ function FuturesLedger({
                   <td data-label="" className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </td>
-                  <td data-label="Contract" className="relative pl-4 pr-2 py-2.5 max-sm:pl-5">
+                  <td data-label="Contract" className="relative pl-4 pr-2 py-2.5">
                     <span
-                      className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm max-sm:hidden ${
+                      className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
                         long
                           ? 'bg-emerald-500/85 dark:bg-emerald-400/80'
                           : short
@@ -1303,8 +1303,8 @@ function OptionsChain({
           </div>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm rtable">
+      <div className="overflow-x-auto -mx-2 sm:mx-0">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-muted/40 dark:bg-muted/20 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="w-7 pl-3 pr-2 py-2"></th>
@@ -1338,9 +1338,9 @@ function OptionsChain({
                   <td data-label="" className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </td>
-                  <td data-label="Underlying" className="relative pl-4 pr-2 py-2.5 max-sm:pl-5">
+                  <td data-label="Underlying" className="relative pl-4 pr-2 py-2.5">
                     <span
-                      className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm max-sm:hidden ${
+                      className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
                         isCall
                           ? 'bg-emerald-500/85 dark:bg-emerald-400/80'
                           : 'bg-rose-500/85 dark:bg-rose-400/80'
@@ -1452,7 +1452,7 @@ function TapeSection({ trades, limit }: { trades: FoTrade[]; limit?: number }) {
         </div>
       </div>
       <div className="max-h-[60vh] sm:h-[420px] overflow-auto">
-        <table className="w-full text-sm rtable">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-muted/40 dark:bg-muted/20 sticky top-0 z-10">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left pl-4 pr-2 py-2 font-semibold">Date</th>
@@ -1549,7 +1549,7 @@ function PnlStatement({
         ))}
       </div>
       <div className="overflow-x-auto rounded border border-border">
-        <table className="w-full text-sm rtable">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-muted/50 dark:bg-muted/30 border-b border-border">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
               <th className="text-left px-3 py-2 font-semibold">Underlying</th>

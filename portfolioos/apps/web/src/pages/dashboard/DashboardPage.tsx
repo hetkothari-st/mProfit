@@ -17,6 +17,7 @@ import { DownloadReportButton } from '@/components/reports/DownloadReportButton'
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
+import { AutoFitText } from '@/components/ui/AutoFitText';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -525,7 +526,9 @@ export function DashboardPage() {
                       <span className="inline-block h-2 w-2 rounded-[1px] rotate-45 flex-shrink-0" style={{ background: item.color }} />
                       <span className="text-[10px] uppercase tracking-kerned text-muted-foreground">{item.label}</span>
                     </div>
-                    <Money className="numeric-display text-[19px] text-foreground">{formatINR(item.value)}</Money>
+                    <AutoFitText className="mt-0.5">
+                      <Money className="numeric-display text-[19px] text-foreground">{formatINR(item.value)}</Money>
+                    </AutoFitText>
                   </div>
                 ))}
             </div>
@@ -625,9 +628,11 @@ export function DashboardPage() {
                     Net after debts
                   </div>
                 </div>
-                <Money className="numeric-display text-[18px] sm:text-[22px] lg:text-[26px] leading-tight font-semibold text-foreground block break-words">
-                  {formatINR(nw.netWorthAfterLiabilities)}
-                </Money>
+                <AutoFitText className="mt-0.5">
+                  <Money className="numeric-display text-[18px] sm:text-[22px] lg:text-[26px] leading-tight font-semibold text-foreground">
+                    {formatINR(nw.netWorthAfterLiabilities)}
+                  </Money>
+                </AutoFitText>
                 <div className="text-[11px] text-muted-foreground mt-1">
                   Assets minus liabilities
                 </div>
@@ -643,9 +648,11 @@ export function DashboardPage() {
                     Total outstanding
                   </div>
                 </div>
-                <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold text-negative block break-words">
-                  {formatINR(nw.totalLiabilities)}
-                </Money>
+                <AutoFitText className="mt-0.5">
+                  <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold text-negative">
+                    {formatINR(nw.totalLiabilities)}
+                  </Money>
+                </AutoFitText>
                 <div className="text-[11px] text-muted-foreground mt-1">
                   Across all debts
                 </div>
@@ -661,9 +668,11 @@ export function DashboardPage() {
                     Monthly EMI
                   </div>
                 </div>
-                <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold block break-words">
-                  {formatINR(nw.liabilities.monthlyEmiTotal)}
-                </Money>
+                <AutoFitText className="mt-0.5">
+                  <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold">
+                    {formatINR(nw.liabilities.monthlyEmiTotal)}
+                  </Money>
+                </AutoFitText>
                 <div className="text-[11px] text-muted-foreground mt-1">
                   {nw.liabilities.loanCount} loan{nw.liabilities.loanCount === 1 ? '' : 's'}
                 </div>
@@ -679,9 +688,11 @@ export function DashboardPage() {
                     Card balance
                   </div>
                 </div>
-                <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold block break-words">
-                  {formatINR(nw.liabilities.totalCreditCardOutstanding)}
-                </Money>
+                <AutoFitText className="mt-0.5">
+                  <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold">
+                    {formatINR(nw.liabilities.totalCreditCardOutstanding)}
+                  </Money>
+                </AutoFitText>
                 <div className="text-[11px] text-muted-foreground mt-1">
                   {nw.liabilities.creditCardCount} card{nw.liabilities.creditCardCount === 1 ? '' : 's'}
                 </div>
@@ -697,9 +708,11 @@ export function DashboardPage() {
                     Interest paid YTD
                   </div>
                 </div>
-                <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold text-negative block break-words">
-                  {formatINR(nw.liabilities.interestPaidYTD)}
-                </Money>
+                <AutoFitText className="mt-0.5">
+                  <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold text-negative">
+                    {formatINR(nw.liabilities.interestPaidYTD)}
+                  </Money>
+                </AutoFitText>
                 <div className="text-[11px] text-muted-foreground mt-1">
                   Principal: {formatINR(nw.liabilities.principalPaidYTD)}
                 </div>
@@ -864,7 +877,10 @@ export function DashboardPage() {
                     formatter={(v: number, name: string) => [hideSensitive ? '•••' : formatINR(v.toFixed(4)), name === 'value' ? 'Market value' : 'Invested']}
                     labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: 4, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}
                   />
-                  <Area type="monotone" dataKey="invested" stroke="hsl(var(--muted-foreground))" strokeWidth={1.25} strokeDasharray="4 4" fill="url(#gradInvested)" dot={false} />
+                  {/* Portfolio market value over time. The gross-cumulative
+                      `invested` series is intentionally not plotted: it dwarfs
+                      actual value (gross outflow ≫ current holdings) and forced
+                      the Y-axis to a scale that flattened the value line. */}
                   <Area type="monotone" dataKey="value" stroke="hsl(var(--foreground))" strokeWidth={2} fill="url(#gradValue)" dot={chartData.length <= 10 ? { r: 2.5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 1.5 } : false} activeDot={{ r: 5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 2 }} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -1019,7 +1035,9 @@ export function DashboardPage() {
 
                         {/* Value */}
                         <td data-label="Value" className="py-2 pr-4 text-right align-middle">
-                          <Money className="text-sm font-medium tabular-nums text-foreground">{h.currentValue ? formatINR(h.currentValue) : formatINR(h.totalCost)}</Money>
+                          <AutoFitText>
+                            <Money className="text-sm font-medium tabular-nums text-foreground">{h.currentValue ? formatINR(h.currentValue) : formatINR(h.totalCost)}</Money>
+                          </AutoFitText>
                           {!h.currentValue && (
                             <div className="text-[10px] text-muted-foreground/70 mt-0.5">cost basis</div>
                           )}
@@ -1029,11 +1047,13 @@ export function DashboardPage() {
                         <td data-label="Unrealised P&L" className="py-2 pr-6 text-right align-middle">
                           {h.currentValue ? (
                             <>
-                              <div className={`inline-flex items-center justify-end gap-1.5 ${pos ? 'text-positive' : neg ? 'text-negative' : 'text-muted-foreground'}`}>
-                                {pos && <span aria-hidden className="text-[9px] leading-none translate-y-px">▲</span>}
-                                {neg && <span aria-hidden className="text-[9px] leading-none translate-y-px">▼</span>}
-                                <Money className="text-sm font-medium tabular-nums">{h.unrealisedPnL ? formatINR(h.unrealisedPnL, { showSign: true }) : '—'}</Money>
-                              </div>
+                              <AutoFitText>
+                                <div className={`inline-flex items-center justify-end gap-1.5 ${pos ? 'text-positive' : neg ? 'text-negative' : 'text-muted-foreground'}`}>
+                                  {pos && <span aria-hidden className="text-[9px] leading-none translate-y-px">▲</span>}
+                                  {neg && <span aria-hidden className="text-[9px] leading-none translate-y-px">▼</span>}
+                                  <Money className="text-sm font-medium tabular-nums">{h.unrealisedPnL ? formatINR(h.unrealisedPnL, { showSign: true }) : '—'}</Money>
+                                </div>
+                              </AutoFitText>
                               {h.unrealisedPnLPct != null && (
                                 <div className={`text-[10px] tabular-nums mt-0.5 ${pos ? 'text-positive/75' : neg ? 'text-negative/75' : 'text-muted-foreground'}`}>
                                   {pos ? '+' : ''}{h.unrealisedPnLPct.toFixed(2)}%
@@ -1080,25 +1100,33 @@ export function DashboardPage() {
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Property value</p>
-                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.realEstate.totalValue)}</Money>
+                      <AutoFitText className="mt-0.5">
+                        <Money className="text-sm sm:text-base font-semibold">{formatINR(nw.realEstate.totalValue)}</Money>
+                      </AutoFitText>
                       <p className="text-xs text-muted-foreground">{nw.realEstate.count} {nw.realEstate.count === 1 ? 'property' : 'properties'}</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Monthly rent</p>
-                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.realEstate.monthlyRent)}</Money>
+                      <AutoFitText className="mt-0.5">
+                        <Money className="text-sm sm:text-base font-semibold">{formatINR(nw.realEstate.monthlyRent)}</Money>
+                      </AutoFitText>
                       <p className="text-xs text-muted-foreground">active tenancies</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Income YTD</p>
-                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block text-green-600 dark:text-green-400">{formatINR(nw.realEstate.incomeYTD)}</Money>
+                      <AutoFitText className="mt-0.5">
+                        <Money className="text-sm sm:text-base font-semibold text-green-600 dark:text-green-400">{formatINR(nw.realEstate.incomeYTD)}</Money>
+                      </AutoFitText>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Net P&L YTD</p>
-                      <Money className={`text-sm sm:text-base font-semibold mt-0.5 block ${toDecimal(nw.realEstate.netYTD).greaterThanOrEqualTo(0) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {formatINR(nw.realEstate.netYTD, { showSign: true })}
-                      </Money>
+                      <AutoFitText className="mt-0.5">
+                        <Money className={`text-sm sm:text-base font-semibold ${toDecimal(nw.realEstate.netYTD).greaterThanOrEqualTo(0) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {formatINR(nw.realEstate.netYTD, { showSign: true })}
+                        </Money>
+                      </AutoFitText>
                     </div>
                   </div>
                   {nw.realEstate.overdueCount > 0 && (
@@ -1132,7 +1160,9 @@ export function DashboardPage() {
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Total value</p>
-                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.vehicles.totalValue)}</Money>
+                      <AutoFitText className="mt-0.5">
+                        <Money className="text-sm sm:text-base font-semibold">{formatINR(nw.vehicles.totalValue)}</Money>
+                      </AutoFitText>
                       <p className="text-xs text-muted-foreground">{nw.vehicles.count} vehicle{nw.vehicles.count !== 1 ? 's' : ''}</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
@@ -1186,12 +1216,16 @@ export function DashboardPage() {
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Total sum assured</p>
-                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.insurance.totalSumAssured)}</Money>
+                      <AutoFitText className="mt-0.5">
+                        <Money className="text-sm sm:text-base font-semibold">{formatINR(nw.insurance.totalSumAssured)}</Money>
+                      </AutoFitText>
                       <p className="text-xs text-muted-foreground">{nw.insurance.activePoliciesCount} active {nw.insurance.activePoliciesCount === 1 ? 'policy' : 'policies'}</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Annual premium</p>
-                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.insurance.annualPremiumTotal)}</Money>
+                      <AutoFitText className="mt-0.5">
+                        <Money className="text-sm sm:text-base font-semibold">{formatINR(nw.insurance.annualPremiumTotal)}</Money>
+                      </AutoFitText>
                       <p className="text-xs text-muted-foreground">per year total</p>
                     </div>
                   </div>
@@ -1208,7 +1242,9 @@ export function DashboardPage() {
                             <div className={`font-semibold ${urgencyColor(r.daysUntil <= 7 ? 'HIGH' : r.daysUntil <= 15 ? 'MEDIUM' : 'LOW')}`}>
                               {r.daysUntil <= 0 ? 'Due now' : `${r.daysUntil}d`}
                             </div>
-                            <Money className="text-muted-foreground block">{formatINR(r.amount)}</Money>
+                            <AutoFitText>
+                              <Money className="text-muted-foreground">{formatINR(r.amount)}</Money>
+                            </AutoFitText>
                           </div>
                         </div>
                       ))}
@@ -1236,7 +1272,7 @@ export function DashboardPage() {
         if (trio.length === 0) return null;
 
         return (
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {trio.map((c) => c.node)}
           </div>
         );
