@@ -29,6 +29,61 @@ import {
 
 const GF_CUTOFF = new Date('2018-01-31T23:59:59.999Z');
 
+/**
+ * Fetch FMV (close price) on / near 31-Jan-2018 for a set of ISINs.
+ * Window is ±2 days to handle non-trading days. Returns whatever is
+ * actually in StockPrice; missing ISINs are simply absent from the map.
+ *
+ * Exported so other services (e.g. Schedule 112A) can apply the same
+ * grandfathering substitution without re-implementing the query.
+ */
+export async function fetchFmvOn31Jan2018(isins: string[]): Promise<Map<string, Decimal>> {
+  const fmv = new Map<string, Decimal>();
+  const real = Array.from(new Set(isins.filter((i): i is string => !!i)));
+  if (real.length === 0) return fmv;
+  const stocks = await prisma.stockMaster.findMany({
+    where: { isin: { in: real } },
+    select: { id: true, isin: true },
+  });
+  const stockIds = stocks.map((s) => s.id);
+  const isinByStock = new Map(stocks.map((s) => [s.id, s.isin]));
+  const prices = await prisma.stockPrice.findMany({
+    where: {
+      stockId: { in: stockIds },
+      date: { gte: new Date('2018-01-28'), lte: new Date('2018-02-02') },
+    },
+    orderBy: { date: 'desc' },
+  });
+  for (const p of prices) {
+    const isin = isinByStock.get(p.stockId);
+    if (isin && !fmv.has(isin)) {
+      fmv.set(isin, new Decimal(p.close.toString()));
+    }
+  }
+  return fmv;
+}
+
+/**
+ * Apply Sec 112A grandfathering to a single capital-gain row.
+ * Returns the FMV-adjusted gain ( = sellAmount - max(actualCost, FMV*qty) )
+ * when FMV is known and the lot pre-dates 31-Jan-2018; otherwise returns
+ * the raw gain unchanged.
+ */
+export function adjustGainForGrandfathering(
+  buyDate: Date,
+  quantity: Decimal,
+  buyAmount: Decimal,
+  sellAmount: Decimal,
+  rawGain: Decimal,
+  fmvPerUnit: Decimal | null,
+): Decimal {
+  if (buyDate.getTime() > GF_CUTOFF.getTime()) return rawGain;
+  if (!fmvPerUnit) return rawGain;
+  const fmvCost = fmvPerUnit.times(quantity);
+  if (fmvCost.lessThanOrEqualTo(buyAmount)) return rawGain;
+  return sellAmount.minus(fmvCost);
+}
+
 export interface GrandfatheringRow {
   scriptName: string;
   isin: string | null;
@@ -80,35 +135,20 @@ export async function grandfatheringReport(
     (r) => isGrandfatherEligible(r) && (!fy || r.financialYear === fy),
   );
 
-  // Fetch FMV on 31-Jan-2018 for each ISIN if we have it in StockPrice / MFNav.
-  const fmvByIsin = new Map<string, Decimal>();
-  const isins = Array.from(new Set(filtered.map((r) => r.isin).filter((i): i is string => !!i)));
-  if (isins.length > 0) {
-    const stocks = await prisma.stockMaster.findMany({
-      where: { isin: { in: isins } },
-      select: { id: true, isin: true },
-    });
-    const stockIds = stocks.map((s) => s.id);
-    const isinByStock = new Map(stocks.map((s) => [s.id, s.isin]));
-    const prices = await prisma.stockPrice.findMany({
-      where: {
-        stockId: { in: stockIds },
-        date: { gte: new Date('2018-01-28'), lte: new Date('2018-02-02') },
-      },
-      orderBy: { date: 'desc' },
-    });
-    for (const p of prices) {
-      const isin = isinByStock.get(p.stockId);
-      if (isin && !fmvByIsin.has(isin)) {
-        fmvByIsin.set(isin, new Decimal(p.close.toString()));
-      }
-    }
-  }
+  const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
+  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
 
+  // Apply Sec 112A grandfathering: cost basis = max(actualCost, FMV × qty)
+  // whenever FMV-on-31-Jan-2018 is available. Recompute gain/loss with the
+  // substituted cost; without the substitution, displayed gain would be
+  // higher than the legally taxable one.
   const out: GrandfatheringRow[] = filtered.map((r) => {
     const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const gain = r.gainLoss.toString();
-    const isGain = r.gainLoss.greaterThanOrEqualTo(0);
+    const actualCost = r.buyAmount;
+    const fmvCost = fmv ? fmv.times(r.quantity) : null;
+    const effectiveCost = fmvCost && fmvCost.greaterThan(actualCost) ? fmvCost : actualCost;
+    const adjustedGain = r.sellAmount.minus(effectiveCost);
+    const isGain = adjustedGain.greaterThanOrEqualTo(0);
     return {
       scriptName: r.assetName,
       isin: r.isin,
@@ -121,9 +161,9 @@ export async function grandfatheringReport(
       sellQty: r.quantity.toString(),
       sellRate: r.sellPrice.toString(),
       sellAmount: r.sellAmount.toString(),
-      gainLoss: gain,
-      gain: isGain ? gain : '0',
-      loss: !isGain ? r.gainLoss.negated().toString() : '0',
+      gainLoss: adjustedGain.toString(),
+      gain: isGain ? adjustedGain.toString() : '0',
+      loss: !isGain ? adjustedGain.negated().toString() : '0',
     };
   });
 
@@ -528,16 +568,24 @@ export async function m2mReport(userId: string, asOf?: Date): Promise<M2MReport>
   }
 
   async function build(seg: 'EQUITY' | 'FNO', src: typeof txs): Promise<M2MRow[]> {
+    // Effective price = netAmount / quantity. This rolls brokerage,
+    // STT, stamp duty etc. into the cost basis so the M2M valuation
+    // measures real-money unrealised P&L, not gross-rate P&L.
     const lots = residualLots(
-      src.map((t) => ({
-        tradeDate: t.tradeDate,
-        quantity: new Decimal(t.quantity.toString()),
-        price: new Decimal(t.price.toString()),
-        assetKey: t.assetKey ?? `name:${t.assetName ?? ''}`,
-        assetName: t.assetName,
-        isin: t.isin,
-        transactionType: t.transactionType,
-      })),
+      src.map((t) => {
+        const q = new Decimal(t.quantity.toString());
+        const net = new Decimal(t.netAmount.toString());
+        const effectivePrice = q.isZero() ? new Decimal(t.price.toString()) : net.dividedBy(q);
+        return {
+          tradeDate: t.tradeDate,
+          quantity: q,
+          price: effectivePrice,
+          assetKey: t.assetKey ?? `name:${t.assetName ?? ''}`,
+          assetName: t.assetName,
+          isin: t.isin,
+          transactionType: t.transactionType,
+        };
+      }),
     );
     const rows: M2MRow[] = [];
     for (const lot of lots) {

@@ -13,6 +13,10 @@ import {
   computeUserXirr,
 } from './xirr.service.js';
 import { getCryptoPriceAt } from '../priceFeeds/crypto.service.js';
+import {
+  fetchFmvOn31Jan2018,
+  adjustGainForGrandfathering,
+} from './specialReports.service.js';
 
 async function listUserPortfolioIds(userId: string): Promise<string[]> {
   const ps = await prisma.portfolio.findMany({ where: { userId }, select: { id: true } });
@@ -85,15 +89,29 @@ export async function schedule112AReport(portfolioId: string, fy?: string) {
       r.assetClass === 'MUTUAL_FUND'
     );
   });
-  const totalGain = filtered.reduce((acc, r) => acc.plus(r.gainLoss), new Decimal(0));
+  const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
+  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
+  const adjusted = filtered.map((r) => {
+    const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
+    const adjGain = adjustGainForGrandfathering(
+      r.buyDate,
+      r.quantity,
+      r.buyAmount,
+      r.sellAmount,
+      r.gainLoss,
+      fmv,
+    );
+    return { ...r, gainLoss: adjGain };
+  });
+  const totalGain = adjusted.reduce((acc, r) => acc.plus(r.gainLoss), new Decimal(0));
   const exemptionLimit = new Decimal(100000);
   const taxable = Decimal.max(totalGain.minus(exemptionLimit), new Decimal(0));
   return {
-    rows: filtered,
+    rows: adjusted,
     totalGain: totalGain.toString(),
     exemptionLimit: exemptionLimit.toString(),
     taxable: taxable.toString(),
-    count: filtered.length,
+    count: adjusted.length,
   };
 }
 
@@ -438,15 +456,29 @@ export async function userSchedule112AReport(userId: string, fy?: string) {
       r.assetClass === 'MUTUAL_FUND'
     );
   });
-  const totalGain = filtered.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
+  const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
+  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
+  const adjusted = filtered.map((r) => {
+    const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
+    const adjGain = adjustGainForGrandfathering(
+      r.buyDate,
+      r.quantity,
+      r.buyAmount,
+      r.sellAmount,
+      r.gainLoss,
+      fmv,
+    );
+    return { ...r, gainLoss: adjGain };
+  });
+  const totalGain = adjusted.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
   const exemptionLimit = new Decimal(100000);
   const taxable = Decimal.max(totalGain.minus(exemptionLimit), new Decimal(0));
   return {
-    rows: filtered,
+    rows: adjusted,
     totalGain: totalGain.toString(),
     exemptionLimit: exemptionLimit.toString(),
     taxable: taxable.toString(),
-    count: filtered.length,
+    count: adjusted.length,
   };
 }
 

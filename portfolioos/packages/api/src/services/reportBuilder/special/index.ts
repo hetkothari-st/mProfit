@@ -608,17 +608,43 @@ export async function buildProfitLossLayout(
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
   const pl = await getPnL(userId, opts.from, opts.to);
-  const maxLen = Math.max(pl.income.length, pl.expense.length);
-  const rows: Array<{
-    cells: Record<string, unknown>;
-  }> = [];
+
+  // Indian-style P&L T-account: net profit/loss appears as a transfer
+  // entry on the side opposite where it was earned, so both columns
+  // tally to the same grand total. Profit sits on the debit side as
+  // "To Net Profit transferred to Capital A/c"; a loss sits on the
+  // credit side instead.
+  const netPl = new Decimal(pl.netProfit);
+  const isProfit = netPl.greaterThanOrEqualTo(0);
+  const debitList = pl.expense.map((x) => ({
+    name: `TO ${x.name.toUpperCase()}`,
+    amount: x.closingBalance,
+  }));
+  const creditList = pl.income.map((x) => ({
+    name: `BY ${x.name.toUpperCase()}`,
+    amount: x.closingBalance,
+  }));
+  if (isProfit) {
+    debitList.push({
+      name: 'TO NET PROFIT TRANSFERRED TO CAPITAL A/C',
+      amount: netPl.toString(),
+    });
+  } else {
+    creditList.push({
+      name: 'BY NET LOSS TRANSFERRED TO CAPITAL A/C',
+      amount: netPl.abs().toString(),
+    });
+  }
+
+  const maxLen = Math.max(debitList.length, creditList.length);
+  const rows: Array<{ cells: Record<string, unknown> }> = [];
   for (let i = 0; i < maxLen; i++) {
     rows.push({
       cells: {
-        debitParticulars: pl.expense[i] ? `TO ${pl.expense[i]!.name.toUpperCase()}` : '',
-        debit: pl.expense[i]?.closingBalance ?? '',
-        creditParticulars: pl.income[i] ? `BY ${pl.income[i]!.name.toUpperCase()}` : '',
-        credit: pl.income[i]?.closingBalance ?? '',
+        debitParticulars: debitList[i]?.name ?? '',
+        debit: debitList[i]?.amount ?? '',
+        creditParticulars: creditList[i]?.name ?? '',
+        credit: creditList[i]?.amount ?? '',
       },
     });
   }
@@ -630,6 +656,13 @@ export async function buildProfitLossLayout(
     { key: 'credit', label: 'Credit', width: 12, align: 'right', formatter: MONEY },
   ];
 
+  const sideTotal = (isProfit
+    ? new Decimal(pl.totalExpense).plus(netPl)
+    : new Decimal(pl.totalIncome).plus(netPl.abs())
+  ).toString();
+  const debitTotal = isProfit ? sideTotal : pl.totalExpense;
+  const creditTotal = isProfit ? pl.totalIncome : sideTotal;
+
   return {
     reportTitle: `Profit & Loss Report As On ${opts.to ?? new Date().toLocaleDateString('en-IN')}`,
     family: m.family,
@@ -640,8 +673,8 @@ export async function buildProfitLossLayout(
     columns,
     sections: [{ groups: [{ rows }] }],
     grandTotal: {
-      label: parseFloat(pl.netProfit) >= 0 ? 'Net Profit' : 'Net Loss',
-      values: { debit: pl.totalExpense, credit: pl.totalIncome },
+      label: 'Grand Total',
+      values: { debit: debitTotal, credit: creditTotal },
     },
     filenameStem: `profit-loss${opts.from ? `-${opts.from}` : ''}`,
   };
@@ -866,6 +899,10 @@ export async function buildDailyTransactionsLayout(
     { key: 'net', label: 'Net Amount', width: 10, align: 'right', formatter: MONEY, signed: true },
   ];
 
+  const grandGross = txs.reduce((s, t) => s.plus(t.grossAmount.toString()), new Decimal(0));
+  const grandBrokerage = txs.reduce((s, t) => s.plus(t.brokerage.toString()), new Decimal(0));
+  const grandNet = txs.reduce((s, t) => s.plus(t.netAmount.toString()), new Decimal(0));
+
   return {
     reportTitle: `BrokerBill Register As On ${new Date().toLocaleDateString('en-IN')}`,
     family: m.family,
@@ -875,6 +912,14 @@ export async function buildDailyTransactionsLayout(
     headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
     columns,
     sections,
+    grandTotal: {
+      label: 'Grand Total',
+      values: {
+        gross: grandGross.toString(),
+        brokerage: grandBrokerage.toString(),
+        net: grandNet.toString(),
+      },
+    },
     filenameStem: `broker-bill-register${opts.from ? `-${opts.from}` : ''}`,
   };
 }
