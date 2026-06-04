@@ -119,27 +119,29 @@ function ChartOfAccountsTab() {
 
   return (
     <div>
-      <div className="flex justify-end mb-4">
+      <div className="flex flex-wrap justify-end mb-4 gap-2">
         <Button size="sm" onClick={() => openAdd('')}><Plus className="h-4 w-4" /> Add account</Button>
       </div>
       <Card>
-        <CardContent className="p-0">
-          <div className="flex items-center gap-1 py-2 px-2 border-b text-xs text-muted-foreground font-medium uppercase tracking-wider">
-            <span className="w-4 shrink-0" />
-            <span className="w-16 shrink-0">Code</span>
-            <span className="flex-1">Name</span>
-            <span className="w-20 text-right">Type</span>
-            <span className="w-28 text-right">Opening Balance</span>
-            <span className="w-12" />
+        <CardContent className="p-0 overflow-x-auto">
+          <div className="min-w-[480px]">
+            <div className="flex items-center gap-1 py-2 px-2 border-b text-xs text-muted-foreground font-medium uppercase tracking-wider">
+              <span className="w-4 shrink-0" />
+              <span className="w-16 shrink-0">Code</span>
+              <span className="flex-1">Name</span>
+              <span className="w-20 text-right">Type</span>
+              <span className="w-28 text-right">Opening Balance</span>
+              <span className="w-12" />
+            </div>
+            {tree.map((n) => (
+              <AccountTreeNode key={n.id} node={n} depth={0} onAdd={openAdd} onDelete={handleDelete} />
+            ))}
+            {tree.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                Loading default chart of accounts…
+              </p>
+            )}
           </div>
-          {tree.map((n) => (
-            <AccountTreeNode key={n.id} node={n} depth={0} onAdd={openAdd} onDelete={handleDelete} />
-          ))}
-          {tree.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              Loading default chart of accounts…
-            </p>
-          )}
         </CardContent>
       </Card>
 
@@ -764,11 +766,13 @@ function BalanceSheetReport() {
 function ReportsTab() {
   return (
     <Tabs defaultValue="trial-balance">
-      <TabsList>
-        <TabsTrigger value="trial-balance"><Scale className="h-3.5 w-3.5 mr-1.5" />Trial Balance</TabsTrigger>
-        <TabsTrigger value="pnl"><TrendingDown className="h-3.5 w-3.5 mr-1.5" />P&L Statement</TabsTrigger>
-        <TabsTrigger value="balance-sheet"><Landmark className="h-3.5 w-3.5 mr-1.5" />Balance Sheet</TabsTrigger>
-      </TabsList>
+      <div className="overflow-x-auto">
+        <TabsList className="flex-nowrap w-max min-w-full">
+          <TabsTrigger value="trial-balance" className="shrink-0 whitespace-nowrap"><Scale className="h-3.5 w-3.5 mr-1.5" />Trial Balance</TabsTrigger>
+          <TabsTrigger value="pnl" className="shrink-0 whitespace-nowrap"><TrendingDown className="h-3.5 w-3.5 mr-1.5" />P&L Statement</TabsTrigger>
+          <TabsTrigger value="balance-sheet" className="shrink-0 whitespace-nowrap"><Landmark className="h-3.5 w-3.5 mr-1.5" />Balance Sheet</TabsTrigger>
+        </TabsList>
+      </div>
       <div className="mt-4">
         <TabsContent value="trial-balance"><TrialBalanceReport /></TabsContent>
         <TabsContent value="pnl"><PnLReport /></TabsContent>
@@ -789,12 +793,14 @@ export function AccountingPage() {
         actions={<BookOpenCheck className="h-5 w-5 text-muted-foreground" />}
       />
       <Tabs defaultValue="chart">
-        <TabsList>
-          <TabsTrigger value="chart"><Landmark className="h-3.5 w-3.5 mr-1.5" />Chart of Accounts</TabsTrigger>
-          <TabsTrigger value="vouchers"><FileText className="h-3.5 w-3.5 mr-1.5" />Vouchers</TabsTrigger>
-          <TabsTrigger value="ledger"><BookOpenCheck className="h-3.5 w-3.5 mr-1.5" />Ledger</TabsTrigger>
-          <TabsTrigger value="reports"><Scale className="h-3.5 w-3.5 mr-1.5" />Reports</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="flex-nowrap w-max min-w-full">
+            <TabsTrigger value="chart" className="shrink-0 whitespace-nowrap"><Landmark className="h-3.5 w-3.5 mr-1.5" />Chart of Accounts</TabsTrigger>
+            <TabsTrigger value="vouchers" className="shrink-0 whitespace-nowrap"><FileText className="h-3.5 w-3.5 mr-1.5" />Vouchers</TabsTrigger>
+            <TabsTrigger value="ledger" className="shrink-0 whitespace-nowrap"><BookOpenCheck className="h-3.5 w-3.5 mr-1.5" />Ledger</TabsTrigger>
+            <TabsTrigger value="reports" className="shrink-0 whitespace-nowrap"><Scale className="h-3.5 w-3.5 mr-1.5" />Reports</TabsTrigger>
+          </TabsList>
+        </div>
         <div className="mt-6">
           <TabsContent value="chart"><ChartOfAccountsTab /></TabsContent>
           <TabsContent value="vouchers"><VouchersTab /></TabsContent>

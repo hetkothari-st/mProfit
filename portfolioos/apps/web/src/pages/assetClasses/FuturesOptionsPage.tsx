@@ -996,7 +996,7 @@ function UnderlyingTrades({ trades }: { trades: FoTrade[] }) {
                 <td data-label="Side" className="px-2 py-1.5 font-sans">
                   <SideTagBadge side={t.transactionType} />
                 </td>
-                <td data-label="Instrument" className="px-2 py-1.5 truncate max-w-[260px] text-[11px]">{t.assetName ?? '—'}</td>
+                <td data-label="Instrument" className="px-2 py-1.5 sm:truncate max-w-[260px] text-[11px] min-w-0 break-words">{t.assetName ?? '—'}</td>
                 <td data-label="Strike" className="px-2 py-1.5 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
                 <td data-label="Expiry" className="px-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
                   {t.expiryDate ?? '—'}
@@ -1129,9 +1129,9 @@ function FuturesLedger({
                   <td data-label="" className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </td>
-                  <td data-label="Contract" className="relative pl-4 pr-2 py-2.5">
+                  <td data-label="Contract" className="relative pl-4 pr-2 py-2.5 max-sm:pl-5">
                     <span
-                      className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
+                      className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm max-sm:hidden ${
                         long
                           ? 'bg-emerald-500/85 dark:bg-emerald-400/80'
                           : short
@@ -1338,9 +1338,9 @@ function OptionsChain({
                   <td data-label="" className="pl-3 pr-2 py-2.5 text-muted-foreground w-7">
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </td>
-                  <td data-label="Underlying" className="relative pl-4 pr-2 py-2.5">
+                  <td data-label="Underlying" className="relative pl-4 pr-2 py-2.5 max-sm:pl-5">
                     <span
-                      className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm ${
+                      className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm max-sm:hidden ${
                         isCall
                           ? 'bg-emerald-500/85 dark:bg-emerald-400/80'
                           : 'bg-rose-500/85 dark:bg-rose-400/80'
@@ -1451,7 +1451,7 @@ function TapeSection({ trades, limit }: { trades: FoTrade[]; limit?: number }) {
           ── time-series ledger ──
         </div>
       </div>
-      <div className="h-[420px] overflow-auto">
+      <div className="max-h-[60vh] sm:h-[420px] overflow-auto">
         <table className="w-full text-sm rtable">
           <thead className="bg-muted/40 dark:bg-muted/20 sticky top-0 z-10">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
@@ -1481,7 +1481,7 @@ function TapeSection({ trades, limit }: { trades: FoTrade[]; limit?: number }) {
                 <td data-label="Side" className="px-3 py-2 font-sans">
                   <SideTagBadge side={t.transactionType} />
                 </td>
-                <td data-label="Instrument" className="px-3 py-2 truncate max-w-[280px] text-xs">{t.assetName ?? '—'}</td>
+                <td data-label="Instrument" className="px-3 py-2 sm:truncate max-w-[280px] text-xs min-w-0 break-words">{t.assetName ?? '—'}</td>
                 <td data-label="Strike" className="px-3 py-2 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
                 <td data-label="Expiry" className="px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums">
                   {t.expiryDate ?? '—'}

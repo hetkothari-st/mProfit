@@ -91,7 +91,7 @@ function AlertRow({ alert, onMarkRead, onDelete }: {
         style={{ background: railColor }}
       />
 
-      <div className="flex flex-1 items-start gap-4 px-5 py-4">
+      <div className="flex flex-1 items-start gap-3 sm:gap-4 px-3 py-2.5 sm:px-5 sm:py-4">
         {/* Tone marker */}
         <div className="mt-0.5 flex flex-col items-center gap-1.5 pt-1">
           <span
@@ -127,17 +127,17 @@ function AlertRow({ alert, onMarkRead, onDelete }: {
           </div>
 
           <p className={cn(
-            'mt-2 text-[15px] font-medium leading-tight tracking-[-0.012em] text-balance',
+            'mt-1.5 sm:mt-2 text-[13.5px] sm:text-[15px] font-medium leading-tight tracking-[-0.012em] text-balance',
             alert.isRead ? 'text-muted-foreground' : 'text-foreground',
           )}>
             {alert.title}
           </p>
           {alert.description && (
-            <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+            <p className="mt-0.5 sm:mt-1 text-[11.5px] sm:text-[12.5px] leading-relaxed text-muted-foreground">
               {alert.description}
             </p>
           )}
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="mt-1.5 sm:mt-2 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <CalendarDays className="h-3 w-3 text-muted-foreground/70" strokeWidth={1.7} />
             <span className="numeric tabular-nums">{formatTriggerDate(alert.triggerDate)}</span>
             {!isOverdue && !isUrgent && (
@@ -280,7 +280,7 @@ export function AlertsPage() {
       />
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 reveal">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6 reveal">
         <KpiTile icon={Inbox}        label="Total"   value={totalCount}   tone="default" />
         <KpiTile icon={Bell}         label="Unread"  value={unreadCount}  tone={unreadCount > 0 ? 'accent' : 'default'} />
         <KpiTile icon={Clock}        label="Due ≤ 7d" value={urgentCount} tone={urgentCount > 0 ? 'accent' : 'default'} />
@@ -288,13 +288,13 @@ export function AlertsPage() {
       </div>
 
       {/* Filter bar */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="relative inline-flex items-center">
           <Filter className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-muted-foreground z-10" strokeWidth={1.7} />
           <Select
             value={filterType}
             onChange={(e) => { setFilterType(e.target.value as AlertType | ''); setPage(1); }}
-            className="h-9 w-52 pl-9 pr-9 text-[13px] border-border/70 bg-card/50"
+            className="h-9 w-44 sm:w-52 pl-9 pr-9 text-[13px] border-border/70 bg-card/50"
           >
             <option value="">All types</option>
             {ALL_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
@@ -327,7 +327,7 @@ export function AlertsPage() {
         <Card>
           <div className="divide-y divide-border/60">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-[110px] animate-pulse bg-muted/30" />
+              <div key={i} className="h-[80px] sm:h-[110px] animate-pulse bg-muted/30" />
             ))}
           </div>
         </Card>
@@ -386,16 +386,16 @@ function KpiTile({ icon: Icon, label, value, tone }: {
     'border-border/70';
 
   return (
-    <Card className={cn('p-4 transition-shadow hover:shadow-elev-lg', toneRing)}>
+    <Card className={cn('p-3 sm:p-4 transition-shadow hover:shadow-elev-lg', toneRing)}>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[10px] uppercase tracking-kerned text-muted-foreground">{label}</p>
-          <p className="numeric numeric-display mt-1.5 text-[24px] tracking-tight text-foreground money-digits">
+          <p className="text-[9px] sm:text-[10px] uppercase tracking-kerned text-muted-foreground">{label}</p>
+          <p className="numeric numeric-display mt-1 sm:mt-1.5 text-[18px] sm:text-[24px] tracking-tight text-foreground money-digits">
             {value}
           </p>
         </div>
-        <div className={cn('grid h-9 w-9 place-items-center rounded-md border', toneRing)}>
-          <Icon className={cn('h-4 w-4', toneText)} strokeWidth={1.6} />
+        <div className={cn('grid h-8 w-8 sm:h-9 sm:w-9 place-items-center rounded-md border', toneRing)}>
+          <Icon className={cn('h-3.5 w-3.5 sm:h-4 sm:w-4', toneText)} strokeWidth={1.6} />
         </div>
       </div>
     </Card>

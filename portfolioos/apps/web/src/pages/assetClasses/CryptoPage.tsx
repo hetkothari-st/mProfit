@@ -389,7 +389,7 @@ export function CryptoPage() {
             <h3 className="text-sm font-semibold text-foreground/90 uppercase tracking-wider">Transactions</h3>
             <span className="text-xs text-muted-foreground">({transactions.length})</span>
           </div>
-          <div className="rounded-md border overflow-x-auto">
+          <div className="rounded-md border sm:overflow-x-auto">
             <table className="w-full text-sm rtable">
               <thead>
                 <tr className="border-b bg-muted/40">
@@ -416,12 +416,12 @@ export function CryptoPage() {
                         <div className="flex items-center gap-2.5">
                           <CoinAvatar symbol={sym} size="sm" />
                           <div className="min-w-0">
-                            <p className="font-medium truncate max-w-[160px]">{txn.assetName ?? '—'}</p>
+                            <p className="font-medium truncate sm:max-w-[160px]">{txn.assetName ?? '—'}</p>
                             {txn.isin && <p className="text-[10px] text-muted-foreground font-mono">{txn.isin}</p>}
                           </div>
                         </div>
                       </td>
-                      <td data-label="Type" className="px-4 py-3 hidden sm:table-cell">
+                      <td data-label="Type" className="px-4 py-3 max-sm:!hidden sm:table-cell">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
                           ${isCredit
                             ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
@@ -433,10 +433,10 @@ export function CryptoPage() {
                           : txn.transactionType}
                         </span>
                       </td>
-                      <td data-label="Qty" className="px-4 py-3 text-right tabular-nums hidden sm:table-cell text-muted-foreground">
+                      <td data-label="Qty" className="px-4 py-3 text-right tabular-nums max-sm:!hidden sm:table-cell text-muted-foreground">
                         {new Decimal(txn.quantity).toFixed(6)}
                       </td>
-                      <td data-label="Price" className="px-4 py-3 text-right tabular-nums hidden md:table-cell text-muted-foreground">
+                      <td data-label="Price" className="px-4 py-3 text-right tabular-nums max-md:!hidden md:table-cell text-muted-foreground">
                         {formatINR(txn.price)}
                       </td>
                       <td data-label="Amount" className="px-4 py-3 text-right tabular-nums font-medium">

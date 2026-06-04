@@ -268,17 +268,18 @@ export function VehicleDetailPage() {
           'Vehicle details'
         }
         actions={
-          <div className="flex gap-2 flex-wrap justify-end">
-            <Button asChild variant="outline">
+          <div className="flex flex-wrap gap-2 justify-end">
+            <Button asChild variant="outline" size="sm">
               <Link to={`/vehicles/value?vehicleId=${vehicle.id}`}>
                 <Calculator className="h-4 w-4" /> Get valuation
               </Link>
             </Button>
-            <Button variant="outline" onClick={() => setSmsOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => setSmsOpen(true)}>
               <MessageSquareShare className="h-4 w-4" /> SMS
             </Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => refreshMutation.mutate()}
               disabled={refreshMutation.isPending}
             >
@@ -289,11 +290,12 @@ export function VehicleDetailPage() {
               )}
               Refresh
             </Button>
-            <Button onClick={() => setEditOpen(true)}>
+            <Button size="sm" onClick={() => setEditOpen(true)}>
               <Edit className="h-4 w-4" /> Edit
             </Button>
             <Button
               variant="destructive"
+              size="sm"
               onClick={handleDelete}
               disabled={deleteMutation.isPending}
             >
@@ -434,7 +436,7 @@ export function VehicleDetailPage() {
             <CardTitle className="text-base">Expiries</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-0">
               <ExpiryRow label="Insurance" iso={vehicle.insuranceExpiry} />
               <ExpiryRow label="PUC" iso={vehicle.pucExpiry} />
               <ExpiryRow label="Fitness" iso={vehicle.fitnessExpiry} />
@@ -517,32 +519,34 @@ export function VehicleDetailPage() {
                   : `No challans in "${challanTab.toLowerCase()}" tab.`}
               </div>
             ) : (
-              <table className="rtable w-full text-sm">
-                <thead className="text-xs text-muted-foreground border-b">
-                  <tr>
-                    <th className="text-left py-2 font-medium">Challan</th>
-                    <th className="text-left py-2 font-medium">Offence</th>
-                    <th className="text-left py-2 font-medium">Date</th>
-                    <th className="text-left py-2 font-medium">Location</th>
-                    <th className="text-right py-2 font-medium">Amount</th>
-                    <th className="text-right py-2 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredChallans.map((c) => (
-                    <tr key={c.id} className="border-b last:border-b-0">
-                      <td data-label="Challan" className="py-2 font-mono text-xs">{c.challanNo}</td>
-                      <td data-label="Offence" className="py-2">{c.offenceType ?? '—'}</td>
-                      <td data-label="Date" className="py-2">{c.offenceDate.slice(0, 10)}</td>
-                      <td data-label="Location" className="py-2">{c.location ?? '—'}</td>
-                      <td data-label="Amount" className="py-2 text-right numeric">₹{c.amount}</td>
-                      <td data-label="Status" className="py-2 text-right">
-                        <StatusBadge status={c.status} />
-                      </td>
+              <div className="md:overflow-x-auto md:-mx-1">
+                <table className="rtable w-full md:min-w-[520px] text-sm">
+                  <thead className="text-xs text-muted-foreground border-b">
+                    <tr>
+                      <th className="text-left py-2 font-medium">Challan</th>
+                      <th className="text-left py-2 font-medium">Offence</th>
+                      <th className="text-left py-2 font-medium">Date</th>
+                      <th className="text-left py-2 font-medium">Location</th>
+                      <th className="text-right py-2 font-medium">Amount</th>
+                      <th className="text-right py-2 font-medium">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredChallans.map((c) => (
+                      <tr key={c.id} className="border-b last:border-b-0">
+                        <td data-label="Challan" className="py-2 font-mono text-xs">{c.challanNo}</td>
+                        <td data-label="Offence" className="py-2">{c.offenceType ?? '—'}</td>
+                        <td data-label="Date" className="py-2">{c.offenceDate.slice(0, 10)}</td>
+                        <td data-label="Location" className="py-2">{c.location ?? '—'}</td>
+                        <td data-label="Amount" className="py-2 text-right numeric">₹{c.amount}</td>
+                        <td data-label="Status" className="py-2 text-right">
+                          <StatusBadge status={c.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>
