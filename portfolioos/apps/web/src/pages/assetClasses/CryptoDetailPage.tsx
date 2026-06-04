@@ -96,7 +96,7 @@ export function CryptoDetailPage() {
   const meta = parseCryptoNarration(latestTxn?.narration);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       {/* Sticky nav */}
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b px-4 sm:px-6 py-3 flex items-center gap-3">
         <Button variant="ghost" size="sm" className="gap-1.5 -ml-2" onClick={() => navigate('/crypto')}>

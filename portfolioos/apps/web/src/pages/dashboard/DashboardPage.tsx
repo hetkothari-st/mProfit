@@ -411,7 +411,7 @@ export function DashboardPage() {
   const alerts = nw?.alerts ?? [];
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-4 sm:space-y-7">
       <GmailDashboardCards />
       <PageHeader
         eyebrow="Dashboard"
@@ -597,7 +597,7 @@ export function DashboardPage() {
       {/* Liabilities summary — net worth after loans + CC debt */}
       {nw && toDecimal(nw.totalLiabilities).greaterThan(0) && (
         <Card className="reveal">
-          <CardHeader className="flex-row items-start justify-between pb-4 flex-wrap gap-2">
+          <CardHeader className="flex-row items-start justify-between pb-3 sm:pb-4 flex-wrap gap-2">
             <div>
               <p className="text-[11px] uppercase tracking-kerned text-accent-ink/80 mb-1.5">
                 Liabilities · FY {nw.liabilities.financialYear}
@@ -614,9 +614,9 @@ export function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 overflow-hidden">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 overflow-hidden">
               {/* Net after debts — highlighted */}
-              <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/10 via-accent/5 to-transparent p-4">
+              <div className="col-span-2 lg:col-span-1 rounded-xl border border-accent/30 bg-gradient-to-br from-accent/10 via-accent/5 to-transparent p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="h-7 w-7 rounded-md grid place-items-center bg-accent/15 text-accent-ink">
                     <Scale className="h-3.5 w-3.5" strokeWidth={1.9} />
@@ -625,7 +625,7 @@ export function DashboardPage() {
                     Net after debts
                   </div>
                 </div>
-                <Money className="numeric-display text-[22px] sm:text-[26px] leading-tight font-semibold text-foreground block break-words">
+                <Money className="numeric-display text-[18px] sm:text-[22px] lg:text-[26px] leading-tight font-semibold text-foreground block break-words">
                   {formatINR(nw.netWorthAfterLiabilities)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -634,7 +634,7 @@ export function DashboardPage() {
               </div>
 
               {/* Total outstanding */}
-              <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+              <div className="rounded-xl border border-border/70 bg-card/40 p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="h-7 w-7 rounded-md grid place-items-center bg-negative/10 text-negative">
                     <Receipt className="h-3.5 w-3.5" strokeWidth={1.9} />
@@ -643,7 +643,7 @@ export function DashboardPage() {
                     Total outstanding
                   </div>
                 </div>
-                <Money className="numeric-display text-[20px] sm:text-[22px] leading-tight font-semibold text-negative block break-words">
+                <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold text-negative block break-words">
                   {formatINR(nw.totalLiabilities)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -652,7 +652,7 @@ export function DashboardPage() {
               </div>
 
               {/* Monthly EMI */}
-              <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+              <div className="rounded-xl border border-border/70 bg-card/40 p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="h-7 w-7 rounded-md grid place-items-center bg-muted/70 text-foreground/80">
                     <HandCoins className="h-3.5 w-3.5" strokeWidth={1.9} />
@@ -661,7 +661,7 @@ export function DashboardPage() {
                     Monthly EMI
                   </div>
                 </div>
-                <Money className="numeric-display text-[20px] sm:text-[22px] leading-tight font-semibold block break-words">
+                <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold block break-words">
                   {formatINR(nw.liabilities.monthlyEmiTotal)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -670,7 +670,7 @@ export function DashboardPage() {
               </div>
 
               {/* Card balance */}
-              <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+              <div className="rounded-xl border border-border/70 bg-card/40 p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="h-7 w-7 rounded-md grid place-items-center bg-muted/70 text-foreground/80">
                     <CreditCard className="h-3.5 w-3.5" strokeWidth={1.9} />
@@ -679,7 +679,7 @@ export function DashboardPage() {
                     Card balance
                   </div>
                 </div>
-                <Money className="numeric-display text-[20px] sm:text-[22px] leading-tight font-semibold block break-words">
+                <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold block break-words">
                   {formatINR(nw.liabilities.totalCreditCardOutstanding)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -688,7 +688,7 @@ export function DashboardPage() {
               </div>
 
               {/* Interest paid YTD */}
-              <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+              <div className="rounded-xl border border-border/70 bg-card/40 p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="h-7 w-7 rounded-md grid place-items-center bg-negative/10 text-negative">
                     <Percent className="h-3.5 w-3.5" strokeWidth={1.9} />
@@ -697,7 +697,7 @@ export function DashboardPage() {
                     Interest paid YTD
                   </div>
                 </div>
-                <Money className="numeric-display text-[20px] sm:text-[22px] leading-tight font-semibold text-negative block break-words">
+                <Money className="numeric-display text-[17px] sm:text-[20px] leading-tight font-semibold text-negative block break-words">
                   {formatINR(nw.liabilities.interestPaidYTD)}
                 </Money>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -744,7 +744,7 @@ export function DashboardPage() {
       <DashboardFxStrip />
 
       {/* Investment metric cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="reveal reveal-delay-1" title="Tradable + accrual holdings only. Excludes real estate, vehicles and insurance (those sit in Total Net Worth).">
           <MetricCard
             label="Portfolio value"
@@ -793,7 +793,7 @@ export function DashboardPage() {
       </div>
 
       {/* Chart + Full Allocation Pie */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between pb-2">
             <div>
@@ -1072,31 +1072,31 @@ export function DashboardPage() {
                 <Link to="/rental">Manage <ArrowRight className="h-3 w-3 ml-1" /></Link>
               </Button>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2 sm:space-y-3">
               {nw.realEstate.count === 0 ? (
                 <p className="text-sm text-muted-foreground">No properties added yet.</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-muted/50 p-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Property value</p>
-                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.realEstate.totalValue)}</Money>
+                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.realEstate.totalValue)}</Money>
                       <p className="text-xs text-muted-foreground">{nw.realEstate.count} {nw.realEstate.count === 1 ? 'property' : 'properties'}</p>
                     </div>
-                    <div className="rounded-lg bg-muted/50 p-3">
+                    <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Monthly rent</p>
-                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.realEstate.monthlyRent)}</Money>
+                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.realEstate.monthlyRent)}</Money>
                       <p className="text-xs text-muted-foreground">active tenancies</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-muted/50 p-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Income YTD</p>
-                      <Money className="text-base font-semibold mt-0.5 block text-green-600 dark:text-green-400">{formatINR(nw.realEstate.incomeYTD)}</Money>
+                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block text-green-600 dark:text-green-400">{formatINR(nw.realEstate.incomeYTD)}</Money>
                     </div>
-                    <div className="rounded-lg bg-muted/50 p-3">
+                    <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Net P&L YTD</p>
-                      <Money className={`text-base font-semibold mt-0.5 block ${toDecimal(nw.realEstate.netYTD).greaterThanOrEqualTo(0) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <Money className={`text-sm sm:text-base font-semibold mt-0.5 block ${toDecimal(nw.realEstate.netYTD).greaterThanOrEqualTo(0) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {formatINR(nw.realEstate.netYTD, { showSign: true })}
                       </Money>
                     </div>
@@ -1124,20 +1124,20 @@ export function DashboardPage() {
                 <Link to="/vehicles">Manage <ArrowRight className="h-3 w-3 ml-1" /></Link>
               </Button>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2 sm:space-y-3">
               {nw.vehicles.count === 0 ? (
                 <p className="text-sm text-muted-foreground">No vehicles added yet.</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-muted/50 p-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Total value</p>
-                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.vehicles.totalValue)}</Money>
+                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.vehicles.totalValue)}</Money>
                       <p className="text-xs text-muted-foreground">{nw.vehicles.count} vehicle{nw.vehicles.count !== 1 ? 's' : ''}</p>
                     </div>
-                    <div className="rounded-lg bg-muted/50 p-3">
+                    <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Pending challans</p>
-                      <p className={`text-base font-semibold mt-0.5 numeric ${nw.vehicles.pendingChallans > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                      <p className={`text-sm sm:text-base font-semibold mt-0.5 numeric ${nw.vehicles.pendingChallans > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                         {nw.vehicles.pendingChallans > 0 ? nw.vehicles.pendingChallans : 'None'}
                       </p>
                       <p className="text-xs text-muted-foreground">traffic fines</p>
@@ -1178,20 +1178,20 @@ export function DashboardPage() {
                 <Link to="/insurance">Manage <ArrowRight className="h-3 w-3 ml-1" /></Link>
               </Button>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2 sm:space-y-3">
               {nw.insurance.activePoliciesCount === 0 ? (
                 <p className="text-sm text-muted-foreground">No policies added yet.</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-muted/50 p-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Total sum assured</p>
-                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.insurance.totalSumAssured)}</Money>
+                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.insurance.totalSumAssured)}</Money>
                       <p className="text-xs text-muted-foreground">{nw.insurance.activePoliciesCount} active {nw.insurance.activePoliciesCount === 1 ? 'policy' : 'policies'}</p>
                     </div>
-                    <div className="rounded-lg bg-muted/50 p-3">
+                    <div className="rounded-lg bg-muted/50 p-2 sm:p-3">
                       <p className="text-xs text-muted-foreground">Annual premium</p>
-                      <Money className="text-base font-semibold mt-0.5 block">{formatINR(nw.insurance.annualPremiumTotal)}</Money>
+                      <Money className="text-sm sm:text-base font-semibold mt-0.5 block">{formatINR(nw.insurance.annualPremiumTotal)}</Money>
                       <p className="text-xs text-muted-foreground">per year total</p>
                     </div>
                   </div>
@@ -1236,7 +1236,7 @@ export function DashboardPage() {
         if (trio.length === 0) return null;
 
         return (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {trio.map((c) => c.node)}
           </div>
         );
