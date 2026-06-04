@@ -752,6 +752,16 @@ import {
   buildScriptwiseQtywiseLayout,
   buildContractNoteChargesLayout,
   buildMfM2MLayout,
+  buildFinancialLedgerLayout,
+  buildClosingBalanceLayout,
+  buildTopHoldingsLayout,
+  buildSectorWiseAllocationLayout,
+  buildContractNotesSummaryLayout,
+  buildBrokerwiseCapitalGainLayout,
+  buildTaxPnLLayout,
+  buildStt10DbLayout,
+  buildCapitalGainsFifoLayout,
+  buildAdvanceTaxSummaryLayout,
 } from '../services/reportBuilder/special/index.js';
 import {
   streamMprofitPdf,
@@ -914,4 +924,75 @@ export async function downloadMfM2M(req: Request, res: Response) {
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
   await emitMprofit(req, res, await buildMfM2MLayout(userId, asOf));
+}
+
+export async function downloadFinancialLedger(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const from = (req.query.from as string | undefined)?.trim() || undefined;
+  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const accountId = (req.query.accountId as string | undefined)?.trim() || undefined;
+  await ensureAccountingProjected(userId);
+  await emitMprofit(req, res, await buildFinancialLedgerLayout(userId, { from, to, accountId }));
+}
+
+export async function downloadClosingBalance(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const asOfStr = (req.query.asOf as string | undefined)?.trim();
+  const asOf = asOfStr ? new Date(asOfStr) : undefined;
+  if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
+  await emitMprofit(req, res, await buildClosingBalanceLayout(userId, asOf));
+}
+
+export async function downloadTopHoldings(req: Request, res: Response) {
+  const userId = req.user!.id;
+  await emitMprofit(req, res, await buildTopHoldingsLayout(userId));
+}
+
+export async function downloadSectorAllocation(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const mode = (req.query.mode as string | undefined)?.trim() === 'script' ? 'script' : 'sector';
+  await emitMprofit(req, res, await buildSectorWiseAllocationLayout(userId, mode));
+}
+
+export async function downloadContractNotesSummary(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const asOfStr = (req.query.asOf as string | undefined)?.trim();
+  const asOf = asOfStr ? new Date(asOfStr) : undefined;
+  if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
+  await emitMprofit(req, res, await buildContractNotesSummaryLayout(userId, asOf));
+}
+
+export async function downloadBrokerwiseCapitalGain(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const from = (req.query.from as string | undefined)?.trim() || undefined;
+  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  await emitMprofit(req, res, await buildBrokerwiseCapitalGainLayout(userId, { from, to }));
+}
+
+export async function downloadTaxPnL(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const from = (req.query.from as string | undefined)?.trim() || undefined;
+  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  await emitMprofit(req, res, await buildTaxPnLLayout(userId, { from, to }));
+}
+
+export async function downloadStt10Db(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const asOfStr = (req.query.asOf as string | undefined)?.trim();
+  const asOf = asOfStr ? new Date(asOfStr) : undefined;
+  if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
+  await emitMprofit(req, res, await buildStt10DbLayout(userId, asOf));
+}
+
+export async function downloadCapitalGainsFifo(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const from = (req.query.from as string | undefined)?.trim() || undefined;
+  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  await emitMprofit(req, res, await buildCapitalGainsFifoLayout(userId, { from, to }));
+}
+
+export async function downloadAdvanceTaxSummary(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const fy = (req.query.fy as string | undefined)?.trim() || undefined;
+  await emitMprofit(req, res, await buildAdvanceTaxSummaryLayout(userId, { fy }));
 }
