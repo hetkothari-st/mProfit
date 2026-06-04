@@ -957,8 +957,62 @@ export function DashboardPage() {
           ) : topHoldings.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Add transactions to see your top holdings</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full rtable">
+            <>
+            {/* Compact mobile list — two lines per holding (name + value, then
+                class + return). Replaces the card-ified table below md so the
+                10-row list stays tight. */}
+            <ul className="md:hidden divide-y divide-border/40">
+              {topHoldings.map((h, idx) => {
+                const pnlD = toDecimal(h.unrealisedPnL ?? '0');
+                const pos = pnlD.greaterThan(0), neg = pnlD.lessThan(0);
+                const color = assetClassColor(h.assetClass);
+                const route = holdingRoute(h);
+                const method = valuationMethodFor(h.assetClass);
+                return (
+                  <li key={h.id}>
+                    <div
+                      role={route ? 'link' : undefined}
+                      tabIndex={route ? 0 : undefined}
+                      aria-label={route ? `Open ${h.assetName}` : undefined}
+                      onClick={route ? () => navigate(route) : undefined}
+                      onKeyDown={route ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(route); } } : undefined}
+                      className={`flex items-center gap-2.5 py-2 ${route ? 'cursor-pointer active:bg-muted/30' : ''}`}
+                    >
+                      <span className="w-4 shrink-0 text-[11px] tabular-nums text-muted-foreground/55">{String(idx + 1).padStart(2, '0')}</span>
+                      <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-sm font-medium text-foreground truncate">{h.assetName}</span>
+                          <AutoFitText className="shrink-0 max-w-[48%] text-right">
+                            <Money className="text-sm font-medium tabular-nums text-foreground">{h.currentValue ? formatINR(h.currentValue) : formatINR(h.totalCost)}</Money>
+                          </AutoFitText>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 mt-0.5">
+                          <span className="text-[11px] text-muted-foreground truncate">{ASSET_CLASS_LABELS[h.assetClass] ?? h.assetClass}</span>
+                          {h.currentValue ? (
+                            <span className={`shrink-0 inline-flex items-center gap-1 text-[11px] tabular-nums font-medium ${pos ? 'text-positive' : neg ? 'text-negative' : 'text-muted-foreground'}`}>
+                              {pos && <span aria-hidden className="text-[8px] leading-none">▲</span>}
+                              {neg && <span aria-hidden className="text-[8px] leading-none">▼</span>}
+                              {h.unrealisedPnLPct != null
+                                ? `${pos ? '+' : ''}${h.unrealisedPnLPct.toFixed(2)}%`
+                                : (h.unrealisedPnL ? formatINR(h.unrealisedPnL, { showSign: true }) : '—')}
+                              {method !== 'MARKET' && (
+                                <span className="text-[9px] uppercase tracking-wide text-muted-foreground/65">{method === 'ACCRUAL' ? 'accr' : 'cost'}</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="shrink-0 text-[10px] text-muted-foreground/70">no price</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70 bg-muted/20">
                     <th className="w-10 py-2 pl-6 font-normal text-left" aria-hidden></th>
@@ -1075,6 +1129,7 @@ export function DashboardPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
