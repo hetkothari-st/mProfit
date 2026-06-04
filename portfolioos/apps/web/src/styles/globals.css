@@ -507,24 +507,6 @@
     overflow-wrap: anywhere;
   }
 
-  table.rtable td::before {
-    content: attr(data-label);
-    text-align: left;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: hsl(var(--muted-foreground));
-    font-weight: 600;
-    flex-shrink: 0;
-    max-width: 45%;
-  }
-
-  /* Let the value side shrink so long content (descriptions, names) wraps
-     or ellipsizes inside the card instead of bleeding past its edge. */
-  table.rtable td > * {
-    min-width: 0;
-  }
-
   /* Cells with no label (data-label="") drop the label column. */
   table.rtable td[data-label='']::before {
     content: '';

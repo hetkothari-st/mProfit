@@ -25,6 +25,7 @@ import { reportsApi } from '@/api/reports.api';
 import { importsApi } from '@/api/imports.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { InboxImportsTab } from './InboxImportsTab';
+import { TaxMisDownloads } from './TaxMisDownloads';
 import {
   Decimal,
   toDecimal,
@@ -36,6 +37,7 @@ import {
 type Tab =
   | 'summary'
   | 'statements'
+  | 'tax-mis'
   | 'intraday'
   | 'stcg'
   | 'ltcg'
@@ -48,6 +50,7 @@ type Tab =
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'summary', label: 'Summary' },
+  { key: 'tax-mis', label: 'Tax & MIS downloads' },
   { key: 'statements', label: 'Statements' },
   { key: 'unrealised', label: 'Unrealised P&L' },
   { key: 'intraday', label: 'Intraday' },
@@ -123,7 +126,7 @@ function initialTabFromUrl(): Tab {
   if (typeof window === 'undefined') return 'summary';
   const v = new URLSearchParams(window.location.search).get('tab');
   const valid: Tab[] = [
-    'summary', 'statements', 'intraday', 'stcg', 'ltcg', 'schedule-112a',
+    'summary', 'statements', 'tax-mis', 'intraday', 'stcg', 'ltcg', 'schedule-112a',
     'income', 'unrealised', 'xirr', 'historical', 'inbox-imports',
   ];
   return (valid as string[]).includes(v ?? '') ? (v as Tab) : 'summary';
@@ -287,6 +290,8 @@ export function ReportsPage() {
 
       {tab === 'inbox-imports' ? (
         <InboxImportsTab />
+      ) : tab === 'tax-mis' ? (
+        <TaxMisDownloads fy={fy} />
       ) : !portfolioId ? (
         <div className="text-sm text-muted-foreground p-6 text-center">
           Select a portfolio to view reports.
