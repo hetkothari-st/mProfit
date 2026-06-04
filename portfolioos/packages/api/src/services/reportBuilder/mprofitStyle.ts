@@ -147,6 +147,11 @@ export function fmtDateDDMMYYYY(v: unknown): string {
   return `${dd}/${mm}/${yy}`;
 }
 
+/** Today's date in DD/MM/YYYY, suitable for report titles. */
+export function todayDDMMYYYY(): string {
+  return fmtDateDDMMYYYY(new Date());
+}
+
 function isParensNegative(s: string): boolean {
   return s.startsWith('(') && s.endsWith(')');
 }
@@ -172,18 +177,23 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     const BOT = doc.page.height - 30;
 
     // ── Top family / member / FY band ───────────────────────────
+    // Drop the family cell when it duplicates the member name (v2 is
+    // single-user — see CLAUDE.md §1 row 2). Drop the FY cell entirely
+    // when the report doesn't carry one, so an as-of report doesn't
+    // show "Financial Year: —" as dead space.
     function renderTopBand(): number {
       const bandH = 28;
       const y = doc.y;
-      // Full-width pink band
       doc.rect(ML, y, pageW, bandH).fillAndStroke(MPROFIT_PALETTE.bandPinkSoft, MPROFIT_PALETTE.border);
 
-      // Three equal columns: Family | Member | FY
-      const cells = [
-        { label: 'Family Name', value: layout.family ?? '—' },
-        { label: 'Member Name', value: layout.member ?? '—' },
-        { label: 'Financial Year', value: layout.financialYear ?? '—' },
-      ];
+      const cells: Array<{ label: string; value: string }> = [];
+      if (layout.family && layout.family !== layout.member) {
+        cells.push({ label: 'Family Name', value: layout.family });
+      }
+      cells.push({ label: 'Member Name', value: layout.member ?? '—' });
+      if (layout.financialYear) {
+        cells.push({ label: 'Financial Year', value: layout.financialYear });
+      }
       const colW = pageW / cells.length;
       cells.forEach((c, i) => {
         const cx = ML + i * colW;
@@ -382,9 +392,14 @@ export async function streamMprofitExcel(res: Response, layout: MprofitLayout): 
 
   const totalCols = layout.columns.length;
 
-  // Top band — three equal cells: Family / Member / FY
+  // Top band — collapse duplicate family / drop empty FY, same rules
+  // as the PDF renderer.
   ws.mergeCells(1, 1, 1, totalCols);
-  ws.getCell(1, 1).value = `${layout.family ?? ''} · ${layout.member ?? ''} · ${layout.financialYear ?? ''}`;
+  const topParts: string[] = [];
+  if (layout.family && layout.family !== layout.member) topParts.push(layout.family);
+  if (layout.member) topParts.push(layout.member);
+  if (layout.financialYear) topParts.push(`FY ${layout.financialYear}`);
+  ws.getCell(1, 1).value = topParts.join(' · ');
   ws.getCell(1, 1).fill = solid(MPROFIT_PALETTE.bandPinkSoft);
   ws.getCell(1, 1).font = { bold: true, size: 11 };
   ws.getCell(1, 1).alignment = { horizontal: 'center', vertical: 'middle' };

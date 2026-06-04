@@ -14,6 +14,7 @@ import {
   fmtDateDDMMYYYY,
   indianInt,
   indianMoney,
+  todayDDMMYYYY,
   type ColumnDef,
   type MprofitLayout,
   type SubGroup,
@@ -255,7 +256,7 @@ export async function buildDematHoldingsLayout(userId: string): Promise<MprofitL
   ];
 
   return {
-    reportTitle: `Physical/Demat Accountwise Stock Report As On ${new Date().toLocaleDateString('en-IN')}`,
+    reportTitle: `Physical/Demat Accountwise Stock Report As On ${todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -520,7 +521,7 @@ export async function buildTrialBalanceLayout(userId: string, asOf?: string): Pr
   ];
 
   return {
-    reportTitle: `Trial Balance As On ${asOf ?? new Date().toLocaleDateString('en-IN')}`,
+    reportTitle: `Trial Balance As On ${asOf ? fmtDateDDMMYYYY(asOf) : todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -594,7 +595,7 @@ export async function buildAccountLedgerLayout(
   ];
 
   return {
-    reportTitle: `Account Ledger From ${opts.from ?? '—'} To ${opts.to ?? new Date().toLocaleDateString('en-IN')}`,
+    reportTitle: `Account Ledger From ${opts.from ? fmtDateDDMMYYYY(opts.from) : '—'} To ${opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -670,7 +671,7 @@ export async function buildProfitLossLayout(
   const creditTotal = isProfit ? pl.totalIncome : sideTotal;
 
   return {
-    reportTitle: `Profit & Loss Report As On ${opts.to ?? new Date().toLocaleDateString('en-IN')}`,
+    reportTitle: `Profit & Loss Report As On ${opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -719,7 +720,7 @@ export async function buildBalanceSheetLayout(userId: string, asOf?: string): Pr
 
   const totalLiab = new Decimal(bs.totalLiabilities).plus(bs.totalEquity);
   return {
-    reportTitle: `Balance Sheet Report As On ${asOf ?? new Date().toLocaleDateString('en-IN')}`,
+    reportTitle: `Balance Sheet Report As On ${asOf ? fmtDateDDMMYYYY(asOf) : todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -829,7 +830,7 @@ export async function buildMFCapitalGainLayout(userId: string, fy?: string): Pro
   const totalGain = filtered.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
 
   return {
-    reportTitle: `Capital Gain - Loss Mutual Fund As on ${new Date().toLocaleDateString('en-IN')}`,
+    reportTitle: `Capital Gain - Loss Mutual Fund As on ${todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -910,7 +911,7 @@ export async function buildDailyTransactionsLayout(
   const grandNet = txs.reduce((s, t) => s.plus(t.netAmount.toString()), new Decimal(0));
 
   return {
-    reportTitle: `BrokerBill Register As On ${new Date().toLocaleDateString('en-IN')}`,
+    reportTitle: `BrokerBill Register As On ${todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -1089,7 +1090,7 @@ export async function buildPortfolioHoldingsSummaryLayout(
   ];
 
   return {
-    reportTitle: `Portfolio Holdings Summary As On ${new Date().toLocaleDateString('en-IN')}`,
+    reportTitle: `Portfolio Holdings Summary As On ${todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -1172,7 +1173,7 @@ export async function buildPerformanceLayout(userId: string): Promise<MprofitLay
   ];
 
   return {
-    reportTitle: `XIRR / Performance Report As On ${new Date().toLocaleDateString('en-IN')}`,
+    reportTitle: `XIRR / Performance Report As On ${todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -1391,8 +1392,10 @@ export async function buildCashFlowStatementLayout(
   const debitTotal = isPositive ? sideTotal : totalOutflow.toString();
   const creditTotal = isPositive ? totalInflow.toString() : sideTotal;
 
-  const fromStamp = opts.from ?? (flows[0] ? flows[0].date.toISOString().slice(0, 10) : 'inception');
-  const toStamp = opts.to ?? new Date().toLocaleDateString('en-IN');
+  const fromStamp = opts.from
+    ? fmtDateDDMMYYYY(opts.from)
+    : (flows[0] ? fmtDateDDMMYYYY(flows[0].date) : 'inception');
+  const toStamp = opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY();
 
   return {
     reportTitle: `Cash Flow Statement (${fromStamp} → ${toStamp})`,
@@ -1684,7 +1687,7 @@ export async function buildCombinedRealisedUnrealisedLayout(
   ];
 
   return {
-    reportTitle: `Combined Realised/Unrealised Gain/Loss Report as on ${cutoff.toLocaleDateString('en-IN')} (Equity)`,
+    reportTitle: `Combined Realised/Unrealised Gain/Loss Report as on ${fmtDateDDMMYYYY(cutoff)} (Equity)`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -1814,7 +1817,7 @@ export async function buildFamilyWiseHoldingsLayout(
   ];
 
   return {
-    reportTitle: `FamilyWise capital Gain - Loss Summary As On ${cutoff.toLocaleDateString('en-IN')}`,
+    reportTitle: `FamilyWise capital Gain - Loss Summary As On ${fmtDateDDMMYYYY(cutoff)}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -1999,8 +2002,8 @@ export async function buildScriptwiseQtywiseLayout(
     { key: 'netAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY, signed: true },
   ];
 
-  const fromStamp = opts.from ?? 'inception';
-  const toStamp = opts.to ?? new Date().toISOString().slice(0, 10);
+  const fromStamp = opts.from ? fmtDateDDMMYYYY(opts.from) : 'inception';
+  const toStamp = opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY();
 
   return {
     reportTitle: `Scriptwise - Qtywise Report As ${fromStamp} To ${toStamp} (Equity)`,
@@ -2157,7 +2160,7 @@ export async function buildContractNoteChargesLayout(
   ];
 
   return {
-    reportTitle: `Brokerage Statement & Other Charges As On ${cutoff.toLocaleDateString('en-IN')} (Equity)`,
+    reportTitle: `Brokerage Statement & Other Charges As On ${fmtDateDDMMYYYY(cutoff)} (Equity)`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -2322,7 +2325,7 @@ export async function buildMfM2MLayout(
   ];
 
   return {
-    reportTitle: `M2M (NSE) report as on ${cutoff.toLocaleDateString('en-IN')} (Mutual Fund)`,
+    reportTitle: `M2M (NSE) report as on ${fmtDateDDMMYYYY(cutoff)} (Mutual Fund)`,
     family: m.family,
     member: m.member,
     pan: m.pan,
