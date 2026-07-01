@@ -37,6 +37,7 @@ export interface CreateBankAccountInput {
   accountType: BankAccountType;
   accountHolder: string;
   last4: string;
+  customerId?: string | null;
   portfolioId?: string | null;
   ifsc?: string | null;
   branch?: string | null;
@@ -104,6 +105,7 @@ export async function createAccount(userId: string, input: CreateBankAccountInpu
       accountType: input.accountType,
       accountHolder: input.accountHolder.trim(),
       last4: input.last4.trim(),
+      customerId: input.customerId?.trim() || null,
       portfolioId: input.portfolioId ?? null,
       ifsc: input.ifsc?.trim() || null,
       branch: input.branch?.trim() || null,
@@ -140,6 +142,7 @@ export async function updateAccount(
   if (input.accountType !== undefined) data.accountType = input.accountType;
   if (input.accountHolder !== undefined) data.accountHolder = input.accountHolder.trim();
   if (input.last4 !== undefined) data.last4 = input.last4.trim();
+  if (input.customerId !== undefined) data.customerId = input.customerId?.trim() || null;
   if (input.portfolioId !== undefined)
     data.portfolio = input.portfolioId
       ? { connect: { id: input.portfolioId } }

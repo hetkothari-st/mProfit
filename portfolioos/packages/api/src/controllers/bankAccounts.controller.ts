@@ -24,6 +24,7 @@ const createSchema = z.object({
   accountType: z.enum(BANK_ACCOUNT_TYPES),
   accountHolder: z.string().min(1).max(200),
   last4: last4Digits,
+  customerId: z.string().max(64).nullable().optional(),
   portfolioId: z.string().nullable().optional(),
   ifsc: z.string().max(20).nullable().optional(),
   branch: z.string().max(200).nullable().optional(),
