@@ -55,6 +55,7 @@ model User {
   rentalProperties  RentalProperty[]
   insurancePolicies InsurancePolicy[]
   auditLogs         AuditLog[]
+  healthScoreSnapshot HealthScoreSnapshot?
 
   // Phase 5-A — per-call LLM spend ledger (§8, §16 gate G5). Every
   // Anthropic API call writes a row here so the monthly budget check
@@ -2776,6 +2777,19 @@ model Goal {
 
   @@index([userId, status])
   @@index([userId, targetDate])
+}
+
+model HealthScoreSnapshot {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  overallScore Int
+  grade      String
+  subScores  Json
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
 }
 
 // ─── ACCOUNT AGGREGATOR CONSENTS ──────────────────────────────────
