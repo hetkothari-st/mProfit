@@ -81,17 +81,17 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
                 <svg viewBox="0 0 120 120" className="h-[88px] w-[88px] shrink-0">
                   <circle cx="60" cy="60" r="46" fill="none" stroke="hsl(var(--border))" strokeWidth="0.5" />
                   {/* Donut segments — refined editorial palette */}
-                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(213 53% 22%)" strokeWidth="14" strokeDasharray="100 251" strokeDashoffset="0" transform="rotate(-90 60 60)" />
-                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(36 60% 48%)" strokeWidth="14" strokeDasharray="62 251" strokeDashoffset="-100" transform="rotate(-90 60 60)" />
-                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(130 35% 34%)" strokeWidth="14" strokeDasharray="48 251" strokeDashoffset="-162" transform="rotate(-90 60 60)" />
-                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(12 50% 44%)" strokeWidth="14" strokeDasharray="41 251" strokeDashoffset="-210" transform="rotate(-90 60 60)" />
+                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(70 95% 65%)" strokeWidth="14" strokeDasharray="100 251" strokeDashoffset="0" transform="rotate(-90 60 60)" />
+                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(265 70% 72%)" strokeWidth="14" strokeDasharray="62 251" strokeDashoffset="-100" transform="rotate(-90 60 60)" />
+                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(25 80% 60%)" strokeWidth="14" strokeDasharray="48 251" strokeDashoffset="-162" transform="rotate(-90 60 60)" />
+                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(0 0% 70%)" strokeWidth="14" strokeDasharray="41 251" strokeDashoffset="-210" transform="rotate(-90 60 60)" />
                 </svg>
                 <div className="space-y-1.5 text-[11.5px]">
                   {[
-                    { label: 'Equities', pct: '40%', color: 'hsl(213 53% 22%)' },
-                    { label: 'Mutual Funds', pct: '25%', color: 'hsl(36 60% 48%)' },
-                    { label: 'Real Estate', pct: '19%', color: 'hsl(130 35% 34%)' },
-                    { label: 'Other', pct: '16%', color: 'hsl(12 50% 44%)' },
+                    { label: 'Equities', pct: '40%', color: 'hsl(70 95% 65%)' },
+                    { label: 'Mutual Funds', pct: '25%', color: 'hsl(265 70% 72%)' },
+                    { label: 'Real Estate', pct: '19%', color: 'hsl(25 80% 60%)' },
+                    { label: 'Other', pct: '16%', color: 'hsl(0 0% 70%)' },
                   ].map((row) => (
                     <div key={row.label} className="flex items-center gap-2 min-w-[180px]">
                       <span className="h-2 w-2 rounded-[1px] rotate-45 shrink-0" style={{ background: row.color }} />

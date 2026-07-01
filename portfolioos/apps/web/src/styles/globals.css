@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────
-   PortfolioOS — Editorial Finance theme
-   Light: warm parchment paper · deep ink · old gold
-   Dark : midnight ink · ivory foreground · brass accent
+   PortfolioOS — CRED-dark theme
+   Near-black canvas, signature lime accent, Fraunces display serif.
+   Dark-only — no light mode.
    ───────────────────────────────────────────────────────────────────────── */
 
 @layer base {

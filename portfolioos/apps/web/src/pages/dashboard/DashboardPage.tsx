@@ -139,7 +139,7 @@ const ASSET_CLASS_COLORS: Record<string, string> = {
   OTHER: 'hsl(0 0% 70%)',
 };
 function assetClassColor(cls: string): string {
-  return ASSET_CLASS_COLORS[cls] ?? 'hsl(220 10% 60%)';
+  return ASSET_CLASS_COLORS[cls] ?? 'hsl(0 0% 70%)';
 }
 
 // Map an asset class enum to the sidebar section key that controls its visibility
