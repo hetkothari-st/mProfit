@@ -1,6 +1,7 @@
 import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import type { ApiResponse } from '@portfolioos/shared';
 import { useAuthStore } from '@/stores/auth.store';
+import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { getApiBaseUrl } from './baseUrl';
 
 const baseURL = getApiBaseUrl();
@@ -14,6 +15,12 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = useAuthStore.getState().accessToken;
   if (token) {
     config.headers.set('Authorization', `Bearer ${token}`);
+  }
+  // Family / HOF scope selector — backend resolves an EffectiveScope
+  // for this family when the header is present.
+  const familyId = useFamilyScopeStore.getState().viewingAsFamilyId;
+  if (familyId) {
+    config.headers.set('X-Viewing-As-Family', familyId);
   }
   return config;
 });

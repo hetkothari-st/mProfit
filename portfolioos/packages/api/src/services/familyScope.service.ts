@@ -1,6 +1,7 @@
 import type { AssetClass, FamilyRole } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ForbiddenError } from '../lib/errors.js';
+import { runAsUser } from '../lib/requestContext.js';
 
 /**
  * Family / HOF access-control core.
@@ -281,6 +282,34 @@ export async function assertOwnerOf(callerId: string, familyId: string): Promise
   if (!row || row.status !== 'ACTIVE' || row.role !== 'OWNER') {
     throw new ForbiddenError('OWNER role required.');
   }
+}
+
+/**
+ * Fan-out helper for reading a per-user list model (Vehicle, Loan,
+ * InsurancePolicy, ...) across all readable users in scope.
+ *
+ * Short-circuits to `[]` when the caller lacks visibility on the given
+ * category. Runs the caller's own fetch in-context and every other
+ * member's under `runAsUser` so the existing single-owner RLS still
+ * permits reads. Fetcher must be idempotent (called once per user id).
+ */
+export async function fanOutRead<T>(
+  scope: EffectiveScope,
+  category: NonAcCategory,
+  fetcher: (userId: string) => Promise<T[]>,
+): Promise<T[]> {
+  if (
+    scope.allowedCategories !== null &&
+    !scope.allowedCategories.includes(category)
+  ) {
+    return [];
+  }
+  const results = await Promise.all(
+    scope.readableUserIds.map((uid) =>
+      uid === scope.callerId ? fetcher(uid) : runAsUser(uid, () => fetcher(uid)),
+    ),
+  );
+  return results.flat();
 }
 
 function dedupe<T>(arr: T[]): T[] {

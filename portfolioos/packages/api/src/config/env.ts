@@ -71,6 +71,10 @@ const EnvSchema = z.object({
   // var is the fallback when no AppSetting is present.
   LLM_INSIGHTS_MODEL: z.string().default('claude-sonnet-4-6'),
   ENABLE_LLM_INSIGHTS: z.enum(['true', 'false']).default('false'),
+  // Family / HOF hierarchical multi-user feature. When 'false', the
+  // /api/families endpoints 404 and the frontend Settings section hides
+  // itself. Rolls out per beta cohort without touching solo users.
+  ENABLE_FAMILY: z.enum(['true', 'false']).default('true'),
   // Per §13: Anthropic zero-retention is an account-level setting, not a
   // per-request header. This env var is advisory — if set to 'true' we
   // log the assumption so ops can double-check the Anthropic console.

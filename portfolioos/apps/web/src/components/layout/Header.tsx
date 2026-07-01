@@ -8,6 +8,7 @@ import { usePrivacyStore } from '@/stores/privacy.store';
 import { authApi } from '@/api/auth.api';
 import { alertsApi } from '@/api/alerts.api';
 import { cn } from '@/lib/cn';
+import { FamilyScopeSwitcher } from '@/components/family/FamilyScopeSwitcher';
 
 export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -66,6 +67,9 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
       </div>
 
       <div className="flex items-center gap-1.5">
+        {/* Family / HOF "viewing as" switcher */}
+        <FamilyScopeSwitcher />
+
         {/* Alerts bell */}
         <Link
           to="/alerts"

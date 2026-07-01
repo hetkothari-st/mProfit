@@ -41,6 +41,8 @@ import { notificationsRouter } from './notifications.routes.js';
 import { corporateActionsRouter } from './corporateActions.routes.js';
 import { goalsRouter } from './goals.routes.js';
 import { finfactorRouter, finfactorWebhookRouter } from './finfactor.routes.js';
+import { familiesRouter } from './families.routes.js';
+import { env } from '../config/env.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/api/auth', authRouter);
@@ -87,4 +89,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/goals', goalsRouter);
   app.use('/api/integrations/finfactor', finfactorRouter);
   app.use('/api/integrations/finfactor/webhook', finfactorWebhookRouter);
+  if (env.ENABLE_FAMILY === 'true') {
+    app.use('/api/families', familiesRouter);
+  }
 }

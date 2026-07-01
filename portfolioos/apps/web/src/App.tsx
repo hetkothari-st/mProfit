@@ -10,6 +10,7 @@ import { PortfolioDetailPage } from './pages/portfolios/PortfolioDetailPage';
 import { PortfolioGroupDetailPage } from './pages/portfolios/PortfolioGroupDetailPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
+import { AcceptInvitationPage } from './pages/family/AcceptInvitationPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
 import { StocksPage } from './pages/assetClasses/StocksPage';
 import { MutualFundsPage } from './pages/assetClasses/MutualFundsPage';
@@ -70,6 +71,10 @@ export function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route
+        path="/families/invitations/:token/accept"
+        element={<AcceptInvitationPage />}
+      />
       <Route
         path="/onboarding"
         element={

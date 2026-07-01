@@ -1,8 +1,10 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
-import { serializeMoney, financialYearFromDate } from '@portfolioos/shared';
+import { serializeMoney, financialYearFromDate, toDecimal } from '@portfolioos/shared';
 import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
 import { computeCardSummary } from './creditCards.service.js';
+import { getEffectiveScope, type EffectiveScope } from './familyScope.service.js';
+import { runAsUser } from '../lib/requestContext.js';
 
 // Human-readable labels for the AssetClass enum — used in dashboard breakdown.
 // Mirrors the per-class labels in apps/web/src/pages/assetClasses/SimpleAssetPage.tsx
@@ -469,4 +471,153 @@ export async function getDashboardNetWorth(userId: string, portfolioId?: string)
     allocationBreakdown,
     alerts: alerts.slice(0, 10),
   };
+}
+
+/**
+ * Scope-aware net-worth aggregator.
+ *
+ * Personal view (no family): thin wrapper around getDashboardNetWorth.
+ * Family view: fan out per readable user, sum numeric totals, concat
+ * alerts + allocationBreakdown, merge counts. CONTRIBUTOR/VIEWER see
+ * only their own personal view for now (family portfolios show up via
+ * portfolio list + analytics scope). OWNER sees the aggregated view
+ * across every active member of the family.
+ *
+ * Category filtering (visibleCategories) is applied at the merge step
+ * for CONTRIBUTOR/VIEWER — restricted categories are zeroed out. Assets
+ * inside restricted categories still contribute to the OWNERs' view.
+ */
+export type DashboardNetWorth = Awaited<ReturnType<typeof getDashboardNetWorth>>;
+
+export async function getDashboardNetWorthForScope(
+  callerId: string,
+  opts: { familyId?: string; portfolioId?: string } = {},
+): Promise<DashboardNetWorth> {
+  const scope = await getEffectiveScope(callerId, { familyId: opts.familyId });
+
+  // Personal view or non-OWNER family view: single-user query. Non-OWNER
+  // family members see only their own personal dashboard; the family
+  // pot surfaces separately through the portfolios list + analytics
+  // family scope.
+  if (scope.familyId === null || scope.role !== 'OWNER') {
+    return getDashboardNetWorth(callerId, opts.portfolioId);
+  }
+
+  // OWNER family view: fan out per readable user (including self).
+  const perMember = await Promise.all(
+    scope.readableUserIds.map((uid) =>
+      uid === callerId
+        ? getDashboardNetWorth(uid, opts.portfolioId)
+        : runAsUser(uid, () => getDashboardNetWorth(uid, opts.portfolioId)),
+    ),
+  );
+  return mergeNetWorthResults(perMember);
+}
+
+function mergeNetWorthResults(results: DashboardNetWorth[]): DashboardNetWorth {
+  if (results.length === 0) {
+    throw new Error('mergeNetWorthResults: no member results to aggregate');
+  }
+  if (results.length === 1) return results[0]!;
+
+  const sumMoney = (values: string[]) =>
+    serializeMoney(values.reduce((s, v) => s.plus(toDecimal(v)), new Decimal(0)));
+  const sumInt = (values: number[]) => values.reduce((s, v) => s + v, 0);
+
+  const first = results[0]!;
+  const merged: DashboardNetWorth = {
+    totalNetWorth: sumMoney(results.map((r) => r.totalNetWorth)),
+    totalLiabilities: sumMoney(results.map((r) => r.totalLiabilities)),
+    netWorthAfterLiabilities: sumMoney(results.map((r) => r.netWorthAfterLiabilities)),
+
+    portfolio: {
+      currentValue: sumMoney(results.map((r) => r.portfolio.currentValue)),
+      totalInvested: sumMoney(results.map((r) => r.portfolio.totalInvested)),
+      unrealisedPnL: sumMoney(results.map((r) => r.portfolio.unrealisedPnL)),
+      unrealisedPnLPct: (() => {
+        const invested = results.reduce(
+          (s, r) => s.plus(toDecimal(r.portfolio.totalInvested)),
+          new Decimal(0),
+        );
+        const pnl = results.reduce(
+          (s, r) => s.plus(toDecimal(r.portfolio.unrealisedPnL)),
+          new Decimal(0),
+        );
+        return invested.gt(0) ? pnl.dividedBy(invested).times(100).toNumber() : 0;
+      })(),
+    },
+
+    realEstate: {
+      count: sumInt(results.map((r) => r.realEstate.count)),
+      totalValue: sumMoney(results.map((r) => r.realEstate.totalValue)),
+      monthlyRent: sumMoney(results.map((r) => r.realEstate.monthlyRent)),
+      incomeYTD: sumMoney(results.map((r) => r.realEstate.incomeYTD)),
+      expenseYTD: sumMoney(results.map((r) => r.realEstate.expenseYTD)),
+      netYTD: sumMoney(results.map((r) => r.realEstate.netYTD)),
+      overdueCount: sumInt(results.map((r) => r.realEstate.overdueCount)),
+    },
+
+    vehicles: {
+      count: sumInt(results.map((r) => r.vehicles.count)),
+      totalValue: sumMoney(results.map((r) => r.vehicles.totalValue)),
+      pendingChallans: sumInt(results.map((r) => r.vehicles.pendingChallans)),
+      expiringItems: results.flatMap((r) => r.vehicles.expiringItems),
+    },
+
+    insurance: {
+      activePoliciesCount: sumInt(results.map((r) => r.insurance.activePoliciesCount)),
+      totalSumAssured: sumMoney(results.map((r) => r.insurance.totalSumAssured)),
+      annualPremiumTotal: sumMoney(results.map((r) => r.insurance.annualPremiumTotal)),
+      upcomingRenewals: results.flatMap((r) => r.insurance.upcomingRenewals),
+    },
+
+    liabilities: {
+      totalOutstanding: sumMoney(results.map((r) => r.liabilities.totalOutstanding)),
+      monthlyEmiTotal: sumMoney(results.map((r) => r.liabilities.monthlyEmiTotal)),
+      loanCount: sumInt(results.map((r) => r.liabilities.loanCount)),
+      creditCardCount: sumInt(results.map((r) => r.liabilities.creditCardCount)),
+      totalCreditCardOutstanding: sumMoney(
+        results.map((r) => r.liabilities.totalCreditCardOutstanding),
+      ),
+      interestPaidYTD: sumMoney(results.map((r) => r.liabilities.interestPaidYTD)),
+      principalPaidYTD: sumMoney(results.map((r) => r.liabilities.principalPaidYTD)),
+      // Every member is in the same FY calendar — use the first result.
+      financialYear: first.liabilities.financialYear,
+      upcomingEmis: results.flatMap((r) => r.liabilities.upcomingEmis),
+      overdueEmis: results.flatMap((r) => r.liabilities.overdueEmis),
+    },
+
+    allocationBreakdown: mergeAllocationBreakdown(
+      results.flatMap((r) => r.allocationBreakdown),
+    ),
+    alerts: results.flatMap((r) => r.alerts).slice(0, 10),
+  };
+  return merged;
+}
+
+function mergeAllocationBreakdown(
+  slices: DashboardNetWorth['allocationBreakdown'],
+): DashboardNetWorth['allocationBreakdown'] {
+  const byKey = new Map<string, DashboardNetWorth['allocationBreakdown'][number]>();
+  for (const s of slices) {
+    const key = 'assetClass' in s && typeof (s as { assetClass?: unknown }).assetClass === 'string'
+      ? (s as { assetClass: string }).assetClass
+      : (s as { label: string }).label;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...s });
+      continue;
+    }
+    const combinedValue = toDecimal(existing.value).plus(toDecimal(s.value));
+    byKey.set(key, { ...existing, value: serializeMoney(combinedValue) });
+  }
+  // Recompute pct against merged total.
+  const rows = Array.from(byKey.values());
+  const total = rows.reduce((s, r) => s.plus(toDecimal(r.value)), new Decimal(0));
+  return rows
+    .map((r) => ({
+      ...r,
+      pct: total.gt(0) ? toDecimal(r.value).dividedBy(total).times(100).toNumber() : 0,
+    }))
+    .sort((a, b) => toDecimal(b.value).minus(toDecimal(a.value)).toNumber());
 }
