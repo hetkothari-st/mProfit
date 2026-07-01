@@ -10,112 +10,59 @@
 
 @layer base {
   :root {
-    /* Surfaces */
-    --background: 38 35% 95%;            /* warm parchment */
-    --foreground: 213 38% 12%;           /* deep ink */
-    --card: 40 50% 98%;                  /* cream surface */
-    --card-foreground: 213 38% 12%;
+    /* Surfaces — near-black, not pure #000, so grain/mesh texture still reads */
+    --background: 0 0% 5%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 9%;
+    --card-foreground: 0 0% 96%;
     --card-highlight: 0 0% 100%;
-    --popover: 40 50% 98%;
-    --popover-foreground: 213 38% 12%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 96%;
 
-    /* Brand */
-    --primary: 213 53% 11%;              /* deep navy ink */
-    --primary-foreground: 40 50% 97%;
+    /* Brand — inverted: white primary CTAs on black, like CRED's pill buttons */
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 6%;
 
-    --secondary: 38 25% 90%;
-    --secondary-foreground: 213 38% 12%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 96%;
 
-    --accent: 36 60% 41%;                /* old gold / brass */
-    --accent-foreground: 40 50% 97%;
+    --accent: 70 95% 65%;                /* signature lime, ~#E2FE53 */
+    --accent-foreground: 0 0% 8%;
 
-    --muted: 38 22% 88%;
-    --muted-foreground: 215 14% 38%;
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 62%;
 
-    --destructive: 0 58% 39%;            /* oxblood */
-    --destructive-foreground: 40 50% 97%;
+    --destructive: 4 85% 62%;             /* warm coral-red */
+    --destructive-foreground: 0 0% 96%;
 
-    --border: 38 18% 82%;                /* warm hairline */
-    --input: 38 18% 82%;
-    --ring: 36 60% 41%;
+    --border: 0 0% 18%;                   /* hairline, subtle-but-opaque against 5%/9% surfaces */
+    --input: 0 0% 18%;
+    --ring: 70 95% 65%;
 
-    --positive: 130 38% 32%;             /* deep forest */
-    --negative: 0 58% 39%;                /* oxblood */
-    --warning: 32 75% 45%;
+    --positive: 85 75% 58%;               /* greener-lime, on-brand for gains */
+    --negative: 4 85% 62%;
+    --warning: 40 90% 60%;
 
-    /* Sidebar — refined parchment tier */
-    --sidebar: 40 30% 92%;
-    --sidebar-foreground: 213 38% 14%;
-    --sidebar-accent: 38 25% 86%;
-    --sidebar-accent-foreground: 213 53% 11%;
-    --sidebar-border: 38 18% 80%;
+    /* Sidebar — same near-black family, no separate warm tint */
+    --sidebar: 0 0% 6%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 70 95% 65%;
+    --sidebar-border: 0 0% 14%;
 
-    --shadow-color: 215 30% 15%;
+    --shadow-color: 0 0% 0%;
 
-    --radius: 0.625rem;
+    --radius: 1rem;
 
-    /* Chart palette — refined editorial */
-    --chart-1: 213 53% 18%;   /* ink */
-    --chart-2: 36 60% 45%;    /* gold */
-    --chart-3: 130 35% 32%;   /* forest */
-    --chart-4: 12 50% 42%;    /* terracotta */
-    --chart-5: 260 28% 38%;   /* plum */
-    --chart-6: 195 40% 32%;   /* slate teal */
-    --chart-7: 28 70% 52%;    /* amber */
-    --chart-8: 340 35% 38%;   /* rosewood */
-  }
-
-  .dark {
-    /* Refined gunmetal — warm cool slate, not pitch black.
-       Surface ladder: bg 10 → card 17 → popover 19 → muted 18 → secondary 21
-       Card sits clearly above background; widened gap from 2.5% → 7%. */
-    --background: 217 20% 10%;           /* deeper base so cards lift */
-    --foreground: 38 22% 89%;            /* warm ivory */
-    --card: 217 16% 17%;                 /* lifted card surface */
-    --card-foreground: 38 22% 89%;
-    --card-highlight: 38 25% 75%;
-    --popover: 217 17% 19%;
-    --popover-foreground: 38 22% 89%;
-
-    --primary: 38 24% 88%;               /* ivory inverse */
-    --primary-foreground: 217 24% 10%;
-
-    --secondary: 217 14% 19%;
-    --secondary-foreground: 38 22% 89%;
-
-    --accent: 38 62% 60%;                /* brass, refined */
-    --accent-foreground: 217 28% 8%;
-
-    --muted: 217 14% 18%;
-    --muted-foreground: 217 10% 64%;
-
-    --destructive: 0 52% 60%;
-    --destructive-foreground: 38 24% 95%;
-
-    --border: 217 14% 28%;               /* stronger hairline to define cards */
-    --input: 217 14% 28%;
-    --ring: 38 62% 60%;
-
-    --positive: 142 36% 62%;             /* sage */
-    --negative: 4 58% 67%;                /* clay rose */
-    --warning: 36 78% 64%;
-
-    --sidebar: 217 22% 9.5%;             /* deeper than bg, refined */
-    --sidebar-foreground: 38 18% 82%;
-    --sidebar-accent: 217 16% 15%;
-    --sidebar-accent-foreground: 38 62% 64%;
-    --sidebar-border: 217 14% 16%;
-
-    --shadow-color: 217 30% 4%;
-
-    --chart-1: 38 26% 82%;     /* ivory */
-    --chart-2: 38 70% 64%;     /* brass */
-    --chart-3: 142 38% 62%;    /* sage */
-    --chart-4: 14 62% 64%;     /* terracotta */
-    --chart-5: 260 38% 72%;    /* lavender plum */
-    --chart-6: 195 42% 62%;    /* slate teal */
-    --chart-7: 28 82% 66%;     /* amber */
-    --chart-8: 340 52% 68%;    /* rose */
+    /* Chart palette — vivid, higher-lightness so it holds up on near-black */
+    --chart-1: 70 95% 65%;    /* lime */
+    --chart-2: 0 0% 90%;      /* ivory */
+    --chart-3: 4 85% 66%;     /* coral */
+    --chart-4: 185 70% 55%;   /* teal */
+    --chart-5: 265 70% 72%;   /* violet */
+    --chart-6: 40 90% 62%;    /* amber */
+    --chart-7: 210 85% 65%;   /* blue */
+    --chart-8: 330 70% 68%;   /* rose */
   }
 }
 
