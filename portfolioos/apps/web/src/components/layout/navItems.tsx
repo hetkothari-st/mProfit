@@ -122,7 +122,7 @@ export function NavSection({ section, collapsed }: { section: { heading?: string
                     ? cn(
                         'flex items-center justify-center h-10 w-10 rounded-lg',
                         isActive
-                          ? 'bg-accent/15 ring-1 ring-accent/40 text-accent'
+                          ? 'bg-accent/15 ring-1 ring-accent/40 text-accent-ink'
                           : 'hover:bg-sidebar-accent/70',
                       )
                     : cn(
@@ -147,7 +147,7 @@ export function NavSection({ section, collapsed }: { section: { heading?: string
                     className={cn(
                       'shrink-0 transition-colors',
                       collapsed ? 'h-[19px] w-[19px]' : 'h-[18px] w-[18px]',
-                      isActive ? 'text-accent' : 'text-sidebar-foreground/60 group-hover/nav:text-sidebar-accent-foreground',
+                      isActive ? 'text-accent-ink' : 'text-sidebar-foreground/60 group-hover/nav:text-sidebar-accent-foreground',
                     )}
                     strokeWidth={1.7}
                   />
