@@ -37,7 +37,7 @@ export function SidebarNav({
             <div className="leading-none min-w-0">
               <div className="flex items-baseline gap-[1px] -mt-0.5">
                 <span className="font-brand text-[22px] leading-none text-sidebar-foreground">Portfolio</span>
-                <span className="font-brand text-[22px] leading-none text-accent">OS</span>
+                <span className="font-brand text-[22px] leading-none text-accent-ink">OS</span>
               </div>
               <div className="mt-1.5 text-[9.5px] font-medium uppercase tracking-kerned text-sidebar-foreground/45">
                 Wealth · Ledger
