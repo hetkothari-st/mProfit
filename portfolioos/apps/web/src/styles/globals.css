@@ -3,13 +3,70 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────
-   PortfolioOS — CRED-dark theme
-   Near-black canvas, signature lime accent, Fraunces display serif.
-   Dark-only — no light mode.
+   PortfolioOS — CRED theme
+   Light : near-white canvas, darker olive accent-ink for text contrast
+   Dark  : near-black canvas, signature bright-lime accent
+   Both  : Fraunces display serif, lime fills, pill buttons
    ───────────────────────────────────────────────────────────────────────── */
 
 @layer base {
   :root {
+    /* Surfaces — near-white, card brighter than bg (mirrors dark mode's lift) */
+    --background: 0 0% 98%;
+    --foreground: 0 0% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+    --card-highlight: 0 0% 100%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 8%;
+
+    /* Brand — black primary CTAs on white, mirrors dark mode's white-on-black pills */
+    --primary: 0 0% 8%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 0 0% 94%;
+    --secondary-foreground: 0 0% 8%;
+
+    --accent: 70 95% 65%;                /* signature lime, ~#E2FE53 — same fill color both modes */
+    --accent-foreground: 0 0% 8%;
+    --accent-ink: 70 75% 28%;            /* darker olive — text/icon/ring use, passes contrast on white */
+
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 40%;
+
+    --destructive: 4 75% 45%;             /* darker red than dark mode — text contrast on white */
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
+    --ring: 70 75% 28%;                   /* = --accent-ink */
+
+    --positive: 100 65% 30%;              /* darker green, hue shifted from --accent-ink for separation */
+    --negative: 4 75% 45%;
+    --warning: 35 85% 38%;
+
+    --sidebar: 0 0% 97%;
+    --sidebar-foreground: 0 0% 10%;
+    --sidebar-accent: 0 0% 93%;
+    --sidebar-accent-foreground: 70 75% 28%;
+    --sidebar-border: 0 0% 88%;
+
+    --shadow-color: 0 0% 10%;
+
+    --radius: 1rem;
+
+    /* Chart palette — darker/richer so it holds up on near-white */
+    --chart-1: 70 80% 38%;
+    --chart-2: 0 0% 25%;
+    --chart-3: 4 75% 45%;
+    --chart-4: 185 65% 35%;
+    --chart-5: 265 55% 45%;
+    --chart-6: 40 85% 40%;
+    --chart-7: 210 75% 45%;
+    --chart-8: 330 55% 45%;
+  }
+
+  .dark {
     /* Surfaces — near-black, not pure #000, so grain/mesh texture still reads */
     --background: 0 0% 5%;
     --foreground: 0 0% 96%;
@@ -28,6 +85,7 @@
 
     --accent: 70 95% 65%;                /* signature lime, ~#E2FE53 */
     --accent-foreground: 0 0% 8%;
+    --accent-ink: 70 95% 65%;            /* same as --accent — bright lime already pops on black */
 
     --muted: 0 0% 13%;
     --muted-foreground: 0 0% 62%;
@@ -37,7 +95,7 @@
 
     --border: 0 0% 18%;                   /* hairline, subtle-but-opaque against 5%/9% surfaces */
     --input: 0 0% 18%;
-    --ring: 70 95% 65%;
+    --ring: 70 95% 65%;                   /* = --accent */
 
     --positive: 85 75% 58%;               /* greener-lime, on-brand for gains */
     --negative: 4 85% 62%;
@@ -214,7 +272,7 @@
   .text-positive  { color: hsl(var(--positive)); }
   .text-negative  { color: hsl(var(--negative)); }
   .text-warning   { color: hsl(var(--warning)); }
-  .text-accent-ink { color: hsl(var(--accent)); }
+  .text-accent-ink { color: hsl(var(--accent-ink)); }
   .bg-positive\/10 { background-color: hsl(var(--positive) / 0.1); }
   .bg-negative\/10 { background-color: hsl(var(--negative) / 0.1); }
   .bg-warning\/10  { background-color: hsl(var(--warning) / 0.12); }
