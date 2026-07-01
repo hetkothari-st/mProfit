@@ -82,7 +82,7 @@ export function FamilyScopeSwitcher() {
         title="Switch view"
       >
         {viewingAsFamilyId ? (
-          <Users className="h-3.5 w-3.5 text-accent" strokeWidth={1.9} />
+          <Users className="h-3.5 w-3.5 text-accent-ink" strokeWidth={1.9} />
         ) : (
           <User className="h-3.5 w-3.5" strokeWidth={1.7} />
         )}
@@ -100,7 +100,7 @@ export function FamilyScopeSwitcher() {
             onClick={() => switchTo(null, null)}
             className={cn(
               'w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-muted/60',
-              !viewingAsFamilyId && 'text-accent',
+              !viewingAsFamilyId && 'text-accent-ink',
             )}
           >
             <User className="h-3.5 w-3.5" strokeWidth={1.7} />
@@ -117,7 +117,7 @@ export function FamilyScopeSwitcher() {
               onClick={() => switchTo(f.id, f.name)}
               className={cn(
                 'w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-muted/60',
-                viewingAsFamilyId === f.id && 'text-accent',
+                viewingAsFamilyId === f.id && 'text-accent-ink',
               )}
             >
               <Users className="h-3.5 w-3.5" strokeWidth={1.7} />

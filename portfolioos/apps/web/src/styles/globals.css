@@ -272,7 +272,6 @@
   .text-positive  { color: hsl(var(--positive)); }
   .text-negative  { color: hsl(var(--negative)); }
   .text-warning   { color: hsl(var(--warning)); }
-  .text-accent-ink { color: hsl(var(--accent-ink)); }
   .bg-positive\/10 { background-color: hsl(var(--positive) / 0.1); }
   .bg-negative\/10 { background-color: hsl(var(--negative) / 0.1); }
   .bg-warning\/10  { background-color: hsl(var(--warning) / 0.12); }

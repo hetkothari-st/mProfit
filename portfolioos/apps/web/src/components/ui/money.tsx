@@ -40,7 +40,7 @@ export const Money = React.forwardRef<HTMLSpanElement, MoneyProps>(
           <span
             aria-hidden="true"
             className={cn(
-              'mr-[0.06em] translate-y-[-0.04em] text-[0.74em] font-medium text-accent/85',
+              'mr-[0.06em] translate-y-[-0.04em] text-[0.74em] font-medium text-accent-ink/85',
               symbolClassName,
             )}
             style={{ letterSpacing: 0 }}

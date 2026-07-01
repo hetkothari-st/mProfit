@@ -82,7 +82,7 @@ export function AssetClassSectionList({ items, collapsed }: Props) {
             <button
               type="button"
               onClick={enterEdit}
-              className="text-[10px] text-accent font-medium hover:text-accent/80 focus:outline-none"
+              className="text-[10px] text-accent-ink font-medium hover:text-accent-ink/80 focus:outline-none"
             >
               Edit
             </button>

@@ -100,7 +100,7 @@ export function CasPage() {
             {buildMut.data && (
               <div className="mt-3 border rounded-md p-3 space-y-2 text-sm">
                 <a
-                  className="inline-flex items-center gap-1 text-accent underline"
+                  className="inline-flex items-center gap-1 text-accent-ink underline"
                   href={buildMut.data.portalUrl}
                   target="_blank"
                   rel="noreferrer"

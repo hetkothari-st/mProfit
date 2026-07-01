@@ -114,7 +114,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileDown className="h-4 w-4 text-accent" />
+              <FileDown className="h-4 w-4 text-accent-ink" />
               Download Report
             </DialogTitle>
           </DialogHeader>
@@ -174,7 +174,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
                     className={cn(
                       'rounded-md border py-2.5 text-sm font-medium transition-colors',
                       format === f
-                        ? 'border-accent bg-accent/10 text-accent'
+                        ? 'border-accent bg-accent/10 text-accent-ink'
                         : 'border-border text-muted-foreground hover:border-accent/50 hover:text-foreground',
                     )}
                   >

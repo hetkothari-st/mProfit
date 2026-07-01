@@ -35,7 +35,7 @@ export function MetricCard({ label, value, icon: Icon, trend, hint }: MetricCard
             {isMoney ? (
               <Money
                 className="numeric-display text-[26px] leading-[1.05] tracking-tight text-foreground"
-                symbolClassName="text-[0.66em] -translate-y-[0.14em] text-accent/85"
+                symbolClassName="text-[0.66em] -translate-y-[0.14em] text-accent-ink/85"
               >
                 {value}
               </Money>

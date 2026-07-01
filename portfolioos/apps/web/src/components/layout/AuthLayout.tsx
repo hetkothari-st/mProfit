@@ -60,7 +60,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
               </div>
               <div className="flex items-baseline gap-[1px]">
                 <span className="font-brand text-[24px] leading-none text-foreground">Portfolio</span>
-                <span className="font-brand text-[24px] leading-none text-accent">OS</span>
+                <span className="font-brand text-[24px] leading-none text-accent-ink">OS</span>
               </div>
             </Link>
 
@@ -111,7 +111,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
               {TRUST_POINTS.map((p) => (
                 <div key={p.label} className="flex items-start gap-3">
                   <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border/70 bg-card/60">
-                    <p.icon className="h-4 w-4 text-accent" strokeWidth={1.7} />
+                    <p.icon className="h-4 w-4 text-accent-ink" strokeWidth={1.7} />
                   </div>
                   <div className="leading-tight pt-0.5">
                     <p className="text-[12.5px] font-medium text-foreground">{p.label}</p>
@@ -155,7 +155,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
             </div>
             <div className="flex items-baseline gap-[1px]">
               <span className="font-brand text-[22px] leading-none text-foreground">Portfolio</span>
-              <span className="font-brand text-[22px] leading-none text-accent">OS</span>
+              <span className="font-brand text-[22px] leading-none text-accent-ink">OS</span>
             </div>
           </div>
 

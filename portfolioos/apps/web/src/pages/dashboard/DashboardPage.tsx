@@ -527,7 +527,7 @@ export function DashboardPage() {
                 <Money
                   hero
                   className="numeric-display-lg text-[clamp(1.8rem,5.6vw,4rem)] leading-[1.02] text-foreground break-words"
-                  symbolClassName="text-[0.6em] -translate-y-[0.18em] text-accent"
+                  symbolClassName="text-[0.6em] -translate-y-[0.18em] text-accent-ink"
                 >
                   {netWorthHidden ? '₹ • • • • • • •' : formatINR(nw.totalNetWorth)}
                 </Money>
