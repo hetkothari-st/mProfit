@@ -27,17 +27,18 @@ import { pdfSafe } from '../charts/pdfCharts.js';
 // ─── Palette — pulled from the screenshots ───────────────────────
 
 export const MPROFIT_PALETTE = {
-  bandPink: '#F5C2C7',          // top family/member band + table header
-  bandPinkSoft: '#FAD5DC',      // outer header strip
-  groupBlue: '#9EC5E8',          // top-level group banner (SHARE INVESTMENT...)
-  subPink: '#F6D5DA',            // script header row
-  subtotalYellow: '#FFF4C8',     // per-script total
-  grandGreen: '#A0E6BB',         // grand total
-  border: '#A0A0A0',
-  ink: '#1B1B1B',
-  muted: '#666666',
-  negative: '#B91C1C',
-  white: '#FFFFFF',
+  pageBg: '#0D0D0D',             // full page canvas
+  bandPink: '#1E2210',           // top family/member band + table header (dark olive-lime tint)
+  bandPinkSoft: '#141414',       // outer header strip
+  groupBlue: '#101F2E',          // top-level group banner (dark navy tint)
+  subPink: '#1C1530',            // script header row (dark violet tint)
+  subtotalYellow: '#2A2008',     // per-script total (dark amber tint)
+  grandGreen: '#132B0C',         // grand total (dark green tint)
+  border: '#3D3D3D',
+  ink: '#F0F0F0',
+  muted: '#9E9E9E',
+  negative: '#F0574C',
+  white: '#171717',
 } as const;
 
 // ─── Layout types ────────────────────────────────────────────────
@@ -174,6 +175,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     doc.on('error', reject);
     res.on('error', reject);
     doc.pipe(res);
+    doc.rect(0, 0, doc.page.width, doc.page.height).fill(MPROFIT_PALETTE.pageBg);
 
     const ML = doc.page.margins.left;
     const pageW = doc.page.width - ML - doc.page.margins.right;
@@ -295,6 +297,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
 
     function newPage(): number {
       doc.addPage();
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill(MPROFIT_PALETTE.pageBg);
       let y = doc.page.margins.top;
       doc.y = y;
       y = renderTopBand();
@@ -531,7 +534,7 @@ export async function streamMprofitExcel(res: Response, layout: MprofitLayout): 
         bold,
         size: 9,
         color: c.signed && typeof display === 'string' && isParensNegative(display)
-          ? { argb: 'FFB91C1C' }
+          ? { argb: 'FFF0574C' }
           : undefined,
       };
       cell.alignment = { horizontal: c.align ?? 'left' };
