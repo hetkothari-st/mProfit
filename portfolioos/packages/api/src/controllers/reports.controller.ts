@@ -304,7 +304,7 @@ export async function getHoldingsExport(req: Request, res: Response) {
         const cell = headerRow.getCell(i + 1);
         cell.value = col.header;
         cell.font = { bold: true };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF7' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF20240F' } };
         if (col.width) ws.getColumn(i + 1).width = col.width;
       });
       row++;
