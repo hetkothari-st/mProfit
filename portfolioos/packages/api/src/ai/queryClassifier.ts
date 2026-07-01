@@ -64,8 +64,10 @@ function extractAmount(text: string): number | null {
 function extractEntityAfterPreposition(text: string): string | null {
   const m = text.match(/(?:on|of|for|about|in|from)\s+([a-z0-9][a-z0-9 &.'-]{2,60}?)(?:\s+(?:sip|fund|stock|shares?|holding|mf|portfolio|since|now|today|this|last|and|but|so)\b|[?.!,]|$)/i);
   if (!m) return null;
-  const raw = m[1]!.trim();
-  // Reject noise words that slip through.
+  let raw = m[1]!.trim();
+  // Strip leading possessives ("my SBI Bluechip" → "SBI Bluechip").
+  raw = raw.replace(/^(my|the|a|an|this|that|these|those)\s+/i, '').trim();
+  if (!raw) return null;
   if (/^(my|the|a|an|this|that|these|those)$/i.test(raw)) return null;
   return raw;
 }

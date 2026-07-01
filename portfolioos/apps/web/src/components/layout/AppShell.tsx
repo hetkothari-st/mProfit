@@ -9,6 +9,7 @@ import { ScanProvider } from '@/context/ScanContext';
 import { usePrivacyStore } from '@/stores/privacy.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { useTokenRefresh } from '@/hooks/useTokenRefresh';
+import { AssistantButton } from '@/components/ai/AssistantButton';
 
 export function AppShell() {
   const { hideSensitive } = usePrivacyStore();
@@ -47,6 +48,7 @@ export function AppShell() {
           </main>
         </div>
         <MobileTabBar onOpenMenu={() => setDrawerOpen(true)} />
+        <AssistantButton />
       </div>
     </ScanProvider>
   );
