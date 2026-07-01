@@ -53,8 +53,8 @@ export default {
       },
       fontFamily: {
         sans: ['"Inter Tight"', 'Inter', 'system-ui', 'sans-serif'],
-        display: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
-        serif: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
+        display: ['"Fraunces"', 'ui-serif', 'Georgia', 'serif'],
+        serif: ['"Fraunces"', 'ui-serif', 'Georgia', 'serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
         numeric: ['"Inter Tight"', 'Inter', 'system-ui', 'sans-serif'],
       },
