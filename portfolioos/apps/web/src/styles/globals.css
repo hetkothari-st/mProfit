@@ -128,17 +128,20 @@
 }
 
 @layer utilities {
-  /* Title typography — Instrument Serif, modern editorial */
+  /* Title typography — Fraunces, bold editorial weight for CRED-style headlines */
   .font-display {
-    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-family: 'Fraunces', ui-serif, Georgia, serif;
     font-feature-settings: 'liga', 'kern';
-    letter-spacing: -0.012em;
-    font-weight: 400;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0;
+    letter-spacing: -0.015em;
+    font-weight: 700;
   }
   .font-display-italic {
-    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-family: 'Fraunces', ui-serif, Georgia, serif;
     font-style: italic;
-    letter-spacing: -0.005em;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0;
+    letter-spacing: -0.008em;
+    font-weight: 500;
   }
   /* Brand wordmark — Geist, sans, distinct from content titles */
   .font-brand {
