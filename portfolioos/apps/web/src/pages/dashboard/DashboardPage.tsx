@@ -67,32 +67,32 @@ function alertHref(type: string): string {
   }
 }
 
-// Editorial chart palette — refined, restrained, never neon
+// CRED-style chart palette — vivid, high-lightness so it reads on near-black
 const PIE_COLORS = [
-  'hsl(213 53% 22%)',   // ink
-  'hsl(36 60% 48%)',    // gold
-  'hsl(130 35% 34%)',   // forest
-  'hsl(12 50% 44%)',    // terracotta
-  'hsl(260 28% 42%)',   // plum
-  'hsl(195 40% 34%)',   // slate teal
-  'hsl(28 70% 54%)',    // amber
-  'hsl(340 35% 40%)',   // rosewood
-  'hsl(80 28% 38%)',    // moss
-  'hsl(220 25% 50%)',   // dust blue
-  'hsl(50 55% 45%)',    // mustard
-  'hsl(165 30% 36%)',   // pine
+  'hsl(70 95% 65%)',    // lime (signature accent)
+  'hsl(0 0% 88%)',      // ivory
+  'hsl(4 85% 66%)',     // coral
+  'hsl(185 70% 55%)',   // teal
+  'hsl(265 70% 72%)',   // violet
+  'hsl(40 90% 62%)',    // amber
+  'hsl(210 85% 65%)',   // blue
+  'hsl(330 70% 68%)',   // rose
+  'hsl(150 55% 55%)',   // green
+  'hsl(25 80% 60%)',    // orange
+  'hsl(280 60% 68%)',   // purple
+  'hsl(190 60% 60%)',   // cyan
 ];
 
 function urgencyColor(urgency: 'HIGH' | 'MEDIUM' | 'LOW') {
-  if (urgency === 'HIGH') return 'text-red-600 dark:text-red-400';
-  if (urgency === 'MEDIUM') return 'text-amber-600 dark:text-amber-400';
-  return 'text-blue-600 dark:text-blue-400';
+  if (urgency === 'HIGH') return 'text-[hsl(4_85%_70%)]';
+  if (urgency === 'MEDIUM') return 'text-[hsl(40_90%_66%)]';
+  return 'text-[hsl(210_85%_70%)]';
 }
 
 function urgencyBg(urgency: 'HIGH' | 'MEDIUM' | 'LOW') {
-  if (urgency === 'HIGH') return 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800';
-  if (urgency === 'MEDIUM') return 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800';
-  return 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800';
+  if (urgency === 'HIGH') return 'bg-[hsl(4_85%_62%/0.12)] border-[hsl(4_85%_62%/0.35)]';
+  if (urgency === 'MEDIUM') return 'bg-[hsl(40_90%_60%/0.12)] border-[hsl(40_90%_60%/0.35)]';
+  return 'bg-[hsl(210_85%_65%/0.12)] border-[hsl(210_85%_65%/0.35)]';
 }
 
 function UrgencyIcon({ urgency }: { urgency: 'HIGH' | 'MEDIUM' | 'LOW' }) {
@@ -105,38 +105,38 @@ function labelForKey(key: string): string {
   return ASSET_CLASS_LABELS[key as keyof typeof ASSET_CLASS_LABELS] ?? key.replace(/_/g, ' ');
 }
 
-// Editorial palette per asset class — paired with PIE_COLORS for visual coherence.
+// CRED-style palette per asset class — paired with PIE_COLORS for visual coherence.
 const ASSET_CLASS_COLORS: Record<string, string> = {
-  EQUITY: 'hsl(213 53% 22%)',
-  FUTURES: 'hsl(213 53% 22%)',
-  OPTIONS: 'hsl(213 53% 22%)',
-  MUTUAL_FUND: 'hsl(260 28% 42%)',
-  ETF: 'hsl(260 28% 42%)',
-  BOND: 'hsl(195 40% 34%)',
-  GOVT_BOND: 'hsl(195 40% 34%)',
-  CORPORATE_BOND: 'hsl(195 40% 34%)',
-  FIXED_DEPOSIT: 'hsl(220 25% 50%)',
-  RECURRING_DEPOSIT: 'hsl(220 25% 50%)',
-  NPS: 'hsl(130 35% 34%)',
-  PPF: 'hsl(130 35% 34%)',
-  EPF: 'hsl(130 35% 34%)',
-  PMS: 'hsl(165 30% 36%)',
-  AIF: 'hsl(165 30% 36%)',
-  PRIVATE_EQUITY: 'hsl(165 30% 36%)',
-  REIT: 'hsl(12 50% 44%)',
-  INVIT: 'hsl(12 50% 44%)',
-  GOLD_BOND: 'hsl(36 60% 48%)',
-  GOLD_ETF: 'hsl(36 60% 48%)',
-  PHYSICAL_GOLD: 'hsl(36 60% 48%)',
-  PHYSICAL_SILVER: 'hsl(220 10% 60%)',
-  ULIP: 'hsl(340 35% 40%)',
-  INSURANCE: 'hsl(340 35% 40%)',
-  REAL_ESTATE: 'hsl(12 50% 44%)',
-  CRYPTOCURRENCY: 'hsl(28 70% 54%)',
-  CASH: 'hsl(80 28% 38%)',
-  NSC: 'hsl(50 55% 45%)',
-  ART_COLLECTIBLES: 'hsl(220 10% 60%)',
-  OTHER: 'hsl(220 10% 60%)',
+  EQUITY: 'hsl(70 95% 65%)',
+  FUTURES: 'hsl(70 95% 65%)',
+  OPTIONS: 'hsl(70 95% 65%)',
+  MUTUAL_FUND: 'hsl(265 70% 72%)',
+  ETF: 'hsl(265 70% 72%)',
+  BOND: 'hsl(185 70% 55%)',
+  GOVT_BOND: 'hsl(185 70% 55%)',
+  CORPORATE_BOND: 'hsl(185 70% 55%)',
+  FIXED_DEPOSIT: 'hsl(210 85% 65%)',
+  RECURRING_DEPOSIT: 'hsl(210 85% 65%)',
+  NPS: 'hsl(150 55% 55%)',
+  PPF: 'hsl(150 55% 55%)',
+  EPF: 'hsl(150 55% 55%)',
+  PMS: 'hsl(190 60% 60%)',
+  AIF: 'hsl(190 60% 60%)',
+  PRIVATE_EQUITY: 'hsl(190 60% 60%)',
+  REIT: 'hsl(25 80% 60%)',
+  INVIT: 'hsl(25 80% 60%)',
+  GOLD_BOND: 'hsl(40 90% 62%)',
+  GOLD_ETF: 'hsl(40 90% 62%)',
+  PHYSICAL_GOLD: 'hsl(40 90% 62%)',
+  PHYSICAL_SILVER: 'hsl(0 0% 70%)',
+  ULIP: 'hsl(330 70% 68%)',
+  INSURANCE: 'hsl(330 70% 68%)',
+  REAL_ESTATE: 'hsl(25 80% 60%)',
+  CRYPTOCURRENCY: 'hsl(4 85% 66%)',
+  CASH: 'hsl(150 55% 55%)',
+  NSC: 'hsl(40 90% 62%)',
+  ART_COLLECTIBLES: 'hsl(0 0% 70%)',
+  OTHER: 'hsl(0 0% 70%)',
 };
 function assetClassColor(cls: string): string {
   return ASSET_CLASS_COLORS[cls] ?? 'hsl(220 10% 60%)';
@@ -511,10 +511,10 @@ export function DashboardPage() {
             {/* Breakdown row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-5 md:gap-x-0">
               {[
-                { label: 'Investments', value: nw.portfolio.currentValue, color: 'hsl(213 53% 22%)', show: true },
-                { label: 'Real Estate', value: nw.realEstate.totalValue, color: 'hsl(130 35% 34%)', show: toDecimal(nw.realEstate.totalValue).greaterThan(0) },
-                { label: 'Vehicles', value: nw.vehicles.totalValue, color: 'hsl(36 60% 48%)', show: toDecimal(nw.vehicles.totalValue).greaterThan(0) },
-                { label: 'Sum Assured', value: nw.insurance.totalSumAssured, color: 'hsl(260 28% 42%)', show: nw.insurance.activePoliciesCount > 0 },
+                { label: 'Investments', value: nw.portfolio.currentValue, color: 'hsl(70 95% 65%)', show: true },
+                { label: 'Real Estate', value: nw.realEstate.totalValue, color: 'hsl(25 80% 60%)', show: toDecimal(nw.realEstate.totalValue).greaterThan(0) },
+                { label: 'Vehicles', value: nw.vehicles.totalValue, color: 'hsl(40 90% 62%)', show: toDecimal(nw.vehicles.totalValue).greaterThan(0) },
+                { label: 'Sum Assured', value: nw.insurance.totalSumAssured, color: 'hsl(330 70% 68%)', show: nw.insurance.activePoliciesCount > 0 },
               ]
                 .filter((item) => item.show)
                 .map((item, i, arr) => (
