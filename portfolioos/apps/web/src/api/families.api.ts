@@ -57,6 +57,21 @@ export interface InviteResult {
   familyName: string;
 }
 
+export interface FamilyTreeNodePos {
+  userId: string;
+  x: number;
+  y: number;
+}
+export interface FamilyTreeLink {
+  fromUserId: string;
+  toUserId: string;
+  label?: string | null;
+}
+export interface FamilyTreeLayout {
+  nodes?: FamilyTreeNodePos[];
+  links?: FamilyTreeLink[];
+}
+
 export interface InvitationPeek {
   familyName: string;
   invitedByName: string;
@@ -151,6 +166,23 @@ export const familiesApi = {
   async accept(token: string) {
     const { data } = await api.post<ApiResponse<FamilyMemberRow>>(
       `/api/families/invitations/${token}/accept`,
+    );
+    return unwrap(data);
+  },
+
+  async getTreeLayout(familyId: string): Promise<FamilyTreeLayout | null> {
+    const { data } = await api.get<ApiResponse<FamilyTreeLayout | null>>(
+      `/api/families/${familyId}/tree-layout`,
+    );
+    return unwrap(data);
+  },
+  async saveTreeLayout(
+    familyId: string,
+    layout: FamilyTreeLayout,
+  ): Promise<FamilyTreeLayout> {
+    const { data } = await api.put<ApiResponse<FamilyTreeLayout>>(
+      `/api/families/${familyId}/tree-layout`,
+      layout,
     );
     return unwrap(data);
   },

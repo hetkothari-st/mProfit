@@ -317,6 +317,7 @@ function FamilyWorkspace({
             </div>
           ) : (
             <FamilyTreeCanvas
+              familyId={family.id}
               members={members}
               currentUserId={currentUserId}
               isOwner={isOwner}

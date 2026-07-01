@@ -2866,6 +2866,13 @@ model Family {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Persisted layout for the /family tree editor:
+  //   { nodes: [{ userId, x, y }], links: [{ fromUserId, toUserId, label? }] }
+  // `nodes` are draggable card positions. `links` are user-drawn custom
+  // edges — when non-empty they OVERRIDE the auto invitedById chain.
+  // NULL = fall back to auto layout.
+  treeLayout  Json?
+
   members     FamilyMember[]
   invitations FamilyInvitation[]
   portfolios  Portfolio[]

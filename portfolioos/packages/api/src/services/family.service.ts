@@ -447,6 +447,78 @@ export async function acceptInvitation(callerId: string, token: string) {
  * `familyId` marks it as shared — RLS + service scope treat these as
  * "readable by any active member, writable by OWNER/CONTRIBUTOR."
  */
+// ─── Tree layout (draggable + custom-linkable UI) ───────────────────
+
+export interface FamilyTreeLayout {
+  nodes?: Array<{ userId: string; x: number; y: number }>;
+  links?: Array<{ fromUserId: string; toUserId: string; label?: string | null }>;
+}
+
+/**
+ * Get the persisted tree layout for a family (positions + custom
+ * links). Any active member may read; null when the OWNERs haven't
+ * customized it yet (frontend falls back to auto layout).
+ */
+export async function getFamilyTreeLayout(
+  callerId: string,
+  familyId: string,
+): Promise<FamilyTreeLayout | null> {
+  await assertActiveMemberOf(callerId, familyId);
+  const row = await prisma.family.findUnique({
+    where: { id: familyId },
+    select: { treeLayout: true },
+  });
+  if (!row) throw new NotFoundError('Family not found.');
+  return (row.treeLayout as FamilyTreeLayout | null) ?? null;
+}
+
+/**
+ * Replace the persisted tree layout wholesale. OWNER-only — non-OWNER
+ * members shouldn't rearrange the family's shared canvas. Callers pass
+ * the whole layout blob (nodes + custom links) so we don't need a
+ * partial-update PATCH for a small JSON.
+ */
+export async function updateFamilyTreeLayout(
+  callerId: string,
+  familyId: string,
+  layout: FamilyTreeLayout,
+): Promise<FamilyTreeLayout> {
+  await assertOwnerOf(callerId, familyId);
+  const sanitized: FamilyTreeLayout = {
+    nodes: Array.isArray(layout.nodes)
+      ? layout.nodes
+          .filter(
+            (n) =>
+              n &&
+              typeof n.userId === 'string' &&
+              Number.isFinite(n.x) &&
+              Number.isFinite(n.y),
+          )
+          .map((n) => ({ userId: n.userId, x: Math.round(n.x), y: Math.round(n.y) }))
+      : [],
+    links: Array.isArray(layout.links)
+      ? layout.links
+          .filter(
+            (l) =>
+              l &&
+              typeof l.fromUserId === 'string' &&
+              typeof l.toUserId === 'string' &&
+              l.fromUserId !== l.toUserId,
+          )
+          .map((l) => ({
+            fromUserId: l.fromUserId,
+            toUserId: l.toUserId,
+            label: l.label ?? null,
+          }))
+      : [],
+  };
+  await prisma.family.update({
+    where: { id: familyId },
+    data: { treeLayout: sanitized as unknown as object },
+  });
+  return sanitized;
+}
+
 /**
  * Attach an existing PERSONAL portfolio the caller already owns to a
  * family, making it a family-shared portfolio going forward. Only the

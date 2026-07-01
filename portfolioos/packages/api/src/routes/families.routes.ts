@@ -22,6 +22,8 @@ import {
   unsharePortfolioFromFamily,
   updateFamily,
   updateMemberPermissions,
+  getFamilyTreeLayout,
+  updateFamilyTreeLayout,
 } from '../services/family.service.js';
 import { NON_AC_CATEGORIES } from '../services/familyScope.service.js';
 
@@ -218,5 +220,43 @@ familiesRouter.post(
   '/:familyId/portfolios/:portfolioId/unshare',
   asyncHandler(async (req: Request, res: Response) => {
     ok(res, await unsharePortfolioFromFamily(callerId(req), req.params.portfolioId!));
+  }),
+);
+
+// ─── Tree layout ────────────────────────────────────────────────────
+
+const layoutSchema = z.object({
+  nodes: z
+    .array(
+      z.object({
+        userId: z.string(),
+        x: z.number(),
+        y: z.number(),
+      }),
+    )
+    .optional(),
+  links: z
+    .array(
+      z.object({
+        fromUserId: z.string(),
+        toUserId: z.string(),
+        label: z.string().max(50).nullable().optional(),
+      }),
+    )
+    .optional(),
+});
+
+familiesRouter.get(
+  '/:familyId/tree-layout',
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await getFamilyTreeLayout(callerId(req), req.params.familyId!));
+  }),
+);
+
+familiesRouter.put(
+  '/:familyId/tree-layout',
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = layoutSchema.parse(req.body);
+    ok(res, await updateFamilyTreeLayout(callerId(req), req.params.familyId!, data));
   }),
 );
