@@ -282,12 +282,13 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   const rootBookmark = outline.addItem('Portfolio Report');
 
   function renderHeader(): void {
-    doc.rect(0, 0, doc.page.width, 56).fill(BRAND.ink);
+    doc.rect(0, 0, doc.page.width, doc.page.height).fill(BRAND.pageBg);
+    doc.rect(0, 0, doc.page.width, 56).fill(BRAND.headerBarBg);
     doc.font('Helvetica-Bold').fontSize(16).fillColor(BRAND.white)
        .text('PortfolioOS', ML, 14, { lineBreak: false });
-    doc.font('Helvetica').fontSize(9.5).fillColor('#94AECB')
+    doc.font('Helvetica').fontSize(9.5).fillColor(BRAND.muted)
        .text('Comprehensive Portfolio Report', ML, 36, { lineBreak: false });
-    doc.font('Helvetica').fontSize(8).fillColor('#94AECB')
+    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
        .text(pdfSafe(`${portfolioLabel}  ·  ${todayStr}`), ML, 24, { width: W, align: 'right', lineBreak: false });
   }
 
@@ -838,7 +839,7 @@ function drawTable(
   function drawHead(y: number): void {
     // Soft slate — visually distinct from the section band above and the
     // alternating row tint below, but never as heavy as a navy bar.
-    doc.rect(ML, y, W, ROW_H).fill('#DDE3EC');
+    doc.rect(ML, y, W, ROW_H).fill(BRAND.tableHeaderBg);
     doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
     let x = ML;
     for (const col of scaled) {
