@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldCheck, TrendingUp, BarChart3 } from 'lucide-react';
-import { cn } from '@/lib/cn';
 
 interface AuthLayoutProps {
   title: string;
