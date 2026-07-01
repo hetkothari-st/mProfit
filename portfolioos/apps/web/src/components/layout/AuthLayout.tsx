@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Sun, Moon, ShieldCheck, TrendingUp, BarChart3 } from 'lucide-react';
-import { useThemeStore } from '@/stores/theme.store';
+import { ShieldCheck, TrendingUp, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 interface AuthLayoutProps {
@@ -18,8 +17,6 @@ const TRUST_POINTS = [
 ];
 
 export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps) {
-  const { dark, toggle } = useThemeStore();
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="relative mx-auto grid min-h-screen w-full max-w-[1440px] grid-cols-1 lg:grid-cols-[1.05fr_1fr]">
@@ -129,22 +126,6 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
 
         {/* ─── Right — form panel ─── */}
         <main className="relative flex flex-col">
-          {/* Theme toggle */}
-          <div className="absolute top-5 right-6 z-10">
-            <button
-              type="button"
-              onClick={toggle}
-              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-              className={cn(
-                'relative h-9 w-9 rounded-md flex items-center justify-center border border-border/70 bg-card/70 backdrop-blur-sm',
-                'text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors focus-ring overflow-hidden',
-              )}
-            >
-              <Sun className={cn('absolute h-4 w-4 transition-all', dark ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-0 opacity-0')} strokeWidth={1.7} />
-              <Moon className={cn('absolute h-4 w-4 transition-all', dark ? '-rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100')} strokeWidth={1.7} />
-            </button>
-          </div>
-
           {/* Mobile brand mark — only shows when left panel hidden */}
           <div className="lg:hidden flex items-center justify-center gap-2.5 pt-10 pb-2">
             <div className="relative h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm">

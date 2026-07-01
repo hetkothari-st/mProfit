@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogOut, User, ChevronDown, Sun, Moon, Bell, Eye, EyeOff, Menu } from 'lucide-react';
+import { LogOut, User, ChevronDown, Bell, Eye, EyeOff, Menu } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth.store';
-import { useThemeStore } from '@/stores/theme.store';
 import { usePrivacyStore } from '@/stores/privacy.store';
 import { authApi } from '@/api/auth.api';
 import { alertsApi } from '@/api/alerts.api';
@@ -13,7 +12,6 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { user, refreshToken, clearSession } = useAuthStore();
-  const { dark, toggle } = useThemeStore();
   const { hideSensitive, toggleHideSensitive } = usePrivacyStore();
 
   const handleLogout = async () => {
@@ -79,17 +77,6 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
             </span>
           )}
         </Link>
-
-        {/* Theme toggle */}
-        <button
-          type="button"
-          onClick={toggle}
-          title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="relative h-9 w-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors focus-ring overflow-hidden"
-        >
-          <Sun className={cn('absolute h-4 w-4 transition-all', dark ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-0 opacity-0')} strokeWidth={1.7} />
-          <Moon className={cn('absolute h-4 w-4 transition-all', dark ? '-rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100')} strokeWidth={1.7} />
-        </button>
 
         {/* Privacy toggle */}
         <button
