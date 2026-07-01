@@ -40,6 +40,7 @@ import { userPreferencesRouter } from './userPreferences.routes.js';
 import { notificationsRouter } from './notifications.routes.js';
 import { corporateActionsRouter } from './corporateActions.routes.js';
 import { goalsRouter } from './goals.routes.js';
+import { intelligenceRouter } from './intelligence.routes.js';
 import { finfactorRouter, finfactorWebhookRouter } from './finfactor.routes.js';
 import { familiesRouter } from './families.routes.js';
 import { env } from '../config/env.js';
@@ -87,6 +88,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/corporate-actions', corporateActionsRouter);
   app.use('/api/goals', goalsRouter);
+  app.use('/api/intelligence', intelligenceRouter);
   app.use('/api/integrations/finfactor', finfactorRouter);
   app.use('/api/integrations/finfactor/webhook', finfactorWebhookRouter);
   if (env.ENABLE_FAMILY === 'true') {
