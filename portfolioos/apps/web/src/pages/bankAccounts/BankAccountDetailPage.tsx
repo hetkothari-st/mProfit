@@ -241,6 +241,7 @@ export function BankAccountDetailPage() {
                 </p>
                 <DetailRow label="Bank" value={account.bankName} />
                 <DetailRow label="Type" value={account.accountType} />
+                <DetailRow label="Customer ID" value={account.customerId} />
                 <DetailRow label="IFSC" value={account.ifsc} />
                 <DetailRow label="Branch" value={account.branch} />
                 <DetailRow label="Status" value={account.status} />

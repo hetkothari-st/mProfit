@@ -2373,6 +2373,7 @@ model BankAccount {
   accountType   String // SAVINGS | CURRENT | SALARY | NRE | NRO | OD
   accountHolder String
   last4         String // last 4 digits of the account number
+  customerId    String? // bank-issued customer identification number (CIF / CustID)
   ifsc          String?
   branch        String?
   nickname      String? // user-given label e.g. "Primary salary"

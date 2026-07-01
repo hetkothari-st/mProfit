@@ -26,6 +26,7 @@ function emptyForm(): CreateBankAccountInput {
     accountType: 'SAVINGS',
     accountHolder: '',
     last4: '',
+    customerId: null,
     ifsc: null,
     branch: null,
     nickname: null,
@@ -46,6 +47,7 @@ function fromAccount(a: BankAccountDTO): CreateBankAccountInput {
     accountType: a.accountType,
     accountHolder: a.accountHolder,
     last4: a.last4,
+    customerId: a.customerId,
     portfolioId: a.portfolioId,
     ifsc: a.ifsc,
     branch: a.branch,
@@ -106,6 +108,7 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
     if (!form.bankName.trim()) errs['bankName'] = 'Required';
     if (!form.accountHolder.trim()) errs['accountHolder'] = 'Required';
     if (!form.last4 || !/^\d{4}$/.test(form.last4)) errs['last4'] = 'Must be 4 digits';
+    if (!form.customerId?.trim()) errs['customerId'] = 'Required';
     if (form.debitCardLast4 && !/^\d{4}$/.test(form.debitCardLast4))
       errs['debitCardLast4'] = 'Must be 4 digits';
     if (form.debitCardExpiry && !/^(0[1-9]|1[0-2])\/\d{2}$/.test(form.debitCardExpiry))
@@ -127,6 +130,7 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
       bankName: form.bankName.trim(),
       accountHolder: form.accountHolder.trim(),
       jointHolders,
+      customerId: form.customerId?.trim() || null,
       ifsc: form.ifsc?.trim() || null,
       branch: form.branch?.trim() || null,
       nickname: form.nickname?.trim() || null,
@@ -218,6 +222,19 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
                 onChange={(e) => set('branch', e.target.value || null)}
               />
             </div>
+          </div>
+
+          <div>
+            <Label>Customer ID *</Label>
+            <Input
+              placeholder="Bank-issued CIF / Customer ID"
+              value={form.customerId ?? ''}
+              onChange={(e) => set('customerId', e.target.value || null)}
+              className={errors['customerId'] ? 'border-negative' : ''}
+            />
+            {errors['customerId'] && (
+              <p className="text-xs text-negative mt-1">{errors['customerId']}</p>
+            )}
           </div>
 
           <div>

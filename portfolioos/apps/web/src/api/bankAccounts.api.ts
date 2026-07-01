@@ -24,6 +24,7 @@ export interface BankAccountDTO {
   accountType: BankAccountType;
   accountHolder: string;
   last4: string;
+  customerId: string | null;
   ifsc: string | null;
   branch: string | null;
   nickname: string | null;
@@ -59,6 +60,7 @@ export interface CreateBankAccountInput {
   accountType: BankAccountType;
   accountHolder: string;
   last4: string;
+  customerId?: string | null;
   portfolioId?: string | null;
   ifsc?: string | null;
   branch?: string | null;
