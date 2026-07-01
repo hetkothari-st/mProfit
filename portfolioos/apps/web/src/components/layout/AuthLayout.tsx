@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, TrendingUp, BarChart3 } from 'lucide-react';
+import { Sun, Moon, ShieldCheck, TrendingUp, BarChart3 } from 'lucide-react';
+import { useThemeStore } from '@/stores/theme.store';
+import { cn } from '@/lib/cn';
 
 interface AuthLayoutProps {
   title: string;
@@ -16,6 +18,7 @@ const TRUST_POINTS = [
 ];
 
 export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps) {
+  const { dark, toggle } = useThemeStore();
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="relative mx-auto grid min-h-screen w-full max-w-[1440px] grid-cols-1 lg:grid-cols-[1.05fr_1fr]">
@@ -80,18 +83,18 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
               <div className="flex items-center gap-5">
                 <svg viewBox="0 0 120 120" className="h-[88px] w-[88px] shrink-0">
                   <circle cx="60" cy="60" r="46" fill="none" stroke="hsl(var(--border))" strokeWidth="0.5" />
-                  {/* Donut segments — refined editorial palette */}
-                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(70 95% 65%)" strokeWidth="14" strokeDasharray="100 251" strokeDashoffset="0" transform="rotate(-90 60 60)" />
-                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(265 70% 72%)" strokeWidth="14" strokeDasharray="62 251" strokeDashoffset="-100" transform="rotate(-90 60 60)" />
-                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(25 80% 60%)" strokeWidth="14" strokeDasharray="48 251" strokeDashoffset="-162" transform="rotate(-90 60 60)" />
-                  <circle cx="60" cy="60" r="40" fill="none" stroke="hsl(0 0% 70%)" strokeWidth="14" strokeDasharray="41 251" strokeDashoffset="-210" transform="rotate(-90 60 60)" />
+                  {/* Donut segments — refined editorial palette, theme-aware */}
+                  <circle cx="60" cy="60" r="40" fill="none" stroke={dark ? 'hsl(70 95% 65%)' : 'hsl(70 80% 38%)'} strokeWidth="14" strokeDasharray="100 251" strokeDashoffset="0" transform="rotate(-90 60 60)" />
+                  <circle cx="60" cy="60" r="40" fill="none" stroke={dark ? 'hsl(265 70% 72%)' : 'hsl(265 55% 45%)'} strokeWidth="14" strokeDasharray="62 251" strokeDashoffset="-100" transform="rotate(-90 60 60)" />
+                  <circle cx="60" cy="60" r="40" fill="none" stroke={dark ? 'hsl(25 80% 60%)' : 'hsl(25 75% 42%)'} strokeWidth="14" strokeDasharray="48 251" strokeDashoffset="-162" transform="rotate(-90 60 60)" />
+                  <circle cx="60" cy="60" r="40" fill="none" stroke={dark ? 'hsl(0 0% 70%)' : 'hsl(0 0% 50%)'} strokeWidth="14" strokeDasharray="41 251" strokeDashoffset="-210" transform="rotate(-90 60 60)" />
                 </svg>
                 <div className="space-y-1.5 text-[11.5px]">
                   {[
-                    { label: 'Equities', pct: '40%', color: 'hsl(70 95% 65%)' },
-                    { label: 'Mutual Funds', pct: '25%', color: 'hsl(265 70% 72%)' },
-                    { label: 'Real Estate', pct: '19%', color: 'hsl(25 80% 60%)' },
-                    { label: 'Other', pct: '16%', color: 'hsl(0 0% 70%)' },
+                    { label: 'Equities', pct: '40%', color: dark ? 'hsl(70 95% 65%)' : 'hsl(70 80% 38%)' },
+                    { label: 'Mutual Funds', pct: '25%', color: dark ? 'hsl(265 70% 72%)' : 'hsl(265 55% 45%)' },
+                    { label: 'Real Estate', pct: '19%', color: dark ? 'hsl(25 80% 60%)' : 'hsl(25 75% 42%)' },
+                    { label: 'Other', pct: '16%', color: dark ? 'hsl(0 0% 70%)' : 'hsl(0 0% 50%)' },
                   ].map((row) => (
                     <div key={row.label} className="flex items-center gap-2 min-w-[180px]">
                       <span className="h-2 w-2 rounded-[1px] rotate-45 shrink-0" style={{ background: row.color }} />
@@ -125,6 +128,22 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
 
         {/* ─── Right — form panel ─── */}
         <main className="relative flex flex-col">
+          {/* Theme toggle */}
+          <div className="absolute top-5 right-6 z-10">
+            <button
+              type="button"
+              onClick={toggle}
+              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              className={cn(
+                'relative h-9 w-9 rounded-md flex items-center justify-center border border-border/70 bg-card/70 backdrop-blur-sm',
+                'text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors focus-ring overflow-hidden',
+              )}
+            >
+              <Sun className={cn('absolute h-4 w-4 transition-all', dark ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-0 opacity-0')} strokeWidth={1.7} />
+              <Moon className={cn('absolute h-4 w-4 transition-all', dark ? '-rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100')} strokeWidth={1.7} />
+            </button>
+          </div>
+
           {/* Mobile brand mark — only shows when left panel hidden */}
           <div className="lg:hidden flex items-center justify-center gap-2.5 pt-10 pb-2">
             <div className="relative h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm">
