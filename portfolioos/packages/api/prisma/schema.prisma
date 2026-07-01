@@ -131,6 +131,11 @@ model User {
   familyMemberships     FamilyMember[]     @relation("FamilyMembership")
   familyInvitesReceived FamilyMember[]     @relation("FamilyMemberInvitedBy")
   familyInvitationsSent FamilyInvitation[] @relation("FamilyInvitationInviter")
+
+  // AI Assistant — conversational Q&A over the user's portfolio. History
+  // capped at 50 rows per user; daily usage counter drives rate limits.
+  aiConversations AiConversation[]
+  aiUsage         AiUsage[]
 }
 
 model UserNotificationConfig {
@@ -2933,4 +2938,59 @@ model FamilyInvitation {
   @@index([invitedEmail])
   @@index([familyId])
   @@index([expiresAt])
+}
+
+// ─── AI ASSISTANT ───────────────────────────────────────────────────
+//
+// Conversational Q&A over the user's portfolio. Two-layer architecture:
+//   Layer 1 (deterministic Node): query classifier + context builder
+//     compute every number from the intelligence modules
+//     (analytics.service, xirr.service, tax.service, dashboard.service,
+//     capitalGains.service). Claude only reasons about pre-computed
+//     numbers — never arithmetic.
+//   Layer 2 (Claude Sonnet): reads the structured PortfolioContext + the
+//     user's question, produces a conversational answer with an optional
+//     inline "card" (JSON) rendered on the frontend.
+//
+// See packages/api/src/ai/systemPrompt.ts for the full model persona
+// and formatting contract.
+
+enum AiConversationRole {
+  USER
+  ASSISTANT
+}
+
+model AiConversation {
+  id             String             @id @default(cuid())
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           AiConversationRole
+  content        String             @db.Text
+  // Classified intent of the USER message. Kept on both USER and
+  // ASSISTANT rows so we can slice usage by intent later without
+  // joining rows.
+  queryIntent    String?
+  // The PortfolioContext dict sent to Claude for the ASSISTANT
+  // response. Snapshot for debugging + replay; not shown to the user.
+  contextSnapshot Json?
+  // Parsed inline card (holding | goal | stat | action) attached to
+  // an ASSISTANT message, when Claude emitted one.
+  cardData       Json?
+  // The family scope the message was answered under. Null = personal.
+  familyId       String?
+  createdAt      DateTime           @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model AiUsage {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date         DateTime @db.Date
+  messageCount Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId, date])
 }

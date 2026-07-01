@@ -51,6 +51,9 @@ const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'Family',
   'FamilyMember',
   'FamilyInvitation',
+  // AI Assistant — conversation history + daily usage counter.
+  'AiConversation',
+  'AiUsage',
 ]);
 
 const basePrisma =

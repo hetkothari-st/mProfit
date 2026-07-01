@@ -42,6 +42,7 @@ import { corporateActionsRouter } from './corporateActions.routes.js';
 import { goalsRouter } from './goals.routes.js';
 import { finfactorRouter, finfactorWebhookRouter } from './finfactor.routes.js';
 import { familiesRouter } from './families.routes.js';
+import { aiAssistantRouter } from './aiAssistant.routes.js';
 import { env } from '../config/env.js';
 
 export function registerRoutes(app: Express): void {
@@ -92,4 +93,5 @@ export function registerRoutes(app: Express): void {
   if (env.ENABLE_FAMILY === 'true') {
     app.use('/api/families', familiesRouter);
   }
+  app.use('/api/assistant', aiAssistantRouter);
 }
