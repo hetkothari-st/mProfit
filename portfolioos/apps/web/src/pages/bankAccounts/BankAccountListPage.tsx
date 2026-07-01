@@ -123,14 +123,15 @@ function AccountTile({
       </Link>
 
       <div className="mt-3 px-1 space-y-1.5">
-        {account.customerId && (
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Customer ID</span>
-            <span className="font-mono tabular-nums tracking-wide truncate max-w-[180px]" title={account.customerId}>
-              {account.customerId}
-            </span>
-          </div>
-        )}
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Customer ID</span>
+          <span
+            className={`font-mono tabular-nums tracking-wide truncate max-w-[180px] ${account.customerId ? '' : 'text-muted-foreground italic'}`}
+            title={account.customerId ?? undefined}
+          >
+            {account.customerId ?? '—'}
+          </span>
+        </div>
         {account.ifsc && (
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">IFSC</span>
