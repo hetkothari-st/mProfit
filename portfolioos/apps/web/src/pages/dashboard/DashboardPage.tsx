@@ -32,6 +32,7 @@ import { GmailScanProgressCard } from '@/components/dashboard/GmailScanProgressC
 import { DashboardFxStrip } from '@/pages/forex/DashboardFxStrip';
 import { apiErrorMessage } from '@/api/client';
 import { usePrivacyStore } from '@/stores/privacy.store';
+import { useThemeStore } from '@/stores/theme.store';
 import { useAssetSectionsStore } from '@/stores/assetSections.store';
 import {
   formatINR,
@@ -68,7 +69,7 @@ function alertHref(type: string): string {
 }
 
 // CRED-style chart palette — vivid, high-lightness so it reads on near-black
-const PIE_COLORS = [
+const PIE_COLORS_DARK = [
   'hsl(70 95% 65%)',    // lime (signature accent)
   'hsl(0 0% 88%)',      // ivory
   'hsl(4 85% 66%)',     // coral
@@ -83,22 +84,48 @@ const PIE_COLORS = [
   'hsl(190 60% 60%)',   // cyan
 ];
 
-function urgencyColor(urgency: 'HIGH' | 'MEDIUM' | 'LOW') {
-  if (urgency === 'HIGH') return 'text-[hsl(4_85%_70%)]';
-  if (urgency === 'MEDIUM') return 'text-[hsl(40_90%_66%)]';
-  return 'text-[hsl(210_85%_70%)]';
+// Same hue families as PIE_COLORS_DARK, darkened/enriched to hold contrast on near-white
+const PIE_COLORS_LIGHT = [
+  'hsl(70 80% 38%)',    // olive-lime
+  'hsl(0 0% 25%)',      // charcoal (replaces ivory, which vanishes on white)
+  'hsl(4 75% 45%)',     // coral
+  'hsl(185 65% 35%)',   // teal
+  'hsl(265 55% 45%)',   // violet
+  'hsl(40 85% 40%)',    // amber
+  'hsl(210 75% 45%)',   // blue
+  'hsl(330 55% 45%)',   // rose
+  'hsl(150 55% 32%)',   // green
+  'hsl(25 75% 42%)',    // orange
+  'hsl(280 55% 45%)',   // purple
+  'hsl(190 60% 35%)',   // cyan
+];
+
+function urgencyColor(urgency: 'HIGH' | 'MEDIUM' | 'LOW', dark: boolean) {
+  if (dark) {
+    if (urgency === 'HIGH') return 'text-[hsl(4_85%_70%)]';
+    if (urgency === 'MEDIUM') return 'text-[hsl(40_90%_66%)]';
+    return 'text-[hsl(210_85%_70%)]';
+  }
+  if (urgency === 'HIGH') return 'text-[hsl(4_75%_42%)]';
+  if (urgency === 'MEDIUM') return 'text-[hsl(35_85%_38%)]';
+  return 'text-[hsl(210_75%_42%)]';
 }
 
-function urgencyBg(urgency: 'HIGH' | 'MEDIUM' | 'LOW') {
-  if (urgency === 'HIGH') return 'bg-[hsl(4_85%_62%/0.12)] border-[hsl(4_85%_62%/0.35)]';
-  if (urgency === 'MEDIUM') return 'bg-[hsl(40_90%_60%/0.12)] border-[hsl(40_90%_60%/0.35)]';
-  return 'bg-[hsl(210_85%_65%/0.12)] border-[hsl(210_85%_65%/0.35)]';
+function urgencyBg(urgency: 'HIGH' | 'MEDIUM' | 'LOW', dark: boolean) {
+  if (dark) {
+    if (urgency === 'HIGH') return 'bg-[hsl(4_85%_62%/0.12)] border-[hsl(4_85%_62%/0.35)]';
+    if (urgency === 'MEDIUM') return 'bg-[hsl(40_90%_60%/0.12)] border-[hsl(40_90%_60%/0.35)]';
+    return 'bg-[hsl(210_85%_65%/0.12)] border-[hsl(210_85%_65%/0.35)]';
+  }
+  if (urgency === 'HIGH') return 'bg-[hsl(4_75%_50%/0.08)] border-[hsl(4_75%_50%/0.3)]';
+  if (urgency === 'MEDIUM') return 'bg-[hsl(35_85%_45%/0.08)] border-[hsl(35_85%_45%/0.3)]';
+  return 'bg-[hsl(210_75%_50%/0.08)] border-[hsl(210_75%_50%/0.3)]';
 }
 
-function UrgencyIcon({ urgency }: { urgency: 'HIGH' | 'MEDIUM' | 'LOW' }) {
-  if (urgency === 'HIGH') return <XCircle className={`h-4 w-4 flex-shrink-0 ${urgencyColor(urgency)}`} />;
-  if (urgency === 'MEDIUM') return <AlertTriangle className={`h-4 w-4 flex-shrink-0 ${urgencyColor(urgency)}`} />;
-  return <Bell className={`h-4 w-4 flex-shrink-0 ${urgencyColor(urgency)}`} />;
+function UrgencyIcon({ urgency, dark }: { urgency: 'HIGH' | 'MEDIUM' | 'LOW'; dark: boolean }) {
+  if (urgency === 'HIGH') return <XCircle className={`h-4 w-4 flex-shrink-0 ${urgencyColor(urgency, dark)}`} />;
+  if (urgency === 'MEDIUM') return <AlertTriangle className={`h-4 w-4 flex-shrink-0 ${urgencyColor(urgency, dark)}`} />;
+  return <Bell className={`h-4 w-4 flex-shrink-0 ${urgencyColor(urgency, dark)}`} />;
 }
 
 function labelForKey(key: string): string {
@@ -106,7 +133,7 @@ function labelForKey(key: string): string {
 }
 
 // CRED-style palette per asset class — paired with PIE_COLORS for visual coherence.
-const ASSET_CLASS_COLORS: Record<string, string> = {
+const ASSET_CLASS_COLORS_DARK: Record<string, string> = {
   EQUITY: 'hsl(70 95% 65%)',
   FUTURES: 'hsl(70 95% 65%)',
   OPTIONS: 'hsl(70 95% 65%)',
@@ -138,8 +165,44 @@ const ASSET_CLASS_COLORS: Record<string, string> = {
   ART_COLLECTIBLES: 'hsl(0 0% 70%)',
   OTHER: 'hsl(0 0% 70%)',
 };
-function assetClassColor(cls: string): string {
-  return ASSET_CLASS_COLORS[cls] ?? 'hsl(0 0% 70%)';
+
+// Same hue families as ASSET_CLASS_COLORS_DARK, darkened for contrast on near-white
+const ASSET_CLASS_COLORS_LIGHT: Record<string, string> = {
+  EQUITY: 'hsl(70 80% 38%)',
+  FUTURES: 'hsl(70 80% 38%)',
+  OPTIONS: 'hsl(70 80% 38%)',
+  MUTUAL_FUND: 'hsl(265 55% 45%)',
+  ETF: 'hsl(265 55% 45%)',
+  BOND: 'hsl(185 65% 35%)',
+  GOVT_BOND: 'hsl(185 65% 35%)',
+  CORPORATE_BOND: 'hsl(185 65% 35%)',
+  FIXED_DEPOSIT: 'hsl(210 75% 45%)',
+  RECURRING_DEPOSIT: 'hsl(210 75% 45%)',
+  NPS: 'hsl(150 55% 32%)',
+  PPF: 'hsl(150 55% 32%)',
+  EPF: 'hsl(150 55% 32%)',
+  PMS: 'hsl(190 60% 35%)',
+  AIF: 'hsl(190 60% 35%)',
+  PRIVATE_EQUITY: 'hsl(190 60% 35%)',
+  REIT: 'hsl(25 75% 42%)',
+  INVIT: 'hsl(25 75% 42%)',
+  GOLD_BOND: 'hsl(40 85% 40%)',
+  GOLD_ETF: 'hsl(40 85% 40%)',
+  PHYSICAL_GOLD: 'hsl(40 85% 40%)',
+  PHYSICAL_SILVER: 'hsl(0 0% 40%)',
+  ULIP: 'hsl(330 55% 45%)',
+  INSURANCE: 'hsl(330 55% 45%)',
+  REAL_ESTATE: 'hsl(25 75% 42%)',
+  CRYPTOCURRENCY: 'hsl(4 75% 45%)',
+  CASH: 'hsl(150 55% 32%)',
+  NSC: 'hsl(40 85% 40%)',
+  ART_COLLECTIBLES: 'hsl(0 0% 50%)',
+  OTHER: 'hsl(0 0% 50%)',
+};
+
+function assetClassColor(cls: string, dark: boolean): string {
+  const map = dark ? ASSET_CLASS_COLORS_DARK : ASSET_CLASS_COLORS_LIGHT;
+  return map[cls] ?? (dark ? 'hsl(0 0% 70%)' : 'hsl(0 0% 50%)');
 }
 
 // Map an asset class enum to the sidebar section key that controls its visibility
@@ -242,6 +305,8 @@ export function DashboardPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const hideSensitive = usePrivacyStore((s) => s.hideSensitive);
+  const dark = useThemeStore((s) => s.dark);
+  const PIE_COLORS = dark ? PIE_COLORS_DARK : PIE_COLORS_LIGHT;
   // In-session collapse for the alerts bar. Intentionally NOT persisted —
   // every fresh load shows alerts expanded so the user re-sees them.
   const [alertsCollapsed, setAlertsCollapsed] = useState(false);
@@ -546,19 +611,19 @@ export function DashboardPage() {
             {!alertsCollapsed ? (
               <>
                 {shown.map((a, i) => (
-                  <div key={i} className={`flex items-stretch rounded-lg border text-sm ${urgencyBg(a.urgency)}`}>
+                  <div key={i} className={`flex items-stretch rounded-lg border text-sm ${urgencyBg(a.urgency, dark)}`}>
                     <Link
                       to={alertHref(a.type)}
                       className="flex flex-1 items-start gap-3 px-4 py-2.5 min-w-0 rounded-l-lg transition-colors hover:bg-foreground/[0.03] focus:outline-none focus:ring-2 focus:ring-primary/40"
                       title="Open section"
                     >
-                      <UrgencyIcon urgency={a.urgency} />
+                      <UrgencyIcon urgency={a.urgency} dark={dark} />
                       <div className="flex-1 min-w-0">
                         <span className="font-medium">{a.title}</span>
                         <span className="text-muted-foreground ml-2">{a.description}</span>
                       </div>
                       {a.daysUntil != null && (
-                        <span className={`text-xs font-medium flex-shrink-0 ${urgencyColor(a.urgency)}`}>
+                        <span className={`text-xs font-medium flex-shrink-0 ${urgencyColor(a.urgency, dark)}`}>
                           {a.daysUntil <= 0 ? 'Overdue' : `${a.daysUntil}d`}
                         </span>
                       )}
@@ -583,9 +648,9 @@ export function DashboardPage() {
                 type="button"
                 onClick={() => setAlertsCollapsed(false)}
                 aria-label="Expand alerts"
-                className={`w-full flex items-center gap-3 rounded-lg border px-4 py-2 text-sm text-left transition-colors hover:bg-foreground/[0.02] ${urgencyBg(highest)}`}
+                className={`w-full flex items-center gap-3 rounded-lg border px-4 py-2 text-sm text-left transition-colors hover:bg-foreground/[0.02] ${urgencyBg(highest, dark)}`}
               >
-                <UrgencyIcon urgency={highest} />
+                <UrgencyIcon urgency={highest} dark={dark} />
                 <span className="flex-1 font-medium">
                   {alerts.length} alert{alerts.length === 1 ? '' : 's'}
                   <span className="text-muted-foreground font-normal ml-2">— click to expand</span>
@@ -965,7 +1030,7 @@ export function DashboardPage() {
               {topHoldings.map((h, idx) => {
                 const pnlD = toDecimal(h.unrealisedPnL ?? '0');
                 const pos = pnlD.greaterThan(0), neg = pnlD.lessThan(0);
-                const color = assetClassColor(h.assetClass);
+                const color = assetClassColor(h.assetClass, dark);
                 const route = holdingRoute(h);
                 const method = valuationMethodFor(h.assetClass);
                 return (
@@ -1028,7 +1093,7 @@ export function DashboardPage() {
                   {topHoldings.map((h, idx) => {
                     const pnlD = toDecimal(h.unrealisedPnL ?? '0');
                     const pos = pnlD.greaterThan(0), neg = pnlD.lessThan(0);
-                    const color = assetClassColor(h.assetClass);
+                    const color = assetClassColor(h.assetClass, dark);
                     const route = holdingRoute(h);
                     return (
                       <tr
@@ -1232,9 +1297,9 @@ export function DashboardPage() {
                     <div className="space-y-1.5">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Expiring soon</p>
                       {nw.vehicles.expiringItems.slice(0, 4).map((item, i) => (
-                        <div key={i} className={`flex items-center justify-between rounded px-2.5 py-1.5 text-xs border ${urgencyBg(item.daysUntil <= 7 ? 'HIGH' : item.daysUntil <= 15 ? 'MEDIUM' : 'LOW')}`}>
+                        <div key={i} className={`flex items-center justify-between rounded px-2.5 py-1.5 text-xs border ${urgencyBg(item.daysUntil <= 7 ? 'HIGH' : item.daysUntil <= 15 ? 'MEDIUM' : 'LOW', dark)}`}>
                           <span className="font-medium truncate">{item.type} — {item.label}</span>
-                          <span className={`ml-2 flex-shrink-0 font-semibold ${urgencyColor(item.daysUntil <= 7 ? 'HIGH' : item.daysUntil <= 15 ? 'MEDIUM' : 'LOW')}`}>
+                          <span className={`ml-2 flex-shrink-0 font-semibold ${urgencyColor(item.daysUntil <= 7 ? 'HIGH' : item.daysUntil <= 15 ? 'MEDIUM' : 'LOW', dark)}`}>
                             {item.daysUntil <= 0 ? 'Expired' : `${item.daysUntil}d`}
                           </span>
                         </div>
@@ -1288,13 +1353,13 @@ export function DashboardPage() {
                     <div className="space-y-1.5">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Upcoming premiums</p>
                       {nw.insurance.upcomingRenewals.slice(0, 4).map((r) => (
-                        <div key={r.policyId} className={`flex items-center justify-between rounded px-2.5 py-1.5 text-xs border ${urgencyBg(r.daysUntil <= 7 ? 'HIGH' : r.daysUntil <= 15 ? 'MEDIUM' : 'LOW')}`}>
+                        <div key={r.policyId} className={`flex items-center justify-between rounded px-2.5 py-1.5 text-xs border ${urgencyBg(r.daysUntil <= 7 ? 'HIGH' : r.daysUntil <= 15 ? 'MEDIUM' : 'LOW', dark)}`}>
                           <div className="min-w-0">
                             <span className="font-medium">{r.insurer}</span>
                             <span className="text-muted-foreground ml-1">({r.type})</span>
                           </div>
                           <div className="ml-2 flex-shrink-0 text-right">
-                            <div className={`font-semibold ${urgencyColor(r.daysUntil <= 7 ? 'HIGH' : r.daysUntil <= 15 ? 'MEDIUM' : 'LOW')}`}>
+                            <div className={`font-semibold ${urgencyColor(r.daysUntil <= 7 ? 'HIGH' : r.daysUntil <= 15 ? 'MEDIUM' : 'LOW', dark)}`}>
                               {r.daysUntil <= 0 ? 'Due now' : `${r.daysUntil}d`}
                             </div>
                             <AutoFitText>
