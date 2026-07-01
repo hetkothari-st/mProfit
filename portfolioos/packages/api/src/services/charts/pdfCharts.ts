@@ -37,7 +37,7 @@ export function pdfSafe(s: string | number | null | undefined): string {
     .trim();
 }
 
-// Allocation colour wheel — 12 distinct, editorial, never neon
+// Allocation colour wheel — 12 distinct, vivid colours tuned for near-black backgrounds
 export const PIE_COLORS = [
   '#E2FE53', '#E0E0E0', '#F0574C', '#3FC6C0',
   '#B79EF0', '#F5B93D', '#5CA8F5', '#EF87C0',

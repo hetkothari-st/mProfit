@@ -308,8 +308,8 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
   const ROW_H       = 16;
 
   const drawHeader = (yy: number): void => {
-    // Table column header — soft slate background, ink text. Distinct from
-    // section header (light blue) and row background (white / row-alt).
+    // Table column header — dark slate background, ink text. Distinct from
+    // section header (headerBg) and row background (rowAlt).
     doc.rect(o.x, yy, o.width, ROW_H).fill(BRAND.tableHeaderBg);
     doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
     let x = o.x;

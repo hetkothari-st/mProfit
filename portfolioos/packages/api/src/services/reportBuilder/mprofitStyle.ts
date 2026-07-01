@@ -594,6 +594,6 @@ function solid(argb: string): ExcelJS.FillPattern {
 }
 
 function allBorders(): ExcelJS.Borders {
-  const style: ExcelJS.Border = { style: 'thin', color: { argb: 'FFA0A0A0' } };
+  const style: ExcelJS.Border = { style: 'thin', color: { argb: 'FF3D3D3D' } };
   return { top: style, left: style, right: style, bottom: style } as ExcelJS.Borders;
 }

@@ -837,8 +837,8 @@ function drawTable(
   let cy = startY;
 
   function drawHead(y: number): void {
-    // Soft slate — visually distinct from the section band above and the
-    // alternating row tint below, but never as heavy as a navy bar.
+    // Dark slate — visually distinct from the section band above and the
+    // alternating row tint below.
     doc.rect(ML, y, W, ROW_H).fill(BRAND.tableHeaderBg);
     doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
     let x = ML;
