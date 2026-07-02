@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   ChevronRight,
   Lock,
+  Search,
+  X,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +27,7 @@ import { reportsApi } from '@/api/reports.api';
 import { importsApi } from '@/api/imports.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { InboxImportsTab } from './InboxImportsTab';
-import { TaxMisDownloads } from './TaxMisDownloads';
+import { TaxMisDownloads, REPORTS as TAX_MIS_REPORTS, type ReportHighlight } from './TaxMisDownloads';
 import {
   Decimal,
   toDecimal,
@@ -61,6 +63,79 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'xirr', label: 'XIRR' },
   { key: 'historical', label: 'Historical' },
   { key: 'inbox-imports', label: 'Inbox imports' },
+];
+
+// Short blurbs so single-view tabs (no report cards of their own) are still
+// findable by keyword in the search bar below, not just by their tab label.
+const TAB_HINTS: Partial<Record<Tab, string>> = {
+  summary: 'Portfolio overview — unrealised P&L, XIRR, capital gains by financial year.',
+  unrealised: 'Open positions marked to market — quantity, avg cost, current value, P&L.',
+  intraday: 'Same-day buy/sell speculation gains and losses.',
+  stcg: 'Short-term capital gains — realised sales held under the LTCG threshold.',
+  ltcg: 'Long-term capital gains — realised sales held past the LTCG threshold.',
+  'schedule-112a': 'ITR Schedule 112A — grandfathered long-term equity gains, sale-wise.',
+  income: 'Dividends, interest and maturity credits received.',
+  xirr: 'Annualised money-weighted returns — overall, 1Y, 3Y, 5Y.',
+  historical: 'Month-end portfolio valuation history.',
+};
+
+// Metadata for the 4 Statements-tab download cards, shared between the card
+// grid below and the search index — buildUrl/fyDependent stay inline in
+// StatementsView since they close over portfolioId/fy.
+const STATEMENT_REPORTS: { key: string; title: string; description: string }[] = [
+  {
+    key: 'holdings',
+    title: 'Holdings Statement',
+    description:
+      'Per-asset positions grouped by class with avg cost, market value, unrealised P&L and allocation %.',
+  },
+  {
+    key: 'capital-gains',
+    title: 'Capital Gains Statement',
+    description: 'FIFO-matched Intraday, STCG and LTCG sections with FY totals — ready for tax filing.',
+  },
+  {
+    key: 'income',
+    title: 'Income Statement',
+    description: 'Dividends, interest and maturity credits split by category with FY totals.',
+  },
+  {
+    key: 'ledger',
+    title: 'Transaction Ledger',
+    description: 'Chronological book-style ledger of every trade and cash movement with running balance.',
+  },
+];
+
+interface SearchItem {
+  id: string;
+  title: string;
+  description: string;
+  tab: Tab;
+  reportKey?: string;
+}
+
+const SEARCH_INDEX: SearchItem[] = [
+  ...TABS.filter((t) => t.key !== 'tax-mis' && t.key !== 'statements' && t.key !== 'inbox-imports').map(
+    (t): SearchItem => ({ id: `tab-${t.key}`, title: t.label, description: TAB_HINTS[t.key] ?? '', tab: t.key }),
+  ),
+  ...STATEMENT_REPORTS.map(
+    (r): SearchItem => ({
+      id: `stmt-${r.key}`,
+      title: r.title,
+      description: r.description,
+      tab: 'statements',
+      reportKey: r.key,
+    }),
+  ),
+  ...TAX_MIS_REPORTS.map(
+    (r): SearchItem => ({
+      id: `tax-${r.key}`,
+      title: r.title,
+      description: r.description,
+      tab: 'tax-mis',
+      reportKey: r.key,
+    }),
+  ),
 ];
 
 function currentFy(): string {
@@ -139,6 +214,12 @@ export function ReportsPage() {
   // first portfolio happens to be empty) sees real numbers, not zeros.
   const [portfolioId, setPortfolioId] = useState<string>('all');
   const [fy, setFy] = useState<string>(currentFy());
+  const [highlight, setHighlight] = useState<ReportHighlight | null>(null);
+
+  const goToReport = (item: SearchItem) => {
+    setTab(item.tab);
+    setHighlight(item.reportKey ? { key: item.reportKey, ts: Date.now() } : null);
+  };
 
   const { data: portfolios } = useQuery({
     queryKey: ['portfolios'],
@@ -229,6 +310,8 @@ export function ReportsPage() {
         description="Capital gains, income, XIRR and historical valuation"
       />
 
+      <ReportSearch onSelect={goToReport} />
+
       <Card className="mb-4">
         <CardContent className="p-4 sm:pt-4 flex flex-wrap items-end gap-3">
           <div className="min-w-[180px] w-full sm:w-auto sm:min-w-[220px]">
@@ -291,7 +374,7 @@ export function ReportsPage() {
       {tab === 'inbox-imports' ? (
         <InboxImportsTab />
       ) : tab === 'tax-mis' ? (
-        <TaxMisDownloads fy={fy} />
+        <TaxMisDownloads fy={fy} highlight={highlight} />
       ) : !portfolioId ? (
         <div className="text-sm text-muted-foreground p-6 text-center">
           Select a portfolio to view reports.
@@ -300,7 +383,12 @@ export function ReportsPage() {
         <>
           {tab === 'summary' && <SummaryView data={summaryQ.data} loading={summaryQ.isLoading} />}
           {tab === 'statements' && (
-            <StatementsView portfolioId={portfolioId} fy={fy} accessToken={accessToken} />
+            <StatementsView
+              portfolioId={portfolioId}
+              fy={fy}
+              accessToken={accessToken}
+              highlight={highlight}
+            />
           )}
           {tab === 'unrealised' && (
             <UnrealisedView data={unrealisedQ.data} loading={unrealisedQ.isLoading} />
@@ -326,6 +414,128 @@ export function ReportsPage() {
       )}
 
       <RecentEmailImports />
+    </div>
+  );
+}
+
+function ReportSearch({ onSelect }: { onSelect: (item: SearchItem) => void }) {
+  const [query, setQuery] = useState('');
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [focused, setFocused] = useState(false);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return SEARCH_INDEX.filter(
+      (i) => i.title.toLowerCase().includes(q) || i.description.toLowerCase().includes(q),
+    ).slice(0, 8);
+  }, [query]);
+
+  useEffect(() => setActiveIdx(0), [query]);
+
+  // Blur closes the dropdown, but delayed: a suggestion's onClick fires
+  // right after the mousedown-triggered blur, so the timer gets cancelled
+  // before it runs — without the delay the dropdown would close before the
+  // click could register.
+  useEffect(() => () => {
+    if (blurTimer.current) clearTimeout(blurTimer.current);
+  }, []);
+
+  const open = focused && query.trim().length > 0;
+
+  const select = (item: SearchItem) => {
+    onSelect(item);
+    setQuery('');
+    setFocused(false);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx((i) => Math.min(i + 1, matches.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const item = matches[activeIdx];
+      if (item) select(item);
+    } else if (e.key === 'Escape') {
+      setFocused(false);
+      inputRef.current?.blur();
+    }
+  };
+
+  const tabLabel = (t: Tab) => TABS.find((x) => x.key === t)?.label ?? t;
+
+  return (
+    <div className="relative mb-4">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => {
+            if (blurTimer.current) clearTimeout(blurTimer.current);
+            setFocused(true);
+          }}
+          onBlur={() => {
+            blurTimer.current = setTimeout(() => setFocused(false), 150);
+          }}
+          onKeyDown={onKeyDown}
+          placeholder="Search reports… e.g. XIRR, LTCG, holdings statement"
+          className="pl-9 pr-9"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full max-h-96 overflow-auto rounded-md border border-border bg-popover shadow-xl">
+          {matches.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-muted-foreground">
+              No reports match &ldquo;{query}&rdquo;
+            </div>
+          ) : (
+            matches.map((item, i) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => select(item)}
+                onMouseEnter={() => setActiveIdx(i)}
+                className={cn(
+                  'w-full text-left px-4 py-2.5 flex items-start gap-3 border-b border-border/50 last:border-b-0',
+                  i === activeIdx ? 'bg-accent/10' : 'hover:bg-muted/50',
+                )}
+              >
+                <FileText className="h-4 w-4 mt-0.5 shrink-0 text-accent" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium truncate">{item.title}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">
+                      {tabLabel(item.tab)}
+                    </span>
+                  </div>
+                  {item.description && (
+                    <p className="text-xs text-muted-foreground truncate">{item.description}</p>
+                  )}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -862,10 +1072,23 @@ interface StatementsViewProps {
   portfolioId: string;
   fy: string;
   accessToken: string | null;
+  highlight?: ReportHighlight | null;
 }
 
-function StatementsView({ portfolioId, fy, accessToken }: StatementsViewProps) {
+function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsViewProps) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [flashKey, setFlashKey] = useState<string | null>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (!highlight) return;
+    const el = cardRefs.current[highlight.key];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setFlashKey(highlight.key);
+    const t = setTimeout(() => setFlashKey(null), 1800);
+    return () => clearTimeout(t);
+  }, [highlight]);
 
   async function fetchAndSave(url: string, suggestedFilename: string, key: string) {
     if (!accessToken) {
@@ -889,47 +1112,37 @@ function StatementsView({ portfolioId, fy, accessToken }: StatementsViewProps) {
     }
   }
 
-  const cards: Array<{
-    key: string;
-    title: string;
-    description: string;
-    buildUrl: (format: 'pdf' | 'xlsx') => string;
-    fyDependent: boolean;
-  }> = [
-    {
-      key: 'holdings',
-      title: 'Holdings Statement',
-      description: 'Per-asset positions grouped by class with avg cost, market value, unrealised P&L and allocation %.',
-      buildUrl: (format) => reportsApi.statementHoldingsUrl(format, [portfolioId]),
-      fyDependent: false,
-    },
-    {
-      key: 'capital-gains',
-      title: 'Capital Gains Statement',
-      description: 'FIFO-matched Intraday, STCG and LTCG sections with FY totals — ready for tax filing.',
-      buildUrl: (format) => reportsApi.statementCapitalGainsUrl(format, [portfolioId], 'all', fy),
-      fyDependent: true,
-    },
-    {
-      key: 'income',
-      title: 'Income Statement',
-      description: 'Dividends, interest and maturity credits split by category with FY totals.',
-      buildUrl: (format) => reportsApi.statementIncomeUrl(format, [portfolioId], fy),
-      fyDependent: true,
-    },
-    {
-      key: 'ledger',
-      title: 'Transaction Ledger',
-      description: 'Chronological book-style ledger of every trade and cash movement with running balance.',
-      buildUrl: (format) => reportsApi.statementLedgerUrl(format, [portfolioId]),
-      fyDependent: false,
-    },
-  ];
+  const buildUrlByKey: Record<string, (format: 'pdf' | 'xlsx') => string> = {
+    holdings: (format) => reportsApi.statementHoldingsUrl(format, [portfolioId]),
+    'capital-gains': (format) => reportsApi.statementCapitalGainsUrl(format, [portfolioId], 'all', fy),
+    income: (format) => reportsApi.statementIncomeUrl(format, [portfolioId], fy),
+    ledger: (format) => reportsApi.statementLedgerUrl(format, [portfolioId]),
+  };
+  const fyDependentByKey: Record<string, boolean> = {
+    holdings: false,
+    'capital-gains': true,
+    income: true,
+    ledger: false,
+  };
+  const cards = STATEMENT_REPORTS.map((r) => ({
+    ...r,
+    buildUrl: buildUrlByKey[r.key]!,
+    fyDependent: fyDependentByKey[r.key]!,
+  }));
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {cards.map((c) => (
-        <Card key={c.key}>
+        <Card
+          key={c.key}
+          ref={(el) => {
+            cardRefs.current[c.key] = el;
+          }}
+          className={cn(
+            'transition-shadow duration-300',
+            flashKey === c.key && 'ring-2 ring-accent ring-offset-2 ring-offset-background',
+          )}
+        >
           <CardContent className="px-5 py-4">
             <div className="flex items-start gap-3 mb-3">
               <div className="grid h-9 w-9 place-items-center rounded-md bg-accent/10 text-accent shrink-0">
