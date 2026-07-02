@@ -2,14 +2,17 @@ import type PDFDocument from 'pdfkit';
 
 // Brand palette — matches the app's editorial colour scheme
 export const BRAND = {
-  ink: '#1B2E4B',
-  accent: '#2563EB',
-  positive: '#15803D',
-  negative: '#B91C1C',
-  muted: '#64748B',
-  headerBg: '#EFF4FF',
-  rowAlt: '#F8FAFC',
-  border: '#E2E8F0',
+  pageBg: '#0D0D0D',
+  headerBarBg: '#171717',
+  tableHeaderBg: '#232323',
+  ink: '#F0F0F0',
+  accent: '#E2FE53',
+  positive: '#A1E444',
+  negative: '#F0574C',
+  muted: '#9E9E9E',
+  headerBg: '#20240F',
+  rowAlt: '#171717',
+  border: '#333333',
   white: '#FFFFFF',
 } as const;
 
@@ -34,11 +37,11 @@ export function pdfSafe(s: string | number | null | undefined): string {
     .trim();
 }
 
-// Allocation colour wheel — 12 distinct, editorial, never neon
+// Allocation colour wheel — 12 distinct, vivid colours tuned for near-black backgrounds
 export const PIE_COLORS = [
-  '#1B2E4B', '#B8860B', '#2D6A4F', '#8B3A2A',
-  '#5B4B8A', '#2E6B7A', '#C0671C', '#7B2D3A',
-  '#4F7942', '#6B4C9A', '#C09A2E', '#1E5F74',
+  '#E2FE53', '#E0E0E0', '#F0574C', '#3FC6C0',
+  '#B79EF0', '#F5B93D', '#5CA8F5', '#EF87C0',
+  '#5CC98B', '#EB8C4C', '#C595E8', '#5CC4D6',
 ];
 
 export interface PieSlice  { label: string; value: number; color?: string }
@@ -107,8 +110,8 @@ export function drawPieChart(
     startAngle = end;
   });
 
-  // White donut hole
-  doc.circle(cx, cy, radius * 0.5).fill(BRAND.white);
+  // Donut hole shows the page background through it
+  doc.circle(cx, cy, radius * 0.5).fill(BRAND.pageBg);
 
   // Legend — right side. Each row uses two SEPARATE text writes with
   // explicit (x, y) + lineBreak:false so PDFKit cannot wrap and advance

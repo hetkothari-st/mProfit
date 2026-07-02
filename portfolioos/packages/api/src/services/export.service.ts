@@ -69,7 +69,7 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
     cell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFE8EEF7' },
+      fgColor: { argb: 'FF20240F' },
     };
     if (col.width) ws.getColumn(i + 1).width = col.width;
   });
@@ -146,16 +146,17 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     const BOT   = pageH - 40;  // bottom safe y for content
 
     function renderPageHeader(): void {
-      doc.rect(0, 0, doc.page.width, 56).fill(BRAND.ink);
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill(BRAND.pageBg);
+      doc.rect(0, 0, doc.page.width, 56).fill(BRAND.headerBarBg);
       doc.font('Helvetica-Bold').fontSize(17).fillColor(BRAND.white)
          .text('PortfolioOS', ML, 14, { lineBreak: false });
-      doc.font('Helvetica').fontSize(10).fillColor('#94AECB')
+      doc.font('Helvetica').fontSize(10).fillColor(BRAND.muted)
          .text(pdfSafe(payload.title), ML, 36, { lineBreak: false });
       const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
-      doc.font('Helvetica').fontSize(8.5).fillColor('#94AECB')
+      doc.font('Helvetica').fontSize(8.5).fillColor(BRAND.muted)
          .text(genStr, ML, 22, { align: 'right', width: pageW, lineBreak: false });
       if (payload.subtitle) {
-        doc.font('Helvetica').fontSize(8).fillColor('#94AECB')
+        doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
            .text(pdfSafe(payload.subtitle), ML, 38, { align: 'right', width: pageW, lineBreak: false });
       }
     }
@@ -307,9 +308,9 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
   const ROW_H       = 16;
 
   const drawHeader = (yy: number): void => {
-    // Table column header — soft slate background, ink text. Distinct from
-    // section header (light blue) and row background (white / row-alt).
-    doc.rect(o.x, yy, o.width, ROW_H).fill('#DDE3EC');
+    // Table column header — dark slate background, ink text. Distinct from
+    // section header (headerBg) and row background (rowAlt).
+    doc.rect(o.x, yy, o.width, ROW_H).fill(BRAND.tableHeaderBg);
     doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
     let x = o.x;
     for (let i = 0; i < o.columns.length; i++) {

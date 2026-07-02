@@ -233,7 +233,7 @@ export async function buildDematHoldingsLayout(userId: string): Promise<MprofitL
                 outQty: mv.outQty === '0' ? '0' : mv.outQty,
                 balanceQty: mv.balanceQty,
               },
-              bg: mv.kind === 'OPENING' ? '#FFE3E6' : undefined,
+              bg: mv.kind === 'OPENING' ? '#2E1418' : undefined,
             })),
             subtotal: {
               label: 'Script Total',
