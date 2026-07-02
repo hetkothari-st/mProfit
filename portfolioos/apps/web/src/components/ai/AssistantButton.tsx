@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { UserRound } from 'lucide-react';
 import { AIAssistant } from './AIAssistant';
 
 /**
@@ -17,7 +17,7 @@ export function AssistantButton() {
         aria-label="Open AI Assistant"
         title="Ask the AI Assistant"
       >
-        <Sparkles className="h-5 w-5 group-hover:scale-110 transition-transform" strokeWidth={1.9} />
+        <UserRound className="h-5 w-5 group-hover:scale-110 transition-transform" strokeWidth={1.9} />
       </button>
       <AIAssistant open={open} onClose={() => setOpen(false)} />
     </>
