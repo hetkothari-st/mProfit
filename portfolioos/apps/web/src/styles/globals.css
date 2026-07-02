@@ -4,9 +4,9 @@
 
 /* ─────────────────────────────────────────────────────────────────────────
    PortfolioOS — CRED theme
-   Light : near-white canvas, darker olive accent-ink for text contrast
+   Light : near-white canvas, deep indigo accent (lime doesn't read on white)
    Dark  : near-black canvas, signature bright-lime accent
-   Both  : Fraunces display serif, lime fills, pill buttons
+   Both  : Fraunces display serif, pill buttons
    ───────────────────────────────────────────────────────────────────────── */
 
 @layer base {
@@ -27,9 +27,9 @@
     --secondary: 0 0% 94%;
     --secondary-foreground: 0 0% 8%;
 
-    --accent: 70 95% 65%;                /* signature lime, ~#E2FE53 — same fill color both modes */
-    --accent-foreground: 0 0% 8%;
-    --accent-ink: 70 75% 28%;            /* darker olive — text/icon/ring use, passes contrast on white */
+    --accent: 258 78% 46%;                /* deep indigo — light-mode-only, replaces lime (unreadable on white) */
+    --accent-foreground: 0 0% 100%;       /* white text/icons on filled accent — lime used near-black, indigo needs white */
+    --accent-ink: 258 78% 46%;            /* = --accent — one color for fill+text, no split needed at this lightness */
 
     --muted: 0 0% 95%;
     --muted-foreground: 0 0% 40%;
@@ -39,16 +39,16 @@
 
     --border: 0 0% 88%;
     --input: 0 0% 88%;
-    --ring: 70 75% 28%;                   /* = --accent-ink */
+    --ring: 258 78% 46%;                  /* = --accent */
 
-    --positive: 100 65% 30%;              /* darker green, hue shifted from --accent-ink for separation */
+    --positive: 100 65% 30%;              /* darker green, distinct hue from accent */
     --negative: 4 75% 45%;
     --warning: 35 85% 38%;
 
     --sidebar: 0 0% 97%;
     --sidebar-foreground: 0 0% 10%;
     --sidebar-accent: 0 0% 93%;
-    --sidebar-accent-foreground: 70 75% 28%;
+    --sidebar-accent-foreground: 258 78% 46%;
     --sidebar-border: 0 0% 88%;
 
     --shadow-color: 0 0% 10%;
