@@ -23,7 +23,10 @@ import { aiAssistantApi } from '@/api/aiAssistant.api';
  * on every page load.
  */
 
-const DISMISS_KEY = 'portfolioos.ai-teaser-seen';
+// v2 — the v1 key persisted a dismissal on every teaser click, which
+// wiped the bubble for the rest of the session even for engaged users.
+// Renaming resets existing dismissals so they see the teaser again.
+const DISMISS_KEY = 'portfolioos.ai-teaser-seen.v2';
 const ROTATE_MS = 12_000;
 const FIRST_VISIT_HOLD_MS = 6_000;
 
@@ -90,7 +93,10 @@ export function AssistantButton() {
   const openWithPrompt = (q: string) => {
     setPending({ question: q });
     setOpen(true);
-    dismiss();
+    // NOTE: intentionally do not dismiss. Only the explicit × on the
+    // bubble persists dismissal. Otherwise the teaser vanishes for
+    // the whole session after a single click, and never comes back
+    // when the user closes the panel.
   };
 
   return (
