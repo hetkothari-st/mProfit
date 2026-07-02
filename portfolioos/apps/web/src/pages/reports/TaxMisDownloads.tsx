@@ -5,7 +5,7 @@
  * style layout) and would be visually noisy in-app.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, FileDown, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,10 +14,11 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { getApiBaseUrl } from '@/api/baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
+import { cn } from '@/lib/cn';
 
 type Param = 'fy' | 'asOf' | 'from' | 'to';
 
-interface ReportDef {
+export interface ReportDef {
   key: string;
   title: string;
   description: string;
@@ -26,7 +27,12 @@ interface ReportDef {
   filename: string;
 }
 
-const REPORTS: ReportDef[] = [
+export interface ReportHighlight {
+  key: string;
+  ts: number;
+}
+
+export const REPORTS: ReportDef[] = [
   {
     key: 'grandfathering',
     title: 'Grandfathering LTCG (Sec 112A)',
@@ -416,7 +422,13 @@ function fyOptions(): string[] {
   return arr;
 }
 
-export function TaxMisDownloads({ fy: defaultFy }: { fy: string }) {
+export function TaxMisDownloads({
+  fy: defaultFy,
+  highlight,
+}: {
+  fy: string;
+  highlight?: ReportHighlight | null;
+}) {
   const accessToken = useAuthStore((s) => s.accessToken);
   const today = new Date().toISOString().slice(0, 10);
   const [fy, setFy] = useState(defaultFy || currentFy());
@@ -424,6 +436,18 @@ export function TaxMisDownloads({ fy: defaultFy }: { fy: string }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState(today);
   const [busy, setBusy] = useState<string | null>(null);
+  const [flashKey, setFlashKey] = useState<string | null>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (!highlight) return;
+    const el = cardRefs.current[highlight.key];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setFlashKey(highlight.key);
+    const t = setTimeout(() => setFlashKey(null), 1800);
+    return () => clearTimeout(t);
+  }, [highlight]);
 
   async function download(report: ReportDef, format: 'pdf' | 'xlsx') {
     if (!accessToken) {
@@ -488,7 +512,16 @@ export function TaxMisDownloads({ fy: defaultFy }: { fy: string }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {REPORTS.map((r) => (
-          <Card key={r.key}>
+          <Card
+            key={r.key}
+            ref={(el) => {
+              cardRefs.current[r.key] = el;
+            }}
+            className={cn(
+              'transition-shadow duration-300',
+              flashKey === r.key && 'ring-2 ring-accent ring-offset-2 ring-offset-background',
+            )}
+          >
             <CardContent className="px-5 py-4">
               <div className="flex items-start gap-3 mb-3">
                 <div className="grid h-9 w-9 place-items-center rounded-md bg-accent/10 text-accent shrink-0">
