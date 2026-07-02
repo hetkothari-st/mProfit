@@ -114,10 +114,11 @@ model User {
   // home / FIRE / emergency / …). See `Goal` model at end of schema.
   goals Goal[]
 
-  // Recurring salary/income entries — the preferred income source for
-  // Health Score and any future module that needs "monthly income"
-  // (Gmail-estimated NEFT/UPI credits are the fallback when empty).
-  salaryIncomes SalaryIncome[]
+  // Recurring income entries (salary, business, trading, freelance, etc.)
+  // — the preferred income source for Health Score and any future module
+  // that needs "monthly income" (Gmail-estimated NEFT/UPI credits are the
+  // fallback when empty).
+  incomes Income[]
 
   // UI preferences — sidebar asset class order + visibility per user.
   preferences Json?
@@ -2789,22 +2790,38 @@ model Goal {
   @@index([userId, targetDate])
 }
 
-model SalaryIncome {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+enum IncomeType {
+  SALARY
+  BUSINESS
+  TRADING
+  FREELANCE
+  RENTAL
+  INTEREST_DIVIDEND
+  CAPITAL_GAINS
+  OTHER
+}
 
-  employerName  String
+model Income {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type          IncomeType @default(SALARY)
+  /// Employer name, business name, broker/platform, or any free-text label.
+  sourceName    String
   /// Net monthly credit, in INR. Multiple rows = multiple income streams
-  /// (co-borrower salary, side income, job change without deleting history).
-  monthlyAmount Decimal  @db.Decimal(12, 2)
-  /// Day of month salary is credited (1-31) — mirrors Loan.emiDueDay.
-  payDay        Int      @default(1)
-  isActive      Boolean  @default(true)
+  /// (salary + trading, co-borrower salary, side income, job change
+  /// without deleting history).
+  monthlyAmount Decimal    @db.Decimal(12, 2)
+  /// Day of month this income is typically credited (1-31) — mirrors
+  /// Loan.emiDueDay. Less meaningful for irregular income (trading,
+  /// freelance) but kept uniform across types for simplicity.
+  payDay        Int        @default(1)
+  isActive      Boolean    @default(true)
   notes         String?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   @@index([userId, isActive])
 }

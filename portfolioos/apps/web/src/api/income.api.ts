@@ -6,9 +6,20 @@ function unwrap<T>(r: ApiResponse<T>): T {
   return r.data;
 }
 
-export interface SalaryIncomeDTO {
+export type IncomeType =
+  | 'SALARY'
+  | 'BUSINESS'
+  | 'TRADING'
+  | 'FREELANCE'
+  | 'RENTAL'
+  | 'INTEREST_DIVIDEND'
+  | 'CAPITAL_GAINS'
+  | 'OTHER';
+
+export interface IncomeDTO {
   id: string;
-  employerName: string;
+  type: IncomeType;
+  sourceName: string;
   monthlyAmount: string;
   payDay: number;
   isActive: boolean;
@@ -17,8 +28,9 @@ export interface SalaryIncomeDTO {
   updatedAt: string;
 }
 
-export interface SalaryIncomeInput {
-  employerName: string;
+export interface IncomeInput {
+  type?: IncomeType;
+  sourceName: string;
   monthlyAmount: string | number;
   payDay?: number;
   isActive?: boolean;
@@ -26,20 +38,20 @@ export interface SalaryIncomeInput {
 }
 
 export const incomeApi = {
-  async list(): Promise<SalaryIncomeDTO[]> {
-    const { data } = await api.get<ApiResponse<SalaryIncomeDTO[]>>('/api/income');
+  async list(): Promise<IncomeDTO[]> {
+    const { data } = await api.get<ApiResponse<IncomeDTO[]>>('/api/income');
     return unwrap(data);
   },
-  async get(id: string): Promise<SalaryIncomeDTO> {
-    const { data } = await api.get<ApiResponse<SalaryIncomeDTO>>(`/api/income/${id}`);
+  async get(id: string): Promise<IncomeDTO> {
+    const { data } = await api.get<ApiResponse<IncomeDTO>>(`/api/income/${id}`);
     return unwrap(data);
   },
-  async create(input: SalaryIncomeInput): Promise<SalaryIncomeDTO> {
-    const { data } = await api.post<ApiResponse<SalaryIncomeDTO>>('/api/income', input);
+  async create(input: IncomeInput): Promise<IncomeDTO> {
+    const { data } = await api.post<ApiResponse<IncomeDTO>>('/api/income', input);
     return unwrap(data);
   },
-  async update(id: string, input: Partial<SalaryIncomeInput>): Promise<SalaryIncomeDTO> {
-    const { data } = await api.patch<ApiResponse<SalaryIncomeDTO>>(`/api/income/${id}`, input);
+  async update(id: string, input: Partial<IncomeInput>): Promise<IncomeDTO> {
+    const { data } = await api.patch<ApiResponse<IncomeDTO>>(`/api/income/${id}`, input);
     return unwrap(data);
   },
   async remove(id: string): Promise<void> {

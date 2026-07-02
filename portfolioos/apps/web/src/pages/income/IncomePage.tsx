@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/common/EmptyState';
-import { incomeApi, type SalaryIncomeDTO } from '@/api/income.api';
+import { incomeApi, type IncomeDTO } from '@/api/income.api';
+import { INCOME_TYPE_LABEL } from './incomeTypeMeta';
 import { apiErrorMessage } from '@/api/client';
 import { formatINR, toDecimal } from '@portfolioos/shared';
 import { IncomeDialog } from './IncomeDialog';
@@ -15,7 +16,7 @@ import { IncomeDialog } from './IncomeDialog';
 export function IncomePage() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<SalaryIncomeDTO | null>(null);
+  const [editing, setEditing] = useState<IncomeDTO | null>(null);
 
   const { data: incomes, isLoading } = useQuery({
     queryKey: ['income'],
@@ -39,7 +40,7 @@ export function IncomePage() {
     setEditing(null);
     setDialogOpen(true);
   };
-  const openEdit = (i: SalaryIncomeDTO) => {
+  const openEdit = (i: IncomeDTO) => {
     setEditing(i);
     setDialogOpen(true);
   };
@@ -48,7 +49,7 @@ export function IncomePage() {
     <div>
       <PageHeader
         title="Income"
-        description="Your salary and other recurring income streams. Used to score your financial health (investment rate, debt burden, insurance) and to calculate progress wherever your income matters."
+        description="Salary, business, trading, freelance, rental, or any other recurring income. Used to score your financial health (investment rate, debt burden, insurance) and wherever your income matters."
         actions={
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" /> Add income
@@ -65,7 +66,7 @@ export function IncomePage() {
       {!isLoading && (incomes ?? []).length === 0 && (
         <EmptyState
           title="No income entries yet"
-          description="Add your salary (or any other recurring income) so Health Score and other features can use a real number instead of guessing from bank emails."
+          description="Add your salary, business, trading, or any other income stream so Health Score and other features can use a real number instead of guessing from bank emails."
           action={
             <Button onClick={openCreate}>
               <Plus className="h-4 w-4" /> Add your first income
@@ -132,8 +133,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Grid({
   incomes, onEdit, onDelete,
 }: {
-  incomes: SalaryIncomeDTO[];
-  onEdit: (i: SalaryIncomeDTO) => void;
+  incomes: IncomeDTO[];
+  onEdit: (i: IncomeDTO) => void;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -144,7 +145,7 @@ function Grid({
             <div className="flex items-start justify-between gap-2">
               <CardTitle className="text-base flex items-center gap-2 min-w-0">
                 <IndianRupee className="h-4 w-4 text-primary shrink-0" />
-                <span className="truncate">{i.employerName}</span>
+                <span className="truncate">{i.sourceName}</span>
               </CardTitle>
               <div className="flex items-center gap-1 shrink-0">
                 <Button variant="ghost" size="sm" onClick={() => onEdit(i)} title="Edit">
@@ -155,9 +156,12 @@ function Grid({
                 </Button>
               </div>
             </div>
-            {!i.isActive && (
-              <Badge variant="outline" className="text-[10px] w-fit">Inactive</Badge>
-            )}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline" className="text-[10px] w-fit">{INCOME_TYPE_LABEL[i.type]}</Badge>
+              {!i.isActive && (
+                <Badge variant="outline" className="text-[10px] w-fit">Inactive</Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
             <p className="numeric-display text-xl font-semibold">{formatINR(i.monthlyAmount)}<span className="text-xs font-normal text-muted-foreground">/mo</span></p>
