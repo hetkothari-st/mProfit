@@ -180,6 +180,21 @@ export function TaxPage() {
       .catch((e) => alert(e.message ?? 'Download failed'));
   };
 
+  const downloadTaxReport = () => {
+    const url = taxApi.capitalGainsTaxReportUrl(fy);
+    fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await r.text());
+        const blob = await r.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `capital-gains-tax-report-${fy}.pdf`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      })
+      .catch((e) => alert(e.message ?? 'Download failed'));
+  };
+
   return (
     <div>
       <PageHeader
@@ -204,6 +219,12 @@ export function TaxPage() {
               <FileDown className="h-4 w-4" /> ITR-portal CSV
             </Button>
           )}
+          {tab === 'summary' && (
+            <Button variant="outline" className="ml-auto gap-1" onClick={downloadTaxReport}>
+              <FileDown className="h-4 w-4" />
+              CA Tax Report (PDF)
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -224,7 +245,9 @@ export function TaxPage() {
         ))}
       </div>
 
-      {tab === 'summary' && <SummaryView data={summaryQ.data} loading={summaryQ.isLoading} />}
+      {tab === 'summary' && (
+        <SummaryView data={summaryQ.data} loading={summaryQ.isLoading} onDownloadReport={downloadTaxReport} />
+      )}
       {tab === 'schedule-112a' && (
         <GainsView
           data={s112AQ.data}
@@ -265,12 +288,36 @@ function Loading() {
   );
 }
 
-function SummaryView({ data, loading }: { data: TaxSummary | undefined; loading: boolean }) {
+function SummaryView({
+  data,
+  loading,
+  onDownloadReport,
+}: {
+  data: TaxSummary | undefined;
+  loading: boolean;
+  onDownloadReport: () => void;
+}) {
   if (loading) return <Loading />;
   if (!data) return null;
   const cg = data.capitalGains;
   return (
     <div className="space-y-4">
+      <Card className="border-accent/30 bg-accent/5">
+        <CardContent className="pt-4 flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium">CA-ready capital gains report</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              One PDF with tax summary, unrealised snapshot, harvesting opportunities, and full
+              transaction detail — ready to share with your CA.
+            </div>
+          </div>
+          <Button onClick={onDownloadReport} className="shrink-0 gap-1">
+            <FileDown className="h-4 w-4" />
+            Download PDF
+          </Button>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader>

@@ -13,6 +13,7 @@ import {
   getTaxHarvest,
   downloadSchedule112ACsv,
   getAvailableFys,
+  downloadCapitalGainsTaxReport,
 } from '../controllers/tax.controller.js';
 
 export const taxRouter = Router();
@@ -29,3 +30,4 @@ taxRouter.get('/schedule-43', asyncHandler(getUserSchedule43));
 taxRouter.get('/income', asyncHandler(getUserIncome));
 taxRouter.get('/harvest', asyncHandler(getTaxHarvest));
 taxRouter.get('/schedule-112a.csv', asyncHandler(downloadSchedule112ACsv));
+taxRouter.get('/capital-gains-report', asyncHandler(downloadCapitalGainsTaxReport));

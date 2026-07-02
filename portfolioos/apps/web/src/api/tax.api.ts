@@ -177,4 +177,12 @@ export const taxApi = {
   schedule112ACsvUrl: (fy: string): string => {
     return `${getApiBaseUrl()}/api/tax/schedule-112a.csv${qs({ fy })}`;
   },
+  capitalGainsTaxReportUrl: (fy: string, portfolioIds?: string[]): string => {
+    const base = getApiBaseUrl();
+    const params = new URLSearchParams({ fy });
+    if (portfolioIds && portfolioIds.length > 0) {
+      params.set('portfolioIds', portfolioIds.join(','));
+    }
+    return `${base}/api/tax/capital-gains-report?${params.toString()}`;
+  },
 };

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { ok } from '../lib/response.js';
 import { BadRequestError } from '../lib/errors.js';
+import { prisma } from '../lib/prisma.js';
 import {
   buildTaxSummary,
   userStcgReport,
@@ -14,6 +15,7 @@ import {
   availableTaxFys,
 } from '../services/tax.service.js';
 import { buildSchedule43Report } from '../services/reports/schedule43.report.js';
+import { streamCapitalGainsTaxReport } from '../services/reportBuilder/statement/capitalGainsTaxReport.js';
 
 function getFy(req: Request, required = false): string | undefined {
   const fy = (req.query.fy as string | undefined)?.trim();
@@ -81,4 +83,26 @@ export async function downloadSchedule112ACsv(req: Request, res: Response) {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(csv);
+}
+
+export async function downloadCapitalGainsTaxReport(req: Request, res: Response) {
+  const fy = getFy(req, true)!;
+  const userId = req.user!.id;
+
+  const portfolioIds = req.query.portfolioIds
+    ? String(req.query.portfolioIds).split(',').filter(Boolean)
+    : [];
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, pan: true },
+  });
+
+  await streamCapitalGainsTaxReport(res, {
+    userId,
+    portfolioIds,
+    fy,
+    userName: user?.name ?? undefined,
+    pan: user?.pan ?? undefined,
+  });
 }
