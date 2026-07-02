@@ -16,7 +16,10 @@ import { useAuthStore } from '@/stores/auth.store';
 
 /**
  * PortfolioOS Assistant panel — designed as a financial planner agent,
- * not a chatbot. Right-side drawer on desktop, full-sheet on mobile.
+ * not a chatbot. Floating, non-modal window docked bottom-right on
+ * desktop (rest of the app stays visible and interactive behind it,
+ * like Intercom/Drift); full-sheet on mobile where there's no room to
+ * float.
  *
  * Layout:
  *   Header    — gradient background, sparkle-in-orb avatar, status dot,
@@ -86,15 +89,10 @@ export function AIAssistant({ open, onClose }: Props) {
 
   return (
     <>
-      <div
-        aria-hidden
-        className="fixed inset-0 bg-background/60 backdrop-blur-md z-40 animate-in fade-in duration-200"
-        onClick={onClose}
-      />
       <aside
         role="dialog"
         aria-label="PortfolioOS Assistant"
-        className="fixed inset-y-0 right-0 z-50 w-full sm:w-[460px] md:w-[500px] bg-background border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
+        className="fixed inset-0 sm:inset-auto sm:bottom-24 sm:right-6 z-40 w-full sm:w-[420px] md:w-[460px] h-full sm:h-[min(680px,calc(100vh-7.5rem))] bg-background border border-border sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200"
       >
         <AgentHeader
           onClose={onClose}
