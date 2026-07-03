@@ -7,6 +7,7 @@ import type {
   TransactionType,
 } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { getFmvForUser } from './fmvOverride.service.js';
 
 // ─── Indian tax constants ───────────────────────────────────────────
 
@@ -39,7 +40,10 @@ const CII: Record<number, number> = {
   2024: 363,
 };
 
-const GRANDFATHERING_CUTOFF = new Date('2018-01-31T00:00:00Z');
+// Exported: fmvOverride.service.ts uses the same cutoff to decide which
+// CapitalGain rows are eligible for grandfathering (circular import — safe,
+// only referenced inside function bodies, never at module-eval time).
+export const GRANDFATHERING_CUTOFF = new Date('2018-01-31T00:00:00Z');
 const DEBT_MF_INDEXATION_CUTOFF = new Date('2023-04-01T00:00:00Z');
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -261,7 +265,10 @@ function groupByAsset(txs: Transaction[]): Map<string, { key: AssetKey; txs: Tra
   return m;
 }
 
-export function computeFIFOGains(txs: Transaction[]): CapitalGainRow[] {
+export function computeFIFOGains(
+  txs: Transaction[],
+  fmvMap?: Map<string, Decimal>, // isin -> fmvPerUnit on 31-Jan-2018
+): CapitalGainRow[] {
   // F&O and forex pairs are §43(5)/§28 business income, not capital gains —
   // strip those rows upstream of the FIFO engine so they can never silently
   // get bucketed as STCG/LTCG.
@@ -326,17 +333,34 @@ export function computeFIFOGains(txs: Transaction[]): CapitalGainRow[] {
             if (indexed) taxableGain = proceeds.minus(indexed);
           }
 
-          // Section 112A grandfathering: for pre-31-Jan-2018 equity, cost basis
-          // should be max(actualCost, FMV on 31-Jan-2018). We don't have FMV
-          // data, so flag via indexedCostOfAcquisition=null and use actual cost.
-          // TODO: wire FMV lookup when historical BSE/NSE close prices for
-          // 31-Jan-2018 become available in MarketData.
+          // Section 112A grandfathering (Sec 55(2)(ac)): cost of acquisition
+          // for pre-31-Jan-2018 equity = higher of (actual cost, lower of
+          // (FMV on 31-Jan-2018, full value of consideration)). The "lower of
+          // FMV/proceeds" cap is mandatory — without it, a lot bought cheap
+          // with an FMV above the eventual sale price would understate the
+          // taxable gain (or fabricate a loss) beyond what the section allows.
+          // Requires a caller-supplied fmvMap (computeUserCapitalGains/
+          // computePortfolioCapitalGains preload it from fmvOverride.service.ts);
+          // rows for ISINs missing from the map are left uncorrected
+          // (gainLoss/taxableGain at actual cost) — the Schedule 112A tab
+          // flags those for the user to fill in.
           if (
             gainType === 'LONG_TERM' &&
             (isEquityLike(key.assetClass) || key.assetClass === 'MUTUAL_FUND') &&
-            lot.buyDate <= GRANDFATHERING_CUTOFF
+            lot.buyDate <= GRANDFATHERING_CUTOFF &&
+            fmvMap &&
+            key.isin &&
+            fmvMap.has(key.isin)
           ) {
-            // Keep taxableGain as gainLoss; downstream UI can prompt for FMV.
+            const fmvPerUnit = fmvMap.get(key.isin)!;
+            const fmvBasis = fmvPerUnit.times(take);
+            const lowerOfFmvAndProceeds = Decimal.min(fmvBasis, proceeds);
+            const adjustedBasis = Decimal.max(costBasis, lowerOfFmvAndProceeds);
+            // taxableGain under Sec 55(2)(ac): use adjusted cost
+            taxableGain = proceeds.minus(adjustedBasis);
+            // Store adjustedBasis in indexedCostOfAcquisition column
+            // (re-using this nullable column — it's the "adjusted acquisition cost")
+            indexed = adjustedBasis;
           }
 
           rows.push({
@@ -392,21 +416,36 @@ function summarize(rows: CapitalGainRow[]): CapitalGainsResult['summaryByFy'] {
   return s;
 }
 
+async function loadFmvMap(userId: string): Promise<Map<string, Decimal>> {
+  const byIsin = await getFmvForUser(userId);
+  return new Map([...byIsin.entries()].map(([isin, r]) => [isin, r.fmvPerUnit]));
+}
+
 export async function computePortfolioCapitalGains(portfolioId: string): Promise<CapitalGainsResult> {
-  const txs = await prisma.transaction.findMany({
-    where: { portfolioId },
-    orderBy: { tradeDate: 'asc' },
+  const portfolio = await prisma.portfolio.findUnique({
+    where: { id: portfolioId },
+    select: { userId: true },
   });
-  const rows = computeFIFOGains(txs);
+  const [txs, fmvMap] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { portfolioId },
+      orderBy: { tradeDate: 'asc' },
+    }),
+    portfolio ? loadFmvMap(portfolio.userId) : Promise.resolve(new Map<string, Decimal>()),
+  ]);
+  const rows = computeFIFOGains(txs, fmvMap);
   return { rows, summaryByFy: summarize(rows) };
 }
 
 export async function computeUserCapitalGains(userId: string): Promise<CapitalGainsResult> {
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId } },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const rows = computeFIFOGains(txs);
+  const [txs, fmvMap] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { portfolio: { userId } },
+      orderBy: { tradeDate: 'asc' },
+    }),
+    loadFmvMap(userId),
+  ]);
+  const rows = computeFIFOGains(txs, fmvMap);
   return { rows, summaryByFy: summarize(rows) };
 }
 
@@ -458,10 +497,17 @@ export async function persistCapitalGainsForAsset(
   portfolioId: string,
   assetKey: string,
 ): Promise<number> {
-  const txs = await prisma.transaction.findMany({
-    where: { portfolioId, assetKey },
-    orderBy: { tradeDate: 'asc' },
+  const portfolio = await prisma.portfolio.findUnique({
+    where: { id: portfolioId },
+    select: { userId: true },
   });
+  const [txs, fmvMap] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { portfolioId, assetKey },
+      orderBy: { tradeDate: 'asc' },
+    }),
+    portfolio ? loadFmvMap(portfolio.userId) : Promise.resolve(new Map<string, Decimal>()),
+  ]);
   const txIds = txs.map((t) => t.id);
 
   // Clear any prior CG rows that touch this asset's transactions (either as
@@ -479,7 +525,7 @@ export async function persistCapitalGainsForAsset(
     });
   }
 
-  const rows = computeFIFOGains(txs);
+  const rows = computeFIFOGains(txs, fmvMap);
   if (rows.length === 0) return 0;
   await prisma.capitalGain.createMany({ data: rows.map(toCGCreateInput) });
   return rows.length;

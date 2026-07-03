@@ -1,0 +1,1002 @@
+[
+  {
+    "isin": "INE051B01021",
+    "scripName": "VAKRANGEE",
+    "fmvPerUnit": "364.75"
+  },
+  {
+    "isin": "INE081A01012",
+    "scripName": "TATASTEEL",
+    "fmvPerUnit": "705.05"
+  },
+  {
+    "isin": "INE090A01021",
+    "scripName": "ICICIBANK",
+    "fmvPerUnit": "352.95"
+  },
+  {
+    "isin": "INE001A01036",
+    "scripName": "HDFC",
+    "fmvPerUnit": "1956.30"
+  },
+  {
+    "isin": "INE615P01015",
+    "scripName": "QUESS",
+    "fmvPerUnit": "984.25"
+  },
+  {
+    "isin": "INE795G01014",
+    "scripName": "HDFCLIFE",
+    "fmvPerUnit": "427.00"
+  },
+  {
+    "isin": "INE242A01010",
+    "scripName": "IOC",
+    "fmvPerUnit": "417.60"
+  },
+  {
+    "isin": "INE002A01018",
+    "scripName": "RELIANCE",
+    "fmvPerUnit": "961.30"
+  },
+  {
+    "isin": "INE009A01021",
+    "scripName": "INFY",
+    "fmvPerUnit": "1150.25"
+  },
+  {
+    "isin": "INE154A01025",
+    "scripName": "ITC",
+    "fmvPerUnit": "271.40"
+  },
+  {
+    "isin": "INE062A01020",
+    "scripName": "SBIN",
+    "fmvPerUnit": "313.25"
+  },
+  {
+    "isin": "INE785M01013",
+    "scripName": "PCJEWELLER",
+    "fmvPerUnit": "485.35"
+  },
+  {
+    "isin": "INE467B01029",
+    "scripName": "TCS",
+    "fmvPerUnit": "3112.35"
+  },
+  {
+    "isin": "INE038A01020",
+    "scripName": "HINDALCO",
+    "fmvPerUnit": "256.15"
+  },
+  {
+    "isin": "INE669C01036",
+    "scripName": "TECHM",
+    "fmvPerUnit": "612.65"
+  },
+  {
+    "isin": "INE585B01010",
+    "scripName": "MARUTI",
+    "fmvPerUnit": "9509.70"
+  },
+  {
+    "isin": "INE238A01034",
+    "scripName": "AXISBANK",
+    "fmvPerUnit": "593.60"
+  },
+  {
+    "isin": "INE176B01034",
+    "scripName": "HAVELLS",
+    "fmvPerUnit": "522.35"
+  },
+  {
+    "isin": "INE371P01015",
+    "scripName": "AMBER",
+    "fmvPerUnit": "1249.65"
+  },
+  {
+    "isin": "INE066A01013",
+    "scripName": "EICHERMOT",
+    "fmvPerUnit": "26923.60"
+  },
+  {
+    "isin": "INE018A01030",
+    "scripName": "LT",
+    "fmvPerUnit": "1416.50"
+  },
+  {
+    "isin": "INE330H01018",
+    "scripName": "RCOM",
+    "fmvPerUnit": "29.45"
+  },
+  {
+    "isin": "INE040A01026",
+    "scripName": "HDFCBANK",
+    "fmvPerUnit": "2005.70"
+  },
+  {
+    "isin": "INE237A01028",
+    "scripName": "KOTAKBANK",
+    "fmvPerUnit": "1108.95"
+  },
+  {
+    "isin": "INE599M01018",
+    "scripName": "JUSTDIAL",
+    "fmvPerUnit": "516.10"
+  },
+  {
+    "isin": "INE528G01027",
+    "scripName": "YESBANK",
+    "fmvPerUnit": "354.40"
+  },
+  {
+    "isin": "INE029A01011",
+    "scripName": "BPCL",
+    "fmvPerUnit": "492.30"
+  },
+  {
+    "isin": "INE749A01030",
+    "scripName": "JINDALSTEL",
+    "fmvPerUnit": "266.45"
+  },
+  {
+    "isin": "INE205A01025",
+    "scripName": "VEDL",
+    "fmvPerUnit": "340.35"
+  },
+  {
+    "isin": "INE397D01024",
+    "scripName": "BHARTIARTL",
+    "fmvPerUnit": "439.85"
+  },
+  {
+    "isin": "INE044A01036",
+    "scripName": "SUNPHARMA",
+    "fmvPerUnit": "579.90"
+  },
+  {
+    "isin": "INE094A01015",
+    "scripName": "HINDPETRO",
+    "fmvPerUnit": "397.70"
+  },
+  {
+    "isin": "INE049B01025",
+    "scripName": "WOCKPHARMA",
+    "fmvPerUnit": "804.85"
+  },
+  {
+    "isin": "INE061F01013",
+    "scripName": "FORTIS",
+    "fmvPerUnit": "139.05"
+  },
+  {
+    "isin": "INE160A01022",
+    "scripName": "PNB",
+    "fmvPerUnit": "171.35"
+  },
+  {
+    "isin": "INE089A01023",
+    "scripName": "DRREDDY",
+    "fmvPerUnit": "2225.35"
+  },
+  {
+    "isin": "INE175A01038",
+    "scripName": "JISLJALEQS",
+    "fmvPerUnit": "139.95"
+  },
+  {
+    "isin": "INE102D01028",
+    "scripName": "GODREJCP",
+    "fmvPerUnit": "1053.40"
+  },
+  {
+    "isin": "INE263A01024",
+    "scripName": "BEL",
+    "fmvPerUnit": "169.35"
+  },
+  {
+    "isin": "INE797F01012",
+    "scripName": "JUBLFOOD",
+    "fmvPerUnit": "2043.20"
+  },
+  {
+    "isin": "INE042A01014",
+    "scripName": "ESCORTS",
+    "fmvPerUnit": "811.75"
+  },
+  {
+    "isin": "INE213A01029",
+    "scripName": "ONGC",
+    "fmvPerUnit": "203.45"
+  },
+  {
+    "isin": "INE013A01015",
+    "scripName": "RELCAPITAL",
+    "fmvPerUnit": "491.10"
+  },
+  {
+    "isin": "INE296A01024",
+    "scripName": "BAJFINANCE",
+    "fmvPerUnit": "1677.85"
+  },
+  {
+    "isin": "INE095A01012",
+    "scripName": "INDUSINDBK",
+    "fmvPerUnit": "1753.10"
+  },
+  {
+    "isin": "INE028A01039",
+    "scripName": "BANKBARODA",
+    "fmvPerUnit": "156.80"
+  },
+  {
+    "isin": "INE158A01026",
+    "scripName": "HEROMOTOCO",
+    "fmvPerUnit": "3691.45"
+  },
+  {
+    "isin": "INE030A01027",
+    "scripName": "HINDUNILVR",
+    "fmvPerUnit": "1369.35"
+  },
+  {
+    "isin": "INE155A01022",
+    "scripName": "TATAMOTORS",
+    "fmvPerUnit": "399.50"
+  },
+  {
+    "isin": "INE019A01038",
+    "scripName": "JSWSTEEL",
+    "fmvPerUnit": "289.95"
+  },
+  {
+    "isin": "INE506A01018",
+    "scripName": "DREDGECORP",
+    "fmvPerUnit": "764.75"
+  },
+  {
+    "isin": "INE148I01020",
+    "scripName": "IBULHSGFIN",
+    "fmvPerUnit": "1390.95"
+  },
+  {
+    "isin": "INE347G01014",
+    "scripName": "PETRONET",
+    "fmvPerUnit": "254.75"
+  },
+  {
+    "isin": "INE101A01026",
+    "scripName": "M&M",
+    "fmvPerUnit": "763.05"
+  },
+  {
+    "isin": "INE069I01010",
+    "scripName": "IBREALEST",
+    "fmvPerUnit": "215.70"
+  },
+  {
+    "isin": "INE423A01024",
+    "scripName": "ADANIENT",
+    "fmvPerUnit": "213.20"
+  },
+  {
+    "isin": "INE494B01023",
+    "scripName": "TVSMOTOR",
+    "fmvPerUnit": "696.80"
+  },
+  {
+    "isin": "INE376G01013",
+    "scripName": "BIOCON",
+    "fmvPerUnit": "614.90"
+  },
+  {
+    "isin": "INE860A01027",
+    "scripName": "HCLTECH",
+    "fmvPerUnit": "986.55"
+  },
+  {
+    "isin": "INE115A01026",
+    "scripName": "LICHSGFIN",
+    "fmvPerUnit": "534.95"
+  },
+  {
+    "isin": "INE271C01023",
+    "scripName": "DLF",
+    "fmvPerUnit": "250.10"
+  },
+  {
+    "isin": "INE192A01025",
+    "scripName": "TATAGLOBAL",
+    "fmvPerUnit": "290.65"
+  },
+  {
+    "isin": "INE752E01010",
+    "scripName": "POWERGRID",
+    "fmvPerUnit": "193.80"
+  },
+  {
+    "isin": "INE802G01018",
+    "scripName": "JETAIRWAYS",
+    "fmvPerUnit": "753.65"
+  },
+  {
+    "isin": "INE522F01014",
+    "scripName": "COALINDIA",
+    "fmvPerUnit": "299.55"
+  },
+  {
+    "isin": "INE016A01026",
+    "scripName": "DABUR",
+    "fmvPerUnit": "355.60"
+  },
+  {
+    "isin": "INE180K01011",
+    "scripName": "BHARATFIN",
+    "fmvPerUnit": "1051.65"
+  },
+  {
+    "isin": "INE371A01025",
+    "scripName": "GRAPHITE",
+    "fmvPerUnit": "758.60"
+  },
+  {
+    "isin": "INE669E01016",
+    "scripName": "IDEA",
+    "fmvPerUnit": "93.10"
+  },
+  {
+    "isin": "INE854D01016",
+    "scripName": "MCDOWELL-N",
+    "fmvPerUnit": "3285.60"
+  },
+  {
+    "isin": "INE326A01037",
+    "scripName": "LUPIN",
+    "fmvPerUnit": "883.75"
+  },
+  {
+    "isin": "INF732E01037",
+    "scripName": "LIQUIDBEES",
+    "fmvPerUnit": "1000.00"
+  },
+  {
+    "isin": "INE121J01017",
+    "scripName": "INFRATEL",
+    "fmvPerUnit": "351.55"
+  },
+  {
+    "isin": "INE628A01036",
+    "scripName": "UPL",
+    "fmvPerUnit": "752.05"
+  },
+  {
+    "isin": "INE774D01024",
+    "scripName": "M&MFIN",
+    "fmvPerUnit": "463.50"
+  },
+  {
+    "isin": "INE036A01016",
+    "scripName": "RELINFRA",
+    "fmvPerUnit": "496.35"
+  },
+  {
+    "isin": "INE545A01016",
+    "scripName": "HEG",
+    "fmvPerUnit": "2715.10"
+  },
+  {
+    "isin": "INE257A01026",
+    "scripName": "BHEL",
+    "fmvPerUnit": "100.20"
+  },
+  {
+    "isin": "INE034A01011",
+    "scripName": "ARVIND",
+    "fmvPerUnit": "413.35"
+  },
+  {
+    "isin": "INE208A01029",
+    "scripName": "ASHOKLEY",
+    "fmvPerUnit": "126.10"
+  },
+  {
+    "isin": "INE280A01028",
+    "scripName": "TITAN",
+    "fmvPerUnit": "869.55"
+  },
+  {
+    "isin": "INE018I01017",
+    "scripName": "MINDTREE",
+    "fmvPerUnit": "770.00"
+  },
+  {
+    "isin": "INE114A01011",
+    "scripName": "SAIL",
+    "fmvPerUnit": "88.90"
+  },
+  {
+    "isin": "INE202B01012",
+    "scripName": "DHFL",
+    "fmvPerUnit": "582.20"
+  },
+  {
+    "isin": "INE855B01025",
+    "scripName": "RAIN",
+    "fmvPerUnit": "380.55"
+  },
+  {
+    "isin": "INE406A01037",
+    "scripName": "AUROPHARMA",
+    "fmvPerUnit": "629.55"
+  },
+  {
+    "isin": "INE129A01019",
+    "scripName": "GAIL",
+    "fmvPerUnit": "478.60"
+  },
+  {
+    "isin": "INE742F01042",
+    "scripName": "ADANIPORTS",
+    "fmvPerUnit": "428.85"
+  },
+  {
+    "isin": "INE267A01025",
+    "scripName": "HINDZINC",
+    "fmvPerUnit": "310.25"
+  },
+  {
+    "isin": "INE886H01027",
+    "scripName": "TV18BRDCST",
+    "fmvPerUnit": "61.85"
+  },
+  {
+    "isin": "INE163A01018",
+    "scripName": "NOCIL",
+    "fmvPerUnit": "209.60"
+  },
+  {
+    "isin": "INE700A01033",
+    "scripName": "JUBILANT",
+    "fmvPerUnit": "913.35"
+  },
+  {
+    "isin": "INE733E01010",
+    "scripName": "NTPC",
+    "fmvPerUnit": "170.25"
+  },
+  {
+    "isin": "INE256A01028",
+    "scripName": "ZEEL",
+    "fmvPerUnit": "593.70"
+  },
+  {
+    "isin": "INE139A01034",
+    "scripName": "NATIONALUM",
+    "fmvPerUnit": "75.30"
+  },
+  {
+    "isin": "INE021A01026",
+    "scripName": "ASIANPAINT",
+    "fmvPerUnit": "1128.30"
+  },
+  {
+    "isin": "INE918I01018",
+    "scripName": "BAJAJFINSV",
+    "fmvPerUnit": "4812.35"
+  },
+  {
+    "isin": "INE532F01054",
+    "scripName": "EDELWEISS",
+    "fmvPerUnit": "280.70"
+  },
+  {
+    "isin": "INE721A01013",
+    "scripName": "SRTRANSFIN",
+    "fmvPerUnit": "1379.75"
+  },
+  {
+    "isin": "INE171A01029",
+    "scripName": "FEDERALBNK",
+    "fmvPerUnit": "100.45"
+  },
+  {
+    "isin": "INE602A01015",
+    "scripName": "PHILIPCARB",
+    "fmvPerUnit": "1206.80"
+  },
+  {
+    "isin": "INE361B01024",
+    "scripName": "DIVISLAB",
+    "fmvPerUnit": "1039.40"
+  },
+  {
+    "isin": "INE191H01014",
+    "scripName": "PVR",
+    "fmvPerUnit": "1460.60"
+  },
+  {
+    "isin": "INE787D01026",
+    "scripName": "BALKRISIND",
+    "fmvPerUnit": "1141.85"
+  },
+  {
+    "isin": "INE917I01010",
+    "scripName": "BAJAJ-AUTO",
+    "fmvPerUnit": "3337.15"
+  },
+  {
+    "isin": "INE591G01017",
+    "scripName": "NIITTECH",
+    "fmvPerUnit": "856.15"
+  },
+  {
+    "isin": "INE498L01015",
+    "scripName": "L&TFH",
+    "fmvPerUnit": "172.60"
+  },
+  {
+    "isin": "INE438A01022",
+    "scripName": "APOLLOTYRE",
+    "fmvPerUnit": "254.85"
+  },
+  {
+    "isin": "INE124G01033",
+    "scripName": "DELTACORP",
+    "fmvPerUnit": "345.80"
+  },
+  {
+    "isin": "INE192R01011",
+    "scripName": "DMART",
+    "fmvPerUnit": "1179.65"
+  },
+  {
+    "isin": "INE944F01028",
+    "scripName": "RADICO",
+    "fmvPerUnit": "361.50"
+  },
+  {
+    "isin": "INE776C01039",
+    "scripName": "GMRINFRA",
+    "fmvPerUnit": "21.75"
+  },
+  {
+    "isin": "INE476A01014",
+    "scripName": "CANBK",
+    "fmvPerUnit": "341.35"
+  },
+  {
+    "isin": "INE075A01022",
+    "scripName": "WIPRO",
+    "fmvPerUnit": "304.70"
+  },
+  {
+    "isin": "INE455F01025",
+    "scripName": "JPASSOCIAT",
+    "fmvPerUnit": "20.30"
+  },
+  {
+    "isin": "INE836A01035",
+    "scripName": "KPIT",
+    "fmvPerUnit": "211.60"
+  },
+  {
+    "isin": "INE226A01021",
+    "scripName": "VOLTAS",
+    "fmvPerUnit": "605.00"
+  },
+  {
+    "isin": "INE070D01027",
+    "scripName": "JAICORPLTD",
+    "fmvPerUnit": "182.00"
+  },
+  {
+    "isin": "INE481G01011",
+    "scripName": "ULTRACEMCO",
+    "fmvPerUnit": "4382.00"
+  },
+  {
+    "isin": "INE203G01027",
+    "scripName": "IGL",
+    "fmvPerUnit": "304.65"
+  },
+  {
+    "isin": "INE059A01026",
+    "scripName": "CIPLA",
+    "fmvPerUnit": "592.15"
+  },
+  {
+    "isin": "INE584A01023",
+    "scripName": "NMDC",
+    "fmvPerUnit": "140.30"
+  },
+  {
+    "isin": "INE775A01035",
+    "scripName": "MOTHERSUMI",
+    "fmvPerUnit": "365.80"
+  },
+  {
+    "isin": "INE510A01028",
+    "scripName": "ENGINERSIN",
+    "fmvPerUnit": "177.50"
+  },
+  {
+    "isin": "INE084A01016",
+    "scripName": "BANKINDIA",
+    "fmvPerUnit": "157.20"
+  },
+  {
+    "isin": "INE422C01014",
+    "scripName": "TINPLATE",
+    "fmvPerUnit": "253.35"
+  },
+  {
+    "isin": "INE095N01023",
+    "scripName": "NBCC",
+    "fmvPerUnit": "225.95"
+  },
+  {
+    "isin": "INE079A01024",
+    "scripName": "AMBUJACEM",
+    "fmvPerUnit": "261.80"
+  },
+  {
+    "isin": "INE003A01024",
+    "scripName": "SIEMENS",
+    "fmvPerUnit": "1301.85"
+  },
+  {
+    "isin": "INE323A01026",
+    "scripName": "BOSCHLTD",
+    "fmvPerUnit": "19400.25"
+  },
+  {
+    "isin": "INE092A01019",
+    "scripName": "TATACHEM",
+    "fmvPerUnit": "719.00"
+  },
+  {
+    "isin": "INE089C01029",
+    "scripName": "STRTECH",
+    "fmvPerUnit": "358.85"
+  },
+  {
+    "isin": "INE383A01012",
+    "scripName": "INDIACEM",
+    "fmvPerUnit": "168.15"
+  },
+  {
+    "isin": "INE482A01020",
+    "scripName": "CEATLTD",
+    "fmvPerUnit": "1820.85"
+  },
+  {
+    "isin": "INE134E01011",
+    "scripName": "PFC",
+    "fmvPerUnit": "116.80"
+  },
+  {
+    "isin": "INE140A01024",
+    "scripName": "PEL",
+    "fmvPerUnit": "2743.00"
+  },
+  {
+    "isin": "INE318A01026",
+    "scripName": "PIDILITIND",
+    "fmvPerUnit": "896.30"
+  },
+  {
+    "isin": "INE548C01032",
+    "scripName": "EMAMILTD",
+    "fmvPerUnit": "1124.75"
+  },
+  {
+    "isin": "INE465A01025",
+    "scripName": "BHARATFORG",
+    "fmvPerUnit": "717.10"
+  },
+  {
+    "isin": "INE217B01036",
+    "scripName": "KAJARIACER",
+    "fmvPerUnit": "631.65"
+  },
+  {
+    "isin": "INE136B01020",
+    "scripName": "CYIENT",
+    "fmvPerUnit": "641.85"
+  },
+  {
+    "isin": "INE745G01035",
+    "scripName": "MCX",
+    "fmvPerUnit": "775.70"
+  },
+  {
+    "isin": "INE301A01014",
+    "scripName": "RAYMOND",
+    "fmvPerUnit": "1049.70"
+  },
+  {
+    "isin": "INE191I01012",
+    "scripName": "HDIL",
+    "fmvPerUnit": "57.85"
+  },
+  {
+    "isin": "INE055A01016",
+    "scripName": "CENTURYTEX",
+    "fmvPerUnit": "1388.25"
+  },
+  {
+    "isin": "INE614G01033",
+    "scripName": "RPOWER",
+    "fmvPerUnit": "45.75"
+  },
+  {
+    "isin": "INE726G01019",
+    "scripName": "ICICIPRULI",
+    "fmvPerUnit": "406.70"
+  },
+  {
+    "isin": "INE046A01015",
+    "scripName": "RIIL",
+    "fmvPerUnit": "540.90"
+  },
+  {
+    "isin": "INE012A01025",
+    "scripName": "ACC",
+    "fmvPerUnit": "1715.25"
+  },
+  {
+    "isin": "INE437A01024",
+    "scripName": "APOLLOHOSP",
+    "fmvPerUnit": "1162.80"
+  },
+  {
+    "isin": "INE455I01029",
+    "scripName": "KSCL",
+    "fmvPerUnit": "515.50"
+  },
+  {
+    "isin": "INE036D01028",
+    "scripName": "KARURVYSYA",
+    "fmvPerUnit": "110.90"
+  },
+  {
+    "isin": "INE047A01021",
+    "scripName": "GRASIM",
+    "fmvPerUnit": "1160.05"
+  },
+  {
+    "isin": "INE113A01013",
+    "scripName": "GNFC",
+    "fmvPerUnit": "480.15"
+  },
+  {
+    "isin": "INE883A01011",
+    "scripName": "MRF",
+    "fmvPerUnit": "68113.35"
+  },
+  {
+    "isin": "INE868B01028",
+    "scripName": "NCC",
+    "fmvPerUnit": "122.50"
+  },
+  {
+    "isin": "INE172A01027",
+    "scripName": "CASTROLIND",
+    "fmvPerUnit": "185.40"
+  },
+  {
+    "isin": "INE522D01027",
+    "scripName": "MANAPPURAM",
+    "fmvPerUnit": "110.95"
+  },
+  {
+    "isin": "INE141A01014",
+    "scripName": "ORIENTBANK",
+    "fmvPerUnit": "115.65"
+  },
+  {
+    "isin": "IN9155A01020",
+    "scripName": "TATAMTRDVR",
+    "fmvPerUnit": "224.55"
+  },
+  {
+    "isin": "INE010B01027",
+    "scripName": "CADILAHC",
+    "fmvPerUnit": "425.80"
+  },
+  {
+    "isin": "INE245A01021",
+    "scripName": "TATAPOWER",
+    "fmvPerUnit": "89.00"
+  },
+  {
+    "isin": "INE121A01016",
+    "scripName": "CHOLAFIN",
+    "fmvPerUnit": "1286.05"
+  },
+  {
+    "isin": "INE121E01018",
+    "scripName": "JSWENERGY",
+    "fmvPerUnit": "87.60"
+  },
+  {
+    "isin": "INE119A01028",
+    "scripName": "BALRAMCHIN",
+    "fmvPerUnit": "122.15"
+  },
+  {
+    "isin": "INE262H01013",
+    "scripName": "PERSISTENT",
+    "fmvPerUnit": "787.85"
+  },
+  {
+    "isin": "INE020B01018",
+    "scripName": "RECLTD",
+    "fmvPerUnit": "155.50"
+  },
+  {
+    "isin": "INE439L01019",
+    "scripName": "DALMIABHA",
+    "fmvPerUnit": "2935.25"
+  },
+  {
+    "isin": "INE424H01027",
+    "scripName": "SUNTV",
+    "fmvPerUnit": "1024.40"
+  },
+  {
+    "isin": "INE688I01017",
+    "scripName": "CAPF",
+    "fmvPerUnit": "738.10"
+  },
+  {
+    "isin": "INE821I01014",
+    "scripName": "IRB",
+    "fmvPerUnit": "241.20"
+  },
+  {
+    "isin": "INE483S01020",
+    "scripName": "INFIBEAM",
+    "fmvPerUnit": "156.20"
+  },
+  {
+    "isin": "INE811K01011",
+    "scripName": "PRESTIGE",
+    "fmvPerUnit": "322.80"
+  },
+  {
+    "isin": "INE244A01016",
+    "scripName": "DENORA",
+    "fmvPerUnit": "373.95"
+  },
+  {
+    "isin": "INE646L01027",
+    "scripName": "INDIGO",
+    "fmvPerUnit": "1214.95"
+  },
+  {
+    "isin": "INE603A01013",
+    "scripName": "PRAKASH",
+    "fmvPerUnit": "212.45"
+  },
+  {
+    "isin": "INE027A01015",
+    "scripName": "RCF",
+    "fmvPerUnit": "97.75"
+  },
+  {
+    "isin": "INE356A01018",
+    "scripName": "MPHASIS",
+    "fmvPerUnit": "894.85"
+  },
+  {
+    "isin": "INE302A01020",
+    "scripName": "EXIDEIND",
+    "fmvPerUnit": "223.35"
+  },
+  {
+    "isin": "INE806A01020",
+    "scripName": "VIKASECO",
+    "fmvPerUnit": "39.80"
+  },
+  {
+    "isin": "INE032A01023",
+    "scripName": "BOMDYEING",
+    "fmvPerUnit": "228.15"
+  },
+  {
+    "isin": "INE093A01033",
+    "scripName": "HEXAWARE",
+    "fmvPerUnit": "381.40"
+  },
+  {
+    "isin": "INE093I01010",
+    "scripName": "OBEROIRLTY",
+    "fmvPerUnit": "528.80"
+  },
+  {
+    "isin": "INE111A01017",
+    "scripName": "CONCOR",
+    "fmvPerUnit": "1390.30"
+  },
+  {
+    "isin": "INE818H01020",
+    "scripName": "DAAWAT",
+    "fmvPerUnit": "90.50"
+  },
+  {
+    "isin": "INE694C01018",
+    "scripName": "LAKSHVILAS",
+    "fmvPerUnit": "127.90"
+  },
+  {
+    "isin": "INE780C01023",
+    "scripName": "JMFINANCIL",
+    "fmvPerUnit": "163.15"
+  },
+  {
+    "isin": "INE343B01030",
+    "scripName": "RAJESHEXPO",
+    "fmvPerUnit": "821.45"
+  },
+  {
+    "isin": "INE274V01019",
+    "scripName": "SHANKARA",
+    "fmvPerUnit": "1693.60"
+  },
+  {
+    "isin": "INE600L01024",
+    "scripName": "LALPATHLAB",
+    "fmvPerUnit": "903.70"
+  },
+  {
+    "isin": "INE814H01011",
+    "scripName": "ADANIPOWER",
+    "fmvPerUnit": "36.65"
+  },
+  {
+    "isin": "INE692A01016",
+    "scripName": "UNIONBANK",
+    "fmvPerUnit": "136.25"
+  },
+  {
+    "isin": "INE922B01023",
+    "scripName": "PANACEABIO",
+    "fmvPerUnit": "301.75"
+  },
+  {
+    "isin": "INE935A01035",
+    "scripName": "GLENMARK",
+    "fmvPerUnit": "606.20"
+  },
+  {
+    "isin": "INE092T01019",
+    "scripName": "IDFCBANK",
+    "fmvPerUnit": "56.80"
+  },
+  {
+    "isin": "INE813H01021",
+    "scripName": "TORNTPOWER",
+    "fmvPerUnit": "285.45"
+  },
+  {
+    "isin": "INE763A01023",
+    "scripName": "POLARIS",
+    "fmvPerUnit": "410.25"
+  },
+  {
+    "isin": "INE542F01012",
+    "scripName": "RNAVAL",
+    "fmvPerUnit": "46.00"
+  },
+  {
+    "isin": "INE151A01013",
+    "scripName": "TATACOMM",
+    "fmvPerUnit": "615.35"
+  },
+  {
+    "isin": "INE580B01029",
+    "scripName": "GRUH",
+    "fmvPerUnit": "584.85"
+  }
+]

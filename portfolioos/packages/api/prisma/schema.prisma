@@ -143,6 +143,10 @@ model User {
   // capped at 50 rows per user; daily usage counter drives rate limits.
   aiConversations AiConversation[]
   aiUsage         AiUsage[]
+
+  // Sec 55(2)(ac) grandfathering — user-entered/overridden FMV per ISIN as
+  // on 31-Jan-2018. See FmvOverride model below.
+  fmvOverrides FmvOverride[]
 }
 
 model UserNotificationConfig {
@@ -3049,4 +3053,39 @@ model AiUsage {
 
   @@unique([userId, date])
   @@index([userId, date])
+}
+
+// ─── SEC 55(2)(ac) GRANDFATHERING — FMV ON 31-JAN-2018 ──────────────────
+
+model FmvOverride {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isin      String
+  // scrip name for display — denormalised for easy lookup without joining assets
+  scripName String?
+  // FMV per unit on 31-Jan-2018 in INR, stored as exact Decimal
+  fmvPerUnit Decimal  @db.Decimal(18, 4)
+  // source: "SEED" = loaded from our BSE data file, "USER" = manually entered
+  source    FmvSource @default(SEED)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, isin])
+  @@index([userId])
+}
+
+enum FmvSource {
+  SEED // pre-loaded from BSE 31-Jan-2018 closing prices
+  USER // entered manually by the user
+}
+
+// Shared across all users — canonical BSE closing price per ISIN on
+// 31-Jan-2018, loaded once by seedFmv.ts. Not user-scoped, so it is
+// intentionally excluded from RLS (see fmv_override_rls migration).
+model SystemFmvSeed {
+  isin       String   @id
+  scripName  String?
+  fmvPerUnit Decimal  @db.Decimal(18, 4)
+  updatedAt  DateTime @updatedAt
 }

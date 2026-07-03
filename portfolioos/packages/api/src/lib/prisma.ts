@@ -54,6 +54,9 @@ const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   // AI Assistant — conversation history + daily usage counter.
   'AiConversation',
   'AiUsage',
+  // Sec 55(2)(ac) grandfathering — user-entered FMV overrides. SystemFmvSeed
+  // is deliberately excluded: it's shared reference data, not user-scoped.
+  'FmvOverride',
 ]);
 
 const basePrisma =

@@ -14,6 +14,13 @@ import {
   downloadSchedule112ACsv,
   getAvailableFys,
 } from '../controllers/tax.controller.js';
+import {
+  getTaxGrandfathering,
+  getFmvOverrides,
+  putFmvOverride,
+  deleteFmvOverride,
+  downloadGrandfatheringCsv,
+} from '../controllers/fmv.controller.js';
 
 export const taxRouter = Router();
 taxRouter.use(authenticate);
@@ -29,3 +36,8 @@ taxRouter.get('/schedule-43', asyncHandler(getUserSchedule43));
 taxRouter.get('/income', asyncHandler(getUserIncome));
 taxRouter.get('/harvest', asyncHandler(getTaxHarvest));
 taxRouter.get('/schedule-112a.csv', asyncHandler(downloadSchedule112ACsv));
+taxRouter.get('/grandfathering', asyncHandler(getTaxGrandfathering));
+taxRouter.get('/fmv-overrides', asyncHandler(getFmvOverrides));
+taxRouter.put('/fmv-overrides/:isin', asyncHandler(putFmvOverride));
+taxRouter.delete('/fmv-overrides/:isin', asyncHandler(deleteFmvOverride));
+taxRouter.get('/grandfathering.csv', asyncHandler(downloadGrandfatheringCsv));

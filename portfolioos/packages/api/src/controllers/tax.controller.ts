@@ -76,6 +76,8 @@ export async function getTaxHarvest(req: Request, res: Response) {
 
 export async function downloadSchedule112ACsv(req: Request, res: Response) {
   const fy = getFy(req, true)!;
+  // schedule112ACsv now populates the FMV column (Sec 55(2)(ac) grandfathering)
+  // internally via fmvOverride.service.ts — no separate enrichment needed here.
   const csv = await schedule112ACsv(req.user!.id, fy);
   const filename = `schedule-112a-${fy}.csv`;
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');

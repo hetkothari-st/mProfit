@@ -133,6 +133,44 @@ export interface TaxHarvestReport {
   count: number;
 }
 
+export interface GrandfatheringRow {
+  isin: string | null;
+  assetName: string;
+  buyDate: string;
+  sellDate: string;
+  quantity: string;
+  buyAmount: string; // actual cost basis
+  sellAmount: string;
+  gainLoss: string; // uncorrected
+  fmvPerUnit: string | null;
+  fmvSource: 'SEED' | 'USER' | null;
+  fmvTotalBasis: string | null;
+  adjustedCostBasis: string | null;
+  correctedGain: string | null;
+  correctedTaxableGain: string | null;
+  gainDifference: string | null; // tax saving vs uncorrected
+  needsUserInput: boolean;
+  financialYear: string;
+}
+
+export interface GrandfatheringReport {
+  rows: GrandfatheringRow[];
+  summary: {
+    totalCorrectedGain: string;
+    totalUncorrectedGain: string;
+    totalTaxSaving: string; // positive = corrected is lower (saves tax)
+    rowsNeedingInput: number;
+  };
+  count: number;
+}
+
+export interface FmvOverride {
+  isin: string;
+  scripName: string | null;
+  fmvPerUnit: string;
+  source: 'SEED' | 'USER';
+}
+
 export const taxApi = {
   availableFys: async (): Promise<{ fys: string[] }> => {
     const { data } = await api.get<ApiResponse<{ fys: string[] }>>('/api/tax/available-fys');
@@ -176,5 +214,39 @@ export const taxApi = {
   },
   schedule112ACsvUrl: (fy: string): string => {
     return `${getApiBaseUrl()}/api/tax/schedule-112a.csv${qs({ fy })}`;
+  },
+  grandfathering: async (fy?: string): Promise<GrandfatheringReport> => {
+    const { data } = await api.get<
+      ApiResponse<{ rows: GrandfatheringRow[]; summary: Omit<GrandfatheringReport['summary'], 'rowsNeedingInput'>; count: number }>
+    >('/api/tax/grandfathering' + qs({ fy }));
+    const report = unwrap(data);
+    // Backend summary doesn't carry rowsNeedingInput — derive it from rows
+    // rather than round-tripping for a count already implied by the payload.
+    return {
+      ...report,
+      summary: {
+        ...report.summary,
+        rowsNeedingInput: report.rows.filter((r) => r.needsUserInput).length,
+      },
+    };
+  },
+  fmvOverrides: async (): Promise<FmvOverride[]> => {
+    const { data } = await api.get<ApiResponse<{ records: FmvOverride[]; count: number }>>(
+      '/api/tax/fmv-overrides',
+    );
+    return unwrap(data).records;
+  },
+  putFmvOverride: async (isin: string, fmvPerUnit: string, scripName?: string): Promise<FmvOverride> => {
+    const { data } = await api.put<ApiResponse<FmvOverride>>(
+      `/api/tax/fmv-overrides/${encodeURIComponent(isin)}`,
+      { fmvPerUnit, scripName },
+    );
+    return unwrap(data);
+  },
+  deleteFmvOverride: async (isin: string): Promise<void> => {
+    await api.delete(`/api/tax/fmv-overrides/${encodeURIComponent(isin)}`);
+  },
+  grandfatheringCsvUrl: (fy: string): string => {
+    return `${getApiBaseUrl()}/api/tax/grandfathering.csv${qs({ fy })}`;
   },
 };

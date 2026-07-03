@@ -9,6 +9,7 @@ import {
 } from './capitalGains.service.js';
 import { buildSchedule43Report } from './reports/schedule43.report.js';
 import { computeHarvestSavings } from './taxHarvestMath.js';
+import { getFmvForUser } from './fmvOverride.service.js';
 
 /**
  * Tax module — user-level (cross-portfolio) tax reporting.
@@ -369,14 +370,25 @@ export async function buildTaxSummary(userId: string, fy: string): Promise<TaxSu
  *   Full value of consideration, Cost of acquisition without indexation,
  *   Cost per share (col 6/4), If acquired before 1-Feb-2018 (Y/N),
  *   FMV per share as on 31-Jan-2018, Sale price (col 5),
- *   Higher of col 8 & 9 (per share), Lower of col 11 & 10,
+ *   Lower of col 9 & 10 (per share), Higher of col 7 & 11,
  *   Acquisition cost u/s 55(2)(ac) (col 12 × col 4),
  *   Expenditure wholly & exclusively in connection with transfer,
  *   Total deductions, Balance (col 6 – col 14).
  *
- * FMV for grandfathering (col 9) is left blank — the user fills it in
- * before submitting, since we don't yet have BSE/NSE 31-Jan-2018 close
- * prices loaded (see capitalGains.service §grandfathering TODO).
+ * FMV for grandfathering (col 9) is populated from FmvOverride/SystemFmvSeed
+ * (fmvOverride.service.ts) for rows acquired before 01-Feb-2018 where an ISIN
+ * match exists; left blank only when no FMV is known (user hasn't overridden
+ * and the seed doesn't cover that ISIN) — matches GrandfatheringRow.needsUserInput
+ * in fmvOverride.service.ts#listGrandfatheringRows.
+ *
+ * Cost-of-acquisition cascade (Sec 55(2)(ac)): cost used = higher of (actual
+ * cost, lower of (FMV, sale price)). Col 11 = lower of Col 9 (FMV) and Col 10
+ * (sale price); Col 12 = higher of Col 7 (actual cost per unit) and Col 11.
+ * The order matters — taking "higher of cost/FMV" before capping at sale
+ * price loses the actual-cost floor whenever cost > sale price, understating
+ * losses on capital-loss rows. When FMV is unknown, Col 11/Col 12 are left
+ * blank and Col 13 falls back to the uncorrected actual cost per unit (no
+ * grandfathering applied).
  */
 export async function schedule112ACsv(userId: string, fy: string): Promise<string> {
   const all = await userCgRows(userId, fy);
@@ -384,6 +396,7 @@ export async function schedule112ACsv(userId: string, fy: string): Promise<strin
     (r) => r.capitalGainType === 'LONG_TERM' && isListedEquityClass(r.assetClass),
   );
   const grandfatherCutoff = new Date('2018-02-01T00:00:00Z');
+  const fmvByIsin = await getFmvForUser(userId);
 
   const headers = [
     'ISIN',
@@ -396,12 +409,15 @@ export async function schedule112ACsv(userId: string, fy: string): Promise<strin
     'Acquired Before 01/02/2018',
     'FMV per Share/Unit as on 31/01/2018',
     'Sale Price (Col 5)',
-    'Higher of Col 8 and Col 9',
-    'Lower of Col 11 and Col 10',
+    'Lower of Col 9 and Col 10',
+    'Higher of Col 7 and Col 11',
     'Acquisition Cost u/s 55(2)(ac)',
     'Expenditure on Transfer',
     'Total Deductions',
     'Balance (Col 6 - Col 14)',
+    // Extra column, not part of the ITR-portal template — lets a CA see at a
+    // glance which FMV values are seeded, user-overridden, or still missing.
+    'FMV Source',
   ];
 
   const lines: string[] = [headers.map(csvCell).join(',')];
@@ -413,12 +429,21 @@ export async function schedule112ACsv(userId: string, fy: string): Promise<strin
     const costNoIndex = r.buyAmount;
     const costPerUnit = qty.isZero() ? new Decimal(0) : costNoIndex.dividedBy(qty);
     const acquiredBeforeCutoff = r.buyDate < grandfatherCutoff ? 'Y' : 'N';
-    // FMV blank by default — user supplies
-    const fmvPerUnit = '';
-    // Col 11 = higher of cost-per-share and FMV (FMV blank → use cost)
-    const col11 = costPerUnit;
-    // Col 12 = lower of col 11 and sale price
-    const col12 = Decimal.min(col11, salePricePerUnit);
+    // FMV only applies to pre-cutoff lots with a known ISIN match; blank
+    // otherwise (needsUserInput-equivalent — see fmvOverride.service.ts).
+    const fmvRecord =
+      acquiredBeforeCutoff === 'Y' && r.isin ? fmvByIsin.get(r.isin) ?? null : null;
+    const fmvPerUnitDecimal = fmvRecord?.fmvPerUnit ?? null;
+    const fmvPerUnit = fmvPerUnitDecimal ? fmvPerUnitDecimal.toFixed(4) : '';
+    // Not applicable (post-cutoff buy) → blank; eligible but unresolved
+    // (no ISIN, or ISIN not in FmvOverride/SystemFmvSeed) → MISSING.
+    const fmvSource = acquiredBeforeCutoff !== 'Y' ? '' : (fmvRecord?.source ?? 'MISSING');
+    // Col 11 = lower of FMV (col 9) and sale price (col 10); blank when FMV
+    // is unknown — there is nothing to cap against.
+    const col11 = fmvPerUnitDecimal ? Decimal.min(fmvPerUnitDecimal, salePricePerUnit) : null;
+    // Col 12 = higher of cost-per-share (col 7) and col 11. Falls back to the
+    // uncorrected cost-per-share when FMV is unknown (no grandfathering).
+    const col12 = col11 ? Decimal.max(costPerUnit, col11) : costPerUnit;
     // Col 13 = col 12 × qty
     const col13 = col12.times(qty);
     // Expenditure on transfer (col 14) — not tracked at row level; default 0
@@ -438,12 +463,13 @@ export async function schedule112ACsv(userId: string, fy: string): Promise<strin
         acquiredBeforeCutoff,
         fmvPerUnit,
         salePricePerUnit.toFixed(4),
-        col11.toFixed(4),
+        col11 ? col11.toFixed(4) : '',
         col12.toFixed(4),
         col13.toFixed(2),
         col14.toFixed(2),
         totalDeductions.toFixed(2),
         balance.toFixed(2),
+        fmvSource,
       ]
         .map(csvCell)
         .join(','),

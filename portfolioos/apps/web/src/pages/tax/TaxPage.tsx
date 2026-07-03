@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { FileDown, Loader2, Info } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FileDown, Loader2, Info, Pencil, RotateCcw, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import {
   type Schedule43Report,
   type TaxHarvestReport,
   type TaxSummary,
+  type GrandfatheringReport,
 } from '@/api/tax.api';
 
 type Tab =
@@ -27,7 +28,8 @@ type Tab =
   | 'intraday'
   | 'fno'
   | 'income'
-  | 'harvest';
+  | 'harvest'
+  | 'grandfathering';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'summary', label: 'Summary' },
@@ -39,6 +41,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'fno', label: 'F&O (Sec. 43(5))' },
   { key: 'income', label: 'Dividend & Interest' },
   { key: 'harvest', label: 'Tax Harvest' },
+  { key: 'grandfathering', label: 'Grandfathering (112A FMV)' },
 ];
 
 function currentFy(): string {
@@ -164,9 +167,18 @@ export function TaxPage() {
     queryFn: () => taxApi.harvest(fy),
     enabled: tab === 'harvest' && !!fy,
   });
+  const grandfatheringQ = useQuery({
+    queryKey: ['tax-grandfathering', fy],
+    queryFn: () => taxApi.grandfathering(fy),
+    // Also needed by the Schedule 112A tab's FMV status line, not just the
+    // Grandfathering tab itself.
+    enabled: (tab === 'grandfathering' || tab === 'schedule-112a') && !!fy,
+  });
 
   const downloadCsv = () => {
-    const url = taxApi.schedule112ACsvUrl(fy);
+    // Both this (Schedule 112A tab) and downloadGrandfatheringCsv now hit
+    // the same enriched endpoint — it fills col 9 (FMV) where known.
+    const url = taxApi.grandfatheringCsvUrl(fy);
     fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
       .then(async (r) => {
         if (!r.ok) throw new Error(await r.text());
@@ -174,6 +186,21 @@ export function TaxPage() {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = `schedule-112a-${fy}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      })
+      .catch((e) => alert(e.message ?? 'Download failed'));
+  };
+
+  const downloadGrandfatheringCsv = () => {
+    const url = taxApi.grandfatheringCsvUrl(fy);
+    fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await r.text());
+        const blob = await r.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `schedule-112a-grandfathering-${fy}.csv`;
         a.click();
         URL.revokeObjectURL(a.href);
       })
@@ -204,6 +231,11 @@ export function TaxPage() {
               <FileDown className="h-4 w-4" /> ITR-portal CSV
             </Button>
           )}
+          {tab === 'grandfathering' && (
+            <Button variant="outline" className="ml-auto" onClick={downloadGrandfatheringCsv}>
+              <FileDown className="h-4 w-4" /> Schedule 112A CSV (with FMV)
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -231,6 +263,8 @@ export function TaxPage() {
           loading={s112AQ.isLoading}
           kind="Schedule 112A · LTCG on listed equity / equity MF"
           showRate
+          grandfatheringData={grandfatheringQ.data}
+          onEditFmv={() => setTab('grandfathering')}
         />
       )}
       {tab === 'schedule-112' && (
@@ -253,6 +287,9 @@ export function TaxPage() {
       {tab === 'fno' && <Schedule43View data={fnoQ.data} loading={fnoQ.isLoading} />}
       {tab === 'income' && <IncomeView data={incomeQ.data} loading={incomeQ.isLoading} />}
       {tab === 'harvest' && <HarvestView data={harvestQ.data} loading={harvestQ.isLoading} />}
+      {tab === 'grandfathering' && (
+        <GrandfatheringView data={grandfatheringQ.data} loading={grandfatheringQ.isLoading} fy={fy} />
+      )}
     </div>
   );
 }
@@ -452,82 +489,113 @@ function GainsView({
   kind,
   showRate,
   showIndexed,
+  grandfatheringData,
+  onEditFmv,
 }: {
   data: TaxGainsReport | undefined;
   loading: boolean;
   kind: string;
   showRate?: boolean;
   showIndexed?: boolean;
+  grandfatheringData?: GrandfatheringReport;
+  onEditFmv?: () => void;
 }) {
   if (loading) return <Loading />;
   if (!data) return null;
+  const fmvRowsWithData = grandfatheringData
+    ? grandfatheringData.rows.filter((r) => !r.needsUserInput).length
+    : undefined;
+  const fmvRowsTotal = grandfatheringData?.rows.length;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">
-          {kind} · {data.count} rows · Total ₹{fmt(data.totalGain)}
-          {data.exemptionLimit && <span> · Exemption ₹{fmt(data.exemptionLimit)}</span>}
-          {data.taxable && <span> · Taxable ₹{fmt(data.taxable)}</span>}
-          {showRate && data.ratePct !== undefined && <span> · Rate {data.ratePct}%</span>}
-          {data.estimatedTax && <span> · Est. Tax ₹{fmt(data.estimatedTax)}</span>}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-auto">
-          <table className="text-sm w-full rtable">
-            <thead>
-              <tr className="border-b bg-muted/30">
-                <th className="text-left p-2">Asset</th>
-                <th className="text-left p-2">ISIN</th>
-                <th className="text-left p-2">Buy</th>
-                <th className="text-left p-2">Sell</th>
-                <th className="text-right p-2">Qty</th>
-                <th className="text-right p-2">Cost</th>
-                <th className="text-right p-2">Proceeds</th>
-                {showIndexed && <th className="text-right p-2">Indexed Cost</th>}
-                <th className="text-right p-2">Gain/Loss</th>
-                <th className="text-right p-2">Taxable</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.rows.map((r, i) => (
-                <tr key={i} className="border-b">
-                  <td data-label="Asset" className="p-2">{r.assetName || r.isin || '—'}</td>
-                  <td data-label="ISIN" className="p-2 text-xs text-muted-foreground">{r.isin ?? '—'}</td>
-                  <td data-label="Buy" className="p-2">{r.buyDate.slice(0, 10)}</td>
-                  <td data-label="Sell" className="p-2">{r.sellDate.slice(0, 10)}</td>
-                  <td data-label="Qty" className="p-2 text-right">{fmt(r.quantity, 4)}</td>
-                  <td data-label="Cost" className="p-2 text-right">{fmt(r.buyAmount)}</td>
-                  <td data-label="Proceeds" className="p-2 text-right">{fmt(r.sellAmount)}</td>
-                  {showIndexed && (
-                    <td data-label="Indexed Cost" className="p-2 text-right">
-                      {r.indexedCostOfAcquisition ? fmt(r.indexedCostOfAcquisition) : '—'}
-                    </td>
-                  )}
-                  <td
-                    data-label="Gain/Loss"
-                    className={cn(
-                      'p-2 text-right',
-                      isNonNegativeMoney(r.gainLoss) ? 'text-positive' : 'text-negative',
-                    )}
-                  >
-                    {fmt(r.gainLoss)}
-                  </td>
-                  <td data-label="Taxable" className="p-2 text-right">{fmt(r.taxableGain)}</td>
-                </tr>
-              ))}
-              {data.rows.length === 0 && (
-                <tr>
-                  <td colSpan={showIndexed ? 10 : 9} className="p-6 text-center text-muted-foreground">
-                    No records for selected FY.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+    <div className="space-y-3">
+      {grandfatheringData && fmvRowsTotal !== undefined && fmvRowsTotal > 0 && (
+        <div className="flex items-center justify-between gap-3 text-sm px-1">
+          <span
+            className={cn(
+              'text-xs',
+              fmvRowsWithData === fmvRowsTotal ? 'text-muted-foreground' : 'text-amber-600',
+            )}
+          >
+            FMV data: {fmvRowsWithData} of {fmvRowsTotal} rows have FMV
+          </span>
+          {onEditFmv && (
+            <button
+              type="button"
+              onClick={onEditFmv}
+              className="text-xs text-accent hover:underline font-medium"
+            >
+              Edit FMV values →
+            </button>
+          )}
         </div>
-      </CardContent>
-    </Card>
+      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">
+            {kind} · {data.count} rows · Total ₹{fmt(data.totalGain)}
+            {data.exemptionLimit && <span> · Exemption ₹{fmt(data.exemptionLimit)}</span>}
+            {data.taxable && <span> · Taxable ₹{fmt(data.taxable)}</span>}
+            {showRate && data.ratePct !== undefined && <span> · Rate {data.ratePct}%</span>}
+            {data.estimatedTax && <span> · Est. Tax ₹{fmt(data.estimatedTax)}</span>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-auto">
+            <table className="text-sm w-full rtable">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-left p-2">Asset</th>
+                  <th className="text-left p-2">ISIN</th>
+                  <th className="text-left p-2">Buy</th>
+                  <th className="text-left p-2">Sell</th>
+                  <th className="text-right p-2">Qty</th>
+                  <th className="text-right p-2">Cost</th>
+                  <th className="text-right p-2">Proceeds</th>
+                  {showIndexed && <th className="text-right p-2">Indexed Cost</th>}
+                  <th className="text-right p-2">Gain/Loss</th>
+                  <th className="text-right p-2">Taxable</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r, i) => (
+                  <tr key={i} className="border-b">
+                    <td data-label="Asset" className="p-2">{r.assetName || r.isin || '—'}</td>
+                    <td data-label="ISIN" className="p-2 text-xs text-muted-foreground">{r.isin ?? '—'}</td>
+                    <td data-label="Buy" className="p-2">{r.buyDate.slice(0, 10)}</td>
+                    <td data-label="Sell" className="p-2">{r.sellDate.slice(0, 10)}</td>
+                    <td data-label="Qty" className="p-2 text-right">{fmt(r.quantity, 4)}</td>
+                    <td data-label="Cost" className="p-2 text-right">{fmt(r.buyAmount)}</td>
+                    <td data-label="Proceeds" className="p-2 text-right">{fmt(r.sellAmount)}</td>
+                    {showIndexed && (
+                      <td data-label="Indexed Cost" className="p-2 text-right">
+                        {r.indexedCostOfAcquisition ? fmt(r.indexedCostOfAcquisition) : '—'}
+                      </td>
+                    )}
+                    <td
+                      data-label="Gain/Loss"
+                      className={cn(
+                        'p-2 text-right',
+                        isNonNegativeMoney(r.gainLoss) ? 'text-positive' : 'text-negative',
+                      )}
+                    >
+                      {fmt(r.gainLoss)}
+                    </td>
+                    <td data-label="Taxable" className="p-2 text-right">{fmt(r.taxableGain)}</td>
+                  </tr>
+                ))}
+                {data.rows.length === 0 && (
+                  <tr>
+                    <td colSpan={showIndexed ? 10 : 9} className="p-6 text-center text-muted-foreground">
+                      No records for selected FY.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -796,6 +864,300 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
           Unabsorbed losses can be carried forward for 8 AYs (Sec. 74). Holding-period
           classification uses the oldest BUY in the lot — actual FIFO matching at sell
           time may differ.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function GrandfatheringView({
+  data,
+  loading,
+  fy,
+}: {
+  data: GrandfatheringReport | undefined;
+  loading: boolean;
+  fy: string;
+}) {
+  // Local state for inline editing
+  const [editingIsin, setEditingIsin] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+
+  if (loading) return <Loading />;
+  if (!data) return null;
+
+  const handleSave = async (isin: string, scripName: string) => {
+    if (!editValue) return;
+    try {
+      if (!toDecimal(editValue).isFinite()) return;
+    } catch {
+      return;
+    }
+    setSaving(true);
+    try {
+      await taxApi.putFmvOverride(isin, editValue, scripName);
+      queryClient.invalidateQueries({ queryKey: ['tax-grandfathering'] });
+      queryClient.invalidateQueries({ queryKey: ['tax-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['tax-112a'] });
+      setEditingIsin(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (isin: string) => {
+    await taxApi.deleteFmvOverride(isin);
+    queryClient.invalidateQueries({ queryKey: ['tax-grandfathering'] });
+    queryClient.invalidateQueries({ queryKey: ['tax-summary'] });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Rows requiring FMV</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className={cn(
+                'text-2xl font-semibold',
+                data.summary.rowsNeedingInput > 0 ? 'text-amber-600' : 'text-positive',
+              )}
+            >
+              {data.summary.rowsNeedingInput}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {data.summary.rowsNeedingInput > 0
+                ? 'Enter FMV to get accurate tax'
+                : 'All FMVs are filled in'}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Gain without FMV</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className={cn(
+                'text-2xl font-semibold',
+                isNonNegativeMoney(data.summary.totalUncorrectedGain)
+                  ? 'text-positive'
+                  : 'text-negative',
+              )}
+            >
+              ₹{fmt(data.summary.totalUncorrectedGain)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Using actual purchase cost</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Gain with FMV</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className={cn(
+                'text-2xl font-semibold',
+                isNonNegativeMoney(data.summary.totalCorrectedGain)
+                  ? 'text-positive'
+                  : 'text-negative',
+              )}
+            >
+              ₹{fmt(data.summary.totalCorrectedGain)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Using Sec. 55(2)(ac) basis</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Tax benefit from FMV</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold text-positive">
+              ₹{fmt(data.summary.totalTaxSaving)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Est. at 12.5% LTCG rate</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Warning banner if rows need input */}
+      {data.summary.rowsNeedingInput > 0 && (
+        <div className="flex items-start gap-2 p-3 rounded-md border border-amber-300 bg-amber-50 text-sm text-amber-800">
+          <Info className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>
+            {data.summary.rowsNeedingInput} holding(s) bought before 31-Jan-2018 need the BSE/NSE
+            closing price on that date. Enter the FMV per unit inline below or check the NSE/BSE
+            bhavcopy archive for that date.
+          </span>
+        </div>
+      )}
+
+      {/* Main table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">
+            {data.count} pre-31-Jan-2018 lots · FY {fy} · Sec. 55(2)(ac) grandfathering
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-auto">
+            <table className="text-sm w-full rtable">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-left p-2">Asset</th>
+                  <th className="text-left p-2">ISIN</th>
+                  <th className="text-left p-2">Buy Date</th>
+                  <th className="text-left p-2">Sell Date</th>
+                  <th className="text-right p-2">Qty</th>
+                  <th className="text-right p-2">Cost</th>
+                  <th className="text-right p-2">Proceeds</th>
+                  <th className="text-right p-2">FMV / unit</th>
+                  <th className="text-right p-2">Adjusted basis</th>
+                  <th className="text-right p-2">Corrected gain</th>
+                  <th className="text-right p-2">Tax saving</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r, i) => (
+                  <tr key={i} className={cn('border-b', r.needsUserInput && 'bg-amber-50/30')}>
+                    <td className="p-2">{r.assetName || '—'}</td>
+                    <td className="p-2 text-xs text-muted-foreground">{r.isin ?? '—'}</td>
+                    <td className="p-2">{r.buyDate.slice(0, 10)}</td>
+                    <td className="p-2">{r.sellDate.slice(0, 10)}</td>
+                    <td className="p-2 text-right">{fmt(r.quantity, 4)}</td>
+                    <td className="p-2 text-right">{fmt(r.buyAmount)}</td>
+                    <td className="p-2 text-right">{fmt(r.sellAmount)}</td>
+
+                    {/* Inline FMV edit cell */}
+                    <td className="p-2 text-right">
+                      {!r.isin ? (
+                        // No ISIN on this row — nothing to key the override on.
+                        <span className="text-muted-foreground text-xs">no ISIN</span>
+                      ) : editingIsin === r.isin ? (
+                        <div className="flex items-center gap-1 justify-end">
+                          <span className="text-muted-foreground text-xs">₹</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            className="w-24 text-right border border-border rounded px-1 py-0.5 text-sm"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSave(r.isin!, r.assetName);
+                              if (e.key === 'Escape') setEditingIsin(null);
+                            }}
+                          />
+                          <button
+                            className="text-positive text-xs font-medium"
+                            onClick={() => handleSave(r.isin!, r.assetName)}
+                            disabled={saving}
+                          >
+                            {saving ? '…' : '✓'}
+                          </button>
+                          <button
+                            className="text-muted-foreground text-xs"
+                            onClick={() => setEditingIsin(null)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : r.fmvPerUnit ? (
+                        <div className="flex items-center gap-1 justify-end group">
+                          <span>₹{fmt(r.fmvPerUnit)}</span>
+                          <span
+                            className={cn(
+                              'text-[10px] px-1 rounded font-medium',
+                              r.fmvSource === 'USER'
+                                ? 'bg-accent/10 text-accent'
+                                : 'bg-muted text-muted-foreground',
+                            )}
+                          >
+                            {r.fmvSource === 'USER' ? 'edited' : 'seed'}
+                          </span>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              setEditingIsin(r.isin!);
+                              setEditValue(r.fmvPerUnit!);
+                            }}
+                            title="Edit FMV"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          {r.fmvSource === 'USER' && (
+                            <button
+                              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-negative"
+                              onClick={() => r.isin && handleDelete(r.isin)}
+                              title="Revert to seed value"
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          className="text-amber-600 text-xs font-medium hover:underline flex items-center gap-1"
+                          onClick={() => {
+                            setEditingIsin(r.isin!);
+                            setEditValue('');
+                          }}
+                        >
+                          <AlertTriangle className="h-3 w-3" /> Enter FMV
+                        </button>
+                      )}
+                    </td>
+
+                    <td className="p-2 text-right">
+                      {r.adjustedCostBasis ? `₹${fmt(r.adjustedCostBasis)}` : '—'}
+                    </td>
+                    <td
+                      className={cn(
+                        'p-2 text-right',
+                        r.correctedGain
+                          ? isNonNegativeMoney(r.correctedGain)
+                            ? 'text-positive'
+                            : 'text-negative'
+                          : '',
+                      )}
+                    >
+                      {r.correctedGain ? `₹${fmt(r.correctedGain)}` : '—'}
+                    </td>
+                    <td className="p-2 text-right text-positive text-xs">
+                      {r.gainDifference && toDecimal(r.gainDifference).greaterThan(0)
+                        ? `₹${fmt(r.gainDifference)}`
+                        : '—'}
+                    </td>
+                  </tr>
+                ))}
+                {data.rows.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="p-6 text-center text-muted-foreground">
+                      No pre-31-Jan-2018 equity/MF lots sold in this FY.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Legal disclaimer */}
+      <div className="text-xs text-muted-foreground flex items-start gap-2 px-1">
+        <Info className="h-3 w-3 mt-0.5 shrink-0" />
+        <span>
+          FMV per Sec. 55(2)(ac) is the higher of actual purchase cost and the BSE/NSE closing price
+          on 31-Jan-2018. Seed values are approximate — verify against the official BSE bhavcopy for
+          EQ310118. The adjusted cost basis cannot exceed the actual sale proceeds (per the CBDT
+          FAQ). Confirm with your CA before filing.
         </span>
       </div>
     </div>
