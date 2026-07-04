@@ -60,6 +60,7 @@ import { ProvidentFundPage } from './pages/assetClasses/ProvidentFundPage';
 import { PfExtensionPairPage } from './pages/pf/PfExtensionPairPage';
 import { OtherAssetsPage } from './pages/assetClasses/OtherAssetsPage';
 import { PostOfficePage } from './pages/assetClasses/PostOfficePage';
+import { PostOfficeDetailPage } from './pages/assetClasses/PostOfficeDetailPage';
 import { FuturesOptionsPage } from './pages/assetClasses/FuturesOptionsPage';
 import { ForexPage } from './pages/forex/ForexPage';
 import { AccountingPage } from './pages/accounting/AccountingPage';
@@ -121,6 +122,7 @@ export function App() {
         {/* NPS — disabled until NSDL CRA adapter lands (§10.2) */}
         {/* <Route path="/nps" element={<NpsPage />} /> */}
         <Route path="/post-office" element={<PostOfficePage />} />
+        <Route path="/post-office/:holdingId" element={<PostOfficeDetailPage />} />
         <Route path="/others" element={<OtherAssetsPage />} />
         <Route path="/vehicles" element={<VehicleListPage />} />
         <Route path="/vehicles/value" element={<VehicleValuePage />} />
