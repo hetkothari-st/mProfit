@@ -87,7 +87,7 @@ const RAR_MAGIC = Buffer.from('Rar!');
 const SEVENZ_MAGIC = Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]);
 const MP4_FTYP = Buffer.from('ftyp');
 
-interface SniffedKind {
+export interface SniffedKind {
   kind: FileKind;
   mime: string | null;
   /** True when the magic identifies an encrypted Office file. */
@@ -110,7 +110,12 @@ function isLikelyTextual(buf: Buffer): boolean {
   return bad / Math.max(1, sample.length) < 0.02;
 }
 
-function sniff(buf: Buffer, fileName?: string): SniffedKind {
+/**
+ * Magic-byte sniff, independent of the claimed file extension. Exported so
+ * `lib/uploadSecurity.ts` can check claimed-extension-vs-detected-content
+ * without re-implementing this table.
+ */
+export function sniff(buf: Buffer, fileName?: string): SniffedKind {
   if (startsWith(buf, PDF_MAGIC)) return { kind: 'pdf', mime: 'application/pdf' };
   if (startsWith(buf, CFB_MAGIC)) {
     // CFB: legacy .xls OR encrypted OOXML. Differentiate by extension hint.
