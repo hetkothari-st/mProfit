@@ -19,6 +19,7 @@ import { startCatalogJobs } from './jobs/catalogJobs.js';
 import { startRentalJobs } from './jobs/rentalJobs.js';
 import { startInsuranceJobs } from './jobs/insuranceJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
+import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
@@ -99,6 +100,7 @@ const server = app.listen(env.PORT, '::', () => {
   startRentalJobs();
   startInsuranceJobs();
   startAlertJobs();
+  startNetWorthSnapshotJob();
   startFoExpiryJob();
   // Fire-and-forget: run initial data sync in background so server stays responsive
   runStartupSync().catch((err) => logger.error({ err }, 'Startup sync failed'));
