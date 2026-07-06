@@ -500,6 +500,7 @@ export interface TaxHarvestRow {
   unrealisedPnL: string;
   pctReturn: string;
   longTermEligible: boolean; // current holding period ≥ LTCG threshold
+  oldestBuyDate: string;     // ISO date string of the oldest BUY for this holding
   classification: 'STCG_LOSS' | 'LTCG_LOSS' | 'STCG_GAIN' | 'LTCG_GAIN';
 }
 
@@ -574,6 +575,7 @@ export async function taxHarvestReport(userId: string, fy?: string) {
       unrealisedPnL: pnl.toString(),
       pctReturn,
       longTermEligible: ltEligible,
+      oldestBuyDate: oldest.toISOString().slice(0, 10),
       classification,
     });
   }

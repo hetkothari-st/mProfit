@@ -95,6 +95,26 @@ function isNonNegativeMoney(s: string | number | null | undefined): boolean {
   }
 }
 
+/**
+ * Computes days remaining until the oldest lot of a holding crosses the LTCG
+ * threshold. Returns null if already long-term eligible.
+ * Threshold: 12 months for EQUITY/ETF/MUTUAL_FUND, 24 for FOREIGN_EQUITY,
+ * 36 for everything else. Uses 365/730/1095 days approximation matching the
+ * backend (longTermThresholdMonths × 30 ≈ those day counts are close enough
+ * at the UX level — exact to within 1–2 days).
+ */
+function daysToLtcg(oldestBuyDateIso: string, assetClass: string): number | null {
+  const thresholdDays =
+    ['EQUITY', 'ETF', 'MUTUAL_FUND'].includes(assetClass) ? 365
+    : assetClass === 'FOREIGN_EQUITY' ? 730
+    : 1095;
+  const oldest = new Date(oldestBuyDateIso);
+  const now = new Date();
+  const heldDays = Math.floor((now.getTime() - oldest.getTime()) / (24 * 60 * 60 * 1000));
+  const remaining = thresholdDays - heldDays;
+  return remaining > 0 ? remaining : null; // null means already LTCG-eligible
+}
+
 export function TaxPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const [tab, setTab] = useState<Tab>('summary');
@@ -853,6 +873,7 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
                   <th className="text-right p-2">P&L</th>
                   <th className="text-right p-2">%</th>
                   <th className="text-left p-2">Classification</th>
+                  <th className="text-right p-2">Days to LTCG</th>
                 </tr>
               </thead>
               <tbody>
@@ -889,11 +910,34 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
                         {r.classification.replace('_', ' ')}
                       </span>
                     </td>
+                    <td data-label="Days to LTCG" className="p-2 text-right text-xs tabular-nums">
+                      {(() => {
+                        // Already long-term — show a check, no countdown needed
+                        if (r.longTermEligible) {
+                          return (
+                            <span className="text-muted-foreground">LTCG ✓</span>
+                          );
+                        }
+                        const days = daysToLtcg(r.oldestBuyDate, r.assetClass);
+                        if (days === null) {
+                          return <span className="text-muted-foreground">LTCG ✓</span>;
+                        }
+                        // Colour-code urgency: green if > 30 days, amber if ≤ 30, red if ≤ 7
+                        const urgency = days <= 7 ? 'text-positive font-medium'
+                          : days <= 30 ? 'text-amber-600 dark:text-amber-400 font-medium'
+                          : 'text-muted-foreground';
+                        return (
+                          <span className={urgency} title={`Oldest buy: ${r.oldestBuyDate}`}>
+                            {days}d
+                          </span>
+                        );
+                      })()}
+                    </td>
                   </tr>
                 ))}
                 {data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={12} className="p-6 text-center text-muted-foreground">
                       No holdings to analyse.
                     </td>
                   </tr>

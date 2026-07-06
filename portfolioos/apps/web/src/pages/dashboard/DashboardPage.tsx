@@ -31,6 +31,7 @@ import { ConnectGmailCard } from '@/components/dashboard/ConnectGmailCard';
 import { FamilyScopeBanner } from '@/components/family/FamilyScopeBanner';
 import { GmailScanProgressCard } from '@/components/dashboard/GmailScanProgressCard';
 import { DashboardFxStrip } from '@/pages/forex/DashboardFxStrip';
+import { DashboardTaxStrip } from '@/components/dashboard/DashboardTaxStrip';
 import { HealthScore } from '@/components/intelligence/HealthScore';
 import { apiErrorMessage } from '@/api/client';
 import { usePrivacyStore } from '@/stores/privacy.store';
@@ -825,6 +826,9 @@ export function DashboardPage() {
 
       {/* Live FX rates strip — quick glance + click-through to /forex */}
       <DashboardFxStrip />
+
+      {/* Tax estimate strip — FY summary + CA report download */}
+      <DashboardTaxStrip />
 
       {/* Investment metric cards */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

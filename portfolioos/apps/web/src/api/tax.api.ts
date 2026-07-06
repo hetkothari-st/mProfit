@@ -121,6 +121,7 @@ export interface TaxHarvestReport {
     unrealisedPnL: string;
     pctReturn: string;
     longTermEligible: boolean;
+    oldestBuyDate: string;   // ISO date, oldest BUY for this holding
     classification: 'STCG_LOSS' | 'LTCG_LOSS' | 'STCG_GAIN' | 'LTCG_GAIN';
   }>;
   totals: {
