@@ -3,6 +3,7 @@ import type { Transaction, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';
 import { spanDays, isXirrReliable } from './xirr.reliability.js';
+import { assetKeyFromTransaction } from './assetKey.js';
 
 /**
  * Internal cashflow representation. Amounts are Decimal to avoid IEEE-754
@@ -291,6 +292,65 @@ export async function computePortfolioXirr(
     spanDays: span,
     reliable: isXirrReliable(span),
   };
+}
+
+/**
+ * Per-holding XIRR fan-out. Deliberately takes an already-fetched
+ * transaction list and a map of already-known terminal (current) values
+ * instead of querying per assetKey — a naive `computePortfolioXirr` call
+ * per holding would issue one `transaction.findMany` + one
+ * `holdingProjection.findMany` per row, turning a holdings-list request
+ * into 2N round-trips. Callers fetch the portfolio's transactions once
+ * (already have the HoldingProjection rows for currentValue/totalCost from
+ * building the holdings list itself) and this function does the grouping +
+ * solving in memory, so the whole holdings list costs exactly one extra
+ * query regardless of holding count.
+ *
+ * Grouping key mirrors HoldingProjection.assetKey: prefer the transaction's
+ * own `assetKey` (set at write time for rows created after the Phase 4.5
+ * backfill), falling back to `assetKeyFromTransaction` for legacy rows where
+ * it's still null — the same precedence used to build the projection, so a
+ * transaction lands in the same bucket as its holding.
+ */
+export function computeHoldingXirrs(
+  transactions: Transaction[],
+  terminalValues: Map<string, Decimal>,
+  asOfDate: Date = new Date(),
+): Map<string, XirrResult> {
+  const byAssetKey = new Map<string, Transaction[]>();
+  for (const t of transactions) {
+    const key = t.assetKey ?? assetKeyFromTransaction(t);
+    if (!byAssetKey.has(key)) byAssetKey.set(key, []);
+    byAssetKey.get(key)!.push(t);
+  }
+
+  const results = new Map<string, XirrResult>();
+  for (const [key, txs] of byAssetKey) {
+    const flows: CashFlow[] = [];
+    let invested = new Decimal(0);
+    for (const t of txs) {
+      const cf = txToCashflow(t);
+      if (!cf) continue;
+      flows.push(cf);
+      if (cf.amount.isNegative()) invested = invested.plus(cf.amount.negated());
+    }
+
+    const tv = terminalValues.get(key) ?? new Decimal(0);
+    const flowsForTwr = [...flows];
+    if (tv.greaterThan(0)) flows.push({ date: asOfDate, amount: tv });
+
+    const span = spanDays(flows.map((f) => f.date));
+    results.set(key, {
+      xirr: xirr(flows),
+      twr: modifiedDietzAnnualized(flowsForTwr, tv),
+      cashflowCount: flows.length,
+      totalInvested: invested.toFixed(4),
+      terminalValue: tv.toFixed(4),
+      spanDays: span,
+      reliable: isXirrReliable(span),
+    });
+  }
+  return results;
 }
 
 export async function computeUserXirr(userId: string): Promise<XirrResult> {
