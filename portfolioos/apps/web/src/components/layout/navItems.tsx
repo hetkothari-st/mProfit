@@ -37,6 +37,7 @@ import {
   Target,
   HeartPulse,
   IndianRupee,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -57,6 +58,7 @@ export const ASSET_CLASS_ITEMS: NavItem[] = [
   { label: 'Crypto', to: '/crypto', icon: Bitcoin },
   { label: 'Forex', to: '/forex', icon: Globe },
   { label: 'PPF & EPF', to: '/provident-fund', icon: Wallet },
+  { label: 'NPS', to: '/nps', icon: ShieldCheck },
   { label: 'Post Office', to: '/post-office', icon: MailOpen },
   { label: 'Real Estate', to: '/real-estate', icon: Home },
   { label: 'Rental', to: '/rental', icon: Building2 },

@@ -119,8 +119,8 @@ export function App() {
         {/* PPF + EPF merged into /provident-fund. Old paths redirect for back-compat. */}
         <Route path="/ppf" element={<Navigate to="/provident-fund" replace />} />
         <Route path="/epf" element={<Navigate to="/provident-fund" replace />} />
-        {/* NPS — disabled until NSDL CRA adapter lands (§10.2) */}
-        {/* <Route path="/nps" element={<NpsPage />} /> */}
+        {/* NPS — manual entry only; NSDL CRA auto-fetch adapter is a separate future project (§10.2) */}
+        <Route path="/nps" element={<NpsPage />} />
         <Route path="/post-office" element={<PostOfficePage />} />
         <Route path="/post-office/:holdingId" element={<PostOfficeDetailPage />} />
         <Route path="/others" element={<OtherAssetsPage />} />
