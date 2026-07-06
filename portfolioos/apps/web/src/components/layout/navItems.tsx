@@ -73,7 +73,7 @@ export const OVERVIEW_ITEMS: NavItem[] = [
   { label: 'Portfolios', to: '/portfolios', icon: Briefcase },
   { label: 'Family', to: '/family', icon: Users },
   { label: 'Income', to: '/income', icon: IndianRupee },
-  { label: 'Health Score', to: '/health-score', icon: HeartPulse },
+  { label: 'Portfolio Score', to: '/health-score', icon: HeartPulse },
   { label: 'Goals', to: '/goals', icon: Target },
   { label: 'Transactions', to: '/transactions', icon: Receipt },
   { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },
