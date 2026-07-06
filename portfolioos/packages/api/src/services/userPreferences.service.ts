@@ -16,6 +16,7 @@ const ASSET_SECTION_KEYS: string[] = [
   '/crypto',
   '/forex',
   '/provident-fund',
+  '/nps',
   '/post-office',
   '/real-estate',
   '/rental',
