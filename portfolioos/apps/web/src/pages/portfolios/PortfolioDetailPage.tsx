@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Wallet, TrendingUp, Percent, LineChart as LineChartIcon, RefreshCw, Plus, Loader2 } from 'lucide-react';
+import { ArrowLeft, Wallet, TrendingUp, Percent, LineChart as LineChartIcon, RefreshCw, Plus, Loader2, ArrowUpDown } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
+import type { HoldingRow } from '@portfolioos/shared';
 import {
   formatINR,
   formatPercent,
@@ -32,10 +33,42 @@ function signClass(m: string | null | undefined): 'up' | 'down' | 'flat' {
   }
 }
 
+// FD-rate proxy (~7% p.a.) used only to color-code the XIRR badge — not a
+// stored rate, just a quick "beating a safe alternative?" signal.
+const FD_RATE_PROXY = 0.07;
+
+function xirrBadge(xirr: number | null) {
+  if (xirr == null) return <span className="text-muted-foreground">—</span>;
+  const pct = xirr * 100;
+  const cls =
+    xirr < 0
+      ? 'bg-negative/10 text-negative'
+      : xirr >= FD_RATE_PROXY
+        ? 'bg-positive/10 text-positive'
+        : 'bg-amber-100 text-amber-700';
+  return (
+    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${cls}`}>
+      {xirr >= 0 ? '+' : ''}
+      {pct.toFixed(2)}%
+    </span>
+  );
+}
+
+function sortHoldings(holdings: HoldingRow[], dir: 'asc' | 'desc' | null): HoldingRow[] {
+  if (!dir) return holdings;
+  // Unreliable/insufficient-history holdings (null xirr) sort last regardless
+  // of direction — there's no meaningful rank for "we don't know".
+  const withXirr = holdings.filter((h) => h.xirr != null);
+  const withoutXirr = holdings.filter((h) => h.xirr == null);
+  withXirr.sort((a, b) => (dir === 'asc' ? a.xirr! - b.xirr! : b.xirr! - a.xirr!));
+  return [...withXirr, ...withoutXirr];
+}
+
 export function PortfolioDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [txOpen, setTxOpen] = useState(false);
+  const [xirrSort, setXirrSort] = useState<'asc' | 'desc' | null>(null);
 
   const portfolioQuery = useQuery({
     queryKey: ['portfolio', id],
@@ -65,7 +98,14 @@ export function PortfolioDetailPage() {
 
   const portfolio = portfolioQuery.data;
   const summary = summaryQuery.data;
-  const holdings = holdingsQuery.data ?? [];
+  const holdings = useMemo(
+    () => sortHoldings(holdingsQuery.data ?? [], xirrSort),
+    [holdingsQuery.data, xirrSort],
+  );
+
+  function toggleXirrSort() {
+    setXirrSort((prev) => (prev === 'desc' ? 'asc' : prev === 'asc' ? null : 'desc'));
+  }
 
   return (
     <div>
@@ -162,6 +202,16 @@ export function PortfolioDetailPage() {
                     <th className="text-right font-medium px-4 py-2">CMP</th>
                     <th className="text-right font-medium px-4 py-2">Value</th>
                     <th className="text-right font-medium px-4 py-2">P&L</th>
+                    <th className="text-right font-medium px-4 py-2">
+                      <button
+                        type="button"
+                        onClick={toggleXirrSort}
+                        className="inline-flex items-center gap-1 hover:text-foreground"
+                      >
+                        XIRR
+                        <ArrowUpDown className="h-3 w-3" />
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -200,6 +250,9 @@ export function PortfolioDetailPage() {
                         }`}
                       >
                         {formatINR(h.unrealisedPnL, { showSign: true })}
+                      </td>
+                      <td data-label="XIRR" className="px-4 py-2 text-right numeric">
+                        {xirrBadge(h.xirr)}
                       </td>
                     </tr>
                   ))}

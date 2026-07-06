@@ -8,6 +8,7 @@ import {
   type Money,
   type Quantity,
 } from '@portfolioos/shared';
+import type { Transaction } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
@@ -20,6 +21,7 @@ import {
   type EffectiveScope,
 } from './familyScope.service.js';
 import { runAsUser } from '../lib/requestContext.js';
+import { computePortfolioXirr, computeHoldingXirrs } from './xirr.service.js';
 
 function toPortfolioDTO(p: Portfolio) {
   return {
@@ -309,7 +311,7 @@ export async function deletePortfolio(userId: string, id: string): Promise<void>
 
 export async function getPortfolioSummary(userId: string, id: string) {
   await ensureOwnership(userId, id);
-  const [rows, holdingCount] = await Promise.all([
+  const [rows, holdingCount, xirrResult] = await Promise.all([
     prisma.holdingProjection.findMany({
       where: { portfolioId: id },
       select: {
@@ -321,6 +323,7 @@ export async function getPortfolioSummary(userId: string, id: string) {
       },
     }),
     prisma.holdingProjection.count({ where: { portfolioId: id } }),
+    computePortfolioXirr(id),
   ]);
 
   const holdings = rows.filter((h) => h.stockId);
@@ -377,7 +380,10 @@ export async function getPortfolioSummary(userId: string, id: string) {
     unrealisedPnLPct,
     todaysChange: serializeMoney(todaysChange),
     todaysChangePct,
-    xirr: null as number | null,
+    // Unreliable (too little history — §xirr.reliability MIN_XIRR_DAYS)
+    // surfaces as null rather than an annualized rate that a few days of
+    // noise blew out of proportion.
+    xirr: xirrResult.reliable ? xirrResult.xirr : null,
     holdingCount,
   };
 }
@@ -418,6 +424,26 @@ export async function getPortfolioHoldings(userId: string, id: string) {
   const stockById = new Map(stocks.map((s) => [s.id, s]));
   const fundById = new Map(funds.map((f) => [f.id, f]));
 
+  // Per-holding XIRR: one extra query for ALL of this portfolio's
+  // transactions, then grouped + solved in memory by computeHoldingXirrs —
+  // not one `transaction.findMany` per holding. Terminal values reuse the
+  // `currentValue`/`totalCost` already on the HoldingProjection rows fetched
+  // above instead of re-querying them (that's what `computePortfolioXirr`'s
+  // internal `terminalValue()` does, which would reintroduce N+1 here).
+  const allTransactions: Transaction[] = await readCtx(() =>
+    prisma.transaction.findMany({
+      where: { portfolioId: id },
+      orderBy: { tradeDate: 'asc' },
+    }),
+  );
+  const terminalValues = new Map(
+    holdings.map((h) => [
+      h.assetKey,
+      h.currentValue !== null ? toDecimal(h.currentValue) : toDecimal(h.totalCost),
+    ]),
+  );
+  const xirrByAssetKey = computeHoldingXirrs(allTransactions, terminalValues);
+
   return holdings.map((h) => {
     const stock = h.stockId ? stockById.get(h.stockId) ?? null : null;
     const fund = h.fundId ? fundById.get(h.fundId) ?? null : null;
@@ -430,6 +456,7 @@ export async function getPortfolioHoldings(userId: string, id: string) {
       unrealisedPnL !== null && totalCost.greaterThan(0)
         ? unrealisedPnL.dividedBy(totalCost).times(100).toNumber()
         : null;
+    const xirrForHolding = xirrByAssetKey.get(h.assetKey);
 
     return {
       id: h.id,
@@ -450,8 +477,9 @@ export async function getPortfolioHoldings(userId: string, id: string) {
       valuationMethod: valuationMethodFor(h.assetClass),
       priceAsOf: h.priceAsOf ? h.priceAsOf.toISOString() : null,
       stale: isPriceStale(h.assetClass, h.priceAsOf),
-      xirr: null as number | null,
-      holdingPeriodDays: null as number | null,
+      xirr: xirrForHolding && xirrForHolding.reliable ? xirrForHolding.xirr : null,
+      holdingPeriodDays:
+        xirrForHolding && xirrForHolding.cashflowCount >= 2 ? xirrForHolding.spanDays : null,
     };
   });
 }
