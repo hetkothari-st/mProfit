@@ -2,10 +2,10 @@
  * AI Assistant — tier gating + daily rate limit.
  *
  * PlanTier → daily message quota:
- *   FREE / LITE      → 0 (feature locked; router returns 403)
- *   PLUS / HNI       → 50 messages/day
- *   FAMILY_OFFICE
- *   ADVISOR          → 200 messages/day
+ *   FREE         → 30 messages/day
+ *   PLUS         → 100 messages/day
+ *   FAMILY       → 200 messages/day
+ *   PRO_ADVISOR  → 500 messages/day
  *
  * The daily counter is a single AiUsage row per (user, date). Increment
  * on each successful assistant response (not on the user's message).
@@ -25,18 +25,16 @@ export interface QuotaCheckResult {
 function dailyLimitFor(plan: PlanTier): number {
   // MVP gating: assistant is open to every authenticated user; tiers
   // just widen the daily quota. Real "wealth-tier lock" comes back
-  // when subscription billing is live. FREE/LITE users would otherwise
-  // hit a 403 immediately, which is the wrong first impression during
-  // beta.
+  // when subscription billing is live. FREE users would otherwise hit a
+  // 403 immediately, which is the wrong first impression during beta.
   switch (plan) {
-    case 'ADVISOR':
-    case 'FAMILY_OFFICE':
+    case 'PRO_ADVISOR':
       return 500;
-    case 'HNI':
+    case 'FAMILY':
+      return 200;
     case 'PLUS':
       return 100;
     case 'FREE':
-    case 'LITE':
     default:
       return 30;
   }

@@ -47,6 +47,12 @@ export interface PendingInvitation {
   expiresAt: string;
 }
 
+export interface SeatOverage {
+  extraSeats: number;
+  additionalMonthlyCostInr: string;
+  message: string;
+}
+
 export interface InviteResult {
   id: string;
   token: string;
@@ -55,6 +61,9 @@ export interface InviteResult {
   invitedName: string | null;
   role: FamilyRole;
   familyName: string;
+  seatNumber: number;
+  includedSeats: number;
+  seatOverage: SeatOverage | null;
 }
 
 export interface FamilyTreeNodePos {

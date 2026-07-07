@@ -8,13 +8,14 @@ export const UserRole = {
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
+// Strict linear ladder: FREE < PLUS < FAMILY < PRO_ADVISOR. See
+// packages/shared/src/entitlements.ts for the tier-ordering / feature-gate
+// logic built on top of these values.
 export const PlanTier = {
   FREE: 'FREE',
-  LITE: 'LITE',
   PLUS: 'PLUS',
-  HNI: 'HNI',
-  FAMILY_OFFICE: 'FAMILY_OFFICE',
-  ADVISOR: 'ADVISOR',
+  FAMILY: 'FAMILY',
+  PRO_ADVISOR: 'PRO_ADVISOR',
 } as const;
 export type PlanTier = (typeof PlanTier)[keyof typeof PlanTier];
 

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
+import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import {
   listAccountsTreeHandler,
@@ -23,6 +24,9 @@ import {
 
 export const accountingRouter = Router();
 accountingRouter.use(authenticate);
+// Full accounting module (double-entry, Trial Balance, P&L, Balance Sheet,
+// Chart of Accounts) is Pro/Advisor-only.
+accountingRouter.use(requireFeature('ACCOUNTING_MODULE'));
 
 // Accounts
 accountingRouter.get('/accounts/tree', asyncHandler(listAccountsTreeHandler));

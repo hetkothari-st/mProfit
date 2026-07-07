@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { PortfolioType } from '@prisma/client';
+import type { PlanTierValue } from '@portfolioos/shared';
 import {
   createPortfolio,
   deletePortfolio,
@@ -16,6 +17,8 @@ import {
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
+import { assertPortfolioLimit } from '../lib/planLimits.js';
+import { prisma } from '../lib/prisma.js';
 
 const createSchema = z.object({
   name: z.string().min(1).max(100),
@@ -42,7 +45,10 @@ export async function detail(req: Request, res: Response) {
 }
 
 export async function create(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
   const data = createSchema.parse(req.body);
+  const existingCount = await prisma.portfolio.count({ where: { userId: req.user.id } });
+  assertPortfolioLimit(existingCount, req.user.plan as PlanTierValue, req.user.role);
   created(res, await createPortfolio(userId(req), data));
 }
 

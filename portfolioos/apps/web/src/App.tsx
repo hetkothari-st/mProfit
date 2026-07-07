@@ -64,6 +64,7 @@ import { PostOfficeDetailPage } from './pages/assetClasses/PostOfficeDetailPage'
 import { FuturesOptionsPage } from './pages/assetClasses/FuturesOptionsPage';
 import { ForexPage } from './pages/forex/ForexPage';
 import { AccountingPage } from './pages/accounting/AccountingPage';
+import { PricingPage } from './pages/pricing/PricingPage';
 import { AlertsPage } from './pages/alerts/AlertsPage';
 import { OnboardingWizard } from './pages/onboarding/OnboardingWizard';
 import { PrivacyPage } from './pages/legal/PrivacyPage';
@@ -163,6 +164,7 @@ export function App() {
         <Route path="/ingestion/review" element={<Navigate to="/ingestion" replace />} />
         <Route path="/ingestion/discovery" element={<Navigate to="/ingestion" replace />} />
         <Route path="/accounting" element={<AccountingPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

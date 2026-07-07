@@ -19,6 +19,7 @@ import { RiskMetricsCards, AllocationCorrelationGrid } from './widgets/RiskWidge
 import { LiabilitiesVsAssetsCard } from './widgets/LiabilitiesWidget';
 import { InsightsPanel } from './widgets/InsightsPanel';
 import { WhatIfSimulator } from './widgets/WhatIfSimulator';
+import { LockedFeature } from '@/components/common/LockedFeature';
 
 const PERIOD_OPTIONS: { label: string; value: Period }[] = [
   { label: '1M', value: '1M' },
@@ -130,7 +131,9 @@ export function AnalyticsPage() {
           <KpiCards kpis={data.kpis} />
 
           {/* AI Insights — high on the page so users see it */}
-          <InsightsPanel portfolioId={scopeId} period={period} />
+          <LockedFeature requiredTier="PLUS" featureName="AI Insights">
+            <InsightsPanel portfolioId={scopeId} period={period} />
+          </LockedFeature>
 
           {/* Performance row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

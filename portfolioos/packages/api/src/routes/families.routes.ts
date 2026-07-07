@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { AssetClass, FamilyRole } from '@prisma/client';
 import { authenticate } from '../middleware/authenticate.js';
+import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
@@ -97,6 +98,7 @@ familiesRouter.get(
 
 familiesRouter.post(
   '/',
+  requireFeature('FAMILY_SHARING'),
   asyncHandler(async (req: Request, res: Response) => {
     const data = createFamilySchema.parse(req.body);
     created(res, await createFamily(callerId(req), data));

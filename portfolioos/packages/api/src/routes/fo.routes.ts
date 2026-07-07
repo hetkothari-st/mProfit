@@ -25,6 +25,7 @@ import {
   redirectInfo as brokerRedirectInfo,
 } from '../controllers/brokerOauth.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 
 export const foRouter = Router();
@@ -42,7 +43,7 @@ foRouter.get('/trades', asyncHandler(listTrades));
 foRouter.get('/pnl', asyncHandler(pnl));
 foRouter.get('/summary', asyncHandler(summary));
 foRouter.get('/option-chain', asyncHandler(optionChain));
-foRouter.get('/schedule-43', asyncHandler(schedule43));
+foRouter.get('/schedule-43', requireFeature('FNO_SCHEDULE_43'), asyncHandler(schedule43));
 foRouter.get('/margin', asyncHandler(listMargin));
 foRouter.get('/expiry-jobs', asyncHandler(listExpiryJobs));
 foRouter.post('/expiry-jobs/:id/approve', asyncHandler(approveExpiryJob));

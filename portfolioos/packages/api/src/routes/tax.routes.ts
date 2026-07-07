@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
+import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import {
   getTaxSummary,
@@ -33,7 +34,7 @@ taxRouter.get('/ltcg', asyncHandler(getUserLtcg));
 taxRouter.get('/intraday', asyncHandler(getUserIntraday));
 taxRouter.get('/schedule-112a', asyncHandler(getUserSchedule112A));
 taxRouter.get('/schedule-112', asyncHandler(getUserSchedule112));
-taxRouter.get('/schedule-43', asyncHandler(getUserSchedule43));
+taxRouter.get('/schedule-43', requireFeature('FNO_SCHEDULE_43'), asyncHandler(getUserSchedule43));
 taxRouter.get('/income', asyncHandler(getUserIncome));
 taxRouter.get('/harvest', asyncHandler(getTaxHarvest));
 taxRouter.get('/schedule-112a.csv', asyncHandler(downloadSchedule112ACsv));

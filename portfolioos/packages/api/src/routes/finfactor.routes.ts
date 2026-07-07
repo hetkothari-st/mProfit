@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
+import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import {
   getConsents,
@@ -32,7 +33,13 @@ import {
 export const finfactorRouter = Router();
 finfactorRouter.use(authenticate);
 
+// Connection status is harmless to read at any tier — it's what the
+// upgrade prompt itself needs to render correctly.
 finfactorRouter.get('/status', asyncHandler(getFinfactorStatus));
+
+// Everything below actually drives AA/Finvu-sourced auto-import (consent,
+// sync, statements, AA-derived insights) — Plus and above only.
+finfactorRouter.use(requireFeature('AA_FINVU_AUTOIMPORT'));
 
 // Mutual Fund insights group — mirrors /pfm/api/v2/mutual-fund/* upstream.
 finfactorRouter.post('/mf/insights', asyncHandler(postMfInsights));

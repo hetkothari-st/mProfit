@@ -261,13 +261,14 @@ enum UserRole {
   ADMIN
 }
 
+// Strict linear ladder: FREE < PLUS < FAMILY < PRO_ADVISOR. Each tier
+// includes everything in every tier below it — see packages/shared/src/
+// entitlements.ts for the enforcement layer built on top of this.
 enum PlanTier {
   FREE
-  LITE
   PLUS
-  HNI
-  FAMILY_OFFICE
-  ADVISOR
+  FAMILY
+  PRO_ADVISOR
 }
 
 model RefreshToken {
@@ -2941,6 +2942,14 @@ model Family {
   // edges — when non-empty they OVERRIDE the auto invitedById chain.
   // NULL = fall back to auto layout.
   treeLayout  Json?
+
+  // Seat pricing for the FAMILY plan tier (§ pricing-tiers-gating task).
+  // Whether family sharing is available at all is gated at the route level
+  // by the owner's plan tier (requireFeature('FAMILY_SHARING')); these two
+  // fields only govern the seat-overage math shown in billing once a family
+  // exists. Placeholder values — not yet confirmed by the business side.
+  includedSeats     Int     @default(3)
+  extraSeatPriceInr Decimal @default(199) @db.Decimal(8, 2)
 
   members     FamilyMember[]
   invitations FamilyInvitation[]

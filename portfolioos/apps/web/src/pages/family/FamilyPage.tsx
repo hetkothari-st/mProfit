@@ -30,6 +30,7 @@ import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { FamilyTreeCanvas } from '@/components/family/FamilyTreeCanvas';
+import { LockedFeature } from '@/components/common/LockedFeature';
 import {
   ALL_ASSET_CLASSES,
   ASSET_CLASS_LABEL,
@@ -109,46 +110,48 @@ export function FamilyPage() {
       />
 
       {creatingFamily && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Create a new family</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex gap-2">
-              <Input
-                autoFocus
-                placeholder="e.g. Kothari Family"
-                value={newFamilyName}
-                onChange={(e) => setNewFamilyName(e.target.value)}
-                className="flex-1"
-                disabled={createFamilyMutation.isPending}
-              />
-              <Button
-                onClick={() => createFamilyMutation.mutate(newFamilyName.trim())}
-                disabled={!newFamilyName.trim() || createFamilyMutation.isPending}
-              >
-                {createFamilyMutation.isPending && (
-                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                )}
-                Create
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setCreatingFamily(false);
-                  setNewFamilyName('');
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              You become the OWNER. Add other OWNERs later for joint families
-              (grandpa + father + uncle each as OWNER is the canonical joint-
-              family setup).
-            </p>
-          </CardContent>
-        </Card>
+        <LockedFeature requiredTier="FAMILY" featureName="Family Sharing">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle>Create a new family</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2">
+                <Input
+                  autoFocus
+                  placeholder="e.g. Kothari Family"
+                  value={newFamilyName}
+                  onChange={(e) => setNewFamilyName(e.target.value)}
+                  className="flex-1"
+                  disabled={createFamilyMutation.isPending}
+                />
+                <Button
+                  onClick={() => createFamilyMutation.mutate(newFamilyName.trim())}
+                  disabled={!newFamilyName.trim() || createFamilyMutation.isPending}
+                >
+                  {createFamilyMutation.isPending && (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  )}
+                  Create
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCreatingFamily(false);
+                    setNewFamilyName('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                You become the OWNER. Add other OWNERs later for joint families
+                (grandpa + father + uncle each as OWNER is the canonical joint-
+                family setup).
+              </p>
+            </CardContent>
+          </Card>
+        </LockedFeature>
       )}
 
       {familiesQuery.isLoading ? (
@@ -617,6 +620,11 @@ function InviteDialog({
       }),
     onSuccess: (res) => {
       toast.success('Invitation created');
+      if (res.seatOverage) {
+        // Overage is paid, not refused — surfaced as an informative note.
+        // Actual billing wiring happens in the payments task that follows.
+        toast(res.seatOverage.message, { icon: '💳', duration: 8000 });
+      }
       setLastToken(res.token);
       queryClient.invalidateQueries({ queryKey: ['families', familyId, 'invitations'] });
     },

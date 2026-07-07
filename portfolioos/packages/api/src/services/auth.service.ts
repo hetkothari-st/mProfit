@@ -63,7 +63,6 @@ export async function registerUser(input: {
   name: string;
   phone?: string;
   role?: User['role'];
-  plan?: User['plan'];
 }) {
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) throw new ConflictError('Email already registered');
@@ -76,7 +75,9 @@ export async function registerUser(input: {
       name: input.name,
       phone: input.phone,
       role: input.role ?? 'INVESTOR',
-      plan: input.plan ?? 'FREE',
+      // plan is never client-supplied — every new account starts FREE and
+      // upgrades only through the billing flow (see requireFeature /
+      // FEATURE_MIN_TIER).
     },
   });
 

@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
+import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { list, read, create, update, remove } from '../controllers/goals.controller.js';
 
 export const goalsRouter = Router();
 goalsRouter.use(authenticate);
+goalsRouter.use(requireFeature('GOAL_PROJECTIONS'));
 
 goalsRouter.get('/', asyncHandler(list));
 goalsRouter.post('/', asyncHandler(create));

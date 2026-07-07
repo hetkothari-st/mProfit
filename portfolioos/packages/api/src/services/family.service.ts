@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { AssetClass, FamilyRole } from '@prisma/client';
+import { toDecimal, serializeMoney } from '@portfolioos/shared';
 import { prisma } from '../lib/prisma.js';
 import { runAsUser } from '../lib/requestContext.js';
 import {
@@ -287,6 +288,21 @@ export async function inviteMember(
     throw new BadRequestError(`${invitedEmail} is already a member of this family.`);
   }
 
+  const family = await prisma.family.findUniqueOrThrow({
+    where: { id: familyId },
+    select: { includedSeats: true, extraSeatPriceInr: true },
+  });
+  // Seats already spoken for: ACTIVE members + still-pending, unexpired
+  // invitations. The invite about to be created takes the next seat.
+  const [activeMemberCount, pendingInviteCount] = await Promise.all([
+    prisma.familyMember.count({ where: { familyId, status: 'ACTIVE' } }),
+    prisma.familyInvitation.count({
+      where: { familyId, acceptedAt: null, expiresAt: { gt: new Date() } },
+    }),
+  ]);
+  const seatNumber = activeMemberCount + pendingInviteCount + 1;
+  const overageSeats = Math.max(0, seatNumber - family.includedSeats);
+
   const token = crypto.randomBytes(INVITE_TOKEN_BYTES).toString('base64url');
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000);
 
@@ -305,9 +321,28 @@ export async function inviteMember(
     include: { family: { select: { name: true } } },
   });
   logger.info(
-    { familyId, invitedEmail, invitationId: invitation.id },
+    { familyId, invitedEmail, invitationId: invitation.id, seatNumber, overageSeats },
     '[family] invitation created',
   );
+
+  // Overage is paid, not refused — surface it as an informative note, not a
+  // block. Actual billing wiring (charging the extra seat) happens in the
+  // payments task that follows this one; this only computes and reports it.
+  const seatOverage =
+    overageSeats > 0
+      ? {
+          extraSeats: overageSeats,
+          additionalMonthlyCostInr: serializeMoney(
+            toDecimal(family.extraSeatPriceInr).mul(overageSeats),
+          ),
+          message: `This is your ${ordinal(seatNumber)} family member; it exceeds your included ${family.includedSeats} seats by ${overageSeats}, which will add ₹${toDecimal(
+            family.extraSeatPriceInr,
+          )
+            .mul(overageSeats)
+            .toString()} to your next bill.`,
+        }
+      : null;
+
   return {
     id: invitation.id,
     token,
@@ -316,7 +351,25 @@ export async function inviteMember(
     invitedName: invitation.invitedName,
     role: invitation.role,
     familyName: invitation.family.name,
+    seatNumber,
+    includedSeats: family.includedSeats,
+    seatOverage,
   };
+}
+
+function ordinal(n: number): string {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
 }
 
 /** OWNER-only. List still-pending invitations on the family. */

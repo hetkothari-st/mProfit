@@ -31,7 +31,8 @@ export interface RegisterRequest {
   name: string;
   phone?: string;
   role?: UserRole;
-  plan?: PlanTier;
+  // No client-supplied `plan` — every new account starts FREE and upgrades
+  // only through the billing flow (see @portfolioos/shared/entitlements).
 }
 
 export interface LoginResponse {

@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../services/jwt.service.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { enterUserContext } from '../lib/requestContext.js';
-import type { UserRole } from '@prisma/client';
+import type { UserRole, PlanTier } from '@prisma/client';
 
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
   try {
@@ -16,7 +16,7 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
       id: payload.sub,
       email: payload.email,
       role: payload.role as UserRole,
-      plan: payload.plan as never,
+      plan: payload.plan as PlanTier,
     };
     // Bind the ambient user context to the current request's async resource so
     // Prisma's $allOperations hook sees the same userId for every downstream

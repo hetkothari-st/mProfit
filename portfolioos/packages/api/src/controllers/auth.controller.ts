@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { UserRole, PlanTier } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import {
   getCurrentUser,
   loginOrRegisterWithGoogle,
@@ -23,8 +23,15 @@ export const registerSchema = z.object({
   password: z.string().min(8).max(100),
   name: z.string().min(2).max(100),
   phone: z.string().optional(),
-  role: z.nativeEnum(UserRole).optional(),
-  plan: z.nativeEnum(PlanTier).optional(),
+  // ADMIN is never self-assignable at registration — it bypasses every
+  // plan-tier gate (see requireFeature), so granting it must stay an
+  // out-of-band operation, not something a public signup form can request.
+  // `plan` isn't accepted here at all: every new account starts FREE and
+  // upgrades only through the billing flow, never by self-declaring a
+  // paid tier at signup.
+  role: z.nativeEnum(UserRole).refine((r) => r !== 'ADMIN', {
+    message: 'Cannot self-register with this role',
+  }).optional(),
 });
 
 export const loginSchema = z.object({

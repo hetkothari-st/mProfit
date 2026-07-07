@@ -14,7 +14,7 @@ import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
-import { UserRole, PlanTier } from '@portfolioos/shared';
+import { UserRole } from '@portfolioos/shared';
 
 const schema = z
   .object({
@@ -23,7 +23,6 @@ const schema = z
     password: z.string().min(8, 'Minimum 8 characters'),
     confirmPassword: z.string(),
     role: z.nativeEnum(UserRole).default(UserRole.INVESTOR),
-    plan: z.nativeEnum(PlanTier).default(PlanTier.FREE),
   })
   .refine((d) => d.password === d.confirmPassword, {
     path: ['confirmPassword'],
@@ -41,7 +40,7 @@ export function RegisterPage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { role: UserRole.INVESTOR, plan: PlanTier.FREE },
+    defaultValues: { role: UserRole.INVESTOR },
   });
 
   const registerMutation = useMutation({
@@ -60,7 +59,6 @@ export function RegisterPage() {
       email: values.email,
       password: values.password,
       role: values.role,
-      plan: values.plan,
     });
   };
 
@@ -126,29 +124,18 @@ export function RegisterPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="role">I am</Label>
-            <Select id="role" className="mt-1" {...register('role')}>
-              <option value={UserRole.INVESTOR}>Individual Investor</option>
-              <option value={UserRole.HNI}>HNI</option>
-              <option value={UserRole.FAMILY_OFFICE}>Family Office</option>
-              <option value={UserRole.ADVISOR}>Financial Advisor</option>
-              <option value={UserRole.CA}>Chartered Accountant</option>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="plan">Plan</Label>
-            <Select id="plan" className="mt-1" {...register('plan')}>
-              <option value={PlanTier.FREE}>Free</option>
-              <option value={PlanTier.LITE}>Lite</option>
-              <option value={PlanTier.PLUS}>Plus</option>
-              <option value={PlanTier.HNI}>HNI</option>
-              <option value={PlanTier.FAMILY_OFFICE}>Family Office</option>
-              <option value={PlanTier.ADVISOR}>Advisor</option>
-            </Select>
-          </div>
+        <div>
+          <Label htmlFor="role">I am</Label>
+          <Select id="role" className="mt-1" {...register('role')}>
+            <option value={UserRole.INVESTOR}>Individual Investor</option>
+            <option value={UserRole.HNI}>HNI</option>
+            <option value={UserRole.FAMILY_OFFICE}>Family Office</option>
+            <option value={UserRole.ADVISOR}>Financial Advisor</option>
+            <option value={UserRole.CA}>Chartered Accountant</option>
+          </Select>
         </div>
+        {/* Every new signup starts on the Free plan — upgrades happen via
+            /pricing + billing, never by self-selecting a paid tier here. */}
 
         <Button type="submit" className="w-full mt-2" disabled={registerMutation.isPending}>
           {registerMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

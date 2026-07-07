@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, FileDown, FileText } from 'lucide-react';
+import type { PlanTierValue } from '@portfolioos/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,7 +15,29 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { getApiBaseUrl } from '@/api/baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
+import { LockedFeature } from '@/components/common/LockedFeature';
 import { cn } from '@/lib/cn';
+
+// Accounting-specific exports (Trial Balance, P&L, Balance Sheet, Chart of
+// Accounts, Account Ledger, Tally export) need PRO_ADVISOR. holdings-summary
+// and cash-flow are the Free-tier "basic reports" carve-out and stay
+// unlocked. Everything else in the catalog needs PLUS.
+const ACCOUNTING_REPORT_KEYS = new Set([
+  'trial-balance',
+  'account-ledger',
+  'profit-loss',
+  'balance-sheet',
+  'chart-of-accounts',
+  'tally-masters',
+  'tally-vouchers',
+]);
+const FREE_REPORT_KEYS = new Set(['holdings-summary', 'cash-flow']);
+
+function requiredTierFor(key: string): PlanTierValue | null {
+  if (FREE_REPORT_KEYS.has(key)) return null;
+  if (ACCOUNTING_REPORT_KEYS.has(key)) return 'PRO_ADVISOR';
+  return 'PLUS';
+}
 
 type Param = 'fy' | 'asOf' | 'from' | 'to';
 
@@ -533,64 +556,73 @@ export function TaxMisDownloads({
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {REPORTS.map((r) => (
-          <Card
-            key={r.key}
-            ref={(el) => {
-              cardRefs.current[r.key] = el;
-            }}
-            className={cn(
-              'transition-shadow duration-300',
-              flashKey === r.key && 'ring-2 ring-accent ring-offset-2 ring-offset-background',
-            )}
-          >
-            <CardContent className="px-5 py-4">
-              <div className="flex items-start gap-3 mb-3">
-                <div className="grid h-9 w-9 place-items-center rounded-md bg-accent/10 text-accent shrink-0">
-                  <FileText className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-foreground">{r.title}</h3>
-                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{r.description}</p>
-                  {r.params.length > 0 && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Uses:{' '}
-                      {r.params
-                        .map((p) =>
-                          p === 'fy'
-                            ? `FY ${fy}`
-                            : p === 'asOf'
-                            ? `As of ${asOf || today}`
-                            : p === 'from'
-                            ? `From ${from || '—'}`
-                            : `To ${to || today}`,
-                        )
-                        .join(' · ')}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {(r.formats ?? ['pdf', 'xlsx']).map((fmt) => (
-                  <Button
-                    key={fmt}
-                    variant="outline"
-                    size="sm"
-                    disabled={busy === `${r.key}-${fmt}`}
-                    onClick={() => download(r, fmt)}
-                  >
-                    {busy === `${r.key}-${fmt}` ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <FileDown className="h-3.5 w-3.5" />
+        {REPORTS.map((r) => {
+          const requiredTier = requiredTierFor(r.key);
+          const card = (
+            <Card
+              key={r.key}
+              ref={(el) => {
+                cardRefs.current[r.key] = el;
+              }}
+              className={cn(
+                'transition-shadow duration-300',
+                flashKey === r.key && 'ring-2 ring-accent ring-offset-2 ring-offset-background',
+              )}
+            >
+              <CardContent className="px-5 py-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="grid h-9 w-9 place-items-center rounded-md bg-accent/10 text-accent shrink-0">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-foreground">{r.title}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{r.description}</p>
+                    {r.params.length > 0 && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Uses:{' '}
+                        {r.params
+                          .map((p) =>
+                            p === 'fy'
+                              ? `FY ${fy}`
+                              : p === 'asOf'
+                              ? `As of ${asOf || today}`
+                              : p === 'from'
+                              ? `From ${from || '—'}`
+                              : `To ${to || today}`,
+                          )
+                          .join(' · ')}
+                      </p>
                     )}
-                    {fmt === 'xlsx' ? 'Excel' : fmt.toUpperCase()}
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {(r.formats ?? ['pdf', 'xlsx']).map((fmt) => (
+                    <Button
+                      key={fmt}
+                      variant="outline"
+                      size="sm"
+                      disabled={busy === `${r.key}-${fmt}`}
+                      onClick={() => download(r, fmt)}
+                    >
+                      {busy === `${r.key}-${fmt}` ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <FileDown className="h-3.5 w-3.5" />
+                      )}
+                      {fmt === 'xlsx' ? 'Excel' : fmt.toUpperCase()}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          );
+          if (!requiredTier) return card;
+          return (
+            <LockedFeature key={r.key} requiredTier={requiredTier} featureName={r.title}>
+              {card}
+            </LockedFeature>
+          );
+        })}
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { formatINR } from '@portfolioos/shared';
+import { LockedFeature } from '@/components/common/LockedFeature';
 import {
   accountingApi,
   type AccountNode,
@@ -792,22 +793,24 @@ export function AccountingPage() {
         description="Double-entry bookkeeping — chart of accounts, vouchers, ledger, and financial statements"
         actions={<BookOpenCheck className="h-5 w-5 text-muted-foreground" />}
       />
-      <Tabs defaultValue="chart">
-        <div className="overflow-x-auto">
-          <TabsList className="flex-nowrap w-max min-w-full">
-            <TabsTrigger value="chart" className="shrink-0 whitespace-nowrap"><Landmark className="h-3.5 w-3.5 mr-1.5" />Chart of Accounts</TabsTrigger>
-            <TabsTrigger value="vouchers" className="shrink-0 whitespace-nowrap"><FileText className="h-3.5 w-3.5 mr-1.5" />Vouchers</TabsTrigger>
-            <TabsTrigger value="ledger" className="shrink-0 whitespace-nowrap"><BookOpenCheck className="h-3.5 w-3.5 mr-1.5" />Ledger</TabsTrigger>
-            <TabsTrigger value="reports" className="shrink-0 whitespace-nowrap"><Scale className="h-3.5 w-3.5 mr-1.5" />Reports</TabsTrigger>
-          </TabsList>
-        </div>
-        <div className="mt-6">
-          <TabsContent value="chart"><ChartOfAccountsTab /></TabsContent>
-          <TabsContent value="vouchers"><VouchersTab /></TabsContent>
-          <TabsContent value="ledger"><LedgerTab /></TabsContent>
-          <TabsContent value="reports"><ReportsTab /></TabsContent>
-        </div>
-      </Tabs>
+      <LockedFeature requiredTier="PRO_ADVISOR" featureName="Accounting Module">
+        <Tabs defaultValue="chart">
+          <div className="overflow-x-auto">
+            <TabsList className="flex-nowrap w-max min-w-full">
+              <TabsTrigger value="chart" className="shrink-0 whitespace-nowrap"><Landmark className="h-3.5 w-3.5 mr-1.5" />Chart of Accounts</TabsTrigger>
+              <TabsTrigger value="vouchers" className="shrink-0 whitespace-nowrap"><FileText className="h-3.5 w-3.5 mr-1.5" />Vouchers</TabsTrigger>
+              <TabsTrigger value="ledger" className="shrink-0 whitespace-nowrap"><BookOpenCheck className="h-3.5 w-3.5 mr-1.5" />Ledger</TabsTrigger>
+              <TabsTrigger value="reports" className="shrink-0 whitespace-nowrap"><Scale className="h-3.5 w-3.5 mr-1.5" />Reports</TabsTrigger>
+            </TabsList>
+          </div>
+          <div className="mt-6">
+            <TabsContent value="chart"><ChartOfAccountsTab /></TabsContent>
+            <TabsContent value="vouchers"><VouchersTab /></TabsContent>
+            <TabsContent value="ledger"><LedgerTab /></TabsContent>
+            <TabsContent value="reports"><ReportsTab /></TabsContent>
+          </div>
+        </Tabs>
+      </LockedFeature>
     </div>
   );
 }

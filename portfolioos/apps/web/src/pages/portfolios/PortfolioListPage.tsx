@@ -4,13 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import { Plus, Briefcase, Star, ArrowUpRight, Users } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PortfolioFormDialog } from './PortfolioFormDialog';
 import { PortfolioGroupFormDialog } from './PortfolioGroupFormDialog';
 import { portfoliosApi, type PortfolioListItem } from '@/api/portfolios.api';
 import { portfolioGroupsApi } from '@/api/portfolioGroups.api';
-import { formatINR } from '@portfolioos/shared';
+import { useAuthStore } from '@/stores/auth.store';
+import { formatINR, PLAN_LIMITS, type PlanTierValue } from '@portfolioos/shared';
 import type { PortfolioGroupListItem } from '@portfolioos/shared';
 
 export function PortfolioListPage() {
@@ -41,6 +43,12 @@ export function PortfolioListPage() {
 
   const hasPortfolios = (portfolios ?? []).length > 0;
 
+  const user = useAuthStore((s) => s.user);
+  const portfolioCount = (portfolios ?? []).length;
+  const maxPortfolios =
+    user && user.role !== 'ADMIN' ? PLAN_LIMITS[user.plan as PlanTierValue].maxPortfolios : null;
+  const capReached = maxPortfolios !== null && portfolioCount >= maxPortfolios;
+
   return (
     <div>
       <PageHeader
@@ -48,16 +56,26 @@ export function PortfolioListPage() {
         title="Portfolios"
         description="Group holdings by goal, strategy, or account. Bundle multiple portfolios into a family group for a consolidated view."
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {maxPortfolios !== null && (
+              <Badge variant={capReached ? 'destructive' : 'outline'}>
+                {portfolioCount} of {maxPortfolios} portfolios used
+              </Badge>
+            )}
             <Button variant="outline" onClick={handleCreateGroup} disabled={!hasPortfolios}>
               <Users className="h-4 w-4" /> New group
             </Button>
-            <Button onClick={handleCreate}>
+            <Button onClick={handleCreate} disabled={capReached} title={capReached ? 'Upgrade to add more portfolios' : undefined}>
               <Plus className="h-4 w-4" /> New portfolio
             </Button>
           </div>
         }
       />
+      {capReached && (
+        <p className="text-xs text-muted-foreground -mt-2 mb-4">
+          {portfolioCount} of {maxPortfolios} portfolios used — <Link to="/pricing" className="text-accent-ink hover:underline">upgrade to add more</Link>.
+        </p>
+      )}
 
       {/* Groups section — only render once at least one group exists */}
       {!isGroupsLoading && (groups ?? []).length > 0 && (

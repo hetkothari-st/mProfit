@@ -19,6 +19,7 @@ import { goalsApi, type GoalDTO, type GoalCategory, type GoalPriority } from '@/
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import { formatINR } from '@portfolioos/shared';
+import { LockedFeature } from '@/components/common/LockedFeature';
 import { GoalDialog } from './GoalDialog';
 
 const CATEGORY_LABEL: Record<GoalCategory, string> = {
@@ -83,93 +84,95 @@ export function GoalsPage() {
         }
       />
 
-      {isLoading && (
-        <div className="py-10 text-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin inline" /> Loading…
-        </div>
-      )}
+      <LockedFeature requiredTier="PLUS" featureName="Goal Planning">
+        {isLoading && (
+          <div className="py-10 text-center text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin inline" /> Loading…
+          </div>
+        )}
 
-      {!isLoading && (goals ?? []).length === 0 && (
-        <EmptyState
-          title="No goals yet"
-          description="Set a target amount and date, link contributing portfolios, and watch progress accrue."
-          action={
-            <Button
-              onClick={() => {
-                setEditing(null);
+        {!isLoading && (goals ?? []).length === 0 && (
+          <EmptyState
+            title="No goals yet"
+            description="Set a target amount and date, link contributing portfolios, and watch progress accrue."
+            action={
+              <Button
+                onClick={() => {
+                  setEditing(null);
+                  setDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4" /> Create first goal
+              </Button>
+            }
+          />
+        )}
+
+        {active.length > 0 && (
+          <Section title="Active">
+            <GoalGrid
+              goals={active}
+              portfolios={portfolios ?? []}
+              onEdit={(g) => {
+                setEditing(g);
                 setDialogOpen(true);
               }}
-            >
-              <Plus className="h-4 w-4" /> Create first goal
-            </Button>
-          }
-        />
-      )}
+              onDelete={(id) => {
+                if (confirm('Delete this goal?')) removeMut.mutate(id);
+              }}
+            />
+          </Section>
+        )}
 
-      {active.length > 0 && (
-        <Section title="Active">
-          <GoalGrid
-            goals={active}
+        {achieved.length > 0 && (
+          <Section title="Achieved">
+            <GoalGrid
+              goals={achieved}
+              portfolios={portfolios ?? []}
+              onEdit={(g) => {
+                setEditing(g);
+                setDialogOpen(true);
+              }}
+              onDelete={(id) => {
+                if (confirm('Delete this goal?')) removeMut.mutate(id);
+              }}
+            />
+          </Section>
+        )}
+
+        {paused.length > 0 && (
+          <Section title="Paused / abandoned">
+            <GoalGrid
+              goals={paused}
+              portfolios={portfolios ?? []}
+              onEdit={(g) => {
+                setEditing(g);
+                setDialogOpen(true);
+              }}
+              onDelete={(id) => {
+                if (confirm('Delete this goal?')) removeMut.mutate(id);
+              }}
+            />
+          </Section>
+        )}
+
+        {dialogOpen && (
+          <GoalDialog
+            open={dialogOpen}
+            existing={editing}
             portfolios={portfolios ?? []}
-            onEdit={(g) => {
-              setEditing(g);
-              setDialogOpen(true);
+            onClose={() => {
+              setDialogOpen(false);
+              setEditing(null);
             }}
-            onDelete={(id) => {
-              if (confirm('Delete this goal?')) removeMut.mutate(id);
+            onSaved={() => {
+              qc.invalidateQueries({ queryKey: ['goals'] });
+              setDialogOpen(false);
+              setEditing(null);
             }}
           />
-        </Section>
-      )}
-
-      {achieved.length > 0 && (
-        <Section title="Achieved">
-          <GoalGrid
-            goals={achieved}
-            portfolios={portfolios ?? []}
-            onEdit={(g) => {
-              setEditing(g);
-              setDialogOpen(true);
-            }}
-            onDelete={(id) => {
-              if (confirm('Delete this goal?')) removeMut.mutate(id);
-            }}
-          />
-        </Section>
-      )}
-
-      {paused.length > 0 && (
-        <Section title="Paused / abandoned">
-          <GoalGrid
-            goals={paused}
-            portfolios={portfolios ?? []}
-            onEdit={(g) => {
-              setEditing(g);
-              setDialogOpen(true);
-            }}
-            onDelete={(id) => {
-              if (confirm('Delete this goal?')) removeMut.mutate(id);
-            }}
-          />
-        </Section>
-      )}
-
-      {dialogOpen && (
-        <GoalDialog
-          open={dialogOpen}
-          existing={editing}
-          portfolios={portfolios ?? []}
-          onClose={() => {
-            setDialogOpen(false);
-            setEditing(null);
-          }}
-          onSaved={() => {
-            qc.invalidateQueries({ queryKey: ['goals'] });
-            setDialogOpen(false);
-            setEditing(null);
-          }}
-        />
-      )}
+        )}
+      </LockedFeature>
     </div>
   );
 }
