@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, Loader2, RefreshCw, AlertTriangle, Info, AlertOctagon, ShieldAlert } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, AlertTriangle, Info, AlertOctagon, ShieldAlert, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import type {
   InsightCard,
   InsightSeverity,
   InsightCategory,
+  DeterministicInsight,
 } from '@/api/analytics.api';
 import { apiErrorMessage } from '@/api/client';
 
@@ -72,6 +73,29 @@ function InsightCardView({ card }: { card: InsightCard }) {
   );
 }
 
+function DeterministicInsightCardView({ card }: { card: DeterministicInsight }) {
+  return (
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/60 dark:bg-emerald-950/30 px-4 py-3">
+      <div className="flex items-center gap-2 mb-1.5">
+        <Zap className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        <span className="text-[10px] uppercase tracking-kerned font-medium rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+          Instant · from your data
+        </span>
+      </div>
+      <p className="text-[13px] text-foreground leading-relaxed">{card.message}</p>
+      {card.action && (
+        <Link
+          to={card.action.href}
+          className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline"
+        >
+          {card.action.label}
+          <span aria-hidden>→</span>
+        </Link>
+      )}
+    </div>
+  );
+}
+
 interface InsightsPanelProps {
   portfolioId: string | undefined;
   period: Period;
@@ -90,6 +114,15 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
     queryKey: ['analytics', 'insights-spend'],
     queryFn: () => analyticsApi.insightsSpend(),
     staleTime: 60_000,
+  });
+
+  // Deterministic cards are cheap (no LLM call) and always reflect current
+  // data — fetched independently of the LLM insights above so they render
+  // even while those are loading, capped, or absent.
+  const deterministicQuery = useQuery({
+    queryKey: ['analytics', 'insights-deterministic'],
+    queryFn: () => analyticsApi.deterministicInsights(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const generateMutation = useMutation({
@@ -155,6 +188,14 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
         </div>
       </CardHeader>
       <CardContent>
+        {!!deterministicQuery.data?.length && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+            {deterministicQuery.data.map((c) => (
+              <DeterministicInsightCardView key={c.id} card={c} />
+            ))}
+          </div>
+        )}
+
         {latestQuery.isLoading && (
           <div className="flex items-center justify-center py-10">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

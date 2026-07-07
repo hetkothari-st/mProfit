@@ -237,6 +237,19 @@ export interface BudgetStatus {
   status: 'ok' | 'warn' | 'capped';
 }
 
+// ─── Deterministic (non-LLM) insights ────────────────────────────────
+
+export type DeterministicInsightType = 'FD_MATURITY' | 'TAX_LOSS_HARVEST';
+
+export interface DeterministicInsight {
+  id: string;
+  type: DeterministicInsightType;
+  message: string;
+  impactAmountInr: string | null;
+  action: InsightAction | null;
+  generatedAt: string;
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────
 
 function unwrap<T>(r: ApiResponse<T>): T {
@@ -293,6 +306,12 @@ export const analyticsApi = {
       '/api/analytics/insights/spend',
     );
     return unwrap(data);
+  },
+  async deterministicInsights(): Promise<DeterministicInsight[]> {
+    const { data } = await api.get<ApiResponse<{ insights: DeterministicInsight[] }>>(
+      '/api/analytics/insights/deterministic',
+    );
+    return unwrap(data).insights;
   },
   async mfOverlap(): Promise<MfOverlapResult> {
     const { data } = await api.get<ApiResponse<MfOverlapResult>>('/api/analytics/mf-overlap');

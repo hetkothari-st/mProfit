@@ -15,6 +15,7 @@ import {
   getOrGenerateInsights,
   getLatestInsight,
 } from '../services/analytics.insights.js';
+import { generateDeterministicInsights } from '../services/deterministicInsights.js';
 import { checkBudget } from '../ingestion/llm/budget.js';
 import { getMfOverlap } from '../services/mfOverlap.service.js';
 import { simulateWhatIf } from '../services/whatIf.service.js';
@@ -129,6 +130,12 @@ export async function generateInsights(req: Request, res: Response): Promise<voi
   const force = req.body?.force === true || req.query.force === 'true';
   const result = await getOrGenerateInsights(scope, period, force);
   ok(res, result);
+}
+
+export async function getDeterministicInsights(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const insights = await generateDeterministicInsights(userId);
+  ok(res, { insights });
 }
 
 export async function getInsightsSpend(req: Request, res: Response): Promise<void> {

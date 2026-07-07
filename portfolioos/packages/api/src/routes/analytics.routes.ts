@@ -8,6 +8,7 @@ import {
   getInsightsLatest,
   generateInsights,
   getInsightsSpend,
+  getDeterministicInsights,
   getMfOverlapHandler,
   postWhatIf,
 } from '../controllers/analytics.controller.js';
@@ -29,6 +30,10 @@ analyticsRouter.get('/risk', asyncHandler(getRisk));
 analyticsRouter.get('/insights', asyncHandler(getInsightsLatest));
 analyticsRouter.post('/insights/generate', asyncHandler(generateInsights));
 analyticsRouter.get('/insights/spend', asyncHandler(getInsightsSpend));
+
+// Deterministic (non-LLM, no cost, always-current) rule-based insight cards —
+// additive alongside the LLM insights above, not a replacement.
+analyticsRouter.get('/insights/deterministic', asyncHandler(getDeterministicInsights));
 
 // Phase 2g — MF direct/regular + portfolio overlap.
 analyticsRouter.get('/mf-overlap', asyncHandler(getMfOverlapHandler));
