@@ -74,10 +74,12 @@ export function buildLedgerMessage(input: TallyLedgerInput): string {
   // convention applied to voucher entries, and the caveat that this must be
   // empirically verified against a real Tally install before production use.
   const signedOpening = input.isDebitOpening ? `-${opening}` : opening;
+  // NAME attribute alone identifies the ledger to Tally's importer — the
+  // child <NAME> element used in the original implementation duplicated it
+  // with no basis in Tally's own documentation examples; dropped.
   return (
     `<TALLYMESSAGE xmlns:UDF="TallyUDF">` +
     `<LEDGER NAME="${name}" ACTION="Create">` +
-    `<NAME>${name}</NAME>` +
     `<PARENT>${parent}</PARENT>` +
     `<OPENINGBALANCE>${signedOpening}</OPENINGBALANCE>` +
     `</LEDGER>` +

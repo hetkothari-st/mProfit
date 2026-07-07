@@ -182,3 +182,45 @@ describe('sign-convention regression test — one voucher of each supported type
     }
   });
 });
+
+// TASK_08: regression coverage for the reported "unescaped & breaks
+// xmllint" bug. Each account below isolates exactly one special
+// character (rather than one name combining all three) so a future
+// regression pinpoints which case broke, and both masters and vouchers
+// output (including NARRATION and LEDGERNAME, which are equally
+// user/transaction-controlled) are run through a real XML parser.
+describe('escaping regression — masters and vouchers with & / " / \' in names (TASK_08)', () => {
+  const ACCOUNTS_WITH_SPECIAL_CHARS: TallyAccountInput[] = [
+    { code: '1104', name: 'Bonds & Debentures', type: 'ASSET', openingBalance: '1000' },
+    { code: '9101', name: 'Broker "ABC Securities" Account', type: 'ASSET', openingBalance: '0' },
+    { code: '9102', name: "O'Reilly Trading", type: 'ASSET', openingBalance: '0' },
+  ];
+
+  it('masters XML parses cleanly with zero errors for names containing &, ", and \'', () => {
+    const xml = renderTallyMastersXml(ACCOUNTS_WITH_SPECIAL_CHARS);
+    expect(() => new XMLParser({ ignoreAttributes: false }).parse(xml)).not.toThrow();
+    expect(xml).toContain('NAME="Bonds &amp; Debentures"');
+    expect(xml).toContain('NAME="Broker &quot;ABC Securities&quot; Account"');
+    expect(xml).toContain('NAME="O&apos;Reilly Trading"');
+  });
+
+  it('vouchers XML parses cleanly with special characters in NARRATION and LEDGERNAME', () => {
+    const voucher: TallyVoucherInput = {
+      voucherNo: 'AUTO-BUY-txn9',
+      type: 'PURCHASE',
+      date: new Date(Date.UTC(2026, 2, 15)),
+      narration: `Buy from O'Reilly & Sons re: "Q1 lot"`,
+      entries: [{ debitAccountName: 'Bonds & Debentures', creditAccountName: "O'Reilly Trading", amount: '1000' }],
+    };
+    const xml = renderTallyVouchersXml([voucher], ACCOUNTS_WITH_SPECIAL_CHARS);
+    expect(() => new XMLParser({ ignoreAttributes: false }).parse(xml)).not.toThrow();
+    expect(xml).toContain('<NARRATION>Buy from O&apos;Reilly &amp; Sons re: &quot;Q1 lot&quot;</NARRATION>');
+    expect(xml).toContain('<LEDGERNAME>Bonds &amp; Debentures</LEDGERNAME>');
+    expect(xml).toContain('<LEDGERNAME>O&apos;Reilly Trading</LEDGERNAME>');
+  });
+
+  it('LEDGER has no redundant child <NAME> element (Tally identifies the ledger via the NAME attribute alone)', () => {
+    const xml = renderTallyMastersXml(ACCOUNTS_WITH_SPECIAL_CHARS);
+    expect(xml).not.toContain('<NAME>');
+  });
+});
