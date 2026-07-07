@@ -44,9 +44,10 @@ describe('buildLedgerMessage', () => {
     });
     expect(xml).toBe(
       '<TALLYMESSAGE xmlns:UDF="TallyUDF"><LEDGER NAME="Bank Accounts" ACTION="Create">' +
-        '<NAME>Bank Accounts</NAME><PARENT>Bank Accounts</PARENT>' +
+        '<PARENT>Bank Accounts</PARENT>' +
         '<OPENINGBALANCE>-5000.00</OPENINGBALANCE></LEDGER></TALLYMESSAGE>',
     );
+    expect(xml).not.toContain('<NAME>'); // redundant child tag — NAME attribute alone identifies the ledger
     expect(() => new XMLParser().parse(xml)).not.toThrow();
   });
 
@@ -68,7 +69,29 @@ describe('buildLedgerMessage', () => {
       isDebitOpening: true,
     });
     expect(xml).toContain('NAME="O&apos;Brien &amp; Sons"');
-    expect(xml).toContain('<NAME>O&apos;Brien &amp; Sons</NAME>');
+    expect(() => new XMLParser({ ignoreAttributes: false }).parse(xml)).not.toThrow();
+  });
+
+  // A bare & not followed by a known entity name (amp;/lt;/gt;/quot;/apos;)
+  // is what broke xmllint on the original unescaped output — this catches
+  // that regression directly, independent of the parser library.
+  const BARE_AMPERSAND = /&(?!amp;|lt;|gt;|quot;|apos;)/;
+
+  it.each([
+    ['ampersand', 'Bonds & Debentures'],
+    ['double quote', 'Broker "ABC" Demat'],
+    ['apostrophe', "O'Reilly Trading"],
+    ['angle brackets', 'Fund <India> Ltd'],
+  ])('escapes a ledger name containing a %s so the XML stays well-formed', (_label, name) => {
+    const xml = buildLedgerMessage({
+      name,
+      parentGroup: 'Sundry Debtors',
+      openingBalance: '0',
+      isDebitOpening: true,
+    });
+    expect(() => new XMLParser({ ignoreAttributes: false }).parse(xml)).not.toThrow();
+    expect(xml).not.toMatch(BARE_AMPERSAND);
+    expect(xml).not.toContain(`NAME="${name}"`); // raw, unescaped attribute value must not survive
   });
 });
 
