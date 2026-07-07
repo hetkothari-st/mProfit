@@ -45,7 +45,7 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
   });
 
   return (
-    <header className="relative h-16 shrink-0 border-b border-border/70 bg-card/70 backdrop-blur-md flex items-center justify-between px-6 lg:px-10">
+    <header className="relative z-30 h-16 shrink-0 border-b border-border/70 bg-card/70 backdrop-blur-md flex items-center justify-between px-6 lg:px-10">
       <div className="flex items-center gap-3 min-w-0">
         <button
           type="button"
