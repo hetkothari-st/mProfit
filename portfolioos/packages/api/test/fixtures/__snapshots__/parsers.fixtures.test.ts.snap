@@ -683,42 +683,6 @@ exports[`parser golden fixtures > Zerodha contract note (PDF text) > zerodha-pdf
 }
 `;
 
-exports[`parser golden fixtures > Zerodha contract note (PDF text) > zerodha-pdf :: fno_options_1.txt 1`] = `
-{
-  "transactions": [
-    {
-      "assetClass": "OPTIONS",
-      "assetName": "NIFTY26N1324500CE",
-      "broker": "Zerodha",
-      "exchange": "NFO",
-      "expiryDate": "2026-11-13",
-      "optionType": "CALL",
-      "price": "124.5",
-      "quantity": "50",
-      "strikePrice": "24500",
-      "symbol": "NIFTY",
-      "tradeDate": "2026-11-12",
-      "transactionType": "BUY",
-    },
-    {
-      "assetClass": "OPTIONS",
-      "assetName": "NIFTY26N1324500CE",
-      "broker": "Zerodha",
-      "exchange": "NFO",
-      "expiryDate": "2026-11-13",
-      "optionType": "CALL",
-      "price": "138.2",
-      "quantity": "50",
-      "strikePrice": "24500",
-      "symbol": "NIFTY",
-      "tradeDate": "2026-11-12",
-      "transactionType": "SELL",
-    },
-  ],
-  "warnings": [],
-}
-`;
-
 exports[`parser golden fixtures > generic CSV parser > csv :: 01_zerodha_equity_simple.csv 1`] = `
 {
   "adapter": "generic.csv",
