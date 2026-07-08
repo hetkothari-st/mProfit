@@ -109,20 +109,27 @@ export async function userStcgReport(userId: string, fy?: string) {
   const rows = (await userCgRows(userId, fy)).filter((r) => r.capitalGainType === 'SHORT_TERM');
   const totalGain = rows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
   const taxable = rows.reduce((a, r) => a.plus(r.taxableGain), new Decimal(0));
-  return { rows: rows.map(rowToJson), totalGain: totalGain.toString(), taxable: taxable.toString(), count: rows.length };
+  const rowsNeedingReview = rows.filter((r) => r.needsReview).length;
+  return { rows: rows.map(rowToJson), totalGain: totalGain.toString(), taxable: taxable.toString(), count: rows.length, rowsNeedingReview };
 }
 
 export async function userLtcgReport(userId: string, fy?: string) {
   const rows = (await userCgRows(userId, fy)).filter((r) => r.capitalGainType === 'LONG_TERM');
   const totalGain = rows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
   const taxable = rows.reduce((a, r) => a.plus(r.taxableGain), new Decimal(0));
-  return { rows: rows.map(rowToJson), totalGain: totalGain.toString(), taxable: taxable.toString(), count: rows.length };
+  const rowsNeedingReview = rows.filter((r) => r.needsReview).length;
+  return { rows: rows.map(rowToJson), totalGain: totalGain.toString(), taxable: taxable.toString(), count: rows.length, rowsNeedingReview };
 }
 
 export async function userIntradayReport(userId: string, fy?: string) {
   const rows = (await userCgRows(userId, fy)).filter((r) => r.capitalGainType === 'INTRADAY');
   const totalGain = rows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
-  return { rows: rows.map(rowToJson), totalGain: totalGain.toString(), count: rows.length };
+  return {
+    rows: rows.map(rowToJson),
+    totalGain: totalGain.toString(),
+    count: rows.length,
+    rowsNeedingReview: rows.filter((r) => r.needsReview).length,
+  };
 }
 
 /**
@@ -146,6 +153,7 @@ export async function userSchedule112AReport(userId: string, fy?: string) {
     ratePct: rates.ltcgEquityPct,
     estimatedTax: estimatedTax.toString(),
     count: rows.length,
+    rowsNeedingReview: rows.filter((r) => r.needsReview).length,
   };
 }
 
@@ -172,6 +180,7 @@ export async function userSchedule112Report(userId: string, fy?: string) {
     taxable: totalTaxable.toString(),
     estimatedTax: estimatedTax.toString(),
     count: rows.length,
+    rowsNeedingReview: rows.filter((r) => r.needsReview).length,
   };
 }
 
@@ -418,6 +427,11 @@ export async function schedule112ACsv(userId: string, fy: string): Promise<strin
     // Extra column, not part of the ITR-portal template — lets a CA see at a
     // glance which FMV values are seeded, user-overridden, or still missing.
     'FMV Source',
+    // Extra column, not part of the ITR-portal template — flags rows where
+    // indexation was applicable but the CII table had no entry for the FY,
+    // so the gain shown is a non-indexed (possibly overstated) fallback.
+    'Review Needed',
+    'Review Reason',
   ];
 
   const lines: string[] = [headers.map(csvCell).join(',')];
@@ -470,6 +484,8 @@ export async function schedule112ACsv(userId: string, fy: string): Promise<strin
         totalDeductions.toFixed(2),
         balance.toFixed(2),
         fmvSource,
+        r.needsReview ? 'Y' : 'N',
+        r.reviewReason ?? '',
       ]
         .map(csvCell)
         .join(','),
@@ -652,5 +668,7 @@ function rowToJson(r: CapitalGainRow) {
     gainLoss: r.gainLoss.toString(),
     taxableGain: r.taxableGain.toString(),
     financialYear: r.financialYear,
+    needsReview: r.needsReview,
+    reviewReason: r.reviewReason,
   };
 }

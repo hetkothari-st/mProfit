@@ -42,6 +42,7 @@ const GAIN_COLUMNS = [
   { key: 'proceeds', header: 'Proceeds', width: 11 },
   { key: 'days', header: 'Days', width: 6 },
   { key: 'gainLoss', header: 'Gain / Loss', width: 12 },
+  { key: 'reviewNote', header: 'Review Note', width: 24 },
 ];
 
 export async function buildCapitalGainsStatement(
@@ -103,6 +104,7 @@ export async function buildCapitalGainsStatement(
       proceeds: fmtNum(proceeds.toFixed(2)),
       days,
       gainLoss: `${gain.gte(0) ? '' : ''}${fmtNum(gain.toFixed(2))}`,
+      reviewNote: r.reviewReason ?? '',
     };
   }
 
@@ -126,6 +128,7 @@ export async function buildCapitalGainsStatement(
         proceeds: '',
         days: '',
         gainLoss: `${total.gte(0) ? '' : ''}${fmtNum(total.toFixed(2))}`,
+        reviewNote: '',
       });
     }
     return {
@@ -170,6 +173,8 @@ export async function buildCapitalGainsStatement(
     : `${portfolios.length} portfolios`;
   const fyLabel = params.fy ?? 'All FYs';
 
+  const rowsNeedingReview = allRows.filter((r) => r.needsReview).length;
+
   return {
     title: KIND_LABEL[params.kind],
     subtitle: `Financial year ${fyLabel}`,
@@ -177,6 +182,10 @@ export async function buildCapitalGainsStatement(
       Portfolio: portfolioLabel,
       'Financial Year': fyLabel,
       Sells: String(allRows.length),
+      // Only shown when non-zero — rows where indexation was applicable but
+      // the CII table had no entry for the FY, so the gain shown is a
+      // non-indexed (possibly overstated) fallback. See reviewNote column.
+      ...(rowsNeedingReview > 0 ? { 'Rows Needing Review': rowsNeedingReview } : {}),
     },
     footer,
     columns: main?.columns ?? GAIN_COLUMNS,

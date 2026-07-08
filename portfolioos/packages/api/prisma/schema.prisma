@@ -883,6 +883,12 @@ model CapitalGain {
   taxableGain     Decimal         @db.Decimal(18, 4)
   financialYear   String
 
+  // Set when the asset class qualifies for indexation but the CII table has
+  // no entry for the buy/sell FY — `taxableGain` above is the non-indexed
+  // fallback, not a final figure. See capitalGains.service.ts#indexedCost.
+  needsReview  Boolean @default(false)
+  reviewReason String?
+
   createdAt DateTime @default(now())
 
   @@index([portfolioId, financialYear])

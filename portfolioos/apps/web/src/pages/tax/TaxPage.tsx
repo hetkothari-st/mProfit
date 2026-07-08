@@ -596,6 +596,16 @@ function GainsView({
           )}
         </div>
       )}
+      {data.rowsNeedingReview > 0 && (
+        <div className="flex items-start gap-2 p-3 rounded-md border border-amber-300 bg-amber-50 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>
+            {data.rowsNeedingReview} row(s) qualify for indexation but the CII table has no
+            entry for that financial year — the gain shown is a non-indexed (possibly
+            overstated) fallback, not a final figure. Hover the row for details.
+          </span>
+        </div>
+      )}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">
@@ -621,11 +631,12 @@ function GainsView({
                   {showIndexed && <th className="text-right p-2">Indexed Cost</th>}
                   <th className="text-right p-2">Gain/Loss</th>
                   <th className="text-right p-2">Taxable</th>
+                  <th className="text-left p-2">Review</th>
                 </tr>
               </thead>
               <tbody>
                 {data.rows.map((r, i) => (
-                  <tr key={i} className="border-b">
+                  <tr key={i} className={cn('border-b', r.needsReview && 'bg-amber-50/30')}>
                     <td data-label="Asset" className="p-2">{r.assetName || r.isin || '—'}</td>
                     <td data-label="ISIN" className="p-2 text-xs text-muted-foreground">{r.isin ?? '—'}</td>
                     <td data-label="Buy" className="p-2">{r.buyDate.slice(0, 10)}</td>
@@ -648,11 +659,14 @@ function GainsView({
                       {fmt(r.gainLoss)}
                     </td>
                     <td data-label="Taxable" className="p-2 text-right">{fmt(r.taxableGain)}</td>
+                    <td data-label="Review" className="p-2 text-xs text-amber-700" title={r.reviewReason ?? ''}>
+                      {r.needsReview ? '⚠ Review' : ''}
+                    </td>
                   </tr>
                 ))}
                 {data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={showIndexed ? 10 : 9} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={showIndexed ? 11 : 10} className="p-6 text-center text-muted-foreground">
                       No records for selected FY.
                     </td>
                   </tr>

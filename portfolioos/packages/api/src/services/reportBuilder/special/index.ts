@@ -3176,6 +3176,15 @@ export async function buildBrokerwiseCapitalGainLayout(
 //
 // Same shape as Brokerwise but rolled up across all brokers.
 
+/**
+ * NOTE: `cgRows` below carries `needsReview`/`reviewReason` (TASK 02 — CII
+ * gap handling), but this report aggregates by script into a fixed mProfit-
+ * desktop-compatible column layout with no per-row detail, so the flag isn't
+ * rendered here. Row-level detail (with the "Review" column and warning
+ * banner) is available in the Capital Gains Statement
+ * (`statement/capitalGains.ts`), Schedule 112A CSV (`tax.service.ts`), and
+ * the in-app Tax page — use those when a flagged row needs to be identified.
+ */
 export async function buildTaxPnLLayout(
   userId: string,
   opts: { from?: string; to?: string },

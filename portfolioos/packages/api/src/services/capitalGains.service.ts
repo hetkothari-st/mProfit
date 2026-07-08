@@ -6,39 +6,43 @@ import type {
   Transaction,
   TransactionType,
 } from '@prisma/client';
+import { CII_BY_FY } from '@portfolioos/shared';
 import { prisma } from '../lib/prisma.js';
 import { getFmvForUser } from './fmvOverride.service.js';
 
 // ─── Indian tax constants ───────────────────────────────────────────
 
-// Cost Inflation Index (CII) — CBDT Notifications
-// Key = starting year of FY (e.g. 2001 means FY 2001-02 with base CII 100)
-const CII: Record<number, number> = {
-  2001: 100,
-  2002: 105,
-  2003: 109,
-  2004: 113,
-  2005: 117,
-  2006: 122,
-  2007: 129,
-  2008: 137,
-  2009: 148,
-  2010: 167,
-  2011: 184,
-  2012: 200,
-  2013: 220,
-  2014: 240,
-  2015: 254,
-  2016: 264,
-  2017: 272,
-  2018: 280,
-  2019: 289,
-  2020: 301,
-  2021: 317,
-  2022: 331,
-  2023: 348,
-  2024: 363,
-};
+// Cost Inflation Index (CII) — CBDT Notifications, keyed by the *starting*
+// year of the FY (e.g. 2001 means FY 2001-02 with base CII 100).
+//
+// This used to be a second, hand-maintained copy of the CII table that lived
+// only here and silently drifted out of sync with the "YYYY-YY"-keyed
+// `CII_BY_FY` table in `@portfolioos/shared` (used by `propertyCapitalGain.ts`
+// for `OwnedProperty` sales) — this copy stopped at FY2024-25 while the
+// shared one already carries a documented FY2025-26 estimate. Derive from the
+// shared table instead so there is exactly one place to update when CBDT
+// publishes a new value, for both ingestion paths that can produce
+// indexation-eligible rows:
+//   1. `OwnedProperty` sales → `propertyCapitalGain.ts` (its own 20%/12.5%
+//      choice model, using `CII_BY_FY` directly).
+//   2. Manually-entered `Transaction` rows with `assetClass: REAL_ESTATE`
+//      (or BOND/GOLD_BOND/GOLD_ETF/PHYSICAL_GOLD/PHYSICAL_SILVER/debt
+//      MUTUAL_FUND) → this FIFO engine. `AssetClass` accepts REAL_ESTATE on
+//      `Transaction` (see `transaction.controller.ts`), so a user can record
+//      a property sale as a plain transaction instead of via `OwnedProperty`
+//      — that row does NOT flow through `propertyCapitalGain.ts` at all, only
+//      through here. The two paths must therefore share one CII source, or
+//      the same property could get two different indexed costs depending on
+//      which the user picked.
+//
+// FY2025-26 is CBDT's most recent notified value at the time of writing; if a
+// future FY has no entry, indexation is unavailable, not silently skipped —
+// see `indexedCost()` below, which returns `status: 'cii_unavailable'` rather
+// than a bare `null` so callers can flag the row instead of quietly reporting
+// a non-indexed (higher) taxable gain as if it were final.
+const CII: Record<number, number> = Object.fromEntries(
+  Object.entries(CII_BY_FY).map(([fy, value]) => [Number.parseInt(fy.slice(0, 4), 10), value]),
+);
 
 // Exported: fmvOverride.service.ts uses the same cutoff to decide which
 // CapitalGain rows are eligible for grandfathering (circular import — safe,
@@ -127,7 +131,9 @@ function longTermThresholdMonths(ac: AssetClass): number {
   return 36;
 }
 
-function qualifiesForIndexation(ac: AssetClass, buyDate: Date): boolean {
+// Exported only for the CII-coverage guard test (test/invariants) — not used
+// by any other runtime caller outside this file.
+export function qualifiesForIndexation(ac: AssetClass, buyDate: Date): boolean {
   // Equity/equity MFs: no indexation
   if (isEquityLike(ac) || ac === 'ETF') return false;
   if (ac === 'MUTUAL_FUND') {
@@ -149,13 +155,30 @@ function qualifiesForIndexation(ac: AssetClass, buyDate: Date): boolean {
   );
 }
 
-function indexedCost(cost: Decimal, buyDate: Date, sellDate: Date): Decimal | null {
+export type IndexationStatus = 'applied' | 'cii_unavailable';
+
+export interface IndexationResult {
+  indexedCost: Decimal | null;
+  status: IndexationStatus;
+}
+
+/**
+ * Computes the indexed cost of acquisition for a lot, or reports why it
+ * couldn't be computed. Never silently returns `null` on its own — the
+ * caller must inspect `status` and, on `'cii_unavailable'`, flag the row for
+ * manual review rather than quietly falling back to a non-indexed (higher,
+ * possibly wrong) taxable gain. See `qualifiesForIndexation()` call site in
+ * `computeFIFOGains` below.
+ */
+function indexedCost(cost: Decimal, buyDate: Date, sellDate: Date): IndexationResult {
   const buyFy = fyStartYear(buyDate);
   const sellFy = fyStartYear(sellDate);
   const buyCii = CII[buyFy];
   const sellCii = CII[sellFy];
-  if (!buyCii || !sellCii) return null;
-  return cost.times(sellCii).dividedBy(buyCii);
+  if (!buyCii || !sellCii) {
+    return { indexedCost: null, status: 'cii_unavailable' };
+  }
+  return { indexedCost: cost.times(sellCii).dividedBy(buyCii), status: 'applied' };
 }
 
 function classify(
@@ -234,6 +257,12 @@ export interface CapitalGainRow {
   gainLoss: Decimal;
   taxableGain: Decimal;
   financialYear: string;
+  // True when this row's asset class qualifies for indexation but the CII
+  // table has no entry for the buy or sell FY — `taxableGain` above is the
+  // non-indexed (possibly overstated) figure, shown as a stopgap, not a
+  // final answer. Never set for asset classes that never used indexation.
+  needsReview: boolean;
+  reviewReason: string | null;
 }
 
 export interface CapitalGainsResult {
@@ -328,9 +357,21 @@ export function computeFIFOGains(
 
           let indexed: Decimal | null = null;
           let taxableGain = gainLoss;
+          let needsReview = false;
+          let reviewReason: string | null = null;
           if (gainType === 'LONG_TERM' && qualifiesForIndexation(key.assetClass, lot.buyDate)) {
-            indexed = indexedCost(costBasis, lot.buyDate, tx.tradeDate);
-            if (indexed) taxableGain = proceeds.minus(indexed);
+            const result = indexedCost(costBasis, lot.buyDate, tx.tradeDate);
+            if (result.status === 'applied') {
+              indexed = result.indexedCost;
+              taxableGain = proceeds.minus(indexed!);
+            } else {
+              // Asset class qualifies for indexation but the CII table has no
+              // entry for the buy or sell FY — do NOT silently report the
+              // non-indexed (higher, possibly wrong) taxable gain as final.
+              const sellFy = financialYearOf(tx.tradeDate);
+              needsReview = true;
+              reviewReason = `CII not available for FY ${sellFy} — indexation could not be computed; taxable gain shown is non-indexed and may overstate tax.`;
+            }
           }
 
           // Section 112A grandfathering (Sec 55(2)(ac)): cost of acquisition
@@ -382,6 +423,8 @@ export function computeFIFOGains(
             gainLoss,
             taxableGain,
             financialYear: financialYearOf(tx.tradeDate),
+            needsReview,
+            reviewReason,
           });
 
           lot.qty = lot.qty.minus(take);
@@ -469,6 +512,8 @@ function toCGCreateInput(r: CapitalGainRow): Prisma.CapitalGainCreateManyInput {
     gainLoss: r.gainLoss.toString(),
     taxableGain: r.taxableGain.toString(),
     financialYear: r.financialYear,
+    needsReview: r.needsReview,
+    reviewReason: r.reviewReason,
   };
 }
 

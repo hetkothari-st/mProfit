@@ -54,6 +54,11 @@ export interface TaxCapitalGainRow {
   gainLoss: string;
   taxableGain: string;
   financialYear: string;
+  // True when the asset class qualifies for indexation but the CII table has
+  // no entry for the buy/sell FY — `taxableGain` above is the non-indexed
+  // (possibly overstated) fallback, not a final figure.
+  needsReview: boolean;
+  reviewReason: string | null;
 }
 
 export interface TaxGainsReport {
@@ -64,6 +69,7 @@ export interface TaxGainsReport {
   ratePct?: number;
   estimatedTax?: string;
   count: number;
+  rowsNeedingReview: number;
 }
 
 export interface TaxIncomeReport {
