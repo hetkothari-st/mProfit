@@ -9,13 +9,13 @@ export interface EntitlementResult {
 /**
  * Reads the current user's plan from auth state and checks it against
  * the single source of truth in `@portfolioos/shared`'s `FEATURE_MIN_TIER`.
- * ADMIN-role users always pass, mirroring the backend `requireFeature`
- * bypass.
+ * Gated purely on `plan`, mirroring the backend `requireFeature` — no
+ * ADMIN bypass, so switching plan on an admin account actually changes
+ * what's locked (needed to QA tier gating without a second account).
  */
 export function useEntitlement(feature: FeatureFlag): EntitlementResult {
   const user = useAuthStore((s) => s.user);
   const requiredTier = FEATURE_MIN_TIER[feature];
   if (!user) return { allowed: false, requiredTier };
-  if (user.role === 'ADMIN') return { allowed: true, requiredTier };
   return { allowed: hasFeature(user.plan as PlanTierValue, feature), requiredTier };
 }

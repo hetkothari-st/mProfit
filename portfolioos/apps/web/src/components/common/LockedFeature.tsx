@@ -26,12 +26,13 @@ export interface LockedFeatureProps {
  * meet `requiredTier`, the children still render (dimmed + blurred, non-
  * interactive) behind an upgrade overlay — showing what's behind the
  * paywall drives upgrades better than hiding the section outright, which
- * just reads as a bug. ADMIN-role users always see the real thing.
+ * just reads as a bug. Gated purely on `plan` — no ADMIN bypass, so
+ * switching plan via the dev-set-plan button on an admin account
+ * actually changes what's locked.
  */
 export function LockedFeature({ requiredTier, featureName, children, className }: LockedFeatureProps) {
   const user = useAuthStore((s) => s.user);
-  const allowed =
-    !!user && (user.role === 'ADMIN' || meetsMinTier(user.plan as PlanTierValue, requiredTier));
+  const allowed = !!user && meetsMinTier(user.plan as PlanTierValue, requiredTier);
 
   if (allowed) return <>{children}</>;
 
