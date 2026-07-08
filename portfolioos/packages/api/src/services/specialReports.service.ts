@@ -121,8 +121,7 @@ export interface GrandfatheringReport {
 
 function isGrandfatherEligible(row: CapitalGainRow): boolean {
   if (row.capitalGainType !== 'LONG_TERM') return false;
-  if (!(row.assetClass === 'EQUITY' || row.assetClass === 'ETF' || row.assetClass === 'MUTUAL_FUND'))
-    return false;
+  if (!row.isEquityOriented) return false;
   return row.buyDate.getTime() <= GF_CUTOFF.getTime();
 }
 

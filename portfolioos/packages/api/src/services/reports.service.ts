@@ -83,11 +83,7 @@ export async function schedule112AReport(portfolioId: string, fy?: string) {
   const filtered = rows.filter((r) => {
     if (fy && r.financialYear !== fy) return false;
     if (r.capitalGainType !== 'LONG_TERM') return false;
-    return (
-      r.assetClass === 'EQUITY' ||
-      r.assetClass === 'ETF' ||
-      r.assetClass === 'MUTUAL_FUND'
-    );
+    return r.isEquityOriented;
   });
   const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
   const fmvByIsin = await fetchFmvOn31Jan2018(isins);
@@ -450,11 +446,7 @@ export async function userSchedule112AReport(userId: string, fy?: string) {
   const filtered = rows.filter((r) => {
     if (fy && r.financialYear !== fy) return false;
     if (r.capitalGainType !== 'LONG_TERM') return false;
-    return (
-      r.assetClass === 'EQUITY' ||
-      r.assetClass === 'ETF' ||
-      r.assetClass === 'MUTUAL_FUND'
-    );
+    return r.isEquityOriented;
   });
   const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
   const fmvByIsin = await fetchFmvOn31Jan2018(isins);

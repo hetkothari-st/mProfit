@@ -54,9 +54,11 @@ export interface TaxCapitalGainRow {
   gainLoss: string;
   taxableGain: string;
   financialYear: string;
-  // True when the asset class qualifies for indexation but the CII table has
-  // no entry for the buy/sell FY — `taxableGain` above is the non-indexed
-  // (possibly overstated) fallback, not a final figure.
+  // True when this row needs a human look before the numbers can be trusted
+  // as final — either a MUTUAL_FUND row's fund category couldn't be
+  // resolved (defaulted to debt-conservative), or the asset class qualifies
+  // for indexation but the CII table has no entry for the buy/sell FY
+  // (`taxableGain` above is the non-indexed, possibly overstated, fallback).
   needsReview: boolean;
   reviewReason: string | null;
 }

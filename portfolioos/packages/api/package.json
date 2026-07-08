@@ -17,6 +17,7 @@
     "prisma:studio": "prisma studio",
     "seed:fmv": "tsx src/scripts/seedFmv.ts",
     "fmv:coverage": "tsx src/scripts/fmvCoverage.ts",
+    "mf-category:coverage": "tsx src/scripts/mfCategoryCoverage.ts",
     "backfill:net-worth-history": "tsx src/scripts/backfillNetWorthHistory.ts"
   },
   "prisma": {

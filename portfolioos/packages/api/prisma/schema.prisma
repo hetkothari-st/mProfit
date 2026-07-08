@@ -883,9 +883,15 @@ model CapitalGain {
   taxableGain     Decimal         @db.Decimal(18, 4)
   financialYear   String
 
-  // Set when the asset class qualifies for indexation but the CII table has
-  // no entry for the buy/sell FY — `taxableGain` above is the non-indexed
-  // fallback, not a final figure. See capitalGains.service.ts#indexedCost.
+  // Set when this row needs a human look before the numbers can be trusted
+  // as final — either (a) a MUTUAL_FUND row's fund category was unknown at
+  // compute time (no fundId, or fundId not found in MutualFundMaster), so
+  // tax treatment fell back to debt-conservative instead of guessing equity
+  // (TASK-01 fix-mf-debt-equity-tax-classification), or (b) the asset class
+  // qualifies for indexation but the CII table has no entry for the buy/sell
+  // FY, so `taxableGain` above is the non-indexed fallback, not a final
+  // figure (see capitalGains.service.ts#indexedCost). `reviewReason`
+  // explains which (or both) applied.
   needsReview  Boolean @default(false)
   reviewReason String?
 
@@ -893,6 +899,7 @@ model CapitalGain {
 
   @@index([portfolioId, financialYear])
   @@index([sellTransactionId])
+  @@index([portfolioId, needsReview])
 }
 
 enum CapitalGainType {

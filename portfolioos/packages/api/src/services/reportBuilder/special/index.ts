@@ -748,7 +748,7 @@ export async function buildSchedule112ALayout(
   const rows = r.rows.map((row) => ({
     cells: {
       listed: 'Listed',
-      category: 'Equity Shares',
+      category: row.needsReview ? 'Equity Shares (⚠ verify category)' : 'Equity Shares',
       term: 'Long term',
       name: row.assetName,
       sale: row.sellAmount,

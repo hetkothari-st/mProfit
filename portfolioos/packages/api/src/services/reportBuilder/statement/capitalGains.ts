@@ -12,7 +12,7 @@
 
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../../lib/prisma.js';
-import { computeFIFOGains, financialYearOf } from '../../capitalGains.service.js';
+import { computeFIFOGains, financialYearOf, loadFundCategoryMap } from '../../capitalGains.service.js';
 import { fmtNum, fmtDate, type ExportPayload, type ExportSection } from '../../export.service.js';
 
 export interface CapitalGainsStatementParams {
@@ -42,6 +42,7 @@ const GAIN_COLUMNS = [
   { key: 'proceeds', header: 'Proceeds', width: 11 },
   { key: 'days', header: 'Days', width: 6 },
   { key: 'gainLoss', header: 'Gain / Loss', width: 12 },
+  { key: 'review', header: 'Review', width: 8 },
   { key: 'reviewNote', header: 'Review Note', width: 24 },
 ];
 
@@ -62,7 +63,8 @@ export async function buildCapitalGainsStatement(
     where: { portfolioId: { in: portfolioIds } },
     orderBy: { tradeDate: 'asc' },
   });
-  let allRows = computeFIFOGains(txs);
+  const fundCategoryMap = await loadFundCategoryMap(txs);
+  let allRows = computeFIFOGains(txs, undefined, fundCategoryMap);
 
   if (params.fy) {
     allRows = allRows.filter((r) => r.financialYear === params.fy);
@@ -104,6 +106,7 @@ export async function buildCapitalGainsStatement(
       proceeds: fmtNum(proceeds.toFixed(2)),
       days,
       gainLoss: `${gain.gte(0) ? '' : ''}${fmtNum(gain.toFixed(2))}`,
+      review: r.needsReview ? '⚠ verify' : '',
       reviewNote: r.reviewReason ?? '',
     };
   }
@@ -128,6 +131,7 @@ export async function buildCapitalGainsStatement(
         proceeds: '',
         days: '',
         gainLoss: `${total.gte(0) ? '' : ''}${fmtNum(total.toFixed(2))}`,
+        review: '',
         reviewNote: '',
       });
     }

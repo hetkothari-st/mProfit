@@ -659,8 +659,15 @@ function GainsView({
                       {fmt(r.gainLoss)}
                     </td>
                     <td data-label="Taxable" className="p-2 text-right">{fmt(r.taxableGain)}</td>
-                    <td data-label="Review" className="p-2 text-xs text-amber-700" title={r.reviewReason ?? ''}>
-                      {r.needsReview ? '⚠ Review' : ''}
+                    <td data-label="Review" className="p-2">
+                      {r.needsReview && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-700"
+                          title={r.reviewReason ?? 'Needs manual verification before filing.'}
+                        >
+                          <AlertTriangle className="h-3 w-3" /> Review
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
