@@ -195,6 +195,10 @@ export async function listProperties(userId: string) {
     include: {
       tenancies: {
         orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }],
+        include: {
+          // Needed by the list page's 12-month receipt ledger strip per card.
+          rentReceipts: { orderBy: { dueDate: 'desc' } },
+        },
       },
       _count: { select: { expenses: true } },
     },

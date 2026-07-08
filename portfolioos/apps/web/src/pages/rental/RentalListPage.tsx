@@ -59,7 +59,7 @@ const PROPERTY_TYPE_STYLES: Record<PropertyTypeKey, PropertyTypeStyle> = {
     label: 'Residential',
     icon: Home,
     stripe: 'hsl(var(--positive))',
-    stripeText: 'hsl(40 50% 97%)',
+    stripeText: 'hsl(var(--primary-foreground))',
   },
   COMMERCIAL: {
     label: 'Commercial',
