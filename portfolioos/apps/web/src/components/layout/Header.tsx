@@ -68,9 +68,9 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
 
       <div className="flex items-center gap-1.5">
         {/* Persistent upgrade nudge — visible on every page for any
-            non-top-tier, non-admin user, not just when a locked
-            feature is hit. */}
-        {user && user.plan !== 'PRO_ADVISOR' && user.role !== 'ADMIN' && (
+            non-top-tier user (including ADMIN, keyed off `plan`), not
+            just when a locked feature is hit. */}
+        {user && user.plan !== 'PRO_ADVISOR' && (
           <Link
             to="/pricing"
             className="hidden sm:flex items-center gap-1.5 h-9 px-3 rounded-md text-[12px] font-medium text-accent-ink bg-accent/10 hover:bg-accent/15 transition-colors focus-ring"

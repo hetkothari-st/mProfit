@@ -20,7 +20,7 @@ export function UpgradeBanner() {
     () => user != null && localStorage.getItem(dismissKey(user.id)) === '1',
   );
 
-  if (!user || user.plan !== 'FREE' || user.role === 'ADMIN' || dismissed) return null;
+  if (!user || user.plan !== 'FREE' || dismissed) return null;
 
   const dismiss = () => {
     localStorage.setItem(dismissKey(user.id), '1');

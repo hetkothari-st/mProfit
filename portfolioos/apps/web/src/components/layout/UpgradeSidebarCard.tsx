@@ -11,11 +11,13 @@ const NEXT_TIER_COPY: Record<string, { label: string; blurb: string }> = {
 /**
  * Pinned above BudgetGauge in the sidebar footer — stays visible
  * regardless of nav scroll position, unlike a plain list entry. Hidden
- * for PRO_ADVISOR (nothing above it) and ADMIN (bypasses gating anyway).
+ * only for PRO_ADVISOR (nothing above it to upgrade to). Shown for ADMIN
+ * too, keyed off their `plan` value — admin bypasses actual feature
+ * gates, but still wants to see/QA the upgrade path per tier.
  */
 export function UpgradeSidebarCard({ collapsed }: { collapsed: boolean }) {
   const user = useAuthStore((s) => s.user);
-  if (!user || user.role === 'ADMIN') return null;
+  if (!user) return null;
   const copy = NEXT_TIER_COPY[user.plan];
   if (!copy) return null;
 
