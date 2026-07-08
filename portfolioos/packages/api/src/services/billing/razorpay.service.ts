@@ -25,6 +25,14 @@ function getClient(): Razorpay {
   return client;
 }
 
+// Razorpay caps `receipt` at 40 chars. Real identity binding lives in
+// `notes` (re-fetched and trusted at verify time) — this is just a
+// short, merchant-facing reference, so a truncated tier + short random
+// suffix is enough; it doesn't need to encode the full userId/timestamp.
+function shortReceipt(tier: string): string {
+  return `${tier.slice(0, 20)}_${crypto.randomBytes(6).toString('hex')}`;
+}
+
 /**
  * Creates a Razorpay order for the given amount. `notes` are opaque
  * metadata Razorpay stores alongside the order and returns unmodified on
@@ -33,7 +41,6 @@ function getClient(): Razorpay {
  */
 export async function createOrder(input: {
   amountPaise: number;
-  receipt: string;
   notes: OrderNotes;
 }): Promise<{ orderId: string; amount: number; currency: string }> {
   if (!Number.isInteger(input.amountPaise) || input.amountPaise < 100) {
@@ -42,7 +49,7 @@ export async function createOrder(input: {
   const order = await getClient().orders.create({
     amount: input.amountPaise,
     currency: 'INR',
-    receipt: input.receipt,
+    receipt: shortReceipt(input.notes.tier),
     notes: input.notes as unknown as Record<string, string | number>,
   });
   return {
