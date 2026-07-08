@@ -28,13 +28,22 @@ describe('requireFeature', () => {
     expect(err.message).toMatch(/PRO_ADVISOR/);
   });
 
-  it('bypasses the tier check for ADMIN role regardless of their own plan', () => {
+  it('gates ADMIN role on their own plan too, same as any user (no automatic bypass)', () => {
     const mw = requireFeature('ACCOUNTING_MODULE');
-    const req = makeReq({ id: 'u1', email: 'a@b.com', role: 'ADMIN', plan: 'FREE' } as never);
-    const next = vi.fn();
-    mw(req, {} as Response, next as NextFunction);
-    expect(next).toHaveBeenCalledTimes(1);
-    expect(next).toHaveBeenCalledWith();
+    const deniedReq = makeReq({ id: 'u1', email: 'a@b.com', role: 'ADMIN', plan: 'FREE' } as never);
+    const deniedNext = vi.fn();
+    mw(deniedReq, {} as Response, deniedNext as NextFunction);
+    expect(deniedNext.mock.calls[0]![0]).toBeInstanceOf(ForbiddenError);
+
+    const allowedReq = makeReq({
+      id: 'u1',
+      email: 'a@b.com',
+      role: 'ADMIN',
+      plan: 'PRO_ADVISOR',
+    } as never);
+    const allowedNext = vi.fn();
+    mw(allowedReq, {} as Response, allowedNext as NextFunction);
+    expect(allowedNext).toHaveBeenCalledWith();
   });
 
   it('calls next(UnauthorizedError) when there is no authenticated user', () => {

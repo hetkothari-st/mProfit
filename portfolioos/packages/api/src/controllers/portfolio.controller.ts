@@ -48,7 +48,7 @@ export async function create(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const data = createSchema.parse(req.body);
   const existingCount = await prisma.portfolio.count({ where: { userId: req.user.id } });
-  assertPortfolioLimit(existingCount, req.user.plan as PlanTierValue, req.user.role);
+  assertPortfolioLimit(existingCount, req.user.plan as PlanTierValue);
   created(res, await createPortfolio(userId(req), data));
 }
 

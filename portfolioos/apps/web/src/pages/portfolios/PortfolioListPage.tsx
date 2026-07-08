@@ -45,8 +45,7 @@ export function PortfolioListPage() {
 
   const user = useAuthStore((s) => s.user);
   const portfolioCount = (portfolios ?? []).length;
-  const maxPortfolios =
-    user && user.role !== 'ADMIN' ? PLAN_LIMITS[user.plan as PlanTierValue].maxPortfolios : null;
+  const maxPortfolios = user ? PLAN_LIMITS[user.plan as PlanTierValue].maxPortfolios : null;
   const capReached = maxPortfolios !== null && portfolioCount >= maxPortfolios;
 
   return (

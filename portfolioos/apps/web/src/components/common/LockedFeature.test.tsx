@@ -51,8 +51,13 @@ describe('LockedFeature', () => {
     expect(screen.getByText('Secret content')).toBeTruthy();
   });
 
-  it('bypasses the lock for ADMIN role regardless of their own plan', () => {
+  it('gates ADMIN role on their own plan too, same as any user (no automatic bypass)', () => {
     useAuthStore.setState({ user: makeUser({ plan: 'FREE', role: 'ADMIN' }) });
+    renderLocked();
+    expect(screen.getByText(/Tax Report Catalog is locked/i)).toBeTruthy();
+
+    cleanup();
+    useAuthStore.setState({ user: makeUser({ plan: 'PLUS', role: 'ADMIN' }) });
     renderLocked();
     expect(screen.getByText('Secret content')).toBeTruthy();
     expect(screen.queryByText(/is locked/i)).toBeNull();
