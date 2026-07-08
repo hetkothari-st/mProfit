@@ -6,8 +6,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, FileDown, FileText } from 'lucide-react';
-import type { PlanTierValue } from '@portfolioos/shared';
+import { Link } from 'react-router-dom';
+import { Loader2, FileDown, FileText, Lock } from 'lucide-react';
+import { meetsMinTier, type PlanTierValue } from '@portfolioos/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -473,6 +474,30 @@ function fyOptions(): string[] {
   return arr;
 }
 
+// Shown once, in place of both the PLUS and PRO_ADVISOR lock cards, when
+// the user meets neither tier (FREE/unauthenticated) — two near-identical
+// "upgrade" cards stacked back to back read as broken, not as two
+// distinct features.
+function CombinedReportsLockCard() {
+  return (
+    <div className="flex items-center justify-center py-12">
+      <Card tone="flat" className="max-w-sm w-full p-5 text-center shadow-elev-lg">
+        <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-full bg-accent/10 text-accent">
+          <Lock className="h-5 w-5" />
+        </div>
+        <h3 className="text-sm font-semibold text-foreground">More reports are locked</h3>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Upgrade to Plus for the full Tax &amp; CA Report Catalog, or Pro/Advisor for Accounting
+          Reports (Trial Balance, P&amp;L, Balance Sheet, Tally exports and more).
+        </p>
+        <Button asChild size="sm" className="mt-4 w-full">
+          <Link to="/pricing">View plans</Link>
+        </Button>
+      </Card>
+    </div>
+  );
+}
+
 export function TaxMisDownloads({
   fy: defaultFy,
   highlight,
@@ -481,6 +506,8 @@ export function TaxMisDownloads({
   highlight?: ReportHighlight | null;
 }) {
   const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
+  const meetsPlus = !!user && meetsMinTier(user.plan as PlanTierValue, 'PLUS');
   const today = new Date().toISOString().slice(0, 10);
   const [fy, setFy] = useState(defaultFy || currentFy());
   const [asOf, setAsOf] = useState(today);
@@ -562,15 +589,17 @@ export function TaxMisDownloads({
       </Card>
 
       {renderReportGroup(freeReports)}
-      {plusReports.length > 0 && (
-        <LockedFeature requiredTier="PLUS" featureName="Tax & CA Report Catalog" compact>
-          {renderReportGroup(plusReports)}
-        </LockedFeature>
-      )}
-      {accountingReports.length > 0 && (
-        <LockedFeature requiredTier="PRO_ADVISOR" featureName="Accounting Reports" compact>
-          {renderReportGroup(accountingReports)}
-        </LockedFeature>
+      {!meetsPlus && (plusReports.length > 0 || accountingReports.length > 0) ? (
+        <CombinedReportsLockCard />
+      ) : (
+        <>
+          {plusReports.length > 0 && renderReportGroup(plusReports)}
+          {accountingReports.length > 0 && (
+            <LockedFeature requiredTier="PRO_ADVISOR" featureName="Accounting Reports" compact>
+              {renderReportGroup(accountingReports)}
+            </LockedFeature>
+          )}
+        </>
       )}
     </div>
   );
