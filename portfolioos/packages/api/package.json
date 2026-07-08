@@ -57,6 +57,7 @@
     "playwright": "^1.59.1",
     "playwright-extra": "^4.3",
     "puppeteer-extra-plugin-stealth": "^2.11",
+    "razorpay": "^2.9.6",
     "tesseract.js": "^5",
     "twilio": "^6.0.2",
     "undici": "^6.21.0",

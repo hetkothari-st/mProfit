@@ -7,3 +7,4 @@ export * from './greeks.js';
 export * from './valuation/index.js';
 export * from './finance/index.js';
 export * from './entitlements.js';
+export * from './pricing.js';

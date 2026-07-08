@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { PlanTierValue } from '@portfolioos/shared';
+import { formatPaiseAsRupees, planPriceFor, type BillingCycle, type PlanTierValue } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,27 +9,25 @@ import { Badge } from '@/components/ui/badge';
 import { billingApi } from '@/api/billing.api';
 import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
+import { openRazorpayCheckout } from '@/lib/razorpay';
 import { cn } from '@/lib/cn';
 
 interface TierDef {
   tier: PlanTierValue;
   name: string;
-  price: string;
-  priceNote?: string;
   tagline: string;
   features: string[];
   highlight?: boolean;
 }
 
-// Prices are placeholders pending real business-side confirmation — flagged
-// here and in the checkout-intent stub. Feature copy is pulled directly
-// from the tier descriptions in the pricing-tiers-gating task, not
-// reinvented.
+// Feature copy is pulled directly from the tier descriptions in the
+// pricing-tiers-gating task, not reinvented. Prices come from
+// @portfolioos/shared's PLAN_PRICING (also what Razorpay actually
+// charges) — never hardcoded here.
 const TIERS: TierDef[] = [
   {
     tier: 'FREE',
     name: 'Free',
-    price: '₹0',
     tagline: 'Get your net worth in one place.',
     features: [
       'Net worth + dashboard',
@@ -41,8 +39,6 @@ const TIERS: TierDef[] = [
   {
     tier: 'PLUS',
     name: 'Plus',
-    price: '₹499',
-    priceNote: '/month · ₹4,999/year (placeholder)',
     tagline: 'Automate ingestion, unlock the full report catalog.',
     features: [
       'Everything in Free',
@@ -57,8 +53,6 @@ const TIERS: TierDef[] = [
   {
     tier: 'FAMILY',
     name: 'Family',
-    price: '₹899',
-    priceNote: '/month · 3 members included, +₹199/month per extra member (placeholder)',
     tagline: 'One consolidated view for the whole household.',
     features: [
       'Everything in Plus',
@@ -70,8 +64,6 @@ const TIERS: TierDef[] = [
   {
     tier: 'PRO_ADVISOR',
     name: 'Pro/Advisor',
-    price: '₹1,999',
-    priceNote: '/month (placeholder)',
     tagline: 'For CAs and advisors running client books.',
     features: [
       'Everything in Family',
@@ -84,17 +76,57 @@ const TIERS: TierDef[] = [
   },
 ];
 
+function priceDisplay(tier: PlanTierValue, cycle: BillingCycle): { price: string; note?: string } {
+  if (tier === 'FREE') return { price: '₹0' };
+  const price = planPriceFor(tier, cycle);
+  if (!price) return { price: '—', note: `No ${cycle.toLowerCase()} plan yet` };
+  const note =
+    tier === 'FAMILY'
+      ? '3 members included, +₹199/month per extra member (placeholder)'
+      : cycle === 'ANNUAL'
+      ? 'billed yearly (placeholder)'
+      : 'placeholder';
+  return { price: `${formatPaiseAsRupees(price.amountPaise)}/${cycle === 'ANNUAL' ? 'year' : 'month'}`, note };
+}
+
 export function PricingPage() {
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const [pending, setPending] = useState<PlanTierValue | null>(null);
+  const [cycle, setCycle] = useState<BillingCycle>('MONTHLY');
 
   const handleUpgrade = async (tier: PlanTierValue) => {
     setPending(tier);
     try {
-      const res = await billingApi.checkoutIntent(tier);
-      toast(res.message, { icon: '🚧' });
+      const intent = await billingApi.checkoutIntent(tier, cycle);
+      if (intent.status === 'not_implemented') {
+        toast(intent.message, { icon: '🚧' });
+        return;
+      }
+
+      const payment = await openRazorpayCheckout({
+        key: intent.keyId,
+        amount: intent.amount,
+        currency: intent.currency,
+        name: 'PortfolioOS',
+        description: `${tier} plan — ${cycle === 'ANNUAL' ? 'annual' : 'monthly'}`,
+        order_id: intent.orderId,
+        prefill: { name: user?.name, email: user?.email },
+      });
+
+      const { user: updatedUser } = await billingApi.verifyPayment({
+        razorpayOrderId: payment.razorpay_order_id,
+        razorpayPaymentId: payment.razorpay_payment_id,
+        razorpaySignature: payment.razorpay_signature,
+      });
+      setUser(updatedUser);
+      toast.success(`Upgraded to ${tier === 'PRO_ADVISOR' ? 'Pro/Advisor' : tier}`);
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Could not start checkout'));
+      if (err instanceof Error && err.message === 'dismissed') {
+        // User closed the checkout modal — no error toast needed.
+      } else {
+        toast.error(apiErrorMessage(err, 'Payment failed'));
+      }
     } finally {
       setPending(null);
     }
@@ -106,11 +138,31 @@ export function PricingPage() {
         eyebrow="Pricing"
         title="Plans for every stage of your portfolio"
         description="Free forever for a single portfolio and the essentials. Upgrade as your needs grow — every tier includes everything in the tier below it."
+        actions={
+          <div className="flex gap-0.5 rounded-md border border-border/70 bg-background/40 p-0.5">
+            {(['MONTHLY', 'ANNUAL'] as const).map((c) => (
+              <button
+                key={c}
+                onClick={() => setCycle(c)}
+                className={cn(
+                  'px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
+                  cycle === c
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {c === 'MONTHLY' ? 'Monthly' : 'Annual'}
+              </button>
+            ))}
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {TIERS.map((t) => {
           const isCurrent = user?.plan === t.tier;
+          const { price, note } = priceDisplay(t.tier, cycle);
+          const priceUnavailable = t.tier !== 'FREE' && !planPriceFor(t.tier, cycle);
           return (
             <Card
               key={t.tier}
@@ -125,10 +177,8 @@ export function PricingPage() {
                 )}
                 <CardTitle>{t.name}</CardTitle>
                 <div className="mt-1">
-                  <span className="font-display text-[28px] leading-none">{t.price}</span>
-                  {t.priceNote && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">{t.priceNote}</p>
-                  )}
+                  <span className="font-display text-[28px] leading-none">{price}</span>
+                  {note && <p className="mt-1 text-[11px] text-muted-foreground">{note}</p>}
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">{t.tagline}</p>
               </CardHeader>
@@ -144,7 +194,7 @@ export function PricingPage() {
                 <Button
                   className="mt-5 w-full"
                   variant={isCurrent ? 'outline' : t.highlight ? 'default' : 'outline'}
-                  disabled={isCurrent || pending === t.tier || t.tier === 'FREE'}
+                  disabled={isCurrent || pending === t.tier || t.tier === 'FREE' || priceUnavailable}
                   onClick={() => handleUpgrade(t.tier)}
                 >
                   {isCurrent

@@ -104,6 +104,12 @@ const EnvSchema = z.object({
     .string()
     .url()
     .default('http://host.docker.internal:3001'),
+
+  // Razorpay Standard Checkout — see services/billing/razorpay.service.ts.
+  // Optional so the app still boots (with checkout disabled) in worktrees
+  // that haven't been given test keys yet.
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
 });
 
 function loadEnv() {
