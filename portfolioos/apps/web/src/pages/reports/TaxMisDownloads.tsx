@@ -563,12 +563,12 @@ export function TaxMisDownloads({
 
       {renderReportGroup(freeReports)}
       {plusReports.length > 0 && (
-        <LockedFeature requiredTier="PLUS" featureName="Tax & CA Report Catalog">
+        <LockedFeature requiredTier="PLUS" featureName="Tax & CA Report Catalog" compact>
           {renderReportGroup(plusReports)}
         </LockedFeature>
       )}
       {accountingReports.length > 0 && (
-        <LockedFeature requiredTier="PRO_ADVISOR" featureName="Accounting Reports">
+        <LockedFeature requiredTier="PRO_ADVISOR" featureName="Accounting Reports" compact>
           {renderReportGroup(accountingReports)}
         </LockedFeature>
       )}
