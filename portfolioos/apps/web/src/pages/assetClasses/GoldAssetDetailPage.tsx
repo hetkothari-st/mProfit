@@ -19,7 +19,7 @@ import {
   Trash2,
   Loader2,
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, LabelList, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@portfolioos/shared';
 import type { TransactionDTO } from '@portfolioos/shared';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import { transactionsApi } from '@/api/transactions.api';
 import { assetsApi } from '@/api/assets.api';
 import { api, apiErrorMessage } from '@/api/client';
 import { NEUTRAL_COLOR, POS_COLOR, NEG_COLOR } from '../analytics/chartColors';
+import { INR_COMPACT, TOOLTIP_STYLE, TOOLTIP_LABEL_STYLE, formatDate } from '@/lib/depositMath';
 import { GoldFormDialog } from './GoldFormDialog';
 
 const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
@@ -227,58 +228,52 @@ function Ledger({
 }
 
 // ── Cost vs Live comparison chart ─────────────────────────────────
-function CostBar({ invested, current }: { invested: Decimal; current: Decimal | null }) {
+// Only two real data points exist (cost at acquisition, live value today —
+// there's no tracked daily gold-price history to interpolate through), so
+// the "trend" is an honest two-point line: flat "Invested" reference line
+// vs a "Current value" line sloping from cost to today's live value.
+function CostBar({ invested, current, sinceDate }: { invested: Decimal; current: Decimal | null; sinceDate: string | null }) {
   if (!current || invested.isZero()) return null;
   const gain = current.gte(invested);
+  const investedNum = invested.toNumber();
+  const currentNum = current.toNumber();
+  const valueColor = gain ? POS_COLOR : NEG_COLOR;
   const data = [
-    { label: 'Invested', value: invested.toNumber() },
-    { label: 'Today', value: current.toNumber() },
+    { label: sinceDate ? formatDate(sinceDate) : 'Purchase', invested: investedNum, value: investedNum },
+    { label: 'Today', invested: investedNum, value: currentNum },
   ];
-  const todayColor = gain ? POS_COLOR : NEG_COLOR;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
-        <span>Cost · Value</span>
-        <span>{gain ? 'Appreciated' : 'Depreciated'}</span>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">Cost · Value</span>
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ background: valueColor }} /> Current value
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-3" style={{ background: NEUTRAL_COLOR }} /> Invested
+          </span>
+        </div>
       </div>
-      <div className="h-[130px]">
+      <div className="h-[150px]">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 64, left: 0, bottom: 4 }} barCategoryGap="38%">
-            <XAxis type="number" hide domain={[0, (dataMax: number) => dataMax * 1.08]} />
-            <YAxis
-              type="category"
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              width={72}
-              tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-            />
+          <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+            <XAxis dataKey="label" fontSize={10} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" />
+            <YAxis fontSize={10} tickLine={false} axisLine={false} width={52} stroke="hsl(var(--muted-foreground))" tickFormatter={INR_COMPACT} />
             <Tooltip
-              cursor={{ fill: 'hsl(var(--muted) / 0.35)' }}
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                const p = payload[0]!;
-                return (
-                  <div className="rounded-lg border bg-[hsl(var(--card))] px-3 py-2 shadow-lg text-xs">
-                    <p className="text-muted-foreground uppercase tracking-wide text-[10px] mb-0.5">{String(p.payload.label)}</p>
-                    <p className="font-semibold tabular-nums">{formatINR(String(p.value))}</p>
-                  </div>
-                );
-              }}
+              contentStyle={TOOLTIP_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
+              formatter={(v: number, name: string) => [formatINR(String(v)), name === 'value' ? 'Current value' : 'Invested']}
             />
-            <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={24}>
-              {data.map((d, i) => (
-                <Cell key={d.label} fill={i === 0 ? NEUTRAL_COLOR : todayColor} />
-              ))}
-              <LabelList
-                dataKey="value"
-                position="right"
-                formatter={(v: number) => formatINR(v.toString())}
-                style={{ fontSize: 12, fontWeight: 600, fill: 'hsl(var(--foreground))' }}
-              />
-            </Bar>
-          </BarChart>
+            <Line type="monotone" dataKey="invested" stroke={NEUTRAL_COLOR} strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 3 }} />
+            <Line
+              type="monotone" dataKey="value" stroke={valueColor} strokeWidth={2.5}
+              dot={{ r: 3, fill: valueColor, strokeWidth: 0 }}
+              activeDot={{ r: 5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 2 }}
+            />
+          </LineChart>
         </ResponsiveContainer>
       </div>
     </div>
@@ -591,7 +586,7 @@ export function GoldAssetDetailPage() {
             {/* Cost vs Live bar */}
             {currentVal && (
               <div className="mt-8">
-                <CostBar invested={invested} current={currentVal} />
+                <CostBar invested={invested} current={currentVal} sinceDate={firstTxnDate} />
               </div>
             )}
           </div>
