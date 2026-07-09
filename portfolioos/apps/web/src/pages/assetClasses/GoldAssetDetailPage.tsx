@@ -19,12 +19,14 @@ import {
   Trash2,
   Loader2,
 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, LabelList, ResponsiveContainer } from 'recharts';
 import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@portfolioos/shared';
 import type { TransactionDTO } from '@portfolioos/shared';
 import { Button } from '@/components/ui/button';
 import { transactionsApi } from '@/api/transactions.api';
 import { assetsApi } from '@/api/assets.api';
 import { api, apiErrorMessage } from '@/api/client';
+import { NEUTRAL_COLOR, POS_COLOR, NEG_COLOR } from '../analytics/chartColors';
 import { GoldFormDialog } from './GoldFormDialog';
 
 const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
@@ -224,18 +226,15 @@ function Ledger({
   );
 }
 
-// ── Cost vs Live comparison bar ─────────────────────────────────
-function CostBar({ invested, current, accent }: { invested: Decimal; current: Decimal | null; accent: 'gold' | 'silver' }) {
+// ── Cost vs Live comparison chart ─────────────────────────────────
+function CostBar({ invested, current }: { invested: Decimal; current: Decimal | null }) {
   if (!current || invested.isZero()) return null;
-  const max = Decimal.max(invested, current);
-  const investedPct = invested.div(max).times(100).toNumber();
-  const currentPct  = current.div(max).times(100).toNumber();
   const gain = current.gte(invested);
-
-  const investedColor = accent === 'gold' ? 'bg-amber-200/70 dark:bg-amber-900/40' : 'bg-slate-300/70 dark:bg-slate-700/50';
-  const currentColor  = gain
-    ? 'bg-gradient-to-r from-emerald-500/85 to-emerald-600/85 dark:from-emerald-400/85 dark:to-emerald-500/85'
-    : 'bg-gradient-to-r from-rose-500/85 to-rose-600/85 dark:from-rose-400/85 dark:to-rose-500/85';
+  const data = [
+    { label: 'Invested', value: invested.toNumber() },
+    { label: 'Today', value: current.toNumber() },
+  ];
+  const todayColor = gain ? POS_COLOR : NEG_COLOR;
 
   return (
     <div className="space-y-3">
@@ -243,21 +242,44 @@ function CostBar({ invested, current, accent }: { invested: Decimal; current: De
         <span>Cost · Value</span>
         <span>{gain ? 'Appreciated' : 'Depreciated'}</span>
       </div>
-      <div className="space-y-2.5">
-        <div className="flex items-center gap-3">
-          <span className="w-20 text-[10px] tracking-[0.18em] uppercase text-muted-foreground">Invested</span>
-          <div className="relative flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
-            <div className={`absolute inset-y-0 left-0 ${investedColor} rounded-full transition-all duration-700`} style={{ width: `${investedPct}%` }} />
-          </div>
-          <span className="font-semibold text-sm tabular-nums w-24 sm:w-32 text-right break-words">{formatINR(invested.toString())}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="w-20 text-[10px] tracking-[0.18em] uppercase text-muted-foreground">Today</span>
-          <div className="relative flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
-            <div className={`absolute inset-y-0 left-0 ${currentColor} rounded-full transition-all duration-700`} style={{ width: `${currentPct}%` }} />
-          </div>
-          <span className="font-semibold text-sm tabular-nums w-24 sm:w-32 text-right break-words">{formatINR(current.toString())}</span>
-        </div>
+      <div className="h-[130px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 64, left: 0, bottom: 4 }} barCategoryGap="38%">
+            <XAxis type="number" hide domain={[0, (dataMax: number) => dataMax * 1.08]} />
+            <YAxis
+              type="category"
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              width={72}
+              tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            />
+            <Tooltip
+              cursor={{ fill: 'hsl(var(--muted) / 0.35)' }}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const p = payload[0]!;
+                return (
+                  <div className="rounded-lg border bg-[hsl(var(--card))] px-3 py-2 shadow-lg text-xs">
+                    <p className="text-muted-foreground uppercase tracking-wide text-[10px] mb-0.5">{String(p.payload.label)}</p>
+                    <p className="font-semibold tabular-nums">{formatINR(String(p.value))}</p>
+                  </div>
+                );
+              }}
+            />
+            <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={24}>
+              {data.map((d, i) => (
+                <Cell key={d.label} fill={i === 0 ? NEUTRAL_COLOR : todayColor} />
+              ))}
+              <LabelList
+                dataKey="value"
+                position="right"
+                formatter={(v: number) => formatINR(v.toString())}
+                style={{ fontSize: 12, fontWeight: 600, fill: 'hsl(var(--foreground))' }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -270,6 +292,7 @@ export function GoldAssetDetailPage() {
   useParams<{ holdingId: string }>();
   const [editTxn, setEditTxn] = useState<TransactionDTO | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const holding = location.state?.holding as (HoldingRow & { portfolioName: string; currentValue?: string | null }) | undefined;
 
@@ -284,8 +307,12 @@ export function GoldAssetDetailPage() {
     staleTime: 60_000,
   });
 
+  // Single source of truth for the txnData query key — every invalidation
+  // below must reuse this exact array, or the refetch silently no-ops.
+  const txnQueryKey = ['transactions', holding?.assetClass, holding?.assetKey ?? holding?.assetName];
+
   const { data: txnData, isLoading: txnLoading } = useQuery({
-    queryKey: ['transactions', holding?.assetClass, holding?.assetKey ?? holding?.assetName],
+    queryKey: txnQueryKey,
     queryFn: () => transactionsApi.list({ assetClass: holding!.assetClass, pageSize: 200 }),
     enabled: !!holding,
   });
@@ -313,7 +340,7 @@ export function GoldAssetDetailPage() {
     },
     onSuccess: () => {
       toast.success('Photo uploaded');
-      queryClient.invalidateQueries({ queryKey: ['transactions', holding?.assetClass, holding?.assetName] });
+      queryClient.invalidateQueries({ queryKey: txnQueryKey });
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Failed to upload photo')),
   });
@@ -323,10 +350,25 @@ export function GoldAssetDetailPage() {
     onMutate: (photo) => setDeletingPhotoId(photo.id),
     onSuccess: () => {
       toast.success('Photo deleted');
-      queryClient.invalidateQueries({ queryKey: ['transactions', holding?.assetClass, holding?.assetName] });
+      queryClient.invalidateQueries({ queryKey: txnQueryKey });
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Failed to delete photo')),
     onSettled: () => setDeletingPhotoId(null),
+  });
+
+  const deleteTxnMutation = useMutation({
+    mutationFn: (id: string) => transactionsApi.remove(id),
+    onSuccess: () => {
+      toast.success('Transaction deleted');
+      setConfirmDeleteId(null);
+      queryClient.invalidateQueries({ queryKey: txnQueryKey });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
+      // Deleting the only remaining transaction means this holding no
+      // longer exists — the page's stats are a static snapshot from
+      // navigation state, so bounce back rather than show a zombie page.
+      if (transactions.length <= 1) navigate('/gold', { replace: true });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to delete transaction')),
   });
 
   if (!holding) return null;
@@ -549,7 +591,7 @@ export function GoldAssetDetailPage() {
             {/* Cost vs Live bar */}
             {currentVal && (
               <div className="mt-8">
-                <CostBar invested={invested} current={currentVal} accent={accent} />
+                <CostBar invested={invested} current={currentVal} />
               </div>
             )}
           </div>
@@ -707,7 +749,7 @@ export function GoldAssetDetailPage() {
                         )}
                       </div>
 
-                      {/* Amount + edit */}
+                      {/* Amount + edit/delete */}
                       <div className="text-right shrink-0 flex items-center gap-2">
                         <div>
                           <p className="text-base sm:text-lg font-semibold tabular-nums leading-tight break-words">{formatINR(amount.toString())}</p>
@@ -715,14 +757,47 @@ export function GoldAssetDetailPage() {
                             <p className="text-[10px] tracking-wider uppercase text-muted-foreground/60 mt-0.5">{txnPhotos.length} photos</p>
                           )}
                         </div>
-                        <Button
-                          variant="ghost" size="sm"
-                          className="h-8 w-8 p-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => { setEditTxn(t); setEditOpen(true); }}
-                          aria-label="Edit transaction"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
+                        {confirmDeleteId === t.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              className="text-[10px] text-muted-foreground hover:text-foreground px-1"
+                              onClick={() => setConfirmDeleteId(null)}
+                            >
+                              Cancel
+                            </button>
+                            <Button
+                              variant="ghost" size="sm"
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={deleteTxnMutation.isPending}
+                              onClick={() => deleteTxnMutation.mutate(t.id)}
+                              aria-label="Confirm delete transaction"
+                            >
+                              {deleteTxnMutation.isPending && deleteTxnMutation.variables === t.id
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Trash2 className="h-3.5 w-3.5" />}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost" size="sm"
+                              className="h-8 w-8 p-0 text-muted-foreground"
+                              onClick={() => { setEditTxn(t); setEditOpen(true); }}
+                              aria-label="Edit transaction"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => setConfirmDeleteId(t.id)}
+                              aria-label="Delete transaction"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </li>
