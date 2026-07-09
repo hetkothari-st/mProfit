@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import type { Portfolio } from '@prisma/client';
+import type { Portfolio, CommodityType } from '@prisma/client';
 import {
   Decimal,
   toDecimal,
@@ -309,22 +309,58 @@ export async function deletePortfolio(userId: string, id: string): Promise<void>
   await prisma.portfolio.delete({ where: { id } });
 }
 
+/**
+ * Given rows ordered `[key asc, date desc]`, returns the latest price and
+ * the one immediately before it per key — the "today vs prior close" pair
+ * `getPortfolioSummary`'s todaysChange needs for stocks/MF/crypto/commodities.
+ * `prevClose: null` means only one price point exists (no day-over-day move
+ * computable yet, e.g. a holding priced for the first time today).
+ */
+export function latestVsPrevious<T, K>(
+  rows: T[],
+  keyOf: (row: T) => K,
+  priceOf: (row: T) => Prisma.Decimal,
+): Map<K, { latestClose: Decimal; prevClose: Decimal | null }> {
+  const byKey = new Map<K, { latestClose: Decimal; prevClose: Decimal | null }>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { latestClose: toDecimal(priceOf(row)), prevClose: null });
+    } else if (existing.prevClose === null) {
+      existing.prevClose = toDecimal(priceOf(row));
+    }
+  }
+  return byKey;
+}
+
 export async function getPortfolioSummary(userId: string, id: string) {
-  await ensureOwnership(userId, id);
-  const [rows, holdingCount, xirrResult] = await Promise.all([
-    prisma.holdingProjection.findMany({
-      where: { portfolioId: id },
-      select: {
-        totalCost: true,
-        currentValue: true,
-        unrealisedPnL: true,
-        quantity: true,
-        stockId: true,
-      },
-    }),
-    prisma.holdingProjection.count({ where: { portfolioId: id } }),
-    computePortfolioXirr(id),
-  ]);
+  const portfolio = await ensureReadable(userId, id);
+  // Peer personal portfolios still need runAsUser context so child-table
+  // RLS (HoldingProjection/Transaction join Portfolio.userId = current)
+  // permits the read — same pattern as getPortfolioHoldings.
+  const readCtx = <T>(fn: () => Promise<T>): Promise<T> =>
+    portfolio.userId === userId || portfolio.familyId ? fn() : runAsUser(portfolio.userId, fn);
+
+  const [rows, holdingCount, xirrResult] = await readCtx(() =>
+    Promise.all([
+      prisma.holdingProjection.findMany({
+        where: { portfolioId: id },
+        select: {
+          totalCost: true,
+          currentValue: true,
+          unrealisedPnL: true,
+          quantity: true,
+          stockId: true,
+          fundId: true,
+          isin: true,
+          assetClass: true,
+        },
+      }),
+      prisma.holdingProjection.count({ where: { portfolioId: id } }),
+      computePortfolioXirr(id),
+    ]),
+  );
 
   const holdings = rows.filter((h) => h.stockId);
 
@@ -342,28 +378,87 @@ export async function getPortfolioSummary(userId: string, id: string) {
     ? unrealisedPnL.dividedBy(totalInvestment).times(100).toNumber()
     : 0;
 
+  // Day move on market-priced holdings only — stocks, MF (via NAV history),
+  // crypto, and physical gold/silver (via commodity spot history). Everything
+  // else (FD, bonds, EPF/PPF, etc.) has no daily feed, so it contributes 0 —
+  // matches the "Accrual/cost assets have no intraday change" dashboard copy.
+  // All three feeds are global market reference data (no per-user RLS), so
+  // none of this needs readCtx.
   let todaysChange = new Decimal(0);
+
   const stockIds = holdings.map((h) => h.stockId!).filter(Boolean);
   if (stockIds.length > 0) {
     const prices = await prisma.stockPrice.findMany({
       where: { stockId: { in: stockIds } },
       orderBy: [{ stockId: 'asc' }, { date: 'desc' }],
     });
-    const byStock = new Map<string, { latestClose: Decimal; prevClose: Decimal | null }>();
-    for (const p of prices) {
-      const existing = byStock.get(p.stockId);
-      if (!existing) {
-        byStock.set(p.stockId, { latestClose: toDecimal(p.close), prevClose: null });
-      } else if (existing.prevClose === null) {
-        existing.prevClose = toDecimal(p.close);
-      }
-    }
+    const byStock = latestVsPrevious(prices, (p) => p.stockId, (p) => p.close);
     for (const h of holdings) {
       if (!h.stockId) continue;
       const pair = byStock.get(h.stockId);
       if (!pair || pair.prevClose === null) continue;
-      const delta = pair.latestClose.minus(pair.prevClose);
-      todaysChange = todaysChange.plus(delta.times(toDecimal(h.quantity)));
+      todaysChange = todaysChange.plus(pair.latestClose.minus(pair.prevClose).times(toDecimal(h.quantity)));
+    }
+  }
+
+  const fundHoldings = rows.filter((h) => h.fundId);
+  const fundIds = fundHoldings.map((h) => h.fundId!).filter(Boolean);
+  if (fundIds.length > 0) {
+    const navs = await prisma.mFNav.findMany({
+      where: { fundId: { in: fundIds } },
+      orderBy: [{ fundId: 'asc' }, { date: 'desc' }],
+    });
+    const byFund = latestVsPrevious(navs, (n) => n.fundId, (n) => n.nav);
+    for (const h of fundHoldings) {
+      const pair = byFund.get(h.fundId!);
+      if (!pair || pair.prevClose === null) continue;
+      todaysChange = todaysChange.plus(pair.latestClose.minus(pair.prevClose).times(toDecimal(h.quantity)));
+    }
+  }
+
+  const cryptoHoldings = rows.filter((h) => h.assetClass === 'CRYPTOCURRENCY' && h.isin);
+  if (cryptoHoldings.length > 0) {
+    const coinGeckoIds = [...new Set(cryptoHoldings.map((h) => h.isin!))];
+    const cryptoMasters = await prisma.cryptoMaster.findMany({
+      where: { coinGeckoId: { in: coinGeckoIds } },
+      select: { id: true, coinGeckoId: true },
+    });
+    const cryptoIdByCoinGeckoId = new Map(cryptoMasters.map((c) => [c.coinGeckoId, c.id]));
+    const cryptoIds = [...cryptoIdByCoinGeckoId.values()];
+    if (cryptoIds.length > 0) {
+      const prices = await prisma.cryptoPrice.findMany({
+        where: { cryptoId: { in: cryptoIds } },
+        orderBy: [{ cryptoId: 'asc' }, { date: 'desc' }],
+      });
+      const byCrypto = latestVsPrevious(prices, (p) => p.cryptoId, (p) => p.priceInr);
+      for (const h of cryptoHoldings) {
+        const cryptoId = cryptoIdByCoinGeckoId.get(h.isin!);
+        const pair = cryptoId ? byCrypto.get(cryptoId) : undefined;
+        if (!pair || pair.prevClose === null) continue;
+        todaysChange = todaysChange.plus(pair.latestClose.minus(pair.prevClose).times(toDecimal(h.quantity)));
+      }
+    }
+  }
+
+  const commodityByAssetClass: Partial<Record<typeof rows[number]['assetClass'], CommodityType>> = {
+    PHYSICAL_GOLD: 'GOLD',
+    GOLD_ETF: 'GOLD',
+    GOLD_BOND: 'GOLD',
+    PHYSICAL_SILVER: 'SILVER',
+  };
+  const commodityHoldings = rows.filter((h) => commodityByAssetClass[h.assetClass]);
+  if (commodityHoldings.length > 0) {
+    const commodities = [...new Set(commodityHoldings.map((h) => commodityByAssetClass[h.assetClass]!))];
+    const prices = await prisma.commodityPrice.findMany({
+      where: { commodity: { in: commodities } },
+      orderBy: [{ commodity: 'asc' }, { date: 'desc' }],
+    });
+    const byCommodity = latestVsPrevious(prices, (p) => p.commodity, (p) => p.price);
+    for (const h of commodityHoldings) {
+      const commodity = commodityByAssetClass[h.assetClass]!;
+      const pair = byCommodity.get(commodity);
+      if (!pair || pair.prevClose === null) continue;
+      todaysChange = todaysChange.plus(pair.latestClose.minus(pair.prevClose).times(toDecimal(h.quantity)));
     }
   }
 
@@ -485,13 +580,17 @@ export async function getPortfolioHoldings(userId: string, id: string) {
 }
 
 export async function getAssetAllocation(userId: string, id: string) {
-  await ensureOwnership(userId, id);
+  const portfolio = await ensureReadable(userId, id);
+  const readCtx = <T>(fn: () => Promise<T>): Promise<T> =>
+    portfolio.userId === userId || portfolio.familyId ? fn() : runAsUser(portfolio.userId, fn);
   // groupBy + _sum skips NULL currentValue rows — so we fetch all rows and
   // sum in JS using totalCost as fallback for unpriced assets.
-  const rows = await prisma.holdingProjection.findMany({
-    where: { portfolioId: id },
-    select: { assetClass: true, currentValue: true, totalCost: true },
-  });
+  const rows = await readCtx(() =>
+    prisma.holdingProjection.findMany({
+      where: { portfolioId: id },
+      select: { assetClass: true, currentValue: true, totalCost: true },
+    }),
+  );
   const byClass = new Map<string, { value: Decimal; count: number }>();
   for (const h of rows) {
     const val = h.currentValue !== null ? toDecimal(h.currentValue) : toDecimal(h.totalCost);
@@ -514,14 +613,18 @@ export async function getHistoricalValuation(
   id: string,
   days = 365,
 ) {
-  await ensureOwnership(userId, id);
+  const portfolio = await ensureReadable(userId, id);
+  const readCtx = <T>(fn: () => Promise<T>): Promise<T> =>
+    portfolio.userId === userId || portfolio.familyId ? fn() : runAsUser(portfolio.userId, fn);
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const allTransactions = await prisma.transaction.findMany({
-    where: { portfolioId: id },
-    orderBy: { tradeDate: 'asc' },
-    select: { tradeDate: true, assetKey: true, stockId: true, transactionType: true, quantity: true, netAmount: true },
-  });
+  const allTransactions = await readCtx(() =>
+    prisma.transaction.findMany({
+      where: { portfolioId: id },
+      orderBy: { tradeDate: 'asc' },
+      select: { tradeDate: true, assetKey: true, stockId: true, transactionType: true, quantity: true, netAmount: true },
+    }),
+  );
   if (allTransactions.length === 0) return [] as Array<{ date: string; value: Money; invested: Money }>;
 
   const firstTxDate = allTransactions[0]!.tradeDate.toISOString().slice(0, 10);
@@ -740,11 +843,15 @@ export async function getHistoricalValuation(
 }
 
 export async function getCashFlows(userId: string, id: string) {
-  await ensureOwnership(userId, id);
-  const flows = await prisma.cashFlow.findMany({
-    where: { portfolioId: id },
-    orderBy: { date: 'asc' },
-  });
+  const portfolio = await ensureReadable(userId, id);
+  const readCtx = <T>(fn: () => Promise<T>): Promise<T> =>
+    portfolio.userId === userId || portfolio.familyId ? fn() : runAsUser(portfolio.userId, fn);
+  const flows = await readCtx(() =>
+    prisma.cashFlow.findMany({
+      where: { portfolioId: id },
+      orderBy: { date: 'asc' },
+    }),
+  );
   return flows.map((f) => ({
     id: f.id,
     date: f.date.toISOString().slice(0, 10),
