@@ -17,6 +17,8 @@ export interface AiMessage {
   content: string;
   cardData: AiCard | null;
   createdAt: string;
+  /** True for the one synthetic FREE-tier preview answer — render blurred. */
+  locked: boolean;
 }
 
 export interface AiSuggestion {
@@ -30,6 +32,13 @@ export interface AiQuota {
   used: number;
   limit: number;
   resetsAt: string;
+  /**
+   * Only meaningful when reason === 'tier_locked'. Server-side source of
+   * truth for "has this user already spent their one-time free preview" —
+   * survives a refresh, a relogin, or a different device/browser, unlike
+   * a client-only flag.
+   */
+  previewUsed?: boolean;
 }
 
 export interface AiChatSession {
@@ -42,6 +51,7 @@ export interface AiChatSession {
 export type StreamEvent =
   | { type: 'token'; content: string }
   | { type: 'card'; data: AiCard }
+  | { type: 'locked' }
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -56,6 +66,13 @@ export const aiAssistantApi = {
   },
   async deleteSession(sessionId: string): Promise<void> {
     await api.delete(`/api/assistant/sessions/${sessionId}`);
+  },
+  async renameSession(sessionId: string, title: string): Promise<AiChatSession> {
+    const { data } = await api.patch<ApiResponse<AiChatSession>>(
+      `/api/assistant/sessions/${sessionId}`,
+      { title },
+    );
+    return unwrap(data);
   },
   async sessionHistory(sessionId: string): Promise<AiMessage[]> {
     const { data } = await api.get<ApiResponse<AiMessage[]>>(

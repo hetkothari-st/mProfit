@@ -1,13 +1,14 @@
 /**
  * AI Assistant HTTP surface — mounted at /api/assistant.
  *
- * GET    /sessions               — list this user's chat sessions.
- * POST   /sessions                — create a new (empty) chat session.
- * DELETE /sessions/:sessionId     — delete a chat session + its messages.
+ * GET    /sessions                    — list this user's chat sessions.
+ * POST   /sessions                    — create a new (empty) chat session.
+ * PATCH  /sessions/:sessionId         — rename a chat session.
+ * DELETE /sessions/:sessionId         — delete a chat session + its messages.
  * GET    /sessions/:sessionId/history — messages in one session.
- * POST   /chat                    — SSE streaming Claude response, within a session.
- * GET    /suggested               — 4 contextually-relevant question suggestions.
- * GET    /quota                   — remaining daily quota (drives the input UI).
+ * POST   /chat                        — SSE streaming Claude response, within a session.
+ * GET    /suggested                   — 4 contextually-relevant question suggestions.
+ * GET    /quota                       — remaining daily quota (drives the input UI).
  */
 
 import { Router } from 'express';
@@ -25,12 +26,18 @@ import {
   parseResponseForCard,
   type HistoryMessage,
 } from '../ai/claudeClient.js';
-import { getConversationHistory, listSessionMessages, saveMessage } from '../ai/conversationStore.js';
+import {
+  getConversationHistory,
+  hasUsedLockedPreview,
+  listSessionMessages,
+  saveMessage,
+} from '../ai/conversationStore.js';
 import {
   assertSessionOwnership,
   createSession,
   deleteSession,
   listSessions,
+  renameSession,
   touchSession,
 } from '../ai/chatSessions.js';
 import { checkQuota, incrementUsage } from '../ai/rateLimit.js';
@@ -71,10 +78,19 @@ const chatSchema = z.object({
   sessionId: z.string().min(1),
 });
 
+const renameSchema = z.object({
+  title: z.string().min(1).max(200),
+});
+
 aiAssistantRouter.get(
   '/quota',
   asyncHandler(async (req: Request, res: Response) => {
-    ok(res, await checkQuota(callerId(req)));
+    const userId = callerId(req);
+    const quota = await checkQuota(userId);
+    // Only worth the extra query when it's actually relevant — a paid
+    // user's quota response doesn't need it.
+    const previewUsed = quota.reason === 'tier_locked' ? await hasUsedLockedPreview(userId) : false;
+    ok(res, { ...quota, previewUsed });
   }),
 );
 
@@ -90,6 +106,23 @@ aiAssistantRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const session = await createSession(callerId(req), parseFamilyId(req) ?? null);
     created(res, session);
+  }),
+);
+
+aiAssistantRouter.patch(
+  '/sessions/:sessionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = renameSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.message });
+      return;
+    }
+    const session = await renameSession(
+      callerId(req),
+      req.params.sessionId as string,
+      parsed.data.title,
+    );
+    ok(res, session);
   }),
 );
 
@@ -133,14 +166,63 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
 
     const quota = await checkQuota(userId);
     if (!quota.allowed) {
-      const status = quota.reason === 'tier_locked' ? 403 : 429;
-      res.status(status).json({
+      if (quota.reason === 'tier_locked') {
+        // FREE tier gets exactly one real (but unbilled) preview, ever —
+        // enforced here server-side via hasUsedLockedPreview, not just the
+        // frontend's localStorage flag, so it can't be dodged by clearing
+        // storage, using a different browser, or a fresh login. Persist the
+        // real user message + a synthetic empty ASSISTANT row marked
+        // `locked`, with no Claude call and no usage increment, so on
+        // reload the exchange is still there — rendered as a blurred
+        // "upgrade to unlock" placeholder from the persisted flag, not a
+        // client-only simulation.
+        if (await hasUsedLockedPreview(userId)) {
+          res.status(403).json({
+            success: false,
+            error: 'tier_locked',
+            message: 'The AI Assistant requires a paid plan. Upgrade to unlock.',
+            used: quota.used,
+            limit: quota.limit,
+            resetsAt: quota.resetsAt,
+          });
+          return;
+        }
+
+        const classified = classifyQuery(message);
+        await saveMessage({
+          userId,
+          sessionId,
+          role: 'user',
+          content: message,
+          queryIntent: classified.intent,
+          familyId,
+        });
+        await touchSession(sessionId, message);
+        await saveMessage({
+          userId,
+          sessionId,
+          role: 'assistant',
+          content: '',
+          queryIntent: classified.intent,
+          familyId,
+          locked: true,
+        });
+        await touchSession(sessionId);
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders?.();
+        res.write(`data: ${JSON.stringify({ type: 'locked' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+        res.end();
+        return;
+      }
+      res.status(429).json({
         success: false,
         error: quota.reason,
-        message:
-          quota.reason === 'tier_locked'
-            ? 'The AI Assistant requires a paid plan. Upgrade to unlock.'
-            : `You've hit the daily limit of ${quota.limit} questions. Resets tomorrow.`,
+        message: `You've hit the daily limit of ${quota.limit} questions. Resets tomorrow.`,
         used: quota.used,
         limit: quota.limit,
         resetsAt: quota.resetsAt,

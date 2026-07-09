@@ -52,10 +52,27 @@ export async function assertSessionOwnership(userId: string, sessionId: string):
 }
 
 export async function deleteSession(userId: string, sessionId: string): Promise<void> {
-  // deleteMany (not delete) so a foreign sessionId 404s via the ownership
-  // check above rather than throwing Prisma's generic "record not found".
   await assertSessionOwnership(userId, sessionId);
   await prisma.aiChatSession.delete({ where: { id: sessionId } });
+}
+
+export async function renameSession(
+  userId: string,
+  sessionId: string,
+  title: string,
+): Promise<ChatSessionSummary> {
+  await assertSessionOwnership(userId, sessionId);
+  const trimmed = truncateTitle(title) || DEFAULT_TITLE;
+  const r = await prisma.aiChatSession.update({
+    where: { id: sessionId },
+    data: { title: trimmed },
+  });
+  return {
+    id: r.id,
+    title: r.title,
+    createdAt: r.createdAt.toISOString(),
+    lastMessageAt: r.lastMessageAt.toISOString(),
+  };
 }
 
 /**
