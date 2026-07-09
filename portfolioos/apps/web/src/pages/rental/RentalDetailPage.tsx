@@ -115,6 +115,10 @@ function MarkReceivedDialog({
       qc.invalidateQueries({ queryKey: ['rental-property', id] });
       qc.invalidateQueries({ queryKey: ['rental-properties'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
+      qc.invalidateQueries({ queryKey: ['alerts'] });
+      qc.invalidateQueries({ queryKey: ['alerts-unread'] });
+      qc.invalidateQueries({ queryKey: ['notifications'] });
       onOpenChange(false);
     },
   });
@@ -196,6 +200,10 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
     qc.invalidateQueries({ queryKey: ['rental-property', id] });
     qc.invalidateQueries({ queryKey: ['rental-properties'] });
     qc.invalidateQueries({ queryKey: ['dashboard'] });
+    qc.invalidateQueries({ queryKey: ['rental-reminders'] });
+    qc.invalidateQueries({ queryKey: ['alerts'] });
+    qc.invalidateQueries({ queryKey: ['alerts-unread'] });
+    qc.invalidateQueries({ queryKey: ['notifications'] });
   };
   const skipMutation = useMutation({
     mutationFn: () => rentalApi.skipReceipt(receipt.id),

@@ -638,12 +638,10 @@ export async function markReceiptReceived(
         cashFlowId,
       },
     });
-    // Receipt is settled — abandon any pending reminders for this row so
-    // we don't bother the tenant about money we already received.
-    await tx.rentReminder.updateMany({
-      where: { receiptId, status: 'PENDING_APPROVAL' },
-      data: { status: 'SUPERSEDED' },
-    });
+    // Receipt is settled — abandon any pending reminders/alerts for this
+    // row so we don't bother the tenant (or the owner) about money we
+    // already received.
+    await resolveRentReceiptReminders(tx, receiptId);
     return updated;
   });
 }
@@ -662,12 +660,16 @@ export async function skipReceipt(
       'Cannot skip a receipt already marked received — edit/unlink first',
     );
   }
-  return prisma.rentReceipt.update({
-    where: { id: receiptId },
-    data: {
-      status: RECEIPT_STATUS.SKIPPED,
-      notes: reason ?? existing.notes,
-    },
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.rentReceipt.update({
+      where: { id: receiptId },
+      data: {
+        status: RECEIPT_STATUS.SKIPPED,
+        notes: reason ?? existing.notes,
+      },
+    });
+    await resolveRentReceiptReminders(tx, receiptId);
+    return updated;
   });
 }
 
@@ -683,6 +685,24 @@ function unsettledStatusFor(dueDate: Date): ReceiptStatus {
   cutoff.setUTCDate(cutoff.getUTCDate() - OVERDUE_GRACE_DAYS);
   cutoff.setUTCHours(0, 0, 0, 0);
   return dueDate <= cutoff ? RECEIPT_STATUS.OVERDUE : RECEIPT_STATUS.EXPECTED;
+}
+
+/**
+ * A receipt just settled (received/partial/auto-matched) — clear out
+ * anything still nagging about it: pending reminders and the persisted
+ * `rent_overdue:<receiptId>` Alert row. We delete (not soft-dismiss) the
+ * alert so that if the receipt is later unmarked and goes overdue again,
+ * `generateRentOverdueAlerts`'s dedup-by-key check doesn't see a stale
+ * row and skip recreating it.
+ */
+async function resolveRentReceiptReminders(tx: ExtendedTx, receiptId: string) {
+  await tx.rentReminder.updateMany({
+    where: { receiptId, status: 'PENDING_APPROVAL' },
+    data: { status: 'SUPERSEDED' },
+  });
+  await tx.alert.deleteMany({
+    where: { type: 'CUSTOM', metadata: { path: ['key'], equals: `rent_overdue:${receiptId}` } },
+  });
 }
 
 /**
@@ -1010,7 +1030,7 @@ export async function applyAutoMatch(
       });
       cashFlowId = cf.id;
     }
-    return tx.rentReceipt.update({
+    const updated = await tx.rentReceipt.update({
       where: { id: receiptId },
       data: {
         status,
@@ -1020,6 +1040,8 @@ export async function applyAutoMatch(
         autoMatchedFromEventId: event.id,
       },
     });
+    await resolveRentReceiptReminders(tx, receiptId);
+    return updated;
   });
 }
 

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Mail, MessageSquare, X, Pencil, Send, Loader2, BellRing, Save, Check, ChevronDown } from 'lucide-react';
+import { Mail, MessageSquare, X, Pencil, Send, Loader2, BellRing, Save, Check, ChevronDown, AlertTriangle, Clock, CalendarClock } from 'lucide-react';
 import { formatINR } from '@portfolioos/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -59,6 +59,39 @@ function leadCopy(leadDays: number, dueDate?: string): string {
   if (leadDays === 0) return 'Due today';
   if (leadDays === 1) return 'Due tomorrow';
   return `Due in ${leadDays} days`;
+}
+
+// Urgency → notification tone. Mirrors the AlertsPage rail/pill language
+// so a rent reminder reads the same as any other alert in the app instead
+// of looking like a plain form row.
+function reminderTone(leadDays: number): {
+  rail: string;
+  icon: typeof AlertTriangle;
+  iconClass: string;
+  pillClass: string;
+} {
+  if (leadDays < 0) {
+    return {
+      rail: 'bg-negative',
+      icon: AlertTriangle,
+      iconClass: 'text-negative',
+      pillClass: 'border-negative/30 bg-negative/10 text-negative',
+    };
+  }
+  if (leadDays <= 3) {
+    return {
+      rail: 'bg-accent',
+      icon: Clock,
+      iconClass: 'text-accent-ink',
+      pillClass: 'border-accent/30 bg-accent/10 text-accent-ink',
+    };
+  }
+  return {
+    rail: 'bg-border',
+    icon: CalendarClock,
+    iconClass: 'text-muted-foreground',
+    pillClass: 'border-border bg-muted/40 text-muted-foreground',
+  };
 }
 
 function formatMonthLabel(forMonth?: string): string {
@@ -711,44 +744,75 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
         </div>
       </div>
 
-      {/* Reminder rows */}
-      <div className="divide-y divide-border">
+      {/* Reminder rows — styled as notifications: urgency rail, tone
+          icon, and a status pill, matching AlertsPage's language so a
+          rent reminder doesn't read like a bare form row. */}
+      <div className="divide-y divide-border/60">
         {sortedReminders.map((r) => {
           const isSelected = selected.has(r.id);
           const monthLabel = formatMonthLabel(r.receipt?.forMonth);
           const amount = r.receipt ? formatINR(r.receipt.expectedAmount) : '—';
+          const tone = reminderTone(r.leadDays);
+          const Icon = tone.icon;
           return (
             <label
               key={r.id}
-              className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
-                isSelected ? 'bg-foreground/[0.04]' : 'hover:bg-foreground/[0.02]'
-              }`}
+              className={cn(
+                'group relative flex items-stretch gap-0 cursor-pointer transition-colors',
+                isSelected ? 'bg-accent/[0.06]' : 'hover:bg-foreground/[0.02]',
+              )}
             >
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={() => toggle(r.id)}
-                className="h-4 w-4 flex-shrink-0"
-              />
-              <div className="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
-                <span className="text-sm font-medium">{monthLabel}</span>
-                <span className="text-xs text-muted-foreground">· {amount}</span>
-                <span className={`text-xs ${r.leadDays < 0 ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
-                  · {leadCopy(r.leadDays, r.receipt?.dueDate)}
-                </span>
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  {r.channels.email && <Mail className="h-3 w-3" />}
-                  {r.channels.sms && <MessageSquare className="h-3 w-3" />}
-                </span>
+              <span aria-hidden="true" className={cn('w-[3px] shrink-0', tone.rail)} />
+
+              <div className="flex flex-1 items-center gap-3 px-3.5 py-3">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggle(r.id)}
+                  className="h-4 w-4 flex-shrink-0 accent-accent"
+                />
+
+                <div className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-full border', tone.pillClass)}>
+                  <Icon className={cn('h-3.5 w-3.5', tone.iconClass)} strokeWidth={2} />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13.5px] font-medium text-foreground">
+                      Rent due — {monthLabel}
+                    </span>
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned',
+                        tone.pillClass,
+                      )}
+                    >
+                      {leadCopy(r.leadDays, r.receipt?.dueDate)}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap text-[11.5px] text-muted-foreground">
+                    <span className="numeric tabular-nums font-medium text-foreground/80">{amount}</span>
+                    {(r.channels.email || r.channels.sms) && (
+                      <>
+                        <span className="h-1 w-1 rounded-full bg-border" />
+                        <span className="inline-flex items-center gap-1.5">
+                          {r.channels.email && <Mail className="h-3 w-3" strokeWidth={1.8} />}
+                          {r.channels.sms && <MessageSquare className="h-3 w-3" strokeWidth={1.8} />}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => { e.preventDefault(); onPreview(r.id); }}
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Preview
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 shrink-0"
-                onClick={(e) => { e.preventDefault(); onPreview(r.id); }}
-              >
-                <Pencil className="h-3.5 w-3.5" /> Preview
-              </Button>
             </label>
           );
         })}
