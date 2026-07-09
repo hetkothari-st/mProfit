@@ -27,7 +27,6 @@ export const FEATURE_MIN_TIER = {
   TAX_REPORT_CATALOG: 'PLUS', // the 30+ report download catalog beyond the Free basics
   AA_FINVU_AUTOIMPORT: 'PLUS',
   AI_INSIGHTS: 'PLUS',
-  AI_ASSISTANT: 'PLUS', // conversational chat assistant — distinct from the AI_INSIGHTS analytics cards
   GOAL_PROJECTIONS: 'PLUS',
   FAMILY_SHARING: 'FAMILY',
   ACCOUNTING_MODULE: 'PRO_ADVISOR', // Trial Balance, P&L, Balance Sheet, Chart of Accounts, Tally export

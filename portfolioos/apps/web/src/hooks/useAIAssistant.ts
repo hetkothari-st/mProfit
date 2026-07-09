@@ -17,6 +17,8 @@ export interface UiMessage {
   card: AiCard | null;
   createdAt: string;
   isStreaming?: boolean;
+  /** FREE-tier simulated response — rendered blurred with an upgrade CTA. */
+  locked?: boolean;
 }
 
 interface State {
@@ -60,6 +62,14 @@ export function useAIAssistant(active: boolean) {
     historyLoaded: false,
   });
   const abortRef = useRef<AbortController | null>(null);
+  // sendMessage needs the latest quota synchronously (to decide whether to
+  // simulate a locked response) without adding `quota` to its own useCallback
+  // deps, which would tear down/rebuild the closure — and stream handlers
+  // inside it — on every quota refresh.
+  const quotaRef = useRef<AiQuota | null>(null);
+  useEffect(() => {
+    quotaRef.current = state.quota;
+  }, [state.quota]);
 
   const loadHistory = useCallback(async () => {
     setState((s) => ({ ...s, loadingHistory: true, error: null }));
@@ -143,6 +153,23 @@ export function useAIAssistant(active: boolean) {
         isStreaming: true,
         error: null,
       }));
+
+      if (quotaRef.current?.reason === 'tier_locked') {
+        // FREE tier — the panel looks and behaves identically to a paid
+        // user's up to this point (real send, real "thinking" dots), but
+        // never calls the actual (billed) /chat endpoint. After a short
+        // delay that mirrors real response latency, reveal the assistant
+        // bubble as locked/blurred instead of streaming real content.
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        setState((s) => ({
+          ...s,
+          isStreaming: false,
+          messages: s.messages.map((m) =>
+            m.id === assistantId ? { ...m, isStreaming: false, locked: true } : m,
+          ),
+        }));
+        return;
+      }
 
       const controller = new AbortController();
       abortRef.current = controller;

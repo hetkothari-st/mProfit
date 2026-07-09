@@ -46,6 +46,7 @@ const TIERS: TierDef[] = [
       'AA/Finvu auto-import — bank, MF, stocks',
       'Multiple portfolios',
       'AI insights (rule-based + LLM)',
+      'AI Assistant — ask it your XIRR, tax exposure, or "am I overweight in IT?" in plain English',
       'Goal projections',
     ],
     highlight: true,

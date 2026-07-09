@@ -1,4 +1,5 @@
-import { Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Sparkles, Lock } from 'lucide-react';
 import { PortfolioDataCard } from './PortfolioDataCard';
 import type { UiMessage } from '@/hooks/useAIAssistant';
 import { useAuthStore } from '@/stores/auth.store';
@@ -209,6 +210,7 @@ export function MessageBubble({ message }: { message: UiMessage }) {
       time={time}
       isStreaming={message.isStreaming ?? false}
       card={message.card}
+      locked={message.locked ?? false}
     />
   );
 }
@@ -245,11 +247,13 @@ function AssistantBubble({
   time,
   isStreaming,
   card,
+  locked,
 }: {
   content: string;
   time: string;
   isStreaming: boolean;
   card: UiMessage['card'];
+  locked: boolean;
 }) {
   return (
     <div className="flex justify-start mb-4 group">
@@ -259,7 +263,9 @@ function AssistantBubble({
         </div>
         <div className="min-w-0 flex flex-col gap-1">
           <div className="rounded-2xl rounded-tl-md px-4 py-3 text-[14px] leading-[1.6] bg-card border border-border/70 shadow-sm">
-            {content ? (
+            {locked ? (
+              <LockedAnswer />
+            ) : content ? (
               renderBlocks(content)
             ) : isStreaming ? (
               <span
@@ -274,11 +280,39 @@ function AssistantBubble({
               <span className="text-muted-foreground italic">(no response)</span>
             )}
           </div>
-          {card && <PortfolioDataCard card={card} />}
+          {!locked && card && <PortfolioDataCard card={card} />}
           <div className="text-[10px] text-muted-foreground/70 opacity-0 group-hover:opacity-100 transition-opacity">
             {time}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// FREE-tier: the assistant "answered", but the content is a blurred
+// skeleton, not real text — the response was never generated (see
+// useAIAssistant's sendMessage). Blurring real text can still be partly
+// legible at low blur, so this uses solid placeholder bars instead.
+function LockedAnswer() {
+  // Fixed pixel widths, not percentages — the bars are the only normal-flow
+  // content sizing this box, so a percentage width has nothing real to
+  // resolve against and the box collapses to near-zero, letting the
+  // absolutely-positioned CTA pill overflow past its own container.
+  return (
+    <div className="relative w-56 sm:w-64">
+      <div aria-hidden className="space-y-2 blur-[3px] select-none opacity-70">
+        <div className="h-3 w-full rounded-full bg-muted-foreground/25" />
+        <div className="h-3 w-[80%] rounded-full bg-muted-foreground/25" />
+        <div className="h-3 w-[88%] rounded-full bg-muted-foreground/25" />
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <Link
+          to="/pricing"
+          className="inline-flex items-center gap-1.5 rounded-full bg-accent text-accent-foreground text-[11px] font-medium px-3 py-1.5 shadow-md hover:opacity-90 transition-opacity whitespace-nowrap"
+        >
+          <Lock className="h-3 w-3" strokeWidth={2} /> Upgrade to unlock
+        </Link>
       </div>
     </div>
   );

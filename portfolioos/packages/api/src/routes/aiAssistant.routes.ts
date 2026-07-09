@@ -12,7 +12,6 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authenticate.js';
-import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
@@ -48,12 +47,14 @@ aiAssistantRouter.use((req, res, next) => {
 });
 
 aiAssistantRouter.use(authenticate);
-// Paid tiers only — this used to also gate via checkQuota's tier_locked
-// branch in rateLimit.ts, but that path silently stopped firing once
-// FREE's daily quota changed from 0 to 30 (see rateLimit.ts). Gating
-// here matches every other feature in the app instead of relying on a
-// quota side-effect.
-aiAssistantRouter.use(requireFeature('AI_ASSISTANT'));
+// No router-level plan gate: /quota, /suggested and /history must stay
+// reachable for FREE users so the panel can render the full interactive
+// experience (teaser prompts, a real "send" that appears to generate a
+// response) before revealing it's locked. Only /chat — the endpoint that
+// actually costs money — is gated, via checkQuota's tier_locked branch
+// below (dailyLimitFor('FREE') = 0 in rateLimit.ts). The frontend never
+// calls /chat for a locked user in the first place (see useAIAssistant's
+// sendMessage), but this is the defense-in-depth backstop.
 
 function callerId(req: Request): string {
   if (!req.user) throw new UnauthorizedError();

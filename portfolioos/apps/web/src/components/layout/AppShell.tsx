@@ -10,12 +10,9 @@ import { usePrivacyStore } from '@/stores/privacy.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { useTokenRefresh } from '@/hooks/useTokenRefresh';
 import { AssistantButton } from '@/components/ai/AssistantButton';
-import { AssistantLockedButton } from '@/components/ai/AssistantLockedButton';
-import { useEntitlement } from '@/hooks/useEntitlement';
 
 export function AppShell() {
   const { hideSensitive } = usePrivacyStore();
-  const assistantEntitlement = useEntitlement('AI_ASSISTANT');
   // The family scope switch changes what data the app should render,
   // but query keys don't carry the scope dimension — invalidating the
   // react-query cache alone isn't enough to force every page to
@@ -51,7 +48,7 @@ export function AppShell() {
           </main>
         </div>
         <MobileTabBar onOpenMenu={() => setDrawerOpen(true)} />
-        {assistantEntitlement.allowed ? <AssistantButton /> : <AssistantLockedButton />}
+        <AssistantButton />
       </div>
     </ScanProvider>
   );

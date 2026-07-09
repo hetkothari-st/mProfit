@@ -1,10 +1,15 @@
 /**
- * AI Assistant — daily rate limit (tier *access* is gated upstream by
- * requireFeature('AI_ASSISTANT') in aiAssistant.routes.ts, PLUS minimum
- * — FREE users never reach this file for a real request).
+ * AI Assistant — daily rate limit AND the sole tier gate for /chat. FREE
+ * gets 0, so checkQuota() below always returns `reason: 'tier_locked'`
+ * for them — the frontend never actually calls /chat for a locked user
+ * (see useAIAssistant's sendMessage, which simulates the response
+ * client-side instead), but this is what would block it if it did.
+ * /quota, /suggested and /history stay open to FREE (no router-level
+ * gate) so the panel can render its full interactive UI before revealing
+ * the answer is locked.
  *
  * PlanTier → daily message quota:
- *   FREE         → 0 (unreachable in practice; kept as a defensive floor)
+ *   FREE         → 0 (tier-locked, not just capped)
  *   PLUS         → 100 messages/day
  *   FAMILY       → 200 messages/day
  *   PRO_ADVISOR  → 500 messages/day

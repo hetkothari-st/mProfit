@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Sparkles,
   X,
   Send,
   Trash2,
   Loader2,
-  Lock,
   MoreHorizontal,
   Zap,
 } from 'lucide-react';
@@ -31,7 +31,22 @@ import { useAuthStore } from '@/stores/auth.store';
  *               user bubbles are filled accent on the right.
  *   Composer  — pill input with integrated send button + tiny quota
  *               readout + "not investment advice" disclaimer.
- *   Locked    — well-designed upgrade prompt with 3 sample questions.
+ *
+ * FREE tier sees the identical panel — same header, same empty state,
+ * same suggested prompts, same composer. Sending a message still shows
+ * the real "thinking" dots (useAIAssistant.sendMessage never calls the
+ * billed /chat endpoint for a locked user), but the revealed answer is
+ * a blurred placeholder with an upgrade CTA instead of real content
+ * (see MessageBubble's LockedAnswer). The old static "you need to
+ * upgrade" panel that replaced the whole conversation area is gone —
+ * showing what generation *feels* like, then locking the payoff,
+ * converts better than an upfront wall.
+ *
+ * That preview is a ONE-TIME thing per user, not a loophole to keep
+ * asking free (fake) questions forever: once a locked answer has been
+ * shown, the composer and every suggested-prompt tile disable and stay
+ * disabled — `previewUsed`, persisted to localStorage so it survives a
+ * reload — until the user is no longer on a locked tier.
  */
 
 interface Props {
@@ -43,6 +58,10 @@ interface Props {
    * conversation state has picked it up.
    */
   pendingPrompt?: string | null;
+}
+
+function previewUsedKey(userId: string): string {
+  return `portfolioos.ai-preview-used.${userId}`;
 }
 
 export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
@@ -60,6 +79,23 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
     sendMessage,
     clearConversation,
   } = useAIAssistant(open);
+
+  // Locked messages never round-trip the server (see useAIAssistant's
+  // sendMessage), so a fresh history load after a reload wouldn't
+  // otherwise know the free preview was already spent — localStorage is
+  // the source of truth across sessions, `messages` just catches the
+  // in-session case where it hasn't been written yet.
+  const [previewUsed, setPreviewUsed] = useState(() => {
+    if (typeof window === 'undefined' || !user) return false;
+    return localStorage.getItem(previewUsedKey(user.id)) === '1';
+  });
+  useEffect(() => {
+    if (!user || previewUsed) return;
+    if (messages.some((m) => m.locked)) {
+      setPreviewUsed(true);
+      localStorage.setItem(previewUsedKey(user.id), '1');
+    }
+  }, [messages, previewUsed, user]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -100,16 +136,17 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
 
   if (!open) return null;
 
-  const handleSubmit = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!input.trim() || isStreaming) return;
-    void sendMessage(input);
-    setInput('');
-  };
-
   const locked = quota?.reason === 'tier_locked';
   const capped = quota?.reason === 'daily_cap';
   const firstName = user?.name?.split(/\s+/)[0] ?? 'there';
+  const previewLocked = locked && previewUsed;
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!input.trim() || isStreaming || previewLocked) return;
+    void sendMessage(input);
+    setInput('');
+  };
 
   return (
     <>
@@ -129,12 +166,11 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
           messageCount={messages.length}
           quota={quota}
           isStreaming={isStreaming}
+          locked={locked}
         />
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto flex flex-col scroll-smooth">
-          {locked ? (
-            <UpgradePrompt />
-          ) : loadingHistory ? (
+          {loadingHistory ? (
             <div className="m-auto text-center text-sm text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
               Loading conversation…
@@ -143,7 +179,7 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
             <EmptyState
               firstName={firstName}
               suggestedQuestions={suggestedQuestions}
-              disabled={isStreaming || capped}
+              disabled={isStreaming || capped || previewLocked}
               onSelect={(q) => {
                 void sendMessage(q);
               }}
@@ -153,7 +189,7 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
               {messages.map((m) => (
                 <MessageBubble key={m.id} message={m} />
               ))}
-              {!isStreaming && suggestedQuestions.length > 0 && (
+              {!isStreaming && suggestedQuestions.length > 0 && !previewLocked && (
                 <div className="mt-4">
                   <div className="text-[10px] uppercase tracking-kerned text-muted-foreground mb-2">
                     Try next
@@ -171,17 +207,17 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
           )}
         </div>
 
-        {!locked && (
-          <Composer
-            input={input}
-            setInput={setInput}
-            onSubmit={handleSubmit}
-            isStreaming={isStreaming}
-            capped={Boolean(capped)}
-            quota={quota}
-            inputRef={inputRef}
-          />
-        )}
+        <Composer
+          input={input}
+          setInput={setInput}
+          onSubmit={handleSubmit}
+          isStreaming={isStreaming}
+          capped={Boolean(capped)}
+          locked={locked}
+          previewLocked={previewLocked}
+          quota={quota}
+          inputRef={inputRef}
+        />
         {error && (
           <div className="px-4 py-2 text-[11px] text-negative border-t border-border/50 bg-negative/5">
             {error}
@@ -200,6 +236,7 @@ function AgentHeader({
   messageCount,
   quota,
   isStreaming,
+  locked,
 }: {
   onClose: () => void;
   onOpenMenu: () => void;
@@ -208,8 +245,9 @@ function AgentHeader({
   messageCount: number;
   quota: { used: number; limit: number } | null;
   isStreaming: boolean;
+  locked: boolean;
 }) {
-  const remaining = quota ? Math.max(0, quota.limit - quota.used) : null;
+  const remaining = quota && !locked ? Math.max(0, quota.limit - quota.used) : null;
   return (
     // Do NOT set overflow-hidden here — the kebab dropdown popover
     // renders as `absolute right-0 top-full` inside this container and
@@ -240,6 +278,8 @@ function AgentHeader({
           <div className="text-[11px] text-muted-foreground truncate">
             {isStreaming
               ? 'Thinking through your numbers…'
+              : locked
+              ? 'Free plan — upgrade to unlock full answers'
               : remaining !== null
               ? `${remaining} question${remaining === 1 ? '' : 's'} left today`
               : 'Your personal financial planner'}
@@ -344,6 +384,8 @@ function Composer({
   onSubmit,
   isStreaming,
   capped,
+  locked,
+  previewLocked,
   quota,
   inputRef,
 }: {
@@ -352,9 +394,12 @@ function Composer({
   onSubmit: (e?: React.FormEvent) => void;
   isStreaming: boolean;
   capped: boolean;
+  locked: boolean;
+  previewLocked: boolean;
   quota: { used: number; limit: number } | null;
   inputRef: React.MutableRefObject<HTMLInputElement | null>;
 }) {
+  const disabled = isStreaming || capped || previewLocked;
   return (
     <div className="border-t border-border bg-card/40 backdrop-blur">
       <form onSubmit={onSubmit} className="p-3 flex flex-col gap-1.5">
@@ -365,19 +410,21 @@ function Composer({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={
-                capped
+                previewLocked
+                  ? 'Upgrade to keep chatting'
+                  : capped
                   ? 'Daily limit reached — resets tomorrow'
                   : isStreaming
                   ? 'Assistant is answering…'
                   : 'Ask about your XIRR, tax, holdings, goals…'
               }
-              disabled={isStreaming || capped}
+              disabled={disabled}
               maxLength={2000}
               className="w-full h-11 rounded-full border border-border bg-background pl-4 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/60 transition-shadow"
             />
             <button
               type="submit"
-              disabled={!input.trim() || isStreaming || capped}
+              disabled={!input.trim() || disabled}
               className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent text-accent-foreground flex items-center justify-center hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
               title="Send (Enter)"
             >
@@ -390,8 +437,18 @@ function Composer({
           </div>
         </div>
         <div className="flex items-center justify-between text-[10px] text-muted-foreground/70 px-1">
-          <span>Based on your live portfolio data. Not investment advice.</span>
-          {quota && (
+          {previewLocked ? (
+            <Link to="/pricing" className="text-accent-ink hover:underline font-medium">
+              You've used your free preview — upgrade to ask unlimited questions →
+            </Link>
+          ) : (
+            <span>
+              {locked
+                ? 'Answers are locked on the Free plan.'
+                : 'Based on your live portfolio data. Not investment advice.'}
+            </span>
+          )}
+          {quota && !locked && (
             <span className="tabular-nums">
               {quota.used}/{quota.limit}
             </span>
@@ -402,41 +459,3 @@ function Composer({
   );
 }
 
-function UpgradePrompt() {
-  return (
-    <div className="flex-1 flex flex-col justify-center items-center px-6 py-8 space-y-6">
-      <div className="mx-auto h-16 w-16 rounded-full bg-accent/10 flex items-center justify-center">
-        <Lock className="h-7 w-7 text-accent" strokeWidth={1.7} />
-      </div>
-      <div className="text-center space-y-2 max-w-sm">
-        <div className="text-lg font-semibold">Unlock your Portfolio Assistant</div>
-        <div className="text-[13px] text-muted-foreground leading-relaxed">
-          A conversational financial planner that knows your full portfolio, available on the Wealth plan.
-        </div>
-      </div>
-      <div className="w-full max-w-sm space-y-2">
-        <div className="text-[10px] uppercase tracking-kerned text-muted-foreground text-center">
-          It answers questions like
-        </div>
-        {[
-          'Am I overweight in IT stocks?',
-          "What's my XIRR on SBI Bluechip SIP?",
-          'Should I sell HDFC Bank now?',
-        ].map((q) => (
-          <div
-            key={q}
-            className="rounded-lg border border-border/60 bg-card/40 px-3 py-2 text-[13px]"
-          >
-            "{q}"
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        className="px-6 py-2.5 rounded-full bg-accent text-accent-foreground font-medium text-sm hover:opacity-90"
-      >
-        See plans
-      </button>
-    </div>
-  );
-}
