@@ -275,6 +275,7 @@
   .bg-positive\/10 { background-color: hsl(var(--positive) / 0.1); }
   .bg-negative\/10 { background-color: hsl(var(--negative) / 0.1); }
   .bg-warning\/10  { background-color: hsl(var(--warning) / 0.12); }
+  .bg-warning\/60  { background-color: hsl(var(--warning) / 0.6); }
   .bg-accent\/8    { background-color: hsl(var(--accent) / 0.08); }
   .ring-accent\/30 { --tw-ring-color: hsl(var(--accent) / 0.3); }
 

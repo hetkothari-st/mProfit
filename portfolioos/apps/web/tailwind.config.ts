@@ -44,6 +44,7 @@ export default {
         },
         positive: 'hsl(var(--positive))',
         negative: 'hsl(var(--negative))',
+        warning: 'hsl(var(--warning))',
         sidebar: {
           DEFAULT: 'hsl(var(--sidebar))',
           foreground: 'hsl(var(--sidebar-foreground))',
