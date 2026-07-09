@@ -40,6 +40,8 @@ export interface SaveMessageInput {
   contextSnapshot?: Record<string, unknown> | null;
   cardData?: Record<string, unknown> | null;
   familyId?: string | null;
+  /** True only for the synthetic ASSISTANT row of a FREE-tier one-time preview. */
+  locked?: boolean;
 }
 
 export async function saveMessage(input: SaveMessageInput): Promise<void> {
@@ -55,6 +57,7 @@ export async function saveMessage(input: SaveMessageInput): Promise<void> {
         : {}),
       ...(input.cardData ? { cardData: input.cardData as object } : {}),
       familyId: input.familyId ?? null,
+      locked: input.locked ?? false,
     },
   });
   // Trim rows beyond HARD_CAP_PER_SESSION. Single tx keeps the count
@@ -81,6 +84,7 @@ export interface ConversationRow {
   content: string;
   cardData: Record<string, unknown> | null;
   createdAt: string;
+  locked: boolean;
 }
 
 export async function listSessionMessages(
@@ -100,5 +104,21 @@ export async function listSessionMessages(
       content: r.content,
       cardData: (r.cardData as Record<string, unknown> | null) ?? null,
       createdAt: r.createdAt.toISOString(),
+      locked: r.locked,
     }));
+}
+
+/**
+ * Whether this user has ever received the synthetic locked-preview
+ * assistant row, anywhere across any of their sessions. This — not a
+ * client localStorage flag — is the authoritative source of "has this
+ * FREE user already used their one-time preview": it survives a
+ * refresh, a relogin, or switching devices.
+ */
+export async function hasUsedLockedPreview(userId: string): Promise<boolean> {
+  const row = await prisma.aiConversation.findFirst({
+    where: { userId, locked: true },
+    select: { id: true },
+  });
+  return row != null;
 }

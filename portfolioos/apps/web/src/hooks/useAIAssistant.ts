@@ -59,6 +59,7 @@ function toUiMessage(m: AiMessage): UiMessage {
     content: m.content,
     card: m.cardData,
     createdAt: m.createdAt,
+    locked: m.locked,
   };
 }
 
@@ -75,15 +76,10 @@ export function useAIAssistant(active: boolean) {
     historyLoaded: false,
   });
   const abortRef = useRef<AbortController | null>(null);
-  // sendMessage needs the latest quota synchronously (to decide whether to
-  // simulate a locked response) without adding `quota` to its own useCallback
-  // deps, which would tear down/rebuild the closure — and stream handlers
-  // inside it — on every quota refresh.
-  const quotaRef = useRef<AiQuota | null>(null);
-  useEffect(() => {
-    quotaRef.current = state.quota;
-  }, [state.quota]);
-  // Same reasoning for activeSessionId inside removeSession, which needs
+  // sendMessage needs the latest activeSessionId synchronously without
+  // adding it to its own useCallback deps, which would tear down/rebuild
+  // the closure — and stream handlers inside it — on every session switch.
+  // Same reasoning applies inside removeSession, which needs
   // to know synchronously (right after its own delete call) whether the
   // session it just removed was the active one.
   const activeSessionIdRef = useRef<string | null>(null);
@@ -236,6 +232,23 @@ export function useAIAssistant(active: boolean) {
     [switchSession, newChat],
   );
 
+  const renameChat = useCallback(async (sessionId: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    try {
+      const updated = await aiAssistantApi.renameSession(sessionId, trimmed);
+      setState((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => (sess.id === sessionId ? updated : sess)),
+      }));
+    } catch (err) {
+      setState((s) => ({
+        ...s,
+        error: err instanceof Error ? err.message : 'Failed to rename chat.',
+      }));
+    }
+  }, []);
+
   const sendMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -264,23 +277,13 @@ export function useAIAssistant(active: boolean) {
         error: null,
       }));
 
-      if (quotaRef.current?.reason === 'tier_locked') {
-        // FREE tier — the panel looks and behaves identically to a paid
-        // user's up to this point (real send, real "thinking" dots), but
-        // never calls the actual (billed) /chat endpoint. After a short
-        // delay that mirrors real response latency, reveal the assistant
-        // bubble as locked/blurred instead of streaming real content.
-        await new Promise((resolve) => setTimeout(resolve, 1100));
-        setState((s) => ({
-          ...s,
-          isStreaming: false,
-          messages: s.messages.map((m) =>
-            m.id === assistantId ? { ...m, isStreaming: false, locked: true } : m,
-          ),
-        }));
-        return;
-      }
-
+      // Always the real endpoint, for every tier. The backend decides what
+      // actually happens: a paid user streams real tokens; a FREE user who
+      // hasn't used their one-time preview gets it persisted server-side
+      // and a `locked` event back (no Claude call, no billing — see
+      // aiAssistant.routes.ts); a FREE user who already has gets a 403
+      // (unreachable in practice, since the composer disables itself once
+      // quota.previewUsed flips true — see AIAssistant.tsx).
       const controller = new AbortController();
       abortRef.current = controller;
       await aiAssistantApi.streamChat(
@@ -299,6 +302,13 @@ export function useAIAssistant(active: boolean) {
               ...s,
               messages: s.messages.map((m) =>
                 m.id === assistantId ? { ...m, card: event.data } : m,
+              ),
+            }));
+          } else if (event.type === 'locked') {
+            setState((s) => ({
+              ...s,
+              messages: s.messages.map((m) =>
+                m.id === assistantId ? { ...m, locked: true } : m,
               ),
             }));
           } else if (event.type === 'error') {
@@ -345,6 +355,7 @@ export function useAIAssistant(active: boolean) {
     switchSession,
     newChat,
     removeSession,
+    renameChat,
     cancelStream,
     reload: loadAll,
   };

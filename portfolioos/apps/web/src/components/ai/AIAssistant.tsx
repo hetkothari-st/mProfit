@@ -10,6 +10,8 @@ import {
   SquarePen,
   ArrowLeft,
   Zap,
+  Pencil,
+  Check,
 } from 'lucide-react';
 import { useAIAssistant } from '@/hooks/useAIAssistant';
 import { MessageBubble } from './MessageBubble';
@@ -48,9 +50,11 @@ import { useAuthStore } from '@/stores/auth.store';
  * per-chat — not a loophole to keep asking free (fake) questions by
  * starting new threads: once a locked answer has been shown anywhere,
  * the composer, every suggested-prompt tile, AND the "new chat" button
- * disable and stay disabled. `previewUsed` is persisted to localStorage
- * (keyed by user, not by session) so it survives both a reload and a
- * session switch.
+ * disable and stay disabled. `quota.previewUsed` comes straight from
+ * the server (derived from whether any of the user's messages, in any
+ * session, is marked `locked` — see conversationStore's
+ * hasUsedLockedPreview), not a client flag, so it survives a reload, a
+ * relogin, or switching devices, not just the current browser session.
  */
 
 interface Props {
@@ -62,10 +66,6 @@ interface Props {
    * conversation state has picked it up.
    */
   pendingPrompt?: string | null;
-}
-
-function previewUsedKey(userId: string): string {
-  return `portfolioos.ai-preview-used.${userId}`;
 }
 
 export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
@@ -86,24 +86,8 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
     switchSession,
     newChat,
     removeSession,
+    renameChat,
   } = useAIAssistant(open);
-
-  // Locked messages never round-trip the server (see useAIAssistant's
-  // sendMessage), so a fresh history load after a reload wouldn't
-  // otherwise know the free preview was already spent — localStorage is
-  // the source of truth across sessions, `messages` just catches the
-  // in-session case where it hasn't been written yet.
-  const [previewUsed, setPreviewUsed] = useState(() => {
-    if (typeof window === 'undefined' || !user) return false;
-    return localStorage.getItem(previewUsedKey(user.id)) === '1';
-  });
-  useEffect(() => {
-    if (!user || previewUsed) return;
-    if (messages.some((m) => m.locked)) {
-      setPreviewUsed(true);
-      localStorage.setItem(previewUsedKey(user.id), '1');
-    }
-  }, [messages, previewUsed, user]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -147,7 +131,7 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
   const locked = quota?.reason === 'tier_locked';
   const capped = quota?.reason === 'daily_cap';
   const firstName = user?.name?.split(/\s+/)[0] ?? 'there';
-  const previewLocked = locked && previewUsed;
+  const previewLocked = locked && Boolean(quota?.previewUsed);
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -190,6 +174,7 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
               setView('chat');
             }}
             onDelete={(id) => void removeSession(id)}
+            onRename={(id, title) => void renameChat(id, title)}
             onNewChat={handleNewChat}
             newChatDisabled={previewLocked}
           />
@@ -364,6 +349,7 @@ function SessionListView({
   activeSessionId,
   onSelect,
   onDelete,
+  onRename,
   onNewChat,
   newChatDisabled,
 }: {
@@ -371,9 +357,12 @@ function SessionListView({
   activeSessionId: string | null;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onRename: (id: string, title: string) => void;
   onNewChat: () => void;
   newChatDisabled: boolean;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   return (
     <div className="flex-1 overflow-y-auto flex flex-col">
       <div className="p-3 border-b border-border/60">
@@ -394,42 +383,134 @@ function SessionListView({
       ) : (
         <ul className="p-2 space-y-0.5">
           {sessions.map((s) => (
-            <li key={s.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(s.id)}
-                className={`w-full group flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] transition-colors ${
-                  s.id === activeSessionId
-                    ? 'bg-accent/10 text-accent-ink font-medium'
-                    : 'hover:bg-muted/60 text-foreground'
-                }`}
-              >
-                <span className="flex-1 min-w-0 truncate">{s.title}</span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(s.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      onDelete(s.id);
-                    }
-                  }}
-                  className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-negative/10 hover:text-negative transition-opacity"
-                  title="Delete chat"
-                >
-                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
-                </span>
-              </button>
-            </li>
+            <SessionRow
+              key={s.id}
+              session={s}
+              active={s.id === activeSessionId}
+              editing={editingId === s.id}
+              onSelect={() => onSelect(s.id)}
+              onStartRename={() => setEditingId(s.id)}
+              onCommitRename={(title) => {
+                setEditingId(null);
+                if (title.trim() && title.trim() !== s.title) onRename(s.id, title);
+              }}
+              onCancelRename={() => setEditingId(null)}
+              onDelete={() => onDelete(s.id)}
+            />
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+function SessionRow({
+  session,
+  active,
+  editing,
+  onSelect,
+  onStartRename,
+  onCommitRename,
+  onCancelRename,
+  onDelete,
+}: {
+  session: { id: string; title: string };
+  active: boolean;
+  editing: boolean;
+  onSelect: () => void;
+  onStartRename: () => void;
+  onCommitRename: (title: string) => void;
+  onCancelRename: () => void;
+  onDelete: () => void;
+}) {
+  const [draft, setDraft] = useState(session.title);
+  const editInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (editing) {
+      setDraft(session.title);
+      setTimeout(() => editInputRef.current?.select(), 0);
+    }
+  }, [editing, session.title]);
+
+  if (editing) {
+    return (
+      <li>
+        <div className="flex items-center gap-1 rounded-lg px-2 py-1.5 bg-accent/10">
+          <input
+            ref={editInputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onCommitRename(draft);
+              if (e.key === 'Escape') onCancelRename();
+            }}
+            maxLength={200}
+            className="flex-1 min-w-0 bg-transparent text-[13px] px-1 py-1 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => onCommitRename(draft)}
+            className="shrink-0 p-1 rounded hover:bg-accent/20 text-accent-ink"
+            title="Save"
+          >
+            <Check className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`w-full group flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[13px] transition-colors ${
+          active ? 'bg-accent/10 text-accent-ink font-medium' : 'hover:bg-muted/60 text-foreground'
+        }`}
+      >
+        <span className="flex-1 min-w-0 truncate">{session.title}</span>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onStartRename();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation();
+              e.preventDefault();
+              onStartRename();
+            }
+          }}
+          className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted text-muted-foreground hover:text-foreground transition-opacity"
+          title="Rename chat"
+        >
+          <Pencil className="h-3.5 w-3.5" strokeWidth={1.8} />
+        </span>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation();
+              e.preventDefault();
+              onDelete();
+            }
+          }}
+          className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-negative/10 hover:text-negative transition-opacity"
+          title="Delete chat"
+        >
+          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+        </span>
+      </button>
+    </li>
   );
 }
 

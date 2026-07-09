@@ -3121,10 +3121,21 @@ model AiConversation {
   cardData       Json?
   // The family scope the message was answered under. Null = personal.
   familyId       String?
+  // True on the single synthetic ASSISTANT row created for a FREE-tier
+  // user's one-time preview (see aiAssistant.routes.ts's /chat handler).
+  // No real Claude call happens for that row — content stays empty and
+  // the frontend renders a blurred "upgrade to unlock" placeholder
+  // instead, both live and on reload. Existence of any row with this
+  // set to true for a user is also how we know their preview is spent
+  // (see conversationStore.ts's hasUsedLockedPreview) — server-side,
+  // not just a client localStorage flag, so it survives a refresh, a
+  // relogin, or a different device.
+  locked         Boolean            @default(false)
   createdAt      DateTime           @default(now())
 
   @@index([userId, createdAt])
   @@index([sessionId, createdAt])
+  @@index([userId, locked])
 }
 
 model AiUsage {
