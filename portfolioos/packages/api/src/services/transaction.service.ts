@@ -544,6 +544,7 @@ export function toTransactionDTO(tx: TransactionWithRefs | Prisma.TransactionGet
     transactionType: tx.transactionType,
     stockId: tx.stockId,
     fundId: tx.fundId,
+    assetKey: (tx as { assetKey?: string | null }).assetKey ?? null,
     assetName: anyTx.stock?.name ?? anyTx.fund?.schemeName ?? tx.assetName ?? null,
     symbol: anyTx.stock?.symbol ?? null,
     schemeCode: anyTx.fund?.schemeCode ?? null,

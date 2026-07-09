@@ -58,6 +58,10 @@ export interface UpdatePortfolioRequest {
 
 export interface HoldingRow {
   id: string;
+  // Stable grouping key (survives case/whitespace differences in the raw
+  // assetName across the transactions that were merged into this holding).
+  // Match transactions to a holding on this, never on assetName.
+  assetKey: string;
   assetClass: AssetClass;
   assetName: string;
   symbol?: string | null;

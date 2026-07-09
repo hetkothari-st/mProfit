@@ -285,17 +285,21 @@ export function GoldAssetDetailPage() {
   });
 
   const { data: txnData, isLoading: txnLoading } = useQuery({
-    queryKey: ['transactions', holding?.assetClass, holding?.assetName],
+    queryKey: ['transactions', holding?.assetClass, holding?.assetKey ?? holding?.assetName],
     queryFn: () => transactionsApi.list({ assetClass: holding!.assetClass, pageSize: 200 }),
     enabled: !!holding,
   });
 
   const assetName = holding?.assetName ?? '';
+  const holdingKey = holding?.assetKey ?? null;
   const transactions = useMemo(
     () => (txnData?.items ?? [])
-      .filter((t) => (t.assetName ?? '') === assetName)
+      // Group by the stable assetKey (case/whitespace-insensitive), not the
+      // raw assetName — multiple transactions can carry differently-cased
+      // assetName strings while belonging to the same holding.
+      .filter((t) => (holdingKey ? t.assetKey === holdingKey : (t.assetName ?? '') === assetName))
       .sort((a, b) => b.tradeDate.localeCompare(a.tradeDate)),
-    [txnData, assetName],
+    [txnData, holdingKey, assetName],
   );
 
   const queryClient = useQueryClient();

@@ -555,6 +555,7 @@ export async function getPortfolioHoldings(userId: string, id: string) {
 
     return {
       id: h.id,
+      assetKey: h.assetKey,
       assetClass: h.assetClass,
       assetName,
       symbol,

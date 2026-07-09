@@ -12,6 +12,9 @@ export interface TransactionDTO {
   transactionType: TransactionType;
   stockId: string | null;
   fundId: string | null;
+  // Stable grouping key matching HoldingRow.assetKey — use this, not
+  // assetName, to associate a transaction with the holding it rolls into.
+  assetKey: string | null;
   assetName: string | null;
   symbol: string | null;
   schemeCode: string | null;
