@@ -254,6 +254,16 @@ export async function createPortfolio(
     currency?: string;
     clientId?: string;
     isDefault?: boolean;
+    /**
+     * Set by the onboarding wizard only. The wizard has no reliable way to
+     * know whether a given browser/device already completed onboarding for
+     * this account (it only tracks a localStorage flag), so it can end up
+     * re-mounted for a user who already has portfolios — e.g. a second
+     * device, a cleared cache, or a private-browsing session. When true, we
+     * short-circuit to the user's existing oldest portfolio instead of
+     * inserting another "My Portfolio" row.
+     */
+    onboarding?: boolean;
   },
 ) {
   if (input.clientId) {
@@ -262,6 +272,13 @@ export async function createPortfolio(
   }
 
   return prisma.$transaction(async (tx) => {
+    if (input.onboarding) {
+      const existing = await tx.portfolio.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (existing) return toPortfolioDTO(existing);
+    }
     if (input.isDefault) {
       await tx.portfolio.updateMany({
         where: { userId, isDefault: true },

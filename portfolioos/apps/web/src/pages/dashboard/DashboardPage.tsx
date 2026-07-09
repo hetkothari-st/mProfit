@@ -339,7 +339,18 @@ export function DashboardPage() {
   const portfolios = portfoliosQuery.data ?? [];
 
   useEffect(() => {
-    if (!portfoliosQuery.isLoading && portfolios.length === 0 && !localStorage.getItem('onboarding_v2_done')) {
+    if (portfoliosQuery.isLoading) return;
+    if (portfolios.length > 0) {
+      // Belt-and-braces: this account clearly has a portfolio, so this
+      // browser never needs to see onboarding again — set the flag here
+      // too, not just on wizard completion, so a stale/missing flag on an
+      // otherwise-onboarded browser can't trigger a re-run later.
+      if (!localStorage.getItem('onboarding_v2_done')) {
+        localStorage.setItem('onboarding_v2_done', '1');
+      }
+      return;
+    }
+    if (!localStorage.getItem('onboarding_v2_done')) {
       navigate('/onboarding', { replace: true });
     }
   }, [portfoliosQuery.isLoading, portfolios.length, navigate]);

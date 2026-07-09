@@ -35,7 +35,11 @@ export function OnboardingWizard({ onComplete }: Props) {
   const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
 
   const createPortfolioMut = useMutation({
-    mutationFn: () => portfoliosApi.create({ name: portfolioName, type: 'INVESTMENT' }),
+    // `onboarding: true` makes this idempotent server-side — if this
+    // account already has a portfolio (e.g. the wizard got re-shown on a
+    // second device/browser that never saw the completion flag), the
+    // server hands back the existing one instead of inserting a duplicate.
+    mutationFn: () => portfoliosApi.create({ name: portfolioName, type: 'INVESTMENT', onboarding: true }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolios'] });
       advance('portfolio');

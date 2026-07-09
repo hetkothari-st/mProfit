@@ -27,6 +27,7 @@ const createSchema = z.object({
   currency: z.string().length(3).default('INR'),
   clientId: z.string().cuid().optional(),
   isDefault: z.boolean().optional(),
+  onboarding: z.boolean().optional(),
 });
 
 const updateSchema = createSchema.partial();
@@ -47,8 +48,14 @@ export async function detail(req: Request, res: Response) {
 export async function create(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const data = createSchema.parse(req.body);
-  const existingCount = await prisma.portfolio.count({ where: { userId: req.user.id } });
-  assertPortfolioLimit(existingCount, req.user.plan as PlanTierValue);
+  // Onboarding re-entry short-circuits to the existing portfolio (see
+  // createPortfolio's `onboarding` handling) rather than inserting a new
+  // row, so it must not be blocked by a plan cap that's only relevant to
+  // an actual insert.
+  if (!data.onboarding) {
+    const existingCount = await prisma.portfolio.count({ where: { userId: req.user.id } });
+    assertPortfolioLimit(existingCount, req.user.plan as PlanTierValue);
+  }
   created(res, await createPortfolio(userId(req), data));
 }
 

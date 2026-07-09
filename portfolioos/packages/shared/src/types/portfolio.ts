@@ -45,6 +45,8 @@ export interface CreatePortfolioRequest {
   currency?: string;
   clientId?: string;
   isDefault?: boolean;
+  /** Onboarding-wizard re-entry: server returns the existing portfolio instead of creating a duplicate. */
+  onboarding?: boolean;
 }
 
 export interface UpdatePortfolioRequest {
