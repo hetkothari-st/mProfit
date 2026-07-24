@@ -44,6 +44,7 @@ const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'LlmSpend',
   'MFCentralSyncJob',
   'MFCasMailbackJob',
+  'FmvOverride',
 ]);
 
 const basePrisma =
