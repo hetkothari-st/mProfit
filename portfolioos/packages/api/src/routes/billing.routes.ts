@@ -8,7 +8,7 @@ import { ok } from '../lib/response.js';
 import { env } from '../config/env.js';
 import { BadRequestError, ForbiddenError, UnauthorizedError } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
-import { toAuthUser } from '../services/auth.service.js';
+import { issueSession } from '../services/auth.service.js';
 import {
   assertValidSignature,
   createOrder,
@@ -105,7 +105,10 @@ billingRouter.post(
       data: { plan: tier, planExpiresAt },
     });
 
-    ok(res, { user: toAuthUser(updated) });
+    // Re-issue the session: `plan` is baked into the access token and read
+    // back by `authenticate`, so returning only the user would leave the
+    // caller's requests on their pre-upgrade tier until the token expired.
+    ok(res, await issueSession(updated));
   }),
 );
 
@@ -116,10 +119,11 @@ const devSetPlanSchema = z.object({
 // ADMIN-only QA escape hatch: set your own plan directly, no Razorpay
 // involved. Lets a founder/QA account switch between tiers to check
 // billing display, "current plan" badges, and seat-overage math without
-// spending real money on every check. Does NOT change what an ADMIN can
-// see — requireFeature / <LockedFeature> bypass every gate for ADMIN
-// regardless of `plan`, so this doesn't preview locked UI; it only
-// changes the stored plan value.
+// spending real money on every check. ADMIN gets no gate bypass (see
+// requireFeature), so the switched tier really does drive what's locked.
+// Returns a re-issued session: `plan` lives in the access token, so
+// without fresh tokens the new tier would apply to the UI but every
+// gated API call would still be judged on the pre-switch plan.
 billingRouter.post(
   '/dev-set-plan',
   requireRole('ADMIN'),
@@ -130,6 +134,6 @@ billingRouter.post(
       where: { id: req.user.id },
       data: { plan: tier, planExpiresAt: null },
     });
-    ok(res, { user: toAuthUser(updated) });
+    ok(res, await issueSession(updated));
   }),
 );

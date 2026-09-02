@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse, AuthUser, PlanTierValue } from '@portfolioos/shared';
+import type { ApiResponse, AuthTokens, AuthUser, PlanTierValue } from '@portfolioos/shared';
 
 function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);
@@ -23,8 +23,13 @@ export type CheckoutIntentResult =
       billingCycle: 'MONTHLY' | 'ANNUAL';
     };
 
-export interface VerifyPaymentResult {
+// Both plan-changing endpoints re-issue the session, because `plan` is
+// carried in the access token and enforced from there server-side. Callers
+// MUST store `tokens`, not just `user`, or the API keeps gating them on
+// their old tier.
+export interface PlanChangeResult {
   user: AuthUser;
+  tokens: AuthTokens;
 }
 
 export const billingApi = {
@@ -43,8 +48,8 @@ export const billingApi = {
     razorpayOrderId: string;
     razorpayPaymentId: string;
     razorpaySignature: string;
-  }): Promise<VerifyPaymentResult> {
-    const { data } = await api.post<ApiResponse<VerifyPaymentResult>>(
+  }): Promise<PlanChangeResult> {
+    const { data } = await api.post<ApiResponse<PlanChangeResult>>(
       '/api/billing/verify-payment',
       payload,
     );
@@ -54,8 +59,8 @@ export const billingApi = {
   // ADMIN-only. Sets your own plan directly, no Razorpay involved — QA
   // escape hatch for checking billing display across tiers without
   // spending real money on every check.
-  async devSetPlan(tier: PlanTierValue): Promise<VerifyPaymentResult> {
-    const { data } = await api.post<ApiResponse<VerifyPaymentResult>>('/api/billing/dev-set-plan', {
+  async devSetPlan(tier: PlanTierValue): Promise<PlanChangeResult> {
+    const { data } = await api.post<ApiResponse<PlanChangeResult>>('/api/billing/dev-set-plan', {
       tier,
     });
     return unwrap(data);

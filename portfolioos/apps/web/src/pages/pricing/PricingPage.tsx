@@ -92,7 +92,7 @@ function priceDisplay(tier: PlanTierValue, cycle: BillingCycle): { price: string
 
 export function PricingPage() {
   const user = useAuthStore((s) => s.user);
-  const setUser = useAuthStore((s) => s.setUser);
+  const setSession = useAuthStore((s) => s.setSession);
   const [pending, setPending] = useState<PlanTierValue | null>(null);
   const [cycle, setCycle] = useState<BillingCycle>('MONTHLY');
   const isAdmin = user?.role === 'ADMIN';
@@ -100,8 +100,13 @@ export function PricingPage() {
   const handleDevSetPlan = async (tier: PlanTierValue) => {
     setPending(tier);
     try {
-      const { user: updatedUser } = await billingApi.devSetPlan(tier);
-      setUser(updatedUser);
+      // Store the re-issued tokens too, not just the user: the access token
+      // carries `plan` and the API gates every request on it, so keeping the
+      // old token would leave gated calls (report downloads, accounting
+      // exports) rejected on the pre-switch tier while the UI showed them
+      // unlocked.
+      const { user: updatedUser, tokens } = await billingApi.devSetPlan(tier);
+      setSession(updatedUser, tokens);
       toast.success(`Plan set to ${tier} (no payment — ADMIN dev switch)`, { icon: '🧪' });
     } catch (err) {
       toast.error(apiErrorMessage(err, 'Could not switch plan'));
@@ -129,12 +134,12 @@ export function PricingPage() {
         prefill: { name: user?.name, email: user?.email },
       });
 
-      const { user: updatedUser } = await billingApi.verifyPayment({
+      const { user: updatedUser, tokens } = await billingApi.verifyPayment({
         razorpayOrderId: payment.razorpay_order_id,
         razorpayPaymentId: payment.razorpay_payment_id,
         razorpaySignature: payment.razorpay_signature,
       });
-      setUser(updatedUser);
+      setSession(updatedUser, tokens);
       toast.success(`Upgraded to ${tier === 'PRO_ADVISOR' ? 'Pro/Advisor' : tier}`);
     } catch (err) {
       if (err instanceof Error && err.message === 'dismissed') {

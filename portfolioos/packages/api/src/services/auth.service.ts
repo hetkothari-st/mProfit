@@ -57,6 +57,25 @@ async function issueTokens(user: User): Promise<IssueTokensResult> {
   return { accessToken, refreshToken, accessTokenExpiresAt };
 }
 
+/**
+ * Mint a fresh session for `user`. Anything that changes a field the access
+ * token carries (`role`, `plan`) MUST re-issue through this and hand the new
+ * tokens back to the client — `authenticate` reads `plan` off the JWT, so a
+ * DB-only plan change leaves the caller stuck on their old tier until the
+ * token expires (see billing's plan switch / payment verification).
+ */
+export async function issueSession(user: User) {
+  const tokens = await issueTokens(user);
+  return {
+    user: toAuthUser(user),
+    tokens: {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      accessTokenExpiresAt: tokens.accessTokenExpiresAt.toISOString(),
+    },
+  };
+}
+
 export async function registerUser(input: {
   email: string;
   password: string;
@@ -81,15 +100,7 @@ export async function registerUser(input: {
     },
   });
 
-  const tokens = await issueTokens(user);
-  return {
-    user: toAuthUser(user),
-    tokens: {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accessTokenExpiresAt: tokens.accessTokenExpiresAt.toISOString(),
-    },
-  };
+  return issueSession(user);
 }
 
 export async function loginUser(email: string, password: string) {
@@ -98,15 +109,7 @@ export async function loginUser(email: string, password: string) {
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) throw new UnauthorizedError('Invalid credentials');
 
-  const tokens = await issueTokens(user);
-  return {
-    user: toAuthUser(user),
-    tokens: {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accessTokenExpiresAt: tokens.accessTokenExpiresAt.toISOString(),
-    },
-  };
+  return issueSession(user);
 }
 
 export async function refreshSession(refreshToken: string) {
@@ -124,15 +127,7 @@ export async function refreshSession(refreshToken: string) {
     data: { revokedAt: new Date() },
   });
 
-  const tokens = await issueTokens(stored.user);
-  return {
-    user: toAuthUser(stored.user),
-    tokens: {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accessTokenExpiresAt: tokens.accessTokenExpiresAt.toISOString(),
-    },
-  };
+  return issueSession(stored.user);
 }
 
 export async function logoutSession(refreshToken: string): Promise<void> {
@@ -247,16 +242,7 @@ export async function loginOrRegisterWithGoogle(idToken: string) {
   }
   if (!user.isActive) throw new UnauthorizedError('Account deactivated');
 
-  const tokens = await issueTokens(user);
-  return {
-    user: toAuthUser(user),
-    tokens: {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accessTokenExpiresAt: tokens.accessTokenExpiresAt.toISOString(),
-    },
-    isNew,
-  };
+  return { ...(await issueSession(user)), isNew };
 }
 
 export async function updateProfile(
