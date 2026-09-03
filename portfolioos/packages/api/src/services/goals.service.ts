@@ -12,7 +12,15 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
-import { serializeMoney } from '@portfolioos/shared';
+import {
+  serializeMoney,
+  GOAL_CATEGORIES,
+  GOAL_PRIORITIES,
+  GOAL_STATUSES,
+  type GoalCategory,
+  type GoalPriority,
+  type GoalStatus,
+} from '@portfolioos/shared';
 import {
   progressPct as calcProgressPct,
   inflationAdjustedTarget as calcInflationTarget,
@@ -21,24 +29,16 @@ import {
 } from './goalMath.js';
 import type { Prisma } from '@prisma/client';
 
-export const GOAL_CATEGORIES = [
-  'RETIREMENT',
-  'CHILD_EDUCATION',
-  'HOME_PURCHASE',
-  'EMERGENCY_FUND',
-  'FIRE_CORPUS',
-  'VEHICLE_PURCHASE',
-  'TRAVEL',
-  'WEALTH_BUILDING',
-  'CUSTOM',
-] as const;
-
-export const GOAL_PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'] as const;
-export const GOAL_STATUSES = ['ACTIVE', 'ACHIEVED', 'PAUSED', 'ABANDONED'] as const;
-
-export type GoalCategory = (typeof GOAL_CATEGORIES)[number];
-export type GoalPriority = (typeof GOAL_PRIORITIES)[number];
-export type GoalStatus = (typeof GOAL_STATUSES)[number];
+/**
+ * The closed sets a goal's `category` / `priority` / `status` can take.
+ *
+ * Defined once in `@portfolioos/shared` (types/familyDashboard.ts) so the API,
+ * the family dashboard aggregate and the web client cannot drift apart on the
+ * token list, and re-exported here because every existing importer reaches for
+ * them through goals.service.
+ */
+export { GOAL_CATEGORIES, GOAL_PRIORITIES, GOAL_STATUSES };
+export type { GoalCategory, GoalPriority, GoalStatus };
 
 export interface GoalInput {
   name: string;

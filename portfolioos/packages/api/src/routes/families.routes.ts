@@ -4,6 +4,12 @@ import { z } from 'zod';
 import { AssetClass, FamilyRole } from '@prisma/client';
 import { authenticate } from '../middleware/authenticate.js';
 import { requireFeature } from '../middleware/requirePlan.js';
+import {
+  getWealth,
+  getGoals,
+  getProtection,
+  getAttention,
+} from '../controllers/familyDashboard.controller.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
@@ -279,4 +285,39 @@ familiesRouter.put(
     const data = layoutSchema.parse(req.body);
     ok(res, await updateFamilyTreeLayout(callerId(req), req.params.familyId!, data));
   }),
+);
+
+// ─── Family dashboard ────────────────────────────────────────────
+//
+// Read-only household views. Gated on FAMILY_SHARING like the rest of the
+// family feature; membership itself is checked inside getEffectiveScope,
+// which throws ForbiddenError for a non-member or a revoked member, so
+// there is no separate membership guard here.
+//
+// Every one of these applies the caller's per-member visibility caps before
+// aggregating. They are safe to expose to any ACTIVE member of the family,
+// including a VIEWER, precisely because the caps decide what lands in the
+// totals rather than the route deciding who may call it.
+familiesRouter.get(
+  '/:familyId/dashboard/wealth',
+  requireFeature('FAMILY_SHARING'),
+  asyncHandler(getWealth),
+);
+
+familiesRouter.get(
+  '/:familyId/dashboard/goals',
+  requireFeature('FAMILY_SHARING'),
+  asyncHandler(getGoals),
+);
+
+familiesRouter.get(
+  '/:familyId/dashboard/protection',
+  requireFeature('FAMILY_SHARING'),
+  asyncHandler(getProtection),
+);
+
+familiesRouter.get(
+  '/:familyId/dashboard/attention',
+  requireFeature('FAMILY_SHARING'),
+  asyncHandler(getAttention),
 );

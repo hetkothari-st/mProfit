@@ -9,3 +9,4 @@ export * from './documents.js';
 export * from './realEstate.js';
 export * from './gmailIngestion.js';
 export * from './preferences.js';
+export * from './familyDashboard.js';

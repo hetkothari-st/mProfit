@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EmptyState } from '@/components/common/EmptyState';
 import {
   familiesApi,
@@ -37,14 +38,27 @@ import {
   ASSET_CLASS_LABEL,
   NON_AC_CATEGORY_LABEL,
 } from '@/lib/assetClasses';
+import { familyDashboardApi, familyDashboardKeys } from '@/api/familyDashboard.api';
+import { FamilyWealthCard } from './widgets/FamilyWealthCard';
+import { FamilyGoalsCard } from './widgets/FamilyGoalsCard';
+import { FamilyProtectionCard } from './widgets/FamilyProtectionCard';
+import { FamilyAttentionCard } from './widgets/FamilyAttentionCard';
 
 /**
- * Dedicated Family management page.
+ * Dedicated Family page — two tabs over one selected family.
+ *
+ * **Overview** is the household's financial picture: wealth and who it sits
+ * with, shared goals, protection and liabilities, and a ranked feed of what
+ * needs attention. Reads the four `/dashboard/*` endpoints, FAMILY-tier gated.
+ *
+ * **Members** is the original management surface, moved here wholesale: the
+ * visual tree canvas, invitations, the per-member permission matrix, and
+ * family-shared portfolios. Nothing about it changed — it is the same
+ * components, one level deeper.
  *
  * Full-page canvas instead of a cramped Settings section, because the
- * feature has real weight — visual tree + members + invitations +
- * shared portfolios + per-member permission matrix. Separate route
- * (`/family`) linked from the Overview nav.
+ * feature has real weight. Separate route (`/family`) linked from the
+ * Overview nav.
  */
 const REFETCH_MS = 30_000;
 
@@ -100,8 +114,8 @@ export function FamilyPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Family"
-        title="Households and shared portfolios"
-        description="Manage family memberships, permissions, and shared portfolios. Owners see everything; contributors and viewers see own personal + family-shared, filtered per their role."
+        title="The household, whole"
+        description="One picture of the family's wealth, shared goals, protection and open items — with the per-member breakdown behind it. Owners see everything; contributors and viewers see own personal + family-shared, filtered per their role, and anything withheld is labelled as withheld."
         actions={
           <Button size="sm" onClick={() => setCreatingFamily(true)}>
             <Plus className="h-4 w-4" strokeWidth={2} />
@@ -255,6 +269,7 @@ function FamilyWorkspace({
   const [inviting, setInviting] = useState(false);
   const [creatingPortfolio, setCreatingPortfolio] = useState(false);
   const [sharingExisting, setSharingExisting] = useState(false);
+  const [tab, setTab] = useState<'overview' | 'members'>('overview');
 
   const revokeMutation = useMutation({
     mutationFn: (memberUserId: string) =>
@@ -302,115 +317,140 @@ function FamilyWorkspace({
         </CardContent>
       </Card>
 
-      {/* Tree */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle>Family tree</CardTitle>
-            {isOwner && (
-              <Button size="sm" onClick={() => setInviting(true)}>
-                <UserPlus className="h-4 w-4" strokeWidth={1.9} />
-                <span className="ml-1">Invite</span>
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {membersQuery.isLoading ? (
-            <div className="text-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mx-auto" />
-            </div>
-          ) : (
-            <FamilyTreeCanvas
-              familyId={family.id}
-              members={members}
-              currentUserId={currentUserId}
-              isOwner={isOwner}
-              onEdit={(m) => setEditingMember(m)}
-              onRevoke={(m) => {
-                if (confirm(`Revoke ${m.name}'s access?`))
-                  revokeMutation.mutate(m.userId);
-              }}
-            />
+      {/* Overview is the default: the household's picture is what the family
+          came for. Membership management — tree, invites, permissions,
+          shared portfolios — lives one tab across, unchanged.
+
+          The two panels are rendered differently on purpose. Overview goes in
+          a real <TabsContent>, which unmounts when inactive, so a user working
+          on the Members tab never fires four dashboard requests. Members is a
+          plain hidden panel that stays mounted, because FamilyTreeCanvas holds
+          un-saved node positions in local state — unmounting it on a tab
+          switch would silently throw away a drag the user hasn't saved yet. */}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as 'overview' | 'members')}>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="members">Members &amp; sharing</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-5 space-y-6">
+          <LockedFeature requiredTier="FAMILY" featureName="Family dashboard">
+            <FamilyOverviewTab familyId={family.id} />
+          </LockedFeature>
+        </TabsContent>
+
+        <div role="tabpanel" hidden={tab !== 'members'} className="mt-5 space-y-6">
+          {/* Tree */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle>Family tree</CardTitle>
+                {isOwner && (
+                  <Button size="sm" onClick={() => setInviting(true)}>
+                    <UserPlus className="h-4 w-4" strokeWidth={1.9} />
+                    <span className="ml-1">Invite</span>
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {membersQuery.isLoading ? (
+                <div className="text-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mx-auto" />
+                </div>
+              ) : (
+                <FamilyTreeCanvas
+                  familyId={family.id}
+                  members={members}
+                  currentUserId={currentUserId}
+                  isOwner={isOwner}
+                  onEdit={(m) => setEditingMember(m)}
+                  onRevoke={(m) => {
+                    if (confirm(`Revoke ${m.name}'s access?`))
+                      revokeMutation.mutate(m.userId);
+                  }}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pending invitations */}
+          {isOwner && (pendingQuery.data?.length ?? 0) > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle>Pending invitations</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PendingInvitationsList
+                  familyId={family.id}
+                  invitations={pendingQuery.data ?? []}
+                />
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
 
-      {/* Pending invitations */}
-      {isOwner && (pendingQuery.data?.length ?? 0) > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Pending invitations</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PendingInvitationsList
-              familyId={family.id}
-              invitations={pendingQuery.data ?? []}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Family-shared portfolios */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <CardTitle>Shared portfolios</CardTitle>
-            {(isOwner || family.role === 'CONTRIBUTOR') && (
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSharingExisting(true)}
-                >
-                  <Briefcase className="h-4 w-4" strokeWidth={1.9} />
-                  <span className="ml-1">Share existing</span>
-                </Button>
-                <Button size="sm" onClick={() => setCreatingPortfolio(true)}>
-                  <Plus className="h-4 w-4" strokeWidth={2} />
-                  <span className="ml-1">New shared portfolio</span>
-                </Button>
+          {/* Family-shared portfolios */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle>Shared portfolios</CardTitle>
+                {(isOwner || family.role === 'CONTRIBUTOR') && (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSharingExisting(true)}
+                    >
+                      <Briefcase className="h-4 w-4" strokeWidth={1.9} />
+                      <span className="ml-1">Share existing</span>
+                    </Button>
+                    <Button size="sm" onClick={() => setCreatingPortfolio(true)}>
+                      <Plus className="h-4 w-4" strokeWidth={2} />
+                      <span className="ml-1">New shared portfolio</span>
+                    </Button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {familyPortfolios.length === 0 ? (
-            <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/30 px-3 py-2.5 text-sm">
-              <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-medium text-amber-800 dark:text-amber-300">
-                  No shared portfolios yet
-                </p>
-                <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
-                  Contributors and viewers can only see own personal +
-                  family-shared data (rule A). Until a shared portfolio exists
-                  with transactions, the family dashboard shows zeros for
-                  non-owners.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {familyPortfolios.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex items-center gap-3 rounded-md border border-border/70 px-3 py-2"
-                >
-                  <Briefcase className="h-4 w-4 text-accent" strokeWidth={1.9} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{p.name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {p.currency} · {p.holdingCount} holdings ·{' '}
-                      {p.transactionCount} transactions
+            </CardHeader>
+            <CardContent>
+              {familyPortfolios.length === 0 ? (
+                <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/30 px-3 py-2.5 text-sm">
+                  <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-medium text-amber-800 dark:text-amber-300">
+                      No shared portfolios yet
+                    </p>
+                    <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+                      Contributors and viewers can only see own personal +
+                      family-shared data (rule A). Until a shared portfolio exists
+                      with transactions, the family dashboard shows zeros for
+                      non-owners.
                     </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              ) : (
+                <div className="space-y-2">
+                  {familyPortfolios.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center gap-3 rounded-md border border-border/70 px-3 py-2"
+                    >
+                      <Briefcase className="h-4 w-4 text-accent" strokeWidth={1.9} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{p.name}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {p.currency} · {p.holdingCount} holdings ·{' '}
+                          {p.transactionCount} transactions
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </Tabs>
 
       {/* Dialogs */}
       {editingMember && (
@@ -436,6 +476,86 @@ function FamilyWorkspace({
           onClose={() => setSharingExisting(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ─── Overview tab (family dashboard) ─────────────────────────────────
+
+/**
+ * The household's financial picture. Four independent queries so a slow or
+ * failing panel never blanks the others — each widget renders its own
+ * loading/error/empty state, in the same shape AdvisorPage uses.
+ *
+ * Rendered only while the Overview tab is mounted (TabsContent unmounts the
+ * inactive tab), so a user who lives on the Members tab never pays for four
+ * dashboard requests.
+ *
+ * Each of the four payloads carries its own `hiddenMemberCount` — the members
+ * whose slice of THAT endpoint the caller's grant hides — so every widget
+ * reads the figure from its own data and none has to borrow another's.
+ */
+function FamilyOverviewTab({ familyId }: { familyId: string }) {
+  const wealthQuery = useQuery({
+    queryKey: familyDashboardKeys.wealth(familyId),
+    queryFn: () => familyDashboardApi.wealth(familyId),
+    staleTime: REFETCH_MS,
+    refetchOnWindowFocus: true,
+  });
+  const goalsQuery = useQuery({
+    queryKey: familyDashboardKeys.goals(familyId),
+    queryFn: () => familyDashboardApi.goals(familyId),
+    staleTime: REFETCH_MS,
+    refetchOnWindowFocus: true,
+  });
+  const protectionQuery = useQuery({
+    queryKey: familyDashboardKeys.protection(familyId),
+    queryFn: () => familyDashboardApi.protection(familyId),
+    staleTime: REFETCH_MS,
+    refetchOnWindowFocus: true,
+  });
+  const attentionQuery = useQuery({
+    queryKey: familyDashboardKeys.attention(familyId),
+    queryFn: () => familyDashboardApi.attention(familyId),
+    staleTime: REFETCH_MS,
+    refetchOnWindowFocus: true,
+  });
+
+  return (
+    <div className="space-y-6">
+      <FamilyWealthCard
+        data={wealthQuery.data}
+        isLoading={wealthQuery.isLoading}
+        isError={wealthQuery.isError}
+      />
+
+      <FamilyAttentionCard
+        data={attentionQuery.data}
+        isLoading={attentionQuery.isLoading}
+        isError={attentionQuery.isError}
+      />
+
+      <FamilyGoalsCard
+        data={goalsQuery.data}
+        isLoading={goalsQuery.isLoading}
+        isError={goalsQuery.isError}
+      />
+
+      <FamilyProtectionCard
+        data={protectionQuery.data}
+        isLoading={protectionQuery.isLoading}
+        isError={protectionQuery.isError}
+      />
+
+      <p className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-muted/25 px-3.5 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.8} />
+        <span>
+          Everything on this tab is filtered by the family permission model. What an
+          OWNER sees and what a VIEWER sees are different numbers for the same
+          household — where data is withheld from you, it is labelled, never
+          quietly dropped.
+        </span>
+      </p>
     </div>
   );
 }
