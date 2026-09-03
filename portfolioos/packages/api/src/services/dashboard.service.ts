@@ -653,13 +653,21 @@ function mergeAllocationBreakdown(
     const combinedValue = toDecimal(existing.value).plus(toDecimal(s.value));
     byKey.set(key, { ...existing, value: serializeMoney(combinedValue) });
   }
-  // Recompute pct against merged total.
+  // Recompute each share against the merged total.
+  //
+  // This writes `percent`, the field the rows actually carry and every
+  // consumer reads (healthScore.service, the web AllocationSlice type). It
+  // previously wrote a NEW `pct` field, which nothing read — so a merged
+  // family allocation kept each slice's stale per-member percentage while the
+  // correct household figure sat in a field no caller knew about. Percentages
+  // cannot be carried across a merge; they have to be re-derived against the
+  // new denominator, and into the name the caller is looking at.
   const rows = Array.from(byKey.values());
   const total = rows.reduce((s, r) => s.plus(toDecimal(r.value)), new Decimal(0));
   return rows
     .map((r) => ({
       ...r,
-      pct: total.gt(0) ? toDecimal(r.value).dividedBy(total).times(100).toNumber() : 0,
+      percent: total.gt(0) ? toDecimal(r.value).dividedBy(total).times(100).toNumber() : 0,
     }))
     .sort((a, b) => toDecimal(b.value).minus(toDecimal(a.value)).toNumber());
 }

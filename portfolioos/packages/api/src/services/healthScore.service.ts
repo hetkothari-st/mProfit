@@ -8,13 +8,13 @@ import { activeMonthlyIncomeTotal } from './income.service.js';
 import {
   emergencyFundScore, investmentRateScore, debtBurdenScore,
   diversificationScore, insuranceScore, goalProgressScore, weightedOverall,
+  requiredLifeCover, LIFE_POLICY_TYPES,
 } from './healthScoreMath.js';
 
 const ZERO = new Decimal(0);
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const LIQUID_CLASSES = new Set(['CASH', 'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'POST_OFFICE_SAVINGS', 'POST_OFFICE_RD', 'POST_OFFICE_TD']);
-const LIFE_POLICY_TYPES = new Set(['TERM', 'WHOLE_LIFE', 'ULIP', 'ENDOWMENT']);
 
 function d(v: { toString(): string } | null | undefined): Decimal {
   if (v == null) return ZERO;
@@ -326,7 +326,7 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
   }
 
   // Insurance: exact ₹ gap to the 10x-income target, or flag missing income data.
-  const insuranceRequiredCover = annualIncome.times(10);
+  const insuranceRequiredCover = requiredLifeCover(annualIncome);
   const insuranceGap = insuranceRequiredCover.minus(life.sumAssured);
   const insuranceAction = !life.hasPolicies
     ? 'Add a term or life policy — you currently have none tracked.'

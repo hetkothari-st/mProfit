@@ -84,6 +84,34 @@ export function diversificationScore(input: DiversificationInput): { score: numb
   return { score: clampScore(score) };
 }
 
+/**
+ * Policy types that count as LIFE cover for the 10x-income heuristic. HEALTH,
+ * MOTOR, HOME, TRAVEL and PERSONAL_ACCIDENT insure a thing or an event, not
+ * the earner, so they never offset a life-cover shortfall.
+ *
+ * Lives here rather than in healthScore.service so the family protection
+ * aggregate and the health score classify a policy identically.
+ */
+export const LIFE_POLICY_TYPES: ReadonlySet<string> = new Set<string>([
+  'TERM', 'WHOLE_LIFE', 'ULIP', 'ENDOWMENT',
+]);
+
+export function isLifePolicyType(type: string): boolean {
+  return LIFE_POLICY_TYPES.has(type);
+}
+
+/**
+ * The rule-of-thumb life cover an earner should carry: ten times annual
+ * income. Exported so every surface that shows a "cover gap" derives it from
+ * the same multiple as `insuranceScore` below — the number used to be written
+ * out as `annualIncome.times(10)` in three places.
+ */
+export const LIFE_COVER_INCOME_MULTIPLE = 10;
+
+export function requiredLifeCover(annualIncome: Decimal): Decimal {
+  return annualIncome.times(LIFE_COVER_INCOME_MULTIPLE);
+}
+
 /** Sum-assured (life-type policies only) ÷ 10x annual income. 50 if no policies at all. */
 export function insuranceScore(
   totalLifeSumAssured: Decimal,
@@ -92,7 +120,7 @@ export function insuranceScore(
 ): { score: number } {
   if (!hasLifePolicies) return { score: 50 };
   if (annualIncome.lessThanOrEqualTo(0)) return { score: totalLifeSumAssured.greaterThan(0) ? 100 : 0 };
-  const requiredCover = annualIncome.times(10);
+  const requiredCover = requiredLifeCover(annualIncome);
   const ratio = totalLifeSumAssured.dividedBy(requiredCover).toNumber();
   return { score: clampScore(ratio * 100) };
 }

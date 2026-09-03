@@ -79,6 +79,16 @@ const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'ProvidentFundAccount',
   'EpfMemberId',
   'PfFetchSession',
+  // Financial goals and bank accounts. Both carry ENABLE + FORCE ROW LEVEL
+  // SECURITY (20260421140000_phase_4_5_rls) but were never listed here, so no
+  // session variable was ever issued for them: under the NOBYPASSRLS runtime
+  // role every Goal/BankAccount read returned zero rows and every write failed
+  // with 42501, exactly the failure documented for the PF tables above.
+  // Surfaced by the family aggregates, which read both across members.
+  // NOTE: nineteen further RLS-protected tables are still missing from this
+  // set — see the hand-off notes; they are out of scope for this change.
+  'Goal',
+  'BankAccount',
 ]);
 
 const basePrisma =
