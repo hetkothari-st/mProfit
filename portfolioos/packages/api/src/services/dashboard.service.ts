@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import type { AssetClass } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { serializeMoney, financialYearFromDate, toDecimal } from '@portfolioos/shared';
 import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
@@ -55,15 +56,42 @@ function daysUntil(date: Date): number {
   return Math.ceil((date.getTime() - Date.now()) / 86_400_000);
 }
 
-export async function getDashboardNetWorth(userId: string, portfolioId?: string) {
+/**
+ * Visibility caps applied to ONE member's slice of a family view.
+ *
+ * `null` means unrestricted (a personal view, or an OWNER looking at the
+ * family). An empty array means deny-all for that dimension — that is the
+ * documented meaning of an empty FamilyMember.visibleAssetClasses, and the
+ * column defaults to empty, so treating it as "unrestricted" would hand
+ * every newly invited member the whole household's finances.
+ */
+export interface MemberVisibilityCaps {
+  assetClasses: AssetClass[] | null;
+  categories: readonly string[] | null;
+}
+
+/** Deny-all is representable, so this cannot collapse to a truthiness test. */
+function allows(caps: readonly string[] | null, category: string): boolean {
+  return caps === null || caps.includes(category);
+}
+
+export async function getDashboardNetWorth(
+  userId: string,
+  portfolioId?: string,
+  caps: MemberVisibilityCaps = { assetClasses: null, categories: null },
+) {
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 86_400_000);
+  const canSee = (category: string) => allows(caps.categories, category);
 
   // ── 1. Financial portfolio ───────────────────────────────────────────
   const holdings = await prisma.holdingProjection.findMany({
     where: {
       portfolio: { userId },
       ...(portfolioId ? { portfolioId } : {}),
+      // Intersect with the caller's asset-class grant. `[]` is deny-all and
+      // `{ in: [] }` matches nothing, which is exactly right.
+      ...(caps.assetClasses === null ? {} : { assetClass: { in: caps.assetClasses } }),
     },
     include: { portfolio: true },
   });
@@ -88,7 +116,7 @@ export async function getDashboardNetWorth(userId: string, portfolioId?: string)
 
   // ── 2. Vehicles ──────────────────────────────────────────────────────
   const vehicles = await prisma.vehicle.findMany({
-    where: { userId },
+    where: { userId, ...(canSee('VEHICLE') ? {} : { id: { in: [] } }) },
     include: {
       challans: { where: { status: 'PENDING' } },
     },
@@ -127,7 +155,7 @@ export async function getDashboardNetWorth(userId: string, portfolioId?: string)
 
   // ── 3. Rental ────────────────────────────────────────────────────────
   const properties = await prisma.rentalProperty.findMany({
-    where: { userId },
+    where: { userId, ...(canSee('RENTAL') ? {} : { id: { in: [] } }) },
     include: {
       tenancies: {
         where: { isActive: true },
@@ -163,7 +191,7 @@ export async function getDashboardNetWorth(userId: string, portfolioId?: string)
 
   // ── 4. Insurance ─────────────────────────────────────────────────────
   const policies = await prisma.insurancePolicy.findMany({
-    where: { userId, status: 'ACTIVE' },
+    where: { userId, status: 'ACTIVE', ...(canSee('INSURANCE') ? {} : { id: { in: [] } }) },
     orderBy: { nextPremiumDue: 'asc' },
   });
 
@@ -186,12 +214,12 @@ export async function getDashboardNetWorth(userId: string, portfolioId?: string)
 
   // ── 5. Loans & Liabilities ───────────────────────────────────────────
   const activeLoans = await prisma.loan.findMany({
-    where: { userId, status: 'ACTIVE' },
+    where: { userId, status: 'ACTIVE', ...(canSee('LOAN') ? {} : { id: { in: [] } }) },
     include: { payments: { orderBy: { paidOn: 'asc' } } },
   });
 
   const activeCards = await prisma.creditCard.findMany({
-    where: { userId, status: 'ACTIVE' },
+    where: { userId, status: 'ACTIVE', ...(canSee('CREDIT_CARD') ? {} : { id: { in: [] } }) },
     include: { statements: { orderBy: { dueDate: 'desc' } } },
   });
 
@@ -500,18 +528,29 @@ export async function getDashboardNetWorthForScope(
     return getDashboardNetWorth(callerId, opts.portfolioId);
   }
 
-  // Family view — fan out across every active member (regardless of
-  // role). Each pass picks up that user's own personal portfolios plus
-  // any family portfolios they created (family portfolios still carry
-  // `userId = creator`, so a per-user fetch collects them exactly once
-  // through their creator's pass). OWNER sees the full union; other
-  // roles see the same union — AC/category filters apply per-widget on
-  // the frontend rather than zeroing totals here.
+  // Family view — fan out across every active member. Each pass picks up
+  // that user's own personal portfolios plus any family portfolios they
+  // created (family portfolios still carry `userId = creator`, so a
+  // per-user fetch collects them exactly once through their creator's pass).
+  //
+  // The caller's visibility caps are applied to OTHER members' slices only.
+  // You always see your own finances in full: the caps are a grant an OWNER
+  // makes about what you may see OF THE FAMILY, not a restriction on your
+  // own data.
+  //
+  // These caps used to be ignored here entirely, with a comment claiming the
+  // frontend filtered per widget. It did not, so a VIEWER saw every member's
+  // complete net worth. Totals must be built from permitted rows — you cannot
+  // filter a number after it has been summed.
+  const caps: MemberVisibilityCaps = {
+    assetClasses: scope.allowedAssetClasses,
+    categories: scope.allowedCategories,
+  };
   const perMember = await Promise.all(
     scope.readableUserIds.map((uid) =>
       uid === callerId
         ? getDashboardNetWorth(uid, opts.portfolioId)
-        : runAsUser(uid, () => getDashboardNetWorth(uid, opts.portfolioId)),
+        : runAsUser(uid, () => getDashboardNetWorth(uid, opts.portfolioId, caps)),
     ),
   );
   return mergeNetWorthResults(perMember);

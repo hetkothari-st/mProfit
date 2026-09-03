@@ -1,7 +1,7 @@
 import type { AssetClass, FamilyRole } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ForbiddenError } from '../lib/errors.js';
-import { runAsUser } from '../lib/requestContext.js';
+import { runAsUser, runAsSystem } from '../lib/requestContext.js';
 
 /**
  * Family / HOF access-control core.
@@ -68,8 +68,11 @@ export interface EffectiveScope {
   role: FamilyRole | null;
   /**
    * User ids whose personal data the caller can READ. Always includes
-   * `callerId`. Includes other members' ids only when the caller is an
-   * OWNER of the family in view.
+   * `callerId`. Includes every ACTIVE member of the family in view, for
+   * EVERY role — a family view is the union of the household's data. What
+   * a non-OWNER may actually see of that union is capped by
+   * `allowedAssetClasses` / `allowedCategories`, which callers MUST apply;
+   * this list alone is not an authorisation decision.
    */
   readableUserIds: string[];
   /**
@@ -150,14 +153,30 @@ export async function getEffectiveScope(
   const family = opts.familyId;
   const role = membership.role;
 
-  // Family view — every active member of the family is readable to
-  // every other active member. Restrictions applied downstream via
-  // allowedAssetClasses / allowedCategories filter (empty = no
-  // restriction).
-  const siblings = await prisma.familyMember.findMany({
-    where: { familyId: family, status: 'ACTIVE' },
-    select: { userId: true },
-  });
+  // Family view — every active member of the family is readable to every
+  // other active member, and what they may actually SEE of that union is
+  // decided by allowedAssetClasses / allowedCategories below.
+  //
+  // This membership lookup runs privileged, and deliberately so. It is an
+  // AUTHORISATION step, not a data read: RLS on FamilyMember only lets you
+  // see your own row unless you are an ACTIVE OWNER, so an unprivileged read
+  // here would return `[self]` for every CONTRIBUTOR and VIEWER and silently
+  // collapse their family view to their own data — the caps would never even
+  // be consulted. This mirrors app_is_active_family_owner(), the SECURITY
+  // DEFINER function the RLS policy itself uses for exactly this reason.
+  //
+  // It is safe because it is tightly bounded: the caller has already been
+  // proven an ACTIVE member of this family immediately above; the query is
+  // pinned to that one familyId; and it selects nothing but userId — no
+  // names, no emails, no financial data. Widening this select, or reaching it
+  // before the membership check, would turn an authorisation lookup into a
+  // data leak.
+  const siblings = await runAsSystem(() =>
+    prisma.familyMember.findMany({
+      where: { familyId: family, status: 'ACTIVE' },
+      select: { userId: true },
+    }),
+  );
   const readableUserIds = dedupe([callerId, ...siblings.map((s) => s.userId)]);
 
   if (role === 'OWNER') {
@@ -186,11 +205,14 @@ export async function getEffectiveScope(
     writableUserIds: [callerId],
     readableFamilyIds: [family],
     writableFamilyIds: role === 'CONTRIBUTOR' ? [family] : [],
-    allowedAssetClasses:
-      membership.visibleAssetClasses.length === 0
-        ? null
-        : membership.visibleAssetClasses,
-    allowedCategories: knownCats.length === 0 ? null : knownCats,
+    // An empty list is DENY-ALL, not "unrestricted" — see the contract on
+    // allowedAssetClasses above, and the schema comment on
+    // FamilyMember.visibleAssetClasses. Only `null` means unrestricted, and
+    // only an OWNER gets null. Mapping empty to null inverted the default:
+    // the column is `@default([])`, so every member invited without someone
+    // explicitly ticking boxes could see the whole family's finances.
+    allowedAssetClasses: membership.visibleAssetClasses,
+    allowedCategories: knownCats,
   };
 }
 
