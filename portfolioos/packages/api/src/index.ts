@@ -117,6 +117,29 @@ async function shutdown(signal: string) {
   setTimeout(() => process.exit(1), 10_000).unref();
 }
 
+/**
+ * Log before dying.
+ *
+ * Node terminates on an unhandled rejection, and a terminated container is all
+ * the platform can report: the edge returns 502 with no CORS headers and the
+ * container restarts, so the browser blames CORS and the actual error is never
+ * written down anywhere. That is exactly how a batch of unwrapped async route
+ * handlers stayed invisible.
+ *
+ * This does not swallow the failure — the process still exits, because state
+ * after an unhandled rejection is not to be trusted — it just makes sure the
+ * reason reaches the logs first.
+ */
+process.on('unhandledRejection', (reason) => {
+  logger.fatal({ err: reason }, 'unhandled rejection — exiting');
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'uncaught exception — exiting');
+  process.exit(1);
+});
+
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 

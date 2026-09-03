@@ -3,5 +3,11 @@ builder = "DOCKERFILE"
 dockerfilePath = "packages/api/Dockerfile"
 
 [deploy]
+# Without a healthcheck Railway routes traffic to a container the moment it
+# starts, so every deploy has a window where requests reach the edge instead of
+# the app. Edge responses carry no CORS headers, so that window surfaces in the
+# browser as a CORS error rather than as the deploy it actually is.
+healthcheckPath = "/health"
+healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

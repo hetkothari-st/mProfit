@@ -1,5 +1,19 @@
+/**
+ * Every handler here is wrapped in asyncHandler, and must stay wrapped.
+ *
+ * These routes were registered bare. Express 4 does not catch a rejected
+ * promise from an async handler, so any rejection became an unhandled
+ * rejection — which terminates the Node process on modern versions. In
+ * production that showed up as a 502 from the Railway edge with no CORS
+ * headers and a container restart, rather than as the 500 the error deserved,
+ * so the actual failure was never reported anywhere.
+ *
+ * asyncHandler forwards the rejection to errorHandler, which turns it into a
+ * proper response and logs it.
+ */
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
+import { asyncHandler } from '../middleware/validate.js';
 import {
   listAccountsHandler,
   createAccountHandler,
@@ -34,7 +48,7 @@ export const pfRouter: Router = Router();
  * Extension exchanges its short-lived pairing code for a bearer token.
  * No JWT required — the pairing code itself is the auth credential.
  */
-pfRouter.post('/extension/pair-complete', extensionPairCompleteHandler);
+pfRouter.post('/extension/pair-complete', asyncHandler(extensionPairCompleteHandler));
 
 // ---------------------------------------------------------------------------
 // Extension bearer-authenticated routes — custom middleware, not JWT
@@ -42,13 +56,13 @@ pfRouter.post('/extension/pair-complete', extensionPairCompleteHandler);
 // ---------------------------------------------------------------------------
 
 /** GET  /epfppf/extension/me           — extension verifies its pairing is alive */
-pfRouter.get('/extension/me', authenticateExtensionMiddleware, extensionMeHandler);
+pfRouter.get('/extension/me', authenticateExtensionMiddleware, asyncHandler(extensionMeHandler));
 
 /** POST /epfppf/extension/raw-payload  — extension posts scraped data */
-pfRouter.post('/extension/raw-payload', authenticateExtensionMiddleware, extensionRawPayloadHandler);
+pfRouter.post('/extension/raw-payload', authenticateExtensionMiddleware, asyncHandler(extensionRawPayloadHandler));
 
 /** POST /epfppf/extension/revoke       — extension revokes itself on uninstall */
-pfRouter.post('/extension/revoke', authenticateExtensionMiddleware, extensionRevokeHandler);
+pfRouter.post('/extension/revoke', authenticateExtensionMiddleware, asyncHandler(extensionRevokeHandler));
 
 // ---------------------------------------------------------------------------
 // JWT-authenticated routes (all routes below require a valid user JWT)
@@ -57,27 +71,27 @@ pfRouter.post('/extension/revoke', authenticateExtensionMiddleware, extensionRev
 pfRouter.use(authenticate);
 
 // Accounts
-pfRouter.get('/accounts', listAccountsHandler);
-pfRouter.post('/accounts', createAccountHandler);
-pfRouter.delete('/accounts/:id/credentials', forgetCredentialsHandler);
-pfRouter.post('/accounts/:id/snooze-nudge', snoozeNudgeHandler);
-pfRouter.post('/accounts/:id/passbook', upload.single('file'), uploadManualPassbookHandler);
+pfRouter.get('/accounts', asyncHandler(listAccountsHandler));
+pfRouter.post('/accounts', asyncHandler(createAccountHandler));
+pfRouter.delete('/accounts/:id/credentials', asyncHandler(forgetCredentialsHandler));
+pfRouter.post('/accounts/:id/snooze-nudge', asyncHandler(snoozeNudgeHandler));
+pfRouter.post('/accounts/:id/passbook', upload.single('file'), asyncHandler(uploadManualPassbookHandler));
 
 // Sessions
 // Finding a UAN precedes having an account, so this sits beside /sessions
 // rather than under /accounts/:id. Everything after the first step — captcha,
 // OTP, SSE — is the shared session machinery below.
-pfRouter.post('/uan-lookup', startUanLookupHandler);
+pfRouter.post('/uan-lookup', asyncHandler(startUanLookupHandler));
 
-pfRouter.post('/sessions', startSessionHandler);
-pfRouter.get('/sessions/:sessionId/events', sseEventsHandler);
-pfRouter.post('/sessions/:sessionId/captcha', captchaRespondHandler);
-pfRouter.post('/sessions/:sessionId/otp', otpRespondHandler);
+pfRouter.post('/sessions', asyncHandler(startSessionHandler));
+pfRouter.get('/sessions/:sessionId/events', asyncHandler(sseEventsHandler));
+pfRouter.post('/sessions/:sessionId/captcha', asyncHandler(captchaRespondHandler));
+pfRouter.post('/sessions/:sessionId/otp', asyncHandler(otpRespondHandler));
 
 // Extension pairing — web-initiated (user manages their pairings from the web UI)
 /** POST   /epfppf/extension/pair-init       — generate a new pairing code */
-pfRouter.post('/extension/pair-init', extensionPairInitHandler);
+pfRouter.post('/extension/pair-init', asyncHandler(extensionPairInitHandler));
 /** GET    /epfppf/extension/pairings        — list user's pairings */
-pfRouter.get('/extension/pairings', extensionListPairingsHandler);
+pfRouter.get('/extension/pairings', asyncHandler(extensionListPairingsHandler));
 /** DELETE /epfppf/extension/pairings/:id   — revoke pairing from web UI */
-pfRouter.delete('/extension/pairings/:id', extensionRevokePairingHandler);
+pfRouter.delete('/extension/pairings/:id', asyncHandler(extensionRevokePairingHandler));
