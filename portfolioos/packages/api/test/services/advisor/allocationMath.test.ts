@@ -141,7 +141,7 @@ describe('sizeRebalanceTrade', () => {
     expect(buy?.amountInr.toNumber()).toBe(170_000);
   });
 
-  it(`caps a single instruction at ${MAX_SINGLE_TRADE_PCT * 100}% of the portfolio`, () => {
+  it(`caps a single instruction at ${MAX_SINGLE_TRADE_PCT}% of the portfolio`, () => {
     const sell = sizeRebalanceTrade(rowFor(rows, 'EQUITY_DOMESTIC'), TOTAL);
     // Raw drift is ₹300,000; the cap pulls it back to ₹250,000.
     expect(sell?.amountInr.toNumber()).toBe(250_000);

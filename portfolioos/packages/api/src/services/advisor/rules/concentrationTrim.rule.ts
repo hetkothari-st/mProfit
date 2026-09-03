@@ -69,7 +69,7 @@ export const concentrationTrimRule: AdvisorRule = {
     if (holdings.length === 0) return [];
 
     const capValue = total.times(CONCENTRATION_CAP_PCT).dividedBy(100);
-    const tradeCeiling = total.times(MAX_SINGLE_TRADE_PCT);
+    const tradeCeiling = total.times(MAX_SINGLE_TRADE_PCT).dividedBy(100);
 
     const drafts: RecommendationDraft[] = [];
 
@@ -133,7 +133,7 @@ function buildDraft(
   const residual = m.excess.minus(m.amount);
 
   const tail = capped
-    ? `That is the largest single instruction we will issue at once (${(MAX_SINGLE_TRADE_PCT * 100).toFixed(0)}% of the portfolio); ` +
+    ? `That is the largest single instruction we will issue at once (${MAX_SINGLE_TRADE_PCT}% of the portfolio); ` +
       `a further ${inr(residual)} still has to come out after it to reach the ${CONCENTRATION_CAP_PCT}% cap of ${inr(m.capValue)}.`
     : `That leaves ${inr(m.capValue)} in it — exactly the ${CONCENTRATION_CAP_PCT}% cap.`;
 

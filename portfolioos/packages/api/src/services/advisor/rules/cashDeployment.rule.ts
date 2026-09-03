@@ -104,7 +104,9 @@ export const cashDeploymentRule: AdvisorRule = {
     // One instruction never moves more than a quarter of the portfolio, which
     // is what keeps an all-cash new user from getting a single monolithic
     // "invest ₹42,00,000" card and nothing else.
-    const cap = total.greaterThan(ZERO) ? total.times(MAX_SINGLE_TRADE_PCT) : surplus;
+    const cap = total.greaterThan(ZERO)
+      ? total.times(MAX_SINGLE_TRADE_PCT).dividedBy(100)
+      : surplus;
     const amount = Decimal.min(surplus, cap);
     if (amount.lessThanOrEqualTo(MIN_CASH_SURPLUS_INR)) return [];
 
@@ -138,7 +140,7 @@ export const cashDeploymentRule: AdvisorRule = {
 
     const cappedClause = capped
       ? ` We have sized this at ${inr(amount)} rather than the full surplus because no single instruction moves more than ` +
-        `${(MAX_SINGLE_TRADE_PCT * 100).toFixed(0)}% of your portfolio at once; the remaining ${inr(surplus.minus(amount))} follows next.`
+        `${MAX_SINGLE_TRADE_PCT}% of your portfolio at once; the remaining ${inr(surplus.minus(amount))} follows next.`
       : '';
 
     const expensesClause =

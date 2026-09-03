@@ -24,8 +24,13 @@ export const REBALANCE_BAND_PP = 5;
 
 /** No single instruction may move more than this share of the portfolio at
  *  once. Stops a freshly-onboarded, wildly-skewed portfolio from producing one
- *  enormous recommendation that dominates everything else. */
-export const MAX_SINGLE_TRADE_PCT = 0.25;
+ *  enormous recommendation that dominates everything else.
+ *
+ *  In PERCENTAGE POINTS, like every other `_PCT` here — it was 0.25 meaning
+ *  the same 25%, so the file held two conventions at once and callers had to
+ *  know which applied to which constant. Anything named `_PCT` or `_PP` is
+ *  percentage points; divide by 100 to get a multiplier. */
+export const MAX_SINGLE_TRADE_PCT = 25;
 
 /** A single holding above this share of the portfolio is a concentration
  *  risk. Deliberately tighter than the health score's 50% danger line: this

@@ -140,7 +140,7 @@ export function sizeRebalanceTrade(
   const magnitude = drift.driftValue.abs();
   if (magnitude.lessThan(MIN_TRADE_INR)) return null;
 
-  const cap = totalValue.times(MAX_SINGLE_TRADE_PCT);
+  const cap = totalValue.times(MAX_SINGLE_TRADE_PCT).dividedBy(100);
   const amountInr = Decimal.min(magnitude, cap);
   if (amountInr.lessThan(MIN_TRADE_INR)) return null;
 
