@@ -122,6 +122,29 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'RentReminder',
   'TcsCredit',
   'UserNotificationConfig',
+  // Tables that had a userId but NO policy at all until
+  // 20260903180000_rls_remaining_user_tables — guarded only by the application
+  // remembering its where-clause. Registered here so the new policies actually
+  // receive a session variable.
+  //
+  // RefreshToken and PasswordResetToken are deliberately absent: both are read
+  // before the caller has an identity (token refresh, password reset), so a
+  // userId policy cannot apply — the hook would set nothing, the predicate
+  // would be NULL, and sign-in refresh would break. Their security model is
+  // the single-use secret token itself. See the exemption list in
+  // test/invariants/user-scoped-coverage.test.ts.
+  'BrokerAccount',
+  'MailboxAccount',
+  'GmailScanJob',
+  'GmailDiscoveredDoc',
+  'GmailAutoApproveRule',
+  'VehicleValuationLog',
+  'SipPlan',
+  'Loan',
+  'CreditCard',
+  'Income',
+  'HealthScoreSnapshot',
+  'AiChatSession',
 ]);
 
 const basePrisma =

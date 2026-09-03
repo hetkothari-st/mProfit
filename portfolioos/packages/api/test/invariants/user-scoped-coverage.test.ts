@@ -29,6 +29,22 @@ const INTENTIONALLY_UNSCOPED = new Set<string>([
   // (none today — listed for the next person, who will need one.)
 ]);
 
+/**
+ * Tables that have a `userId` but deliberately carry NO policy.
+ *
+ * Both of these are read in flows where the caller has no identity yet: token
+ * refresh and password reset happen before authentication, by definition. A
+ * userId policy cannot apply when there is no current user — the hook would
+ * issue no session variable, the predicate would evaluate against NULL, and
+ * every lookup would return nothing, breaking sign-in refresh and password
+ * reset. Their security model is the token itself: a 48-byte random secret,
+ * single-use, with an expiry.
+ *
+ * Anything added here needs that standard of justification. "It was awkward"
+ * is not one.
+ */
+const NO_POLICY_BY_DESIGN = new Set<string>(['RefreshToken', 'PasswordResetToken']);
+
 describe('USER_SCOPED_MODELS covers every RLS-protected table', () => {
   it('has no table with a policy that Prisma does not scope', async () => {
     const rows = await runAsSystem(() =>
@@ -97,6 +113,42 @@ describe('USER_SCOPED_MODELS covers every RLS-protected table', () => {
       rows.map((r) => `${r.tablename}.${r.policyname}`),
       'These policies have no app_is_system() branch, so background jobs and ' +
         'fixture setup running under runAsSystem cannot see or write these rows.',
+    ).toEqual([]);
+  }, 120_000);
+
+  it('has no user-owned table without a policy at all', async () => {
+    // The gap this suite originally missed. The check above catches "has a
+    // policy but is not registered"; it cannot catch "has a userId and no
+    // policy", because such a table never appears in pg_policies. Fourteen
+    // tables were in exactly that state — Loan, CreditCard, Income,
+    // RefreshToken and others — protected by application where-clauses alone.
+    const rows = await runAsSystem(() =>
+      prisma.$queryRawUnsafe<Array<{ tablename: string }>>(
+        `SELECT c.relname AS tablename
+           FROM pg_class c
+           JOIN pg_namespace ns ON ns.oid = c.relnamespace
+           JOIN pg_attribute a  ON a.attrelid = c.oid
+          WHERE ns.nspname = 'public'
+            AND c.relkind = 'r'
+            AND a.attname = 'userId'
+            AND a.attnum > 0
+            AND NOT a.attisdropped
+            AND NOT c.relrowsecurity
+          ORDER BY 1`,
+      ),
+    );
+
+    const unprotected = rows
+      .map((r) => r.tablename)
+      .filter((t) => !NO_POLICY_BY_DESIGN.has(t));
+
+    expect(
+      unprotected,
+      `These tables have a userId column but no row-level security at all, so ` +
+        `tenant isolation rests entirely on the application remembering its ` +
+        `where-clause. Add a policy (ENABLE + FORCE + app_is_system + WITH ` +
+        `CHECK) and register the model in USER_SCOPED_MODELS, or add it to ` +
+        `NO_POLICY_BY_DESIGN in this file with a reason.`,
     ).toEqual([]);
   }, 120_000);
 });
