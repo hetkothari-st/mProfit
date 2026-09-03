@@ -329,7 +329,12 @@ describe('processEmail pipeline', () => {
     expect(row!.amount!.toFixed(2)).toBe('500.00');
   });
 
-  it('creates a PARSED CanonicalEvent when autoCommitEnabled is true', async () => {
+  // Phase B (`maybeAutoProject` in src/ingestion/gmail/pipeline.ts): a trusted
+  // sender skips the review queue entirely. The event is persisted as PARSED,
+  // then immediately flipped to CONFIRMED (with review metadata stamped) and
+  // projected, so it lands in PROJECTED by the time processEmail returns.
+  // PARSED is only an intermediate state on this path.
+  it('auto-confirms and projects the CanonicalEvent when autoCommitEnabled is true', async () => {
     const outcome = await scope.runAs(() =>
       processEmail(
         {
@@ -366,7 +371,9 @@ describe('processEmail pipeline', () => {
     const row = await runAsSystem(() =>
       prisma.canonicalEvent.findUnique({ where: { id: outcome.eventIds[0]! } }),
     );
-    expect(row!.status).toBe('PARSED');
+    expect(row!.status).toBe('PROJECTED');
+    expect(row!.reviewedById).toBe(scope.userId);
+    expect(row!.reviewedAt).not.toBeNull();
   });
 
   it('creates one row per parsed event with distinct hashes for multi-event messages', async () => {

@@ -34,7 +34,12 @@ describe('monitoredSenders CRUD', () => {
     expect(row.displayLabel).toBe('HDFC alerts');
     expect(row.isActive).toBe(true);
     expect(row.autoCommitAfter).toBe(5);
-    expect(row.autoCommitEnabled).toBe(false);
+    // Phase B (`monitoredSenders.service.createMonitoredSender`): adding a
+    // sender IS the act of trusting it, so the service defaults
+    // `autoCommitEnabled` to true and callers opt out explicitly. The Prisma
+    // column default is still false — that governs rows created by any other
+    // path — but this service deliberately overrides it.
+    expect(row.autoCommitEnabled).toBe(true);
   });
 
   it('accepts a domain-scoped address form', async () => {

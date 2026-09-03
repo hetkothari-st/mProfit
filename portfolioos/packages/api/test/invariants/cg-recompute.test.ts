@@ -43,6 +43,16 @@ describe('invariant: capital-gains cascade on transaction edit (BUG-004)', () =>
 
   // Each `it()` runs in a fresh async scope; wrap the body in `scope.runAs`
   // so RLS policies see `app.current_user_id` for the duration of the test.
+  //
+  // Timeout: this is the heaviest single test in the suite — two
+  // `createTransaction` calls, a full `persistCapitalGainsForPortfolio`, then
+  // an `updateTransaction` that cascades a holdings + capital-gains recompute.
+  // Every user-scoped Prisma call is wrapped by the RLS extension in its own
+  // interactive transaction (BEGIN → set_config → query → COMMIT), so each one
+  // costs four round trips; against the remote Neon instance in DATABASE_URL
+  // that is ~1s apiece. Measured end-to-end at ~37s, i.e. genuinely over the
+  // 30s global `testTimeout` in vitest.config.ts rather than hung. Give it
+  // explicit headroom instead of letting the suite fail on link latency.
   it('editing a matched BUY updates the persisted CapitalGain row', () => scope.runAs(async () => {
     // BUY 100 @ ₹100 on 2022-01-05 → cost basis ₹10,000.
     const buy = await createTransaction(scope.userId, {
@@ -100,5 +110,5 @@ describe('invariant: capital-gains cascade on transaction edit (BUG-004)', () =>
     // Under BUG-004 the row is stale: buyAmount stays at 10000, gainLoss at 2000.
     expect(new Decimal(afterEdit!.buyAmount.toString()).equals(new Decimal('11000'))).toBe(true);
     expect(new Decimal(afterEdit!.gainLoss.toString()).equals(new Decimal('1000'))).toBe(true);
-  }));
+  }), 120_000);
 });
