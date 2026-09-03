@@ -422,6 +422,29 @@ export const advisorApi = {
   async removeApprovedProduct(id: string): Promise<void> {
     await api.delete(`/api/advisor/approved-products/${id}`);
   },
+  /**
+   * Reorder one bucket's approved products. Rank is which product the engine
+   * reaches for first, so this is a real edit, not cosmetic.
+   *
+   * It needs its own endpoint: re-POSTing a product with a new rank hits the
+   * duplicate check and fails, and `rank` is not part of the add payload. The
+   * server renumbers the whole bucket in one pass, so no intermediate state
+   * violates the (modelPortfolioId, bucket, rank) unique constraint.
+   *
+   * `orderedIds` must list every ACTIVE product in the bucket, in the order
+   * wanted.
+   */
+  async reorderApprovedProducts(input: {
+    modelPortfolioId: string;
+    bucket: AdvisorAssetBucket;
+    orderedIds: string[];
+  }): Promise<ApprovedProduct[]> {
+    const { data } = await api.put<ApiResponse<ApprovedProduct[]>>(
+      '/api/advisor/approved-products/order',
+      input,
+    );
+    return unwrap(data) ?? [];
+  },
 
   // Model portfolios
   async modelPortfolios(): Promise<ModelPortfolio[]> {

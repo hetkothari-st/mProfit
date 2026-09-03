@@ -88,11 +88,80 @@ function titleCase(s: string): string {
     .join(' ');
 }
 
-function formatSnapshotValue(value: unknown): string {
+/**
+ * Turn an engine key into something readable. Snapshot keys are camelCase, so
+ * lower-casing then splitting on "_" produced "Capvalue" and
+ * "Cappedbymaxsingletrade" — a word only a machine would write.
+ */
+function humaniseKey(key: string): string {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .trim()
+    .split(/\s+/);
+  // "inr" is a unit, not a word worth reading in a label.
+  const trimmed = words.filter((w) => w !== 'inr');
+  const out = trimmed.length > 0 ? trimmed : words;
+  return out.map((w, i) => (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(' ');
+}
+
+/** Keys whose numbers are rupee amounts. */
+const MONEY_KEY = /(value|amount|inr|cost|price|excess|residual|shortfall|cap$|gap)/i;
+/** Keys whose numbers are proportions of something. */
+const PCT_KEY = /pct$|percent$/i;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
+/**
+ * The most identifying field of a nested object, so a holding renders as its
+ * name rather than a truncated `{"isin":"sefa3-…","bucket":"DEBT","f…`. Raw
+ * JSON in a drawer labelled "inputs this was computed from" tells a reader
+ * nothing they can act on.
+ */
+function summariseObject(value: Record<string, unknown>): string {
+  for (const k of ['assetName', 'name', 'label', 'instrumentName', 'isin', 'id']) {
+    const v = value[k];
+    if (typeof v === 'string' && v.trim()) return v;
+  }
+  const count = Object.keys(value).length;
+  return `${count} field${count === 1 ? '' : 's'}`;
+}
+
+function formatSnapshotValue(key: string, value: unknown): string {
   if (value === null || value === undefined) return '—';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return JSON.stringify(value);
+
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+
+  if (typeof value === 'string') {
+    if (ISO_DATE.test(value)) {
+      return new Date(value).toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+    // Decimals cross the wire as strings; format them like the money they are.
+    if (MONEY_KEY.test(key) && /^-?\d+(\.\d+)?$/.test(value)) return formatINR(value);
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (PCT_KEY.test(key)) {
+      // The engine is inconsistent here: concentrationCapPct is 15 meaning
+      // 15%, while maxSingleTradePct is 0.25 meaning the same 25%. Anything at
+      // or below 1 is a fraction — a real "1% cap" would be written as 1.
+      const pct = Math.abs(value) <= 1 ? value * 100 : value;
+      return `${Number.isInteger(pct) ? pct : pct.toFixed(2)}%`;
+    }
+    if (MONEY_KEY.test(key)) return formatINR(value);
+    return value.toLocaleString('en-IN');
+  }
+
+  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`;
+  if (typeof value === 'object') return summariseObject(value as Record<string, unknown>);
+  return String(value);
 }
 
 function TradeLeg({ leg }: { leg: TradeAction }) {
@@ -292,17 +361,27 @@ export function RecommendationCard({ rec, llmEnabled }: RecommendationCardProps)
               <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {snapshotEntries.map(([key, value]) => (
                   <div key={key} className="flex items-baseline justify-between gap-3 border-b border-border/30 pb-1">
-                    <dt className="text-[12px] text-muted-foreground">{titleCase(key)}</dt>
-                    <dd className="numeric max-w-[55%] truncate text-right text-[12.5px] text-foreground" title={formatSnapshotValue(value)}>
-                      {formatSnapshotValue(value)}
+                    <dt className="text-[12px] text-muted-foreground">{humaniseKey(key)}</dt>
+                    <dd
+                      className="numeric max-w-[55%] truncate text-right text-[12.5px] text-foreground"
+                      title={formatSnapshotValue(key, value)}
+                    >
+                      {formatSnapshotValue(key, value)}
                     </dd>
                   </div>
                 ))}
               </dl>
             )}
-            <p className="mt-2.5 text-[11px] text-muted-foreground">
-              Source: <span className="numeric">{rec.provenance}</span>
-            </p>
+            {/* NONE means "this names no product to buy" — a sell-only
+                recommendation. Printing "Source: NONE" states a fact about the
+                enum, not about the advice. */}
+            {rec.provenance !== 'NONE' && (
+              <p className="mt-2.5 text-[11px] text-muted-foreground">
+                {rec.provenance === 'APPROVED_LIST'
+                  ? 'Instrument taken from your approved product list.'
+                  : 'Instrument ranked from NAV history, not from your approved list.'}
+              </p>
+            )}
           </div>
         )}
       </div>

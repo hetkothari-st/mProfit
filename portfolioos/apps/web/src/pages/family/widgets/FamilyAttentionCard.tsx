@@ -1,10 +1,9 @@
-import { CalendarClock, CheckCircle2, Loader2, Siren } from 'lucide-react';
+import { CheckCircle2, Loader2, Siren } from 'lucide-react';
 import { formatINR } from '@portfolioos/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';
 import {
-  ATTENTION_TYPE_LABEL,
   memberLabel,
   type AttentionItem,
   type AttentionUrgency,
@@ -13,43 +12,47 @@ import {
 import { PartialDataNotice } from './RestrictedNotice';
 
 /**
- * The "what needs doing" feed. Ranked HIGH → MEDIUM → LOW, then by how soon
- * it falls due — so the top of the list is always the next thing someone in
- * the household has to act on.
+ * The "what needs doing" feed, set as a ledger rather than a stack of cards.
  *
- * Every item is badged with the member it belongs to. On a shared surface an
- * unattributed alert is useless: "premium overdue" needs a name attached
+ * Three things decide whether a household acts on one of these: how late it
+ * is, what it is, and how much it costs. So they are three columns you can run
+ * an eye down — when / what / how much — instead of prose with chips on top.
+ *
+ * Deliberately absent: an urgency badge (the red day-count already says it), a
+ * type label (the title already says "premium due"), and a per-row border (the
+ * card is the container; a box inside a box is chrome, not structure).
+ *
+ * Every item still carries the member it belongs to. On a shared surface an
+ * unattributed alert is useless — "premium overdue" needs a name attached
  * before anyone can do anything about it.
  */
 
-const URGENCY_TONE: Record<AttentionUrgency, string> = {
-  HIGH: 'border-negative/45 bg-negative/10 text-negative',
-  MEDIUM: 'border-amber-400/50 bg-amber-400/10 text-amber-700 dark:text-amber-300',
-  LOW: 'border-border bg-muted/60 text-muted-foreground',
-};
-
-const RAIL_TONE: Record<AttentionUrgency, string> = {
-  HIGH: 'bg-negative',
-  MEDIUM: 'bg-amber-500',
-  LOW: 'bg-border',
-};
-
 const DAY_MS = 86_400_000;
 
-function dueLabel(iso: string | null): string | null {
+interface Timing {
+  /** Short form for the left column: "94d late", "in 12d", "today". */
+  short: string;
+  /** The exact day, shown quietly beneath — stated once, not twice. */
+  exact: string;
+  overdue: boolean;
+}
+
+function timing(iso: string | null, daysUntil: number | null): Timing | null {
   if (!iso) return null;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return null;
-  const days = Math.round((t - Date.now()) / DAY_MS);
-  const date = new Date(t).toLocaleDateString('en-IN', {
+
+  const days = daysUntil ?? Math.round((t - Date.now()) / DAY_MS);
+  const exact = new Date(t).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   });
-  if (days < 0) return `${date} · ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`;
-  if (days === 0) return `${date} · today`;
-  if (days === 1) return `${date} · tomorrow`;
-  return `${date} · in ${days} days`;
+
+  if (days < 0) return { short: `${Math.abs(days)}d late`, exact, overdue: true };
+  if (days === 0) return { short: 'today', exact, overdue: false };
+  if (days === 1) return { short: 'tomorrow', exact, overdue: false };
+  return { short: `in ${days}d`, exact, overdue: false };
 }
 
 export interface FamilyAttentionCardProps {
@@ -60,7 +63,7 @@ export interface FamilyAttentionCardProps {
 
 export function FamilyAttentionCard({ data, isLoading, isError }: FamilyAttentionCardProps) {
   /**
-   * The feed arrives ORDERED and it is left that way. The server ranks each
+   * The feed arrives ORDERED and is left that way. The server ranks each
    * member's items by urgency then soonest, caps them, and interleaves the
    * members round-robin so one member with a messy month cannot occupy the
    * whole list (see the FAIRNESS POLICY in familyAggregate.service). A global
@@ -74,34 +77,26 @@ export function FamilyAttentionCard({ data, isLoading, isError }: FamilyAttentio
    * the two empty states below must not look alike.
    */
   const hiddenMemberCount = data?.hiddenMemberCount ?? 0;
-
-  const highCount = items.filter((i) => i.urgency === 'HIGH').length;
+  const lateCount = items.filter((i) => (i.daysUntil ?? 1) < 0).length;
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85">
-              Attention
-            </p>
-            <CardTitle className="mt-1">What the household needs to deal with</CardTitle>
-          </div>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <CardTitle>Needs attention</CardTitle>
           {items.length > 0 && (
-            <div className="text-right">
-              <p className="text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
-                Open items
-              </p>
-              <p className="numeric-display text-[15px] font-medium">
-                <span className={cn(highCount > 0 && 'text-negative')}>{highCount}</span>
-                <span className="text-muted-foreground"> high · {items.length} total</span>
-              </p>
-            </div>
+            <p className="text-[12.5px] text-muted-foreground">
+              {lateCount > 0 && (
+                <span className="font-medium text-negative">{lateCount} overdue</span>
+              )}
+              {lateCount > 0 && ' of '}
+              <span className="numeric">{items.length}</span> open
+            </p>
           )}
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent>
         {isLoading && (
           <div className="flex h-40 items-center justify-center text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -139,7 +134,9 @@ export function FamilyAttentionCard({ data, isLoading, isError }: FamilyAttentio
         )}
 
         {!isLoading && !isError && items.length > 0 && (
-          <ul className="space-y-2">
+          // Hairline separators, no per-row boxes: these are a list, and a list
+          // reads faster than five nested containers.
+          <ul className="-mx-1 divide-y divide-border/50">
             {items.map((item) => (
               <AttentionRow key={item.id} item={item} />
             ))}
@@ -150,62 +147,85 @@ export function FamilyAttentionCard({ data, isLoading, isError }: FamilyAttentio
   );
 }
 
+/** Urgency colours the day-count and nothing else. */
+const WHEN_TONE: Record<AttentionUrgency, string> = {
+  HIGH: 'text-negative',
+  MEDIUM: 'text-amber-600 dark:text-amber-400',
+  LOW: 'text-muted-foreground',
+};
+
 function AttentionRow({ item }: { item: AttentionItem }) {
-  const urgency: AttentionUrgency = item.urgency;
-  const due = dueLabel(item.dueDate);
-  // Negative `daysUntil` is overdue; null means the item has no date at all.
+  const when = timing(item.dueDate, item.daysUntil);
   const overdue = (item.daysUntil ?? 1) < 0;
+  const showDescription =
+    item.description && !isEchoOfTitle(item.description, item.title) ? item.description : null;
 
   return (
-    <li className="flex gap-3 rounded-lg border border-border/60 bg-muted/15 p-3">
-      <span className={cn('w-[3px] shrink-0 self-stretch rounded-full', RAIL_TONE[urgency])} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span
-            className={cn(
-              'inline-flex items-center rounded-full border px-1.5 py-px text-[9.5px] font-medium uppercase tracking-kerned',
-              URGENCY_TONE[urgency],
-            )}
-          >
-            {urgency}
-          </span>
-          {/* Member attribution is not optional on a household feed. */}
-          <span className="inline-flex items-center rounded-full border border-border bg-background/60 px-1.5 py-px text-[9.5px] font-medium uppercase tracking-kerned text-muted-foreground">
-            {memberLabel(item.member)}
-          </span>
-          <span className="text-[9.5px] uppercase tracking-kerned text-muted-foreground/70">
-            {ATTENTION_TYPE_LABEL[item.type]}
-          </span>
-        </div>
-
-        <p className="mt-1.5 text-[14px] font-medium leading-snug text-foreground">
-          {item.title}
-        </p>
-        {item.description && (
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
-            {item.description}
-          </p>
+    <li className="flex items-baseline gap-4 px-1 py-3">
+      {/* WHEN — lateness IS the urgency, so it needs no separate badge. */}
+      <div className="w-[4.75rem] shrink-0 text-right">
+        {when ? (
+          <>
+            <span
+              className={cn(
+                'numeric block text-[13px] font-medium leading-tight',
+                overdue ? 'text-negative' : WHEN_TONE[item.urgency],
+              )}
+            >
+              {when.short}
+            </span>
+            <span className="numeric block text-[10.5px] leading-tight text-muted-foreground/70">
+              {when.exact}
+            </span>
+          </>
+        ) : (
+          // No date on this kind of item — a nudge, not a deadline.
+          <span className="text-[13px] leading-tight text-muted-foreground/50">—</span>
         )}
+      </div>
 
-        {(due || item.amountInr) && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px]">
-            {due && (
-              <span
-                className={cn(
-                  'inline-flex items-center gap-1',
-                  overdue ? 'text-negative' : 'text-muted-foreground',
-                )}
-              >
-                <CalendarClock className="h-3 w-3" strokeWidth={1.8} />
-                <span className="numeric">{due}</span>
-              </span>
-            )}
-            {item.amountInr && (
-              <Money className="font-medium text-foreground">{formatINR(item.amountInr)}</Money>
-            )}
-          </div>
+      {/* WHAT — the member sits inline; it is context, not a category chip. */}
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-medium leading-snug text-foreground">{item.title}</p>
+        <p className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
+          {memberLabel(item.member)}
+          {showDescription && <span> · {showDescription}</span>}
+        </p>
+      </div>
+
+      {/* HOW MUCH — right-aligned so the figures form a column you can scan. */}
+      <div className="shrink-0 text-right">
+        {item.amountInr ? (
+          <Money className="numeric text-[14px] font-medium text-foreground">
+            {formatINR(item.amountInr)}
+          </Money>
+        ) : (
+          <span className="text-[13px] text-muted-foreground/40">—</span>
         )}
       </div>
     </li>
   );
+}
+
+/**
+ * True when the description merely restates the title. The server writes both,
+ * and for deadline items they say the same thing — "EMI is 64 days overdue"
+ * under "HDFC Bank EMI overdue" — which the day-count column already carries.
+ * Descriptions that add something ("No bank account and no holdings") survive.
+ */
+function isEchoOfTitle(description: string, title: string): boolean {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const d = norm(description);
+  const t = norm(title);
+  if (d === t) return true;
+
+  const titleWords = new Set(t.split(' ').filter((w) => w.length > 3));
+  const descWords = d.split(' ').filter((w) => w.length > 3);
+  if (descWords.length === 0) return false;
+  const overlap = descWords.filter((w) => titleWords.has(w)).length;
+  return overlap / descWords.length >= 0.5;
 }
