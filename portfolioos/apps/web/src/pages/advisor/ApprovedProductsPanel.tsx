@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ChevronDown, ChevronUp, ListChecks, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ListChecks, Loader2, Plus, Trash2 } from 'lucide-react';
 import type { AssetSearchHit } from '@portfolioos/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,35 +12,61 @@ import { AssetSearch } from '@/components/common/AssetSearch';
 import { EmptyState } from '@/components/common/EmptyState';
 import { apiErrorMessage } from '@/api/client';
 import {
+  ADVISOR_ASSET_BUCKETS,
   advisorApi,
   advisorKeys,
   bucketLabel,
+  type AdvisorAssetBucket,
   type ApprovedProduct,
   type ApprovedProductInput,
 } from '@/api/advisor.api';
 
-/** Buckets offered in the picker. Any bucket already in use is merged in on top of this. */
-const BUCKET_OPTIONS = [
-  'EQUITY_LARGE_CAP',
-  'EQUITY_MID_CAP',
-  'EQUITY_SMALL_CAP',
-  'EQUITY_INTERNATIONAL',
-  'DEBT_SHORT',
-  'DEBT_LONG',
-  'GOLD',
-  'CASH',
-  'OTHER',
-];
+/**
+ * The seven buckets the API accepts. This is the whole closed set — the zod
+ * schema on POST /approved-products rejects anything else — so there is no
+ * "merge in whatever the rows use" step: an unknown bucket could never have
+ * been persisted in the first place.
+ */
+const BUCKET_OPTIONS: readonly AdvisorAssetBucket[] = ADVISOR_ASSET_BUCKETS;
 
 export function ApprovedProductsPanel() {
   const qc = useQueryClient();
-  const [bucket, setBucket] = useState<string>(BUCKET_OPTIONS[0]!);
+  const [bucket, setBucket] = useState<AdvisorAssetBucket>(BUCKET_OPTIONS[0]!);
   const [pending, setPending] = useState<AssetSearchHit | null>(null);
   const [searchKey, setSearchKey] = useState(0);
 
+  // POST /approved-products requires a modelPortfolioId, so the list of model
+  // portfolios has to be in hand before anything can be added. The risk
+  // profile names the one that is actually in force; the list is what confirms
+  // it still exists and supplies the fallback.
+  const { data: riskProfileData } = useQuery({
+    queryKey: advisorKeys.riskProfile,
+    queryFn: () => advisorApi.riskProfile(),
+  });
+
+  const { data: portfolios } = useQuery({
+    queryKey: advisorKeys.modelPortfolios,
+    queryFn: () => advisorApi.modelPortfolios(),
+  });
+
+  const modelPortfolioId = useMemo(() => {
+    const list = portfolios ?? [];
+    const profile = riskProfileData?.profile ?? null;
+    const preferred = profile?.modelPortfolio?.id;
+    if (preferred && list.some((p) => p.id === preferred)) return preferred;
+    const byCategory = profile?.category
+      ? list.find((p) => p.riskCategory === profile.category)
+      : undefined;
+    return byCategory?.id ?? list.find((p) => p.isActive)?.id ?? list[0]?.id ?? null;
+  }, [portfolios, riskProfileData]);
+
+  // Scoped to the model portfolio being edited: the API returns every row the
+  // user owns across all four risk-category portfolios, and mixing them would
+  // show a Conservative shortlist under an Aggressive heading.
   const { data, isLoading, isError } = useQuery({
-    queryKey: advisorKeys.approvedProducts,
-    queryFn: () => advisorApi.approvedProducts(),
+    queryKey: advisorKeys.approvedProducts(modelPortfolioId ?? undefined),
+    queryFn: () => advisorApi.approvedProducts({ modelPortfolioId: modelPortfolioId ?? undefined }),
+    enabled: !!modelPortfolioId,
   });
 
   const products = useMemo(() => data ?? [], [data]);
@@ -48,24 +74,23 @@ export function ApprovedProductsPanel() {
   const grouped = useMemo(() => {
     const map = new Map<string, ApprovedProduct[]>();
     for (const p of products) {
+      if (!p) continue;
       const list = map.get(p.bucket);
       if (list) list.push(p);
       else map.set(p.bucket, [p]);
     }
     for (const list of map.values()) {
-      list.sort((a, b) => a.rank - b.rank || a.instrumentName.localeCompare(b.instrumentName));
+      // `label` is the display name the backend actually sends; rank is the
+      // adviser's ordering and wins, with label breaking ties.
+      list.sort(
+        (a, b) => (a.rank ?? 0) - (b.rank ?? 0) || (a.label ?? '').localeCompare(b.label ?? ''),
+      );
     }
     return [...map.entries()].sort((a, b) => bucketLabel(a[0]).localeCompare(bucketLabel(b[0])));
   }, [products]);
 
-  const bucketChoices = useMemo(() => {
-    const set = new Set<string>(BUCKET_OPTIONS);
-    for (const p of products) set.add(p.bucket);
-    return [...set];
-  }, [products]);
-
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: advisorKeys.approvedProducts });
+    qc.invalidateQueries({ queryKey: ['advisor', 'approved-products'] });
     qc.invalidateQueries({ queryKey: ['advisor', 'recommendations'] });
   };
 
@@ -89,48 +114,21 @@ export function ApprovedProductsPanel() {
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not remove that product')),
   });
 
-  // The API exposes no rank-update route, so a reorder is expressed as a re-POST
-  // of the same product carrying its new rank (the backend upserts on identity).
-  const reorderMut = useMutation({
-    mutationFn: async (moves: Array<{ product: ApprovedProduct; rank: number }>) => {
-      for (const m of moves) {
-        await advisorApi.addApprovedProduct({
-          bucket: m.product.bucket,
-          instrumentName: m.product.instrumentName,
-          symbol: m.product.symbol,
-          isin: m.product.isin,
-          schemeCode: m.product.schemeCode,
-          kind: m.product.kind,
-          rank: m.rank,
-          note: m.product.note,
-        });
-      }
-    },
-    onSuccess: invalidate,
-    onError: (e) => toast.error(apiErrorMessage(e, 'Could not reorder the list')),
-  });
-
-  const move = (list: ApprovedProduct[], index: number, delta: number) => {
-    const target = index + delta;
-    const a = list[index];
-    const b = list[target];
-    if (!a || !b) return;
-    reorderMut.mutate([
-      { product: a, rank: b.rank },
-      { product: b, rank: a.rank },
-    ]);
-  };
+  // Only a LOCAL search hit carries the MutualFundMaster / StockMaster id the
+  // API resolves against; a Yahoo-sourced hit has `id: null` and would 404.
+  const pendingId = pending?.id ?? null;
+  const canAdd = !!modelPortfolioId && !!pending && !!pendingId && !addMut.isPending;
 
   const addPending = () => {
-    if (!pending) return;
+    if (!pending || !pendingId || !modelPortfolioId) return;
     addMut.mutate({
+      modelPortfolioId,
       bucket,
-      instrumentName: pending.name,
-      symbol: pending.symbol,
-      isin: pending.isin ?? null,
-      schemeCode: pending.schemeCode ?? null,
-      kind: pending.kind === 'STOCK' ? 'STOCK' : 'MUTUAL_FUND',
-      note: null,
+      // The API caps label at 200 chars; long scheme names would otherwise 400.
+      label: (pending.name ?? '').slice(0, 200),
+      // Exactly one of these, never both — the API refines on it.
+      ...(pending.kind === 'STOCK' ? { stockId: pendingId } : { fundId: pendingId }),
+      notes: null,
     });
   };
 
@@ -157,7 +155,7 @@ export function ApprovedProductsPanel() {
 
       <CardContent className="space-y-5">
         <div className="rounded-lg border border-border/60 bg-muted/20 p-3.5">
-          <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
+          <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
             <div>
               <Label htmlFor="approved-bucket" className="text-[11px] uppercase tracking-kerned text-muted-foreground">
                 Bucket
@@ -165,10 +163,10 @@ export function ApprovedProductsPanel() {
               <Select
                 id="approved-bucket"
                 value={bucket}
-                onChange={(e) => setBucket(e.target.value)}
+                onChange={(e) => setBucket(e.target.value as AdvisorAssetBucket)}
                 className="mt-1.5 h-10"
               >
-                {bucketChoices.map((b) => (
+                {BUCKET_OPTIONS.map((b) => (
                   <option key={b} value={b}>
                     {bucketLabel(b)}
                   </option>
@@ -186,7 +184,7 @@ export function ApprovedProductsPanel() {
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Button size="sm" onClick={addPending} disabled={!pending || addMut.isPending}>
+            <Button size="sm" onClick={addPending} disabled={!canAdd}>
               {addMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Add to {bucketLabel(bucket)}
             </Button>
@@ -196,6 +194,19 @@ export function ApprovedProductsPanel() {
               </span>
             )}
           </div>
+
+          {pending && !pendingId && (
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              That result came from a live price lookup rather than our instrument master, so it
+              can't be shortlisted yet. Pick a fund or stock we already track.
+            </p>
+          )}
+          {!modelPortfolioId && (
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              Complete the risk assessment first — an approved product is attached to a model
+              portfolio, and you don't have one yet.
+            </p>
+          )}
         </div>
 
         {isLoading && (
@@ -237,11 +248,8 @@ export function ApprovedProductsPanel() {
                     <th className="px-1 py-2 text-left text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
                       Instrument
                     </th>
-                    <th className="px-1 py-2 text-left text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
-                      Identifier
-                    </th>
-                    <th className="w-28 px-1 py-2 text-right text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
-                      Order
+                    <th className="w-32 px-1 py-2 text-left text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
+                      Type
                     </th>
                     <th className="w-10" />
                   </tr>
@@ -251,44 +259,22 @@ export function ApprovedProductsPanel() {
                     <tr key={p.id} className="border-b border-border/40 last:border-0">
                       <td className="numeric px-1 py-2 text-muted-foreground">{i + 1}</td>
                       <td className="px-1 py-2">
-                        <span className="text-foreground">{p.instrumentName}</span>
-                        {p.note && (
-                          <span className="mt-0.5 block text-[11.5px] text-muted-foreground">{p.note}</span>
+                        <span className="text-foreground">{p.label}</span>
+                        {p.notes && (
+                          <span className="mt-0.5 block text-[11.5px] text-muted-foreground">{p.notes}</span>
                         )}
                       </td>
-                      <td className="numeric px-1 py-2 text-[12px] text-muted-foreground">
-                        {p.symbol ?? p.schemeCode ?? p.isin ?? '—'}
-                      </td>
-                      <td className="px-1 py-2 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7"
-                            aria-label={`Move ${p.instrumentName} up`}
-                            disabled={i === 0 || reorderMut.isPending}
-                            onClick={() => move(list, i, -1)}
-                          >
-                            <ChevronUp className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7"
-                            aria-label={`Move ${p.instrumentName} down`}
-                            disabled={i === list.length - 1 || reorderMut.isPending}
-                            onClick={() => move(list, i, 1)}
-                          >
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                      {/* The row references a master by id — there is no symbol
+                          or ISIN on it to show. */}
+                      <td className="px-1 py-2 text-[12px] text-muted-foreground">
+                        {p.fundId ? 'Mutual fund' : p.stockId ? 'Stock' : '—'}
                       </td>
                       <td className="px-1 py-2 text-right">
                         <Button
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7 text-muted-foreground hover:text-negative"
-                          aria-label={`Remove ${p.instrumentName}`}
+                          aria-label={`Remove ${p.label}`}
                           disabled={removeMut.isPending}
                           onClick={() => removeMut.mutate(p.id)}
                         >

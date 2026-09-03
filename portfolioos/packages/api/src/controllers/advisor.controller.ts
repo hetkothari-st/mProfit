@@ -35,6 +35,7 @@ import {
   listApprovedProducts as listApprovedProductsService,
   addApprovedProduct,
   removeApprovedProduct,
+  reorderApprovedProducts,
 } from '../services/advisor/approvedProducts.service.js';
 import { runAdvisorEngine } from '../services/advisor/advisorEngine.service.js';
 import {
@@ -80,14 +81,25 @@ const RECOMMENDATION_CATEGORIES = [
 
 const RECOMMENDATION_STATUSES = ['OPEN', 'ACCEPTED', 'DISMISSED', 'SNOOZED', 'DONE'] as const;
 
+/**
+ * Query-string boolean. NOT z.coerce.boolean(): that is `Boolean(value)`, so
+ * the string "false" coerces to true and a caller who spells the parameter out
+ * explicitly gets the opposite of what they asked for.
+ */
+const queryBoolean = (dflt: boolean) =>
+  z
+    .enum(['true', 'false', '1', '0'])
+    .optional()
+    .transform((v) => (v === undefined ? dflt : v === 'true' || v === '1'));
+
 const listRecommendationsSchema = z.object({
   status: z.enum(RECOMMENDATION_STATUSES).optional(),
   category: z.enum(RECOMMENDATION_CATEGORIES).optional(),
-  runId: z.string().cuid().optional(),
+  generationRunId: z.string().cuid().optional(),
   // Default false: a superseded recommendation is history, not advice, and
   // showing it alongside the live list is how a user ends up acting twice on
   // the same drift.
-  includeSuperseded: z.coerce.boolean().default(false),
+  includeSuperseded: queryBoolean(false),
   limit: z.coerce.number().int().positive().max(200).default(50),
 });
 
@@ -116,7 +128,7 @@ const bucketSchema = z.enum(ADVISOR_ASSET_BUCKETS);
 const listApprovedProductsSchema = z.object({
   modelPortfolioId: z.string().cuid().optional(),
   bucket: bucketSchema.optional(),
-  includeInactive: z.coerce.boolean().default(false),
+  includeInactive: queryBoolean(false),
 });
 
 const addApprovedProductSchema = z
@@ -127,7 +139,6 @@ const addApprovedProductSchema = z
     stockId: z.string().cuid().nullable().optional(),
     label: z.string().min(1).max(200),
     notes: z.string().max(2000).nullable().optional(),
-    rank: z.number().int().positive().optional(),
   })
   .refine((v) => Boolean(v.fundId) !== Boolean(v.stockId), {
     // Exactly one instrument reference. Both, or neither, makes the product
@@ -340,6 +351,26 @@ export async function listApprovedProducts(req: Request, res: Response): Promise
 export async function postApprovedProduct(req: Request, res: Response): Promise<void> {
   const input = addApprovedProductSchema.parse(req.body);
   const data = await addApprovedProduct(userId(req), input);
+  ok(res, data);
+}
+
+const reorderApprovedProductsSchema = z.object({
+  modelPortfolioId: z.string().cuid(),
+  bucket: bucketSchema,
+  /** Every ACTIVE product id in the bucket, in the order wanted. */
+  orderedIds: z.array(z.string().cuid()).min(1),
+});
+
+/**
+ * Rank is presentation order — which approved product the engine reaches for
+ * first within a bucket. Reordering is its own endpoint because re-POSTing a
+ * product to change its rank hits the duplicate check and fails; the service
+ * renumbers the whole bucket in one pass so no intermediate state violates the
+ * (modelPortfolioId, bucket, rank) unique constraint.
+ */
+export async function putApprovedProductOrder(req: Request, res: Response): Promise<void> {
+  const { modelPortfolioId, bucket, orderedIds } = reorderApprovedProductsSchema.parse(req.body);
+  const data = await reorderApprovedProducts(userId(req), modelPortfolioId, bucket, orderedIds);
   ok(res, data);
 }
 

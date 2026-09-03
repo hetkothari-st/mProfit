@@ -71,20 +71,22 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
       }
       return row;
     };
-    for (const c of data.current) {
+    // `?? []` on all three arrays, `?? 0` on every number: a partial payload
+    // should collapse to the empty state, not throw inside a for…of.
+    for (const c of data.current ?? []) {
       const row = ensure(c.bucket);
-      row.currentPct = c.currentPct;
-      row.currentValue = c.currentValue;
+      row.currentPct = c.currentPct ?? 0;
+      row.currentValue = c.currentValueInr ?? null;
     }
-    for (const t of data.target) {
-      ensure(t.bucket).targetPct = t.targetPct;
+    for (const t of data.target ?? []) {
+      ensure(t.bucket).targetPct = t.targetPct ?? 0;
     }
-    for (const d of data.drift) {
+    for (const d of data.drift ?? []) {
       const row = ensure(d.bucket);
-      row.currentPct = d.currentPct;
-      row.targetPct = d.targetPct;
-      row.driftPp = d.driftPp;
-      row.driftValue = d.driftValue;
+      row.currentPct = d.currentPct ?? 0;
+      row.targetPct = d.targetPct ?? 0;
+      row.driftPp = d.driftPp ?? 0;
+      row.driftValue = d.driftValueInr ?? null;
     }
     // Biggest absolute drift first — the rows that demand attention lead.
     return [...byBucket.values()].sort((a, b) => Math.abs(b.driftPp) - Math.abs(a.driftPp));
@@ -107,7 +109,7 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
               <p className="text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
                 Total value
               </p>
-              <Money className="text-[15px] font-medium">{formatINR(data.totalValue)}</Money>
+              <Money className="text-[15px] font-medium">{formatINR(data.totalValueInr)}</Money>
             </div>
           )}
         </div>
@@ -136,7 +138,17 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
 
         {!isLoading && !isError && rows.length > 0 && (
           <>
-            {worst && Math.abs(worst.driftPp) >= MATERIAL_DRIFT_PP && (
+            {/* The backend flags this explicitly rather than leaving us to infer
+                it from an all-zero target column. */}
+            {data?.hasTargets === false && (
+              <p className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2.5 text-[13px] text-muted-foreground">
+                No target weights are set yet, so every bucket below reads as a
+                100% overweight. Take the risk assessment to get a model portfolio to measure
+                against.
+              </p>
+            )}
+
+            {data?.hasTargets !== false && worst && Math.abs(worst.driftPp) >= MATERIAL_DRIFT_PP && (
               <p className="flex items-start gap-2 rounded-lg border border-accent/25 bg-accent/[0.06] px-3 py-2.5 text-[13px] text-foreground">
                 <Scale className="mt-0.5 h-4 w-4 shrink-0 text-accent-ink" strokeWidth={1.8} />
                 <span>

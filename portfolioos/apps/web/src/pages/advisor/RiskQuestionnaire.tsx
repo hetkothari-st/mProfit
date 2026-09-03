@@ -191,6 +191,9 @@ export function RiskQuestionnaire({ existing, onDone, onCancel }: RiskQuestionna
       qc.invalidateQueries({ queryKey: advisorKeys.riskProfile });
       qc.invalidateQueries({ queryKey: advisorKeys.allocation });
       qc.invalidateQueries({ queryKey: ['advisor', 'recommendations'] });
+      // A first submission seeds the four default model portfolios — which is
+      // where the approved-products panel gets its modelPortfolioId from.
+      qc.invalidateQueries({ queryKey: advisorKeys.modelPortfolios });
       onDone?.(profile);
     },
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not save your risk profile')),

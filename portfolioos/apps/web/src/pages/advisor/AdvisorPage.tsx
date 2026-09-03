@@ -53,10 +53,13 @@ export function AdvisorPage() {
  */
 function RefreshAction() {
   const qc = useQueryClient();
-  const { data: profile } = useQuery({
+  // GET /risk-profile returns `{ profile, history }` — the profile is one half
+  // of an envelope, not the body.
+  const { data: riskProfileData } = useQuery({
     queryKey: advisorKeys.riskProfile,
     queryFn: () => advisorApi.riskProfile(),
   });
+  const profile = riskProfileData?.profile ?? null;
 
   const regenerate = useMutation({
     mutationFn: () => advisorApi.regenerate(),
@@ -101,7 +104,9 @@ function AdvisorContent() {
   const allocationQuery = useQuery({
     queryKey: advisorKeys.allocation,
     queryFn: () => advisorApi.allocation(),
-    enabled: !!profileQuery.data,
+    // Allocation is only meaningful once a profile exists — and `data` is the
+    // `{ profile, history }` envelope, which is truthy even with no profile.
+    enabled: !!profileQuery.data?.profile,
   });
 
   // The prose button only exists when the backend says the model is available.
@@ -127,7 +132,7 @@ function AdvisorContent() {
     );
   }
 
-  const profile = profileQuery.data ?? null;
+  const profile = profileQuery.data?.profile ?? null;
 
   // No profile means no defensible advice — the questionnaire replaces the feed
   // entirely rather than sitting above it.
@@ -193,6 +198,13 @@ function RiskProfileSummary({
   profile: RiskProfile;
   onRetake: () => void;
 }) {
+  // Every read below is defensive: a contract drift should show an incomplete
+  // card, never a white screen.
+  const category = profile.category;
+  const categoryLabel = RISK_CATEGORY_LABEL[category] ?? category ?? 'Unknown';
+  const categoryBlurb = RISK_CATEGORY_BLURB[category] ?? '';
+  const overrides = profile.overrides ?? [];
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -202,10 +214,10 @@ function RiskProfileSummary({
               Risk profile
             </p>
             <CardTitle className="mt-1 flex flex-wrap items-center gap-2.5">
-              {RISK_CATEGORY_LABEL[profile.category]}
+              {categoryLabel}
               <Badge
                 variant="outline"
-                className={cn('text-[10px] uppercase tracking-kerned', CATEGORY_TONE[profile.category])}
+                className={cn('text-[10px] uppercase tracking-kerned', CATEGORY_TONE[category])}
               >
                 Score {profile.score}
               </Badge>
@@ -219,22 +231,27 @@ function RiskProfileSummary({
 
       <CardContent className="space-y-4">
         <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-          {RISK_CATEGORY_BLURB[profile.category]}
+          {categoryBlurb}
         </p>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Category" value={RISK_CATEGORY_LABEL[profile.category]} />
-          <Stat label="Score" value={String(profile.score)} numeric />
-          <Stat label="Tax slab" value={`${profile.taxSlabPct}%`} numeric />
+          <Stat label="Category" value={categoryLabel} />
+          <Stat label="Score" value={String(profile.score ?? '—')} numeric />
+          {/* taxSlabPct is genuinely nullable — "not sure" must not render as "null%". */}
+          <Stat
+            label="Tax slab"
+            value={profile.taxSlabPct != null ? `${profile.taxSlabPct}%` : 'Not sure'}
+            numeric
+          />
         </div>
 
-        {profile.overrides.length > 0 && (
+        {overrides.length > 0 && (
           <div className="rounded-lg border border-accent/25 bg-accent/[0.06] p-3">
             <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85">
               <ShieldAlert className="h-3 w-3" /> Adjustments we made
             </p>
             <ul className="mt-2 space-y-2">
-              {profile.overrides.map((o, i) => (
+              {overrides.map((o, i) => (
                 <li key={`${o.rule}-${i}`} className="text-[13px] leading-relaxed text-foreground">
                   <span className="text-muted-foreground">
                     {o.from} → <span className="font-medium text-foreground">{o.to}</span> —{' '}

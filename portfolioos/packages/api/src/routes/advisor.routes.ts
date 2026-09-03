@@ -15,6 +15,7 @@ import {
   listApprovedProducts,
   postApprovedProduct,
   deleteApprovedProduct,
+  putApprovedProductOrder,
   listModelPortfolios,
   putModelPortfolioTargets,
   getRuns,
@@ -54,6 +55,7 @@ advisorRouter.post('/recommendations/:id/prose', asyncHandler(postProse));
 // Adviser-curated buy-side universe.
 advisorRouter.get('/approved-products', asyncHandler(listApprovedProducts));
 advisorRouter.post('/approved-products', asyncHandler(postApprovedProduct));
+advisorRouter.put('/approved-products/order', asyncHandler(putApprovedProductOrder));
 advisorRouter.delete('/approved-products/:id', asyncHandler(deleteApprovedProduct));
 
 // Model portfolios. Editing targets is a PUT that inserts a new version rather

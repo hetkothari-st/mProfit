@@ -81,7 +81,7 @@ function isAdviserApproved(provenance: AdvisorProvenance): boolean {
 }
 
 function titleCase(s: string): string {
-  return s
+  return (s ?? '')
     .toLowerCase()
     .split('_')
     .map((w) => (w.length ? w[0]!.toUpperCase() + w.slice(1) : w))
@@ -96,7 +96,9 @@ function formatSnapshotValue(value: unknown): string {
 }
 
 function TradeLeg({ leg }: { leg: TradeAction }) {
-  const meta = DIRECTION_META[leg.direction];
+  // An unrecognised direction renders as a neutral chip rather than blowing up
+  // on `meta.icon`.
+  const meta = DIRECTION_META[leg.direction] ?? DIRECTION_META.SWITCH;
   const Icon = meta.icon;
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border/40 py-2.5 last:border-0">
@@ -146,7 +148,7 @@ export function RecommendationCard({ rec, llmEnabled }: RecommendationCardProps)
         ? advisorApi.setStatus(rec.id, { status, snoozedUntil: snoozeUntilIso(7) })
         : advisorApi.setStatus(rec.id, { status }),
     onSuccess: (_data, status) => {
-      toast.success(`Marked ${STATUS_LABEL[status].toLowerCase()}`);
+      toast.success(`Marked ${(STATUS_LABEL[status] ?? status).toLowerCase()}`);
       invalidate();
     },
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not update this recommendation')),
@@ -177,6 +179,9 @@ export function RecommendationCard({ rec, llmEnabled }: RecommendationCardProps)
   const prio = priorityTone(rec.priority);
   const approved = isAdviserApproved(rec.provenance);
   const snapshotEntries = Object.entries(rec.inputsSnapshot ?? {});
+  // The engine always serialises an array here, but a missing one must render
+  // "no trade attached" rather than crash on `.length`.
+  const legs = rec.action ?? [];
   const busy = statusMut.isPending;
 
   return (
@@ -192,7 +197,7 @@ export function RecommendationCard({ rec, llmEnabled }: RecommendationCardProps)
             </Badge>
             {rec.status !== 'OPEN' && (
               <Badge variant="secondary" className="text-[10px] uppercase tracking-kerned">
-                {STATUS_LABEL[rec.status]}
+                {STATUS_LABEL[rec.status] ?? rec.status}
               </Badge>
             )}
           </div>
@@ -225,13 +230,13 @@ export function RecommendationCard({ rec, llmEnabled }: RecommendationCardProps)
         <p className="text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
           What to do
         </p>
-        {rec.action.length === 0 ? (
+        {legs.length === 0 ? (
           <p className="py-2.5 text-[13.5px] text-muted-foreground">
             No trade attached — this is guidance only.
           </p>
         ) : (
           <ul className="mt-1">
-            {rec.action.map((leg, i) => (
+            {legs.map((leg, i) => (
               <TradeLeg key={`${leg.direction}-${leg.instrumentName}-${i}`} leg={leg} />
             ))}
           </ul>
