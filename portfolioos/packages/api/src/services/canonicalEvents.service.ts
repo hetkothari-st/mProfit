@@ -22,7 +22,7 @@
  */
 
 import { Prisma, type CanonicalEvent, type CanonicalEventStatus } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 
 /**
  * Transaction client type as handed to $transaction callbacks on our
@@ -30,7 +30,12 @@ import { prisma } from '../lib/prisma.js';
  * the inferred type away from `Prisma.TransactionClient`, so we extract
  * it structurally.
  */
-type ExtendedTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+// The transaction client handed to runInTransaction's callback. It is
+// Prisma's plain TransactionClient, not the extended client's inferred tx:
+// runInTransaction issues set_config on the transaction itself, so operations
+// inside it deliberately bypass the $allOperations hook and run on the base
+// client. This helper only needs the standard delegates.
+type ExtendedTx = Prisma.TransactionClient;
 import { logger } from '../lib/logger.js';
 import {
   BadRequestError,
@@ -183,7 +188,7 @@ export async function approveCanonicalEvent(
 
   // Step 1: mark CONFIRMED + bump sender counter inside one tx.
   const previousStatus = existing.status;
-  const { senderCrossed } = await prisma.$transaction(async (tx) => {
+  const { senderCrossed } = await runInTransaction(async (tx) => {
     await tx.canonicalEvent.update({
       where: { id },
       data: {

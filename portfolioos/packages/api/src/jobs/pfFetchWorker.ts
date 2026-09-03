@@ -16,7 +16,7 @@
 import Bull from 'bull';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { sseHub } from '../lib/sseHub.js';
 import { runAsUser } from '../lib/requestContext.js';
 import { decryptCredentialBlob, decryptIdentifier } from '../services/pfCredentials.service.js';
@@ -30,6 +30,7 @@ import { incCounter } from '../lib/metrics.js';
 import { randomUUID } from 'node:crypto';
 import type { ScrapeContext } from '../adapters/pf/types.js';
 import type { PfFetchStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 min — Playwright scrape can be slow
 const LOCK_DURATION_MS = 10 * 60 * 1000;
@@ -213,14 +214,21 @@ export function startPfFetchWorker(): void {
         });
 
         let eventsInserted = 0;
-        await prisma.$transaction(async (tx) => {
+        await runInTransaction(async (tx) => {
           for (const e of built) {
             try {
               await tx.canonicalEvent.upsert({
                 where: {
                   userId_sourceHash: { userId: e.userId, sourceHash: e.sourceHash },
                 },
-                create: { ...e, status: 'CONFIRMED' },
+                // Same InputJsonValue narrowing as pf.controller: the real
+                // TransactionClient types metadata more strictly than the
+                // extended client's inferred tx did.
+                create: {
+                  ...e,
+                  status: 'CONFIRMED',
+                  metadata: e.metadata as Prisma.InputJsonValue,
+                },
                 update: {},
               });
               eventsInserted++;

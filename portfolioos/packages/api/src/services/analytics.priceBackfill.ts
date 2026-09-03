@@ -1,4 +1,4 @@
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { fetchHistorical } from '../priceFeeds/yahoo.service.js';
 import { backfillCryptoHistory } from '../priceFeeds/crypto.service.js';
@@ -36,9 +36,9 @@ async function backfillStock(stockId: string, fromDate: Date): Promise<void> {
   if (!s) return;
   const bars = await fetchHistorical(s.symbol, s.exchange, fromDate);
   if (bars.length === 0) return;
-  await prisma.$transaction(
-    bars.map((b) =>
-      prisma.stockPrice.upsert({
+  await runInTransaction(async (tx) => {
+    for (const b of bars) {
+      await tx.stockPrice.upsert({
         where: { stockId_date: { stockId, date: b.date } },
         update: {
           open: b.open.toString(),
@@ -54,9 +54,9 @@ async function backfillStock(stockId: string, fromDate: Date): Promise<void> {
           low: b.low.toString(),
           close: b.close.toString(),
         },
-      }),
-    ),
-  );
+      });
+    }
+  });
   logger.info({ stockId, symbol: s.symbol, bars: bars.length }, '[analytics.backfill] stock history');
 }
 

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { User } from '@prisma/client';
 import { OAuth2Client } from 'google-auth-library';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import {
   BadRequestError,
   ConflictError,
@@ -164,20 +164,24 @@ export async function resetPassword(token: string, newPassword: string): Promise
     throw new BadRequestError('Invalid or expired reset token');
   }
   const passwordHash = await hashPassword(newPassword);
-  await prisma.$transaction([
-    prisma.user.update({
+  // Callback form, not the array form. Under the RLS extension each promise in
+  // an array-form $transaction is already wrapped in its own transaction, so
+  // the batch was not atomic either: a failure could leave the password
+  // changed but the reset token still usable and old sessions still live.
+  await runInTransaction(async (tx) => {
+    await tx.user.update({
       where: { id: record.userId },
       data: { passwordHash },
-    }),
-    prisma.passwordResetToken.update({
+    });
+    await tx.passwordResetToken.update({
       where: { id: record.id },
       data: { usedAt: new Date() },
-    }),
-    prisma.refreshToken.updateMany({
+    });
+    await tx.refreshToken.updateMany({
       where: { userId: record.userId, revokedAt: null },
       data: { revokedAt: new Date() },
-    }),
-  ]);
+    });
+  });
 }
 
 export async function getCurrentUser(userId: string) {

@@ -9,7 +9,7 @@ import {
   type Quantity,
 } from '@portfolioos/shared';
 import type { Transaction } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { fetchHistorical, buildYahooSymbol } from '../priceFeeds/yahoo.service.js';
@@ -271,7 +271,7 @@ export async function createPortfolio(
     if (!client || client.advisorId !== userId) throw new ForbiddenError('Invalid client');
   }
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     if (input.onboarding) {
       const existing = await tx.portfolio.findFirst({
         where: { userId },
@@ -306,7 +306,7 @@ export async function updatePortfolio(
   patch: Prisma.PortfolioUpdateInput & { isDefault?: boolean },
 ) {
   await ensureOwnership(userId, id);
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     if (patch.isDefault === true) {
       await tx.portfolio.updateMany({
         where: { userId, isDefault: true, NOT: { id } },
@@ -672,15 +672,15 @@ export async function getHistoricalValuation(
           try {
             const bars = await fetchHistorical(s.symbol, s.exchange, fromDate);
             if (bars.length === 0) return;
-            await prisma.$transaction(
-              bars.map((b) =>
-                prisma.stockPrice.upsert({
+            await runInTransaction(async (tx) => {
+              for (const b of bars) {
+                await tx.stockPrice.upsert({
                   where: { stockId_date: { stockId: s.id, date: b.date } },
                   update: { open: b.open.toString(), high: b.high.toString(), low: b.low.toString(), close: b.close.toString() },
                   create: { stockId: s.id, date: b.date, open: b.open.toString(), high: b.high.toString(), low: b.low.toString(), close: b.close.toString() },
-                }),
-              ),
-            );
+                });
+              }
+            });
           } catch (err) {
             logger.warn({ err, symbol: s.symbol }, '[portfolio] historical backfill failed');
           }

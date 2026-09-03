@@ -13,7 +13,7 @@
  */
 
 import { Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import {
   BadRequestError,
   ForbiddenError,
@@ -249,7 +249,7 @@ export async function addPremiumPayment(
   const policy = await prisma.insurancePolicy.findFirst({ where: { id: policyId, userId } });
   if (!policy) throw new NotFoundError(`InsurancePolicy ${policyId} not found`);
 
-  const payment = await prisma.$transaction(async (tx) => {
+  const payment = await runInTransaction(async (tx) => {
     const p = await tx.premiumPayment.create({
       data: {
         policyId,

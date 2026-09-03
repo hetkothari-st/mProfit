@@ -16,7 +16,7 @@
 
 import { Decimal } from 'decimal.js';
 import { Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { encryptSecret, decryptSecret } from '../lib/secrets.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
@@ -306,7 +306,7 @@ export async function createLrsRemittance(userId: string, input: LrsRemittanceIn
   // recorded, increment the credit's usedAmount so the FY claim ledger stays
   // in sync. We do this in an atomic transaction with the remittance write so
   // a race between two remittances cannot double-count or skip.
-  const row = await prisma.$transaction(async (tx) => {
+  const row = await runInTransaction(async (tx) => {
     const created = await tx.lrsRemittance.create({
       data: {
         userId,
@@ -342,7 +342,7 @@ export async function deleteLrsRemittance(userId: string, id: string) {
   // Reverse the usedAmount increment if this remittance contributed to a
   // TcsCredit's ledger. Wrapped in the same $transaction as the delete so a
   // failure of either rolls back cleanly.
-  await prisma.$transaction(async (tx) => {
+  await runInTransaction(async (tx) => {
     if (row.tcsCreditId && row.tcsDeducted.gt(0)) {
       await tx.tcsCredit.update({
         where: { id: row.tcsCreditId },

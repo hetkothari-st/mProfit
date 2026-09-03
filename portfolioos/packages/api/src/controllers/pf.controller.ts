@@ -9,7 +9,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { ok, created, error } from '../lib/response.js';
 import { logger } from '../lib/logger.js';
 import { sseHub } from '../lib/sseHub.js';
@@ -44,6 +44,7 @@ import {
 import { snoozeNudge } from '../services/pfNudges.service.js';
 import { enterUserContext } from '../lib/requestContext.js';
 import type { CanonicalEventType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 // ---------------------------------------------------------------------------
 // Multer — in-memory, 10 MB cap
@@ -347,14 +348,23 @@ export async function uploadManualPassbookHandler(req: Request, res: Response) {
   });
 
   let inserted = 0;
-  await prisma.$transaction(async (tx) => {
+  await runInTransaction(async (tx) => {
     for (const e of built) {
       try {
         await tx.canonicalEvent.upsert({
           where: {
             userId_sourceHash: { userId: e.userId, sourceHash: e.sourceHash },
           },
-          create: { ...e, eventType: e.eventType as CanonicalEventType, status: 'CONFIRMED' },
+          // `metadata` is Record<string, unknown> on the builder's output while
+          // Prisma types it as InputJsonValue, which is structurally narrower.
+          // The extended client's loosely inferred `tx` hid the mismatch; the
+          // real TransactionClient does not. Same data either way.
+          create: {
+            ...e,
+            eventType: e.eventType as CanonicalEventType,
+            status: 'CONFIRMED',
+            metadata: e.metadata as Prisma.InputJsonValue,
+          },
           update: {},
         });
         inserted++;
@@ -583,12 +593,21 @@ export async function extensionRawPayloadHandler(req: Request, res: Response): P
   });
 
   let eventsCreated = 0;
-  await prisma.$transaction(async (tx) => {
+  await runInTransaction(async (tx) => {
     for (const e of built) {
       try {
         await tx.canonicalEvent.upsert({
           where: { userId_sourceHash: { userId: e.userId, sourceHash: e.sourceHash } },
-          create: { ...e, eventType: e.eventType as CanonicalEventType, status: 'CONFIRMED' },
+          // `metadata` is Record<string, unknown> on the builder's output while
+          // Prisma types it as InputJsonValue, which is structurally narrower.
+          // The extended client's loosely inferred `tx` hid the mismatch; the
+          // real TransactionClient does not. Same data either way.
+          create: {
+            ...e,
+            eventType: e.eventType as CanonicalEventType,
+            status: 'CONFIRMED',
+            metadata: e.metadata as Prisma.InputJsonValue,
+          },
           update: {},
         });
         eventsCreated++;

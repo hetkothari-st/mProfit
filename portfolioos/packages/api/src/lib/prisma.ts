@@ -1,6 +1,11 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { env } from '../config/env.js';
-import { getCurrentUserId, isSystemContext } from './requestContext.js';
+import {
+  getCurrentUserId,
+  isSystemContext,
+  isInTransaction,
+  runWithTransactionFlag,
+} from './requestContext.js';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: ExtendedPrismaClient | undefined;
@@ -15,7 +20,7 @@ const globalForPrisma = globalThis as unknown as {
  * has a session variable to match against. Reference tables (StockMaster,
  * MFNav, FXRate, …) are excluded — they're shared market data.
  */
-const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
+export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'Portfolio',
   'Transaction',
   'Holding',
@@ -85,10 +90,38 @@ const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   // role every Goal/BankAccount read returned zero rows and every write failed
   // with 42501, exactly the failure documented for the PF tables above.
   // Surfaced by the family aggregates, which read both across members.
-  // NOTE: nineteen further RLS-protected tables are still missing from this
-  // set — see the hand-off notes; they are out of scope for this change.
   'Goal',
   'BankAccount',
+  // The remaining RLS-protected tables. Same defect as Goal/BankAccount above:
+  // a policy on the table, no entry here, therefore no set_config, therefore
+  // zero rows read and 42501 on write under the NOBYPASSRLS runtime role.
+  //
+  // Six of these are written inside a caller's $transaction — LrsRemittance,
+  // OwnedProperty, PortfolioGroup, PortfolioGroupMember, RentReminder,
+  // TcsCredit. Registering them was unsafe until runInTransaction landed,
+  // because the hook re-dispatched each write onto its own connection and it
+  // escaped the caller's rollback. Those call sites now use runInTransaction,
+  // so the writes stay inside the caller's transaction and this is safe.
+  // See test/invariants/transaction-atomicity.test.ts.
+  'AaConsent',
+  'BankBalanceSnapshot',
+  'BrokerCredential',
+  'DerivativePosition',
+  'Document',
+  'ExpiryCloseJob',
+  'ExtensionPairing',
+  'ForexBalance',
+  'LrsRemittance',
+  'MarginSnapshot',
+  'OwnedProperty',
+  'PendingFamilyInvite',
+  'PortfolioGroup',
+  'PortfolioGroupMember',
+  'PortfolioInsight',
+  'PortfolioSetting',
+  'RentReminder',
+  'TcsCredit',
+  'UserNotificationConfig',
 ]);
 
 const basePrisma =
@@ -128,6 +161,15 @@ const extended = basePrisma.$extends({
   query: {
     $allOperations: async ({ model, operation, args, query }) => {
       if (!model || !USER_SCOPED_MODELS.has(model)) {
+        return query(args);
+      }
+      // Already inside runInTransaction: `set_config` has been issued on THAT
+      // transaction and, being transaction-local, applies to this query too.
+      // Opening another transaction here would put the write on a different
+      // connection, where the caller's rollback cannot reach it — which is
+      // exactly how caller-level $transaction blocks silently stopped being
+      // atomic for user-scoped models.
+      if (isInTransaction()) {
         return query(args);
       }
       const userId = getCurrentUserId();
@@ -180,4 +222,42 @@ if (env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
  */
 function modelToDelegate(model: string): string {
   return model.charAt(0).toLowerCase() + model.slice(1);
+}
+
+/**
+ * Run `fn` inside ONE transaction that carries the RLS session variable.
+ *
+ * Use this instead of `prisma.$transaction` anywhere the body touches a
+ * user-scoped model. `prisma.$transaction` alone is not atomic for those
+ * models: the $allOperations hook re-dispatches each operation onto its own
+ * transaction on another connection, so the writes survive a rollback of the
+ * outer block. Proven in test/invariants/transaction-atomicity.test.ts.
+ *
+ * Here the session variable is set once, up front, on the transaction the
+ * callback actually uses; the hook then sees `inTransaction` and runs each
+ * query inline on that same transaction. One connection, one transaction,
+ * real atomicity, and RLS still enforced.
+ */
+export async function runInTransaction<T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  opts: { maxWait?: number; timeout?: number } = {},
+): Promise<T> {
+  const userId = getCurrentUserId();
+  const system = isSystemContext();
+
+  return basePrisma.$transaction(
+    async (tx) => {
+      if (system) {
+        await tx.$executeRaw(Prisma.sql`SELECT set_config('app.bypass_rls', 'on', true)`);
+      } else if (userId) {
+        await tx.$executeRaw(
+          Prisma.sql`SELECT set_config('app.current_user_id', ${userId}, true)`,
+        );
+      }
+      // No ambient context: deliberately set nothing. RLS then filters
+      // everything out, which is the same fail-closed behaviour the hook has.
+      return runWithTransactionFlag(() => fn(tx));
+    },
+    { maxWait: opts.maxWait ?? 15_000, timeout: opts.timeout ?? 30_000 },
+  );
 }

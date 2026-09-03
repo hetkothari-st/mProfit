@@ -20,7 +20,7 @@
 
 import { Prisma, type RentReceipt } from '@prisma/client';
 import { similarityRatio } from '@portfolioos/shared';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import {
   BadRequestError,
   ForbiddenError,
@@ -33,7 +33,12 @@ import { logger } from '../lib/logger.js';
  * extended Prisma client (the $allOperations extension widens the
  * inferred type away from `Prisma.TransactionClient`).
  */
-type ExtendedTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+// Prisma's plain TransactionClient — the type runInTransaction hands its
+// callback. Operations inside it deliberately bypass the $allOperations hook,
+// because runInTransaction has already issued set_config on this very
+// transaction; re-wrapping would put the write on another connection and
+// break the caller's atomicity.
+type ExtendedTx = Prisma.TransactionClient;
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -375,7 +380,7 @@ export async function createTenancy(userId: string, input: CreateTenancyInput) {
     'securityDeposit',
   );
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     const tenancy = await tx.tenancy.create({
       data: {
         propertyId: input.propertyId,
@@ -460,7 +465,7 @@ export async function updateTenancy(
     data.endDate = newEndDate;
   }
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     const updated = await tx.tenancy.update({ where: { id }, data });
 
     // If endDate was extended, backfill receipts for the new months.
@@ -613,7 +618,7 @@ export async function markReceiptReceived(
       ? RECEIPT_STATUS.PARTIAL
       : RECEIPT_STATUS.RECEIVED;
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     let cashFlowId: string | null = null;
     if (portfolioId) {
       const cf = await tx.cashFlow.create({
@@ -660,7 +665,7 @@ export async function skipReceipt(
       'Cannot skip a receipt already marked received — edit/unlink first',
     );
   }
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     const updated = await tx.rentReceipt.update({
       where: { id: receiptId },
       data: {
@@ -723,7 +728,7 @@ export async function unmarkReceived(userId: string, receiptId: string) {
     );
   }
   const nextStatus = unsettledStatusFor(existing.dueDate);
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     if (existing.cashFlowId) {
       await tx.cashFlow.deleteMany({ where: { id: existing.cashFlowId } });
     }
@@ -1015,7 +1020,7 @@ export async function applyAutoMatch(
       ? RECEIPT_STATUS.PARTIAL
       : RECEIPT_STATUS.RECEIVED;
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     let cashFlowId: string | null = existingCashFlowId;
     if (!cashFlowId && portfolioId) {
       const cf = await tx.cashFlow.create({
@@ -1089,7 +1094,7 @@ export async function undoAutoMatch(userId: string, receiptId: string) {
   if (!existing.autoMatchedFromEventId) {
     throw new BadRequestError('Receipt was not auto-matched');
   }
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     if (existing.cashFlowId) {
       await tx.cashFlow.deleteMany({ where: { id: existing.cashFlowId } });
     }

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { AssetClass, FamilyRole } from '@prisma/client';
 import { toDecimal, serializeMoney } from '@portfolioos/shared';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { runAsUser } from '../lib/requestContext.js';
 import {
   BadRequestError,
@@ -57,7 +57,7 @@ export async function createFamily(callerId: string, input: CreateFamilyInput) {
   const name = input.name.trim();
   if (!name) throw new BadRequestError('Family name is required.');
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     const family = await tx.family.create({
       data: {
         name,
@@ -472,13 +472,17 @@ export async function verifySeatPaymentAndInvite(
   const token = crypto.randomBytes(INVITE_TOKEN_BYTES).toString('base64url');
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000);
 
-  const [family, invitation] = await prisma.$transaction([
-    prisma.family.update({
+  // Callback form so the seat increment, the invitation and the removal of the
+  // pending row commit or fail together. The pendingFamilyInvite delete used to
+  // sit outside the transaction entirely, so a crash between the two could
+  // leave a paid-for seat with its pending invite still claimable.
+  const { family, invitation } = await runInTransaction(async (tx) => {
+    const family = await tx.family.update({
       where: { id: familyId },
       data: { includedSeats: { increment: 1 } },
       select: { name: true, includedSeats: true },
-    }),
-    prisma.familyInvitation.create({
+    });
+    const invitation = await tx.familyInvitation.create({
       data: {
         familyId,
         invitedEmail: pending.invitedEmail,
@@ -490,9 +494,10 @@ export async function verifySeatPaymentAndInvite(
         token,
         expiresAt,
       },
-    }),
-  ]);
-  await prisma.pendingFamilyInvite.delete({ where: { id: pending.id } });
+    });
+    await tx.pendingFamilyInvite.delete({ where: { id: pending.id } });
+    return { family, invitation };
+  });
 
   logger.info(
     { familyId, invitationId: invitation.id, pendingInviteId: pending.id },
@@ -599,7 +604,7 @@ export async function acceptInvitation(callerId: string, token: string) {
   });
   if (!caller) throw new NotFoundError('User not found.');
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     const inv = await tx.familyInvitation.findUnique({ where: { token } });
     if (!inv) throw new NotFoundError('Invitation not found.');
     if (inv.acceptedAt) throw new BadRequestError('Invitation already accepted.');

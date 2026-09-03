@@ -20,7 +20,7 @@
 
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import {
   ForbiddenError,
   NotFoundError,
@@ -39,7 +39,12 @@ import { writeIngestionFailure } from './ingestionFailures.service.js';
 // The $extends-wrapped Prisma client passes a different tx client type
 // to $transaction callbacks than Prisma.TransactionClient — extract it
 // structurally (same trick as canonicalEvents.service.ts).
-type ExtendedTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+// Prisma's plain TransactionClient — the type runInTransaction hands its
+// callback. Operations inside it deliberately bypass the $allOperations hook,
+// because runInTransaction has already issued set_config on this very
+// transaction; re-wrapping would put the write on another connection and
+// break the caller's atomicity.
+type ExtendedTx = Prisma.TransactionClient;
 
 export interface ChallanScanOutcome {
   ok: boolean;
@@ -158,7 +163,7 @@ async function applyScanOutcomeToDb(
   let updated = 0;
   let unchanged = 0;
   for (const row of result.challans) {
-    const action = await prisma.$transaction(async (tx) => {
+    const action = await runInTransaction(async (tx) => {
       const status = await upsertChallan(tx, vehicleId, row);
       if (status === 'new') {
         await emitCanonicalEvent(tx, userId, vehicleId, regNo, row);

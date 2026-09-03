@@ -40,7 +40,7 @@
  */
 
 import { Prisma, type AssetClass, type CanonicalEvent, type TransactionType } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
 import { computeAssetKey } from '../services/assetKey.js';
@@ -141,7 +141,7 @@ async function projectBuySell(event: CanonicalEvent): Promise<ProjectionOutcome>
   const amount = event.amount;
   const price = event.price ?? new Prisma.Decimal(amount.toString()).div(qty.toString());
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await runInTransaction(async (tx) => {
     const created = await tx.transaction.create({
       data: {
         portfolioId: portfolio.portfolioId,
@@ -223,7 +223,7 @@ async function projectCashFlow(
   // accountLast4 and exactly one of the user's accounts ends in those digits.
   const bankAccountId = await findAccountByLast4(event.userId, event.accountLast4);
 
-  const created = await prisma.$transaction(async (tx) => {
+  const created = await runInTransaction(async (tx) => {
     const cf = await tx.cashFlow.create({
       data: {
         portfolioId: portfolio.portfolioId,
@@ -345,7 +345,7 @@ async function projectFnoTrade(event: CanonicalEvent): Promise<ProjectionOutcome
     foExpiryDate: expiryStr,
   });
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await runInTransaction(async (tx) => {
     const created = await tx.transaction.create({
       data: {
         portfolioId: portfolio.portfolioId,

@@ -16,6 +16,17 @@ export interface RequestContext {
   userId: string;
   /** When true, Prisma sets `app.bypass_rls = on` instead of `app.current_user_id`. */
   isSystem?: boolean;
+  /**
+   * True while executing inside `runInTransaction`, which has already issued
+   * `set_config` on the caller's transaction.
+   *
+   * The RLS hook uses this to run the query inline instead of opening a
+   * transaction of its own. Without it, a write inside a caller's
+   * `$transaction` was re-dispatched onto a SEPARATE connection and therefore
+   * escaped the caller's rollback — silently, so multi-row writes that read as
+   * atomic were not.
+   */
+  inTransaction?: boolean;
 }
 
 /**
@@ -85,4 +96,21 @@ export function enterUserContext(userId: string): void {
 
 export function enterSystemContext(): void {
   userContext.enterWith({ userId: '__system__', isSystem: true });
+}
+
+/** True while inside `runInTransaction` — the session variable is already set. */
+export function isInTransaction(): boolean {
+  return userContext.getStore()?.inTransaction === true;
+}
+
+/**
+ * Mark the current context as inside a transaction whose session variable has
+ * already been set. Internal to lib/prisma.ts's `runInTransaction`; nothing
+ * else should call it, because claiming the variable is set when it is not
+ * would make every query inside fail closed.
+ */
+export function runWithTransactionFlag<T>(fn: () => Promise<T>): Promise<T> {
+  const store = userContext.getStore();
+  if (!store) return fn();
+  return userContext.run({ ...store, inTransaction: true }, async () => await fn());
 }

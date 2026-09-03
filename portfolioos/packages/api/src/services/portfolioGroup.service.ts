@@ -19,7 +19,7 @@ import {
   type Money,
   type Quantity,
 } from '@portfolioos/shared';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { ForbiddenError, NotFoundError, BadRequestError } from '../lib/errors.js';
 import { fetchHistorical } from '../priceFeeds/yahoo.service.js';
@@ -163,7 +163,7 @@ export async function createGroup(
   const portfolios = await ensurePortfoliosOwned(userId, memberIds);
   assertSingleCurrency(portfolios);
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     const group = await tx.portfolioGroup.create({
       data: {
         userId,
@@ -193,7 +193,7 @@ export async function updateGroup(
     assertSingleCurrency(portfolios);
   }
 
-  return prisma.$transaction(async (tx) => {
+  return runInTransaction(async (tx) => {
     const data: Prisma.PortfolioGroupUpdateInput = {};
     if (patch.name !== undefined) data.name = patch.name.trim();
     if (patch.description !== undefined) data.description = patch.description;
@@ -224,7 +224,7 @@ export async function setGroupMembers(
   await ensureGroupOwnership(userId, groupId);
   const portfolios = await ensurePortfoliosOwned(userId, memberIds);
   assertSingleCurrency(portfolios);
-  await prisma.$transaction(async (tx) => {
+  await runInTransaction(async (tx) => {
     await tx.portfolioGroupMember.deleteMany({ where: { groupId } });
     if (memberIds.length > 0) {
       await tx.portfolioGroupMember.createMany({
@@ -530,9 +530,9 @@ export async function getGroupHistoricalValuation(
           try {
             const bars = await fetchHistorical(s.symbol, s.exchange, fromDate);
             if (bars.length === 0) return;
-            await prisma.$transaction(
-              bars.map((b) =>
-                prisma.stockPrice.upsert({
+            await runInTransaction(async (tx) => {
+              for (const b of bars) {
+                await tx.stockPrice.upsert({
                   where: { stockId_date: { stockId: s.id, date: b.date } },
                   update: {
                     open: b.open.toString(),
@@ -548,9 +548,9 @@ export async function getGroupHistoricalValuation(
                     low: b.low.toString(),
                     close: b.close.toString(),
                   },
-                }),
-              ),
-            );
+                });
+              }
+            });
           } catch (err) {
             logger.warn({ err, symbol: s.symbol }, '[group] historical backfill failed');
           }

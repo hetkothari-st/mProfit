@@ -14,7 +14,7 @@
 
 import { Prisma } from '@prisma/client';
 import { Decimal } from 'decimal.js';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { NotFoundError } from '../lib/errors.js';
 import {
   computePropertyCapitalGain,
@@ -384,7 +384,7 @@ export async function promoteToRental(
   const rentalType =
     PROPERTY_TYPE_TO_RENTAL_TYPE[property.propertyType] ?? 'RESIDENTIAL';
 
-  const updated = await prisma.$transaction(async (tx) => {
+  const updated = await runInTransaction(async (tx) => {
     const rental = await tx.rentalProperty.create({
       data: {
         userId,
@@ -435,7 +435,7 @@ export async function unlinkFromRental(
     );
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  const updated = await runInTransaction(async (tx) => {
     const next = await tx.ownedProperty.update({
       where: { id, userId },
       data: {
