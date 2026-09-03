@@ -68,6 +68,17 @@ const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'AdvisorApprovedProduct',
   'AdvisorRun',
   'AdvisorRecommendation',
+  // Provident fund auto-fetch. 20260506120000_pf_autofetch_foundation puts
+  // ENABLE + FORCE ROW LEVEL SECURITY on all three of these tables, so every
+  // read and write — including `runAsSystem` setup and the pfFetchWorker —
+  // needs `app.current_user_id` / `app.bypass_rls` set. Without the entries
+  // below the hook skips them, no session variable is issued, and Postgres
+  // rejects inserts with 42501 ("new row violates row-level security policy")
+  // and returns zero rows on reads. EpfMemberId has no `userId` of its own;
+  // its policy joins back through ProvidentFundAccount.
+  'ProvidentFundAccount',
+  'EpfMemberId',
+  'PfFetchSession',
 ]);
 
 const basePrisma =
@@ -77,6 +88,16 @@ const basePrisma =
       env.NODE_ENV === 'development'
         ? ['warn', 'error']
         : ['warn', 'error'],
+    // Prisma's defaults for an interactive `$transaction` are maxWait 2s /
+    // timeout 5s. That is incoherent with the RLS hook below, which re-issues
+    // every user-scoped query inside its *own* transaction with maxWait 15s:
+    // a caller-level `prisma.$transaction(async tx => { tx.transaction.create(…) })`
+    // could sit for up to 15s waiting on a pool slot for the inner call while
+    // the outer transaction expired at 5s, surfacing as
+    // "Transaction not found. Transaction ID is invalid, refers to an old
+    // closed transaction". Give outer transactions at least the headroom the
+    // inner ones are allowed to consume.
+    transactionOptions: { maxWait: 15_000, timeout: 30_000 },
   });
 
 if (env.NODE_ENV !== 'production') globalForPrisma.basePrisma = basePrisma;
