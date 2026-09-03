@@ -120,6 +120,22 @@ const EnvSchema = z.object({
   // that haven't been given test keys yet.
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
+
+  // AES-256-GCM key for PF identifiers and stored portal credentials
+  // (pfCredentials.service). Base64 of exactly 32 bytes.
+  //
+  // Optional here rather than required, because a deployment without it should
+  // lose the PF feature, not refuse to boot and take the whole API with it.
+  // The boot check below makes its absence loud instead of leaving it to
+  // surface as a 500 the first time someone adds a PF account — which is
+  // exactly how it was found.
+  APP_ENCRYPTION_KEY: z
+    .string()
+    .optional()
+    .refine(
+      (v) => v === undefined || Buffer.from(v, 'base64').length === 32,
+      'APP_ENCRYPTION_KEY must be base64 of exactly 32 bytes',
+    ),
 });
 
 function loadEnv() {
@@ -132,6 +148,20 @@ function loadEnv() {
     }
     throw new Error('Invalid environment variables');
   }
+  // Say plainly, at boot, whether the process can see the PF encryption key.
+  // A variable set on the wrong service or an unlinked shared variable looks
+  // identical to one that was never set; this line settles it from the deploy
+  // log rather than from a user hitting an error.
+  if (parsed.data.APP_ENCRYPTION_KEY) {
+    console.info('✅ APP_ENCRYPTION_KEY present — PF credential encryption available');
+  } else {
+    console.warn(
+      '⚠️  APP_ENCRYPTION_KEY is NOT set. Provident-fund account creation will fail ' +
+        'at runtime. On Railway, check it is set on THIS service (a project-level ' +
+        'shared variable is not inherited unless the service references it).',
+    );
+  }
+
   return parsed.data;
 }
 
