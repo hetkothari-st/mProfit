@@ -18,6 +18,7 @@
  */
 
 import { prisma } from '../lib/prisma.js';
+import { ageBasedEquityGuidelinePct } from '../services/riskProfileMath.js';
 import { logger } from '../lib/logger.js';
 import {
   getAnalyticsSnapshot,
@@ -219,7 +220,11 @@ async function buildAllocationData(
     : null;
   const equitySlice = classAllocation.find((c) => c.key === 'EQUITY');
   const equityPct = equitySlice?.pct ?? 0;
-  const recommendedEquityPct = age ? Math.max(20, 100 - age) : null;
+  // Same shared guideline as the health score, but the assistant keeps its own
+  // floor of 20% — it phrases this as conversational guidance, and "0% equity"
+  // reads as advice rather than a heuristic hitting its lower bound.
+  const guideline = ageBasedEquityGuidelinePct(age);
+  const recommendedEquityPct = guideline == null ? null : Math.max(20, guideline);
   return {
     queryEntity: query.entity,
     querySector: querySector ?? null,

@@ -29,6 +29,10 @@ export const FEATURE_MIN_TIER = {
   AI_INSIGHTS: 'PLUS',
   GOAL_PROJECTIONS: 'PLUS',
   FAMILY_SHARING: 'FAMILY',
+  // The /advisor engine: deterministic, prescriptive recommendations against a
+  // risk-profiled target allocation. Sits with AI_INSIGHTS and GOAL_PROJECTIONS
+  // because it consumes both and would be incoherent without them.
+  ADVICE_ENGINE: 'PLUS',
   ACCOUNTING_MODULE: 'PRO_ADVISOR', // Trial Balance, P&L, Balance Sheet, Chart of Accounts, Tally export
   UNLIMITED_CLIENTS: 'PRO_ADVISOR',
   FNO_SCHEDULE_43: 'PRO_ADVISOR',

@@ -47,14 +47,14 @@ model User {
   mailboxAccounts     MailboxAccount[]
 
   // Phase 4.5 hardening — ingestion + real-asset modules (§4.1–§4.9)
-  canonicalEvents   CanonicalEvent[]
-  monitoredSenders  MonitoredSender[]
-  learnedTemplates  LearnedTemplate[]
-  ingestionFailures IngestionFailure[]
-  vehicles          Vehicle[]
-  rentalProperties  RentalProperty[]
-  insurancePolicies InsurancePolicy[]
-  auditLogs         AuditLog[]
+  canonicalEvents     CanonicalEvent[]
+  monitoredSenders    MonitoredSender[]
+  learnedTemplates    LearnedTemplate[]
+  ingestionFailures   IngestionFailure[]
+  vehicles            Vehicle[]
+  rentalProperties    RentalProperty[]
+  insurancePolicies   InsurancePolicy[]
+  auditLogs           AuditLog[]
   healthScoreSnapshot HealthScoreSnapshot?
 
   // Phase 5-A — per-call LLM spend ledger (§8, §16 gate G5). Every
@@ -134,10 +134,10 @@ model User {
   // Family / HOF feature — a user may create N families, be a member of N
   // families (own household + parental, in-laws, HUF entity, ...), and send
   // invitations. Roles + per-member visibility live on FamilyMember.
-  familiesCreated       Family[]           @relation("FamilyCreatedBy")
-  familyMemberships     FamilyMember[]     @relation("FamilyMembership")
-  familyInvitesReceived FamilyMember[]     @relation("FamilyMemberInvitedBy")
-  familyInvitationsSent FamilyInvitation[] @relation("FamilyInvitationInviter")
+  familiesCreated             Family[]              @relation("FamilyCreatedBy")
+  familyMemberships           FamilyMember[]        @relation("FamilyMembership")
+  familyInvitesReceived       FamilyMember[]        @relation("FamilyMemberInvitedBy")
+  familyInvitationsSent       FamilyInvitation[]    @relation("FamilyInvitationInviter")
   pendingFamilyInvitesCreated PendingFamilyInvite[] @relation("PendingFamilyInviteCreator")
 
   // AI Assistant — conversational Q&A over the user's portfolio, grouped
@@ -154,31 +154,38 @@ model User {
   // Net-worth history — one daily snapshot per user, powers the dashboard
   // trend chart. See NetWorthSnapshot model below.
   netWorthSnapshots NetWorthSnapshot[]
+
+  // Advisor engine (/advisor). See the ADVISOR ENGINE section below.
+  riskProfileAssessments  RiskProfileAssessment[]
+  modelPortfolios         ModelPortfolio[]
+  advisorApprovedProducts AdvisorApprovedProduct[]
+  advisorRuns             AdvisorRun[]
+  advisorRecommendations  AdvisorRecommendation[]
 }
 
 model UserNotificationConfig {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   // SMTP host + port + secure flag. We accept anything the user's
   // mail provider asks for (Gmail, Brevo, SendGrid, Resend, Mailgun,
   // self-hosted Postfix, …) — there's no provider list to choose from.
-  smtpHost        String
-  smtpPort        Int
-  smtpSecure      Boolean  @default(false)
-  smtpUser        String
+  smtpHost            String
+  smtpPort            Int
+  smtpSecure          Boolean  @default(false)
+  smtpUser            String
   // Stored AES-256-GCM encrypted via lib/secrets.ts — never returned
   // to the client; the settings endpoint masks it as "***" on read.
-  smtpPassEnc     String
+  smtpPassEnc         String
   // What the recipient sees as the "From" header. Most providers
   // require the email here to match the authenticated mailbox.
-  fromName        String
-  fromEmail       String
+  fromName            String
+  fromEmail           String
   // Optional default rent payment instructions for this user. The
   // per-property override on RentalProperty takes precedence when set.
-  paymentInstructions String? @db.Text
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  paymentInstructions String?  @db.Text
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 // ─── BROKER / DATA-SOURCE CONNECTORS ────────────────────────────
@@ -417,10 +424,11 @@ model StockMaster {
   isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
 
-  holdings         Holding[]
-  transactions     Transaction[]
-  prices           StockPrice[]
-  corporateActions CorporateAction[]
+  holdings                Holding[]
+  transactions            Transaction[]
+  prices                  StockPrice[]
+  corporateActions        CorporateAction[]
+  advisorApprovedProducts AdvisorApprovedProduct[]
 }
 
 enum Exchange {
@@ -448,9 +456,10 @@ model MutualFundMaster {
   isActive    Boolean    @default(true)
   updatedAt   DateTime   @updatedAt
 
-  holdings     Holding[]
-  transactions Transaction[]
-  navHistory   MFNav[]
+  holdings                Holding[]
+  transactions            Transaction[]
+  navHistory              MFNav[]
+  advisorApprovedProducts AdvisorApprovedProduct[]
 }
 
 enum MFCategory {
@@ -1645,25 +1654,25 @@ model VehicleValuationLog {
 // ─── §4.7 RENTAL ─────────────────────────────────────────────────
 
 model RentalProperty {
-  id            String    @id @default(cuid())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  portfolioId   String?
-  name          String
-  address       String?
-  propertyType  String
-  purchaseDate  DateTime? @db.Date
-  purchasePrice Decimal?  @db.Decimal(14, 2)
-  currentValue  Decimal?  @db.Decimal(14, 2)
-  isActive      Boolean   @default(true)
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId         String?
+  name                String
+  address             String?
+  propertyType        String
+  purchaseDate        DateTime? @db.Date
+  purchasePrice       Decimal?  @db.Decimal(14, 2)
+  currentValue        Decimal?  @db.Decimal(14, 2)
+  isActive            Boolean   @default(true)
   // Per-property landlord display name (signed on rent reminders). Falls
   // back to the user's profile name if blank.
-  landlordName  String?
+  landlordName        String?
   // Per-property payment instructions (UPI handle, NEFT details, etc.)
   // shown in rent reminder emails. Falls back to
   // UserNotificationConfig.paymentInstructions if blank.
-  paymentInstructions String? @db.Text
-  createdAt     DateTime  @default(now())
+  paymentInstructions String?   @db.Text
+  createdAt           DateTime  @default(now())
 
   tenancies       Tenancy[]
   expenses        PropertyExpense[]
@@ -1723,28 +1732,28 @@ model RentReceipt {
 // actual SMS + email send) or rejects. No auto-send: every outbound
 // message is a deliberate human action.
 model RentReminder {
-  id          String   @id @default(cuid())
-  receiptId   String
-  receipt     RentReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  tenancyId   String
-  tenancy     Tenancy  @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
+  id        String      @id @default(cuid())
+  receiptId String
+  receipt   RentReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  tenancyId String
+  tenancy   Tenancy     @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
 
   // Days before dueDate this reminder was queued for: 5 / 3 / 1 / 0
   // (0 = same-day). Multiple rows per receipt — one per lead day —
   // dedup-protected by the unique constraint below.
-  leadDays    Int
+  leadDays Int
 
   // PENDING_APPROVAL | APPROVED | SENT | FAILED | REJECTED | SUPERSEDED
   // SUPERSEDED = receipt was marked RECEIVED before approval, no longer needed.
-  status      String   @default("PENDING_APPROVAL")
+  status String @default("PENDING_APPROVAL")
 
   // Channels the landlord wants to send through. {email: true, sms: true}.
-  channels    Json
+  channels Json
 
   // Editable message content (cron pre-fills via template).
-  subject     String
-  body        String   @db.Text
-  smsBody     String   @db.Text
+  subject String
+  body    String @db.Text
+  smsBody String @db.Text
 
   // Per-channel send result. "skipped" when channel disabled or
   // recipient missing; "sent" / "failed" otherwise.
@@ -1753,9 +1762,9 @@ model RentReminder {
   smsStatus   String?
   smsError    String?
 
-  createdAt   DateTime @default(now())
-  approvedAt  DateTime?
-  sentAt      DateTime?
+  createdAt  DateTime  @default(now())
+  approvedAt DateTime?
+  sentAt     DateTime?
 
   @@unique([receiptId, leadDays])
   @@index([status, createdAt])
@@ -2773,43 +2782,43 @@ enum GoalStatus {
 }
 
 model Goal {
-  id              String        @id @default(cuid())
-  userId          String
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name            String
-  category        GoalCategory  @default(CUSTOM)
-  priority        GoalPriority  @default(MEDIUM)
-  status          GoalStatus    @default(ACTIVE)
+  id       String       @id @default(cuid())
+  userId   String
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name     String
+  category GoalCategory @default(CUSTOM)
+  priority GoalPriority @default(MEDIUM)
+  status   GoalStatus   @default(ACTIVE)
 
   /// Target corpus required at `targetDate`, in INR.
-  targetAmount    Decimal       @db.Decimal(18, 2)
+  targetAmount   Decimal  @db.Decimal(18, 2)
   /// Money the user already has earmarked for this goal — manual seed
   /// when the goal is created (e.g. opening balance from an old FD).
-  initialAmount   Decimal       @db.Decimal(18, 2) @default(0)
+  initialAmount  Decimal  @default(0) @db.Decimal(18, 2)
   /// Assumed annual inflation rate (e.g. 0.06 for 6%). Used to render
   /// "inflation-adjusted target" hints in the UI.
-  inflationRate   Decimal?      @db.Decimal(5, 4)
+  inflationRate  Decimal? @db.Decimal(5, 4)
   /// Assumed annual return on the corpus. Used by the required-CAGR
   /// gauge — `(target / current) ^ (1/years) - 1` is the *required*
   /// return; this column lets the UI flag if expected < required.
-  expectedReturn  Decimal?      @db.Decimal(5, 4)
+  expectedReturn Decimal? @db.Decimal(5, 4)
 
   /// When the corpus must be ready by (e.g. age 60 for retirement,
   /// child's 18th birthday for education). Always >= today.
-  targetDate      DateTime      @db.Date
-  startDate       DateTime      @db.Date @default(now())
+  targetDate DateTime @db.Date
+  startDate  DateTime @default(now()) @db.Date
 
   /// Portfolios contributing to this goal. Sum of their current value
   /// → goal progress. Stored as an array because users frequently map
   /// the same goal to multiple portfolios (one parent, two SIP folios).
-  portfolioIds    String[]      @default([])
+  portfolioIds String[] @default([])
   /// Optional notes (free-text, ≤4000 chars). Stored on the row to
   /// keep goal-detail reads cheap.
-  notes           String?       @db.Text
+  notes        String?  @db.Text
 
-  achievedAt      DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  achievedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([userId, status])
   @@index([userId, targetDate])
@@ -2827,9 +2836,9 @@ enum IncomeType {
 }
 
 model Income {
-  id            String     @id @default(cuid())
-  userId        String
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   type          IncomeType @default(SALARY)
   /// Employer name, business name, broker/platform, or any free-text label.
@@ -2845,21 +2854,21 @@ model Income {
   isActive      Boolean    @default(true)
   notes         String?
 
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, isActive])
 }
 
 model HealthScoreSnapshot {
-  id         String   @id @default(cuid())
-  userId     String   @unique
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   overallScore Int
-  grade      String
-  subScores  Json
-  computedAt DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  grade        String
+  subScores    Json
+  computedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([userId])
 }
@@ -2879,13 +2888,13 @@ model HealthScoreSnapshot {
 //   REVOKED     – we called submit-consent-revoke-request
 
 model AaConsent {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider      String   @default("finfactor")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider      String    @default("finfactor")
   consentHandle String?
   consentId     String?
-  status        String   @default("INITIATED")
+  status        String    @default("INITIATED")
   fiTypes       String[]
   fipIds        String[]
   purposeCode   String?
@@ -2957,7 +2966,7 @@ model Family {
   // `nodes` are draggable card positions. `links` are user-drawn custom
   // edges — when non-empty they OVERRIDE the auto invitedById chain.
   // NULL = fall back to auto layout.
-  treeLayout  Json?
+  treeLayout Json?
 
   // Seat pricing for the FAMILY plan tier (§ pricing-tiers-gating task).
   // Whether family sharing is available at all is gated at the route level
@@ -2993,7 +3002,7 @@ model FamilyMember {
   // RENTAL, INSURANCE, LOAN, CREDIT_CARD, BANK_ACCOUNT,
   // OWNED_PROPERTY, GOAL. String[] (not an enum) so new categories
   // don't require a migration when added.
-  visibleCategories String[] @default([])
+  visibleCategories   String[]     @default([])
 
   invitedById String?
   invitedBy   User?    @relation("FamilyMemberInvitedBy", fields: [invitedById], references: [id])
@@ -3039,18 +3048,18 @@ model FamilyInvitation {
 // paying for it. Not actively swept on expiry in this task — expiresAt
 // exists so a cleanup job can be added later without a schema change.
 model PendingFamilyInvite {
-  id                  String     @id @default(cuid())
+  id                  String       @id @default(cuid())
   familyId            String
-  family              Family     @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  family              Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
   invitedEmail        String
   invitedName         String?
-  role                FamilyRole @default(CONTRIBUTOR)
+  role                FamilyRole   @default(CONTRIBUTOR)
   visibleAssetClasses AssetClass[] @default([])
-  visibleCategories   String[]   @default([])
+  visibleCategories   String[]     @default([])
   createdById         String
-  createdBy           User       @relation("PendingFamilyInviteCreator", fields: [createdById], references: [id])
-  razorpayOrderId     String     @unique
-  createdAt           DateTime   @default(now())
+  createdBy           User         @relation("PendingFamilyInviteCreator", fields: [createdById], references: [id])
+  razorpayOrderId     String       @unique
+  createdAt           DateTime     @default(now())
   expiresAt           DateTime
 
   @@index([familyId])
@@ -3098,29 +3107,29 @@ model AiChatSession {
 }
 
 model AiConversation {
-  id             String             @id @default(cuid())
-  userId         String
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String             @id @default(cuid())
+  userId          String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Nullable only for rows created before multi-session support
   // shipped (§20260709 migration backfills every pre-existing row
   // into one session per user, so this is NOT NULL in practice for
   // any row going forward).
-  sessionId      String?
-  session        AiChatSession?     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role           AiConversationRole
-  content        String             @db.Text
+  sessionId       String?
+  session         AiChatSession?     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role            AiConversationRole
+  content         String             @db.Text
   // Classified intent of the USER message. Kept on both USER and
   // ASSISTANT rows so we can slice usage by intent later without
   // joining rows.
-  queryIntent    String?
+  queryIntent     String?
   // The PortfolioContext dict sent to Claude for the ASSISTANT
   // response. Snapshot for debugging + replay; not shown to the user.
   contextSnapshot Json?
   // Parsed inline card (holding | goal | stat | action) attached to
   // an ASSISTANT message, when Claude emitted one.
-  cardData       Json?
+  cardData        Json?
   // The family scope the message was answered under. Null = personal.
-  familyId       String?
+  familyId        String?
   // True on the single synthetic ASSISTANT row created for a FREE-tier
   // user's one-time preview (see aiAssistant.routes.ts's /chat handler).
   // No real Claude call happens for that row — content stays empty and
@@ -3130,8 +3139,8 @@ model AiConversation {
   // (see conversationStore.ts's hasUsedLockedPreview) — server-side,
   // not just a client localStorage flag, so it survives a refresh, a
   // relogin, or a different device.
-  locked         Boolean            @default(false)
-  createdAt      DateTime           @default(now())
+  locked          Boolean            @default(false)
+  createdAt       DateTime           @default(now())
 
   @@index([userId, createdAt])
   @@index([sessionId, createdAt])
@@ -3153,18 +3162,18 @@ model AiUsage {
 // ─── SEC 55(2)(ac) GRANDFATHERING — FMV ON 31-JAN-2018 ──────────────────
 
 model FmvOverride {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  isin      String
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isin       String
   // scrip name for display — denormalised for easy lookup without joining assets
-  scripName String?
+  scripName  String?
   // FMV per unit on 31-Jan-2018 in INR, stored as exact Decimal
-  fmvPerUnit Decimal  @db.Decimal(18, 4)
+  fmvPerUnit Decimal   @db.Decimal(18, 4)
   // source: "SEED" = loaded from our BSE data file, "USER" = manually entered
-  source    FmvSource @default(SEED)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  source     FmvSource @default(SEED)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@unique([userId, isin])
   @@index([userId])
@@ -3208,4 +3217,246 @@ model SystemFmvSeed {
   scripName  String?
   fmvPerUnit Decimal  @db.Decimal(18, 4)
   updatedAt  DateTime @updatedAt
+}
+
+// ─── ADVISOR ENGINE (/advisor) ───────────────────────────────────
+//
+// The system acts as the investor's adviser: deterministic TypeScript rules
+// compute every number (trigger, trade size, priority); an optional LLM layer
+// only narrates figures the rules already decided. Prescriptive output lives
+// here and ONLY here — analytics.insights.ts and ai/systemPrompt.ts stay
+// descriptive-only and must not be loosened to match (see advisorSystemPrompt.ts).
+//
+// Everything below is user-owned: each model is listed in USER_SCOPED_MODELS
+// (src/lib/prisma.ts) AND carries an RLS policy in the advisor_engine migration.
+
+enum RiskCategory {
+  CONSERVATIVE
+  BALANCED
+  GROWTH
+  AGGRESSIVE
+}
+
+/// Coarse buckets that target allocations are expressed in. Deliberately NOT
+/// split by market cap: StockMaster has no market-cap field, so a LARGE/MID/
+/// SMALL taxonomy could not be populated and would silently mis-bucket every
+/// direct equity holding. Widening this enum later is an additive ALTER TYPE;
+/// re-tagging every approved product after a split would not be.
+enum AdvisorAssetBucket {
+  EQUITY_DOMESTIC
+  EQUITY_INTERNATIONAL
+  DEBT
+  GOLD
+  REAL_ASSETS
+  CASH_EQUIVALENT
+  OTHER_ALT
+}
+
+/// One row per questionnaire submission, never updated in place. The "current"
+/// profile is the newest row. Kept forever: reconstructing why a 2027
+/// recommendation was made needs the answers and scoring version in force at
+/// the time, not a re-scoring of stale answers under today's rules.
+model RiskProfileAssessment {
+  id                   String          @id @default(cuid())
+  userId               String
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionnaireVersion Int
+  answers              Json
+  score                Int
+  category             RiskCategory
+  /// Hard guardrails applied after scoring (e.g. the age cap on AGGRESSIVE),
+  /// recorded so an adjusted verdict is explainable rather than silent.
+  overrides            Json?
+  taxSlabPct           Decimal?        @db.Decimal(5, 2)
+  modelPortfolioId     String?
+  modelPortfolio       ModelPortfolio? @relation(fields: [modelPortfolioId], references: [id])
+  createdAt            DateTime        @default(now())
+
+  recommendations AdvisorRecommendation[]
+
+  @@index([userId, createdAt])
+}
+
+/// Identity row for a target-allocation template. Weights live on
+/// ModelPortfolioVersion so editing them never rewrites the history that a
+/// past recommendation points at.
+model ModelPortfolio {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  riskCategory RiskCategory
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  versions         ModelPortfolioVersion[]
+  approvedProducts AdvisorApprovedProduct[]
+  assessments      RiskProfileAssessment[]
+
+  @@unique([userId, name])
+  @@index([userId, isActive])
+}
+
+/// Immutable. Editing target weights inserts version+1 rather than updating in
+/// place, mirroring LearnedTemplate.version.
+model ModelPortfolioVersion {
+  id               String         @id @default(cuid())
+  modelPortfolioId String
+  modelPortfolio   ModelPortfolio @relation(fields: [modelPortfolioId], references: [id], onDelete: Cascade)
+  version          Int
+  /// Array<{ bucket: AdvisorAssetBucket, targetPct: number }>, validated to sum to 100.
+  targetWeights    Json
+  note             String?
+  createdAt        DateTime       @default(now())
+
+  recommendations AdvisorRecommendation[]
+
+  @@unique([modelPortfolioId, version])
+}
+
+/// The adviser-curated buy-side universe. Soft-deleted (isActive/removedAt) so
+/// a recommendation minted against it last year still resolves after the
+/// product is retired from the live list.
+model AdvisorApprovedProduct {
+  id               String             @id @default(cuid())
+  userId           String
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  modelPortfolioId String
+  modelPortfolio   ModelPortfolio     @relation(fields: [modelPortfolioId], references: [id], onDelete: Cascade)
+  bucket           AdvisorAssetBucket
+  rank             Int
+  fundId           String?
+  fund             MutualFundMaster?  @relation(fields: [fundId], references: [id])
+  stockId          String?
+  stock            StockMaster?       @relation(fields: [stockId], references: [id])
+  /// Denormalised display name. Survives master-data churn and keeps retired
+  /// recommendations readable.
+  label            String
+  notes            String?
+  isActive         Boolean            @default(true)
+  addedAt          DateTime           @default(now())
+  removedAt        DateTime?
+
+  @@unique([modelPortfolioId, bucket, rank])
+  @@index([userId, modelPortfolioId, bucket, isActive])
+}
+
+enum AdvisorRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AdvisorRunTrigger {
+  USER
+  SYSTEM
+}
+
+/// One row per engine execution. Exists so that "why did no rule flag X" is as
+/// answerable as "why was Y recommended": ruleVersionsSnapshot records every
+/// rule that ran, including the ones that emitted nothing.
+model AdvisorRun {
+  id                      String            @id @default(cuid())
+  userId                  String
+  user                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  triggeredBy             AdvisorRunTrigger @default(USER)
+  status                  AdvisorRunStatus  @default(RUNNING)
+  engineVersion           String
+  /// { [ruleId]: version } for every registered rule evaluated in this run.
+  ruleVersionsSnapshot    Json
+  /// { [ruleId]: message } — a throwing rule is recorded and skipped, never
+  /// allowed to fail the run or block the other rules.
+  ruleErrors              Json?
+  riskProfileAssessmentId String?
+  recommendationCount     Int               @default(0)
+  startedAt               DateTime          @default(now())
+  completedAt             DateTime?
+  errorMessage            String?
+
+  recommendations AdvisorRecommendation[]
+
+  @@index([userId, startedAt])
+}
+
+enum AdvisorRecommendationCategory {
+  REBALANCE
+  CONCENTRATION_TRIM
+  TAX_HARVEST
+  GOAL_SHORTFALL_SIP
+  CASH_DEPLOYMENT
+  RISK_PROFILE_REVIEW
+}
+
+enum AdvisorRecommendationStatus {
+  OPEN
+  ACCEPTED
+  DISMISSED
+  SNOOZED
+  DONE
+}
+
+enum AdvisorProvenance {
+  APPROVED_LIST
+  FALLBACK_RANKING
+  NONE
+}
+
+model AdvisorRecommendation {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generationRunId String
+  generationRun   AdvisorRun @relation(fields: [generationRunId], references: [id], onDelete: Cascade)
+
+  ruleId      String
+  ruleVersion Int
+  category    AdvisorRecommendationCategory
+  /// Lower = more urgent. Rule-assigned within documented bands; the engine
+  /// only sorts, it never re-derives urgency.
+  priority    Int
+
+  /// TradeAction[] — direction, instrument, units and/or amount. Empty for
+  /// non-trade advisories such as RISK_PROFILE_REVIEW. This shape is the
+  /// contract any future execution integration would read: change it carefully.
+  action     Json
+  /// Deterministic, number-bearing, code-generated. Always present.
+  rationale  String   @db.Text
+  /// Optional LLM narration. Never authoritative and never a source of numbers:
+  /// rejected before persistence if it contains a figure absent from rationale.
+  llmProse   String?  @db.Text
+  llmModel   String?
+  llmCostInr Decimal? @db.Decimal(10, 4)
+
+  /// Every fact the rule consumed, frozen at generation time. Identifying
+  /// fields are copied rather than FK'd to HoldingProjection, which is derived
+  /// data that gets deleted and rebuilt whenever transactions change.
+  inputsSnapshot Json
+
+  riskProfileAssessmentId String?
+  riskProfileAssessment   RiskProfileAssessment? @relation(fields: [riskProfileAssessmentId], references: [id])
+  modelPortfolioVersionId String?
+  modelPortfolioVersion   ModelPortfolioVersion? @relation(fields: [modelPortfolioVersionId], references: [id])
+
+  provenance    AdvisorProvenance @default(NONE)
+  provenanceRef Json?
+
+  /// Stable per-issue identity within a ruleId. Lets a re-run supersede an
+  /// existing recommendation instead of duplicating it.
+  dedupeKey      String
+  supersededById String?                 @unique
+  supersededBy   AdvisorRecommendation?  @relation("AdvisorSupersede", fields: [supersededById], references: [id])
+  supersedes     AdvisorRecommendation[] @relation("AdvisorSupersede")
+
+  status          AdvisorRecommendationStatus @default(OPEN)
+  statusNote      String?
+  snoozedUntil    DateTime?
+  statusChangedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status, priority])
+  @@index([userId, ruleId, dedupeKey])
+  @@index([generationRunId])
 }

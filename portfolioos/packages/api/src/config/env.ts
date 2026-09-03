@@ -71,6 +71,16 @@ const EnvSchema = z.object({
   // var is the fallback when no AppSetting is present.
   LLM_INSIGHTS_MODEL: z.string().default('claude-sonnet-4-6'),
   ENABLE_LLM_INSIGHTS: z.enum(['true', 'false']).default('false'),
+  // Advisor engine (/advisor) — the optional prose layer that narrates a
+  // recommendation the deterministic rules have already decided. Its own
+  // model knob (override via the `llm.advisor_model` AppSetting) and its
+  // own gate, kept separate from insights: this is the one surface allowed
+  // to phrase advice prescriptively, so it defaults OFF and — unlike the
+  // insights gate — does not open itself in development. With it off,
+  // recommendations render from their code-generated rationale and
+  // `llmProse` simply stays null.
+  LLM_ADVISOR_MODEL: z.string().default('claude-sonnet-4-6'),
+  ENABLE_LLM_ADVISOR_PROSE: z.enum(['true', 'false']).default('false'),
   // Family / HOF hierarchical multi-user feature. When 'false', the
   // /api/families endpoints 404 and the frontend Settings section hides
   // itself. Rolls out per beta cohort without touching solo users.

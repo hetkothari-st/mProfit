@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import { ageBasedEquityGuidelinePct } from './riskProfileMath.js';
 
 /**
  * Pure health-score math, extracted so formulas are unit-testable without a
@@ -75,7 +76,7 @@ export function diversificationScore(input: DiversificationInput): { score: numb
     return { score: clampScore(score) };
   }
 
-  const targetEquityPct = Math.max(0, 100 - input.age);
+  const targetEquityPct = ageBasedEquityGuidelinePct(input.age) ?? 0;
   const equityGap = Math.abs(input.equityPct - targetEquityPct);
   const subEquityGuideline = clampScore(100 - equityGap * 5);
 

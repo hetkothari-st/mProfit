@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import { ageBasedEquityGuidelinePct } from './riskProfileMath.js';
 import { formatINR } from '@portfolioos/shared';
 import { prisma } from '../lib/prisma.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
@@ -84,12 +85,59 @@ async function estimateMonthlyInvestment(userId: string): Promise<Decimal> {
   return total.dividedBy(3);
 }
 
+/**
+ * Months of expenses the emergency fund should cover. Mirrors the divisor
+ * inside healthScoreMath.emergencyFundScore — the two must not disagree.
+ */
+const EMERGENCY_FUND_MONTHS = 6;
+
 async function liquidAssetsTotal(userId: string): Promise<Decimal> {
   const rows = await prisma.holdingProjection.findMany({
     where: { portfolio: { userId }, assetClass: { in: Array.from(LIQUID_CLASSES) as never } },
     select: { currentValue: true, totalCost: true },
   });
   return rows.reduce((s, h) => s.plus(h.currentValue !== null ? d(h.currentValue) : d(h.totalCost)), ZERO);
+}
+
+/**
+ * The emergency-fund picture, in one place.
+ *
+ * Extracted so the advisor engine's liquidity facts are the *same* numbers the
+ * health score shows rather than a third independent implementation of
+ * "liquid assets vs six months of expenses" (contextBuilder and
+ * healthScoreMath already made it two). Behaviour of computeHealthScore is
+ * unchanged — it still calls the same two private estimators, now via this.
+ */
+export interface EmergencyFundInputs {
+  liquidAssets: Decimal;
+  /** Three-month rolling average of debit events. Zero when we have no
+   *  spending signal at all — callers must decide what that means for them. */
+  monthlyExpenses: Decimal;
+  target: Decimal;
+  /** liquidAssets − target. Negative means a shortfall. */
+  surplus: Decimal;
+  /** False when there is no expense signal, so `target` is a meaningless 0. */
+  hasExpenseSignal: boolean;
+}
+
+/** Pure: the six-month target for a given monthly spend. */
+export function emergencyFundTargetFor(monthlyExpenses: Decimal): Decimal {
+  return monthlyExpenses.times(EMERGENCY_FUND_MONTHS);
+}
+
+export async function getEmergencyFundInputs(userId: string): Promise<EmergencyFundInputs> {
+  const [liquidAssets, monthlyExpenses] = await Promise.all([
+    liquidAssetsTotal(userId),
+    estimateMonthlyExpenses(userId),
+  ]);
+  const target = emergencyFundTargetFor(monthlyExpenses);
+  return {
+    liquidAssets,
+    monthlyExpenses,
+    target,
+    surplus: liquidAssets.minus(target),
+    hasExpenseSignal: monthlyExpenses.greaterThan(0),
+  };
 }
 
 interface LargestHolding {
@@ -233,7 +281,7 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
   });
 
   // Emergency fund: point at the exact shortfall, or confirm the buffer if already met.
-  const emergencyTarget = monthlyExpenses.times(6);
+  const emergencyTarget = emergencyFundTargetFor(monthlyExpenses);
   const emergencyShortfall = emergencyTarget.minus(liquidAssets);
   const emergencyFundAction = emergencyShortfall.greaterThan(0)
     ? `You need ${formatINR(emergencyShortfall.toString())} more in liquid assets (savings, FDs) to reach the 6-month target of ${formatINR(emergencyTarget.toString())}.`
@@ -262,7 +310,7 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
   const maxClass = netWorth.allocationBreakdown.reduce<{ key: string; percent: number } | null>(
     (m, a) => (m === null || a.percent > m.percent ? a : m), null,
   );
-  const targetEquityPct = age != null ? Math.max(0, 100 - age) : null;
+  const targetEquityPct = ageBasedEquityGuidelinePct(age);
   const equityGap = targetEquityPct != null ? Math.abs(equityPct - targetEquityPct) : null;
   let diversificationAction: string;
   if (largestHoldingPct.pct > 50) {

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import {
   progressPct, inflationAdjustedTarget, requiredCagr,
-  isLiquidForEmergencyFund, eligibleClassesForGoal,
+  isLiquidForEmergencyFund, eligibleClassesForGoal, requiredMonthlySip,
 } from './goalMath.js';
 
 const D = (n: number | string) => new Decimal(n);
@@ -64,5 +64,55 @@ describe('emergency-fund liquidity', () => {
     expect(eligibleClassesForGoal('EMERGENCY_FUND')).not.toContain('EQUITY');
     expect(eligibleClassesForGoal('RETIREMENT')).toBeNull();
     expect(eligibleClassesForGoal('CUSTOM')).toBeNull();
+  });
+});
+
+describe('requiredMonthlySip', () => {
+  it('inverts the future value of an ordinary annuity', () => {
+    // 1,000,000 over 10y at 12% p.a. → r = 1%/mo, n = 120
+    // PMT = 1e6 × 0.01 / (1.01^120 − 1) = 10000 / 2.300387 ≈ 4347.09
+    expect(requiredMonthlySip(D(1_000_000), 10, 12)!.toNumber()).toBeCloseTo(4347.09, 1);
+  });
+
+  it('divides straight when no expected return is supplied', () => {
+    expect(requiredMonthlySip(D(1_000_000), 10, null)!.toNumber()).toBeCloseTo(8333.333, 3);
+  });
+
+  it('divides straight at a zero return', () => {
+    expect(requiredMonthlySip(D(600_000), 5, 0)!.toNumber()).toBeCloseTo(10_000, 6);
+  });
+
+  it('asks for less as the expected return rises', () => {
+    const at8 = requiredMonthlySip(D(1_000_000), 10, 8)!;
+    const at12 = requiredMonthlySip(D(1_000_000), 10, 12)!;
+    const flat = requiredMonthlySip(D(1_000_000), 10, null)!;
+    expect(at12.lessThan(at8)).toBe(true);
+    expect(at8.lessThan(flat)).toBe(true);
+  });
+
+  it('asks for more as the horizon shortens', () => {
+    const long = requiredMonthlySip(D(1_000_000), 15, 12)!;
+    const short = requiredMonthlySip(D(1_000_000), 5, 12)!;
+    expect(short.greaterThan(long)).toBe(true);
+  });
+
+  it('handles a sub-year horizon by rounding to whole months', () => {
+    expect(requiredMonthlySip(D(60_000), 0.5, 0)!.toNumber()).toBeCloseTo(10_000, 6);
+  });
+
+  it('returns null when there is nothing left to fund', () => {
+    expect(requiredMonthlySip(D(0), 10, 12)).toBeNull();
+    expect(requiredMonthlySip(D(-1), 10, 12)).toBeNull();
+  });
+
+  it('returns null when there is no time left to fund it', () => {
+    expect(requiredMonthlySip(D(1_000_000), 0, 12)).toBeNull();
+    expect(requiredMonthlySip(D(1_000_000), -3, 12)).toBeNull();
+  });
+
+  it('still returns a positive figure at a negative expected return', () => {
+    const sip = requiredMonthlySip(D(1_000_000), 10, -2)!;
+    expect(sip.greaterThan(0)).toBe(true);
+    expect(sip.greaterThan(requiredMonthlySip(D(1_000_000), 10, null)!)).toBe(true);
   });
 });

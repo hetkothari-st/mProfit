@@ -59,6 +59,15 @@ const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'FmvOverride',
   // Net-worth history — one row per user per day.
   'NetWorthSnapshot',
+  // Advisor engine (/advisor). Each of these also has an RLS policy in
+  // 20260902120000_advisor_engine — the two halves must stay paired, or the
+  // policy matches nothing because app.current_user_id is never set.
+  'RiskProfileAssessment',
+  'ModelPortfolio',
+  'ModelPortfolioVersion',
+  'AdvisorApprovedProduct',
+  'AdvisorRun',
+  'AdvisorRecommendation',
 ]);
 
 const basePrisma =

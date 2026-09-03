@@ -65,3 +65,42 @@ export function eligibleClassesForGoal(category: string): readonly string[] | nu
   if (category === 'EMERGENCY_FUND') return Array.from(LIQUID_EMERGENCY_CLASSES);
   return null;
 }
+
+/**
+ * Monthly SIP needed to close `remaining` in `years`, at `annualReturnPct`.
+ *
+ * Future value of an ordinary annuity, inverted:
+ *   PMT = FV × r / ((1 + r)^n − 1)
+ * with r = the monthly rate (annualReturnPct / 100 / 12) and n = months.
+ *
+ * Returns null when there is nothing to fund (remaining ≤ 0) or no time to fund
+ * it in (years ≤ 0) — an "infinite monthly SIP" is not advice. With no expected
+ * return supplied, or a return of exactly zero, it falls back to straight
+ * division (remaining / months) rather than assuming a rate nobody chose, which
+ * is the same stance riskProfileMath takes on an unknown tax slab.
+ *
+ * Unrounded on purpose; callers round for display.
+ */
+export function requiredMonthlySip(
+  remaining: Decimal,
+  years: number,
+  annualReturnPct: number | null,
+): Decimal | null {
+  if (remaining.lessThanOrEqualTo(ZERO)) return null;
+  if (!Number.isFinite(years) || years <= 0) return null;
+
+  const months = Math.round(years * 12);
+  if (months <= 0) return null;
+
+  if (annualReturnPct == null || !Number.isFinite(annualReturnPct) || annualReturnPct === 0) {
+    return remaining.dividedBy(months);
+  }
+
+  const r = new Decimal(annualReturnPct).dividedBy(100).dividedBy(12);
+  const denominator = new Decimal(1).plus(r).pow(months).minus(1);
+  // Only reachable if r rounds to zero over the horizon; the annuity collapses
+  // to the no-growth case rather than dividing by zero.
+  if (denominator.isZero()) return remaining.dividedBy(months);
+
+  return remaining.times(r).dividedBy(denominator);
+}
