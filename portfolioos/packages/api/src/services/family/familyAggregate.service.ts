@@ -708,8 +708,12 @@ export async function getFamilyProtection(
   const memberRows: FamilyMemberProtection[] = rows.map(
     ({ m, policies, liabilities, monthlyIncome }) => {
       const annualIncome = monthlyIncome.times(12);
-      const required = requiredLifeCover(annualIncome);
-      const gap = Decimal.max(ZERO, required.minus(policies.life));
+      // No income on file means the 10x rule has nothing to work from. Ten
+      // times nothing is not a recommendation of nothing — it is the absence
+      // of one, and a UI cannot tell those apart from a serialised "0.00".
+      const incomeKnown = annualIncome.greaterThan(ZERO);
+      const required = incomeKnown ? requiredLifeCover(annualIncome) : null;
+      const gap = required ? Decimal.max(ZERO, required.minus(policies.life)) : null;
       const insuranceHidden = !allowsCategory(m.caps, 'INSURANCE');
 
       return {
@@ -720,8 +724,8 @@ export async function getFamilyProtection(
         otherCover: serializeMoney(policies.other),
         monthlyIncome: serializeMoney(monthlyIncome),
         annualIncome: serializeMoney(annualIncome),
-        requiredLifeCover: serializeMoney(required),
-        lifeCoverGap: serializeMoney(gap),
+        requiredLifeCover: required ? serializeMoney(required) : null,
+        lifeCoverGap: gap ? serializeMoney(gap) : null,
         coverAdequacyScore: insuranceScore(policies.life, annualIncome, policies.hasLifePolicies)
           .score,
         hasNoCover: insuranceHidden ? null : policies.policyCount === 0,
@@ -752,6 +756,21 @@ export async function getFamilyProtection(
   const sum = (pick: (r: FamilyMemberProtection) => string) =>
     memberRows.reduce((s, r) => s.plus(toDecimal(pick(r))), ZERO);
 
+  /**
+   * Sum only the members we could actually size. A member with no income on
+   * file contributes nothing to the household requirement — treating their
+   * unknown as a zero would understate the gap and make the total look
+   * healthier than it is.
+   */
+  const sumKnown = (pick: (r: FamilyMemberProtection) => string | null) =>
+    memberRows.reduce((s, r) => {
+      const v = pick(r);
+      return v === null ? s : s.plus(toDecimal(v));
+    }, ZERO);
+
+  /** Members whose requirement could not be sized, so the totals exclude them. */
+  const unsizedMemberCount = memberRows.filter((r) => r.requiredLifeCover === null).length;
+
   const visibility = buildVisibility(scope, members, protectionFullyHidden);
 
   return {
@@ -763,8 +782,9 @@ export async function getFamilyProtection(
     totals: {
       lifeCover: serializeMoney(sum((r) => r.lifeCover)),
       healthCover: serializeMoney(sum((r) => r.healthCover)),
-      requiredLifeCover: serializeMoney(sum((r) => r.requiredLifeCover)),
-      protectionGap: serializeMoney(sum((r) => r.lifeCoverGap)),
+      requiredLifeCover: serializeMoney(sumKnown((r) => r.requiredLifeCover)),
+      protectionGap: serializeMoney(sumKnown((r) => r.lifeCoverGap)),
+      unsizedMemberCount,
       annualPremiumTotal: serializeMoney(sum((r) => r.annualPremiumTotal)),
       upcomingRenewalCount: memberRows.reduce((n, r) => n + r.upcomingRenewals.length, 0),
       // `hasNoCover === true` only; a `null` means "hidden", and a hidden

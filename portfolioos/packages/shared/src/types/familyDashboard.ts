@@ -235,10 +235,18 @@ export interface FamilyMemberProtection extends FamilyMemberRef {
   otherCover: string;
   monthlyIncome: string;
   annualIncome: string;
-  /** 10x annual income — the heuristic healthScoreMath.insuranceScore uses. */
-  requiredLifeCover: string;
-  /** required − life cover, floored at zero. */
-  lifeCoverGap: string;
+  /**
+   * 10x annual income — the heuristic healthScoreMath.insuranceScore uses.
+   *
+   * `null` when we have no income on file for this member. Ten times an
+   * unknown income is not zero: rendering ₹0 there reads as "needs no cover",
+   * when what is true is "cannot size it yet". Members with no income records
+   * are exactly the ones who have not finished setting up, so this is the
+   * common case, not an edge one.
+   */
+  requiredLifeCover: string | null;
+  /** required − life cover, floored at zero. `null` when required is unknown. */
+  lifeCoverGap: string | null;
   /** healthScoreMath.insuranceScore: 0-100, 50 when the member has no policy. */
   coverAdequacyScore: number;
   /**
@@ -268,6 +276,12 @@ export interface FamilyProtection {
     lifeCover: string;
     healthCover: string;
     requiredLifeCover: string;
+    /**
+     * Members whose requirement could not be sized because no income is on
+     * file. They contribute nothing to the totals above, so a household gap
+     * shown without this count reads as more complete than it is.
+     */
+    unsizedMemberCount: number;
     /**
      * Sum of the PER-MEMBER gaps, not (household required − household cover).
      * One member's surplus term plan does not insure another member's life, so

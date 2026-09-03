@@ -89,7 +89,7 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
           ...m,
           label: memberLabel(m),
           cover: moneyToNumber(m.lifeCover),
-          recommended: moneyToNumber(m.requiredLifeCover),
+          recommended: m.requiredLifeCover === null ? null : moneyToNumber(m.requiredLifeCover),
           gap: moneyToNumber(m.lifeCoverGap),
         }))
         // Biggest gap first — the row that needs a decision leads.
@@ -140,6 +140,15 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
               >
                 {formatINR(data.totals.protectionGap)}
               </Money>
+              {/* The total sums only members we could size. Saying so keeps a
+                  partial figure from reading as the household's whole gap. */}
+              {data.totals.unsizedMemberCount > 0 && (
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Excludes {data.totals.unsizedMemberCount}{' '}
+                  {data.totals.unsizedMemberCount === 1 ? 'member' : 'members'} with no income
+                  on file
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -195,10 +204,21 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
                     >
                       <span className="text-[14px] font-medium text-foreground">{m.label}</span>
                       <span className="text-[12px] text-muted-foreground">
-                        Recommended{' '}
-                        <Money className="font-medium text-foreground">
-                          {formatINR(m.requiredLifeCover)}
-                        </Money>
+                        {/* No income on file means the 10x rule has nothing to
+                            work from. "Recommended ₹0" would read as "needs no
+                            cover" — the opposite of what is true. */}
+                        {m.requiredLifeCover === null ? (
+                          <span className="text-muted-foreground">
+                            Add their income to size the cover
+                          </span>
+                        ) : (
+                          <>
+                            Recommended{' '}
+                            <Money className="font-medium text-foreground">
+                              {formatINR(m.requiredLifeCover)}
+                            </Money>
+                          </>
+                        )}
                         {isPositiveMoney(m.liabilities.totalLiabilities) && (
                           <>
                             {' · carries '}
@@ -332,7 +352,13 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
                           )}
                         </td>
                         <td className="px-1 py-2 text-right text-muted-foreground">
-                          <Money>{formatINR(m.requiredLifeCover)}</Money>
+                          {m.requiredLifeCover === null ? (
+                            <span title="No income on file, so the 10x rule cannot size this">
+                              —
+                            </span>
+                          ) : (
+                            <Money>{formatINR(m.requiredLifeCover)}</Money>
+                          )}
                         </td>
                         <td
                           className={cn(
@@ -342,7 +368,11 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
                               : 'text-muted-foreground',
                           )}
                         >
-                          <Money>{formatINR(m.lifeCoverGap)}</Money>
+                          {m.lifeCoverGap === null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <Money>{formatINR(m.lifeCoverGap)}</Money>
+                          )}
                         </td>
                         <td className="px-1 py-2 text-right text-muted-foreground">
                           {isPositiveMoney(m.healthCover) ? (
