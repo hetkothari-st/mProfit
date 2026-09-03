@@ -23,9 +23,12 @@ type Phase =
 interface Props {
   accountId: string;
   onClose: () => void;
+  /** Opens the EPFO password-reset flow. Optional so existing call sites keep
+   *  working; when absent the link is not rendered rather than doing nothing. */
+  onForgotPassword?: () => void;
 }
 
-export function PfRefreshDialog({ accountId, onClose }: Props) {
+export function PfRefreshDialog({ accountId, onClose, onForgotPassword }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'creds' });
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -133,13 +136,23 @@ export function PfRefreshDialog({ accountId, onClose }: Props) {
         {phase.kind === 'creds' && (
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label>UAN / Username</Label>
+              <Label>UAN</Label>
               <Input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="UAN (12 digits)"
+                placeholder="12 digits, e.g. 100234567890"
+                inputMode="numeric"
                 autoComplete="username"
               />
+              {/* The field used to read "UAN / Username", which invited people
+                  to type the email they use elsewhere. EPFO has no username or
+                  email login — only the UAN — so a wrong value here fails at
+                  the portal after a captcha and an OTP have been spent. */}
+              {username.trim() !== '' && !/^\d{12}$/.test(username.replace(/[\s-]/g, '')) && (
+                <p className="text-[12px] text-muted-foreground">
+                  Your UAN is 12 digits — not an email address. It is on your payslip.
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label>Password</Label>
@@ -172,6 +185,18 @@ export function PfRefreshDialog({ accountId, onClose }: Props) {
             >
               Start
             </Button>
+            {/* Most people have never used their EPFO password: it is set once
+                at UAN activation and rarely again. Without a way out, this
+                dialog is a dead end for them. */}
+            {onForgotPassword && (
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              className="w-full text-center text-[12.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Don&apos;t know your EPFO password?
+            </button>
+            )}
           </div>
         )}
 

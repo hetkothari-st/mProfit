@@ -21,6 +21,7 @@ import {
   snoozeNudgeHandler,
   startSessionHandler,
   startUanLookupHandler,
+  startPasswordResetHandler,
   sseEventsHandler,
   captchaRespondHandler,
   otpRespondHandler,
@@ -82,6 +83,9 @@ pfRouter.post('/accounts/:id/passbook', upload.single('file'), asyncHandler(uplo
 // rather than under /accounts/:id. Everything after the first step — captcha,
 // OTP, SSE — is the shared session machinery below.
 pfRouter.post('/uan-lookup', asyncHandler(startUanLookupHandler));
+// The way out when a member does not know their EPFO password. Same session
+// machinery: captcha and OTP come back over /sessions/:id/events.
+pfRouter.post('/password-reset', asyncHandler(startPasswordResetHandler));
 
 pfRouter.post('/sessions', asyncHandler(startSessionHandler));
 pfRouter.get('/sessions/:sessionId/events', asyncHandler(sseEventsHandler));

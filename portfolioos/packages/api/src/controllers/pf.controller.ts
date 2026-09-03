@@ -12,7 +12,7 @@ import multer from 'multer';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { ok, created, error } from '../lib/response.js';
 import { logger } from '../lib/logger.js';
-import { startUanLookup } from '../services/pf/uanLookup.service.js';
+import { startUanLookup, startPasswordReset } from '../services/pf/uanLookup.service.js';
 import { sseHub } from '../lib/sseHub.js';
 import {
   listPfAccounts,
@@ -200,6 +200,47 @@ export async function startUanLookupHandler(req: Request, res: Response) {
     await pfFetchQueue.add('uan-lookup', { kind: 'UAN_LOOKUP', sessionId, userId, input });
   }
   // For EXTENSION the paired extension picks the job up; nothing to enqueue.
+
+  ok(res, { sessionId });
+}
+
+const PasswordResetSchema = z.object({
+  uan: z.string().min(1),
+  mobile: z.string().min(1),
+  newPassword: z.string().min(1),
+  source: z.enum(['EXTENSION', 'SERVER_HEADLESS']).default('EXTENSION'),
+});
+
+/**
+ * Start an EPFO password reset.
+ *
+ * The way out for a member who cannot refresh because they never knew their
+ * EPFO password — which is most people, since it is set once at UAN activation
+ * and rarely used again. Same captcha-then-OTP conversation as the lookup, over
+ * the same SSE stream.
+ *
+ * The new password is not stored. It is sent to the portal and the member types
+ * it into the refresh dialog themselves; keeping a government portal credential
+ * we did not have to keep would undo the point of offering this.
+ */
+export async function startPasswordResetHandler(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const parsed = PasswordResetSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return error(res, 400, parsed.error.issues.map((i) => i.message).join('; '), 'VALIDATION_ERROR');
+  }
+  const { source, ...input } = parsed.data;
+
+  const { sessionId } = await startPasswordReset(userId, input, source);
+
+  if (source === 'SERVER_HEADLESS') {
+    await pfFetchQueue.add('password-reset', {
+      kind: 'PASSWORD_RESET',
+      sessionId,
+      userId,
+      input,
+    });
+  }
 
   ok(res, { sessionId });
 }

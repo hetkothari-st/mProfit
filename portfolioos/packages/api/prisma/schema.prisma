@@ -2614,6 +2614,10 @@ enum PfAccountStatus {
 /// with — so it is the reason providentFundAccountId is nullable.
 enum PfSessionKind {
   UAN_LOOKUP
+  /// Resetting the member's EPFO portal password. Like a lookup, it runs
+  /// before there is anything to attach it to, and for the same reason: the
+  /// member cannot sign in yet.
+  PASSWORD_RESET
   PASSBOOK_FETCH
 }
 

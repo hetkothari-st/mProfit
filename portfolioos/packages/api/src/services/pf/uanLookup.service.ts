@@ -19,6 +19,11 @@ import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { BadRequestError, TooManyRequestsError } from '../../lib/errors.js';
 import {
+  validateResetInput,
+  type PasswordResetInput,
+  type PasswordResetOutcome,
+} from '../../adapters/pf/epf/passwordReset.parse.js';
+import {
   validateLookupInput,
   maskUan,
   type UanLookupInput,
@@ -32,6 +37,9 @@ import {
  * find your UAN once. The limit is therefore tight on purpose.
  */
 export const MAX_LOOKUPS_PER_DAY = 5;
+
+/** Tighter than lookups: a reset writes, and a member does it once. */
+export const MAX_RESETS_PER_DAY = 3;
 const DAY_MS = 86_400_000;
 
 export interface StartUanLookupResult {
@@ -130,3 +138,88 @@ export const LOOKUP_FAILURE_MESSAGE: Record<string, string> = {
   PORTAL_CHANGED:
     'We could not read the EPFO response. This is our problem, not yours — enter your UAN directly if you have it, and we will look into it.',
 };
+
+// ─── Password reset ──────────────────────────────────────────────
+
+/**
+ * Resetting the portal password is the way out when a member cannot refresh
+ * because they never knew, or have forgotten, their EPFO password — which is
+ * most people, since the password is set once at UAN activation and rarely
+ * used again.
+ *
+ * It runs on the same rails as the lookup: no account yet (they cannot sign in
+ * until it succeeds), same captcha-then-OTP conversation, same SSE prompts.
+ *
+ * The new password is never stored. It goes to the portal and is returned to
+ * the member to type in themselves — holding a government portal credential we
+ * did not have to hold would be a step backwards from the problem this solves.
+ */
+export async function startPasswordReset(
+  userId: string,
+  raw: PasswordResetInput,
+  source: 'EXTENSION' | 'SERVER_HEADLESS',
+): Promise<StartUanLookupResult> {
+  const validation = validateResetInput(raw);
+  if (!validation.ok || !validation.value) {
+    throw new BadRequestError(validation.errors.join(' '));
+  }
+
+  const since = new Date(Date.now() - DAY_MS);
+  const recent = await prisma.pfFetchSession.count({
+    where: { userId, kind: 'PASSWORD_RESET', startedAt: { gte: since } },
+  });
+  if (recent >= MAX_RESETS_PER_DAY) {
+    throw new TooManyRequestsError(
+      'Too many password reset attempts today. Try again tomorrow.',
+    );
+  }
+
+  const session = await prisma.pfFetchSession.create({
+    data: {
+      userId,
+      kind: 'PASSWORD_RESET',
+      providentFundAccountId: null,
+      source,
+      status: 'INITIATED',
+    },
+  });
+
+  logger.info({ userId, sessionId: session.id, source }, '[pf.pwreset] reset started');
+  return { sessionId: session.id };
+}
+
+/**
+ * Record the outcome.
+ *
+ * PORTAL_CHANGED is logged at error level here for a sharper reason than in the
+ * lookup: this flow WRITES. If the portal took the new password and we could
+ * not read the confirmation, the member's password has changed and neither we
+ * nor they know it. That needs a human to look, not a warning in a pile.
+ */
+export async function finishPasswordReset(
+  sessionId: string,
+  outcome: PasswordResetOutcome,
+): Promise<void> {
+  if (outcome.ok) {
+    await prisma.pfFetchSession.update({
+      where: { id: sessionId },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+    logger.info({ sessionId }, '[pf.pwreset] reset succeeded');
+    return;
+  }
+
+  await prisma.pfFetchSession.update({
+    where: { id: sessionId },
+    data: { status: 'FAILED', completedAt: new Date(), errorMessage: outcome.reason },
+  });
+
+  if (outcome.reason === 'PORTAL_CHANGED') {
+    logger.error(
+      { sessionId, detail: outcome.detail },
+      '[pf.pwreset] outcome unknown — the password may or may not have changed',
+    );
+  } else {
+    logger.info({ sessionId, reason: outcome.reason }, '[pf.pwreset] reset failed');
+  }
+}

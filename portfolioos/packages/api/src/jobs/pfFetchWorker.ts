@@ -15,9 +15,16 @@
 
 import Bull from 'bull';
 import type { UanLookupInput } from '../adapters/pf/epf/uanLookup.parse.js';
+import type { PasswordResetInput } from '../adapters/pf/epf/passwordReset.parse.js';
+import { RESET_FAILURE_MESSAGE } from '../adapters/pf/epf/passwordReset.parse.js';
+import { runPasswordReset } from '../adapters/pf/epf/passwordReset.v1.js';
 import { runUanLookup } from '../adapters/pf/epf/uanLookup.v1.js';
 import { makeSessionPrompt } from '../services/pf/sessionPrompt.js';
-import { finishUanLookup, LOOKUP_FAILURE_MESSAGE } from '../services/pf/uanLookup.service.js';
+import {
+  finishUanLookup,
+  finishPasswordReset,
+  LOOKUP_FAILURE_MESSAGE,
+} from '../services/pf/uanLookup.service.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { prisma, runInTransaction } from '../lib/prisma.js';
@@ -62,12 +69,27 @@ export interface PfUanLookupJobPayload {
   input: UanLookupInput;
 }
 
-export type PfFetchJobPayload = PfPassbookJobPayload | PfUanLookupJobPayload;
+/** A password reset: also account-less, and the only PF flow that writes. */
+export interface PfPasswordResetJobPayload {
+  kind: 'PASSWORD_RESET';
+  sessionId: string;
+  userId: string;
+  input: PasswordResetInput;
+}
+
+export type PfFetchJobPayload =
+  | PfPassbookJobPayload
+  | PfUanLookupJobPayload
+  | PfPasswordResetJobPayload;
 
 /** `kind` is optional on the passbook variant so jobs already queued before
  *  this discriminator existed still route correctly. */
 export function isUanLookupJob(p: PfFetchJobPayload): p is PfUanLookupJobPayload {
   return p.kind === 'UAN_LOOKUP';
+}
+
+export function isPasswordResetJob(p: PfFetchJobPayload): p is PfPasswordResetJobPayload {
+  return p.kind === 'PASSWORD_RESET';
 }
 
 let _pfFetchQueue: Bull.Queue<PfFetchJobPayload> | null = null;
@@ -125,6 +147,10 @@ export function startPfFetchWorker(): void {
     // branches out before any of the passbook machinery below.
     if (isUanLookupJob(job.data)) {
       await runUanLookupJob(job.data);
+      return;
+    }
+    if (isPasswordResetJob(job.data)) {
+      await runPasswordResetJob(job.data);
       return;
     }
 
@@ -368,6 +394,41 @@ async function runUanLookupJob(payload: PfUanLookupJobPayload): Promise<void> {
     } catch (err) {
       logger.error({ sessionId, err }, '[pf-worker] uan lookup threw');
       await fail(sessionId, err instanceof Error ? err.message : 'UAN lookup failed');
+    }
+  });
+}
+
+/**
+ * Server-headless password reset.
+ *
+ * The outcome matters more than in a lookup, because this writes: if the portal
+ * accepted the new password and we could not read the confirmation, it HAS
+ * changed and nobody knows. That case reports as unknown, not failed — telling
+ * the member it failed would have them keep using a password that no longer
+ * works.
+ */
+async function runPasswordResetJob(payload: PfPasswordResetJobPayload): Promise<void> {
+  const { sessionId, userId, input } = payload;
+  logger.info({ sessionId, userId }, '[pf-worker] password reset');
+
+  await runAsUser(userId, async () => {
+    try {
+      await transition(sessionId, 'SCRAPING');
+      const outcome = await runPasswordReset({
+        sessionId,
+        input,
+        prompt: makeSessionPrompt(sessionId),
+      });
+      await finishPasswordReset(sessionId, outcome);
+      sseHub.publish(sessionId, {
+        type: outcome.ok ? 'password_reset' : 'lookup_failed',
+        data: outcome.ok
+          ? { ok: true }
+          : { reason: outcome.reason, message: RESET_FAILURE_MESSAGE[outcome.reason] },
+      });
+    } catch (err) {
+      logger.error({ sessionId, err }, '[pf-worker] password reset threw');
+      await fail(sessionId, err instanceof Error ? err.message : 'Password reset failed');
     }
   });
 }
