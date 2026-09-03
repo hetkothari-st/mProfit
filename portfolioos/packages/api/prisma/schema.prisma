@@ -2609,6 +2609,14 @@ enum PfAccountStatus {
   INSTITUTION_CHANGED
 }
 
+/// What a PfFetchSession is doing. UAN_LOOKUP runs before any account exists —
+/// it is the step that produces the identifier an account is later created
+/// with — so it is the reason providentFundAccountId is nullable.
+enum PfSessionKind {
+  UAN_LOOKUP
+  PASSBOOK_FETCH
+}
+
 enum PfFetchSource {
   EXTENSION
   SERVER_HEADLESS
@@ -2685,11 +2693,15 @@ model EpfMemberId {
 }
 
 model PfFetchSession {
-  id                     String               @id @default(cuid())
-  providentFundAccountId String
-  account                ProvidentFundAccount @relation(fields: [providentFundAccountId], references: [id], onDelete: Cascade)
+  id                     String                @id @default(cuid())
+  /// Null for UAN_LOOKUP: the lookup is what produces the identifier, so there
+  /// is nothing to attach it to until it succeeds. Creating a placeholder
+  /// account instead would leave identifier-less rows behind on every failure.
+  providentFundAccountId String?
+  account                ProvidentFundAccount? @relation(fields: [providentFundAccountId], references: [id], onDelete: Cascade)
+  kind                   PfSessionKind         @default(PASSBOOK_FETCH)
   userId                 String
-  user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   source             PfFetchSource
   status             PfFetchStatus     @default(INITIATED)

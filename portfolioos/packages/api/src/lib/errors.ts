@@ -47,3 +47,15 @@ export class ValidationError extends AppError {
     super(message, 422, 'VALIDATION_ERROR', details);
   }
 }
+
+/**
+ * An application-level quota — a per-user cap on an expensive or abusable
+ * action — as distinct from the IP-level throttling in middleware/rateLimit.ts.
+ * Separate from BadRequestError because the request was well formed: the caller
+ * should retry later, not change what they sent.
+ */
+export class TooManyRequestsError extends AppError {
+  constructor(message = 'Too many requests', details?: unknown) {
+    super(message, 429, 'TOO_MANY_REQUESTS', details);
+  }
+}

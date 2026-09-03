@@ -14,6 +14,10 @@
  */
 
 import Bull from 'bull';
+import type { UanLookupInput } from '../adapters/pf/epf/uanLookup.parse.js';
+import { runUanLookup } from '../adapters/pf/epf/uanLookup.v1.js';
+import { makeSessionPrompt } from '../services/pf/sessionPrompt.js';
+import { finishUanLookup, LOOKUP_FAILURE_MESSAGE } from '../services/pf/uanLookup.service.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { prisma, runInTransaction } from '../lib/prisma.js';
@@ -35,11 +39,35 @@ import { Prisma } from '@prisma/client';
 const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 min — Playwright scrape can be slow
 const LOCK_DURATION_MS = 10 * 60 * 1000;
 
-export interface PfFetchJobPayload {
+/**
+ * A passbook fetch: an account already exists and we are refreshing it.
+ */
+export interface PfPassbookJobPayload {
+  kind?: 'PASSBOOK_FETCH';
   sessionId: string;
   accountId: string;
   userId: string;
   credentialOverride?: { username: string; password: string; mpin?: string };
+}
+
+/**
+ * A UAN lookup: there is no account yet — this is the step that finds the
+ * identifier one would be created from. The member's details ride in the job
+ * payload and are never persisted on the session row.
+ */
+export interface PfUanLookupJobPayload {
+  kind: 'UAN_LOOKUP';
+  sessionId: string;
+  userId: string;
+  input: UanLookupInput;
+}
+
+export type PfFetchJobPayload = PfPassbookJobPayload | PfUanLookupJobPayload;
+
+/** `kind` is optional on the passbook variant so jobs already queued before
+ *  this discriminator existed still route correctly. */
+export function isUanLookupJob(p: PfFetchJobPayload): p is PfUanLookupJobPayload {
+  return p.kind === 'UAN_LOOKUP';
 }
 
 let _pfFetchQueue: Bull.Queue<PfFetchJobPayload> | null = null;
@@ -93,6 +121,13 @@ export function startPfFetchWorker(): void {
   const q = getPfFetchQueue();
 
   q.process(2, async (job) => {
+    // A UAN lookup has no account to load and a different adapter, so it
+    // branches out before any of the passbook machinery below.
+    if (isUanLookupJob(job.data)) {
+      await runUanLookupJob(job.data);
+      return;
+    }
+
     const { sessionId, accountId, userId, credentialOverride } = job.data;
     const t0 = Date.now();
     logger.info({ bullJobId: job.id, sessionId, accountId }, '[pf-worker] processing');
@@ -293,4 +328,46 @@ export function startPfFetchWorker(): void {
   });
 
   logger.info('[pf-worker] started — concurrency=2, timeout=10min');
+}
+
+/**
+ * Server-headless UAN lookup.
+ *
+ * Kept deliberately thin: it drives the adapter, relays whatever the adapter
+ * asks the member for through the same SSE prompts a passbook fetch uses, and
+ * records the outcome. The EXTENSION path does the same steps in the member's
+ * own browser and posts the result to /pf/extension/raw-payload instead, which
+ * is why this only handles the headless case.
+ */
+async function runUanLookupJob(payload: PfUanLookupJobPayload): Promise<void> {
+  const { sessionId, userId, input } = payload;
+  logger.info({ sessionId, userId }, '[pf-worker] uan lookup');
+
+  await runAsUser(userId, async () => {
+    try {
+      await transition(sessionId, 'SCRAPING');
+      const outcome = await runUanLookup({
+        sessionId,
+        input,
+        prompt: makeSessionPrompt(sessionId),
+      });
+      await finishUanLookup(sessionId, outcome);
+      if (outcome.ok) {
+        // The UAN reaches the member over SSE and is never persisted here:
+        // there is no account to attach it to until they confirm and create one.
+        sseHub.publish(sessionId, {
+          type: 'uan',
+          data: { uan: outcome.uan, maskedName: outcome.maskedName },
+        });
+      } else {
+        sseHub.publish(sessionId, {
+          type: 'lookup_failed',
+          data: { reason: outcome.reason, message: LOOKUP_FAILURE_MESSAGE[outcome.reason] },
+        });
+      }
+    } catch (err) {
+      logger.error({ sessionId, err }, '[pf-worker] uan lookup threw');
+      await fail(sessionId, err instanceof Error ? err.message : 'UAN lookup failed');
+    }
+  });
 }

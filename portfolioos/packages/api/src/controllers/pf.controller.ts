@@ -12,6 +12,7 @@ import multer from 'multer';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { ok, created, error } from '../lib/response.js';
 import { logger } from '../lib/logger.js';
+import { startUanLookup } from '../services/pf/uanLookup.service.js';
 import { sseHub } from '../lib/sseHub.js';
 import {
   listPfAccounts,
@@ -160,6 +161,47 @@ export async function startSessionHandler(req: Request, res: Response) {
   });
 
   ok(res, { sessionId: session.id });
+}
+
+const UanLookupSchema = z.object({
+  mobile: z.string().min(1),
+  pan: z.string().optional(),
+  aadhaar: z.string().optional(),
+  memberId: z.string().optional(),
+  name: z.string().min(1),
+  dob: z.string().min(1),
+  source: z.enum(['EXTENSION', 'SERVER_HEADLESS']).default('EXTENSION'),
+});
+
+/**
+ * Start a "Know your UAN" lookup.
+ *
+ * The member never leaves the app: the captcha image and the OTP prompt come
+ * back over the same SSE stream a passbook fetch uses, and are answered through
+ * the existing /sessions/:id/captcha and /sessions/:id/otp endpoints.
+ *
+ * EXTENSION is the default source deliberately. The lookup runs in the member's
+ * own browser from their own IP, which is both what EPFO sees from a normal
+ * visitor and what keeps a datacentre IP from being rate-limited into
+ * uselessness. SERVER_HEADLESS exists for people who will not install the
+ * extension, and should be expected to be the flakier path.
+ */
+export async function startUanLookupHandler(req: Request, res: Response) {
+  const userId = req.user!.id;
+  const parsed = UanLookupSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return error(res, 400, parsed.error.issues.map((i) => i.message).join('; '), 'VALIDATION_ERROR');
+  }
+  const { source, ...input } = parsed.data;
+
+  const { sessionId } = await startUanLookup(userId, input, source);
+
+  if (source === 'SERVER_HEADLESS') {
+    await pfFetchQueue.add('uan-lookup', { kind: 'UAN_LOOKUP', sessionId, userId, input });
+  }
+  // For EXTENSION the paired extension picks the job up; nothing to enqueue.
+
+  ok(res, { sessionId });
 }
 
 export async function sseEventsHandler(req: Request, res: Response) {

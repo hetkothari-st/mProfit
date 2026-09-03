@@ -6,6 +6,7 @@ import {
   forgetCredentialsHandler,
   snoozeNudgeHandler,
   startSessionHandler,
+  startUanLookupHandler,
   sseEventsHandler,
   captchaRespondHandler,
   otpRespondHandler,
@@ -63,6 +64,11 @@ pfRouter.post('/accounts/:id/snooze-nudge', snoozeNudgeHandler);
 pfRouter.post('/accounts/:id/passbook', upload.single('file'), uploadManualPassbookHandler);
 
 // Sessions
+// Finding a UAN precedes having an account, so this sits beside /sessions
+// rather than under /accounts/:id. Everything after the first step — captcha,
+// OTP, SSE — is the shared session machinery below.
+pfRouter.post('/uan-lookup', startUanLookupHandler);
+
 pfRouter.post('/sessions', startSessionHandler);
 pfRouter.get('/sessions/:sessionId/events', sseEventsHandler);
 pfRouter.post('/sessions/:sessionId/captcha', captchaRespondHandler);
