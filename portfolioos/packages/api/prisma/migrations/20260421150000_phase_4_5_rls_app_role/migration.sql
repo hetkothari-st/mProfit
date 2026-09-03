@@ -26,7 +26,35 @@ $do$;
 
 -- Belt-and-braces: even if the role already existed (e.g. created manually),
 -- make sure it does NOT carry BYPASSRLS.
-ALTER ROLE portfolioos_app NOSUPERUSER NOBYPASSRLS;
+--
+-- Wrapped because managed Postgres (Neon, RDS) does not give the migration
+-- role SUPERUSER, and touching the SUPERUSER attribute — even to clear it —
+-- requires it: "permission denied to alter role". Unguarded, this single
+-- statement fails every migrate deploy/reset and every shadow-database check
+-- on a managed host.
+--
+-- Skipping is safe: the CREATE ROLE above already sets NOSUPERUSER
+-- NOBYPASSRLS, and a managed provider will not hand out SUPERUSER anyway. The
+-- case this guard gives up on is a pre-existing role that someone granted
+-- BYPASSRLS to by hand; the assertion below turns that into a loud failure
+-- rather than silently unenforced RLS.
+DO $role$
+BEGIN
+  BEGIN
+    ALTER ROLE portfolioos_app NOSUPERUSER NOBYPASSRLS;
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE NOTICE 'Skipping ALTER ROLE portfolioos_app (no SUPERUSER on this host); relying on CREATE ROLE attributes.';
+  END;
+
+  -- Fail loudly rather than leave RLS silently bypassed for the runtime role.
+  IF EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname = 'portfolioos_app' AND (rolbypassrls OR rolsuper)
+  ) THEN
+    RAISE EXCEPTION 'portfolioos_app carries BYPASSRLS/SUPERUSER: every RLS policy would be skipped for the app role. Clear it with a superuser before continuing.';
+  END IF;
+END
+$role$;
 
 -- Schema-level usage.
 GRANT USAGE ON SCHEMA public TO portfolioos_app;
