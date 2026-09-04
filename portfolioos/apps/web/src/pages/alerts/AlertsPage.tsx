@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, CheckCheck, Trash2, Plus, RefreshCw, CalendarDays, Filter,
-  AlertTriangle, Inbox, Clock,
+  Bell, CheckCheck, Trash2, Plus, RefreshCw, Filter, AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -16,164 +15,246 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { alertsApi, type AlertType, type AlertDTO } from '@/api/alerts.api';
 import { cn } from '@/lib/cn';
 
+/**
+ * Alerts, set as a ledger grouped by when they land.
+ *
+ * The only question this page answers is "what must I do, and by when". So
+ * time is the structure rather than a field inside each row: overdue first,
+ * then this week, this month, later — each a labelled band you can stop
+ * reading once it stops being urgent. Within a band every row shares one
+ * column grid, so the dates line up and the eye runs down a single edge
+ * instead of hunting for them.
+ *
+ * Deliberately dropped from the previous design:
+ *
+ *   - Nine hand-picked HSL hues, one per alert type. This theme is monochrome
+ *     with a single accent; here colour means urgency and nothing else, so the
+ *     type became a quiet label in its own column instead of a coloured pill.
+ *   - A four-tile KPI strip sitting above a filter bar that restated it. The
+ *     counts now live ON the filters, which makes them actionable rather than
+ *     decorative and removes the third place "unread" was being announced.
+ *   - The day count printed twice in every row (badge, then footer).
+ *   - Actions held at opacity-50 until hover — invisible on a touch screen.
+ *
+ * Read/unread is carried by ONE signal (accent rail + title weight), not by a
+ * rail AND a dot AND a background tint all saying the same bit.
+ */
+
 const TYPE_LABELS: Record<AlertType, string> = {
-  FD_MATURITY: 'FD Maturity',
-  BOND_MATURITY: 'Bond Maturity',
-  MF_LOCK_IN_EXPIRY: 'MF Lock-in',
-  SIP_DUE: 'SIP Due',
-  INSURANCE_PREMIUM: 'Insurance Premium',
+  FD_MATURITY: 'FD maturity',
+  BOND_MATURITY: 'Bond maturity',
+  MF_LOCK_IN_EXPIRY: 'MF lock-in',
+  SIP_DUE: 'SIP due',
+  INSURANCE_PREMIUM: 'Insurance premium',
   DIVIDEND_RECEIVED: 'Dividend',
-  CORPORATE_ACTION: 'Corporate Action',
-  PRICE_TARGET: 'Price Target',
+  CORPORATE_ACTION: 'Corporate action',
+  PRICE_TARGET: 'Price target',
   CUSTOM: 'Custom',
 };
-
-// Editorial palette tones — refined HSL chips, not raw tailwind
-const TYPE_TONES: Record<AlertType, { dot: string; text: string; ring: string; bg: string }> = {
-  FD_MATURITY:        { dot: 'hsl(213 53% 32%)',  text: 'text-foreground/85', ring: 'border-[hsl(213_53%_32%/0.25)]', bg: 'bg-[hsl(213_53%_32%/0.06)]' },
-  BOND_MATURITY:      { dot: 'hsl(260 28% 42%)',  text: 'text-foreground/85', ring: 'border-[hsl(260_28%_42%/0.25)]', bg: 'bg-[hsl(260_28%_42%/0.06)]' },
-  MF_LOCK_IN_EXPIRY:  { dot: 'hsl(195 40% 34%)',  text: 'text-foreground/85', ring: 'border-[hsl(195_40%_34%/0.25)]', bg: 'bg-[hsl(195_40%_34%/0.06)]' },
-  SIP_DUE:            { dot: 'hsl(36 60% 48%)',   text: 'text-foreground/85', ring: 'border-[hsl(36_60%_48%/0.30)]',  bg: 'bg-[hsl(36_60%_48%/0.08)]'  },
-  INSURANCE_PREMIUM:  { dot: 'hsl(12 50% 44%)',   text: 'text-foreground/85', ring: 'border-[hsl(12_50%_44%/0.25)]',  bg: 'bg-[hsl(12_50%_44%/0.06)]'  },
-  DIVIDEND_RECEIVED:  { dot: 'hsl(130 35% 32%)',  text: 'text-foreground/85', ring: 'border-[hsl(130_35%_32%/0.25)]', bg: 'bg-[hsl(130_35%_32%/0.06)]' },
-  CORPORATE_ACTION:   { dot: 'hsl(28 70% 52%)',   text: 'text-foreground/85', ring: 'border-[hsl(28_70%_52%/0.30)]',  bg: 'bg-[hsl(28_70%_52%/0.08)]'  },
-  PRICE_TARGET:       { dot: 'hsl(340 35% 38%)',  text: 'text-foreground/85', ring: 'border-[hsl(340_35%_38%/0.25)]', bg: 'bg-[hsl(340_35%_38%/0.06)]' },
-  CUSTOM:             { dot: 'hsl(215 14% 38%)',  text: 'text-foreground/85', ring: 'border-border',                  bg: 'bg-muted/40'                },
-};
-
-const FALLBACK_TONE = {
-  dot: 'hsl(var(--muted-foreground))',
-  text: 'text-foreground/85',
-  ring: 'border-border',
-  bg: 'bg-muted/40',
-} as const;
 
 const ALL_TYPES: AlertType[] = [
   'FD_MATURITY', 'BOND_MATURITY', 'MF_LOCK_IN_EXPIRY', 'SIP_DUE',
   'INSURANCE_PREMIUM', 'DIVIDEND_RECEIVED', 'CORPORATE_ACTION', 'PRICE_TARGET', 'CUSTOM',
 ];
 
+const PAGE_SIZE = 30;
+const DAY_MS = 86_400_000;
+
 function daysUntil(iso: string): number {
   const t = new Date(iso).getTime();
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  return Math.round((t - today.getTime()) / 86_400_000);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((t - today.getTime()) / DAY_MS);
 }
 
-function formatTriggerDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+function exactDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
 }
+
+/** Short relative form for the left column — same idiom as the family feed. */
+function relativeDay(days: number): string {
+  if (days < 0) return `${Math.abs(days)}d late`;
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  return `in ${days}d`;
+}
+
+// ─── Time bands ──────────────────────────────────────────────────────
+
+type BandKey = 'overdue' | 'week' | 'month' | 'later';
+
+const BANDS: { key: BandKey; label: string; caption: string }[] = [
+  { key: 'overdue', label: 'Overdue',    caption: 'past their date' },
+  { key: 'week',    label: 'This week',  caption: 'next 7 days' },
+  { key: 'month',   label: 'This month', caption: 'next 30 days' },
+  { key: 'later',   label: 'Later',      caption: 'beyond 30 days' },
+];
+
+function bandOf(days: number): BandKey {
+  if (days < 0) return 'overdue';
+  if (days <= 7) return 'week';
+  if (days <= 30) return 'month';
+  return 'later';
+}
+
+// ─── Row ─────────────────────────────────────────────────────────────
+
+/**
+ * `[when] [what] [actions]`. The `when` column is a fixed width so every date
+ * in every band sits on the same axis — that alignment is the whole reason
+ * this reads as a ledger and not as a stack of cards.
+ */
+const ROW_GRID = 'grid grid-cols-[76px_minmax(0,1fr)_auto] sm:grid-cols-[104px_minmax(0,1fr)_auto]';
 
 function AlertRow({ alert, onMarkRead, onDelete }: {
   alert: AlertDTO;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const tone = TYPE_TONES[alert.type as AlertType] ?? FALLBACK_TONE;
-  const typeLabel = TYPE_LABELS[alert.type as AlertType] ?? alert.type.replace(/_/g, ' ');
   const days = daysUntil(alert.triggerDate);
-  const isOverdue = days < 0;
-  const isUrgent = days >= 0 && days <= 7;
-  const railColor = !alert.isRead
-    ? (isOverdue ? 'hsl(var(--negative))' : isUrgent ? 'hsl(var(--accent))' : 'hsl(var(--accent))')
-    : 'transparent';
+  const overdue = days < 0;
+  const unread = !alert.isRead;
+  const typeLabel = TYPE_LABELS[alert.type as AlertType] ?? alert.type.replace(/_/g, ' ').toLowerCase();
 
   return (
-    <div
-      className={cn(
-        'group relative flex items-stretch gap-0 border-b border-border/60 last:border-0 transition-colors',
-        alert.isRead ? 'bg-transparent hover:bg-muted/20' : 'bg-card hover:bg-muted/15',
-      )}
-    >
-      {/* Urgency rail */}
+    <div className={cn(
+      ROW_GRID,
+      'group relative items-start gap-3 sm:gap-5 py-3 sm:py-3.5 pl-3 pr-2 sm:pl-5 sm:pr-3',
+      'border-b border-border/50 last:border-0 transition-colors hover:bg-muted/25',
+    )}>
+      {/* Unread rail. One signal, not three. */}
       <span
         aria-hidden="true"
-        className="w-[3px] shrink-0 transition-colors"
-        style={{ background: railColor }}
+        className={cn(
+          'absolute bottom-0 left-0 top-0 w-[2px] transition-colors',
+          unread ? (overdue ? 'bg-negative' : 'bg-accent') : 'bg-transparent',
+        )}
       />
 
-      <div className="flex flex-1 items-start gap-3 sm:gap-4 px-3 py-2.5 sm:px-5 sm:py-4">
-        {/* Tone marker */}
-        <div className="mt-0.5 flex flex-col items-center gap-1.5 pt-1">
-          <span
-            aria-hidden="true"
-            className="h-2 w-2 rounded-[1px] rotate-45 shrink-0"
-            style={{ background: tone.dot }}
-          />
-          {!alert.isRead && (
-            <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_0_3px_hsl(var(--accent)/0.18)]" />
-          )}
-        </div>
+      {/* When */}
+      <div className="pt-px">
+        <p className={cn(
+          'numeric tabular-nums text-[12px] leading-tight tracking-tight sm:text-[12.5px]',
+          overdue ? 'font-medium text-negative' : unread ? 'text-foreground' : 'text-muted-foreground',
+        )}>
+          {relativeDay(days)}
+        </p>
+        <p className="numeric tabular-nums mt-0.5 text-[10.5px] leading-tight text-muted-foreground/70">
+          {exactDate(alert.triggerDate)}
+        </p>
+      </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={cn(
-              'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned',
-              tone.ring, tone.bg, tone.text,
-            )}>
-              {typeLabel}
-            </span>
-            {isOverdue && !alert.isRead && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-negative/30 bg-negative/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned text-negative">
-                <AlertTriangle className="h-3 w-3" strokeWidth={2.2} />
-                Overdue
-              </span>
-            )}
-            {isUrgent && !alert.isRead && !isOverdue && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned text-accent-ink">
-                <Clock className="h-3 w-3" strokeWidth={2.2} />
-                {days === 0 ? 'Today' : `${days}d`}
-              </span>
-            )}
-          </div>
-
-          <p className={cn(
-            'mt-1.5 sm:mt-2 text-[13.5px] sm:text-[15px] font-medium leading-tight tracking-[-0.012em] text-balance',
-            alert.isRead ? 'text-muted-foreground' : 'text-foreground',
-          )}>
-            {alert.title}
+      {/* What */}
+      <div className="min-w-0">
+        <p className="text-[9.5px] uppercase tracking-kerned text-muted-foreground/80">
+          {typeLabel}
+        </p>
+        <p className={cn(
+          'mt-1 text-[13.5px] leading-snug tracking-[-0.011em] text-pretty sm:text-[14px]',
+          unread ? 'font-medium text-foreground' : 'text-muted-foreground',
+        )}>
+          {alert.title}
+        </p>
+        {alert.description && (
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/85 text-pretty">
+            {alert.description}
           </p>
-          {alert.description && (
-            <p className="mt-0.5 sm:mt-1 text-[11.5px] sm:text-[12.5px] leading-relaxed text-muted-foreground">
-              {alert.description}
-            </p>
-          )}
-          <div className="mt-1.5 sm:mt-2 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <CalendarDays className="h-3 w-3 text-muted-foreground/70" strokeWidth={1.7} />
-            <span className="numeric tabular-nums">{formatTriggerDate(alert.triggerDate)}</span>
-            {!isOverdue && !isUrgent && (
-              <>
-                <span className="h-1 w-1 rounded-full bg-border" />
-                <span className="numeric tabular-nums">in {days}d</span>
-              </>
-            )}
-          </div>
-        </div>
+        )}
+      </div>
 
-        {/* Actions */}
-        <div className="flex gap-1 shrink-0 mt-1 opacity-50 group-hover:opacity-100 transition-opacity">
-          {!alert.isRead && (
-            <button
-              type="button"
-              onClick={() => onMarkRead(alert.id)}
-              title="Mark as read"
-              className="p-1.5 rounded-md text-muted-foreground hover:text-positive hover:bg-positive/10 transition-colors focus-ring"
-            >
-              <CheckCheck className="h-3.5 w-3.5" strokeWidth={1.8} />
-            </button>
-          )}
+      {/* Actions — always visible; hover only strengthens them. */}
+      <div className="flex items-center gap-0.5 pt-0.5">
+        {unread && (
           <button
             type="button"
-            onClick={() => onDelete(alert.id)}
-            title="Dismiss"
-            className="p-1.5 rounded-md text-muted-foreground hover:text-negative hover:bg-negative/10 transition-colors focus-ring"
+            onClick={() => onMarkRead(alert.id)}
+            title="Mark as read"
+            aria-label={`Mark "${alert.title}" as read`}
+            className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground/60 transition-colors hover:bg-positive/10 hover:text-positive focus-ring"
           >
-            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+            <CheckCheck className="h-3.5 w-3.5" strokeWidth={1.8} />
           </button>
-        </div>
+        )}
+        <button
+          type="button"
+          onClick={() => onDelete(alert.id)}
+          title="Dismiss"
+          aria-label={`Dismiss "${alert.title}"`}
+          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground/60 transition-colors hover:bg-negative/10 hover:text-negative focus-ring"
+        >
+          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+        </button>
       </div>
     </div>
   );
 }
+
+// ─── Band header ─────────────────────────────────────────────────────
+
+function BandHeader({ label, caption, count, tone }: {
+  label: string;
+  caption: string;
+  count: number;
+  tone: 'negative' | 'default';
+}) {
+  return (
+    <div className={cn(
+      ROW_GRID,
+      'items-baseline gap-3 border-b border-border/60 bg-muted/40 py-2 pl-3 pr-3 sm:gap-5 sm:pl-5',
+    )}>
+      <p className={cn(
+        'text-[10px] font-medium uppercase tracking-kerned',
+        tone === 'negative' ? 'text-negative' : 'text-foreground/70',
+      )}>
+        {label}
+      </p>
+      <p className="text-[10.5px] text-muted-foreground/70">{caption}</p>
+      <p className="numeric tabular-nums text-[11px] text-muted-foreground">{count}</p>
+    </div>
+  );
+}
+
+// ─── Filter chip ─────────────────────────────────────────────────────
+
+function FilterChip({ label, count, active, onClick, tone = 'default' }: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+  tone?: 'default' | 'negative';
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'inline-flex h-9 items-center gap-2 rounded-md border px-3 text-[12.5px] transition-colors focus-ring',
+        active
+          ? 'border-accent/45 bg-accent/10 text-foreground'
+          : 'border-border/70 bg-card/50 text-muted-foreground hover:border-border hover:text-foreground',
+      )}
+    >
+      <span className={cn(tone === 'negative' && count > 0 && !active && 'text-negative')}>
+        {label}
+      </span>
+      <span className={cn(
+        'numeric tabular-nums text-[11px]',
+        active
+          ? 'text-foreground/70'
+          : tone === 'negative' && count > 0
+            ? 'text-negative'
+            : 'text-muted-foreground/70',
+      )}>
+        {count}
+      </span>
+    </button>
+  );
+}
+
+// ─── Create dialog ───────────────────────────────────────────────────
 
 function CreateAlertDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const qc = useQueryClient();
@@ -196,11 +277,20 @@ function CreateAlertDialog({ open, onOpenChange }: { open: boolean; onOpenChange
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>New Custom Alert</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>New reminder</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div><Label>Title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. FD maturity at SBI" /></div>
-          <div><Label>Description (optional)</Label><Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Additional details" /></div>
-          <div><Label>Reminder date</Label><Input type="date" value={triggerDate} onChange={(e) => setTriggerDate(e.target.value)} /></div>
+          <div>
+            <Label>Title</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. FD maturity at SBI" />
+          </div>
+          <div>
+            <Label>Description (optional)</Label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Additional details" />
+          </div>
+          <div>
+            <Label>Reminder date</Label>
+            <Input type="date" value={triggerDate} onChange={(e) => setTriggerDate(e.target.value)} />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -213,59 +303,97 @@ function CreateAlertDialog({ open, onOpenChange }: { open: boolean; onOpenChange
   );
 }
 
+// ─── Page ────────────────────────────────────────────────────────────
+
+type Lens = 'all' | 'overdue' | 'soon' | 'unread';
+
 export function AlertsPage() {
   const qc = useQueryClient();
   const [filterType, setFilterType] = useState<AlertType | ''>('');
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [lens, setLens] = useState<Lens>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['alerts', filterType, unreadOnly, page],
-    queryFn: () => alertsApi.list({ type: filterType || undefined, unreadOnly, page, limit: 30 }),
+    queryKey: ['alerts', filterType, page],
+    queryFn: () => alertsApi.list({ type: filterType || undefined, page, limit: PAGE_SIZE }),
   });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['alerts'] });
+    qc.invalidateQueries({ queryKey: ['alerts-unread'] });
+  };
 
   const markReadMut = useMutation({
     mutationFn: (id: string) => alertsApi.markRead(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['alerts'] }); qc.invalidateQueries({ queryKey: ['alerts-unread'] }); },
+    onSuccess: invalidate,
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => alertsApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['alerts'] }); qc.invalidateQueries({ queryKey: ['alerts-unread'] }); },
+    onSuccess: invalidate,
     onError: (e: Error) => toast.error(e.message),
   });
 
   const markAllMut = useMutation({
     mutationFn: () => alertsApi.markAllRead(),
-    onSuccess: () => {
-      toast.success('All alerts marked as read');
-      qc.invalidateQueries({ queryKey: ['alerts'] });
-      qc.invalidateQueries({ queryKey: ['alerts-unread'] });
-    },
+    onSuccess: () => { toast.success('All alerts marked as read'); invalidate(); },
   });
 
   const scanMut = useMutation({
     mutationFn: () => alertsApi.triggerScan(),
-    onSuccess: (r) => {
-      toast.success(`Scan complete — ${r.vehicle + r.rent} new alerts`);
-      qc.invalidateQueries({ queryKey: ['alerts'] });
-      qc.invalidateQueries({ queryKey: ['alerts-unread'] });
-    },
+    onSuccess: (r) => { toast.success(`Scan complete — ${r.vehicle + r.rent} new alerts`); invalidate(); },
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const alerts = useMemo(() => data?.alerts ?? [], [data]);
+  const total = data?.total ?? 0;
   const unreadCount = data?.unreadCount ?? 0;
-  const totalCount = data?.total ?? 0;
-  const overdueCount = (data?.alerts ?? []).filter(a => !a.isRead && daysUntil(a.triggerDate) < 0).length;
-  const urgentCount = (data?.alerts ?? []).filter(a => !a.isRead && daysUntil(a.triggerDate) >= 0 && daysUntil(a.triggerDate) <= 7).length;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  /**
+   * Lens counts describe the LOADED page, not the whole ledger — the API
+   * paginates, and only `total` / `unreadCount` are ledger-wide. The footer
+   * states the scope so the two kinds of number are never read as one.
+   */
+  const counts = useMemo(() => {
+    let overdue = 0, soon = 0, unread = 0;
+    for (const a of alerts) {
+      const d = daysUntil(a.triggerDate);
+      if (d < 0) overdue += 1;
+      else if (d <= 7) soon += 1;
+      if (!a.isRead) unread += 1;
+    }
+    return { all: alerts.length, overdue, soon, unread };
+  }, [alerts]);
+
+  const visible = useMemo(() => alerts.filter((a) => {
+    const d = daysUntil(a.triggerDate);
+    if (lens === 'overdue') return d < 0;
+    if (lens === 'soon') return d >= 0 && d <= 7;
+    if (lens === 'unread') return !a.isRead;
+    return true;
+  }), [alerts, lens]);
+
+  /** Bucket into time bands, each internally sorted soonest-first. */
+  const banded = useMemo(() => {
+    const map: Record<BandKey, AlertDTO[]> = { overdue: [], week: [], month: [], later: [] };
+    for (const a of visible) map[bandOf(daysUntil(a.triggerDate))].push(a);
+    for (const key of Object.keys(map) as BandKey[]) {
+      map[key].sort((x, y) => daysUntil(x.triggerDate) - daysUntil(y.triggerDate));
+    }
+    return map;
+  }, [visible]);
+
+  const nothingLoaded = !isLoading && alerts.length === 0;
+  const filteredToNothing = !isLoading && alerts.length > 0 && visible.length === 0;
 
   return (
     <div>
       <PageHeader
         eyebrow="Inbox"
         title="Alerts & Reminders"
-        description="Upcoming maturities, premium due dates, expiry reminders, and custom alerts — all curated in one ledger."
+        description="Maturities, premium due dates, expiries and your own reminders — grouped by when they land."
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => scanMut.mutate()} disabled={scanMut.isPending}>
@@ -273,131 +401,126 @@ export function AlertsPage() {
               Scan now
             </Button>
             <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" /> New alert
+              <Plus className="h-4 w-4" /> New reminder
             </Button>
           </div>
         }
       />
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6 reveal">
-        <KpiTile icon={Inbox}        label="Total"   value={totalCount}   tone="default" />
-        <KpiTile icon={Bell}         label="Unread"  value={unreadCount}  tone={unreadCount > 0 ? 'accent' : 'default'} />
-        <KpiTile icon={Clock}        label="Due ≤ 7d" value={urgentCount} tone={urgentCount > 0 ? 'accent' : 'default'} />
-        <KpiTile icon={AlertTriangle} label="Overdue" value={overdueCount} tone={overdueCount > 0 ? 'negative' : 'positive'} />
-      </div>
-
-      {/* Filter bar */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3">
-        <div className="relative inline-flex items-center">
-          <Filter className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-muted-foreground z-10" strokeWidth={1.7} />
-          <Select
-            value={filterType}
-            onChange={(e) => { setFilterType(e.target.value as AlertType | ''); setPage(1); }}
-            className="h-9 w-44 sm:w-52 pl-9 pr-9 text-[13px] border-border/70 bg-card/50"
-          >
-            <option value="">All types</option>
-            {ALL_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
-          </Select>
+      {/* One control row: counts live on the filters that act on them. */}
+      <div className="reveal mb-4 flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <FilterChip label="All"      count={counts.all}     active={lens === 'all'}     onClick={() => setLens('all')} />
+          <FilterChip label="Overdue"  count={counts.overdue} active={lens === 'overdue'} onClick={() => setLens('overdue')} tone="negative" />
+          <FilterChip label="Due ≤ 7d" count={counts.soon}    active={lens === 'soon'}    onClick={() => setLens('soon')} />
+          <FilterChip label="Unread"   count={counts.unread}  active={lens === 'unread'}  onClick={() => setLens('unread')} />
         </div>
 
-        <label className="inline-flex items-center gap-2 cursor-pointer rounded-md border border-border/70 bg-card/50 px-3.5 h-9 text-[13px] hover:border-accent/40 transition-colors">
-          <input
-            type="checkbox"
-            checked={unreadOnly}
-            onChange={(e) => { setUnreadOnly(e.target.checked); setPage(1); }}
-            className="h-3.5 w-3.5 rounded border-border accent-accent"
-          />
-          Unread only
-          {unreadCount > 0 && (
-            <span className="numeric tabular-nums text-[10.5px] font-medium rounded-full bg-accent text-accent-foreground px-1.5 py-0.5 ml-0.5">
-              {unreadCount}
-            </span>
-          )}
-        </label>
+        <div className="ml-auto flex items-center gap-2">
+          <div className="relative inline-flex items-center">
+            <Filter className="pointer-events-none absolute left-3 z-10 h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.7} />
+            <Select
+              value={filterType}
+              onChange={(e) => { setFilterType(e.target.value as AlertType | ''); setPage(1); }}
+              className="h-9 w-40 border-border/70 bg-card/50 pl-9 pr-9 text-[12.5px] sm:w-48"
+            >
+              <option value="">All types</option>
+              {ALL_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
+            </Select>
+          </div>
 
-        {unreadCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => markAllMut.mutate()} disabled={markAllMut.isPending} className="text-accent-ink hover:text-accent h-9">
-            <CheckCheck className="h-4 w-4" /> Mark all read
-          </Button>
-        )}
+          {unreadCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => markAllMut.mutate()}
+              disabled={markAllMut.isPending}
+              className="h-9 text-accent-ink hover:text-accent"
+            >
+              <CheckCheck className="h-4 w-4" /> Mark all read
+            </Button>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
-        <Card>
-          <div className="divide-y divide-border/60">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-[80px] sm:h-[110px] animate-pulse bg-muted/30" />
+        <Card className="overflow-hidden">
+          <div className="divide-y divide-border/50">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-[76px] animate-pulse bg-muted/30" />
             ))}
           </div>
         </Card>
-      ) : (data?.alerts.length ?? 0) === 0 ? (
+      ) : nothingLoaded ? (
         <EmptyState
           icon={Bell}
           title="All clear"
-          description="You're caught up. Alerts appear here for maturities, premium due dates, vehicle expiries, and rent reminders."
+          description="Nothing is due. Alerts appear here for maturities, premium due dates, vehicle expiries and rent reminders."
           action={<Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> Create a reminder</Button>}
         />
+      ) : filteredToNothing ? (
+        /* Distinct from "all clear": alerts DO exist, this lens just hides them. */
+        <Card className="overflow-hidden">
+          <CardContent className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+            <AlertTriangle className="h-5 w-5 text-muted-foreground/60" strokeWidth={1.6} />
+            <p className="text-[13.5px] text-foreground">Nothing in this view</p>
+            <p className="max-w-sm text-[12.5px] leading-relaxed text-muted-foreground">
+              {counts.all} alert{counts.all === 1 ? '' : 's'} loaded, but none match this filter.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => setLens('all')}>Show all</Button>
+          </CardContent>
+        </Card>
       ) : (
         <Card className="overflow-hidden">
           <CardContent className="p-0">
-            {data!.alerts.map((a) => (
-              <AlertRow
-                key={a.id}
-                alert={a}
-                onMarkRead={(id) => markReadMut.mutate(id)}
-                onDelete={(id) => deleteMut.mutate(id)}
-              />
-            ))}
+            {BANDS.map(({ key, label, caption }) => {
+              const rows = banded[key];
+              if (rows.length === 0) return null;
+              return (
+                <div key={key}>
+                  <BandHeader
+                    label={label}
+                    caption={caption}
+                    count={rows.length}
+                    tone={key === 'overdue' ? 'negative' : 'default'}
+                  />
+                  {rows.map((a) => (
+                    <AlertRow
+                      key={a.id}
+                      alert={a}
+                      onMarkRead={(id) => markReadMut.mutate(id)}
+                      onDelete={(id) => deleteMut.mutate(id)}
+                    />
+                  ))}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}
 
-      {(data?.total ?? 0) > 30 && (
-        <div className="flex items-center justify-center gap-3 mt-6 text-[13px]">
-          <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-          <span className="text-muted-foreground numeric tabular-nums">
-            Page {page} of {Math.ceil((data?.total ?? 1) / 30)}
-          </span>
-          <Button variant="outline" size="sm" disabled={page >= Math.ceil((data?.total ?? 1) / 30)} onClick={() => setPage((p) => p + 1)}>Next</Button>
+      {/* Scope line — separates page-local chip counts from ledger-wide totals. */}
+      {!isLoading && total > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-[11.5px] text-muted-foreground">
+          <p className="numeric tabular-nums">
+            Showing {alerts.length} of {total}
+            {unreadCount > 0 && <> · {unreadCount} unread in total</>}
+          </p>
+          {pageCount > 1 && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+                Previous
+              </Button>
+              <span className="numeric tabular-nums">Page {page} of {pageCount}</span>
+              <Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}>
+                Next
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
       <CreateAlertDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
-  );
-}
-
-function KpiTile({ icon: Icon, label, value, tone }: {
-  icon: typeof Bell;
-  label: string;
-  value: number;
-  tone: 'default' | 'accent' | 'negative' | 'positive';
-}) {
-  const toneText =
-    tone === 'accent' ? 'text-accent' :
-    tone === 'negative' ? 'text-negative' :
-    tone === 'positive' ? 'text-positive' :
-    'text-muted-foreground';
-  const toneRing =
-    tone === 'accent' ? 'border-accent/25' :
-    tone === 'negative' ? 'border-negative/25' :
-    tone === 'positive' ? 'border-positive/25' :
-    'border-border/70';
-
-  return (
-    <Card className={cn('p-3 sm:p-4 transition-shadow hover:shadow-elev-lg', toneRing)}>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[9px] sm:text-[10px] uppercase tracking-kerned text-muted-foreground">{label}</p>
-          <p className="numeric numeric-display mt-1 sm:mt-1.5 text-[18px] sm:text-[24px] tracking-tight text-foreground money-digits">
-            {value}
-          </p>
-        </div>
-        <div className={cn('grid h-8 w-8 sm:h-9 sm:w-9 place-items-center rounded-md border', toneRing)}>
-          <Icon className={cn('h-3.5 w-3.5 sm:h-4 sm:w-4', toneText)} strokeWidth={1.6} />
-        </div>
-      </div>
-    </Card>
   );
 }
