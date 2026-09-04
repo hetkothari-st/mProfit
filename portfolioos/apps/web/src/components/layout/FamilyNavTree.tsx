@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, Home, Loader2, User } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/cn';
 import { familiesApi, type MyFamily } from '@/api/families.api';
@@ -182,7 +182,7 @@ function FamilyNode({
           title={family.name}
           className={({ isActive }) =>
             cn(
-              'relative min-w-0 flex-1 truncate rounded-md py-2 pr-2 text-[14px] focus-ring',
+              'relative flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-2 pr-2 text-[14px] focus-ring',
               isActive && 'font-medium text-sidebar-accent-foreground',
             )
           }
@@ -195,6 +195,18 @@ function FamilyNode({
                   className="absolute -left-7 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-accent"
                 />
               )}
+              {/* A house, not the `Users` glyph the Overview "Family" link
+                  already uses — two identical icons pointing at the same
+                  route would read as a duplicate rather than a hierarchy. */}
+              <Home
+                className={cn(
+                  'h-[17px] w-[17px] shrink-0 transition-colors',
+                  isActive
+                    ? 'text-accent-ink'
+                    : 'text-sidebar-foreground/60 group-hover/fam:text-sidebar-accent-foreground',
+                )}
+                strokeWidth={1.7}
+              />
               <span className="truncate">{family.name}</span>
             </>
           )}
@@ -206,13 +218,17 @@ function FamilyNode({
         // belonging to the family above them rather than as siblings of it.
         <ul className="ml-[13px] mt-0.5 space-y-0.5 border-l border-sidebar-border/60 pl-2.5">
           {membersQuery.isLoading && (
-            <li className="flex items-center gap-2 py-1.5 pl-2 text-[12.5px] text-sidebar-foreground/45">
-              <Loader2 className="h-3 w-3 animate-spin" />
+            // Spinner occupies the same box as a member's icon, so the label
+            // sits on the text axis the real rows will use and the list does
+            // not jump sideways when they arrive.
+            <li className="flex items-center gap-2 px-2 py-1.5 text-[12.5px] text-sidebar-foreground/45">
+              <Loader2 className="h-[15px] w-[15px] shrink-0 animate-spin" strokeWidth={1.7} />
               Loading members
             </li>
           )}
           {membersQuery.isError && !membersQuery.isLoading && (
-            <li className="py-1.5 pl-2 text-[12.5px] text-sidebar-foreground/45">
+            <li className="flex items-center gap-2 px-2 py-1.5 text-[12.5px] text-sidebar-foreground/45">
+              <span aria-hidden="true" className="h-[15px] w-[15px] shrink-0" />
               Couldn&apos;t load members
             </li>
           )}
@@ -228,14 +244,34 @@ function FamilyNode({
                   title={m.userId === currentUserId ? 'You' : m.name || m.email}
                   className={({ isActive }) =>
                     cn(
-                      'block truncate rounded-md px-2 py-1.5 text-[13px] transition-colors focus-ring',
+                      'group/mem flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors focus-ring',
                       isActive
                         ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
                         : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
                     )
                   }
                 >
-                  {m.userId === currentUserId ? 'You' : m.name || m.email}
+                  {({ isActive }) => (
+                    <>
+                      {/* One glyph for every member, the caller included. The
+                          "You" label and the first position already say which
+                          row is theirs; a second icon for the same fact is
+                          noise, not emphasis. Smaller than the family's, so
+                          the nesting is legible even mid-scroll. */}
+                      <User
+                        className={cn(
+                          'h-[15px] w-[15px] shrink-0 transition-colors',
+                          isActive
+                            ? 'text-accent-ink'
+                            : 'text-sidebar-foreground/45 group-hover/mem:text-sidebar-accent-foreground',
+                        )}
+                        strokeWidth={1.7}
+                      />
+                      <span className="truncate">
+                        {m.userId === currentUserId ? 'You' : m.name || m.email}
+                      </span>
+                    </>
+                  )}
                 </NavLink>
               </li>
             ))}
