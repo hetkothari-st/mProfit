@@ -13,12 +13,15 @@ import { AssistantButton } from '@/components/ai/AssistantButton';
 
 export function AppShell() {
   const { hideSensitive } = usePrivacyStore();
-  // The family scope switch changes what data the app should render,
-  // but query keys don't carry the scope dimension — invalidating the
-  // react-query cache alone isn't enough to force every page to
-  // re-fetch under the new X-Viewing-As-Family header. Bumping this
-  // as a `key` on the Outlet unmounts + remounts the current page,
-  // guaranteeing every useQuery starts fresh with the new scope.
+  // Remounts the page on a scope switch so LOCAL component state resets:
+  // filter selections, page numbers, expanded rows. "Page 3 of the family's
+  // transactions" is meaningless once you are back in the personal view.
+  //
+  // This does NOT make the data correct on its own, though it was once
+  // believed to. A remounted useQuery still finds a cache entry that is fresh
+  // under staleTime and serves it without refetching, so the previous scope's
+  // rows survived the remount. Cache correctness comes from the scope-aware
+  // queryKeyHashFn in main.tsx; this key only handles view state.
   const viewingAsFamilyId = useFamilyScopeStore((s) => s.viewingAsFamilyId);
   useTokenRefresh();
 
