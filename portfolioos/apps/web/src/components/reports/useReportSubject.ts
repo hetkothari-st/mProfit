@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { familiesApi } from '@/api/families.api';
+import { familiesApi, NON_AC_CATEGORIES } from '@/api/families.api';
+import { ALL_ASSET_CLASSES } from '@/lib/assetClasses';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 
@@ -64,9 +65,36 @@ export function useReportSubject(): UseReportSubject {
     [membersQuery.data],
   );
 
+  /**
+   * A capped member cannot download reports about anyone but themselves — the
+   * builders emit a whole position and cannot yet honour
+   * `visibleAssetClasses` / `visibleCategories`, so the server refuses rather
+   * than hand out rows the dashboard withholds.
+   *
+   * Mirrored here only so the picker doesn't offer a choice that is going to
+   * be refused. The server is the authority; this is courtesy, and it is
+   * computed from the same two fields rather than from the role, so a
+   * fully-granted CONTRIBUTOR keeps the options an OWNER has.
+   */
+  const ownRow = useMemo(
+    () => members.find((m) => m.userId === currentUserId) ?? null,
+    [members, currentUserId],
+  );
+
+  const capped = useMemo(() => {
+    if (!ownRow || ownRow.role === 'OWNER') return false;
+    const everyAssetClass = ALL_ASSET_CLASSES.every((c) =>
+      ownRow.visibleAssetClasses.includes(c),
+    );
+    const everyCategory = (NON_AC_CATEGORIES as readonly string[]).every((c) =>
+      (ownRow.visibleCategories as string[]).includes(c),
+    );
+    return !(everyAssetClass && everyCategory);
+  }, [ownRow]);
+
   const options = useMemo<SubjectOption[]>(() => {
     const base: SubjectOption[] = [{ value: 'self', label: 'Me' }];
-    if (!familyId || members.length === 0) return base;
+    if (!familyId || members.length === 0 || capped) return base;
 
     return [
       ...base,
@@ -76,7 +104,7 @@ export function useReportSubject(): UseReportSubject {
         .map((m) => ({ value: m.userId, label: m.name || m.email }))
         .sort((a, b) => a.label.localeCompare(b.label)),
     ];
-  }, [familyId, members, currentUserId]);
+  }, [familyId, members, currentUserId, capped]);
 
   // One option is not a choice. A solo user should not see a control that can
   // only ever say "Me".

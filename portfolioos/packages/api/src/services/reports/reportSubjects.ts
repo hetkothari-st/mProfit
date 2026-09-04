@@ -22,11 +22,16 @@
  */
 
 import type { Request } from 'express';
+import { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { runAsUser } from '../../lib/requestContext.js';
 import { BadRequestError, ForbiddenError } from '../../lib/errors.js';
 import { parseFamilyId } from '../../lib/familyHeader.js';
-import { getEffectiveScope } from '../familyScope.service.js';
+import {
+  getEffectiveScope,
+  NON_AC_CATEGORIES,
+  type EffectiveScope,
+} from '../familyScope.service.js';
 import type { MprofitLayout, ReportSection } from '../reportBuilder/mprofitStyle.js';
 
 export interface ReportSubject {
@@ -67,6 +72,14 @@ export async function resolveReportSubjects(req: Request): Promise<ResolvedSubje
   const scope = await getEffectiveScope(callerId, { familyId });
   const readable = new Set(scope.readableUserIds);
 
+  // Asking for yourself by id is asking for yourself. Caps never apply to a
+  // member's own data, so this must not fall through to the check below.
+  if (raw === callerId) {
+    return { subjects: [await selfSubject(callerId)], isFamily: false };
+  }
+
+  assertMayReportOnOthers(scope);
+
   if (raw === 'family') {
     const subjects = await labelledSubjects(scope.readableUserIds);
     const family = await prisma.family.findUnique({
@@ -88,6 +101,44 @@ export async function resolveReportSubjects(req: Request): Promise<ResolvedSubje
   }
 
   return { subjects: await labelledSubjects([raw]), isFamily: false };
+}
+
+/**
+ * Refuse to build a report about someone else when the caller's view of this
+ * family is capped.
+ *
+ * The dashboard applies `allowedAssetClasses` / `allowedCategories` to every
+ * figure it renders. The report builders do not — they take a userId and emit
+ * that person's whole position, because until now the only userId they could
+ * ever be given was the caller's own. Handing a capped member another
+ * member's builder output would therefore print, in a downloadable file, the
+ * very rows their screen is designed to withhold. A PDF is worse than a screen
+ * for this: it leaves the session and cannot be un-shared.
+ *
+ * So the check fails closed. It is not a heuristic about report contents: a
+ * grant that covers every asset class and every category filters nothing, and
+ * such a member is let through. Anything narrower is refused outright rather
+ * than served in a partially-filtered form nobody has verified.
+ *
+ * Lifting this properly means threading the caps into the builders and
+ * teaching each one which of its columns are subject to them. Until that
+ * exists, "you may not download it" is the honest answer, and it costs a
+ * capped member nothing they could already see.
+ */
+function assertMayReportOnOthers(scope: EffectiveScope): void {
+  const acCapped =
+    scope.allowedAssetClasses !== null &&
+    !Object.values(AssetClass).every((c) => scope.allowedAssetClasses!.includes(c));
+  const catCapped =
+    scope.allowedCategories !== null &&
+    !NON_AC_CATEGORIES.every((c) => scope.allowedCategories!.includes(c));
+
+  if (acCapped || catCapped) {
+    throw new ForbiddenError(
+      'Your view of this family is limited to certain categories, and reports cannot yet be produced in a limited form. ' +
+        'You can download your own reports; ask a family owner for anything covering other members.',
+    );
+  }
 }
 
 async function selfSubject(callerId: string): Promise<ReportSubject> {
