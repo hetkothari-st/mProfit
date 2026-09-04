@@ -18,6 +18,7 @@ import {
   type TaxSummary,
   type GrandfatheringReport,
 } from '@/api/tax.api';
+import { useReportSubject } from '@/components/reports/useReportSubject';
 
 type Tab =
   | 'summary'
@@ -117,6 +118,7 @@ function daysToLtcg(oldestBuyDateIso: string, assetClass: string): number | null
 
 export function TaxPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
+  const reportSubject = useReportSubject();
   const [tab, setTab] = useState<Tab>('summary');
   const [fy, setFy] = useState<string>('');
 
@@ -198,14 +200,14 @@ export function TaxPage() {
   const downloadCsv = () => {
     // Both this (Schedule 112A tab) and downloadGrandfatheringCsv now hit
     // the same enriched endpoint — it fills col 9 (FMV) where known.
-    const url = taxApi.grandfatheringCsvUrl(fy);
+    const url = reportSubject.appendTo(taxApi.grandfatheringCsvUrl(fy));
     fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
       .then(async (r) => {
         if (!r.ok) throw new Error(await r.text());
         const blob = await r.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `schedule-112a-${fy}.csv`;
+        a.download = `schedule-112a-${fy}${reportSubject.filenameSuffix}.csv`;
         a.click();
         URL.revokeObjectURL(a.href);
       })
@@ -213,14 +215,14 @@ export function TaxPage() {
   };
 
   const downloadGrandfatheringCsv = () => {
-    const url = taxApi.grandfatheringCsvUrl(fy);
+    const url = reportSubject.appendTo(taxApi.grandfatheringCsvUrl(fy));
     fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
       .then(async (r) => {
         if (!r.ok) throw new Error(await r.text());
         const blob = await r.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `schedule-112a-grandfathering-${fy}.csv`;
+        a.download = `schedule-112a-grandfathering-${fy}${reportSubject.filenameSuffix}.csv`;
         a.click();
         URL.revokeObjectURL(a.href);
       })
@@ -228,14 +230,14 @@ export function TaxPage() {
   };
 
   const downloadTaxReport = () => {
-    const url = taxApi.capitalGainsTaxReportUrl(fy);
+    const url = reportSubject.appendTo(taxApi.capitalGainsTaxReportUrl(fy));
     fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
       .then(async (r) => {
         if (!r.ok) throw new Error(await r.text());
         const blob = await r.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `capital-gains-tax-report-${fy}.pdf`;
+        a.download = `capital-gains-tax-report-${fy}${reportSubject.filenameSuffix}.pdf`;
         a.click();
         URL.revokeObjectURL(a.href);
       })
@@ -261,6 +263,30 @@ export function TaxPage() {
               ))}
             </Select>
           </div>
+          {/* Governs the downloads on this page only. The tables below stay
+              your own, so the label says "Download" rather than implying the
+              whole page follows the selection. Tax artefacts are per-assessee
+              — there is no "whole family" option here, and the server refuses
+              one, because a combined return is not a valid filing for
+              anybody. */}
+          {reportSubject.enabled && (
+            <div className="w-full sm:w-auto">
+              <Label>Download reports for</Label>
+              <Select
+                className="mt-1 w-full sm:w-52"
+                value={reportSubject.subject}
+                onChange={(e) => reportSubject.setSubject(e.target.value)}
+              >
+                {reportSubject.options
+                  .filter((o) => o.value !== 'family')
+                  .map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+          )}
           {tab === 'schedule-112a' && (
             <Button variant="outline" className="w-full sm:w-auto sm:ml-auto" onClick={downloadCsv}>
               <FileDown className="h-4 w-4" /> ITR-portal CSV

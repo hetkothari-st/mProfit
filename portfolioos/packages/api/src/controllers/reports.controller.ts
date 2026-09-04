@@ -57,11 +57,21 @@ type ReportScope =
   | { kind: 'one'; portfolioId: string; userId: string }
   | { kind: 'all'; userId: string };
 
-async function resolveScope(req: Request): Promise<ReportScope> {
-  const userId = req.user!.id;
+/**
+ * `subjectUserId` is who the report is about. A named member is always
+ * resolved cross-portfolio: the caller's portfolio picker lists their own
+ * books, so a specific portfolioId alongside another member's subject can
+ * only be a mismatch — treating it as "all of that member's portfolios" is
+ * the sole coherent reading, and it is what the UI sends.
+ */
+async function resolveScope(req: Request, subjectUserId?: string): Promise<ReportScope> {
+  const userId = subjectUserId ?? req.user!.id;
   const portfolioId =
     (req.query.portfolioId as string | undefined) ??
     (req.params.portfolioId as string | undefined);
+  if (subjectUserId && subjectUserId !== req.user!.id) {
+    return { kind: 'all', userId };
+  }
   if (!portfolioId) throw new BadRequestError('portfolioId required');
   if (portfolioId === 'all' || portfolioId === 'ALL') {
     return { kind: 'all', userId };
@@ -95,52 +105,82 @@ export async function getSummary(req: Request, res: Response) {
 }
 
 export async function getIntraday(req: Request, res: Response) {
-  const scope = await resolveScope(req);
   const fy = getFy(req);
-  const data = scope.kind === 'all'
-    ? await userIntradayReport(scope.userId, fy)
-    : await intradayReport(scope.portfolioId, fy);
-  if (getFormat(req) === 'json') return ok(res, data);
-  await exportCapitalGains(req, res, 'Intraday', data, fy);
+  if (getFormat(req) === 'json') {
+    const scope = await resolveScope(req);
+    const data = scope.kind === 'all'
+      ? await userIntradayReport(scope.userId, fy)
+      : await intradayReport(scope.portfolioId, fy);
+    return ok(res, data);
+  }
+  // Downloads follow `?subject=`; the on-screen JSON above stays the caller's.
+  const resolved = await resolveReportSubjects(req);
+  await exportCapitalGainsForSubjects(req, res, 'Intraday', resolved, fy, async (userId) => {
+    const scope = await resolveScope(req, userId);
+    return scope.kind === 'all'
+      ? userIntradayReport(scope.userId, fy)
+      : intradayReport(scope.portfolioId, fy);
+  });
 }
 
 export async function getStcg(req: Request, res: Response) {
-  const scope = await resolveScope(req);
   const fy = getFy(req);
-  const data = scope.kind === 'all'
-    ? await userStcgReport(scope.userId, fy)
-    : await stcgReport(scope.portfolioId, fy);
-  if (getFormat(req) === 'json') return ok(res, data);
-  await exportCapitalGains(req, res, 'Short-Term Capital Gains', data, fy);
+  if (getFormat(req) === 'json') {
+    const scope = await resolveScope(req);
+    const data = scope.kind === 'all'
+      ? await userStcgReport(scope.userId, fy)
+      : await stcgReport(scope.portfolioId, fy);
+    return ok(res, data);
+  }
+  // Downloads follow `?subject=`; the on-screen JSON above stays the caller's.
+  const resolved = await resolveReportSubjects(req);
+  await exportCapitalGainsForSubjects(req, res, 'Short-Term Capital Gains', resolved, fy, async (userId) => {
+    const scope = await resolveScope(req, userId);
+    return scope.kind === 'all'
+      ? userStcgReport(scope.userId, fy)
+      : stcgReport(scope.portfolioId, fy);
+  });
 }
 
 export async function getLtcg(req: Request, res: Response) {
-  const scope = await resolveScope(req);
   const fy = getFy(req);
-  const data = scope.kind === 'all'
-    ? await userLtcgReport(scope.userId, fy)
-    : await ltcgReport(scope.portfolioId, fy);
-  if (getFormat(req) === 'json') return ok(res, data);
-  await exportCapitalGains(req, res, 'Long-Term Capital Gains', data, fy);
+  if (getFormat(req) === 'json') {
+    const scope = await resolveScope(req);
+    const data = scope.kind === 'all'
+      ? await userLtcgReport(scope.userId, fy)
+      : await ltcgReport(scope.portfolioId, fy);
+    return ok(res, data);
+  }
+  // Downloads follow `?subject=`; the on-screen JSON above stays the caller's.
+  const resolved = await resolveReportSubjects(req);
+  await exportCapitalGainsForSubjects(req, res, 'Long-Term Capital Gains', resolved, fy, async (userId) => {
+    const scope = await resolveScope(req, userId);
+    return scope.kind === 'all'
+      ? userLtcgReport(scope.userId, fy)
+      : ltcgReport(scope.portfolioId, fy);
+  });
 }
 
 export async function get112A(req: Request, res: Response) {
-  const scope = await resolveScope(req);
   const fy = getFy(req);
-  const data = scope.kind === 'all'
-    ? await userSchedule112AReport(scope.userId, fy)
-    : await schedule112AReport(scope.portfolioId, fy);
-  if (getFormat(req) === 'json') return ok(res, data);
-  await exportCapitalGains(req, res, 'Schedule 112A', data, fy);
+  if (getFormat(req) === 'json') {
+    const scope = await resolveScope(req);
+    const data = scope.kind === 'all'
+      ? await userSchedule112AReport(scope.userId, fy)
+      : await schedule112AReport(scope.portfolioId, fy);
+    return ok(res, data);
+  }
+  // Downloads follow `?subject=`; the on-screen JSON above stays the caller's.
+  const resolved = await resolveReportSubjects(req);
+  await exportCapitalGainsForSubjects(req, res, 'Schedule 112A', resolved, fy, async (userId) => {
+    const scope = await resolveScope(req, userId);
+    return scope.kind === 'all'
+      ? userSchedule112AReport(scope.userId, fy)
+      : schedule112AReport(scope.portfolioId, fy);
+  });
 }
 
-export async function getIncome(req: Request, res: Response) {
-  const scope = await resolveScope(req);
-  const fy = getFy(req);
-  const data = scope.kind === 'all'
-    ? await userIncomeReport(scope.userId, fy)
-    : await incomeReport(scope.portfolioId, fy);
-  if (getFormat(req) === 'json') return ok(res, data);
+function incomePayload(data: Awaited<ReturnType<typeof userIncomeReport>>, fy?: string) {
   const columns: ExportColumn[] = [
     { key: 'date', header: 'Date', width: 12, formatter: fmtDate },
     { key: 'type', header: 'Type', width: 14 },
@@ -148,7 +188,7 @@ export async function getIncome(req: Request, res: Response) {
     { key: 'amount', header: 'Amount', width: 16, formatter: (v) => fmtNum(v) },
     { key: 'narration', header: 'Narration', width: 40 },
   ];
-  await emit(req, res, {
+  return {
     title: `Income Report${fy ? ` ${fy}` : ''}`,
     columns,
     rows: data.rows,
@@ -159,15 +199,30 @@ export async function getIncome(req: Request, res: Response) {
       Maturity: fmtNum(data.maturity),
       Total: fmtNum(data.total),
     },
-  });
+  };
 }
 
-export async function getUnrealised(req: Request, res: Response) {
-  const scope = await resolveScope(req);
-  const data = scope.kind === 'all'
-    ? await userUnrealisedReport(scope.userId)
-    : await unrealisedReport(scope.portfolioId);
-  if (getFormat(req) === 'json') return ok(res, data);
+export async function getIncome(req: Request, res: Response) {
+  const fy = getFy(req);
+  if (getFormat(req) === 'json') {
+    const scope = await resolveScope(req);
+    const data = scope.kind === 'all'
+      ? await userIncomeReport(scope.userId, fy)
+      : await incomeReport(scope.portfolioId, fy);
+    return ok(res, data);
+  }
+  const resolved = await resolveReportSubjects(req);
+  const payload = await buildPayloadForSubjects(resolved, async (userId) => {
+    const scope = await resolveScope(req, userId);
+    const data = scope.kind === 'all'
+      ? await userIncomeReport(scope.userId, fy)
+      : await incomeReport(scope.portfolioId, fy);
+    return incomePayload(data, fy);
+  });
+  await emit(req, res, payload);
+}
+
+function unrealisedPayload(data: Awaited<ReturnType<typeof userUnrealisedReport>>) {
   const columns: ExportColumn[] = [
     { key: 'assetClass', header: 'Class', width: 14 },
     { key: 'assetName', header: 'Asset', width: 34 },
@@ -179,7 +234,7 @@ export async function getUnrealised(req: Request, res: Response) {
     { key: 'unrealisedPnL', header: 'P&L', width: 14, formatter: (v) => fmtNum(v) },
     { key: 'pctReturn', header: '% Rtn', width: 10, formatter: (v) => `${v}%` },
   ];
-  await emit(req, res, {
+  return {
     title: 'Unrealised P&L',
     columns,
     rows: data.rows,
@@ -188,7 +243,26 @@ export async function getUnrealised(req: Request, res: Response) {
       'Total Value': fmtNum(data.totalValue),
       'Unrealised P&L': fmtNum(data.unrealisedPnL),
     },
+  };
+}
+
+export async function getUnrealised(req: Request, res: Response) {
+  if (getFormat(req) === 'json') {
+    const scope = await resolveScope(req);
+    const data = scope.kind === 'all'
+      ? await userUnrealisedReport(scope.userId)
+      : await unrealisedReport(scope.portfolioId);
+    return ok(res, data);
+  }
+  const resolved = await resolveReportSubjects(req);
+  const payload = await buildPayloadForSubjects(resolved, async (userId) => {
+    const scope = await resolveScope(req, userId);
+    const data = scope.kind === 'all'
+      ? await userUnrealisedReport(scope.userId)
+      : await unrealisedReport(scope.portfolioId);
+    return unrealisedPayload(data);
   });
+  await emit(req, res, payload);
 }
 
 export async function getXirr(req: Request, res: Response) {
@@ -240,7 +314,12 @@ export async function rebuildCapitalGains(req: Request, res: Response) {
 // ─── Holdings / Transactions export (per-section download) ───────────────────
 
 export async function getHoldingsExport(req: Request, res: Response) {
-  const userId = req.user!.id;
+  // Composes a multi-sheet workbook (holdings, transactions, realised P&L)
+  // rather than a list of sections, so there is nowhere to interleave a
+  // second member. One person per file; the household version of this is the
+  // holdings statement under Reports → Statements.
+  const resolved = await resolveReportSubjects(req);
+  const userId = requireSingleSubject(resolved, 'The holdings export').userId;
 
   // portfolioIds: comma-separated list, or empty for all. `all` is also
   // accepted as a meta-token meaning every portfolio the user owns — same
@@ -349,7 +428,12 @@ export async function getHoldingsExport(req: Request, res: Response) {
 // ─── Dashboard export ─────────────────────────────────────────────────────────
 
 export async function getDashboardExport(req: Request, res: Response) {
-  const userId      = req.user!.id;
+  // The dashboard PDF is a single composed page — cover figures, charts,
+  // allocation — with no section structure to hang a second member from.
+  // Per-member is supported; a combined one would need a different document,
+  // not a merge.
+  const resolved = await resolveReportSubjects(req);
+  const userId = requireSingleSubject(resolved, 'The dashboard export').userId;
   let portfolioId = req.query.portfolioId as string | undefined;
   const rawScope    = (req.query.scope as string | undefined) ?? 'all';
   let scope: DashboardScope = rawScope === 'single' ? 'single' : 'all';
@@ -361,7 +445,14 @@ export async function getDashboardExport(req: Request, res: Response) {
     portfolioId = undefined;
   }
 
-  // If scope = single, verify portfolio ownership
+  // A portfolio id from the caller's own picker cannot name another member's
+  // book, so a member subject is always read whole.
+  if (userId !== req.user!.id) {
+    scope = 'all';
+    portfolioId = undefined;
+  }
+
+  // If scope = single, verify ownership against whoever the report is about.
   if (scope === 'single' && portfolioId) {
     const p = await prisma.portfolio.findUnique({ where: { id: portfolioId } });
     if (!p) throw new NotFoundError('Portfolio not found');
@@ -384,7 +475,6 @@ export async function getDashboardExport(req: Request, res: Response) {
 type SectionType = 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental';
 
 export async function getSectionExport(req: Request, res: Response) {
-  const userId  = req.user!.id;
   const section = (req.query.section as string | undefined) as SectionType | undefined;
   const format  = getFormat(req);
 
@@ -392,6 +482,20 @@ export async function getSectionExport(req: Request, res: Response) {
     throw new BadRequestError('section must be one of: vehicles, insurance, loans, credit-cards, rental');
   }
 
+  const resolved = await resolveReportSubjects(req);
+  const payload = await buildPayloadForSubjects(resolved, (userId) =>
+    sectionPayload(userId, section),
+  );
+
+  if (format === 'xlsx') return streamExcel(res, payload);
+  if (format === 'pdf')  return streamPdf(res, payload);
+  ok(res, payload);
+}
+
+async function sectionPayload(
+  userId: string,
+  section: SectionType,
+): Promise<Parameters<typeof streamExcel>[1]> {
   let payload: Parameters<typeof streamExcel>[1];
 
   switch (section) {
@@ -530,18 +634,21 @@ export async function getSectionExport(req: Request, res: Response) {
     }
   }
 
-  if (format === 'xlsx') return streamExcel(res, payload);
-  if (format === 'pdf')  return streamPdf(res, payload);
-  ok(res, payload);
+  return payload;
 }
 
 // ─── Shared export helpers ────────────────────────────────────────
 
-async function exportCapitalGains(
-  req: Request,
-  res: Response,
+interface CapitalGainsExportData {
+  rows: Array<unknown>;
+  totalGain?: string;
+  taxable?: string;
+  exemptionLimit?: string;
+}
+
+function capitalGainsPayload(
   title: string,
-  data: { rows: Array<unknown>; totalGain?: string; taxable?: string; exemptionLimit?: string },
+  data: CapitalGainsExportData,
   fy?: string,
 ) {
   const columns: ExportColumn[] = [
@@ -581,13 +688,42 @@ async function exportCapitalGains(
   if (data.exemptionLimit !== undefined) footer['Section 112A Exemption'] = fmtNum(data.exemptionLimit);
   if (data.taxable !== undefined) footer['Taxable'] = fmtNum(data.taxable);
 
-  await emit(req, res, {
+  return {
     title: `${title}${fy ? ` FY ${fy}` : ''}`,
     columns,
     rows: normalized,
     meta: fy ? { 'Financial Year': fy } : undefined,
     footer,
-  });
+  };
+}
+
+async function exportCapitalGains(
+  req: Request,
+  res: Response,
+  title: string,
+  data: CapitalGainsExportData,
+  fy?: string,
+) {
+  await emit(req, res, capitalGainsPayload(title, data, fy));
+}
+
+/**
+ * The same export, but about whoever `?subject=` names. `fetchFor` is called
+ * once per subject; the payloads are merged with a Member column so a
+ * household download says whose gain each row is.
+ */
+async function exportCapitalGainsForSubjects(
+  req: Request,
+  res: Response,
+  title: string,
+  resolved: Awaited<ReturnType<typeof resolveReportSubjects>>,
+  fy: string | undefined,
+  fetchFor: (userId: string) => Promise<CapitalGainsExportData>,
+) {
+  const payload = await buildPayloadForSubjects(resolved, async (userId) =>
+    capitalGainsPayload(title, await fetchFor(userId), fy),
+  );
+  await emit(req, res, payload);
 }
 
 async function emit(
@@ -608,8 +744,17 @@ async function emit(
 // consistent. Each accepts comma-separated portfolioIds (empty = all owned
 // portfolios for the user); ownership is verified before any data load.
 
-async function resolveOwnedPortfolioIds(req: Request): Promise<string[]> {
-  const userId = req.user!.id;
+/**
+ * Portfolio ids for a report, verified against whoever the report is about.
+ *
+ * `subjectUserId` is the person the report covers, which is not always the
+ * caller. Ownership is therefore checked against THEM: a caller who may read
+ * a member's data may name that member's portfolios, and may not name
+ * anybody else's. Passing the caller's id here — the old behaviour — would
+ * have rejected every portfolio belonging to the member being reported on.
+ */
+async function resolveOwnedPortfolioIds(req: Request, subjectUserId?: string): Promise<string[]> {
+  const userId = subjectUserId ?? req.user!.id;
   const raw = (req.query.portfolioIds as string | undefined) ?? '';
   const ids = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
   // `all` is a meta-token meaning "every portfolio the user owns" — same
@@ -628,45 +773,67 @@ async function resolveOwnedPortfolioIds(req: Request): Promise<string[]> {
 }
 
 export async function getStatementHoldings(req: Request, res: Response) {
-  const userId = req.user!.id;
-  const portfolioIds = await resolveOwnedPortfolioIds(req);
+  const resolved = await resolveReportSubjects(req);
   const asOfStr = req.query.asOf as string | undefined;
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
-  const payload = await buildHoldingsStatement({ userId, portfolioIds, asOf });
+  const payload = await buildPayloadForSubjects(resolved, async (userId) =>
+    buildHoldingsStatement({
+      userId,
+      portfolioIds: await resolveOwnedPortfolioIds(req, userId),
+      asOf,
+    }),
+  );
   await emit(req, res, payload);
 }
 
 export async function getStatementCapitalGains(req: Request, res: Response) {
-  const userId = req.user!.id;
-  const portfolioIds = await resolveOwnedPortfolioIds(req);
+  const resolved = await resolveReportSubjects(req);
   const fy = getFy(req);
   const rawKind = ((req.query.kind as string | undefined) ?? 'all').toLowerCase();
   if (!['all', 'intraday', 'stcg', 'ltcg'].includes(rawKind)) {
     throw new BadRequestError(`Invalid kind: ${rawKind}`);
   }
   const kind = rawKind as CapitalGainsStatementParams['kind'];
-  const payload = await buildCapitalGainsStatement({ userId, portfolioIds, fy, kind });
+  const payload = await buildPayloadForSubjects(resolved, async (userId) =>
+    buildCapitalGainsStatement({
+      userId,
+      portfolioIds: await resolveOwnedPortfolioIds(req, userId),
+      fy,
+      kind,
+    }),
+  );
   await emit(req, res, payload);
 }
 
 export async function getStatementIncome(req: Request, res: Response) {
-  const userId = req.user!.id;
-  const portfolioIds = await resolveOwnedPortfolioIds(req);
+  const resolved = await resolveReportSubjects(req);
   const fy = getFy(req);
-  const payload = await buildIncomeStatement({ userId, portfolioIds, fy });
+  const payload = await buildPayloadForSubjects(resolved, async (userId) =>
+    buildIncomeStatement({
+      userId,
+      portfolioIds: await resolveOwnedPortfolioIds(req, userId),
+      fy,
+    }),
+  );
   await emit(req, res, payload);
 }
 
 export async function getStatementLedger(req: Request, res: Response) {
-  const userId = req.user!.id;
-  const portfolioIds = await resolveOwnedPortfolioIds(req);
+  const resolved = await resolveReportSubjects(req);
   const fromStr = req.query.from as string | undefined;
   const toStr = req.query.to as string | undefined;
   const from = fromStr ? new Date(fromStr) : undefined;
   const to = toStr ? new Date(toStr) : undefined;
   if (from && Number.isNaN(from.getTime())) throw new BadRequestError('Invalid `from` date');
   if (to && Number.isNaN(to.getTime())) throw new BadRequestError('Invalid `to` date');
-  const payload = await buildLedgerStatement({ userId, portfolioIds, from, to });
+  const payload = await buildPayloadForSubjects(resolved, async (userId) =>
+    buildLedgerStatement({
+      userId,
+      portfolioIds: await resolveOwnedPortfolioIds(req, userId),
+      from,
+      to,
+    }),
+  );
   await emit(req, res, payload);
 }
 
@@ -783,6 +950,8 @@ import { buildTallyMastersXml, buildTallyVouchersXml } from '../services/reportB
 import {
   resolveReportSubjects,
   buildLayoutForSubjects,
+  buildPayloadForSubjects,
+  requireSingleSubject,
 } from '../services/reports/reportSubjects.js';
 
 async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {

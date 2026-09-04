@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { reportsApi } from '@/api/reports.api';
+import { useReportSubject } from '@/components/reports/useReportSubject';
 import { useAuthStore } from '@/stores/auth.store';
 import { InboxImportsTab } from './InboxImportsTab';
 import { TaxMisDownloads, REPORTS as TAX_MIS_REPORTS, type ReportHighlight } from './TaxMisDownloads';
@@ -195,6 +196,7 @@ function initialTabFromUrl(): Tab {
 
 export function ReportsPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
+  const reportSubject = useReportSubject();
   const [tab, setTab] = useState<Tab>(initialTabFromUrl);
   // Default to the cross-portfolio view so a brand-new user (or one whose
   // first portfolio happens to be empty) sees real numbers, not zeros.
@@ -271,7 +273,11 @@ export function ReportsPage() {
 
   const download = (format: 'xlsx' | 'pdf') => {
     if (!downloadableEndpoint || !portfolioId) return;
-    const url = reportsApi.downloadUrl(downloadableEndpoint, portfolioId, format, fy);
+    // The subject rides on the URL: these downloads use raw fetch, which does
+    // not pass through the axios interceptor that carries the family header.
+    const url = reportSubject.appendTo(
+      reportsApi.downloadUrl(downloadableEndpoint, portfolioId, format, fy),
+    );
     // Authorization header cannot be sent via window.open; fetch + save as blob
     fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
       .then(async (r) => {
@@ -279,7 +285,7 @@ export function ReportsPage() {
         const blob = await r.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `${downloadableEndpoint}-${fy}.${format}`;
+        a.download = `${downloadableEndpoint}-${fy}${reportSubject.filenameSuffix}.${format}`;
         a.click();
         URL.revokeObjectURL(a.href);
       })
@@ -315,6 +321,24 @@ export function ReportsPage() {
               ))}
             </Select>
           </div>
+          {/* Whose figures the downloads on this page cover. Absent for a
+              solo user — a select that can only say "Me" is chrome. */}
+          {reportSubject.enabled && (
+            <div className="w-full sm:w-auto">
+              <Label>Report for</Label>
+              <Select
+                className="mt-1 w-full sm:w-56"
+                value={reportSubject.subject}
+                onChange={(e) => reportSubject.setSubject(e.target.value)}
+              >
+                {reportSubject.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           {needsFy && (
             <div className="w-full sm:w-auto">
               <Label>Financial Year</Label>
@@ -959,6 +983,7 @@ interface StatementsViewProps {
 }
 
 function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsViewProps) {
+  const reportSubject = useReportSubject();
   const [busy, setBusy] = useState<string | null>(null);
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -980,7 +1005,9 @@ function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsV
     }
     setBusy(key);
     try {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const r = await fetch(reportSubject.appendTo(url), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (!r.ok) throw new Error(await r.text());
       const blob = await r.blob();
       const a = document.createElement('a');

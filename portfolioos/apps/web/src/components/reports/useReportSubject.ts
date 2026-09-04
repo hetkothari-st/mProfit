@@ -44,6 +44,12 @@ export interface UseReportSubject {
   params: Record<string, string>;
   /** Slug for the saved file, so two members' downloads don't collide. */
   filenameSuffix: string;
+  /**
+   * Append the subject to an already-built download URL. Most call sites
+   * assemble their URL through an `*.api.ts` helper, so taking the finished
+   * string is less invasive than threading a parameter through each of them.
+   */
+  appendTo: (url: string) => string;
 }
 
 export function useReportSubject(): UseReportSubject {
@@ -127,5 +133,15 @@ export function useReportSubject(): UseReportSubject {
     return `-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
   }, [effective, options]);
 
-  return { subject: effective, setSubject, options, enabled, params, filenameSuffix };
+  const appendTo = useMemo(
+    () => (url: string) => {
+      if (Object.keys(params).length === 0) return url;
+      const sep = url.includes('?') ? '&' : '?';
+      const qs = new URLSearchParams(params).toString();
+      return `${url}${sep}${qs}`;
+    },
+    [params],
+  );
+
+  return { subject: effective, setSubject, options, enabled, params, filenameSuffix, appendTo };
 }

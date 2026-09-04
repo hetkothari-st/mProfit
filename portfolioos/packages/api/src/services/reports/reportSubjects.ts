@@ -250,3 +250,85 @@ export async function buildLayoutForSubjects(
     filenameStem: `${first.filenameStem}-household`,
   };
 }
+
+// ─── The other two report shapes ─────────────────────────────────────
+
+/**
+ * `ExportPayload` reports — the statements, the capital-gains tabs and the
+ * section exports. Flat rows with a column list, rather than the banded
+ * sections an `MprofitLayout` carries.
+ *
+ * With one subject this is just the existing payload. With several, a
+ * `Member` column is prepended and the rows are concatenated, because a flat
+ * table has nowhere else to put the attribution — an unlabelled row in a
+ * household report is worse than useless, since you cannot tell whose gain it
+ * is.
+ */
+export async function buildPayloadForSubjects<
+  T extends {
+    columns: Array<{ key: string; header: string; width?: number }>;
+    rows: Array<Record<string, unknown>>;
+    title: string;
+    footer?: Record<string, string | number>;
+    filenameStem?: string;
+  },
+>(resolved: ResolvedSubjects, build: (userId: string) => Promise<T>): Promise<T> {
+  const { subjects, familyLabel } = resolved;
+  if (subjects.length === 0) throw new BadRequestError('No members to report on.');
+
+  if (subjects.length === 1) {
+    const only = subjects[0]!;
+    return runAsUser(only.userId, () => build(only.userId));
+  }
+
+  const built: Array<{ subject: ReportSubject; payload: T }> = [];
+  for (const subject of subjects) {
+    built.push({ subject, payload: await runAsUser(subject.userId, () => build(subject.userId)) });
+  }
+
+  const first = built[0]!.payload;
+  const rows = built.flatMap(({ subject, payload }) =>
+    payload.rows.map((r) => ({ member: subject.label, ...r })),
+  );
+
+  // Per-member footers, keyed by name. The combined figure is deliberately
+  // absent for the same reason as in `buildLayoutForSubjects`: summing is
+  // right for money and wrong for every percentage beside it, and nothing in
+  // the column list says which is which.
+  const footer: Record<string, string | number> = {};
+  for (const { subject, payload } of built) {
+    for (const [k, v] of Object.entries(payload.footer ?? {})) {
+      footer[`${subject.label} — ${k}`] = v;
+    }
+  }
+
+  return {
+    ...first,
+    title: familyLabel ? `${first.title} — ${familyLabel}` : first.title,
+    columns: [{ key: 'member', header: 'Member', width: 20 }, ...first.columns],
+    rows,
+    footer: Object.keys(footer).length > 0 ? footer : undefined,
+    filenameStem: first.filenameStem ? `${first.filenameStem}-household` : undefined,
+  };
+}
+
+/**
+ * For artefacts that are inherently about one person and cannot carry
+ * sections: the Schedule 112A CSV and the single-stream capital-gains tax
+ * PDF.
+ *
+ * A multi-member Schedule 112A is not a valid filing for anybody — the CSV
+ * feeds an ITR utility that expects one assessee's sales and nothing else, so
+ * interleaving members would produce a file that looks submittable and is
+ * not. Refusing is the safe answer; picking one member at a time is the
+ * supported way to produce each person's filing.
+ */
+export function requireSingleSubject(resolved: ResolvedSubjects, what: string): ReportSubject {
+  if (resolved.isFamily || resolved.subjects.length > 1) {
+    throw new BadRequestError(
+      `${what} covers one person — a combined version would not be a valid filing for anyone. ` +
+        'Pick a single member and download it once per person.',
+    );
+  }
+  return resolved.subjects[0]!;
+}

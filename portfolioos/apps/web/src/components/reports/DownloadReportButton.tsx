@@ -14,6 +14,7 @@ import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/cn';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { useDownloadReport, type ReportFormat } from '@/hooks/useDownloadReport';
+import { useReportSubject } from './useReportSubject';
 
 export type ReportType = 'holdings' | 'dashboard' | 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental';
 
@@ -37,6 +38,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
   const [scope, setScope]         = useState<'all' | 'single'>('all');
   const [format, setFormat]       = useState<ReportFormat>('pdf');
   const { download, loading }     = useDownloadReport();
+  const reportSubject             = useReportSubject();
 
   const { data: portfolios } = useQuery({
     queryKey: ['portfolios'],
@@ -48,13 +50,14 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
   const isSection   = (SECTION_TYPES as string[]).includes(type);
 
   function sectionFilename(): string {
-    if (isDashboard) return `portfolioos-dashboard-report.${format}`;
-    if (isSection)   return `portfolioos-${type}-report.${format}`;
+    const who = reportSubject.filenameSuffix;
+    if (isDashboard) return `portfolioos-dashboard-report${who}.${format}`;
+    if (isSection)   return `portfolioos-${type}-report${who}.${format}`;
     if (assetClasses && assetClasses.length > 0) {
       const slug = assetClasses.map(c => c.toLowerCase().replace(/_/g, '-')).join('_');
-      return `portfolioos-${slug}-report.${format}`;
+      return `portfolioos-${slug}-report${who}.${format}`;
     }
-    return `portfolioos-holdings-report.${format}`;
+    return `portfolioos-holdings-report${who}.${format}`;
   }
 
   function handleDownload() {
@@ -67,6 +70,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
           format,
           scope,
           ...(scope === 'single' && portfolioId ? { portfolioId } : {}),
+          ...reportSubject.params,
         },
         filename,
       ).then(() => setOpen(false)).catch(err => alert(String(err)));
@@ -76,7 +80,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
     if (isSection) {
       download(
         '/api/reports/section-export',
-        { format, section: type },
+        { format, section: type, ...reportSubject.params },
         filename,
       ).then(() => setOpen(false)).catch(err => alert(String(err)));
       return;
@@ -93,6 +97,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
         format,
         portfolioIds: resolvedIds,
         ...(assetClasses && assetClasses.length > 0 ? { assetClasses } : {}),
+        ...reportSubject.params,
       },
       filename,
     ).then(() => setOpen(false)).catch(err => alert(String(err)));
@@ -120,6 +125,26 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {/* Whose data. Holdings and dashboard exports compose a workbook
+                rather than a section list, so they take one person at a
+                time; the household versions of those live under
+                Reports → Statements. */}
+            {reportSubject.enabled && (
+              <div className="space-y-1.5">
+                <Label>Report for</Label>
+                <Select
+                  value={reportSubject.subject}
+                  onChange={e => reportSubject.setSubject(e.target.value)}
+                >
+                  {reportSubject.options
+                    .filter(o => (isDashboard || (!isDashboard && !isSection)) ? o.value !== 'family' : true)
+                    .map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                </Select>
+              </div>
+            )}
+
             {/* Portfolio picker — only for holdings reports */}
             {!isDashboard && !isSection && (
               <div className="space-y-1.5">
