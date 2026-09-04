@@ -17,6 +17,7 @@ import { Select } from '@/components/ui/select';
 import { getApiBaseUrl } from '@/api/baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
 import { LockedFeature } from '@/components/common/LockedFeature';
+import { useReportSubject } from '@/components/reports/useReportSubject';
 import { cn } from '@/lib/cn';
 
 // Accounting-specific exports (Trial Balance, P&L, Balance Sheet, Chart of
@@ -542,6 +543,7 @@ export function TaxMisDownloads({
   const [from, setFrom] = useState('');
   const [to, setTo] = useState(today);
   const [busy, setBusy] = useState<string | null>(null);
+  const reportSubject = useReportSubject();
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -567,13 +569,16 @@ export function TaxMisDownloads({
       if (report.params.includes('asOf') && asOf) params.set('asOf', asOf);
       if (report.params.includes('from') && from) params.set('from', from);
       if (report.params.includes('to') && to) params.set('to', to);
+      // Whose report this is. Absent means the caller, which is what every
+      // download meant before the picker existed.
+      for (const [k, v] of Object.entries(reportSubject.params)) params.set(k, v);
       const url = `${getApiBaseUrl()}/api/reports/download/${report.endpoint}?${params.toString()}`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!r.ok) throw new Error(await r.text());
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `${report.filename}-${fy}.${format}`;
+      a.download = `${report.filename}-${fy}${reportSubject.filenameSuffix}.${format}`;
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {
@@ -587,6 +592,24 @@ export function TaxMisDownloads({
     <div className="space-y-5">
       <Card>
         <CardContent className="pt-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
+          {/* Whose figures go in the file. Hidden entirely for a solo user —
+              a select that can only say "Me" is chrome, not a choice. */}
+          {reportSubject.enabled && (
+            <div className="w-full sm:w-auto">
+              <Label>Report for</Label>
+              <Select
+                className="mt-1 w-full sm:w-56"
+                value={reportSubject.subject}
+                onChange={(e) => reportSubject.setSubject(e.target.value)}
+              >
+                {reportSubject.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-2 sm:contents gap-3">
             <div>
               <Label>Financial year</Label>
@@ -614,6 +637,18 @@ export function TaxMisDownloads({
           <p className="text-[11px] text-muted-foreground sm:ml-auto sm:max-w-md">
             Each report uses whichever subset of these inputs applies to it (shown in the card). Leave any field
             blank to use the report's default range.
+            {reportSubject.enabled && reportSubject.subject !== 'self' && (
+              <>
+                {' '}
+                <span className="text-foreground">
+                  These downloads cover{' '}
+                  {reportSubject.subject === 'family'
+                    ? 'every member of the family, one section each'
+                    : reportSubject.options.find((o) => o.value === reportSubject.subject)?.label}
+                  .
+                </span>
+              </>
+            )}
           </p>
         </CardContent>
       </Card>

@@ -780,6 +780,10 @@ import {
   type MprofitLayout,
 } from '../services/reportBuilder/mprofitStyle.js';
 import { buildTallyMastersXml, buildTallyVouchersXml } from '../services/reportBuilder/tally/tallyExport.service.js';
+import {
+  resolveReportSubjects,
+  buildLayoutForSubjects,
+} from '../services/reports/reportSubjects.js';
 
 async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {
   const format = getFormat(req);
@@ -787,302 +791,301 @@ async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {
   return streamMprofitPdf(res, layout);
 }
 
+/**
+ * Emit a report about whoever `?subject=` names — the caller by default, one
+ * named member, or every member of the family in view.
+ *
+ * Download handlers go through here rather than reading `req.user!.id`
+ * themselves. That is the point: the subject is resolved and authorised in
+ * ONE place, so a report added later cannot forget to check, and the
+ * forty-odd that exist today cannot drift apart from each other.
+ *
+ * `build` receives the userId to report on and must not close over
+ * `req.user!.id` — doing so would silently produce the caller's rows under
+ * another member's banner.
+ */
+async function emitForSubjects(
+  req: Request,
+  res: Response,
+  build: (userId: string) => Promise<MprofitLayout>,
+) {
+  const resolved = await resolveReportSubjects(req);
+  await emitMprofit(req, res, await buildLayoutForSubjects(resolved, build));
+}
+
 export async function downloadGrandfathering(req: Request, res: Response) {
-  const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildGrandfatheringLayout(userId, fy));
+  await emitForSubjects(req, res, (userId) => buildGrandfatheringLayout(userId, fy));
 }
 
 export async function downloadDematHoldings(req: Request, res: Response) {
-  const userId = req.user!.id;
-  await emitMprofit(req, res, await buildDematHoldingsLayout(userId));
+  await emitForSubjects(req, res, (userId) => buildDematHoldingsLayout(userId));
 }
 
 export async function downloadM2M(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildM2MLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildM2MLayout(userId, asOf));
 }
 
 export async function downloadTrialBalance(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOf = (req.query.asOf as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  await emitMprofit(req, res, await buildTrialBalanceLayout(userId, asOf));
+  await emitForSubjects(req, res, async (userId) => {
+    await ensureAccountingProjected(userId);
+    return buildTrialBalanceLayout(userId, asOf);
+  });
 }
 
 export async function downloadAccountLedger(req: Request, res: Response) {
-  const userId = req.user!.id;
   const accountId = (req.query.accountId as string | undefined)?.trim() || undefined;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  await emitMprofit(req, res, await buildAccountLedgerLayout(userId, { accountId, from, to }));
+  await emitForSubjects(req, res, async (userId) => {
+    await ensureAccountingProjected(userId);
+    return buildAccountLedgerLayout(userId, { accountId, from, to });
+  });
 }
 
 export async function downloadProfitLoss(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  await emitMprofit(req, res, await buildProfitLossLayout(userId, { from, to }));
+  await emitForSubjects(req, res, async (userId) => {
+    await ensureAccountingProjected(userId);
+    return buildProfitLossLayout(userId, { from, to });
+  });
 }
 
 export async function downloadBalanceSheet(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOf = (req.query.asOf as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  await emitMprofit(req, res, await buildBalanceSheetLayout(userId, asOf));
+  await emitForSubjects(req, res, async (userId) => {
+    await ensureAccountingProjected(userId);
+    return buildBalanceSheetLayout(userId, asOf);
+  });
 }
 
 export async function downloadSchedule112A(req: Request, res: Response) {
-  const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
   const portfolioId = (req.query.portfolioId as string | undefined)?.trim();
   const pid = portfolioId && portfolioId !== 'all' ? portfolioId : undefined;
-  await emitMprofit(req, res, await buildSchedule112ALayout(userId, fy, pid));
+  await emitForSubjects(req, res, (userId) => buildSchedule112ALayout(userId, fy, pid));
 }
 
 export async function downloadMFCapitalGain(req: Request, res: Response) {
-  const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildMFCapitalGainLayout(userId, fy));
+  await emitForSubjects(req, res, (userId) => buildMFCapitalGainLayout(userId, fy));
 }
 
 export async function downloadDailyTransactions(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildDailyTransactionsLayout(userId, { from, to }));
+  await emitForSubjects(req, res, (userId) => buildDailyTransactionsLayout(userId, { from, to }));
 }
 
 export async function downloadShortLongSpec(req: Request, res: Response) {
-  const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
   const portfolioId = (req.query.portfolioId as string | undefined)?.trim();
   const pid = portfolioId && portfolioId !== 'all' ? portfolioId : undefined;
-  await emitMprofit(req, res, await buildShortLongSpecLayout(userId, fy, pid));
+  await emitForSubjects(req, res, (userId) => buildShortLongSpecLayout(userId, fy, pid));
 }
 
 export async function downloadIncomeReport(req: Request, res: Response) {
-  const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
   const portfolioId = (req.query.portfolioId as string | undefined)?.trim();
   const pid = portfolioId && portfolioId !== 'all' ? portfolioId : undefined;
-  await emitMprofit(req, res, await buildIncomeReportLayout(userId, fy, pid));
+  await emitForSubjects(req, res, (userId) => buildIncomeReportLayout(userId, fy, pid));
 }
 
 export async function downloadHoldingsSummary(req: Request, res: Response) {
-  const userId = req.user!.id;
   const portfolioId = (req.query.portfolioId as string | undefined)?.trim();
   const pid = portfolioId && portfolioId !== 'all' ? portfolioId : undefined;
-  await emitMprofit(req, res, await buildPortfolioHoldingsSummaryLayout(userId, pid));
+  await emitForSubjects(req, res, (userId) => buildPortfolioHoldingsSummaryLayout(userId, pid));
 }
 
 export async function downloadPerformance(req: Request, res: Response) {
-  const userId = req.user!.id;
-  await emitMprofit(req, res, await buildPerformanceLayout(userId));
+  await emitForSubjects(req, res, (userId) => buildPerformanceLayout(userId));
 }
 
 export async function downloadTaxSummary(req: Request, res: Response) {
-  const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildTaxSummaryLayout(userId, fy));
+  await emitForSubjects(req, res, (userId) => buildTaxSummaryLayout(userId, fy));
 }
 
 export async function downloadCashFlow(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildCashFlowStatementLayout(userId, { from, to }));
+  await emitForSubjects(req, res, (userId) => buildCashFlowStatementLayout(userId, { from, to }));
 }
 
 export async function downloadCombinedRealisedUnrealised(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildCombinedRealisedUnrealisedLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildCombinedRealisedUnrealisedLayout(userId, asOf));
 }
 
 export async function downloadFamilyWiseHoldings(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildFamilyWiseHoldingsLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildFamilyWiseHoldingsLayout(userId, asOf));
 }
 
 export async function downloadScriptwiseQtywise(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildScriptwiseQtywiseLayout(userId, { from, to }));
+  await emitForSubjects(req, res, (userId) => buildScriptwiseQtywiseLayout(userId, { from, to }));
 }
 
 export async function downloadContractNoteCharges(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildContractNoteChargesLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildContractNoteChargesLayout(userId, asOf));
 }
 
 export async function downloadMfM2M(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildMfM2MLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildMfM2MLayout(userId, asOf));
 }
 
 export async function downloadFinancialLedger(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
   const accountId = (req.query.accountId as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  await emitMprofit(req, res, await buildFinancialLedgerLayout(userId, { from, to, accountId }));
+  await emitForSubjects(req, res, async (userId) => {
+    await ensureAccountingProjected(userId);
+    return buildFinancialLedgerLayout(userId, { from, to, accountId });
+  });
 }
 
 export async function downloadClosingBalance(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildClosingBalanceLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildClosingBalanceLayout(userId, asOf));
 }
 
 export async function downloadTopHoldings(req: Request, res: Response) {
-  const userId = req.user!.id;
-  await emitMprofit(req, res, await buildTopHoldingsLayout(userId));
+  await emitForSubjects(req, res, (userId) => buildTopHoldingsLayout(userId));
 }
 
 export async function downloadSectorAllocation(req: Request, res: Response) {
-  const userId = req.user!.id;
   const mode = (req.query.mode as string | undefined)?.trim() === 'script' ? 'script' : 'sector';
-  await emitMprofit(req, res, await buildSectorWiseAllocationLayout(userId, mode));
+  await emitForSubjects(req, res, (userId) => buildSectorWiseAllocationLayout(userId, mode));
 }
 
 export async function downloadContractNotesSummary(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildContractNotesSummaryLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildContractNotesSummaryLayout(userId, asOf));
 }
 
 export async function downloadBrokerwiseCapitalGain(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildBrokerwiseCapitalGainLayout(userId, { from, to }));
+  await emitForSubjects(req, res, (userId) => buildBrokerwiseCapitalGainLayout(userId, { from, to }));
 }
 
 export async function downloadTaxPnL(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildTaxPnLLayout(userId, { from, to }));
+  await emitForSubjects(req, res, (userId) => buildTaxPnLLayout(userId, { from, to }));
 }
 
 export async function downloadStt10Db(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildStt10DbLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildStt10DbLayout(userId, asOf));
 }
 
 export async function downloadCapitalGainsFifo(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildCapitalGainsFifoLayout(userId, { from, to }));
+  await emitForSubjects(req, res, (userId) => buildCapitalGainsFifoLayout(userId, { from, to }));
 }
 
 export async function downloadAdvanceTaxSummary(req: Request, res: Response) {
-  const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildAdvanceTaxSummaryLayout(userId, { fy }));
+  await emitForSubjects(req, res, (userId) => buildAdvanceTaxSummaryLayout(userId, { fy }));
 }
 
 export async function downloadOpeningStock(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildOpeningStockLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildOpeningStockLayout(userId, asOf));
 }
 
 export async function downloadHoldingPeriodReturn(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildHoldingPeriodReturnLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildHoldingPeriodReturnLayout(userId, asOf));
 }
 
 export async function downloadScriptLedger(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildScriptLedgerLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildScriptLedgerLayout(userId, asOf));
 }
 
 export async function downloadChartOfAccounts(req: Request, res: Response) {
-  const userId = req.user!.id;
-  await ensureAccountingProjected(userId);
-  await emitMprofit(req, res, await buildChartOfAccountsLayout(userId));
+  await emitForSubjects(req, res, async (userId) => {
+    await ensureAccountingProjected(userId);
+    return buildChartOfAccountsLayout(userId);
+  });
 }
 
 export async function downloadFundFlow(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  await emitMprofit(req, res, await buildFundFlowLayout(userId, { from, to }));
+  await emitForSubjects(req, res, async (userId) => {
+    await ensureAccountingProjected(userId);
+    return buildFundFlowLayout(userId, { from, to });
+  });
 }
 
 export async function downloadBrokerBillRegister(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildBrokerBillRegisterLayout(userId, { from, to }));
+  await emitForSubjects(req, res, (userId) => buildBrokerBillRegisterLayout(userId, { from, to }));
 }
 
 export async function downloadPortfolioSnapshot(req: Request, res: Response) {
-  const userId = req.user!.id;
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitMprofit(req, res, await buildPortfolioSnapshotLayout(userId, asOf));
+  await emitForSubjects(req, res, (userId) => buildPortfolioSnapshotLayout(userId, asOf));
 }
 
 export async function downloadDayBook(req: Request, res: Response) {
-  const userId = req.user!.id;
   const date = (req.query.asOf as string | undefined)?.trim() || (req.query.date as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  await emitMprofit(req, res, await buildDayBookLayout(userId, { date }));
+  await emitForSubjects(req, res, async (userId) => {
+    await ensureAccountingProjected(userId);
+    return buildDayBookLayout(userId, { date });
+  });
 }
 
 export async function downloadDividendReport(req: Request, res: Response) {
-  const userId = req.user!.id;
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await emitMprofit(req, res, await buildDividendReportLayout(userId, { fy, from, to }));
+  await emitForSubjects(req, res, (userId) => buildDividendReportLayout(userId, { fy, from, to }));
 }
 
 export async function downloadBankReconciliation(req: Request, res: Response) {
-  const userId = req.user!.id;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  await emitMprofit(req, res, await buildBankReconciliationLayout(userId, { from, to }));
+  await emitForSubjects(req, res, async (userId) => {
+    await ensureAccountingProjected(userId);
+    return buildBankReconciliationLayout(userId, { from, to });
+  });
 }
 
 // ─── Tally XML export — file download only, no live ODBC/HTTP push ──
