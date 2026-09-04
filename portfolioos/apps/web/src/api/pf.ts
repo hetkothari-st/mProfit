@@ -73,6 +73,24 @@ export const pfApi = {
   forgetCredentials: (id: string) =>
     api.delete(`/api/epfppf/accounts/${id}/credentials`),
 
+  /**
+   * Start an EPFO password reset. Returns a session id whose captcha and OTP
+   * prompts arrive on the same SSE stream a refresh uses, so the caller drives
+   * it with the same respondCaptcha / respondOtp calls.
+   *
+   * The new password is not stored anywhere: it is sent to the portal and the
+   * member types it into the refresh dialog afterwards.
+   */
+  startPasswordReset: (body: {
+    uan: string;
+    mobile: string;
+    newPassword: string;
+    source?: 'EXTENSION' | 'SERVER_HEADLESS';
+  }) =>
+    api
+      .post<{ success: true; data: { sessionId: string } }>('/api/epfppf/password-reset', body)
+      .then((r) => r.data.data.sessionId),
+
   respondCaptcha: (sessionId: string, promptId: string, value: string) =>
     api.post(`/api/epfppf/sessions/${sessionId}/captcha`, { promptId, value }),
 

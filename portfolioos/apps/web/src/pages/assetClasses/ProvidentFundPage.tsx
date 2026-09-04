@@ -7,6 +7,7 @@ import { SimpleAssetPage } from './SimpleAssetPage';
 import { PPFFormDialog } from './PPFNpsFormDialog';
 import { EPFFormDialog } from './EPFFormDialog';
 import { PfRefreshDialog } from '@/pages/pf/PfRefreshDialog';
+import { PfPasswordResetDialog } from '@/pages/pf/PfPasswordResetDialog';
 import { PfManualUploadDialog } from '@/pages/pf/PfManualUploadDialog';
 import { pfApi } from '@/api/pf';
 import type { PfAccount } from '@/api/pf';
@@ -41,6 +42,10 @@ function daysSinceRefresh(a: PfAccount): number | null {
 function AutoFetchSection() {
   const queryClient = useQueryClient();
   const [refreshFor, setRefreshFor] = useState<string | null>(null);
+  // Opened from the refresh dialog when the member does not know their EPFO
+  // password. Kept here rather than inside the refresh dialog so closing one
+  // does not unmount the other mid-flow.
+  const [resetOpen, setResetOpen] = useState(false);
   const [uploadFor, setUploadFor] = useState<string | null>(null);
   const [showAddAccount, setShowAddAccount] = useState(false);
 
@@ -216,7 +221,14 @@ function AutoFetchSection() {
       )}
 
       {refreshFor && (
-        <PfRefreshDialog accountId={refreshFor} onClose={handleRefreshClose} />
+        <PfRefreshDialog
+          accountId={refreshFor}
+          onClose={handleRefreshClose}
+          onForgotPassword={() => setResetOpen(true)}
+        />
+      )}
+      {resetOpen && (
+        <PfPasswordResetDialog onClose={() => setResetOpen(false)} />
       )}
 
       {uploadFor && (
