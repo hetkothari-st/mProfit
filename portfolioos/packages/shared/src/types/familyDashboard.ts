@@ -344,3 +344,45 @@ export interface FamilyAttention {
   shownItemCount: number;
   visibility: VisibilitySummary;
 }
+
+// ─── One member, in full ─────────────────────────────────────────
+
+export interface FamilyMemberHolding {
+  assetKey: string;
+  assetName: string;
+  assetClass: string;
+  quantity: string;
+  currentValue: string;
+  totalCost: string;
+  unrealisedPnL: string;
+}
+
+/**
+ * Everything the caller is permitted to see about ONE member.
+ *
+ * `restricted` and `hiddenCategories` are not decoration: a member viewing a
+ * sibling under a partial grant is looking at an incomplete picture, and a page
+ * that does not say so is claiming to be complete. The caller's own detail is
+ * never restricted — the caps govern what they see OF THE FAMILY, not of
+ * themselves.
+ */
+export interface FamilyMemberDetail {
+  familyId: string;
+  asOf: string;
+  member: FamilyMemberRef;
+  netWorth: string;
+  invested: string;
+  unrealisedPnL: string;
+  totalLiabilities: string;
+  netWorthAfterLiabilities: string;
+  allocation: FamilyAllocationSlice[];
+  holdings: FamilyMemberHolding[];
+  goals: FamilyGoal[];
+  protection: FamilyMemberProtection | null;
+  attention: AttentionItem[];
+  /** Categories the caller's grant hides for this member, named so the UI can
+   *  say what is missing rather than silently omitting it. */
+  hiddenCategories: string[];
+  /** True when an asset-class grant limits the holdings and allocation above. */
+  assetClassesRestricted: boolean;
+}

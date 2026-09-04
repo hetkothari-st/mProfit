@@ -9,6 +9,7 @@ import {
   getGoals,
   getProtection,
   getAttention,
+  getMemberDetail,
 } from '../controllers/familyDashboard.controller.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { created, noContent, ok } from '../lib/response.js';
@@ -320,4 +321,10 @@ familiesRouter.get(
   '/:familyId/dashboard/attention',
   requireFeature('FAMILY_SHARING'),
   asyncHandler(getAttention),
+);
+
+familiesRouter.get(
+  '/:familyId/members/:userId/detail',
+  requireFeature('FAMILY_SHARING'),
+  asyncHandler(getMemberDetail),
 );

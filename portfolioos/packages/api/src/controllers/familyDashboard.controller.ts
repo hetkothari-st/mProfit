@@ -22,6 +22,7 @@ import {
   getFamilyGoals,
   getFamilyProtection,
   getFamilyAttention,
+  getFamilyMemberDetail,
 } from '../services/family/familyAggregate.service.js';
 
 function callerId(req: Request): string {
@@ -48,4 +49,16 @@ export async function getProtection(req: Request, res: Response): Promise<void> 
 
 export async function getAttention(req: Request, res: Response): Promise<void> {
   ok(res, await getFamilyAttention(callerId(req), familyId(req)));
+}
+
+/**
+ * One member, in full.
+ *
+ * The member id comes from the URL, so anyone can ask for anyone. The service
+ * checks it against the caller's resolved scope and refuses otherwise — the
+ * route deliberately does no check of its own, because two places deciding who
+ * may be seen is how the two drift apart.
+ */
+export async function getMemberDetail(req: Request, res: Response): Promise<void> {
+  ok(res, await getFamilyMemberDetail(callerId(req), familyId(req), req.params['userId']!));
 }

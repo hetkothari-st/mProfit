@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { BadRequestError } from '../../lib/errors.js';
+import { BadRequestError, ForbiddenError } from '../../lib/errors.js';
 import {
   serializeMoney,
   toDecimal,
@@ -10,6 +10,8 @@ import {
   type FamilyMemberWealth,
   type FamilyAllocationSlice,
   type FamilyWealth,
+  type FamilyMemberDetail,
+  type FamilyMemberHolding,
   type FamilyGoal,
   type FamilyGoalsByMember,
   type FamilyGoals,
@@ -28,6 +30,7 @@ import {
   fanOutRead,
   type EffectiveScope,
   type NonAcCategory,
+  NON_AC_CATEGORIES,
 } from '../familyScope.service.js';
 import {
   getDashboardNetWorth,
@@ -1083,4 +1086,97 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
   }
 
   return items;
+}
+
+// ─── One member, in full ─────────────────────────────────────────
+
+/**
+ * Everything the caller may see about a single member.
+ *
+ * Two rules decide the whole shape of this:
+ *
+ * 1. The member must be in the caller's readable set. Anyone can put any userId
+ *    in a URL, so this is checked against the resolved scope rather than
+ *    assumed from the fact that a link existed.
+ * 2. The caps apply to a sibling and never to the caller themselves — this is
+ *    the same grant that governs the household view, not a separate rule, so a
+ *    VIEWER granted only EQUITY opening a sibling sees that sibling's equity
+ *    and nothing else.
+ *
+ * What is hidden is reported rather than dropped. A page showing three of a
+ * person's six asset classes, with no indication that three are missing, is
+ * worse than one that says so.
+ */
+export async function getFamilyMemberDetail(
+  callerId: string,
+  familyId: string,
+  memberUserId: string,
+): Promise<FamilyMemberDetail> {
+  const asOf = new Date().toISOString();
+  const { members } = await resolveMembers(callerId, familyId);
+
+  const m = members.find((x) => x.userId === memberUserId);
+  if (!m) {
+    // Not "not found": the caller is an active member of this family, so the
+    // honest answer is that this person is not theirs to look at.
+    throw new ForbiddenError('That member is not part of a family you can see.');
+  }
+
+  // Derived from the household aggregates rather than from three new loaders.
+  // They already apply the caps, are already tested, and reusing them means a
+  // member page cannot quietly disagree with the family view it was opened
+  // from. The cost is computing for every member and keeping one — cheap
+  // beside the per-query round trips these already make.
+  const [netWorth, holdings, goalsAll, protectionAll, attentionAll] = await Promise.all([
+    runFor(m, () => getDashboardNetWorth(m.userId, undefined, m.caps)),
+    loadMemberHoldings(m),
+    getFamilyGoals(callerId, familyId),
+    getFamilyProtection(callerId, familyId),
+    getFamilyAttention(callerId, familyId),
+  ]);
+
+  const hiddenCategories = NON_AC_CATEGORIES.filter((c) => !allowsCategory(m.caps, c));
+
+  return {
+    familyId,
+    asOf,
+    member: toRef(m),
+    netWorth: netWorth.totalNetWorth,
+    invested: netWorth.portfolio.totalInvested,
+    unrealisedPnL: netWorth.portfolio.unrealisedPnL,
+    totalLiabilities: netWorth.totalLiabilities,
+    netWorthAfterLiabilities: netWorth.netWorthAfterLiabilities,
+    allocation: mergeAllocation([netWorth]),
+    holdings,
+    goals: goalsAll.goals.filter((g) => g.owner.userId === memberUserId),
+    protection: protectionAll.members.find((p) => p.userId === memberUserId) ?? null,
+    attention: attentionAll.items.filter((i) => i.member.userId === memberUserId),
+    hiddenCategories: [...hiddenCategories],
+    assetClassesRestricted: m.caps.assetClasses !== null,
+  };
+}
+
+/** Holdings for one member, intersected with any asset-class grant. */
+async function loadMemberHoldings(m: MemberContext): Promise<FamilyMemberHolding[]> {
+  return runFor(m, async () => {
+    const rows = await prisma.holdingProjection.findMany({
+      where: {
+        portfolio: { userId: m.userId },
+        // `[]` is deny-all and `{ in: [] }` matches nothing, which is right.
+        ...(m.caps.assetClasses === null ? {} : { assetClass: { in: m.caps.assetClasses } }),
+      },
+      orderBy: { currentValue: 'desc' },
+      take: 200,
+    });
+
+    return rows.map((h) => ({
+      assetKey: h.assetKey,
+      assetName: h.assetName ?? h.assetKey,
+      assetClass: h.assetClass,
+      quantity: serializeMoney(d(h.quantity)),
+      currentValue: serializeMoney(d(h.currentValue ?? h.totalCost)),
+      totalCost: serializeMoney(d(h.totalCost)),
+      unrealisedPnL: serializeMoney(d(h.unrealisedPnL)),
+    }));
+  });
 }

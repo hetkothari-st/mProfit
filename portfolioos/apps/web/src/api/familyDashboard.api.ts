@@ -4,6 +4,7 @@ import type {
   AttentionType,
   FamilyAttention,
   FamilyGoals,
+  FamilyMemberDetail,
   FamilyMemberRef,
   FamilyProtection,
   FamilyWealth,
@@ -54,6 +55,8 @@ export type {
   FamilyGoal,
   FamilyGoals,
   FamilyGoalsByMember,
+  FamilyMemberDetail,
+  FamilyMemberHolding,
   FamilyMemberProtection,
   FamilyMemberRef,
   FamilyMemberWealth,
@@ -90,6 +93,26 @@ export const familyDashboardApi = {
     );
     return unwrap(data);
   },
+
+  /**
+   * ONE member, in full — everything behind a name on the family tree.
+   *
+   * Not under `/dashboard`: it hangs off the member resource itself
+   * (`/api/families/:familyId/members/:userId/detail`), because it is a view
+   * of a person rather than of the household.
+   *
+   * The same caps govern it as govern the four panels above, and it reports
+   * what they removed rather than dropping it silently:
+   * `assetClassesRestricted` says the holdings/allocation are a filtered
+   * slice, `hiddenCategories` names the categories withheld, and a null
+   * `protection` means "not shared" — never "no cover".
+   */
+  async memberDetail(familyId: string, userId: string): Promise<FamilyMemberDetail> {
+    const { data } = await api.get<ApiResponse<FamilyMemberDetail>>(
+      `/api/families/${familyId}/members/${userId}/detail`,
+    );
+    return unwrap(data);
+  },
 };
 
 /**
@@ -106,6 +129,8 @@ export const familyDashboardKeys = {
     ['families', familyId, 'dashboard', 'protection'] as const,
   attention: (familyId: string) =>
     ['families', familyId, 'dashboard', 'attention'] as const,
+  memberDetail: (familyId: string, userId: string) =>
+    ['families', familyId, 'dashboard', 'member', userId] as const,
 };
 
 /**

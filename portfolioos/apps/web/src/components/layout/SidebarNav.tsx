@@ -4,6 +4,7 @@ import { cn } from '@/lib/cn';
 import { BudgetGauge } from './BudgetGauge';
 import { UpgradeSidebarCard } from './UpgradeSidebarCard';
 import { AssetClassSectionList } from './AssetClassSectionList';
+import { FamilyNavTree } from './FamilyNavTree';
 import { NavSection, OVERVIEW_ITEMS, ASSET_CLASS_ITEMS, NAV_SECTIONS } from './navItems';
 
 export function SidebarNav({
@@ -71,6 +72,9 @@ export function SidebarNav({
           collapsed ? 'px-2 space-y-3' : 'px-3 space-y-5',
         )}
       >
+        {/* Household — renders nothing at all when the user has no family. */}
+        <FamilyNavTree collapsed={collapsed} />
+
         {/* Overview */}
         <NavSection section={{ heading: 'Overview', items: OVERVIEW_ITEMS }} collapsed={collapsed} />
 
