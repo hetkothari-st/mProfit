@@ -69,7 +69,7 @@
 
 import { assembleFacts } from './factsText.js';
 import type { AmcFactsSpec } from './factsText.js';
-import { assemblePortfolio } from './holdingsTable.js';
+import { assemblePortfolio, SHARED_IGNORE_NAME_RE } from './holdingsTable.js';
 import type { AmcTableSpec } from './holdingsTable.js';
 import type {
   MfFactsheetResult,
@@ -85,23 +85,52 @@ export const UTI_ADAPTER_VERSION = '1.0.0';
 
 export const UTI_TABLE_SPEC: AmcTableSpec = {
   amcCode: UTI_AMC_CODE,
+  // VERIFIED 2026-09-07: the preamble says "(Market value in Lacs)"; the
+  // column itself is headed only "MARKET-VALUE", with no unit on it at all.
   marketValueUnit: 'LAKH',
   columns: {
-    name: ['nameoftheinstrument', 'instrumentname', 'nameofinstrument'],
+    // VERIFIED: "NAME OF THE INSTRUMENT " — all caps, trailing space.
+    name: ['nameoftheinstrument', 'nameofinstrument'],
     isin: ['isin'],
-    industryOrRating: ['industryrating', 'industry', 'rating'],
+    // VERIFIED: "RATING/INDUSTRY" — rating first.
+    industryOrRating: ['ratingindustry', 'industryrating', 'industry', 'rating'],
     quantity: ['quantity', 'qty'],
-    marketValue: ['marketfairvalue', 'marketvalue', 'fairvalue'],
+    // VERIFIED: "MARKET-VALUE" -> "marketvalue".
+    marketValue: ['marketvalue', 'marketfairvalue'],
+    // VERIFIED: "% TO NAV".
     weight: ['tonav', 'tonetassets', 'toaum'],
-    ytm: ['ytm', 'yieldtomaturity'],
+    ytm: ['yield', 'ytm'],
     maturity: ['maturitydate', 'maturity'],
   },
-  ignoreNameRe:
-    /^(sub[\s-]*total|total|grand\s*total|net\s+assets?\b|notes?\b|footnote|disclaimer|\(?[a-z]\)?$)/i,
+  // UTI writes subtotals as "TOTAL:(a) Listed...", "TOTAL :  Others" and ends
+  // each scheme block with "TOTAL : <scheme name>" — all caught by the shared
+  // leading-"total" rule.
+  ignoreNameRe: SHARED_IGNORE_NAME_RE,
+  /**
+   * UTI is the one AMC of the ten with NO "Grand Total" row, so the shared
+   * default end-marker never fires and the walk runs on into the footnotes.
+   *
+   * That matters more here than anywhere else, because UTI's footnote block is
+   * "(a) Details of Default beyond Maturity Date (Fig. in Lakhs)" — a table
+   * whose own columns are NAME | ISIN NO | VALUE AS PER NCA | %AGE TO NAV |
+   * TOTAL AMT DUE. Its fifth column lands under the mapped "% TO NAV" position,
+   * so two defaulted securities were read as holdings weighing 1,724% and
+   * 9,992% of NAV. The file was rejected at a weights sum of 11,816%.
+   *
+   * Three independent stops, because none alone is comfortable:
+   *   - "TOTAL : <scheme>" — the real end. Every UTI scheme name begins "UTI",
+   *     which distinguishes it from the section subtotals ("TOTAL: EQUITY AND
+   *     EQUITY RELATED", "TOTAL : Others") that share the prefix.
+   *   - the default-disclosure heading itself.
+   *   - "SCHEME CODEnnnENDS", the sentinel that closes each scheme's block in
+   *     the single all-schemes sheet.
+   */
+  endOfTableRe: /^(total\s*:\s*uti\b|\(a\)\s*details of default|scheme\s*code\d+ends)/i,
   asOfPatterns: [
-    /Portfolio Statement as on\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
-    /as on\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
-    /as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
+    // VERIFIED: "PROVISIONAL AND UNAUDITED PORTFOLIO DISCLOSURE AS OF
+    // 31/07/2026 (Market value in Lacs)" — day-first numeric.
+    /PORTFOLIO DISCLOSURE AS OF\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
+    /AS OF\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
   ],
 };
 

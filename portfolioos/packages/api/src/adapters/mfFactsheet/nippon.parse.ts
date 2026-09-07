@@ -67,7 +67,7 @@
 
 import { assembleFacts } from './factsText.js';
 import type { AmcFactsSpec } from './factsText.js';
-import { assemblePortfolio } from './holdingsTable.js';
+import { assemblePortfolio, SHARED_IGNORE_NAME_RE } from './holdingsTable.js';
 import type { AmcTableSpec } from './holdingsTable.js';
 import type {
   MfFactsheetResult,
@@ -83,24 +83,25 @@ export const NIPPON_ADAPTER_VERSION = '1.0.0';
 
 export const NIPPON_TABLE_SPEC: AmcTableSpec = {
   amcCode: NIPPON_AMC_CODE,
+  // VERIFIED 2026-09-07: "Market/Fair Value ( Rs. in Lacs)".
   marketValueUnit: 'LAKH',
   columns: {
-    name: ['nameoftheinstrument', 'instrumentname', 'nameofinstrument'],
+    name: ['nameoftheinstrument', 'nameofinstrument'],
     isin: ['isin'],
-    industryOrRating: ['industryrating', 'industry', 'rating'],
+    // VERIFIED: "Industry / Rating".
+    industryOrRating: ['industryrating', 'ratingindustry', 'industry', 'rating'],
     quantity: ['quantity', 'qty'],
-    marketValue: ['marketfairvalue', 'marketvalue', 'fairvalue'],
-    // `ofaum` FIRST: it is Nippon's own wording. The others are kept because a
-    // single AMC is not always internally consistent between its equity and its
-    // debt disclosures, and an unmapped weight column fails the file entirely.
-    weight: ['ofaum', 'ofnav', 'tonav', 'toaum', 'tonetassets'],
-    ytm: ['ytm', 'yieldtomaturity'],
+    marketValue: ['marketfairvalue', 'marketvalue'],
+    // VERIFIED: "% to NAV" — NOT the "% of AUM" the synthetic fixture assumed.
+    weight: ['tonav', 'tonetassets', 'toaum'],
+    ytm: ['yield', 'ytm'],
     maturity: ['maturitydate', 'maturity'],
   },
-  ignoreNameRe:
-    /^(sub[\s-]*total|total|grand\s*total|net\s+assets?\b|notes?\b|footnote|disclaimer|\(?[a-z]\)?$)/i,
+  ignoreNameRe: SHARED_IGNORE_NAME_RE,
   asOfPatterns: [
-    /Portfolio Statement as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
+    // VERIFIED: "Monthly Portfolio Statement as on July 31,2026" — no space
+    // after the comma.
+    /Portfolio Statement as on\s+([A-Za-z]{3,9}\.? \d{1,2},?\s*\d{2,4})/i,
     /as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
   ],
 };

@@ -67,7 +67,7 @@
 
 import { assembleFacts } from './factsText.js';
 import type { AmcFactsSpec } from './factsText.js';
-import { assemblePortfolio } from './holdingsTable.js';
+import { assemblePortfolio, SHARED_IGNORE_NAME_RE } from './holdingsTable.js';
 import type { AmcTableSpec } from './holdingsTable.js';
 import type {
   MfFactsheetResult,
@@ -83,25 +83,27 @@ export const MIRAE_ADAPTER_VERSION = '1.0.0';
 
 export const MIRAE_TABLE_SPEC: AmcTableSpec = {
   amcCode: MIRAE_AMC_CODE,
+  // VERIFIED 2026-09-07: "Market/Fair Value (Rs. in Lacs)".
   marketValueUnit: 'LAKH',
   columns: {
-    name: ['nameoftheinstrument', 'instrumentname', 'nameofinstrument'],
-    // `isincode` is matched by the `isin` prefix; listed for the reader.
+    name: ['nameoftheinstrument', 'nameofinstrument'],
+    // VERIFIED: plain "ISIN", not the "ISIN Code" the synthetic fixture used.
     isin: ['isin'],
-    industryOrRating: ['industryrating', 'industry', 'rating'],
+    // VERIFIED: "Industry ^/ Rating".
+    industryOrRating: ['industryrating', 'ratingindustry', 'industry', 'rating'],
+    // VERIFIED: plain "Quantity", not "Quantity/Units".
     quantity: ['quantity', 'qty'],
-    marketValue: ['marketvalue', 'marketfairvalue', 'fairvalue'],
-    // ⚠ `ofnetassets` FIRST — Mirae's own wording, and NOT a prefix of any of
-    // the others. See the header note.
-    weight: ['ofnetassets', 'tonetassets', 'tonav', 'toaum', 'ofnav'],
-    ytm: ['ytm', 'yieldtomaturity'],
+    marketValue: ['marketfairvalue', 'marketvalue'],
+    // VERIFIED: "% to Net Assets" — "to", not the "% of Net Assets" the
+    // synthetic fixture assumed.
+    weight: ['tonetassets', 'tonav', 'toaum'],
+    ytm: ['ytm', 'yield'],
     maturity: ['maturitydate', 'maturity'],
   },
-  ignoreNameRe:
-    /^(sub[\s-]*total|total|grand\s*total|net\s+assets?\b|notes?\b|footnote|disclaimer|\(?[a-z]\)?$)/i,
+  ignoreNameRe: SHARED_IGNORE_NAME_RE,
   asOfPatterns: [
-    /Portfolio Statement as on\s+([A-Za-z]{3,9}\.? \d{1,2},? \d{4})/i,
-    /as on\s+([A-Za-z]{3,9}\.? \d{1,2},? \d{4})/i,
+    // VERIFIED: "Monthly Portfolio Statement as on July 31, 2026".
+    /Portfolio Statement as on\s+([A-Za-z]{3,9}\.? \d{1,2},?\s*\d{2,4})/i,
     /as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
   ],
 };

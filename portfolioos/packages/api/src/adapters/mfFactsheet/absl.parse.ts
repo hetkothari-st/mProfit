@@ -71,7 +71,7 @@
 
 import { assembleFacts } from './factsText.js';
 import type { AmcFactsSpec } from './factsText.js';
-import { assemblePortfolio } from './holdingsTable.js';
+import { assemblePortfolio, SHARED_IGNORE_NAME_RE } from './holdingsTable.js';
 import type { AmcTableSpec } from './holdingsTable.js';
 import type {
   MfFactsheetResult,
@@ -87,26 +87,28 @@ export const ABSL_ADAPTER_VERSION = '1.0.0';
 
 export const ABSL_TABLE_SPEC: AmcTableSpec = {
   amcCode: ABSL_AMC_CODE,
+  // VERIFIED 2026-09-07: "Market value (Rs. in Lakhs)".
   marketValueUnit: 'LAKH',
   columns: {
-    name: ['nameoftheinstrument', 'instrumentname', 'nameofinstrument'],
+    // VERIFIED: "Name of the Instrument / Issuer". ABSL does NOT publish a
+    // separate Issuer column — the synthetic fixture invented one, and it was
+    // the single per-AMC difference the old README leaned on hardest.
+    name: ['nameoftheinstrumentissuer', 'nameoftheinstrument', 'nameofinstrument'],
     isin: ['isin'],
-    // Longest-first: `ratingindustry` (ABSL's reversed wording) before the
-    // bare `rating`, so the prefix match cannot steal the longer key.
-    industryOrRating: ['ratingindustry', 'industryrating', 'industry', 'rating'],
+    // VERIFIED: "Industry^ / Rating" — industry first, not the reversed
+    // "Rating / Industry" the synthetic fixture assumed.
+    industryOrRating: ['industryrating', 'ratingindustry', 'industry', 'rating'],
     quantity: ['quantity', 'qty'],
-    marketValue: ['marketvalue', 'marketfairvalue', 'fairvalue'],
-    weight: ['tonetassets', 'tonav', 'toaum'],
-    ytm: ['ytm', 'yieldtomaturity'],
+    marketValue: ['marketvalue', 'marketfairvalue'],
+    // VERIFIED: "% to AUM", not "% to Net Assets".
+    weight: ['toaum', 'tonav', 'tonetassets'],
+    ytm: ['ytm', 'yield'],
     maturity: ['maturitydate', 'maturity'],
-    // ⚠ ABSL-only. See the header note on why the disclosed issuer beats the
-    // derived one.
-    issuer: ['issuer'],
   },
-  ignoreNameRe:
-    /^(sub[\s-]*total|total|grand\s*total|net\s+assets?\b|notes?\b|footnote|disclaimer|\(?[a-z]\)?$)/i,
+  ignoreNameRe: SHARED_IGNORE_NAME_RE,
   asOfPatterns: [
-    /Portfolio Statement as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
+    // VERIFIED: "Portfolio Statement as on July 31, 2026".
+    /Portfolio Statement as on\s+([A-Za-z]{3,9}\.? \d{1,2},?\s*\d{2,4})/i,
     /as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
   ],
 };

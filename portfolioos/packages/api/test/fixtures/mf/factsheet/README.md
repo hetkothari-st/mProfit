@@ -2,105 +2,213 @@
 
 ## Provenance — read this first
 
-**Every file in this tree is SYNTHETIC.** Nothing here was scraped from, or
-copied out of, any AMC's website, factsheet PDF or portfolio workbook. That
-covers all **ten** AMC folders — the three added by Task 1.5 (`sbi`, `icici`,
-`hdfc`) *and* the seven added by Task 1.6 (`nippon`, `kotak`, `axis`, `uti`,
-`absl`, `mirae`, `dsp`). None of the ten was downloaded from anywhere.
+This tree holds **two kinds of fixture**, and the difference matters more than
+anything else in this file.
 
-They are *synthetic but representative*: hand-written to match the **shape** of
-a SEBI-mandated monthly portfolio disclosure and a scheme factsheet — the
-column set, the section headings, the subtotal/grand-total rows, the Indian
-number grouping, the way the Industry/Rating column does double duty for equity
-and debt, and the several ways a credit rating gets written. The specific
-schemes, holdings, weights, AUMs, TERs and manager names are invented. Any
-resemblance to a real fund's actual portfolio is coincidental and meaningless.
+| Kind | File | What it proves |
+|---|---|---|
+| **REAL capture** | `portfolio-real-2026-07.csv` | That the parser reads what the AMC *actually publishes* |
+| **SYNTHETIC** | every other `.csv` and `.txt` | That the parser handles a specific *edge case* (weights-sum failure, truncation, section transitions, TER out of range) |
 
-**Consequence:** these fixtures pin the *parsers'* behaviour, not the AMCs'
-formats. They prove that given input of the documented shape the parser
-produces the documented output. They do **not** prove that the real files have
-that shape. The assumed shape is written out at the top of each
-`src/adapters/mfFactsheet/<amc>.parse.ts`, and the URLs in each `<amc>.v1.ts`
-are marked `UNVERIFIED` for the same reason. Before enabling any of these
-adapters against a live site, download one real file per AMC, diff it against
-the assumed shape, and either confirm it or add a real (anonymised) fixture and
-bump the adapter version.
+### The real captures
+
+Each `<amc>/portfolio-real-2026-07.csv` was extracted on **2026-09-07** from a
+monthly portfolio disclosure downloaded from that AMC's own website. One equity
+scheme per AMC, the full sheet, nothing trimmed — so the weights genuinely sum
+to ~100% and the `01 §6` gate is genuinely exercised.
+
+| AMC | Source file | Scheme captured | Where it came from |
+|---|---|---|---|
+| `sbi` | `all-schemes-monthly-portfolio---as-on-31st-july-2026.xlsx`, sheet `SMEEF` | SBI ESG Exclusionary Strategy Fund | sbimf.com, consolidated workbook (122 sheets) |
+| `icici` | `ICICI Prudential Balanced Advantage Fund.xlsx`, sheet `BAF` | ICICI Prudential Balanced Advantage Fund | icicipruamc.com blob store, zip of 146 workbooks |
+| `hdfc` | `Monthly HDFC Flexi Cap Fund - 31 July 2026.xlsx`, sheet `HDFCEQ` | HDFC Flexi Cap Fund | files.hdfcfund.com, one workbook per scheme |
+| `nippon` | `NIMF-MONTHLY-PORTFOLIO-31-July-26.xls`, sheet `GF` | Nippon India Growth Mid Cap Fund | mf.nipponindiaim.com, consolidated (108 sheets) |
+| `kotak` | `ConsolidatedSEBIPortfolioJuly2026.xlsx`, sheet `V3I` | Kotak Nifty200 Value 30 Index Fund | vatseelabs-s3.kotakmf.com, consolidated (119 sheets) |
+| `axis` | `Monthly_Portfolio_31_07_2026_b590bc59d9.xlsx`, sheet `AXIS500` | Axis Nifty 500 Index Fund | axismf.com, consolidated (87 sheets) |
+| `uti` | `Sebi Exposure as on 31 Jul 2026_final.xlsx`, sheet `exposure`, rows 0–187 | UTI Unit Linked Insurance Plan | utimf.com → CloudFront zip; one sheet, 83 stacked scheme blocks |
+| `absl` | `ABSL_Monthly_Portfolio_Report_July 2026.xls`, sheet `BSL95F` | ABSL Equity Hybrid '95 Fund | mutualfund.adityabirlacapital.com, zip of one BIFF8 workbook (106 sheets) |
+| `mirae` | `mascf-july2026.xlsx`, sheet `MASCF` | Mirae Asset Small Cap Fund | miraeassetmf.co.in, one workbook per scheme |
+| `dsp` | `DSP Equity FOF ISIN Portfolio as on 31 Jul 2026.xlsx`, sheet `Flexi Cap` | DSP Flexi Cap Fund | dspim.com, zip of 2 workbooks (63 + 26 sheets) |
+
+These are **public statutory disclosures** — SEBI requires every AMC to publish
+them monthly. They contain no personal data, so they are stored verbatim, with
+no anonymisation. Holdings, weights, ISINs and quantities are the real
+published numbers as at **31 July 2026**.
+
+They are stored as CSV rather than as the original workbooks because a fixture
+nobody can read in a diff is a fixture nobody checks. The conversion applied the
+**same extraction rule as production** (`cellToText` in `v1Support.ts`): the
+cell's *formatted* value, with percent-formatted cells scaled to a percent
+string. See below for why that rule is the whole ballgame.
+
+Exercised by `test/adapters/mfFactsheet/parsers.real.test.ts`.
+
+### The synthetic fixtures
+
+Everything else in this tree is **hand-written**, not scraped: the
+`portfolio-equity-normal`, `portfolio-debt-normal`, `portfolio-hybrid-normal`,
+`portfolio-weights-sum-fail`, `portfolio-truncated-malformed` CSVs and both
+`factsheet-*.txt` files, for all ten AMCs. The schemes, holdings, weights, AUMs,
+TERs and manager names are invented.
+
+They exist to pin edge cases that a real file does not conveniently contain (a
+snapshot that must be rejected whole; a truncated export; a TER outside the
+permitted band). **As of 2026-09-07 they were corrected to carry each AMC's real
+column wording and real units** — see "What the real files disproved" below.
+Before that they carried assumed wording, and that is precisely how the bug
+described in the next section survived 54 passing tests.
+
+---
+
+## What the real files disproved
+
+The synthetic fixtures were written from the same assumptions as the parsers.
+So they agreed with the code instead of with the AMCs, and every one passed
+while **six of the ten parsers could not read their AMC's file at all**.
+
+### 1. The 100x error: `% to NAV` is stored two incompatible ways
+
+This is the important one. Verified across all ten real workbooks:
+
+| Stored value | Number format | AMCs |
+|---|---|---|
+| `9.21` | `#,##0.00` | SBI, HDFC, Kotak, UTI |
+| `0.0921` | `0.00%` | ICICI Pru, Nippon, Axis, ABSL, Mirae, DSP |
+
+Both mean 9.21% of NAV. Reading the **raw** cell value — which is what
+`XLSX.utils.sheet_to_json` returns, and the obvious thing to write — makes the
+second group's weights sum to ~1 instead of ~100, so the 97–103% gate rejects
+**every file those six AMCs publish**.
+
+The resolution is that the *number format* is exactly the metadata that
+disambiguates them: a cell storing a fraction is always marked as a percent
+format, because that is the only way Excel renders it as `9.21%` to the human
+who published it. Production therefore reads the formatted value, and both
+conventions converge. Pinned by
+`test/adapters/mfFactsheet/workbookExtraction.test.ts`.
+
+### 2. Units: every one of the ten quotes lakhs
+
+The old fixtures had Kotak in **crore** and Axis in **plain rupees**. Both are
+wrong; all ten real files quote lakhs, in five different spellings
+(`Rs. in Lakhs`, `Rs. in Lacs`, `Rs.in Lacs`, `Rs. In lakhs`, `Rs. in Lacs.`).
+
+A unit mistake is the one per-AMC fact with **no downstream check behind it** —
+weights, which every metric in `02` actually uses, stay correct under it, and
+the 97–103% gate still passes. So Kotak shipped a silently 100x-wrong
+`marketValue` and Axis a 100,000x-wrong one, and nothing else would have noticed.
+
+### 3. Column wording that was simply invented
+
+- **ABSL** was given a dedicated `Issuer` column. No AMC of the ten publishes
+  one. A test asserted the walker preferred that column over
+  `deriveIssuer(securityName)` — a capability tested, and passing, against a
+  column that does not exist in any file the adapter will ever see.
+- **Nippon** `% of AUM` → really `% to NAV`. **Mirae** `% of Net Assets` →
+  really `% to Net Assets`. Both were "of" vs "to" differences invented to make
+  the ten parsers look meaningfully distinct from one another.
+- **ICICI Pru** uses `Company/Issuer/Instrument Name`, not
+  `Name of the Instrument`. **SBI** and **ABSL** use
+  `Name of the Instrument / Issuer`.
+- **SBI**, **UTI** and **DSP** put **rating before industry**
+  (`Rating / Industry^`, `RATING/INDUSTRY`, `Rating/Industry`).
+
+### 4. Structural facts no synthetic fixture had
+
+- **ICICI Pru** prints each section's subtotal **on the heading row**
+  (`Equity & Equity Related Instruments … 74.72%`), so the "a name and no
+  numbers" section rule cannot see it and the weights sum lands near 200%.
+  Worse, it uses the *same string* for a heading and for the instruments under
+  it (`Government Securities`), so a name-only rule would delete every
+  government bond in the fund.
+- **UTI** has **no grand-total row at all**, and its footnote block is a
+  default-disclosure table whose "Total Amt Due" column lands under the mapped
+  `% TO NAV` position. Two defaulted securities were read as holdings weighing
+  1,724% and 9,992% of NAV.
+- **Kotak** merges its `Name of Instrument` header across columns A:C while the
+  values sit in column C, so a plain `row[0]` read returns empty for every
+  holding.
+- **DSP** glues a *second, unrelated* sector-allocation table to the right of
+  the holdings at columns K/L, outrunning the holdings by dozens of rows.
+- **SBI**'s as-of cell is an Excel **date serial** (`46234`, format
+  `mmmm dd, yyyy`, displaying `July 31, 2026`). Converting that serial to a JS
+  `Date` produces local midnight, which in `Asia/Kolkata` is
+  `2026-07-30T18:30:00Z` — so an ISO render of it reads **30 July** and files
+  every SBI snapshot one day early. Only the publisher's formatted text is
+  correct. The first version of the extractor had exactly this bug, and the CSV
+  fixtures could not catch it.
+- **SBI**, **Mirae** and **ICICI Pru** write empty sections as the literal
+  string `NIL` / `Nil` rather than leaving the cells blank.
+- **ICICI Pru** puts a footnote glyph (`^`, "less than 0.01% of NAV") *inside*
+  the numeric weight column.
+
+### 5. Nothing is a CSV
+
+All ten publish XLS/XLSX, three of them inside a ZIP. The `.v1.ts` fetchers were
+written against `fetchText` + `csvToGrid` and could not have read a single real
+file regardless of whether their URLs were right.
+
+---
 
 ## Layout
 
 ```
 <amc>/
-  portfolio-equity-normal.csv        equity scheme, weights sum to 100.00
-  portfolio-debt-normal.csv          debt scheme: issuer, rating, YTM, maturity
-  portfolio-hybrid-normal.csv        equity + debt + cash in one disclosure
-  portfolio-weights-sum-fail.csv     weights sum to 80.00 → rejected, `weights_sum`
-  portfolio-truncated-malformed.csv  preamble + half a header, no data → `MALFORMED_INPUT`
-  factsheet-normal.txt               TER / AUM / managers / exit load / riskometer
-  factsheet-ter-out-of-range.txt     TER outside 0.01–3.0% → rejected, `ter_range`
+  portfolio-real-2026-07.csv         REAL capture — see the provenance table
+  portfolio-equity-normal.csv        synthetic: equity scheme, weights sum to 100.00
+  portfolio-debt-normal.csv          synthetic: issuer, rating, YTM, maturity
+  portfolio-hybrid-normal.csv        synthetic: equity + debt + cash in one file
+  portfolio-weights-sum-fail.csv     synthetic: weights sum to 80.00 → `weights_sum`
+  portfolio-truncated-malformed.csv  synthetic: half a header, no data → `MALFORMED_INPUT`
+  factsheet-normal.txt               synthetic: TER / AUM / managers / exit load
+  factsheet-ter-out-of-range.txt     synthetic: TER outside 0.01–3.0% → `ter_range`
 ```
 
-Seven per AMC × ten AMCs, against the repo's floor of five per parser
+Eight per AMC × ten AMCs, against the repo's floor of five per parser
 (`CONTEXT.md §12`).
 
 ## What each fixture is for
 
 | Fixture | Pins |
 |---|---|
-| `portfolio-equity-normal` | header detection, section state, subtotal skipping, lakh→rupee conversion, ISIN normalisation, `cashPct` recomputation, negative "Net Receivables" weight |
-| `portfolio-debt-normal` | debt classification from section state, rating normalisation across agency prefixes (`CRISIL AAA`, `[ICRA]AAA`, `CARE AA+`, `CRISIL AA- /Stable`, `IND AAA(CE)`, `CARE A1+`), issuer derivation from a coupon-prefixed name, YTM and maturity columns |
-| `portfolio-hybrid-normal` | two subtotal rows and a section transition inside one file — the case where losing section state silently files bonds as shares |
-| `portfolio-weights-sum-fail` | the `01 §6` 97–103% gate; the snapshot must be rejected **whole**, not stored partially |
+| `portfolio-real-2026-07` | **the real column wording, units, section markers, date format and subtotal placement of that AMC** — header detection, section state, percent scaling, lakh→rupee conversion, and the 97–103% gate against genuine published weights |
+| `portfolio-equity-normal` | section state, subtotal skipping, ISIN normalisation, `cashPct` recomputation, negative "Net Receivables" weight |
+| `portfolio-debt-normal` | debt classification from section state, rating normalisation across agency prefixes (`CRISIL AAA`, `[ICRA]AAA`, `CARE AA+`, `CRISIL AA- /Stable`, `IND AAA(CE)`, `CARE A1+`), issuer derivation from a coupon-prefixed name, YTM and maturity |
+| `portfolio-hybrid-normal` | two subtotal rows and a section transition in one file — the case where losing section state files bonds as shares |
+| `portfolio-weights-sum-fail` | the `01 §6` gate; the snapshot must be rejected **whole**, not stored partially |
 | `portfolio-truncated-malformed` | a truncated export must be `MALFORMED_INPUT`, never a silently empty snapshot |
-| `factsheet-normal` | per-plan TER selection, month-end vs average AUM, manager name + "managing since" date, exit-load ladder parsing |
+| `factsheet-normal` | per-plan TER selection, month-end vs average AUM, manager name + "managing since", exit-load ladder |
 | `factsheet-ter-out-of-range` | the `01 §6` TER gate. ICICI's variant uses `0.00%`, which is a *misread column*, not a missing value — SEBI permits no zero-expense scheme, and letting it through would rank that fund first on cost forever |
 
-## Deliberate per-AMC differences
+## The factsheet `.txt` fixtures are still fully synthetic
 
-The ten AMCs' files are not copies with the names swapped. Each carries the
-wording its parser is written against, which is the whole reason there are ten
-parsers rather than one.
+The ten **factsheet PDFs** were downloaded and inspected on 2026-09-07, but no
+real factsheet fixture has been added and the `factsheet-*.txt` files remain
+hand-written. The reason is recorded here so nobody assumes otherwise:
 
-### The three from Task 1.5
+- Every AMC's factsheet is a **multi-scheme, multi-column PDF**, and plain text
+  extraction runs the columns together. SBI yields `TER1.510.85` for a
+  Regular/Direct pair; Mirae yields `38,009.52843,207.9114,455.917` for three
+  schemes' AUM. Reliable extraction needs **positional (x/y) parsing**, not the
+  line-oriented scanner in `factsText.ts`.
+- **UTI** is the worst case: its TER label sits ~140 extracted lines from its
+  value, so line-adjacency parsing mis-associates them.
+- Several AMCs no longer publish a *Total* Expense Ratio in the factsheet at
+  all. ICICI Pru, ABSL, Nippon and HDFC publish only **Base Expense Ratio**;
+  DSP explicitly redirects to `dspim.com/ter`; Axis puts TER in a separate
+  consolidated annexure.
 
-- **SBI** — `% to AUM`, `Market value (Rs. in Lakhs)`, `Industry/Rating`,
-  `Total Expense Ratio: Regular Plan 1.45% | Direct Plan 0.75%`.
-- **ICICI Pru** — `% to Nav`, `Exposure/Market Value(Rs.Lakh)`, a caret-decorated
-  `Industry^/Rating`, a section heading containing a comma (`Cash, Cash
-  Equivalents and Net Current Assets` — which is why the CSV reader has to
-  honour quoting), two managers in one clause, a window-first exit load
-  (`Upto 1 Year from allotment - 1% of applicable NAV`), and the TER trap:
-  `Other than Direct 1.51% | Direct 0.86%`, where a naive `/Direct ([\d.]+)%/`
-  reports the regular plan's TER as the direct plan's.
-- **HDFC** — `% to NAV`, `Market/Fair Value (Rs. in Lacs)` (note "Lacs"), a
-  `+`-decorated `Industry+ / Rating`, a `¤` footnote marker on the fund-manager
-  label, and month-name dates (`March 31, 2026`) rather than `31-Mar-2026`.
-
-### The seven added by Task 1.6
-
-Same rule: each carries the wording, units and date format its own parser is
-written against. The table is the quickest way to see why ten parsers exist
-rather than one.
-
-| AMC | weight column | market-value column | portfolio as-of | TER wording | exit load | other |
-|---|---|---|---|---|---|---|
-| `nippon` | `% of AUM` — "**of**", not "to" | `Market/Fair Value (Rs. in Lacs)` — **lakh** | `31-Mar-2026` | `TER (Regular / Direct): 1.62% / 0.78%` — one line, **no plan token beside the direct number** | percent-first, 365 days | manager clause uses "Managing this fund since" |
-| `kotak` | `% to Net Assets` | `Market Value (Rs. in Crore)` — **crore** | `31/03/2026` (**numeric, day-first**) | `Regular Plan: 1.72% ; Direct Plan: 0.62%` | **window-first**, "within 1 year … - 1%" | month-end AUM vs `AAUM (Monthly Average)` on the same page |
-| `axis` | `% to NAV` | `Market Value (Rs.)` — **plain rupees, no scaling** | `March 31, 2026` (month-name, **comma → quoted CSV cell**) | `Expense Ratio:` — **not** "Total Expense Ratio" | percent-first, 365 days | two managers joined by "and" |
-| `uti` | `% to NAV` | `Market/Fair Value (Rs. In Lakhs)` — lakh | `31-03-2026` (numeric, day-first) | `Total Expense Ratio (TER) : Regular: 1.29% Direct: 0.99%` | window-first, **12 months → `daysUpTo: 360`** | AUM labelled `Fund Size (AUM) as on …`; manager date introduced by `w.e.f.` |
-| `absl` | `% to Net Assets` | `Market Value (Rs. in Lacs)` — lakh | `31-Mar-2026` | `Total Expense Ratio (TER) Regular 1.85% Direct 0.95%` (no colon, no separator) | window-first, 365 days | the **only** AMC with a disclosed `Issuer` column, and its industry header is reversed: `Rating / Industry` |
-| `mirae` | `% of Net Assets` — "**of**", and not a prefix of `to net assets` | `Market Value (Rs. Lakh)` — lakh | `March 31, 2026` (quoted cell) | `Expense Ratio: Regular Plan – 1.55% \| Direct Plan – 0.54%` (**en dash**) | percent-first, 365 days | `ISIN Code`, `Quantity/Units`, and `Risk-o-meter` rather than `Riskometer` |
-| `dsp` | `% to Net Assets` | `Market Value (Rs. in Lakh)` — lakh | `31-Mar-2026` | `Total Expense Ratio: 1.71% (Regular) / 0.71% (Direct)` — **number before the plan label** | percent-first, **12 months → `daysUpTo: 360`** | name header is `Name of Instrument`, without "the" |
-
-All seven equity fixtures hold the *same* economic position — HDFC Bank at
-₹23.4567 crore — written in each AMC's own units, so `parsers.remaining.test.ts`
-asserts the identical `234567000` for all of them. That is deliberate: the
-market-value unit is the one per-AMC fact with **no** downstream check behind
-it. Weights, which every metric in `02` actually uses, stay correct under a unit
-mistake, and the 97–103% gate still passes at 100.00% — so a lakh/crore mix-up
-would ship a silently ×100-wrong `marketValue` and nothing else would notice.
+So `factsText.ts` and its fixtures are **unproven against real factsheets**, and
+the `0.01–3.0%` TER gate has only ever been exercised against invented text.
+That is the largest remaining gap in this adapter family.
 
 ## Adding a fixture
 
 `registry.test.ts` asserts that every registered adapter has a fixture folder
 with at least five files. Registering an AMC without fixtures fails the suite —
 by design (`CONTEXT.md §12`, "≥5 per parser").
+
+When an AMC changes format, **add a new dated real capture**
+(`portfolio-real-YYYY-MM.csv`) and bump that adapter's version rather than
+editing an existing capture in place. A capture is evidence of what the AMC
+published on a date; editing one destroys the evidence.

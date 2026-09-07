@@ -81,9 +81,67 @@ export interface AmcTableSpec {
    * weights sum and would fail an otherwise perfect snapshot.
    */
   ignoreNameRe: RegExp;
+  /**
+   * Rows that are SECTION HEADINGS EVEN THOUGH THEY CARRY NUMBERS.
+   *
+   * Added 2026-09-07 after diffing the ten parsers against real downloads. The
+   * original `looksLikeSection` rule — "a name and no numbers" — is true of
+   * SBI, HDFC, Nippon, Axis and Mirae, and FALSE of ICICI Pru, ABSL and UTI,
+   * which print each section's subtotal on the heading row itself:
+   *
+   *   Equity & Equity Related Instruments (Note -1) | | | | 5570801.45 | 74.72%
+   *   Listed / Awaiting Listing On Stock Exchanges  | | | | 5264555.66 | 70.61%
+   *
+   * Read as holdings, those two lines alone add ~145 percentage points to the
+   * weights sum, so the 97–103% gate rejects a file that is in fact perfect.
+   * That is the failure mode this whole exercise exists to catch: the parser
+   * and its synthetic fixture agreed with each other and not with the AMC.
+   *
+   * Matching rows are section state, never holdings — checked BEFORE the
+   * "does it carry numbers?" test, because for these AMCs it always does.
+   */
+  sectionNameRe?: RegExp;
+  /**
+   * The row that ends the holdings table. Everything below it is notes.
+   *
+   * Every one of the ten real disclosures terminates in a grand-total row and
+   * then continues with per-plan NAV tables, derivative disclosures, portfolio
+   * turnover, YTM/duration blocks and footnotes — and several of those trailing
+   * tables have their own numeric columns that land under the mapped header
+   * positions. Walking them produces junk holdings that are individually
+   * plausible and collectively fatal to the weights gate.
+   *
+   * Stopping at the grand total is safe precisely because it is universal:
+   * `GRAND TOTAL`, `GRAND TOTAL (AUM)`, `Grand Total`, `Total Net Assets` and
+   * UTI's `TOTAL : <scheme name>` all appear after the last real holding.
+   */
+  endOfTableRe?: RegExp;
   /** Patterns that extract the disclosure's own as-of date from the preamble. */
   asOfPatterns: readonly RegExp[];
 }
+
+/**
+ * Default end-of-table marker, covering all ten AMCs' real wording. A spec may
+ * override it, but none of the ten currently needs to.
+ */
+export const DEFAULT_END_OF_TABLE_RE =
+  /^(grand\s*total|total\s+net\s+assets|net\s+assets\s+total)\b/i;
+
+/**
+ * Structural rows to skip, covering all ten AMCs' real subtotal wording.
+ *
+ * Before the 2026-09-07 verification each parser carried its own near-identical
+ * copy of this, which is how a real difference hid: the ten real files use
+ * `Sub Total` (HDFC, Mirae), `Subtotal` (Nippon), `Total` (SBI, ABSL, DSP,
+ * Kotak, Axis) and `TOTAL:` / `TOTAL :` (UTI) — five spellings across ten
+ * parsers whose ten regexes were assumed to differ per AMC but did not.
+ *
+ * `total\b` deliberately matches as a PREFIX so that UTI's
+ * "TOTAL : UTI Retirement Fund" and ICICI Pru's "Total Net Assets" are both
+ * caught without enumerating scheme names.
+ */
+export const SHARED_IGNORE_NAME_RE =
+  /^(sub[\s-]*total|total\b|grand\s*total|net\s+assets?\b|notes?\s*[:&]|notes?$|footnote|disclaimer|\(?[a-z]\)?$)/i;
 
 export interface WalkResult {
   asOf: Date | null;
@@ -149,6 +207,63 @@ function cell(row: readonly string[], i: number | undefined): string {
 }
 
 /**
+ * Read the instrument name, tolerating a name column that is MERGED or INDENTED.
+ *
+ * Added 2026-09-07 from the real Kotak workbook, whose header merges A:C into a
+ * single "Name of Instrument" cell while the values sit in column C:
+ *
+ *   Name of Instrument | | | ISIN Code | Industry | Yield | Quantity | ...
+ *                      | | BHARAT PETROLEUM CORPORATION LTD. | INE029A01011 | ...
+ *
+ * `mapHeader` records the header's own column (0), so a plain `row[0]` read
+ * returns "" for every holding and the whole file becomes MISSING_NAME rows.
+ * ABSL and SBI indent similarly (values in column C under a header that starts
+ * at column C, with an internal security code in column B).
+ *
+ * The scan is bounded on the right by the next mapped column, so it can only
+ * ever pick up cells that belong to no other logical column — it cannot steal
+ * an ISIN or a quantity. Section headings, which are indented one level
+ * further than their holdings, are found by the same walk.
+ */
+function nameCell(row: readonly string[], index: ColumnIndex): string {
+  const start = index.name;
+  if (start === undefined) return '';
+  const direct = cell(row, start);
+  if (direct.length > 0) return direct;
+
+  // Right edge: the nearest other mapped column after the name column.
+  let limit = row.length;
+  for (const key of Object.keys(index) as (keyof AmcColumnAliases)[]) {
+    if (key === 'name') continue;
+    const at = index[key];
+    if (at !== undefined && at > start && at < limit) limit = at;
+  }
+  for (let c = start + 1; c < limit; c += 1) {
+    const v = cell(row, c);
+    if (v.length > 0) return v;
+  }
+  return '';
+}
+
+/**
+ * Does this row carry data in any column the header actually mapped?
+ *
+ * Used to tell "a row of the holdings table with a missing name" (a real data
+ * defect worth a row failure) from "a row that is not part of the holdings
+ * table at all". The real DSP workbook needs the distinction: a second,
+ * unrelated sector-allocation table is glued to the right of the holdings at
+ * columns K/L, and it outruns the holdings by dozens of rows. Those rows are
+ * not empty, so without this check every one of them is reported as a
+ * MISSING_NAME failure and the DLQ fills with noise that hides real defects.
+ */
+function hasMappedData(row: readonly string[], index: ColumnIndex): boolean {
+  for (const key of ['weight', 'marketValue', 'quantity', 'isin'] as const) {
+    if (cell(row, index[key]).length > 0) return true;
+  }
+  return false;
+}
+
+/**
  * A row with text in the name column and nothing in any numeric column is a
  * SECTION HEADING ("EQUITY & EQUITY RELATED", "DEBT INSTRUMENTS"). Carrying
  * that state down the rows is the single most important thing this walker
@@ -156,12 +271,25 @@ function cell(row: readonly string[], i: number | undefined): string {
  * a cosmetic error.
  */
 function looksLikeSection(row: readonly string[], index: ColumnIndex): boolean {
-  const name = cell(row, index.name);
+  const name = nameCell(row, index);
   if (name.length === 0) return false;
-  const weight = cell(row, index.weight);
-  const qty = cell(row, index.quantity);
-  const mv = cell(row, index.marketValue);
-  return weight.length === 0 && qty.length === 0 && mv.length === 0;
+  // "Empty" has to include the AMCs' explicit nil markers. SBI, Mirae and
+  // ICICI Pru print a section that holds nothing as the literal string "NIL" /
+  // "Nil" in the value and weight columns rather than leaving them blank:
+  //
+  //   MONEY MARKET INSTRUMENTS | | | | NIL | NIL
+  //
+  // Treating a non-empty "NIL" as a number-bearing row demoted every such
+  // heading to a holding, which then failed as UNPARSEABLE_WEIGHT — filling
+  // the DLQ with rows that are not defects, and worse, losing the section
+  // state that `classifyHoldingKind` needs for every row underneath it.
+  const blankish = (v: string): boolean =>
+    v.length === 0 || /^(nil|n\.?\s*a\.?|none|-+|–+|—+)$/i.test(v);
+  return (
+    blankish(cell(row, index.weight)) &&
+    blankish(cell(row, index.quantity)) &&
+    blankish(cell(row, index.marketValue))
+  );
 }
 
 /**
@@ -272,7 +400,35 @@ export function walkHoldingsTable(
 
     if (row.every((c) => c.trim().length === 0)) continue;
 
-    const name = cell(row, index.name);
+    const name = nameCell(row, index);
+
+    // The grand total ends the holdings table; everything below it is the
+    // notes/NAV/derivative trailer that every real disclosure carries. Break,
+    // do not `continue`, or those trailing tables get walked as holdings.
+    const endRe = spec.endOfTableRe ?? DEFAULT_END_OF_TABLE_RE;
+    if (endRe.test(name)) break;
+
+    // Section headings that carry their own subtotal (ICICI Pru) must be
+    // recognised as headings BEFORE the numeric test below, because for those
+    // AMCs the numeric test can never identify them.
+    //
+    // The ISIN/quantity guard is what makes this safe. ICICI Pru uses the SAME
+    // string for a heading and for the instruments underneath it:
+    //
+    //   Government Securities |              | | 557364.14 | 7.47%   <- heading
+    //   Government Securities | IN0020250018 | 87500000 | 80000.90 | 1.07%  <- holding
+    //
+    // A name-only rule would delete every government bond in the fund. A real
+    // instrument always carries an ISIN or a quantity; a heading never does.
+    if (
+      spec.sectionNameRe !== undefined &&
+      spec.sectionNameRe.test(name) &&
+      cell(row, index.isin).length === 0 &&
+      cell(row, index.quantity).length === 0
+    ) {
+      section = name;
+      continue;
+    }
 
     if (spec.ignoreNameRe.test(name)) continue;
 
@@ -282,6 +438,11 @@ export function walkHoldingsTable(
     }
 
     if (name.length === 0) {
+      // Only a row inside the holdings table can be "missing" a name. A row
+      // with nothing in any mapped column belongs to a side table (DSP glues a
+      // sector-allocation grid to the right of the holdings) and is skipped
+      // silently rather than reported as a defect it is not.
+      if (!hasMappedData(row, index)) continue;
       rowFailures.push({
         rowIndex,
         raw: row.join(' | '),

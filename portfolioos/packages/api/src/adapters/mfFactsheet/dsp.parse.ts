@@ -71,7 +71,7 @@
 
 import { assembleFacts } from './factsText.js';
 import type { AmcFactsSpec } from './factsText.js';
-import { assemblePortfolio } from './holdingsTable.js';
+import { assemblePortfolio, SHARED_IGNORE_NAME_RE } from './holdingsTable.js';
 import type { AmcTableSpec } from './holdingsTable.js';
 import type {
   MfFactsheetResult,
@@ -87,21 +87,27 @@ export const DSP_ADAPTER_VERSION = '1.0.0';
 
 export const DSP_TABLE_SPEC: AmcTableSpec = {
   amcCode: DSP_AMC_CODE,
+  // VERIFIED 2026-09-07: "Market value (Rs. In lakhs)" — capital "I" in "In".
   marketValueUnit: 'LAKH',
   columns: {
-    name: ['nameofinstrument', 'nameoftheinstrument', 'instrumentname'],
+    // VERIFIED: "Name of Instrument", without "the".
+    name: ['nameofinstrument', 'nameoftheinstrument'],
     isin: ['isin'],
-    industryOrRating: ['industryrating', 'industry', 'rating'],
+    // VERIFIED: "Rating/Industry" — rating first.
+    industryOrRating: ['ratingindustry', 'industryrating', 'industry', 'rating'],
     quantity: ['quantity', 'qty'],
-    marketValue: ['marketvalue', 'marketfairvalue', 'fairvalue'],
+    marketValue: ['marketvalue', 'marketfairvalue'],
+    // VERIFIED: "% to Net Assets".
     weight: ['tonetassets', 'tonav', 'toaum'],
-    ytm: ['ytm', 'yieldtomaturity'],
+    // VERIFIED: "YTM (%)" and a real "Maturity Date" column — DSP is the only
+    // one of the ten that discloses maturity in the monthly portfolio itself.
+    ytm: ['ytm', 'yield'],
     maturity: ['maturitydate', 'maturity'],
   },
-  ignoreNameRe:
-    /^(sub[\s-]*total|total|grand\s*total|net\s+assets?\b|notes?\b|footnote|disclaimer|\(?[a-z]\)?$)/i,
+  ignoreNameRe: SHARED_IGNORE_NAME_RE,
   asOfPatterns: [
-    /Portfolio Statement as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
+    // VERIFIED: "Portfolio as on July 31, 2026".
+    /Portfolio as on\s+([A-Za-z]{3,9}\.? \d{1,2},?\s*\d{2,4})/i,
     /as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
   ],
 };

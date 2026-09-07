@@ -65,7 +65,7 @@
 
 import { assembleFacts } from './factsText.js';
 import type { AmcFactsSpec } from './factsText.js';
-import { assemblePortfolio } from './holdingsTable.js';
+import { assemblePortfolio, SHARED_IGNORE_NAME_RE } from './holdingsTable.js';
 import type { AmcTableSpec } from './holdingsTable.js';
 import type {
   MfFactsheetResult,
@@ -81,22 +81,36 @@ export const ICICI_ADAPTER_VERSION = '1.0.0';
 
 export const ICICI_TABLE_SPEC: AmcTableSpec = {
   amcCode: ICICI_AMC_CODE,
+  // VERIFIED 2026-09-07: "Exposure/Market Value(Rs.Lakh)".
   marketValueUnit: 'LAKH',
   columns: {
-    name: ['companyissuerinstrumentname', 'companyissuer', 'nameoftheinstrument', 'instrumentname'],
+    // VERIFIED: ICICI Pru does not use "Name of the Instrument" at all.
+    name: ['companyissuerinstrumentname', 'nameoftheinstrument', 'nameofinstrument'],
     isin: ['isin'],
-    industryOrRating: ['industryrating', 'industry', 'rating'],
+    industryOrRating: ['industryrating', 'ratingindustry', 'industry', 'rating'],
     quantity: ['quantity', 'qty'],
-    marketValue: ['exposuremarketvalue', 'marketvalue'],
+    // VERIFIED: "Exposure/Market Value(Rs.Lakh)" -> "exposuremarketvaluerslakh".
+    marketValue: ['exposuremarketvalue', 'marketvalue', 'marketfairvalue'],
+    // VERIFIED: "% to Nav".
     weight: ['tonav', 'tonetassets', 'toaum'],
-    ytm: ['yieldtocallmaturity', 'yieldoftheinstrument', 'ytm'],
+    // VERIFIED: "Yield of the instrument".
+    ytm: ['yieldoftheinstrument', 'ytm', 'yield'],
     maturity: ['maturitydate', 'maturity'],
   },
-  ignoreNameRe:
-    /^(sub[\s-]*total|total|grand\s*total|net\s+assets?\b|notes?\b|footnote|disclaimer|\(?[a-z]\)?$)/i,
+  ignoreNameRe: SHARED_IGNORE_NAME_RE,
+  // ICICI Pru prints every section's subtotal ON the heading row, so the
+  // "a name and no numbers" rule cannot see these. Counted as holdings they
+  // push the weights sum to roughly 200% and the file is rejected whole.
+  //
+  // TREPS, "Cash Margin - Derivatives" and "Net Current Assets" are
+  // deliberately ABSENT from this list: they are leaf CASH holdings, and
+  // treating them as headings would silently zero cashPct.
+  sectionNameRe:
+    /^(equity\s*&\s*equity\s*related|listed\s*\/\s*awaiting\s*listing|unlisted|privately\s*placed|units of (real estate|infrastructure|an alternative)|compulsory convertible debenture|non-?convertible debentures?|debt instruments|government securities|securiti[sz]ed debt|term deposits|deposits\s*\(|money market instruments|certificate of deposits|treasury bills|others$|interest rate swaps|details of stock future)/i,
   asOfPatterns: [
-    /Portfolio Statement as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
-    /as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
+    // VERIFIED: "Portfolio as on Jul 31,2026" — no space after the comma.
+    /Portfolio as on\s+([A-Za-z]{3,9}\.? \d{1,2},?\s*\d{2,4})/i,
+    /Portfolio as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
   ],
 };
 

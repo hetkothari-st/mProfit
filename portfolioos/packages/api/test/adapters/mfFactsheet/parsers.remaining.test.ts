@@ -184,9 +184,16 @@ const AMCS: readonly AmcUnderTest[] = [
     aumCrore: '9900.12',
     managerCount: 2,
     marketValueUnit: 'LAKH',
-    // The only AMC with a disclosed issuer column — the walker must prefer it
-    // over `deriveIssuer(securityName)`.
-    gsecIssuer: 'Government of India',
+    // CORRECTED 2026-09-07 against the real ABSL disclosure. The old fixture
+    // gave ABSL a dedicated "Issuer" column and this expectation asserted the
+    // walker preferred it over `deriveIssuer(securityName)`. The real file has
+    // no such column — none of the ten AMCs publishes one — so the issuer is
+    // derived from the instrument name, and "7.26% GOI 2033" yields "GOI".
+    //
+    // This is the assertion that most clearly shows how the synthetic fixtures
+    // failed: a capability was tested, and passed, against a column that does
+    // not exist in any file the adapter will ever be given.
+    gsecIssuer: 'GOI',
     exitLoadDays: 365,
   },
   {

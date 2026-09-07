@@ -68,7 +68,7 @@
 
 import { assembleFacts } from './factsText.js';
 import type { AmcFactsSpec } from './factsText.js';
-import { assemblePortfolio } from './holdingsTable.js';
+import { assemblePortfolio, SHARED_IGNORE_NAME_RE } from './holdingsTable.js';
 import type { AmcTableSpec } from './holdingsTable.js';
 import type {
   MfFactsheetResult,
@@ -84,23 +84,29 @@ export const AXIS_ADAPTER_VERSION = '1.0.0';
 
 export const AXIS_TABLE_SPEC: AmcTableSpec = {
   amcCode: AXIS_AMC_CODE,
-  // ⚠ RUPEE — no scaling. See the header note.
-  marketValueUnit: 'RUPEE',
+  // VERIFIED 2026-09-07: "Market/Fair Value (Rs. in Lakhs)".
+  //
+  // The synthetic fixture assumed plain RUPEES with no scaling — a 100,000x
+  // error on every stored market value.
+  marketValueUnit: 'LAKH',
   columns: {
-    name: ['nameoftheinstrument', 'instrumentname', 'nameofinstrument'],
+    name: ['nameoftheinstrument', 'nameofinstrument'],
     isin: ['isin'],
-    industryOrRating: ['industryrating', 'industry', 'rating'],
+    // VERIFIED: equity sheets head this column "Industry", debt sheets
+    // "Rating". One spec serves both because both aliases are listed.
+    industryOrRating: ['industryrating', 'ratingindustry', 'industry', 'rating'],
     quantity: ['quantity', 'qty'],
-    marketValue: ['marketvalue', 'marketfairvalue', 'fairvalue'],
-    weight: ['tonav', 'tonetassets', 'toaum'],
-    ytm: ['ytm', 'yieldtomaturity'],
+    marketValue: ['marketfairvalue', 'marketvalue'],
+    // VERIFIED: "% to Net Assets" (the real cell carries an embedded newline,
+    // which headerKey strips).
+    weight: ['tonetassets', 'tonav', 'toaum'],
+    ytm: ['ytm', 'yield'],
     maturity: ['maturitydate', 'maturity'],
   },
-  ignoreNameRe:
-    /^(sub[\s-]*total|total|grand\s*total|net\s+assets?\b|notes?\b|footnote|disclaimer|\(?[a-z]\)?$)/i,
+  ignoreNameRe: SHARED_IGNORE_NAME_RE,
   asOfPatterns: [
-    /Portfolio Statement as on\s+([A-Za-z]{3,9}\.? \d{1,2},? \d{4})/i,
-    /as on\s+([A-Za-z]{3,9}\.? \d{1,2},? \d{4})/i,
+    // VERIFIED: "Monthly Portfolio Statement as on July 31, 2026".
+    /Portfolio Statement as on\s+([A-Za-z]{3,9}\.? \d{1,2},?\s*\d{2,4})/i,
     /as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
   ],
 };

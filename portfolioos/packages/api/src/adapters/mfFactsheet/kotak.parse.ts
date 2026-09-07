@@ -53,7 +53,7 @@
 
 import { assembleFacts } from './factsText.js';
 import type { AmcFactsSpec } from './factsText.js';
-import { assemblePortfolio } from './holdingsTable.js';
+import { assemblePortfolio, SHARED_IGNORE_NAME_RE } from './holdingsTable.js';
 import type { AmcTableSpec } from './holdingsTable.js';
 import type {
   MfFactsheetResult,
@@ -69,26 +69,31 @@ export const KOTAK_ADAPTER_VERSION = '1.0.0';
 
 export const KOTAK_TABLE_SPEC: AmcTableSpec = {
   amcCode: KOTAK_AMC_CODE,
-  // ⚠ CRORE. See the header note — getting this wrong is a silent ×100 error.
-  marketValueUnit: 'CRORE',
+  // VERIFIED 2026-09-07: "Market Value (Rs.in Lacs)".
+  //
+  // The synthetic fixture assumed CRORE. That is a 100x error on every stored
+  // market value, and exactly the kind no downstream check catches: weights,
+  // which every metric in 02 actually uses, stay correct either way.
+  marketValueUnit: 'LAKH',
   columns: {
-    name: ['nameoftheinstrument', 'instrumentname', 'nameofinstrument'],
-    isin: ['isin'],
-    industryOrRating: ['industryrating', 'industry', 'rating'],
+    // VERIFIED: "Name of Instrument", in a header cell MERGED across A:C while
+    // the values sit in column C. `nameCell` in holdingsTable.ts resolves that.
+    name: ['nameofinstrument', 'nameoftheinstrument'],
+    // VERIFIED: "ISIN Code".
+    isin: ['isincode', 'isin'],
+    industryOrRating: ['industryrating', 'ratingindustry', 'industry', 'rating'],
     quantity: ['quantity', 'qty'],
-    marketValue: ['marketvalue', 'marketfairvalue', 'fairvalue'],
+    marketValue: ['marketvalue', 'marketfairvalue'],
+    // VERIFIED: "% to Net Assets".
     weight: ['tonetassets', 'tonav', 'toaum'],
-    ytm: ['ytm', 'yieldtomaturity'],
+    ytm: ['yield', 'ytm'],
     maturity: ['maturitydate', 'maturity'],
   },
-  ignoreNameRe:
-    /^(sub[\s-]*total|total|grand\s*total|net\s+assets?\b|notes?\b|footnote|disclaimer|\(?[a-z]\)?$)/i,
+  ignoreNameRe: SHARED_IGNORE_NAME_RE,
   asOfPatterns: [
-    // Numeric first — it is Kotak's own form. The alphabetic-month variants are
-    // kept as a fallback because a single AMC's PDF cover page and its workbook
-    // preamble do not always agree on the format.
-    /Portfolio Statement as on\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
-    /as on\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
+    // VERIFIED: "Portfolio of Kotak <scheme> as on 31-Jul-2026" — the scheme
+    // name sits INSIDE the sentence.
+    /Portfolio of .+? as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
     /as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
   ],
 };

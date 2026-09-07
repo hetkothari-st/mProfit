@@ -64,7 +64,7 @@
 
 import { assembleFacts } from './factsText.js';
 import type { AmcFactsSpec } from './factsText.js';
-import { assemblePortfolio } from './holdingsTable.js';
+import { assemblePortfolio, SHARED_IGNORE_NAME_RE } from './holdingsTable.js';
 import type { AmcTableSpec } from './holdingsTable.js';
 import type {
   MfFactsheetResult,
@@ -86,24 +86,28 @@ export const SBI_ADAPTER_VERSION = '1.0.0';
 
 export const SBI_TABLE_SPEC: AmcTableSpec = {
   amcCode: SBI_AMC_CODE,
-  // "Market value (Rs. in Lakhs)" — see the layout note above.
+  // VERIFIED 2026-09-07: "Market value (Rs. in Lakhs)".
   marketValueUnit: 'LAKH',
   columns: {
-    name: ['nameoftheinstrument', 'instrumentname', 'nameofinstrument'],
+    // VERIFIED: "Name of the Instrument / Issuer" -> "nameoftheinstrumentissuer".
+    name: ['nameoftheinstrumentissuer', 'nameoftheinstrument', 'nameofinstrument'],
     isin: ['isin'],
-    industryOrRating: ['industryrating', 'industry', 'rating'],
+    // VERIFIED: SBI writes "Rating / Industry^" — rating FIRST.
+    industryOrRating: ['ratingindustry', 'industryrating', 'industry', 'rating'],
     quantity: ['quantity', 'qty'],
     marketValue: ['marketvalue', 'marketfairvalue'],
-    // SBI writes "% to AUM"; `headerKey` strips the "%" so the key is "toaum".
+    // VERIFIED: "% to AUM". headerKey strips the "%", leaving "toaum".
     weight: ['toaum', 'tonav', 'tonetassets'],
     ytm: ['ytm', 'yieldtomaturity'],
     maturity: ['maturitydate', 'maturity'],
   },
-  ignoreNameRe:
-    /^(sub[\s-]*total|total|grand\s*total|net\s+assets?\b|notes?\b|footnote|disclaimer|\(?[a-z]\)?$)/i,
+  ignoreNameRe: SHARED_IGNORE_NAME_RE,
   asOfPatterns: [
-    /Portfolio Statement as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
-    /as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
+    // VERIFIED: "PORTFOLIO STATEMENT AS ON :" with "July 31, 2026" in the NEXT
+    // CELL, which the walker joins with a space.
+    /PORTFOLIO STATEMENT AS ON\s*:?\s*([A-Za-z]{3,9}\.? \d{1,2},?\s*\d{2,4})/i,
+    /PORTFOLIO STATEMENT AS ON\s*:?\s*(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
+    /as on\s+([A-Za-z]{3,9}\.? \d{1,2},?\s*\d{2,4})/i,
   ],
 };
 

@@ -163,8 +163,13 @@ export function parseFactsheetDate(raw: string | null | undefined): Date | null 
     if (month !== undefined) return utcDate(expandYear(dmy[3] ?? ''), month, Number.parseInt(dmy[1] ?? '', 10));
   }
 
-  // March 31, 2026 | Mar 31 2026
-  const mdy = s.match(/^([A-Za-z]{3,9})\.? (\d{1,2}),? (\d{2}|\d{4})$/);
+  // March 31, 2026 | Mar 31 2026 | Jul 31,2026
+  // The space after the comma is optional: ICICI Pru writes "Portfolio as on
+  // Jul 31,2026" and Nippon "as on July 31,2026" — both closed up — while SBI,
+  // Axis, ABSL, Mirae and DSP write the same date with the space. Requiring it
+  // silently dropped the as-of for two of the ten AMCs, which is a hard
+  // MALFORMED_INPUT failure rather than a wrong value, but a failure all the same.
+  const mdy = s.match(/^([A-Za-z]{3,9})\.? (\d{1,2}),?\s*(\d{2}|\d{4})$/);
   if (mdy) {
     const month = MONTHS[(mdy[1] ?? '').slice(0, 4).toLowerCase()] ?? MONTHS[(mdy[1] ?? '').slice(0, 3).toLowerCase()];
     if (month !== undefined) return utcDate(expandYear(mdy[3] ?? ''), month, Number.parseInt(mdy[2] ?? '', 10));
