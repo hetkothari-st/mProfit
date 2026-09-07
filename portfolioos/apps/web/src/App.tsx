@@ -19,6 +19,7 @@ import { MutualFundsPage } from './pages/assetClasses/MutualFundsPage';
 import { FundDetailPage } from './pages/mf/FundDetailPage';
 import { MfPortfolioPage } from './pages/mf/MfPortfolioPage';
 import { MethodologyPage } from './pages/mf/MethodologyPage';
+import { QualitativeFactsAdminPage } from './pages/mf/QualitativeFactsAdminPage';
 import { ImportPage } from './pages/imports/ImportPage';
 import { FailuresPage } from './pages/imports/FailuresPage';
 import { ConnectorsPage } from './pages/connectors/ConnectorsPage';
@@ -126,6 +127,13 @@ export function App() {
             entitlement-gated: a reader has to be able to judge what a rating
             means before paying for the plan that shows them ratings. */}
         <Route path="/methodology/mf-score" element={<MethodologyPage />} />
+        {/* Admin-only entry surface for MfSchemeQualitativeFact (Task 6.2).
+            Under /admin rather than /mutual-funds because it is not a view of
+            the caller's book: it writes shared reference data that changes
+            every user's scores. The real gate is requireRole('ADMIN') on the
+            server; the page's own role check only avoids showing a form whose
+            every request would 401. */}
+        <Route path="/admin/mf-qualitative-facts" element={<QualitativeFactsAdminPage />} />
         <Route path="/fo" element={<FuturesOptionsPage />} />
         <Route path="/bonds" element={<BondsPage />} />
         <Route path="/fds" element={<FixedDepositsPage />} />

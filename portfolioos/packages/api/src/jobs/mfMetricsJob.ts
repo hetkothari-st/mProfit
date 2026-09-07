@@ -68,7 +68,21 @@ export const MF_METRICS_ADAPTER_ID = 'mf.metrics';
  * Bull queue the chunk is the unit that must fit, and the number has to already
  * be right.
  */
-export const CHUNK_SIZE = 100;
+/**
+ * Schemes per chunk.
+ *
+ * Lowered from 100 to 45 after the Phase 6 load test measured the real
+ * per-scheme cost: 100 exceeded the supported ceiling of 90 at p95, leaving
+ * only a 6.6% CPU-slowdown margin before the median chunk misses
+ * CHUNK_BUDGET_MS and 12.6% before a chunk outlives the 5-minute Bull lock.
+ * The job is CPU-bound, so the exposure is a production core slower than the
+ * desktop it was measured on -- which is the likely case, not the unlikely one.
+ *
+ * 45 buys roughly 2x margin and costs nothing: chunks run sequentially, so the
+ * total run time is unchanged by how it is divided. See docs/mf-analytics/
+ * LOAD-TEST.md for the measurements.
+ */
+export const CHUNK_SIZE = 45;
 
 /** Four minutes: a chunk that exceeds this would be at risk under a 5-min lock. */
 const CHUNK_BUDGET_MS = 4 * 60 * 1000;
@@ -292,7 +306,8 @@ export async function runMfMetricsJob(
 }
 
 /**
- * Scheduler. 22:30 IST daily — after the AMFI NAV import (22:00, `01 §5`) so
+ * Scheduler. 23:15 IST daily — after mfNavAdjustmentJob (22:30), which is
+ * itself after the AMFI NAV import (22:00, `01 §5`) so
  * today's NAV is in `MFNav` before the series is read, and before the
  * net-worth snapshot at 23:45 which reads nothing from here but shares the box.
  */
@@ -334,5 +349,5 @@ export function startMfMetricsJob(): void {
     },
     { timezone: TZ },
   );
-  logger.info('[cron] scheduled: mf metrics @22:30 IST');
+  logger.info('[cron] scheduled: mf metrics @23:15 IST');
 }

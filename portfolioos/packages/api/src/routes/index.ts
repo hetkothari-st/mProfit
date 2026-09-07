@@ -27,6 +27,7 @@ import { mfCasMailbackRouter } from './mfCasMailback.routes.js';
 import { mfCasparserRouter } from './mfCasparser.routes.js';
 import { mfAnalyticsRouter } from './mfAnalytics.routes.js';
 import { mfPortfolioRouter } from './mfPortfolio.routes.js';
+import { mfQualitativeFactsRouter } from './mfQualitativeFacts.routes.js';
 import { foRouter } from './fo.routes.js';
 import { catalogRouter, valuationRouter } from './valuation.routes.js';
 import { documentsRouter } from './documents.routes.js';
@@ -85,6 +86,11 @@ export function registerRoutes(app: Express): void {
   // the deliberately un-gated `/methodology` route before it was ever reached.
   app.use('/api/mf-analytics', mfPortfolioRouter);
   app.use('/api/mf-analytics', mfAnalyticsRouter);
+  // Separate mount, and deliberately NOT under `/api/mf-analytics`: this is the
+  // ADMIN write surface over shared reference data, gated by role rather than by
+  // the MF_ANALYTICS plan entitlement. See the router header for why the two
+  // gates must not be conflated.
+  app.use('/api/admin/mf-qualitative-facts', mfQualitativeFactsRouter);
   app.use('/api/fo', foRouter);
   app.use('/api/catalog', catalogRouter);
   app.use('/api/valuations', valuationRouter);

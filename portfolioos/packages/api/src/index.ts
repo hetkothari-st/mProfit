@@ -32,6 +32,7 @@ import { startRiskFreeRateJob } from './jobs/riskFreeRateJob.js';
 import { startMfReconciliationJob } from './jobs/mfReconciliationJob.js';
 import { startMfAnalysisJob } from './jobs/mfAnalysisJob.js';
 import { startMfProseJob } from './jobs/mfProseJob.js';
+import { startMfOpsAlertsJob } from './jobs/mfOpsAlertsJob.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 
@@ -163,6 +164,13 @@ const server = app.listen(env.PORT, '::', () => {
    */
   startMfAnalysisJob();
   startMfProseJob();
+  /**
+   * The `06 §7` operational alerts that have no natural home inside a single
+   * job -- the cross-job rates (analysis PARTIAL rate, prose verification
+   * failure rate) that can only be measured after the fact. Runs late enough
+   * to see a full night's pipeline.
+   */
+  startMfOpsAlertsJob();
   startMfNavAdjustmentJob();
   startMfMetricsJob();
   startMfPeerRankJob();

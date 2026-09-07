@@ -64,7 +64,11 @@ export const MF_PEER_RANK_ADAPTER_ID = 'mf.peerRank';
  * sits comfortably inside a 5-minute window even at the high end, with room
  * for a slow category to overrun without dragging the slice past the lock.
  */
-export const UNIVERSE_CHUNK_SIZE = 8;
+/**
+ * Universes per slice. 7, not 8: the Phase 6 load test put the supported
+ * ceiling at 7 for the slice budget. See docs/mf-analytics/LOAD-TEST.md.
+ */
+export const UNIVERSE_CHUNK_SIZE = 7;
 
 /**
  * Wall-clock ceiling for one slice. Half the 5-minute lock, so a slice that
@@ -223,7 +227,7 @@ export function startMfPeerRankJob(): void {
     logger.info('[cron] mf peer rank job disabled via ENABLE_MF_PEER_RANK_CRON=false');
     return;
   }
-  // 23:00 IST — after mfMetricsJob at 22:30, which is itself after the AMFI
+  // 00:30 IST — after mfMetricsJob at 23:15, which is itself after the AMFI
   // NAV import at 22:00. Ranking before the metrics land would rank today's
   // universe against yesterday's numbers for exactly the schemes whose metrics
   // had not yet been rewritten.
@@ -234,5 +238,5 @@ export function startMfPeerRankJob(): void {
   // 10-25 minutes; 75 minutes leaves real headroom. Starting early would not
   // error — it would silently rank against a partial universe, which is worse.
   cron.schedule('30 0 * * *', () => void runMfPeerRankJob(), { timezone: TZ });
-  logger.info('[cron] scheduled: mf peer rank @23:00 IST');
+  logger.info('[cron] scheduled: mf peer rank @00:30 IST');
 }

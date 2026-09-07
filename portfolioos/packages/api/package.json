@@ -18,7 +18,8 @@
     "seed:fmv": "tsx src/scripts/seedFmv.ts",
     "fmv:coverage": "tsx src/scripts/fmvCoverage.ts",
     "mf-category:coverage": "tsx src/scripts/mfCategoryCoverage.ts",
-    "backfill:net-worth-history": "tsx src/scripts/backfillNetWorthHistory.ts"
+    "backfill:net-worth-history": "tsx src/scripts/backfillNetWorthHistory.ts",
+    "loadtest:mf-metrics": "tsx src/scripts/mfMetricsLoadTest.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

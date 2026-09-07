@@ -673,6 +673,84 @@ EPF, PPF, bonds, G-Sec, credit cards, F&O, post office or property — those are
 `AiUsage` cap. `ANTHROPIC_ZERO_RETENTION_CONFIRMED` is an explicit env
 acknowledgement.
 
+### 9.13 MF analytics (`/mutual-funds/:schemeCode`, `MF_ANALYTICS`, PLUS)
+
+A research layer over the MF holdings the three paths in §9.4 produce: a 0–100
+score and 1–5 rating per scheme against its SEBI category, a quantitative
+profile across 1/3/5/7/10-year horizons, portfolio-level look-through, and
+typed findings with a per-fund verdict. **Deterministic rules over immutable
+facts; the LLM only writes prose** — the same architecture as §9.8, for the
+same reason, and it reuses that engine's shape rather than inventing another.
+
+Eight design docs live in `docs/mf-analytics/`; `00-README.md` is the entry
+point and `07-IMPLEMENTATION-PLAN.md` is the work queue. What follows is the
+map, not a summary of them.
+
+- `services/mfAnalytics/` — `mfMetricsMath.ts` (pure Decimal metric functions),
+  `mfMetrics.service.ts`, `mfPeerRank.service.ts`, `mfPortfolioAnalysis.service.ts`
+  (extends `mfOverlap.service.ts`, reuses `capitalGains.service.ts` and
+  `goalMath.ts` rather than re-deriving them), `mfScoring/` (per-category weight
+  tables as data, plus `mfScoreMath.ts`), `mfFacts.builder.ts`, `rules/`
+  (33 rules + a registry), `mfVerdict.ts` (a decision table, not branching
+  code), `mfAnalysisEngine.service.ts`.
+- **Reference vs user data is the fault line.** `MfSchemeMeta`, `MFNav`,
+  `BenchmarkIndexPrice`, `MfSchemeMetrics`, `MfPeerRank`, `MfSchemeScore`,
+  `MfSchemeQualitativeFact` are shared market data — deliberately absent from
+  `USER_SCOPED_MODELS`, no RLS. `MfAnalysisRun`, `MfFinding`, `MfFundVerdict`
+  are user data with policy **and** registration (§5). Two invariant tests
+  assert this from both directions, because a reference table wrongly behind a
+  policy returns zero rows to every job and looks like a broken feed.
+- **Jobs** (`src/jobs/`, exported as named starters and called from `index.ts`,
+  like everything else in §10): a nightly reference chain — `benchmarkPriceJob`
+  20:00, `mfNavAdjustmentJob` 22:30, `mfMetricsJob` 23:15, `mfPeerRankJob`
+  00:30 — plus `riskFreeRateJob` weekly, `mfMetadataJob` monthly,
+  `mfReconciliationJob` on the 5th, and `mfOpsAlertsJob` at 06:30 (starter
+  exported, not yet wired) for the two `06 §7` operational alerts that belong to
+  no single run; the other four live inside the job whose output they watch,
+  which already holds the numbers. `mfAnalysisJob` alone has **no clock**: it is
+  triggered by a holdings change, a new score, or a user refresh (1/hour), and
+  coalesces bursts through a per-user map. A nightly sweep was rejected because
+  verdict rows are append-only advice records, and manufacturing them on a timer
+  fills a user's audit trail with conclusions drawn from data that had not moved.
+  **Of the three triggers only the user refresh is connected today**:
+  `onMfHoldingsChanged` and `onMfSchemeScoresUpdated` are exported and tested
+  but have no call site, so in practice an analysis happens only when somebody
+  presses the button.
+- **Two gates that must not be conflated.** `MF_ANALYTICS` (PLUS) decides who
+  may *read* research. `RIA_VERDICTS_ENABLED` (env, default `false`) decides
+  whether this deployment may *advise*: with it false the API still computes and
+  stores verdicts for the audit trail but downgrades `SWITCH_CANDIDATE` to
+  `REVIEW`, strips the suggested replacement, and forbids imperatives in the
+  prose prompt. **It must stay `false` in production until an RIA registration
+  is confirmed. Flipping it is a legal decision, not a deploy-config tidy-up.**
+- **No `SWITCH_CANDIDATE` can be issued today, gate or no gate.**
+  `REPLACEMENT_EXPECTED_EDGE` in `services/mfAnalytics/constants.ts` is `null`
+  and stays `null` until Task 2.7's backtest produces a regression coefficient
+  of forward excess return on composite gap. Without it `breakEvenMonths`
+  (`05 §5`) cannot be computed, the switch row cannot match, and those funds
+  fall through to `REVIEW`. The committed report at
+  `docs/mf-analytics/backtests/score-active-equity-v1.md` is a **refusal**: the
+  local database has no NAV history, so nothing was measured and no threshold
+  was evaluated. Telling a real person to sell a real fund on an unmeasured
+  edge is the failure this null prevents; do not seed it with a plausible number.
+- **The scorer has no writer yet.** `mfScoring/` computes pillars, composites
+  and ratings and is fully tested, but nothing in `src/` writes an
+  `MfSchemeScore` row — Task 2.5's `mfScore.service.ts` / `mfScoreJob` do not
+  exist, and the two persistence cases are `it.todo` in `mfScoreMath.test.ts` so
+  the gap stays visible rather than passing as coverage. Everything downstream
+  reads the table and degrades honestly when it is empty (unrated states,
+  `INSUFFICIENT_DATA` findings), which is why the absence is easy to miss.
+- Every score, verdict and prose block is persisted with `factsSnapshot`,
+  `ruleVersionsSnapshot` and `methodologyVersion` — the record-keeping SEBI
+  expects of an adviser, and the reason "why was X *not* flagged?" is
+  answerable. `/methodology/mf-score` renders the weight tables from the
+  scorer's own constants over the wire, so a weight change shows on the page
+  with no other edit; a hand-copied table would describe a scorer that no longer
+  exists to exactly the audience with no other way to check.
+- `docs/mf-analytics/METHODOLOGY-CHANGELOG.md` records every version bump and
+  the calibration decisions the spec left open. `LOAD-TEST.md` records the
+  measured per-scheme cost behind `mfMetricsJob`'s chunk size.
+
 ---
 
 ## 10. Price feeds & jobs
@@ -698,7 +776,11 @@ acknowledgement.
 `importWorker`, `gmailScanWorker`, `mailboxPoller`, `vehicleJobs`, `catalogJobs`,
 `rentalJobs`, `insuranceJobs`, `alertJobs`, `netWorthSnapshotJob`,
 `foExpiryClose.job`, `pfFetchWorker`, `pfNudgeJob`, `corporateActionApplyJob`,
-`startupSync` (fire-and-forget so boot stays responsive).
+`startupSync` (fire-and-forget so boot stays responsive), and the MF analytics
+chain — `benchmarkPriceJob`, `riskFreeRateJob`, `mfMetadataJob`,
+`mfNavAdjustmentJob`, `mfMetricsJob`, `mfPeerRankJob`, `mfReconciliationJob`,
+`mfAnalysisJob`, `mfProseJob` (§9.13), plus `mfOpsAlertsJob`, whose starter is
+exported and awaiting registration.
 
 Bull config (`lib/queue.ts`): `JOB_TIMEOUT_MS` and `LOCK_DURATION_MS` both 5 min.
 The lock must exceed realistic wall-clock or Bull treats the job as stalled and
@@ -879,3 +961,37 @@ Highest-value rules, in order:
 9. **Never silently swallow an error.** DLQ, log, rethrow, or typed failure.
 10. **Run the suite in the background** — it takes ~26 minutes and is sequential
     by design.
+
+### If you are touching the MF analytics layer (§9.13)
+
+These are additional, not replacements. Full statements in
+`docs/mf-analytics/00-README.md`; the ones below are the ones that get violated.
+
+11. **Fund data is reference data; a user's analysis is user data.** Adding a
+    scheme-level table to `USER_SCOPED_MODELS` is as much a defect as leaving a
+    user-level one out — under the `NOBYPASSRLS` role a policied reference table
+    returns zero rows to every job and reads as a dead feed, not as a
+    misconfiguration.
+12. **No rating under 36 months of history, and none in a category of fewer
+    than 10 peers.** `rating: null` with a `ratingStatus` that says which.
+    Interpolating a rating from a short record is the failure this prevents.
+13. **Every metric carries `asOf` and `status`.** A non-`OK` status renders as
+    "not available — {reason}", never as 0 and never as a bare dash. Same
+    pattern as `cii_unavailable` in `capitalGains.service.ts`.
+14. **Rules never query.** They receive `MfAnalysisFacts` and return
+    `MfFinding[]`. A rule that needs data the facts do not carry is a
+    facts-builder change. A rule that can query is a rule that cannot be
+    unit-tested without a database.
+15. **Prose never introduces a number.** Every numeric token in generated prose
+    must appear in the findings it came from; verification failure means the
+    deterministic headlines are shown and no error reaches the user.
+16. **Scores and verdicts are append-only.** A re-run writes a new row carrying
+    its `methodologyVersion`; a changed verdict supersedes rather than edits.
+    A figure a user was shown is never rewritten.
+17. **Benchmarks are Total Return Indices.** A price-return index is rejected at
+    ingest — alpha measured against a PRI is systematically overstated, which is
+    a bug that flatters every fund.
+18. **`RIA_VERDICTS_ENABLED` stays `false` until an RIA registration is
+    confirmed,** and `REPLACEMENT_EXPECTED_EDGE` stays `null` until the Task 2.7
+    backtest measures it. Neither is a config tidy-up; both gate telling a real
+    person to sell a real fund.

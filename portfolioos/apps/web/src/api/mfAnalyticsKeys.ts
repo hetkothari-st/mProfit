@@ -119,4 +119,23 @@ export const mfAnalyticsKeys = {
    * rather than load-bearing.
    */
   methodology: () => ['mf-analytics', 'methodology'] as const,
+
+  /**
+   * Admin-curated qualitative facts (`Task 6.2`).
+   *
+   * Kept OUTSIDE `scheme()` even though every row names a scheme, because the
+   * admin list is filtered by scheme, AMC or fact type in any combination and
+   * is never "the facts for scheme X" the way `meta()` is. Filing it under one
+   * scheme would make a list of forty AMC-wide rows invalidate — and refetch —
+   * forty unrelated fund pages.
+   *
+   * The filter object is part of the key: two filters are two resources, and
+   * sharing an entry would let a scheme-filtered list overwrite the unfiltered
+   * one with a strictly smaller array.
+   */
+  qualitativeFacts: (filters?: Record<string, string | boolean | undefined>) =>
+    ['mf-analytics', 'qualitative-facts', filters ?? {}] as const,
+
+  qualitativeFactCatalog: () =>
+    ['mf-analytics', 'qualitative-facts', 'catalog'] as const,
 } as const;
