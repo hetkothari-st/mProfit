@@ -16,6 +16,7 @@ import { FamilyMemberPage } from './pages/family/FamilyMemberPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
 import { StocksPage } from './pages/assetClasses/StocksPage';
 import { MutualFundsPage } from './pages/assetClasses/MutualFundsPage';
+import { FundDetailPage } from './pages/mf/FundDetailPage';
 import { ImportPage } from './pages/imports/ImportPage';
 import { FailuresPage } from './pages/imports/FailuresPage';
 import { ConnectorsPage } from './pages/connectors/ConnectorsPage';
@@ -109,6 +110,10 @@ export function App() {
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/stocks" element={<StocksPage />} />
         <Route path="/mutual-funds" element={<MutualFundsPage />} />
+        {/* MF analytics fund detail (`docs/mf-analytics` Task 3.2). Nested under
+            /mutual-funds so the scheme page reads as a child of the holdings
+            list; the param is an AMFI scheme code, not a holding id. */}
+        <Route path="/mutual-funds/:schemeCode" element={<FundDetailPage />} />
         <Route path="/fo" element={<FuturesOptionsPage />} />
         <Route path="/bonds" element={<BondsPage />} />
         <Route path="/fds" element={<FixedDepositsPage />} />
