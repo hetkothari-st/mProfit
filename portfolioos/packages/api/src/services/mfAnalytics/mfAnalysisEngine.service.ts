@@ -48,6 +48,7 @@ import type {
 } from '@portfolioos/shared';
 import { logger } from '../../lib/logger.js';
 import { runInTransaction } from '../../lib/prisma.js';
+import { enqueueMfProse } from '../../jobs/mfProseJob.js';
 import { getEffectiveScope, type EffectiveScope } from '../familyScope.service.js';
 import { buildMfAnalysisFacts, toSnapshotSafe } from './mfFacts.builder.js';
 import { getRules, MF_RULES } from './rules/registry.js';
@@ -504,6 +505,25 @@ export async function runMfAnalysis(
       }
     }
   });
+
+  // `05 §7`, the last line of the orchestrator: "enqueue prose job (separate
+  // queue; failures never affect the run status)".
+  //
+  // AFTER the commit, deliberately. The narration reads the verdict rows and
+  // the `factsSnapshot` this transaction just wrote, so enqueuing inside it
+  // would either narrate the previous state or hold the commit open for the
+  // length of several LLM round-trips.
+  //
+  // `enqueueMfProse` returns void and never throws (a no-op when the feature
+  // gate is off), so there is no failure here for the run to observe. The
+  // try/catch is belt-and-braces for an unforeseeable synchronous throw: an
+  // analysis that is complete and committed must not be reported as failed
+  // because its optional decoration could not be scheduled.
+  try {
+    enqueueMfProse(userId, run.id);
+  } catch (err) {
+    logger.error({ err, runId: run.id, userId }, '[mfAnalysis] failed to enqueue prose narration');
+  }
 
   if (evaluation.status === 'PARTIAL') {
     logger.warn(
