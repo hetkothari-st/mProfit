@@ -137,13 +137,47 @@ describe('quarantineNavSeries — 01 §6 rules', () => {
     expect(quarantined.map((q) => q.reason)).toEqual(['nav_jump']);
   });
 
-  it('quarantines a weekend NAV that differs from the previous one', () => {
+  it('quarantines a weekend NAV that differs, ONLY when the rule is opted into', () => {
+    const series = [row('fri', '2026-01-09', nav('100')), row('sat', '2026-01-10', nav('100.5'))];
+
+    const optedIn = quarantineNavSeries(series, { applyWeekendRule: true });
+    expect(optedIn.clean.map((r) => r.id)).toEqual(['fri']);
+    expect(optedIn.quarantined[0]?.reason).toBe('nav_weekend_anomaly');
+
+    // Default is OFF. A liquid or overnight fund accrues every calendar day and
+    // SHOULD move on a Saturday; applying this blind put 2,858 Sunday rows into
+    // quarantine on the first real-data run, in exactly those sub-categories.
+    const byDefault = quarantineNavSeries(series);
+    expect(byDefault.quarantined).toHaveLength(0);
+    expect(byDefault.clean.map((r) => r.id)).toEqual(['fri', 'sat']);
+  });
+
+  it('adopts a sustained level shift instead of cascading on it', () => {
+    // ABSL Overnight Fund really does this: a face-value rebasing from ~10 to
+    // ~1000. Anchoring on the last clean row meant the shifted row never became
+    // the baseline, so every subsequent row was compared against ~10 and
+    // quarantined -- 100% of the fund lost.
     const { clean, quarantined } = quarantineNavSeries([
-      row('fri', '2026-01-09', nav('100')),
-      row('sat', '2026-01-10', nav('100.5')),
+      row('a', '2026-01-05', nav('10.0034')),
+      row('b', '2026-01-06', nav('1000.6884')),
+      row('c', '2026-01-07', nav('1000.7912')),
+      row('d', '2026-01-08', nav('1000.9003')),
     ]);
-    expect(clean.map((r) => r.id)).toEqual(['fri']);
-    expect(quarantined[0]?.reason).toBe('nav_weekend_anomaly');
+    expect(quarantined).toHaveLength(0);
+    expect(clean.map((r) => r.id)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('still quarantines a transient spike, which the next row contradicts', () => {
+    // The lookahead must not turn every jump into an accepted shift: here the
+    // series returns to its old level, so the spike is far from what follows.
+    const { clean, quarantined } = quarantineNavSeries([
+      row('a', '2026-01-05', nav('100')),
+      row('spike', '2026-01-06', nav('200')),
+      row('c', '2026-01-07', nav('100.2')),
+    ]);
+    expect(quarantined).toHaveLength(1);
+    expect(quarantined[0]?.reason).toBe('nav_jump');
+    expect(clean.map((r) => r.id)).toEqual(['a', 'c']);
   });
 
   it('leaves a weekend NAV alone when it merely repeats the previous value', () => {

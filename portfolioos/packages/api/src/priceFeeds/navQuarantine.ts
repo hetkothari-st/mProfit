@@ -71,6 +71,16 @@ export interface NavQuarantineOptions {
   knownActionDates?: readonly Date[];
   /** Fractional day-over-day move above which a jump is suspicious. `01 §6` says 20%. */
   jumpThreshold?: Decimal;
+  /**
+   * Apply the weekend rule to this fund. **Default false.**
+   *
+   * Only pass `true` for a fund that does NOT accrue value every calendar day.
+   * Liquid, overnight, money-market and ultra-short funds legitimately publish
+   * a moved NAV on a Saturday and Sunday, and flagging those is what put 2,858
+   * Sunday rows into quarantine on the first real-data run. The caller knows
+   * the SEBI sub-category; this module does not.
+   */
+  applyWeekendRule?: boolean;
 }
 
 /** `01 §6`: "day-over-day change > 20%". */
@@ -142,12 +152,37 @@ function coerceNav(raw: NavPointInput['nav']): { nav: Decimal } | { nav: null; d
  * once coming back down. Anchoring on the last trusted value quarantines only
  * the spike itself.
  */
+
+/**
+ * True when the NEXT usable NAV agrees with `nav` to within `threshold` --
+ * i.e. the series has stepped to a new level and stayed there.
+ *
+ * Skips forward over unparseable rows so a single bad point between the shift
+ * and its confirmation does not make a real rebasing look like a spike. The
+ * last row in a series has nothing to confirm it, so it is treated as a spike:
+ * that is the conservative direction, and the next day's file resolves it.
+ */
+function isSustainedShift(
+  sorted: readonly NavPointInput[],
+  index: number,
+  nav: Decimal,
+  threshold: Decimal,
+): boolean {
+  for (let j = index + 1; j < sorted.length; j += 1) {
+    const next = coerceNav(sorted[j]!.nav);
+    if (next.nav === null) continue;
+    return next.nav.minus(nav).abs().div(nav).lte(threshold);
+  }
+  return false;
+}
+
 export function quarantineNavSeries<T extends NavPointInput>(
   rows: readonly T[],
   options: NavQuarantineOptions = {},
 ): NavQuarantineResult<T> {
   const threshold = options.jumpThreshold ?? DEFAULT_NAV_JUMP_THRESHOLD;
   const actionDays = new Set<number>((options.knownActionDates ?? []).map(utcDayKey));
+  const applyWeekendRule = options.applyWeekendRule ?? false;
 
   // Copy before sorting: mutating a caller's array is a nasty action-at-a-distance
   // bug when the same rows are also used to build the adjusted-NAV series.
@@ -159,7 +194,8 @@ export function quarantineNavSeries<T extends NavPointInput>(
   let prevCleanNav: Decimal | null = null;
   let prevCleanDayKey: number | null = null;
 
-  for (const row of sorted) {
+  for (let i = 0; i < sorted.length; i += 1) {
+    const row = sorted[i]!;
     const coerced = coerceNav(row.nav);
     if (coerced.nav === null) {
       quarantined.push({ row, reason: 'nav_nonpositive', detail: coerced.detail });
@@ -176,7 +212,26 @@ export function quarantineNavSeries<T extends NavPointInput>(
         // is open at the start because a distribution on the PREVIOUS day was
         // already reflected in that day's NAV.
         const explained = hasActionInWindow(actionDays, prevCleanDayKey, dayKey);
-        if (!explained) {
+        /**
+         * A jump the following NAV agrees with is a LEVEL SHIFT, not a spike.
+         *
+         * Anchoring on the last clean row is right for a transient spike
+         * (100 -> 200 -> 100 quarantines only the 200) but catastrophic for a
+         * permanent rebasing. ABSL Overnight Fund really does go 10.0034 ->
+         * 1000.6884 on a face-value change: the shifted row is quarantined, so
+         * it never becomes the baseline, so all 2,511 rows after it are still
+         * measured against 10.0034 and every one is quarantined too. On the
+         * first real-data run that cost 100% of two funds and contributed to
+         * 107 of 148 schemes carrying a QUARANTINED metrics row.
+         *
+         * One row of lookahead separates the two cases: if the NEXT published
+         * NAV sits within the threshold of this one, the series has moved and
+         * stayed moved, so this row is the new truth rather than an outlier.
+         * A spike fails that test, because the next row returns to the old
+         * level and is therefore far from the spike.
+         */
+        const sustained = !explained && isSustainedShift(sorted, i, nav, threshold);
+        if (!explained && !sustained) {
           quarantined.push({
             row,
             reason: 'nav_jump',
@@ -188,12 +243,27 @@ export function quarantineNavSeries<T extends NavPointInput>(
         }
       }
 
-      // Weekend rule: AMFI publishes on non-business days for some scheme types
-      // (liquid/overnight funds accrue daily and legitimately move on a Sunday),
-      // so a weekend row is only anomalous when it REPEATS a value it should not
-      // have, i.e. differs from the last published NAV. Equality means a stale
-      // republish, which is harmless and stays clean.
-      if (isNonBusinessDay(row.date) && !nav.eq(prevCleanNav)) {
+      /**
+       * Weekend rule -- OPT-IN, and off by default.
+       *
+       * `01 §6` says to quarantine a weekend NAV whose value differs from the
+       * previous one. Real data says that rule cannot be applied blind: it
+       * fired on 3,432 rows, 2,858 of them Sundays, concentrated in exactly
+       * the liquid and overnight funds that accrue interest every calendar day
+       * and therefore SHOULD move on a Sunday. The rule's own comment said as
+       * much and then flagged them anyway -- the code and its justification
+       * disagreed.
+       *
+       * A weekend NAV that moved is normal for a daily-accrual fund; one that
+       * did not move is a harmless stale republish. Neither is evidence of a
+       * problem without knowing the fund's type, so the caller -- which knows
+       * the SEBI sub-category -- decides. Default off, because this module's
+       * own governing principle (see `isNonBusinessDay`) is that a false
+       * quarantine is strictly worse than a missed one: a missed one leaves a
+       * mildly suspect row, a false one punches a hole in the series and can
+       * push a whole horizon to INSUFFICIENT_DATA.
+       */
+      if (applyWeekendRule && isNonBusinessDay(row.date) && !nav.eq(prevCleanNav)) {
         quarantined.push({
           row,
           reason: 'nav_weekend_anomaly',
