@@ -1,4 +1,4 @@
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal, xirr } from '@portfolioos/shared';
 import type { Transaction, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';
@@ -37,79 +37,16 @@ const INFLOW_TYPES = new Set<TransactionType>([
   'WITHDRAWAL',
 ]);
 
-function yearFraction(a: Date, b: Date): number {
-  return (b.getTime() - a.getTime()) / (365.0 * 24 * 60 * 60 * 1000);
-}
-
-function npv(rate: number, flows: CashFlow[], t0: Date): number {
-  let total = 0;
-  for (const cf of flows) {
-    // Rate search is a float operation by nature; cast cashflow amount once
-    // at the boundary. The accumulator error matters less than the solver
-    // tolerance (1e-7), so we don't need Decimal here.
-    total += cf.amount.toNumber() / Math.pow(1 + rate, yearFraction(t0, cf.date));
-  }
-  return total;
-}
-
-function npvDerivative(rate: number, flows: CashFlow[], t0: Date): number {
-  let total = 0;
-  for (const cf of flows) {
-    const t = yearFraction(t0, cf.date);
-    total -= (t * cf.amount.toNumber()) / Math.pow(1 + rate, t + 1);
-  }
-  return total;
-}
-
 /**
- * Newton-Raphson XIRR. Returns annualized return as a decimal (0.12 = 12%).
- * Returns null if it fails to converge or inputs are degenerate.
+ * The Newton-Raphson + bisection solver now lives in `@portfolioos/shared`
+ * (`finance/xirr.ts`), because `mfMetricsMath.ts` needs it and is required to
+ * be pure — importing this module would pull Prisma into a file whose whole
+ * point is that it can be tested from fixtures alone. Re-exported here so the
+ * existing call sites and tests keep their import path, and so there is
+ * exactly one implementation: the dashboard XIRR and a metrics-row XIRR
+ * cannot disagree if they are the same function.
  */
-export function xirr(flows: CashFlow[], guess = 0.1): number | null {
-  if (flows.length < 2) return null;
-  // Require at least one positive and one negative flow
-  const hasPos = flows.some((f) => f.amount.greaterThan(0));
-  const hasNeg = flows.some((f) => f.amount.lessThan(0));
-  if (!hasPos || !hasNeg) return null;
-
-  const sorted = [...flows].sort((a, b) => a.date.getTime() - b.date.getTime());
-  const t0 = sorted[0]!.date;
-
-  let rate = guess;
-  for (let i = 0; i < 100; i++) {
-    const f = npv(rate, sorted, t0);
-    const d = npvDerivative(rate, sorted, t0);
-    if (!isFinite(f) || !isFinite(d) || d === 0) break;
-    const next = rate - f / d;
-    if (!isFinite(next)) break;
-    if (Math.abs(next - rate) < 1e-7) return next;
-    // Clamp to prevent runaway
-    rate = Math.max(-0.9999, Math.min(next, 10));
-  }
-
-  // Fallback: bisection between -0.99 and 10
-  let low = -0.99;
-  let high = 10;
-  let fLow = npv(low, sorted, t0);
-  let fHigh = npv(high, sorted, t0);
-  if (isFinite(fLow) && isFinite(fHigh) && fLow * fHigh < 0) {
-    for (let i = 0; i < 200; i++) {
-      const mid = (low + high) / 2;
-      const fMid = npv(mid, sorted, t0);
-      if (!isFinite(fMid)) break;
-      if (Math.abs(fMid) < 1e-6) return mid;
-      if (fMid * fLow < 0) {
-        high = mid;
-        fHigh = fMid;
-      } else {
-        low = mid;
-        fLow = fMid;
-      }
-    }
-    return (low + high) / 2;
-  }
-  return null;
-}
+export { xirr };
 
 interface PortfolioCashflowOptions {
   from?: Date;

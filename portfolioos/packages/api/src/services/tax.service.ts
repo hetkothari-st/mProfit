@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import { ltcg112aExemptionForDate } from '@portfolioos/shared';
 import type { AssetClass, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
@@ -48,7 +49,12 @@ export function ratesForDate(d: Date): TaxRates {
   return {
     stcgEquityPct: isPost ? 20 : 15,
     ltcgEquityPct: isPost ? 12.5 : 10,
-    ltcgEquityExemption: new Decimal(isPost ? 125000 : 100000),
+    // From the shared FY table rather than a literal, so this and the
+    // Schedule 112A reports cannot drift apart the way they had (reports
+    // were still applying ₹1,00,000 after the Finance Act 2024 raised it).
+    // Falls back to zero only for pre-2018 dates, when §10(38) exempted
+    // listed-equity LTCG outright and no allowance was needed.
+    ltcgEquityExemption: ltcg112aExemptionForDate(d) ?? new Decimal(0),
     ltcgOtherIndexedPct: 20,
     ltcgOtherNonIndexedPct: 12.5,
     slabPct: 30,

@@ -8,6 +8,7 @@
  */
 
 import { Decimal } from 'decimal.js';
+import { REBALANCE_BAND_PP, EMERGENCY_FUND_MONTHS } from '@portfolioos/shared';
 import type { AdvisorAssetBucketValue, AdvisorRecommendationCategoryValue } from './types.js';
 import type { RiskCategoryValue } from '../riskProfileMath.js';
 
@@ -19,8 +20,16 @@ export const ADVISOR_ENGINE_VERSION = '1.0.0';
 export const MIN_TRADE_INR = new Decimal(5_000);
 
 /** Drift beyond this many percentage points is worth acting on. Tighter and
- *  the user is nagged by noise; looser and real drift sits uncorrected. */
-export const REBALANCE_BAND_PP = 5;
+ *  the user is nagged by noise; looser and real drift sits uncorrected.
+ *
+ *  Defined in `@portfolioos/shared` (finance/planningBands.ts) and re-exported
+ *  here so existing importers keep their path. It moved down into shared
+ *  because the MF analytics ALLOCATION_DRIFT rule must use the same band
+ *  (`docs/mf-analytics/04-PORTFOLIO-ANALYSIS.md §3`) — a portfolio called
+ *  drifted on one page and not the other is worse than either answer alone,
+ *  and shared cannot import from api, so a second copy was the only
+ *  alternative. */
+export { REBALANCE_BAND_PP };
 
 /** No single instruction may move more than this share of the portfolio at
  *  once. Stops a freshly-onboarded, wildly-skewed portfolio from producing one
@@ -49,9 +58,10 @@ export const MIN_SIP_TOPUP_INR = new Decimal(500);
  *  worth deploying. */
 export const MIN_CASH_SURPLUS_INR = new Decimal(25_000);
 
-/** Months of expenses the emergency fund should cover. Matches
- *  healthScoreMath.emergencyFundScore so the two surfaces cannot disagree. */
-export const EMERGENCY_FUND_MONTHS = 6;
+/** Months of expenses the emergency fund should cover. Now defined once in
+ *  `@portfolioos/shared` and re-exported, so healthScoreMath, this engine and
+ *  the MF analytics NO_LIQUID_BUFFER rule cannot disagree about the target. */
+export { EMERGENCY_FUND_MONTHS };
 
 /** A risk profile older than this should be revisited — circumstances move. */
 export const RISK_PROFILE_REVIEW_MONTHS = 12;
