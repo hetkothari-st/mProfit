@@ -54,10 +54,11 @@ describe('benchmark indices are Total Return only', () => {
 
   it('assertTotalReturnIndex throws on a price-return entry', () => {
     expect(() =>
+      // Only the two fields the guard actually reads. It takes a Pick<>, so
+      // passing name/provider is an excess-property error that vitest never
+      // surfaces (it transpiles without typechecking) but tsc does.
       assertTotalReturnIndex({
         code: 'NIFTY50_PRI',
-        name: 'Nifty 50 (price return)',
-        provider: 'NSE',
         isTotalReturn: false,
       }),
     ).toThrow();
