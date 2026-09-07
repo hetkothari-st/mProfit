@@ -77,6 +77,39 @@ export const mfAnalyticsKeys = {
    */
   portfolio: () => ['mf-analytics', 'portfolio'] as const,
 
+  // -------------------------------------------------------------------------
+  // Findings, verdicts and runs (Task 5.6) — USER-SCOPED
+  // -------------------------------------------------------------------------
+
+  /**
+   * The caller's latest analysis run.
+   *
+   * Outside `scheme()` for the same reason `portfolio()` is: it is not about
+   * one fund. A prefix invalidation of a single scheme must not drop the run,
+   * and a refresh — which changes findings and verdicts for every held fund —
+   * must invalidate `all` rather than pretend it touched one.
+   *
+   * Not parameterised by family id: `main.tsx`'s `queryKeyHashFn` already
+   * prefixes every cache hash with the active `viewingAsFamilyId`. Runs are
+   * per-user anyway (`MfAnalysisRun.familyId` is provenance, not scope), but
+   * the hash prefix means a household switch cannot serve a stale one.
+   */
+  latestRun: () => ['mf-analytics', 'runs', 'latest'] as const,
+
+  /**
+   * One fund's findings and standing verdict.
+   *
+   * Under `scheme()` so that invalidating a single fund reaches them, and kept
+   * as two entries rather than one because the two endpoints have genuinely
+   * different lifetimes: a verdict can stand across many runs while the
+   * findings beneath it are rewritten on every one.
+   */
+  findings: (schemeCode: string) =>
+    ['mf-analytics', 'scheme', schemeCode, 'findings'] as const,
+
+  verdict: (schemeCode: string) =>
+    ['mf-analytics', 'scheme', schemeCode, 'verdict'] as const,
+
   /**
    * The scoring methodology tables (`06 §5`, Task 3.3).
    *

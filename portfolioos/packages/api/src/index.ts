@@ -30,6 +30,8 @@ import { startMfMetadataJob } from './jobs/mfMetadataJob.js';
 import { startBenchmarkPriceJob } from './jobs/benchmarkPriceJob.js';
 import { startRiskFreeRateJob } from './jobs/riskFreeRateJob.js';
 import { startMfReconciliationJob } from './jobs/mfReconciliationJob.js';
+import { startMfAnalysisJob } from './jobs/mfAnalysisJob.js';
+import { startMfProseJob } from './jobs/mfProseJob.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 
@@ -150,6 +152,17 @@ const server = app.listen(env.PORT, '::', () => {
   startRiskFreeRateJob();
   startMfMetadataJob();
   startMfReconciliationJob();
+  /**
+   * The two user-scoped MF workers. Neither is on a cron: mfAnalysis is driven
+   * by its three triggers (holdings change, a new score for a held scheme, a
+   * rate-limited user refresh) and mfProse drains whatever mfAnalysis enqueued.
+   * They are started here only so their queues exist and drain.
+   *
+   * Prose runs on its own queue on purpose (`05 §7`): a narration failure must
+   * never change a run's status, and findings are shown with or without it.
+   */
+  startMfAnalysisJob();
+  startMfProseJob();
   startMfNavAdjustmentJob();
   startMfMetricsJob();
   startMfPeerRankJob();

@@ -38,12 +38,25 @@ vi.mock('@/api/mfAnalytics.api', () => ({
     score: vi.fn(),
     peers: vi.fn(),
     holdings: vi.fn(),
+    portfolio: vi.fn(),
+    // The user-scoped half (Task 5.6). The page fires these alongside the
+    // composed read; their own honesty states are covered in
+    // `components/FundAnalysis.test.tsx` against fixtures, so here they are
+    // stubbed to the "no analysis has run" shape — which is also the state
+    // every assertion below was written against.
+    latestRun: vi.fn(),
+    fundFindings: vi.fn(),
+    fundVerdict: vi.fn(),
+    refreshAnalysis: vi.fn(),
   },
 }));
 
 // Imported after the mock factory so we get the mocked module object.
 const { mfAnalyticsApi } = await import('@/api/mfAnalytics.api');
 const analyticsMock = vi.mocked(mfAnalyticsApi.analytics);
+const latestRunMock = vi.mocked(mfAnalyticsApi.latestRun);
+const fundFindingsMock = vi.mocked(mfAnalyticsApi.fundFindings);
+const fundVerdictMock = vi.mocked(mfAnalyticsApi.fundVerdict);
 
 function plusUser(): AuthUser {
   return {
@@ -61,6 +74,9 @@ function plusUser(): AuthUser {
 
 beforeEach(() => {
   useAuthStore.setState({ user: plusUser() });
+  latestRunMock.mockResolvedValue(null);
+  fundFindingsMock.mockResolvedValue([]);
+  fundVerdictMock.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -262,6 +278,12 @@ describe('FundDetailPage — entitlement gate', () => {
     );
     expect(await screen.findByText(/Fund analytics is locked/i)).toBeTruthy();
     expect(analyticsMock).not.toHaveBeenCalled();
+    // The user-scoped reads are gated by the same entitlement, so a FREE-tier
+    // page must not fire them either — a 403 the UI could have predicted is a
+    // request it should not have made.
+    expect(latestRunMock).not.toHaveBeenCalled();
+    expect(fundFindingsMock).not.toHaveBeenCalled();
+    expect(fundVerdictMock).not.toHaveBeenCalled();
   });
 });
 

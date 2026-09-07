@@ -1,8 +1,11 @@
 import { api, unwrap } from './client';
 import type {
   ApiResponse,
+  MfAnalysisRunDto,
   MfCurrentProfile,
+  MfFinding,
   MfFundAnalyticsDto,
+  MfFundVerdictDto,
   MfHorizonMetrics,
   MfHorizonYears,
   MfPeerPercentiles,
@@ -46,6 +49,9 @@ const base = '/api/mf-analytics/schemes';
 
 /** The user-scoped read lives beside the scheme routes, not under them. */
 const portfolioPath = '/api/mf-analytics/portfolio';
+
+/** Root for the user-scoped analysis reads: runs, findings, verdicts, refresh. */
+const analysisPath = '/api/mf-analytics';
 
 export const mfAnalyticsApi = {
   /** `GET /schemes/:schemeCode` → scheme metadata, including the risk-o-meter. */
@@ -173,6 +179,88 @@ export const mfAnalyticsApi = {
    */
   async portfolio(): Promise<MfPortfolioAnalysisDto> {
     const { data } = await api.get<ApiResponse<MfPortfolioAnalysisDto>>(portfolioPath);
+    return unwrap(data);
+  },
+
+  // -------------------------------------------------------------------------
+  // Findings, verdicts and refresh (Task 5.6) — USER-SCOPED
+  // -------------------------------------------------------------------------
+  //
+  // Everything below returns the CALLER's own analysis. The three reads are
+  // served under the caller's RLS context, so a second user asking for the same
+  // scheme code gets `null` / `[]`, not somebody else's conclusion.
+  //
+  // The gate that matters lives on the server: with `RIA_VERDICTS_ENABLED`
+  // false a stored `SWITCH_CANDIDATE` arrives as `REVIEW` with
+  // `advisoryGated: true` and no replacement (`06 §4`). **Do not re-derive that
+  // here.** The client's job is to render `advisoryGated` honestly — "analysis
+  // only" — not to reconstruct what the engine originally said.
+
+  /**
+   * `GET /api/mf-analytics/runs/latest` → the caller's latest analysis run.
+   *
+   * `null` means no analysis has ever COMPLETED for this user — a real state
+   * (the engine is trigger-driven; a user who has never imported a fund and
+   * never pressed refresh has no run), not an error. RUNNING and FAILED runs
+   * are deliberately invisible: their payload columns are still the engine's
+   * `{}` placeholder, and rendering one would show an empty book to a user who
+   * holds twelve funds.
+   *
+   * On a `PARTIAL` run, `missingCategories` names the finding categories a
+   * failed rule would have covered. The page MUST surface them (`06 §6`) —
+   * silently omitting a section is the failure this field exists to prevent.
+   */
+  async latestRun(): Promise<MfAnalysisRunDto | null> {
+    const { data } = await api.get<ApiResponse<MfAnalysisRunDto | null>>(`${analysisPath}/runs/latest`);
+    return unwrap(data);
+  },
+
+  /**
+   * `GET /api/mf-analytics/funds/:schemeCode/findings` → the latest run's
+   * findings for one scheme.
+   *
+   * Portfolio-level findings are excluded server-side: they are statements
+   * about the book, and repeating one on each of twelve fund pages turns a
+   * single observation into twelve accusations.
+   *
+   * `[]` is ambiguous on its own — "the run found nothing here" and "no run has
+   * happened" both produce it — and is disambiguated by `latestRun()`. It is
+   * NEVER a clean bill of health, and the UI must not phrase it as one.
+   */
+  async fundFindings(schemeCode: string): Promise<MfFinding[]> {
+    const { data } = await api.get<ApiResponse<MfFinding[]>>(
+      `${analysisPath}/funds/${encodeURIComponent(schemeCode)}/findings`,
+    );
+    return unwrap(data);
+  },
+
+  /**
+   * `GET /api/mf-analytics/funds/:schemeCode/verdict` → the STANDING verdict.
+   *
+   * Standing, not "the latest run's": a run that reaches the same conclusion
+   * for the same reasons writes no new row (`05 §5`), so a fund the engine has
+   * been consistently comfortable with has its verdict attached to an older
+   * run. `runId` on the response points at whichever run produced it.
+   */
+  async fundVerdict(schemeCode: string): Promise<MfFundVerdictDto | null> {
+    const { data } = await api.get<ApiResponse<MfFundVerdictDto | null>>(
+      `${analysisPath}/funds/${encodeURIComponent(schemeCode)}/verdict`,
+    );
+    return unwrap(data);
+  },
+
+  /**
+   * `POST /api/mf-analytics/refresh` → the run it just produced.
+   *
+   * Synchronous — seconds of CPU over facts already in memory — so there is no
+   * job id to poll. **Rate-limited to one per hour per user**, enforced on the
+   * server against `MfAnalysisRun.startedAt`; a second call inside the window
+   * rejects with a 429 whose message names the time the next one is allowed.
+   * Surface that message rather than a generic failure: a button that fails
+   * silently teaches the user nothing.
+   */
+  async refreshAnalysis(): Promise<MfAnalysisRunDto> {
+    const { data } = await api.post<ApiResponse<MfAnalysisRunDto>>(`${analysisPath}/refresh`);
     return unwrap(data);
   },
 };

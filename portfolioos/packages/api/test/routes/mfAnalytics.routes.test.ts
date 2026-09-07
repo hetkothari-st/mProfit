@@ -42,6 +42,7 @@ import { prisma } from '../../src/lib/prisma.js';
 import { mfAnalyticsRouter } from '../../src/routes/mfAnalytics.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { signAccessToken } from '../../src/services/jwt.service.js';
+import { offendingNumbers } from '../helpers/wireNumerics.js';
 
 // ---------------------------------------------------------------------------
 // Guard rail
@@ -492,60 +493,11 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 // Numeric-on-the-wire walker
 // ---------------------------------------------------------------------------
-
-/**
- * Keys whose value is legitimately a JSON number.
- *
- * The DTO header states the rule: every numeric is a branded Decimal string
- * except "genuine counts and day-differences, which are integers by nature and
- * carry no precision risk". This list IS that exception set, enumerated. Any
- * number appearing under any other key is a `Money`/`Ratio`/`Pct` that lost its
- * brand somewhere between Postgres and the socket — which is the bug this test
- * exists to catch, and which typecheck cannot see because JSON is `unknown`.
- */
-const COUNT_KEYS = new Set([
-  'horizonYears',
-  'observationsMonthly',
-  'observations',
-  'windowYears',
-  'year',
-  'rank',
-  'universeSize',
-  'quartile',
-  'maxDrawdownDurationDays',
-  'recoveryDays',
-  'numHoldings',
-  'managerChangesLast3y',
-  'exitLoadMaxDays',
-  'rating',
-  'daysUpTo',
-  'memberCount',
-  'totalHoldings',
-  'holdingDays',
-  'daysToLtcg',
-  'holdingPeriodDays',
-  'fundCount',
-  'equityFundCount',
-  // Whole months of NAV history behind an unrated score (06 §6's
-  // "Unrated - N months of history" copy). A count, like the rest of this
-  // list -- no fractional months, no precision risk.
-  'historyMonths',
-]);
-
-/** Every `path -> number` in the payload that is NOT an allowed count. */
-function offendingNumbers(node: unknown, path = '$'): string[] {
-  if (typeof node === 'number') {
-    const key = path.slice(path.lastIndexOf('.') + 1).replace(/\[\d+\]$/, '');
-    return COUNT_KEYS.has(key) ? [] : [`${path} = ${node}`];
-  }
-  if (Array.isArray(node)) {
-    return node.flatMap((v, i) => offendingNumbers(v, `${path}[${i}]`));
-  }
-  if (typeof node === 'object' && node !== null) {
-    return Object.entries(node).flatMap(([k, v]) => offendingNumbers(v, `${path}.${k}`));
-  }
-  return [];
-}
+//
+// `COUNT_KEYS` + `offendingNumbers` moved to `test/helpers/wireNumerics.ts` when
+// the Task 5.6 findings suite needed the identical check. Two copies of the
+// allow-list would drift the first time one of them gained a key; see that
+// file's header.
 
 // ---------------------------------------------------------------------------
 // Tests

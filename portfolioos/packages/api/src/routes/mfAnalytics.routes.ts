@@ -17,10 +17,17 @@
  * database I/O and can reject, so there is no route here for which the wrapper
  * is optional.
  *
- * The tables behind these routes are shared market data with no RLS and no
- * owner (see the header of `mfAnalytics.controller.ts`). Auth and entitlement
- * here gate WHO MAY ASK; they are not, and must not be mistaken for, tenant
- * isolation — there is no tenant to isolate.
+ * The `/schemes/*` tables are shared market data with no RLS and no owner (see
+ * the header of `mfAnalytics.controller.ts`). For those routes, auth and
+ * entitlement gate WHO MAY ASK; they are not, and must not be mistaken for,
+ * tenant isolation — there is no tenant to isolate.
+ *
+ * **The findings block at the bottom of this file is the opposite.**
+ * `MfAnalysisRun`, `MfFinding` and `MfFundVerdict` are user data: they are in
+ * `USER_SCOPED_MODELS` and carry RLS policies, and their handlers live in
+ * `mfFindings.controller.ts` precisely so the reference controller's header
+ * stays true. One router, two ownership models — which is why the distinction
+ * is spelled out here rather than left to be inferred from a path.
  */
 
 import { Router } from 'express';
@@ -35,6 +42,12 @@ import {
   getSchemeHoldings,
   getFundAnalytics,
 } from '../controllers/mfAnalytics.controller.js';
+import {
+  getLatestRun,
+  getFundFindings,
+  getFundVerdict,
+  postAnalysisRefresh,
+} from '../controllers/mfFindings.controller.js';
 
 export const mfAnalyticsRouter = Router();
 
@@ -66,3 +79,40 @@ mfAnalyticsRouter.get('/schemes/:schemeCode/holdings', asyncHandler(getSchemeHol
 // The composed view the fund detail page consumes in one round trip. Declared
 // last only for readability; none of the paths above overlap it.
 mfAnalyticsRouter.get('/schemes/:schemeCode/analytics', asyncHandler(getFundAnalytics));
+
+// ---------------------------------------------------------------------------
+// Findings, verdicts and refresh — USER-SCOPED (Task 5.6)
+// ---------------------------------------------------------------------------
+//
+// These four read and write the caller's own `MfAnalysisRun` / `MfFinding` /
+// `MfFundVerdict` rows, under the caller's RLS context. They are namespaced
+// `/runs`, `/funds` and `/refresh` rather than hung off `/schemes/:schemeCode`
+// so that the path itself says whose data it is: everything under `/schemes` is
+// the same for every caller, and nothing under these three is.
+//
+// The router-level `authenticate` + `requireFeature('MF_ANALYTICS')` above
+// covers them. `06 §4` also describes the verdict layer as riding on the
+// `ADVICE_ENGINE` flag; both flags are PLUS today, so a second `requireFeature`
+// would change no behaviour while making `/runs/latest` (which carries findings
+// AND verdicts) gated differently from `/funds/:code/verdict`. The compliance
+// control that actually does the work is `RIA_VERDICTS_ENABLED`, applied in the
+// controller — see its header.
+//
+// `asyncHandler` on all four, same rule as above: every one of them awaits the
+// database, and the refresh handler additionally awaits a full analysis run.
+
+// The caller's latest COMPLETED/PARTIAL run: portfolio analysis, findings,
+// standing verdicts, the rule-version snapshot and the missing categories a
+// PARTIAL banner names. `null` (200) means no analysis has ever completed.
+mfAnalyticsRouter.get('/runs/latest', asyncHandler(getLatestRun));
+
+// Findings from that run for one scheme. Portfolio-level findings are excluded.
+mfAnalyticsRouter.get('/funds/:schemeCode/findings', asyncHandler(getFundFindings));
+
+// The standing verdict head for one scheme, RIA-gated on the way out.
+mfAnalyticsRouter.get('/funds/:schemeCode/verdict', asyncHandler(getFundVerdict));
+
+// Re-run the engine now. Rate-limited to 1/hour by `requestMfAnalysisRefresh`
+// against `MfAnalysisRun.startedAt`, not by a second limiter here — a limit
+// enforced in two places is a limit with two answers.
+mfAnalyticsRouter.post('/refresh', asyncHandler(postAnalysisRefresh));
