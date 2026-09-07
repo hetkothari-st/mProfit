@@ -1,0 +1,20 @@
+Open Ended Schemes(Debt Scheme - Corporate Bond Fund)
+
+Kotak Mahindra Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+112932;INF174K01LS2;;Kotak Corporate Bond Fund - Direct Plan - Growth;3812.4410;31-Dec-2025
+
+Close Ended Schemes(Income)
+
+Kotak Mahindra Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+140233;INF174K01Z34;;Kotak FMP Series 300 - Direct Plan - Growth;12.4410;31-Dec-2025
+
+Open Ended Schemes(Other Scheme - Capital Protection Oriented Fund)
+
+Kotak Mahindra Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+140234;INF174K01Z42;;Kotak Capital Protection Oriented Scheme - Direct Plan - Growth;11.9800;31-Dec-2025

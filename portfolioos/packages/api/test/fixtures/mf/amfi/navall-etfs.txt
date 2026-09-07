@@ -1,0 +1,13 @@
+Open Ended Schemes(Other Scheme - Index Funds)
+
+Nippon India Mutual Fund
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+101000;INF204KB14I2;;Nippon India ETF Nifty 50 BeES;285.4321;31-Dec-2025
+101001;INF204KB15I9;;Nippon India ETF Nifty Bank BeES;512.8800;31-Dec-2025
+101002;INF204KB16I7;;Nippon India Nifty 50 Index Fund - Direct Plan - Growth;18.9900;31-Dec-2025
+101003;INF204KB17I5;;Nippon India Nifty 50 Index Fund - Regular Plan - Growth;18.4400;31-Dec-2025
+
+SBI Mutual Fund
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+101010;INF200KA1FS9;;SBI Nifty Index Fund - Direct Plan - Growth;220.1100;31-Dec-2025
+101011;INF200KA1FT7;;SBI Exchange Traded Fund Nifty 50;295.6600;31-Dec-2025

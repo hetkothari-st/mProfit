@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "scheme_code": "994504",
+    "scheme_name": "TEST-RECON Corporate Bond Fund - Direct Plan - Growth",
+    "fund_house": "TEST-RECON Mutual Fund",
+    "as_on": "2026-08-31"
+  },
+  "returns": {
+    "1y": "18.42",
+    "3y": "15.10",
+    "5y": "12.03"
+  },
+  "expense_ratio": "0.62",
+  "aum_cr": "1000.00"
+}
