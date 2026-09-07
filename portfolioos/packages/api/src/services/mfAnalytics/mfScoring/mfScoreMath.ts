@@ -698,12 +698,34 @@ export function ratingStatusFor(input: RatingStatusInput): MfRatingStatus {
   const { historyMonths, universeSize, pillars } = input;
 
   if (historyMonths < MIN_RATING_HISTORY_MONTHS) return 'INSUFFICIENT_HISTORY';
-  if (universeSize < MIN_UNIVERSE_SIZE) return 'CATEGORY_TOO_SMALL';
 
+  /**
+   * The scheme's OWN gates are checked before the peer-group gate, and the
+   * order is load-bearing rather than stylistic.
+   *
+   * `CATEGORY_TOO_SMALL` renders as "Unrated - only {n} peers in category"
+   * (`06 §6`). That sentence is only true when this fund was otherwise
+   * rateable and the peer group was the thing that failed. If its own
+   * PERFORMANCE or CONSISTENCY pillar could not be scored, the fund is
+   * unrateable on its own terms -- and because the rating pool is exactly the
+   * set of schemes that cleared these same gates, a category where every fund
+   * fails the pillar check collapses to a pool of zero and every one of them
+   * would be told it has "only 0 peers".
+   *
+   * That is not a hypothetical: on the first real-data run 123 of 138 scores
+   * came back CATEGORY_TOO_SMALL in categories holding six scored funds each,
+   * because a 3-year window ending mid-month yields 35 monthly returns against
+   * `MIN_RISK_ADJUSTED_OBSERVATIONS = 36`, nulling Sharpe and alpha and with
+   * them the PERFORMANCE pillar. The peer count was a symptom; the message
+   * pointed at the wrong cause and sent the reader looking for peers that were
+   * already there.
+   */
   for (const key of RATING_REQUIRED_PILLARS) {
     const pillar = pillars[key];
     if (pillar !== undefined && pillar.score === null) return 'INSUFFICIENT_HISTORY';
   }
+
+  if (universeSize < MIN_UNIVERSE_SIZE) return 'CATEGORY_TOO_SMALL';
 
   return 'RATED';
 }

@@ -649,17 +649,85 @@ describe('determinism', () => {
 });
 
 // ---------------------------------------------------------------------------
-// §11.8 / §11.9 — need a database; tracked here so the gap stays visible
+// §11.8 / §11.9 — the behavioural proofs need a database and live in
+// `mfScore.service.test.ts` beside this file. What is asserted here is the
+// part that must hold *statically*, so a refactor of the service cannot
+// quietly reopen either gap while this sterile suite stays green.
 // ---------------------------------------------------------------------------
 
-describe('score persistence (`03 §11.8-9`) — needs a DB, owned by mfScore.service', () => {
-  it.todo(
-    '§11.8 append-only: running the score job twice writes one row; bumping the ' +
-      'methodologyVersion constant writes a second row and leaves the first ' +
-      'byte-for-byte unchanged',
+describe('score persistence (`03 §11.8-9`) — static guarantees on mfScore.service', () => {
+  const serviceUrl = new URL(
+    '../../../../src/services/mfAnalytics/mfScoring/mfScore.service.ts',
+    import.meta.url,
   );
-  it.todo(
-    '§11.9 IDCW mapping: a user holding an IDCW option resolves its score from ' +
-      'the growth sibling via MfSchemeMeta.growthSiblingSchemeCode',
-  );
+
+  it('§11.8 append-only: the service exposes no update path on MfSchemeScore', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { fileURLToPath } = await import('node:url');
+    const source = await readFile(fileURLToPath(serviceUrl), 'utf8');
+    // `06 §1` (mf-score-append-only): "service exposes no update path". The
+    // only write verb allowed on the delegate is an insert.
+    for (const verb of ['update', 'updateMany', 'upsert', 'delete', 'deleteMany']) {
+      expect(source, `mfSchemeScore.${verb}( must not exist`).not.toMatch(
+        new RegExp(`mfSchemeScore\\s*\\.\\s*${verb}\\s*\\(`),
+      );
+    }
+    expect(source).toMatch(/mfSchemeScore\s*\.\s*createMany\s*\(/);
+    // A raw transaction would bypass the RLS hook's atomicity guarantee.
+    expect(source).not.toMatch(/prisma\.\$transaction\s*\(/);
+  });
+
+  it('§11.9 IDCW mapping: the service resolves through the growth sibling, never its own NAV', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { fileURLToPath } = await import('node:url');
+    const source = await readFile(fileURLToPath(serviceUrl), 'utf8');
+    // The hop is `mfPeerRank.service.resolveRankableSchemeCode`, shared with
+    // the peer-rank read path so the two cannot disagree about which code a
+    // held IDCW option resolves to.
+    expect(source).toMatch(/resolveRankableSchemeCode\(/);
+    expect(source).toMatch(/growthSiblingSchemeCode/);
+    // The universe query is GROWTH-only; an IDCW option is never a member.
+    expect(source).toMatch(/optionType:\s*'GROWTH'/);
+  });
 });
+
+describe('ratingStatusFor gate precedence', () => {
+  /**
+   * Regression for the first real-data run: 123 of 138 scores came back
+   * CATEGORY_TOO_SMALL in categories holding six scored funds, because every
+   * fund failed the PERFORMANCE-pillar gate and the pool therefore collapsed
+   * to zero. `06 §6` renders that status as "only {n} peers in category", so
+   * each fund was told it had no peers when the real cause was its own
+   * unscoreable pillar.
+   */
+  it('blames the fund own null pillar, not the peer count, when both fail', () => {
+    const status = ratingStatusFor({
+      historyMonths: 120,
+      universeSize: 0,
+      pillars: {
+        PERFORMANCE: { score: null },
+        CONSISTENCY: { score: new Decimal('0.5') },
+      },
+    });
+    expect(status).toBe('INSUFFICIENT_HISTORY');
+  });
+
+  it('still reports CATEGORY_TOO_SMALL when the fund itself is rateable', () => {
+    const status = ratingStatusFor({
+      historyMonths: 120,
+      universeSize: 3,
+      pillars: {
+        PERFORMANCE: { score: new Decimal('0.6') },
+        CONSISTENCY: { score: new Decimal('0.5') },
+      },
+    });
+    expect(status).toBe('CATEGORY_TOO_SMALL');
+  });
+
+  it('history still outranks both', () => {
+    expect(
+      ratingStatusFor({ historyMonths: 12, universeSize: 0, pillars: {} }),
+    ).toBe('INSUFFICIENT_HISTORY');
+  });
+});
+

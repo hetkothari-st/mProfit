@@ -33,6 +33,7 @@ import { startMfReconciliationJob } from './jobs/mfReconciliationJob.js';
 import { startMfAnalysisJob } from './jobs/mfAnalysisJob.js';
 import { startMfProseJob } from './jobs/mfProseJob.js';
 import { startMfOpsAlertsJob } from './jobs/mfOpsAlertsJob.js';
+import { startMfScoreJob } from './jobs/mfScoreJob.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 
@@ -174,6 +175,13 @@ const server = app.listen(env.PORT, '::', () => {
   startMfNavAdjustmentJob();
   startMfMetricsJob();
   startMfPeerRankJob();
+  /**
+   * Monthly, the 15th (`01 §5`) -- after the month's holdings and metrics are
+   * in. Scores are computed per universe rather than per scheme, because the
+   * rating buckets are a fixed distribution WITHIN the universe and cannot be
+   * assigned without every peer's composite in hand.
+   */
+  startMfScoreJob();
   // Fire-and-forget: run initial data sync in background so server stays responsive
   runStartupSync().catch((err) => logger.error({ err }, 'Startup sync failed'));
 });
