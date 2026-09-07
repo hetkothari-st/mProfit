@@ -6,6 +6,7 @@ import type {
   MfHorizonMetrics,
   MfHorizonYears,
   MfPeerPercentiles,
+  MfPortfolioAnalysisDto,
   MfSchemeMetaDto,
   MfSchemeScoreDto,
 } from '@portfolioos/shared';
@@ -42,6 +43,9 @@ import type {
  */
 
 const base = '/api/mf-analytics/schemes';
+
+/** The user-scoped read lives beside the scheme routes, not under them. */
+const portfolioPath = '/api/mf-analytics/portfolio';
 
 export const mfAnalyticsApi = {
   /** `GET /schemes/:schemeCode` → scheme metadata, including the risk-o-meter. */
@@ -136,6 +140,39 @@ export const mfAnalyticsApi = {
     const { data } = await api.get<ApiResponse<MfFundAnalyticsDto>>(
       `${base}/${encodeURIComponent(schemeCode)}/analytics`,
     );
+    return unwrap(data);
+  },
+
+  /**
+   * `GET /api/mf-analytics/portfolio` → `MfPortfolioAnalysisDto`
+   * (`04-PORTFOLIO-ANALYSIS.md`, Task 4.3).
+   *
+   * The only USER-SCOPED read in this module. Everything above is shared market
+   * data that happens to be entitlement-gated; this one returns the caller's
+   * own holdings, computed under their RLS context and — in a household view —
+   * fanned out across `readableUserIds` and filtered by their caps.
+   *
+   * No `familyId` argument: the family selection travels on the
+   * `X-Viewing-As-Family` header that `api/client.ts` attaches from
+   * `familyScope.store`, exactly as every other household-aware read does. It
+   * does mean the response changes when the user switches households without
+   * the URL changing, so the React Query key must be namespaced by family scope
+   * — `mfAnalyticsKeys.portfolio(familyId)` exists for that and callers must
+   * pass the active scope into it.
+   *
+   * Three fields on the response are honesty states the UI may not smooth over,
+   * and they are called out here because they are the ones a caller is most
+   * likely to `?? 0`:
+   *
+   *  - `totals.weightedTerPct` / `totals.annualCostInr` are `null` when no held
+   *    fund has disclosed a TER. Rendering `0` there tells the user their
+   *    portfolio is free.
+   *  - `lookThrough.fundsWithoutHoldings` non-empty means every look-through
+   *    aggregate is a FLOOR, not a total.
+   *  - `scope.partial` means the same of every figure on the page.
+   */
+  async portfolio(): Promise<MfPortfolioAnalysisDto> {
+    const { data } = await api.get<ApiResponse<MfPortfolioAnalysisDto>>(portfolioPath);
     return unwrap(data);
   },
 };

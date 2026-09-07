@@ -26,6 +26,7 @@ import { mfCentralRouter } from './mfCentral.routes.js';
 import { mfCasMailbackRouter } from './mfCasMailback.routes.js';
 import { mfCasparserRouter } from './mfCasparser.routes.js';
 import { mfAnalyticsRouter } from './mfAnalytics.routes.js';
+import { mfPortfolioRouter } from './mfPortfolio.routes.js';
 import { foRouter } from './fo.routes.js';
 import { catalogRouter, valuationRouter } from './valuation.routes.js';
 import { documentsRouter } from './documents.routes.js';
@@ -77,6 +78,12 @@ export function registerRoutes(app: Express): void {
   app.use('/api/mf-central', mfCentralRouter);
   app.use('/api/mf-cas-mailback', mfCasMailbackRouter);
   app.use('/api/mf-casparser', mfCasparserRouter);
+  // Two routers share `/api/mf-analytics`. The user-scoped one is mounted
+  // FIRST and uses per-route middleware, so a `/schemes/...` request falls
+  // through it untouched into the reference router below. Mounted the other
+  // way round, `mfAnalyticsRouter`'s router-level `requireFeature` would 403
+  // the deliberately un-gated `/methodology` route before it was ever reached.
+  app.use('/api/mf-analytics', mfPortfolioRouter);
   app.use('/api/mf-analytics', mfAnalyticsRouter);
   app.use('/api/fo', foRouter);
   app.use('/api/catalog', catalogRouter);

@@ -195,6 +195,80 @@ function reasonFor(
   return base;
 }
 
+/**
+ * Pair a value with a status that arrived **beside it** rather than through a
+ * `fieldStatus` map.
+ *
+ * `MfPortfolioAnalysisDto` uses this shape in several places —
+ * `totals.portfolioXirr` + `totals.portfolioXirrStatus`,
+ * `MfHeldFundDto.userXirr` + `userXirrStatus` + `userXirrStatusReason`. There
+ * is no dotted-path map to look the reason up in, so `resolveMetric` cannot be
+ * used directly; this adapts the pair into the same `ResolvedMetric` every
+ * render site consumes.
+ *
+ * The `status === 'OK' && value === null` branch is inherited deliberately:
+ * `OK` is the one status that licenses printing the number, so an `OK` beside
+ * a null would send a spec-following UI straight to `0.00`.
+ */
+export function resolveWithStatus(
+  value: string | null,
+  status: MfMetricStatus,
+  statusReason?: string,
+): ResolvedMetric {
+  return resolveMetric(value, '__inline__', { status, statusReason, fieldStatus: {} });
+}
+
+/**
+ * A value the contract types as plainly nullable, with **no** status field
+ * anywhere beside it.
+ *
+ * Most of `MfPortfolioAnalysisDto` is like this: `weightedTerPct`,
+ * `annualCostInr`, `redundancyScore`, `MfLotDto.exitLoadPct`,
+ * `taxIfSoldTodayInr`, `weightInNetWorth`. The DTO's doc comments say precisely
+ * what each null MEANS — "no held fund disclosed a TER", "we do not know this
+ * scheme's exit load", "the slab is unknowable" — and that meaning is the
+ * reason string the reader needs. So the caller supplies it at the call site,
+ * quoting the contract, rather than this module inventing a generic one.
+ *
+ * The reason must not contain a digit. `MetricValue` renders it inside
+ * `[data-metric-value]`, and the keystone test walks every one of those and
+ * fails if a non-`OK` metric contains a digit — the check that catches a
+ * `?? 0` from ever reading as a measurement. A reason like "below ₹1.25 lakh"
+ * would trip it, correctly: a number inside an unavailability is a number the
+ * reader can mistake for the answer.
+ */
+export function unavailable(reason: string): ResolvedMetric {
+  return { value: null, status: 'INSUFFICIENT_DATA', reason };
+}
+
+/** A value that is present and needs no status negotiation. */
+export function known(value: string): ResolvedMetric {
+  return { value, status: 'OK' };
+}
+
+/**
+ * `known` when present, `unavailable(reason)` when null — the shape almost
+ * every field on the portfolio DTO needs.
+ */
+export function resolveNullable(
+  value: string | null | undefined,
+  reason: string,
+): ResolvedMetric {
+  return value === null || value === undefined ? unavailable(reason) : known(value);
+}
+
+/**
+ * Fund units. Not money and not a `Ratio`, just a plain Decimal string on the
+ * contract (`MfHeldFundDto.units`, `MfLotDto.units`).
+ *
+ * Three decimals because MF allotments are quoted to three and a fund with
+ * 12.345 units genuinely holds 12.345 — rounding to two would show two
+ * different lots of 0.004 and 0.006 units as the same 0.01.
+ */
+export function formatUnits(value: string, fractionDigits = 3): string {
+  return toDecimal(value).toFixed(fractionDigits, Decimal.ROUND_HALF_EVEN);
+}
+
 /** Convenience: resolve straight out of a `Ratio | null` field. */
 export function resolveRatio(
   value: Ratio | null,

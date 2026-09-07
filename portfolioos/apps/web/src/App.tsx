@@ -17,6 +17,8 @@ import { TransactionsPage } from './pages/transactions/TransactionsPage';
 import { StocksPage } from './pages/assetClasses/StocksPage';
 import { MutualFundsPage } from './pages/assetClasses/MutualFundsPage';
 import { FundDetailPage } from './pages/mf/FundDetailPage';
+import { MfPortfolioPage } from './pages/mf/MfPortfolioPage';
+import { MethodologyPage } from './pages/mf/MethodologyPage';
 import { ImportPage } from './pages/imports/ImportPage';
 import { FailuresPage } from './pages/imports/FailuresPage';
 import { ConnectorsPage } from './pages/connectors/ConnectorsPage';
@@ -113,7 +115,17 @@ export function App() {
         {/* MF analytics fund detail (`docs/mf-analytics` Task 3.2). Nested under
             /mutual-funds so the scheme page reads as a child of the holdings
             list; the param is an AMFI scheme code, not a holding id. */}
+        {/* Static segment, declared before the dynamic one for readability.
+            React Router v6 ranks static above dynamic regardless of order, so
+            "analysis" can never be swallowed as a scheme code — but a reader
+            scanning this list should not have to know that. */}
+        <Route path="/mutual-funds/analysis" element={<MfPortfolioPage />} />
         <Route path="/mutual-funds/:schemeCode" element={<FundDetailPage />} />
+        {/* `06-QUALITY-COMPLIANCE.md §5` names this path. It is the
+            transparency artefact for the scoring layer and is deliberately not
+            entitlement-gated: a reader has to be able to judge what a rating
+            means before paying for the plan that shows them ratings. */}
+        <Route path="/methodology/mf-score" element={<MethodologyPage />} />
         <Route path="/fo" element={<FuturesOptionsPage />} />
         <Route path="/bonds" element={<BondsPage />} />
         <Route path="/fds" element={<FixedDepositsPage />} />

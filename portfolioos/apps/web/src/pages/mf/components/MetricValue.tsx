@@ -35,6 +35,23 @@ export interface MetricValueProps extends ResolvedMetric {
   /** Applied only to an `OK` value. Receives the branded Decimal string. */
   format: (value: string) => string;
   /**
+   * Optional wrapper for the formatted `OK` string — the escape hatch that let
+   * the portfolio page render money through `<Money>` (accent ₹ glyph, tabular
+   * digits) WITHOUT a second metric component.
+   *
+   * The alternative was a `MoneyValue` that duplicated the three render paths
+   * below, and duplicating them is precisely how the "a zero never stands in
+   * for an unknown" rule gets weaker: the copy starts identical, then one of
+   * the two gains a `?? 0` and the invariant test only walks the elements the
+   * component it knows about emitted. Everything unavailable still routes
+   * through the single path here, so `data-metric-value` / `data-status` stay
+   * exhaustive across both pages.
+   *
+   * It receives the ALREADY-FORMATTED string, so it cannot reintroduce
+   * arithmetic on a wire value.
+   */
+  renderValue?: (formatted: string) => ReactNode;
+  /**
    * Why this metric is undefined by construction for this fund, e.g. "beta is
    * too close to zero for the ratio to mean anything". Shown beside "Not
    * applicable" so the reader learns the reason rather than filing a bug.
@@ -48,17 +65,19 @@ export function MetricValue({
   status,
   reason,
   format,
+  renderValue,
   notApplicableHint,
   className,
 }: MetricValueProps) {
   if (status === 'OK' && value !== null) {
+    const formatted = format(value);
     return (
       <span
         data-metric-value
         data-status="OK"
         className={cn('numeric tabular-nums text-foreground', className)}
       >
-        {format(value)}
+        {renderValue ? renderValue(formatted) : formatted}
       </span>
     );
   }
