@@ -145,7 +145,64 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'Income',
   'HealthScoreSnapshot',
   'AiChatSession',
+  // MF analytics — the USER-SCOPED half only (docs/mf-analytics/05 §1).
+  // 20260904140000_mf_analytics_user_scoped puts ENABLE + FORCE ROW LEVEL
+  // SECURITY and a `"userId" = app_current_user_id()` policy on all three, and
+  // these entries are the other half of that same change: without them the
+  // hook issues no set_config('app.current_user_id'), the policy predicate
+  // evaluates against NULL, every read returns zero rows and every write fails
+  // with 42501 under the NOBYPASSRLS runtime role. That is the defect
+  // documented immediately above for the PF tables, Goal/BankAccount and the
+  // nineteen after them — same shape, avoided here by pairing the two.
+  //
+  // MfFinding and MfFundVerdict carry a denormalised `userId` copied from
+  // MfAnalysisRun precisely so their policies can be direct column comparisons
+  // rather than EXISTS joins back through the run.
+  //
+  // Note the contrast with the reference models listed in the block below,
+  // which must stay OUT of this Set: a scheme's Sharpe ratio is shared market
+  // data, a user's verdict on that scheme is not.
+  'MfAnalysisRun',
+  'MfFinding',
+  'MfFundVerdict',
 ]);
+
+/**
+ * DELIBERATELY ABSENT: the MF analytics reference models.
+ *
+ *   MfSchemeMeta, MfSchemeTer, MfSchemeAum, MfSchemeManager,
+ *   MfPortfolioSnapshot, MfPortfolioHolding, MfSchemeMetrics, MfPeerRank,
+ *   MfSchemeScore, MfSchemeQualitativeFact, BenchmarkIndex,
+ *   BenchmarkIndexPrice, RiskFreeRate, AmfiMarketCapList
+ *
+ * These are shared market reference data, in the same class as StockMaster,
+ * MFNav, FXRate and VehicleCatalog. A scheme's TER, its benchmark's TRI series
+ * and its Sharpe ratio are the same numbers for every user; none of these
+ * tables has a `userId` to scope by, and none of them carries an RLS policy.
+ *
+ * This note exists because the pairing rule in CONTEXT.md §5 runs the other
+ * way round too. That rule has been broken repeatedly in the "policy but no
+ * entry" direction (the PF tables, then Goal and BankAccount, then nineteen
+ * more), and the natural corrective reflex — sweep the schema, add everything
+ * missing — would be wrong here. Registering these would make the hook issue
+ * `app.current_user_id` for market data, and the eventual matching "we should
+ * add the policies too" would then return zero rows of fund analytics to every
+ * user, for a table that has nothing to isolate.
+ *
+ * `test/invariants/mf-reference-not-user-scoped.test.ts` asserts both halves:
+ * absent from this Set, and no `ENABLE ROW LEVEL SECURITY` on them in any
+ * migration. If that test fails, the fix is to remove the addition, not to
+ * relax the test.
+ *
+ * The user-scoped half of the MF analytics layer — MfAnalysisRun, MfFinding,
+ * MfFundVerdict (docs/mf-analytics/05) — does belong in this Set, with
+ * policies, because those rows are one user's analysis of one user's holdings.
+ * That has now landed: the three are registered at the end of the Set above and
+ * carry policies from 20260904140000_mf_analytics_user_scoped. The boundary
+ * this note draws is therefore live in both directions — reference tables out,
+ * analysis tables in — and neither side may be "fixed" by moving a model across
+ * it.
+ */
 
 const basePrisma =
   globalForPrisma.basePrisma ??

@@ -1,0 +1,18 @@
+-- Adds NOT_APPLICABLE to MfMetricStatus.
+--
+-- Three metrics are undefined by construction rather than missing: Treynor
+-- when beta <= 0.1, Calmar when the fund has never fallen 1%, and CAGR at the
+-- 1-year horizon (SEBI mandates an absolute figure below a year). Every input
+-- was present; the ratio simply has no meaning.
+--
+-- Without this value the service had to report them as `OK` with a null value.
+-- That inverts the layer's core reading rule: docs/mf-analytics/00-README.md
+-- invariant 4 tells consumers to render a *non-OK* metric as unavailable, so
+-- `OK` is the one status that licenses printing the number — and the number is
+-- null. A consumer obeying the documented contract would render 0.00 for a
+-- fund whose Treynor is undefined, which is the exact "null rendered as zero"
+-- failure the status vocabulary exists to prevent.
+--
+-- Additive only. Postgres cannot drop an enum value, so this is one-way; that
+-- is acceptable because removing it would mean reintroducing the bug above.
+ALTER TYPE "MfMetricStatus" ADD VALUE IF NOT EXISTS 'NOT_APPLICABLE';

@@ -161,6 +161,13 @@ model User {
   advisorApprovedProducts AdvisorApprovedProduct[]
   advisorRuns             AdvisorRun[]
   advisorRecommendations  AdvisorRecommendation[]
+
+  // MF analytics — the user-scoped half only. MfFinding and MfFundVerdict also
+  // carry a userId, but deliberately have no relation here: theirs is a
+  // denormalised copy that exists so their RLS policy can be a direct column
+  // comparison instead of a join back through MfAnalysisRun. See the MF
+  // ANALYTICS — USER-SCOPED section below.
+  mfAnalysisRuns MfAnalysisRun[]
 }
 
 model UserNotificationConfig {
@@ -497,7 +504,32 @@ model MFNav {
   fundId String
   fund   MutualFundMaster @relation(fields: [fundId], references: [id], onDelete: Cascade)
   date   DateTime         @db.Date
+  /// The NAV as published by AMFI. Display uses this; return math does NOT.
   nav    Decimal          @db.Decimal(18, 4)
+
+  /// NAV with IDCW distributions reinvested. For a GROWTH option this equals
+  /// `nav`; for an IDCW option it is the series that would have resulted had
+  /// every payout been reinvested at that day's NAV.
+  ///
+  /// Every return, volatility, drawdown and alpha calculation in the analytics
+  /// layer reads this column, never `nav` (docs/mf-analytics/01 §2). Using the
+  /// raw NAV for an IDCW option shows a step down on every payout date and
+  /// understates the fund's return by the whole distribution — which is how an
+  /// IDCW plan ends up looking like a worse fund than the growth plan of the
+  /// same portfolio.
+  ///
+  /// Nullable because it is backfilled (07 Task 1.4) and because the sibling
+  /// growth NAV needed to derive it is not always available; a null here means
+  /// "not yet adjusted", and the metric row must degrade to
+  /// INSUFFICIENT_DATA rather than quietly fall back to `nav`.
+  adjustedNav      Decimal? @db.Decimal(18, 6)
+  /// Set by the ingest validation in 01 §6 (day-over-day jump > 20% with no
+  /// corporate action, NAV <= 0, a weekend/holiday value that moved). The row
+  /// is KEPT rather than dropped so the gap is visible in the series instead
+  /// of silently closing up, and so a later correction can un-quarantine it.
+  /// Every consumer of the NAV series must filter these out.
+  isQuarantined    Boolean  @default(false)
+  quarantineReason String?
 
   @@unique([fundId, date])
   @@index([fundId])
@@ -3475,4 +3507,649 @@ model AdvisorRecommendation {
   @@index([userId, status, priority])
   @@index([userId, ruleId, dedupeKey])
   @@index([generationRunId])
+}
+
+// ─── MF ANALYTICS — REFERENCE DATA (docs/mf-analytics/01 §2) ─────
+//
+// Fund-side reference data for the mutual-fund analytics layer: scheme
+// metadata, TER/AUM/manager history, monthly portfolio disclosures,
+// benchmark TRI series, the risk-free curve, and the computed metric /
+// peer-rank / score rows derived from all of it.
+//
+// EVERY model in this section is SHARED MARKET REFERENCE DATA. None of it
+// carries a userId, none of it goes in USER_SCOPED_MODELS (src/lib/prisma.ts),
+// and none of it gets an RLS policy — exactly like StockMaster, MFNav and
+// FXRate. It is written only by jobs running under `runAsSystem` and read by
+// everyone. Putting RLS on any of it would make the analytics layer return
+// zero rows for every user, which is why
+// test/invariants/mf-reference-not-user-scoped.test.ts asserts the absence in
+// both halves (the Set, and every migration's SQL).
+//
+// Precision, per 01 §2: money Decimal(18,4), quantities Decimal(18,6),
+// ratios and percentages Decimal(12,6) — six decimals covers a 0.0001%
+// expense ratio and a Sharpe of 1.234567 without rounding either away.
+//
+// Every fetched row carries `sourceHash` + `fetchedAt` so re-running a job on
+// the same artefact upserts rather than duplicates (CONTEXT.md §3.3).
+
+enum MfSebiCategory {
+  EQUITY
+  DEBT
+  HYBRID
+  SOLUTION_ORIENTED
+  /// Index funds, ETFs, FoFs — SEBI's residual bucket, not "uncategorised".
+  OTHER
+}
+
+enum MfPlanType {
+  DIRECT
+  REGULAR
+}
+
+enum MfOptionType {
+  GROWTH
+  IDCW_PAYOUT
+  IDCW_REINVEST
+}
+
+enum MfSchemeStatus {
+  ACTIVE
+  MERGED
+  WOUND_UP
+  SUSPENDED
+}
+
+model MfSchemeMeta {
+  /// The AMFI scheme code, and the join key to the rest of the repo.
+  ///
+  /// Read this before writing any query that needs a NAV series. This table is
+  /// deliberately NOT related to the NAV tables by a Prisma relation. In this
+  /// repo `MFNav.fundId` references `MutualFundMaster.id` (a cuid), while the
+  /// AMFI scheme code lives on `MutualFundMaster.schemeCode`. So the join path
+  /// is two hops:
+  ///
+  ///   MfSchemeMeta.schemeCode -> MutualFundMaster.schemeCode
+  ///                          -> MutualFundMaster.id
+  ///                          -> MFNav.fundId
+  ///
+  /// 01 §2 writes the analytics schema as though MFNav were keyed by
+  /// schemeCode. It is not, and rekeying MFNav would rewrite the primary join
+  /// of the table that every price feed, holdings projection and NAV backfill
+  /// already writes to. A documented two-hop join is the cheaper truth.
+  ///
+  /// No FK is declared either: MutualFundMaster.schemeCode is unique, but AMFI
+  /// publishes scheme codes for schemes we may have no MutualFundMaster row
+  /// for yet, and a hard FK would make metadata ingestion fail on exactly the
+  /// schemes it exists to discover.
+  schemeCode              String         @id
+  isin                    String?        @unique
+  schemeName              String
+  amcCode                 String
+  amcName                 String
+  sebiCategory            MfSebiCategory
+  /// "Large Cap Fund", "Corporate Bond Fund", … — one of the 36 SEBI
+  /// sub-categories, or the literal 'UNMAPPED' for a scheme whose AMFI
+  /// category text could not be mapped (01 §3). UNMAPPED schemes are stored
+  /// but excluded from every peer universe.
+  sebiSubCategory         String
+  planType                MfPlanType
+  optionType              MfOptionType
+  /// Exchange-traded fund. Stored rather than re-derived from the name at read
+  /// time because 03 §5 scores an ETF's STRUCTURE pillar on bid-ask / iNAV
+  /// deviation and an index fund's on cash drag, and AMFI files both under the
+  /// single "Index Funds/ETFs" sub-category — the sub-category cannot separate
+  /// them. A stored column is also queryable, which a name-matching helper is
+  /// not: the scorer needs to partition a universe in SQL, not in memory.
+  isEtf                   Boolean         @default(false)
+  /// -> BenchmarkIndex.code. Tier-1 TRI only; a price-return index is
+  /// rejected at seed time (01 §6).
+  benchmarkIndexCode      String?
+  inceptionDate           DateTime
+  /// History chain for merged schemes. Set only when the surviving scheme's
+  /// mandate is unchanged (01 §7); the NAV series is never spliced.
+  predecessorSchemeCode   String?
+  status                  MfSchemeStatus @default(ACTIVE)
+  statusChangedAt         DateTime?
+  riskometer              String?
+  exitLoadText            String?
+  /// Parsed form of exitLoadText: [{ daysUpTo, pct }].
+  exitLoadRules           Json?
+  minSip                  Decimal?       @db.Decimal(18, 4)
+  /// The GROWTH-option sibling of this scheme; null when this row IS the
+  /// growth option.
+  ///
+  /// Required by 03 §1: peer universes contain GROWTH options only, because an
+  /// IDCW option is the same portfolio and including it double-counts the fund
+  /// in its own category. A user who holds the IDCW option must still see a
+  /// score, so the lookup resolves through this column to the growth option's
+  /// MfSchemeScore. Populated by the metadata job (07 Task 1.2) from AMC plus
+  /// scheme-name-minus-option-suffix matching.
+  growthSiblingSchemeCode String?
+  sourceHash              String
+  fetchedAt               DateTime
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  terHistory MfSchemeTer[]
+  aumHistory MfSchemeAum[]
+  managers   MfSchemeManager[]
+  snapshots  MfPortfolioSnapshot[]
+  metrics    MfSchemeMetrics[]
+  scores     MfSchemeScore[]
+
+  @@index([sebiCategory, sebiSubCategory, planType, status])
+  @@index([amcCode])
+  @@index([growthSiblingSchemeCode])
+}
+
+/// TER is disclosed daily and changes without notice, so it is a history
+/// rather than a column on the scheme: a cost pillar computed for an `asOf` in
+/// the past must use the TER in force then, not today's.
+model MfSchemeTer {
+  id            String       @id @default(cuid())
+  schemeCode    String
+  scheme        MfSchemeMeta @relation(fields: [schemeCode], references: [schemeCode], onDelete: Cascade)
+  effectiveFrom DateTime
+  /// e.g. 0.450000 = 0.45%. Percent units, not a fraction.
+  terPct        Decimal      @db.Decimal(12, 6)
+  sourceHash    String
+  fetchedAt     DateTime
+
+  @@unique([schemeCode, effectiveFrom])
+}
+
+model MfSchemeAum {
+  id         String       @id @default(cuid())
+  schemeCode String
+  scheme     MfSchemeMeta @relation(fields: [schemeCode], references: [schemeCode], onDelete: Cascade)
+  /// Month-end.
+  asOf       DateTime
+  /// INR, NOT crore. AMC factsheets quote crore; the adapter multiplies before
+  /// storing so every consumer can treat this as plain rupees.
+  aum        Decimal      @db.Decimal(18, 4)
+  sourceHash String
+  fetchedAt  DateTime
+
+  @@unique([schemeCode, asOf])
+}
+
+model MfSchemeManager {
+  id          String       @id @default(cuid())
+  schemeCode  String
+  scheme      MfSchemeMeta @relation(fields: [schemeCode], references: [schemeCode], onDelete: Cascade)
+  managerName String
+  /// "Lead", "Co-manager", …
+  role        String?
+  fromDate    DateTime
+  /// null = still managing. Manager tenure and manager-change counts both read
+  /// this, so the open interval is meaningful data, not a missing value.
+  toDate      DateTime?
+  sourceHash  String
+  fetchedAt   DateTime
+
+  @@index([schemeCode, toDate])
+}
+
+/// One SEBI-mandated monthly portfolio disclosure. Rejected wholesale at
+/// ingest when the holding weights sum outside 97–103% (01 §6) — a partially
+/// parsed portfolio is worse than none, because the concentration and overlap
+/// numbers computed from it look plausible and are wrong.
+model MfPortfolioSnapshot {
+  id            String       @id @default(cuid())
+  schemeCode    String
+  scheme        MfSchemeMeta @relation(fields: [schemeCode], references: [schemeCode], onDelete: Cascade)
+  /// Month-end.
+  asOf          DateTime
+  totalHoldings Int
+  cashPct       Decimal      @db.Decimal(12, 6)
+  sourceHash    String
+  fetchedAt     DateTime
+
+  holdings MfPortfolioHolding[]
+
+  @@unique([schemeCode, asOf])
+}
+
+enum MfHoldingKind {
+  EQUITY
+  DEBT
+  CASH
+  DERIVATIVE
+  REIT_INVIT
+  GOLD
+  OTHER
+}
+
+model MfPortfolioHolding {
+  id              String              @id @default(cuid())
+  snapshotId      String
+  snapshot        MfPortfolioSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  kind            MfHoldingKind
+  /// Unresolved ISINs keep the name and are still counted, just not
+  /// sector-mapped (01 §4) — dropping them would understate concentration.
+  isin            String?
+  securityName    String
+  weightPct       Decimal             @db.Decimal(12, 6)
+  quantity        Decimal?            @db.Decimal(18, 6)
+  marketValue     Decimal?            @db.Decimal(18, 4)
+  /// AMFI/industry classification as disclosed, mapped onto StockMaster.sector
+  /// where a match exists.
+  sector          String?
+  /// LARGE | MID | SMALL, taken from AmfiMarketCapList — never derived from
+  /// live market cap. See the note on that model for why.
+  marketCapBucket String?
+  // ── debt-only ──
+  issuer          String?
+  /// "AAA", "AA+", "SOV", "A1+", "Unrated" — normalised onto the fixed ordinal
+  /// scale in 01 §4 before storage.
+  creditRating    String?
+  maturityDate    DateTime?
+  ytmPct          Decimal?            @db.Decimal(12, 6)
+
+  @@index([snapshotId])
+  @@index([isin])
+}
+
+/// Benchmark index definitions. Seeded (BENCHMARK_INDEX_SEED, 01 §3), not
+/// discovered.
+model BenchmarkIndex {
+  /// "NIFTY50_TRI", "NIFTY_MIDCAP150_TRI", …
+  code          String  @id
+  name          String
+  /// NSE | BSE | CRISIL
+  provider      String
+  /// Ingest REJECTS false for benchmark use. A price-return index omits
+  /// dividends, so measuring a fund's total return against it manufactures
+  /// alpha that does not exist — roughly the dividend yield, every year.
+  isTotalReturn Boolean
+
+  prices BenchmarkIndexPrice[]
+}
+
+model BenchmarkIndexPrice {
+  id         String         @id @default(cuid())
+  indexCode  String
+  index      BenchmarkIndex @relation(fields: [indexCode], references: [code], onDelete: Cascade)
+  date       DateTime
+  /// An index level, not money — six decimals keeps daily-return math clean
+  /// across a 10-year backfill.
+  value      Decimal        @db.Decimal(18, 6)
+  sourceHash String
+
+  @@unique([indexCode, date])
+}
+
+/// Risk-free curve. Stored at the source's own frequency (T-bill cut-offs are
+/// weekly); forward-filling to daily happens in the math layer, never here, so
+/// a gap stays visible as a gap instead of becoming indistinguishable from a
+/// real observation.
+model RiskFreeRate {
+  id         String   @id @default(cuid())
+  /// "TBILL_91D" | "MIBOR_ON"
+  series     String
+  date       DateTime
+  /// Annualised, percent units.
+  ratePct    Decimal  @db.Decimal(12, 6)
+  sourceHash String
+
+  @@unique([series, date])
+}
+
+/// SEBI's half-yearly large/mid/small-cap classification, as published by AMFI
+/// and refreshed each January and July.
+///
+/// SEEDED, NOT DERIVED — and that is the entire point of the table. Computing a
+/// bucket from live market cap would be easy and would be wrong: SEBI's
+/// published list is the definition a fund is *measured against* for the whole
+/// half-year. A "Large Cap Fund" must hold at least 80% in the top 100 names ON
+/// THAT LIST. Deriving buckets from today's prices would score a fund against a
+/// universe nobody holds it to, and would flip a compliant fund into apparent
+/// breach every time a borderline stock drifted across the boundary mid-period.
+model AmfiMarketCapList {
+  id           String   @id @default(cuid())
+  /// The list's effective date — the half-year it governs, not the fetch date.
+  /// `fetchedAt` is the fetch date.
+  asOf         DateTime
+  isin         String
+  securityName String
+  /// LARGE | MID | SMALL
+  bucket       String
+  /// Rank by average full market cap within the published list.
+  rank         Int
+  sourceHash   String
+  fetchedAt    DateTime
+
+  @@unique([asOf, isin])
+  @@index([asOf, bucket])
+}
+
+// ─── MF ANALYTICS — COMPUTED (docs/mf-analytics/02, 03) ──────────
+//
+// Derived from the reference data above. Still shared, still not user-scoped:
+// a scheme's Sharpe ratio is the same number for every user who holds it.
+
+enum MfMetricStatus {
+  OK
+  INSUFFICIENT_DATA
+  BENCHMARK_UNAVAILABLE
+  STALE
+  QUARANTINED
+  // Undefined by construction, not missing: Treynor at beta <= 0.1, Calmar
+  // under a 1% drawdown, CAGR at the 1-year horizon (SEBI mandates absolute
+  // there). Distinct from INSUFFICIENT_DATA, which means we lacked inputs.
+  // See the long note on MfMetricStatus in packages/shared/src/mfAnalytics.types.ts.
+  NOT_APPLICABLE
+}
+
+model MfSchemeMetrics {
+  id             String         @id @default(cuid())
+  schemeCode     String
+  scheme         MfSchemeMeta   @relation(fields: [schemeCode], references: [schemeCode], onDelete: Cascade)
+  asOf           DateTime
+  /// 1 | 3 | 5 | 7 | 10
+  horizonYears   Int
+  /// A metric row exists even when nothing could be computed. Storing the
+  /// reason beats storing nothing: "we have 18 months of NAV" is an answer,
+  /// an absent row is a bug report.
+  status         MfMetricStatus
+  statusReason   String?
+  /// MfHorizonMetrics (shared type). Numerics are Decimal STRINGS — JSON
+  /// numbers would round-trip through IEEE-754 and break CONTEXT.md §3.1.
+  metrics        Json
+  benchmarkCode  String?
+  riskFreeSeries String?
+  computedAt     DateTime       @default(now())
+  /// "metrics-v1". Bumped when the math changes, so old rows stay
+  /// interpretable instead of silently meaning something else.
+  mathVersion    String
+
+  @@unique([schemeCode, asOf, horizonYears])
+  @@index([asOf])
+}
+
+model MfPeerRank {
+  id           String   @id @default(cuid())
+  schemeCode   String
+  asOf         DateTime
+  horizonYears Int
+  /// "<sebiSubCategory>|<planType>" — see 03 §1.
+  universeKey  String
+  /// Stored, not recomputed later: a percentile is meaningless without the n
+  /// it was taken over, and the universe changes month to month.
+  universeSize Int
+  /// { metricName: Decimal-string percentile }
+  percentiles  Json
+  computedAt   DateTime @default(now())
+
+  @@unique([schemeCode, asOf, horizonYears])
+  @@index([universeKey, asOf])
+}
+
+enum MfRatingStatus {
+  RATED
+  INSUFFICIENT_HISTORY
+  CATEGORY_TOO_SMALL
+  NOT_APPLICABLE
+}
+
+/// Append-only. The unique key is (scheme, asOf, methodologyVersion), so a
+/// re-run with the same methodology on the same date is an upsert of identical
+/// content, while a methodology change writes a NEW row rather than editing a
+/// score a user was already shown. Asserted by 06 §1
+/// (mf-score-append-only.test.ts).
+model MfSchemeScore {
+  id                 String         @id @default(cuid())
+  schemeCode         String
+  scheme             MfSchemeMeta   @relation(fields: [schemeCode], references: [schemeCode], onDelete: Cascade)
+  asOf               DateTime
+  /// "score-active-equity-v1"
+  methodologyVersion String
+  /// ACTIVE_EQUITY | INDEX | DEBT_SHORT | … (03 §2)
+  modelKey           String
+  ratingStatus       MfRatingStatus
+  /// 0–100. Null whenever ratingStatus is not RATED.
+  composite          Decimal?       @db.Decimal(12, 6)
+  /// 1–5. Withheld (null) under 36 months of history — 06 §1
+  /// (mf-no-rating-under-36m) asserts this.
+  rating             Int?
+  /// { pillar: { score, weight, inputs: {…} } } — the full derivation, so
+  /// "why is this fund three stars" is answerable from the stored row alone.
+  pillars            Json
+  universeKey        String
+  universeSize       Int
+  computedAt         DateTime       @default(now())
+
+  @@unique([schemeCode, asOf, methodologyVersion])
+  @@index([universeKey, asOf])
+}
+
+/// Manual / curated facts no feed provides reliably — a SEBI action against an
+/// AMC, a soft close on inflows, a strategy capacity cap. Curated by admins,
+/// time-bounded, and always attributed, because a qualitative penalty applied
+/// to a fund's score has to be defensible to the AMC.
+model MfSchemeQualitativeFact {
+  id         String    @id @default(cuid())
+  schemeCode String
+  /// AMC_REGULATORY_ACTION | STRATEGY_CAPACITY_CAP | AUM_SHOCK | …
+  factType   String
+  value      Json
+  validFrom  DateTime
+  validTo    DateTime?
+  /// URL or note.
+  source     String
+  /// Admin userId. Deliberately not a relation: this is reference data, and an
+  /// FK to User would make the table look user-scoped to the next person
+  /// reading the schema — which is how a table ends up wrongly behind RLS.
+  enteredBy  String
+  createdAt  DateTime  @default(now())
+
+  @@index([schemeCode, factType])
+}
+
+// ─── MF ANALYTICS — USER-SCOPED (docs/mf-analytics/05 §1) ────────
+//
+// The mirror image of the reference section above. Everything here is ONE
+// user's analysis of ONE user's holdings: which of their funds were flagged,
+// why, and what the engine concluded. Nothing in this section is shared.
+//
+// Therefore all three models carry the full RLS treatment, installed by
+// migration 20260904140000_mf_analytics_user_scoped:
+//   ENABLE + FORCE ROW LEVEL SECURITY, a `userId = app_current_user_id()`
+//   policy with USING *and* WITH CHECK, an app_is_system() branch for jobs,
+//   and a GRANT to the NOBYPASSRLS runtime role portfolioos_app.
+//
+// And — the other half of the same change — all three are registered in
+// USER_SCOPED_MODELS in src/lib/prisma.ts. CONTEXT.md §5: a policy without
+// that entry means the hook never issues set_config('app.current_user_id'),
+// the predicate evaluates against NULL, every read returns zero rows and
+// every write fails with 42501. That defect has shipped repeatedly here (the
+// PF tables, then Goal and BankAccount, then nineteen more, then twelve
+// more). The two halves are one change, never two.
+//
+// Asserted by test/invariants/mf-user-scoped-coverage.test.ts and, from the
+// opposite direction, by mf-reference-not-user-scoped.test.ts.
+
+enum MfAnalysisRunStatus {
+  RUNNING
+  COMPLETED
+  /// Some rule categories failed but the run still produced findings. A broken
+  /// rule is a broken rule, not a broken run (05 intro, mirroring CONTEXT.md
+  /// §9.8) — the UI banners which category is missing rather than discarding
+  /// the whole result.
+  PARTIAL
+  FAILED
+}
+
+/// One execution of the MF analytics engine for one user, with everything it
+/// consumed frozen onto it. `factsSnapshot` + `ruleVersionsSnapshot` are what
+/// make "why was fund X *not* flagged?" answerable, and what let a rule change
+/// be replayed against real historical runs without recomputing metrics.
+model MfAnalysisRun {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Which family view the run was made in, when the user was looking at the
+  /// household rather than at their own portfolio (CONTEXT.md §6). This is
+  /// PROVENANCE ONLY and is deliberately NOT part of the RLS predicate:
+  /// ownership of the row is `userId`, full stop. Scoping the policy on
+  /// familyId would let family membership widen who can read a run — an
+  /// authorisation decision that belongs to familyScope.service.ts and its
+  /// per-member visibility caps, not to a database policy that cannot see
+  /// them.
+  familyId String?
+
+  /// The as-of date every metric in the snapshot was computed at. Analytics
+  /// are always evaluated at a point in time; storing it is what makes a
+  /// replay honest.
+  asOf   DateTime
+  status MfAnalysisRunStatus
+
+  /// MfAnalysisFacts — the immutable input bundle the rules were handed (05 §2).
+  factsSnapshot        Json
+  /// MfPortfolioAnalysisDto (04).
+  portfolioAnalysis    Json
+  /// [{ ruleId, version, ran, emitted, error? }] — includes rules that ran and
+  /// emitted nothing, so silence is evidence rather than absence of evidence.
+  ruleVersionsSnapshot Json
+
+  /// HOLDINGS_CHANGE | SCORE_UPDATE | USER_REFRESH | SCHEDULE
+  triggeredBy String
+
+  /// Money, so Decimal(18,4) per CONTEXT.md §3.1 — never a float, and
+  /// serialised as a string at the API boundary.
+  llmSpendInr Decimal? @db.Decimal(18, 4)
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  findings MfFinding[]
+  verdicts MfFundVerdict[]
+
+  @@index([userId, asOf])
+}
+
+enum MfFindingSeverity {
+  INFO
+  NOTICE
+  WARNING
+  CRITICAL
+}
+
+/// One thing a rule noticed about one fund — or about the portfolio as a whole
+/// when `schemeCode` is null — together with the evidence that produced it.
+model MfFinding {
+  id    String        @id @default(cuid())
+  runId String
+  run   MfAnalysisRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  /// Denormalised from the parent run, and NOT redundant: it is what makes the
+  /// RLS policy a direct column comparison
+  ///   "userId" = app_current_user_id()
+  /// instead of an EXISTS join back through MfAnalysisRun. Findings are read in
+  /// bulk on every analytics page load and a join-up policy is re-evaluated per
+  /// candidate row. The join-up form (see ModelPortfolioVersion in
+  /// 20260902120000_advisor_engine) exists for child tables that genuinely have
+  /// no owner column; this one has one, so it uses it.
+  userId String
+
+  /// null = a portfolio-level finding rather than one about a single scheme.
+  schemeCode String?
+
+  ruleId      String
+  ruleVersion String
+  /// e.g. HIGH_DOWN_CAPTURE — stable across prose changes, so the UI and the
+  /// verdict table key off this and never off the headline text.
+  code        String
+  /// PERFORMANCE | RISK | COST | …
+  category    String
+  severity    MfFindingSeverity
+
+  /// 0–1, scaling with evidence quality (10y data ⇒ 1.0, 3y only ⇒ 0.7,
+  /// benchmark missing ⇒ 0.5). Decimal(12,6) matches the ratio precision used
+  /// throughout the reference section — a confidence is a ratio, not money.
+  confidence Decimal @db.Decimal(12, 6)
+
+  /// ≤ 120 chars, filled from a deterministic template. No LLM: a headline a
+  /// model wrote is a headline nobody can reproduce from the evidence.
+  headline String
+  /// MfEvidence[] — metric, horizon, value, category median, percentile.
+  evidence Json
+
+  /// Mandatory counterfactual: what would have to change for this finding to go
+  /// away. A finding a user can neither act on nor argue with is not a finding.
+  whatWouldChangeThis String
+
+  createdAt DateTime @default(now())
+
+  @@index([runId])
+  @@index([userId, schemeCode])
+}
+
+enum MfVerdictKind {
+  HOLD
+  MONITOR
+  REVIEW
+  SWITCH_CANDIDATE
+  /// Not a softer REVIEW — an explicit refusal to judge. Rendered as "unrated,
+  /// N months of history", never as a neutral score (06 §6).
+  INSUFFICIENT_DATA
+}
+
+/// The engine's conclusion for one fund in one run. APPEND-ONLY
+/// (00-README invariant 7): a re-run never edits a verdict. It writes a new row
+/// and points the old row's `supersededById` at it, so a figure a user was once
+/// shown stays exactly as they saw it. Same discipline as AdvisorRecommendation.
+model MfFundVerdict {
+  id    String        @id @default(cuid())
+  runId String
+  /// Deliberately NOT `onDelete: Cascade`, unlike MfFinding above. The
+  /// asymmetry is the point: a finding is scaffolding for the verdict and dies
+  /// with its run, whereas a verdict is the record of advice given and has to
+  /// outlive it. Prisma's default for a required relation is ON DELETE
+  /// RESTRICT; it is stated explicitly here so it reads as a decision rather
+  /// than an omission. Consequence, on purpose: a run that produced verdicts
+  /// cannot be deleted, and neither can the user, until those verdicts are
+  /// deliberately removed. That is what "the audit trail survives" means at the
+  /// database level.
+  run   MfAnalysisRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  /// Denormalised for the same reason as MfFinding.userId: a direct-column RLS
+  /// predicate rather than an EXISTS join through MfAnalysisRun.
+  userId String
+
+  schemeCode String
+  verdict    MfVerdictKind
+
+  /// The finding codes that drove this verdict — the audit link from conclusion
+  /// back to evidence.
+  reasons Json
+
+  /// Only ever set for SWITCH_CANDIDATE, and only from AdvisorApprovedProduct.
+  /// With RIA_VERDICTS_ENABLED=false (06 §4) the API downgrades
+  /// SWITCH_CANDIDATE to REVIEW and strips this field on the way out; the row
+  /// still stores it, because SEBI record-keeping is about what the engine
+  /// concluded, not about what was displayed.
+  suggestedReplacementSchemeCode String?
+  /// { exitLoadInr, taxInr, breakEvenMonths } — decimal strings, never floats.
+  switchCost                     Json?
+
+  /// LLM narrative. Never authoritative and never a source of numbers; shown
+  /// only when proseVerified is true, and its absence is silent to the user
+  /// (06 §6) because a failed narration is not a failed analysis.
+  prose         String? @db.Text
+  proseModel    String?
+  proseVerified Boolean @default(false)
+
+  /// Set on the OLD row when a later run reaches a materially different
+  /// conclusion. @unique because a superseding verdict replaces exactly one
+  /// predecessor: the chain is linear, and a fork would make "what was live on
+  /// date D" unanswerable.
+  supersededById String?         @unique
+  supersededBy   MfFundVerdict?  @relation("MfVerdictSupersede", fields: [supersededById], references: [id])
+  supersedes     MfFundVerdict[] @relation("MfVerdictSupersede")
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, schemeCode, createdAt])
 }

@@ -85,6 +85,28 @@ const EnvSchema = z.object({
   // /api/families endpoints 404 and the frontend Settings section hides
   // itself. Rolls out per beta cohort without touching solo users.
   ENABLE_FAMILY: z.enum(['true', 'false']).default('true'),
+  // MF analytics verdict layer — a *compliance* gate, not a feature flag, and
+  // deliberately separate from the MF_ANALYTICS entitlement.
+  //
+  // The analytics themselves (scores, peer ranks, overlap, cost, tax lots) are
+  // research. Naming a replacement scheme for a fund the user holds is
+  // investment advice under the SEBI Investment Adviser Regulations, and only
+  // an entity holding an RIA registration may give it. Since that registration
+  // belongs to whoever *deploys* this code, no per-user entitlement can decide
+  // it — the deployment must.
+  //
+  // Verdicts are always computed and stored regardless of this flag, because
+  // the stored inputs are the record-keeping SEBI expects and because an
+  // advisor-facing deployment needs the audit trail either way. What the flag
+  // controls is what leaves the API: with it 'false' the response layer
+  // downgrades SWITCH_CANDIDATE to REVIEW, strips
+  // `suggestedReplacementSchemeCode`, and the prose prompt forbids buy/sell
+  // imperatives.
+  //
+  // The 'false' default is the safe one and must STAY false in production
+  // until the registration is actually confirmed — flipping it is a legal
+  // decision, not a deploy-config tidy-up.
+  RIA_VERDICTS_ENABLED: z.enum(['true', 'false']).default('false'),
   // Per §13: Anthropic zero-retention is an account-level setting, not a
   // per-request header. This env var is advisory — if set to 'true' we
   // log the assumption so ops can double-check the Anthropic console.
