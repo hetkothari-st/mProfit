@@ -521,16 +521,23 @@ describe('§10.3 drawdown', () => {
 });
 
 // ---------------------------------------------------------------------------
-// §10.4 / §10.7 — deferred to later tasks, named so the gap stays visible
+// §10.4 — lives in its own file; §10.7 — deferred, named so the gap stays visible
 // ---------------------------------------------------------------------------
+
+// §10.4 (real-fund fixtures with published reference figures) is
+// `mfRealFunds.golden.test.ts` in this directory: three schemes (Mirae Asset
+// Large Cap 118825, HDFC Flexi Cap 118955, Nippon India Growth Mid Cap 118668),
+// ~13 years of MFAPI NAV each, NSE TRI benchmarks and the FBIL 3M T-bill series
+// from `test/fixtures/mf/real-funds/`, checked at asOf 2026-07-31 against the
+// AMCs' own factsheet figures at the doc tolerances. It is separate because it
+// is the one suite whose expected values were NOT derived from the doc's
+// formulas, and the figures that miss are `it.fails` with the delta and cause —
+// see that file's header and the fixture README before touching either.
 
 // `it.todo` rather than `describe.todo`: an empty todo suite is reported by
 // nothing and counted by nothing, which is exactly the invisibility this block
-// exists to prevent. These show in the summary as todo on every run.
-describe('§10.4 / §10.7 deferred to later tasks', () => {
-  it.todo(
-    '§10.4 real-fund fixtures: 3 schemes, 10y NAV + benchmark + rf, hand-verified against AMFI / Value Research at a fixed asOf (returns ±0.05 pp, σ ±0.1 pp, Sharpe ±0.03) — Task 2.2',
-  );
+// exists to prevent. This shows in the summary as todo on every run.
+describe('§10.7 deferred to a later task', () => {
   it.todo(
     '§10.7 IDCW adjustment: a scheme with a 10% payout gives the same CAGR from its adjustedNav series as the growth option (±0.1 pp) — needs an IDCW payout fixture',
   );
