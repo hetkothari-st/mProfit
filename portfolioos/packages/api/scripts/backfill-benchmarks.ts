@@ -27,13 +27,18 @@
  * prefix that the next run continues from. `BACKFILL_FROM_SCRATCH=1` forces the
  * full window when you actually want to re-verify old rows against the source.
  *
- * HONESTY ABOUT WHAT THIS CAN POPULATE. Several seeded codes have no verified
- * free daily TRI download (`BENCHMARK_TRI_NOT_FREELY_AVAILABLE`), and the
- * `.v1.ts` fetchers' URLs are themselves marked UNVERIFIED. The summary below
- * therefore states plainly, per index, whether anything came back — an index
- * reported as `NOTHING RETURNED` is information, not a silent zero. Reporting
- * "success, 0 rows" for a feed we cannot reach is how a benchmark ends up
- * quietly missing from the ratings for a year.
+ * HONESTY ABOUT WHAT THIS CAN POPULATE. Six of the fourteen seeded codes have
+ * no free feed at all (`BENCHMARK_TRI_NOT_FREELY_AVAILABLE`), verified against
+ * the live providers on 2026-09-07: NSE's fixed-income and hybrid history and
+ * CRISIL's whole index are paid products, and BSE publishes no total-return
+ * series. The other eight are the NSE broad-market equity TRI codes, which do
+ * work. The summary below states plainly, per index, whether anything came
+ * back — an index reported as `NOTHING RETURNED` is information, not a silent
+ * zero. Reporting "success, 0 rows" for a feed we cannot reach is how a
+ * benchmark ends up quietly missing from the ratings for a year.
+ *
+ * The risk-free series only reaches back to 2017-08-23 (FBIL's own start), so
+ * a ten-year request legitimately returns about nine years.
  */
 
 import { prisma } from '../src/lib/prisma.js';
@@ -265,12 +270,18 @@ async function main(): Promise<void> {
 
   console.log('');
   console.log(
-    '  NOTE: every URL in nseIndices.v1.ts / bseIndices.v1.ts / rbiRiskFree.v1.ts is marked',
+    '  NOTE: verified live 2026-09-07. The NSE TRI endpoint serves the eight broad-market',
   );
   console.log(
-    '  UNVERIFIED. A run that populates nothing is far more likely to be a wrong endpoint',
+    '  equity codes and nothing else; BSE publishes no free total-return series at all; the',
   );
-  console.log('  than an absent market. Verify against the live sources before trusting these.');
+  console.log(
+    '  FBIL risk-free curve works but only reaches back to 2017-08-23 and its free tier runs',
+  );
+  console.log(
+    '  about a week behind live. A run that populates nothing for a code NOT reported above as',
+  );
+  console.log('  EXPECTED is a wrong endpoint, not a quiet market.');
   console.log('==========================================================');
 }
 

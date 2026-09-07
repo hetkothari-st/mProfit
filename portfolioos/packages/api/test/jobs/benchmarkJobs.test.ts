@@ -41,7 +41,7 @@ import {
 } from '../../src/priceFeeds/benchmarkIndexSeed.js';
 import type { IndexPriceRow } from '../../src/priceFeeds/nseIndices.parse.js';
 import type { IndexFetchOutcome, IndexFetchRange } from '../../src/priceFeeds/nseIndices.v1.js';
-import type { RiskFreeFetchOutcome } from '../../src/priceFeeds/rbiRiskFree.v1.js';
+import type { RiskFreeFetchOutcome } from '../../src/priceFeeds/fbilTbillCurve.v1.js';
 import {
   runBenchmarkPrices,
   STALE_BUSINESS_DAY_THRESHOLD,

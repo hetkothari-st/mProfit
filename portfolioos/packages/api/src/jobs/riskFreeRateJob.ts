@@ -1,33 +1,41 @@
 /**
  * Weekly risk-free-rate job — `01-DATA-FOUNDATION.md §5`
- * ("`riskFreeRateJob` | weekly Mon 06:00 IST | `rbiRiskFree` → `RiskFreeRate`"),
+ * ("`riskFreeRateJob` | weekly Mon 06:00 IST | risk-free feed → `RiskFreeRate`"),
  * `07` Task 1.3.
  *
- * Fetches the RBI DBIE 91-day Treasury Bill primary-auction cut-off yield and
- * upserts it on `(series, date)`. The side-effecting half of a pair: all
- * parsing lives in the pure, fixture-tested `rbiRiskFree.parse.ts`, all URLs in
- * `rbiRiskFree.v1.ts`. This file is I/O and failure policy.
+ * Fetches the FBIL 3-month Treasury Bill par yield and upserts it on
+ * `(series, date)`. The side-effecting half of a pair: all parsing lives in the
+ * pure, fixture-tested `riskFree.parse.ts`, all URLs in
+ * `fbilTbillCurve.v1.ts`. This file is I/O and failure policy.
+ *
+ * THE SOURCE CHANGED, AND SO DID THE SERIES NAME. This job used to target RBI
+ * DBIE's weekly 91-day primary-auction cut-off yield. That endpoint does not
+ * exist — see the evidence block at the top of `fbilTbillCurve.v1.ts`. FBIL's
+ * curve is a *secondary-market* par yield, daily rather than weekly, so it is
+ * stored under `FBIL_TBILL_3M` and never under `TBILL_91D`: filing two
+ * different curves under one name is precisely the silent-wrong-number failure
+ * the rest of this header is about.
  *
  * =============================================================================
  * THE RULE THIS JOB EXISTS TO PROTECT: NEVER FORWARD-FILL INTO STORAGE
  * =============================================================================
  * `01 §3` is explicit: "Forward-fill to daily in the math layer, never in
- * storage." `RiskFreeRate` holds exactly the observations RBI published — one
- * per auction week — and nothing else. This job writes one row per observed
- * row the parser returned, and no others. It does not create a Tuesday.
+ * storage." `RiskFreeRate` holds exactly the observations the provider
+ * published and nothing else. This job writes one row per observed row the
+ * parser returned, and no others. It does not create a Sunday.
  *
- * `forwardFillToDates()` in `rbiRiskFree.parse.ts` is a READ-TIME helper. The
+ * `forwardFillToDates()` in `riskFree.parse.ts` is a READ-TIME helper. The
  * metrics layer calls it to line a weekly series up against daily NAV dates.
  * It must never be called here, and its output must never be written.
  *
  * Why, concretely — if we stored five synthetic daily rows per real weekly one:
  *
  *   1. We could no longer tell an observation from an interpolation. Six months
- *      later nobody knows which rows RBI actually published, and the
+ *      later nobody knows which rows the provider actually published, and the
  *      reconciliation in `06 §2` becomes impossible to run.
- *   2. RBI restates DBIE series. A revision would have to chase four derived
- *      rows for every real one, and a single missed row silently contradicts
- *      its neighbours — with no way to tell which is authoritative.
+ *   2. Providers restate. A revision would have to chase every derived row,
+ *      and a single missed row silently contradicts its neighbours — with no
+ *      way to tell which is authoritative.
  *   3. A staleness alert could never fire, because the fill would keep
  *      manufacturing fresh-looking rows forever after the feed died. Every
  *      Sharpe, Sortino, alpha and M2 in `02-METRICS.md` would keep computing
@@ -58,34 +66,35 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
-import type { RiskFreeParseFailure, RiskFreeRow } from '../priceFeeds/rbiRiskFree.parse.js';
+import type { RiskFreeParseFailure, RiskFreeRow } from '../priceFeeds/riskFree.parse.js';
 import {
-  fetchRbi91DayTbill,
-  RBI_RISK_FREE_ADAPTER_ID,
-  RBI_RISK_FREE_ADAPTER_VERSION,
+  fetchFbilTbillCurve,
+  FBIL_RISK_FREE_ADAPTER_ID,
+  FBIL_RISK_FREE_ADAPTER_VERSION,
+  FBIL_RISK_FREE_SERIES,
   type RiskFreeFetchOutcome,
-} from '../priceFeeds/rbiRiskFree.v1.js';
+} from '../priceFeeds/fbilTbillCurve.v1.js';
 import type { IndexFetchRange } from '../priceFeeds/nseIndices.v1.js';
 
 const TZ = 'Asia/Kolkata';
 
-export const RISK_FREE_JOB_ADAPTER_ID = RBI_RISK_FREE_ADAPTER_ID;
-export const RISK_FREE_JOB_ADAPTER_VERSION = RBI_RISK_FREE_ADAPTER_VERSION;
+export const RISK_FREE_JOB_ADAPTER_ID = FBIL_RISK_FREE_ADAPTER_ID;
+export const RISK_FREE_JOB_ADAPTER_VERSION = FBIL_RISK_FREE_ADAPTER_VERSION;
 
 /**
  * The series this job maintains. `RiskFreeRate.series` is a plain string
  * because the schema anticipates a second curve ("MIBOR_ON"); the job takes it
  * as an option so a future feed reuses this shape rather than being copied.
  */
-export const DEFAULT_RISK_FREE_SERIES = 'TBILL_91D';
+export const DEFAULT_RISK_FREE_SERIES: string = FBIL_RISK_FREE_SERIES;
 
 /**
  * Default catch-up window for the weekly run.
  *
- * Ninety days, not seven. A weekly series with a missed run, a skipped auction
- * around a holiday, or a DBIE restatement needs slack; re-fetched rows that
- * already match are skipped by the value-diff, so a wide window costs
- * comparisons, not writes.
+ * Ninety days, not seven. FBIL's free tier runs roughly five to seven business
+ * days behind live (measured 2026-09-07), and a missed run or a restatement
+ * needs slack on top of that; re-fetched rows that already match are skipped by
+ * the value-diff, so a wide window costs comparisons, not writes.
  */
 const DEFAULT_LOOKBACK_DAYS = 90;
 
@@ -93,7 +102,7 @@ const DAY_MS = 86_400_000;
 const MAX_ROW_FAILURES_DLQ = 10;
 
 /** Injectable transport — the test supplies a fixture-backed implementation so
- *  nothing in the suite can reach data.rbi.org.in. */
+ *  nothing in the suite can reach fbil.org.in. */
 export type RiskFreeFetcher = (range: IndexFetchRange) => Promise<RiskFreeFetchOutcome>;
 
 export interface RiskFreeRateJobOptions {
@@ -117,7 +126,7 @@ export interface RiskFreeRateJobResult {
   /** Observed rows the parser accepted. Nothing else is ever written. */
   rowsSeen: number;
   rowsInserted: number;
-  /** Present with a different rate — a DBIE restatement. */
+  /** Present with a different rate — a provider restatement. */
   rowsUpdated: number;
   /** Present and identical. The idempotency signal. */
   rowsSkipped: number;
@@ -167,10 +176,13 @@ export async function runRiskFreeRateJob(): Promise<RiskFreeRateJobResult | null
 }
 
 /**
- * Weekly, Monday 06:00 IST per `01 §5`. Monday morning because T-bill auctions
- * settle during the preceding week and DBIE publishes over the weekend; early
- * because everything downstream that needs a risk-free rate runs later in the
- * day.
+ * Weekly, Monday 06:00 IST per `01 §5`. The underlying series is now daily
+ * rather than weekly, but a weekly cadence is still right: FBIL's free tier
+ * runs about a week behind live, so polling daily would add six requests for
+ * data that has not moved. The 90-day catch-up window means a weekly run never
+ * misses a business day, and every write is a value-diff upsert so re-reading
+ * the same fortnight costs comparisons, not writes. Early in the day because
+ * everything downstream that needs a risk-free rate runs later.
  *
  * NOT self-registering: call this from the job registration site.
  */
@@ -216,7 +228,7 @@ async function runRiskFreeRatesInner(
   const series = options.series ?? DEFAULT_RISK_FREE_SERIES;
   const lookbackDays = options.lookbackDays ?? DEFAULT_LOOKBACK_DAYS;
   const windowEnd = options.to ? utcMidnight(options.to) : today;
-  const fetchSeries = options.fetchSeries ?? fetchRbi91DayTbill;
+  const fetchSeries = options.fetchSeries ?? fetchFbilTbillCurve;
 
   const result: RiskFreeRateJobResult = {
     series,
@@ -235,7 +247,7 @@ async function runRiskFreeRatesInner(
   const opsUserId = await resolveOpsUserId(options.opsUserId);
   const latestBefore = await latestStoredDate(series);
 
-  // Resume from the last stored observation (inclusive), so a DBIE restatement
+  // Resume from the last stored observation (inclusive), so a restatement
   // of that week is picked up rather than frozen forever.
   const from = options.from
     ? utcMidnight(options.from)

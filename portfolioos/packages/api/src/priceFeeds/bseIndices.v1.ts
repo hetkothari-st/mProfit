@@ -1,39 +1,41 @@
 /**
- * Side-effecting fetcher for BSE historical index data (S&P BSE SENSEX TRI and
- * siblings).
+ * Side-effecting fetcher for BSE's index-archive API.
  *
  * `01-DATA-FOUNDATION.md §3` ("Sensex TRI and BSE indices via a
  * `bseIndices.ts` sibling"), `07` Task 1.3.
  *
  * `.v1.ts` half of the §14 split: **network and URLs only**. The bytes go to
- * `parseBseIndexCsv`, which is pure and fixture-tested. The transport, the
- * "is this actually CSV" check and the outcome types are imported from
- * `nseIndices.v1.ts` rather than re-declared — two index feeds that disagree
- * about what a timeout or a 200-with-an-HTML-error-page means would produce two
- * different-looking incidents for one root cause.
+ * `parseBseIndexJson`, which is pure and fixture-tested. The transport and the
+ * outcome types are imported from `nseIndices.v1.ts` rather than re-declared —
+ * two index feeds that disagree about what a timeout or a
+ * 200-with-an-HTML-error-page means would produce two different-looking
+ * incidents for one root cause.
  *
  * =============================================================================
- * ⚠ EVERY URL, PARAMETER AND INDEX IDENTIFIER BELOW IS **UNVERIFIED**
+ * ⚠ THIS FEED IS WIRED, VERIFIED, AND DELIBERATELY RETURNS NOT_CONFIGURED
  * =============================================================================
- * Written from the documented shape of BSE's "Indices → Historical Data"
- * export, NOT from a live session; this repo has no verified access to it.
- * Same convention as `adapters/pf/epf/uanLookup.v1.ts`.
+ * The endpoint below is real and was confirmed working on 2026-09-07. What
+ * does **not** exist is a free BSE **total-return** series to point it at.
  *
- * Specifically unverified:
- *   1. `HISTORICAL_CSV_URL` and its query parameters. BSE's own site drives
- *      `api.bseindia.com/BseIndiaAPI/api/...` JSON endpoints behind an
- *      `Origin`/`Referer` check; whether a plain CSV export exists at a stable
- *      path is exactly what has not been confirmed. If only JSON is reachable,
- *      the fix is a `bseIndices.v2.ts` plus a JSON parser next to
- *      `bseIndices.parse.ts` — not a JSON→CSV transform hidden in this file.
- *   2. `BSE_INDEX_REQUEST_CODE` — BSE addresses indices by an internal numeric
- *      code as often as by name. `SENSEX_TRI` in particular has a separate
- *      identifier from plain SENSEX, and using the price-return SENSEX by
- *      mistake is the single most damaging error this feed can make (see the
- *      TRI essay in `benchmarkIndexSeed.ts`). Verify it against the live site
- *      and confirm the returned series is the TOTAL RETURN one before trusting
- *      a single row.
- *   3. That BSE serves a >1y range in one response.
+ * `BSE_INDEX_REQUEST_CODE` is therefore **empty**, so `SENSEX_TRI` — the only
+ * BSE code in `BENCHMARK_INDEX_SEED` — resolves to `NOT_CONFIGURED` and the
+ * job skips it without a DLQ row (a documented permanent gap is configuration,
+ * not a failure). `SENSEX_TRI` is listed in
+ * `BENCHMARK_TRI_NOT_FREELY_AVAILABLE` so the staleness alert stays quiet too.
+ *
+ * The evidence is laid out in full in `bseIndices.parse.ts`. The short version:
+ * BSE's own archive picker lists 149 indices and none of them is a TR variant;
+ * eight plausible TR codes all return `{"Table":[]}`; and the code that *is*
+ * available, `SENSEX`, closed at 72,271.94 on 01-Jan-2024 — the price-return
+ * index, roughly 38,000 points below the Sensex TRI on the same day.
+ *
+ * **Do not add `SENSEX` to the map.** It fetches cleanly, parses cleanly,
+ * stores cleanly, and hands every fund benchmarked against it the market's
+ * entire dividend yield (~1.2-1.5% p.a. in India) as alpha that does not
+ * exist — inflating information ratio, up/down capture, M2 and the star rating
+ * together, consistently, and undetectably. That is precisely the failure
+ * `test/invariants/mf-benchmark-tri-only.test.ts` exists to prevent, and it is
+ * why this map is empty rather than "helpfully" populated.
  *
  * Never throws; never fabricates rows. See the same headings in
  * `nseIndices.v1.ts` for why.
@@ -41,52 +43,54 @@
 
 import {
   __sharedTransport,
-  chunkRange,
   formatNiftyDate,
   type IndexFetchOutcome,
   type IndexFetchRange,
   type HttpTextOutcome,
 } from './nseIndices.v1.js';
-import { parseBseIndexCsv } from './bseIndices.parse.js';
-import type { IndexParseFailure, IndexPriceRow } from './nseIndices.parse.js';
+import { parseBseIndexJson } from './bseIndices.parse.js';
 
 export const BSE_INDICES_ADAPTER_ID = 'bse.indices';
-export const BSE_INDICES_ADAPTER_VERSION = '1';
+/** v1 was the never-working CSV guess; v2 is the verified JSON archive API. */
+export const BSE_INDICES_ADAPTER_VERSION = '2';
 
 /**
- * ⚠ UNVERIFIED base URL.
+ * The archive tool's own daily-history call, verified live.
  *
- * Overridable per call so a corrected path can be supplied without editing
- * this file, and so the backfill can run against a locally-saved mirror.
+ * `GET .../IndexArchDailyPAR/w?fmdt=DD/MM/YYYY&index=<code>&period=D&todt=DD/MM/YYYY`
+ * → `{"Table":[{ tdate, I_open, I_high, I_low, I_close, ... }]}`.
  */
-export const HISTORICAL_CSV_URL = 'https://www.bseindia.com/indices/IndexArchiveData.aspx';
+export const INDEX_ARCHIVE_URL = 'https://api.bseindia.com/BseIndiaAPI/api/IndexArchDailyPAR/w';
 
 /**
- * BSE-specific headers. `api.bseindia.com` rejects requests whose `origin` and
- * `referer` do not name bseindia.com, so these are not decoration.
+ * The picker that enumerates every index the archive serves, verified live.
+ * Not called by this module; recorded here because it is the check to re-run
+ * before ever concluding that BSE still has no TR series.
  */
-const BSE_HEADERS = {
+export const INDEX_LIST_URL = 'https://api.bseindia.com/BseIndiaAPI/api/FillddlIndex/w?fmdt=&todt=';
+
+/**
+ * BSE-specific headers. `api.bseindia.com` answers a request whose `origin`
+ * and `referer` do not name bseindia.com with a 302 to `error_Bse.html`
+ * (verified), so these are not decoration.
+ */
+const BSE_HEADERS: Readonly<Record<string, string>> = {
   'user-agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-  accept: 'text/csv,application/octet-stream,*/*;q=0.8',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  accept: 'application/json, text/plain, */*',
   'accept-language': 'en-US,en;q=0.9',
-  referer: 'https://www.bseindia.com/indices/IndexArchiveData.html',
+  referer: 'https://www.bseindia.com/',
   origin: 'https://www.bseindia.com',
 };
 
 /**
- * ⚠ UNVERIFIED. Seed code → the identifier BSE expects.
+ * Seed code → the identifier BSE expects.
  *
- * Explicit map, not a derivation, for the same reason as the NSE one: a
- * derived-but-wrong identifier returns an empty body rather than an error, and
- * for BSE a *plausible* wrong identifier returns the PRICE-RETURN Sensex —
- * which parses perfectly, stores perfectly, and quietly inflates every alpha
- * measured against it. An unmapped code is `NOT_CONFIGURED`; a guessed one is
- * a silent data-integrity bug.
+ * **Intentionally empty.** Read the header before adding anything. An unmapped
+ * code is an honest `NOT_CONFIGURED`; a guessed one — or the price-return
+ * `SENSEX` — is a silent data-integrity bug that no user could ever detect.
  */
-export const BSE_INDEX_REQUEST_CODE: Readonly<Record<string, string>> = {
-  SENSEX_TRI: 'SENSEX_TRI',
-};
+export const BSE_INDEX_REQUEST_CODE: Readonly<Record<string, string>> = {};
 
 export interface BseIndexFetchOptions {
   url?: string;
@@ -95,21 +99,28 @@ export interface BseIndexFetchOptions {
   fetchText?: (url: string) => Promise<HttpTextOutcome>;
 }
 
+/** BSE wants `DD/MM/YYYY`. UTC parts only, for the reason in `formatNiftyDate`. */
+export function formatBseDate(d: Date): string {
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getUTCFullYear()}`;
+}
+
 function buildUrl(base: string, code: string, range: IndexFetchRange): string {
   const u = new URL(base);
-  // ⚠ UNVERIFIED parameter names.
+  u.searchParams.set('fmdt', formatBseDate(range.from));
   u.searchParams.set('index', code);
-  u.searchParams.set('fromdate', formatNiftyDate(range.from));
-  u.searchParams.set('todate', formatNiftyDate(range.to));
+  u.searchParams.set('period', 'D');
+  u.searchParams.set('todt', formatBseDate(range.to));
   return u.toString();
 }
 
 /**
  * Fetch one BSE index's history over `range`, oldest-first, deduplicated.
  *
- * A failed chunk fails the whole fetch — a partial series reported as success
- * is a benchmark with an invisible hole, and every metric computed across it is
- * wrong while looking healthy.
+ * One request for the whole range, as with NSE: the archive API served a full
+ * month in ~200 ms and there is nothing to gain from splitting a public
+ * endpoint's work into more requests than it needs.
  */
 export async function fetchBseIndexHistory(
   indexCode: string,
@@ -124,79 +135,84 @@ export async function fetchBseIndexHistory(
       ok: false,
       reason: 'NOT_CONFIGURED',
       detail:
-        `No BSE request identifier is mapped for "${indexCode}". Add a ` +
-        `BSE_INDEX_REQUEST_CODE entry only after confirming on the live site ` +
-        `that the identifier returns the TOTAL RETURN series and not the ` +
-        `price-return one.`,
+        `No BSE request identifier is mapped for "${indexCode}". BSE publishes ` +
+        `no free total-return series: its archive picker lists 149 indices and ` +
+        `none is a TR variant, and the freely available "SENSEX" code is the ` +
+        `PRICE-RETURN index. Benchmarking against that would invent roughly the ` +
+        `market's dividend yield as alpha. Schemes on this benchmark must ` +
+        `degrade to BENCHMARK_UNAVAILABLE rather than compare against a PRI.`,
       sourceRef,
     };
   }
 
-  const base = options.url ?? HISTORICAL_CSV_URL;
+  const base = options.url ?? INDEX_ARCHIVE_URL;
   const get = options.fetchText ?? ((url: string) => __sharedTransport.httpGetText(url, BSE_HEADERS));
 
-  const rows: IndexPriceRow[] = [];
-  const failures: IndexParseFailure[] = [];
-  const seen = new Set<number>();
+  const res = await get(buildUrl(base, requestCode, range));
+  if (!res.ok) {
+    return {
+      ok: false,
+      reason: res.reason,
+      detail: res.detail,
+      sourceRef,
+      ...(res.httpStatus === undefined ? {} : { httpStatus: res.httpStatus }),
+    };
+  }
 
-  for (const chunk of chunkRange(range)) {
-    const url = buildUrl(base, requestCode, chunk);
-    const res = await get(url);
-    if (!res.ok) {
-      return {
-        ok: false,
-        reason: res.reason,
-        detail: res.detail,
-        sourceRef,
-        ...(res.httpStatus === undefined ? {} : { httpStatus: res.httpStatus }),
-      };
-    }
+  if (!res.text.trim()) {
+    return {
+      ok: false,
+      reason: 'EMPTY_BODY',
+      detail: `Empty body for BSE "${requestCode}" over ${sourceRef}.`,
+      sourceRef,
+    };
+  }
 
-    if (!res.text.trim()) {
+  if (!__sharedTransport.looksLikeJson(res.text)) {
+    return {
+      ok: false,
+      reason: 'NOT_JSON',
+      detail:
+        `Response for BSE "${requestCode}" is not JSON. api.bseindia.com ` +
+        `redirects to an HTML error page when the origin/referer check fails.`,
+      sourceRef,
+      bodySample: res.text.trimStart().slice(0, 300),
+    };
+  }
+
+  const parsed = parseBseIndexJson(res.text);
+  const fatal = parsed.failures.find(
+    (f) => f.reason === 'not_json' || f.reason === 'not_array' || f.reason === 'empty_payload',
+  );
+  if (fatal) {
+    if (fatal.reason === 'empty_payload') {
       return {
         ok: false,
         reason: 'EMPTY_BODY',
-        detail: `Empty body for BSE "${requestCode}" ${formatNiftyDate(chunk.from)}..${formatNiftyDate(chunk.to)} — the identifier or the endpoint is probably wrong.`,
+        detail:
+          `BSE returned an empty Table for "${requestCode}" over ${sourceRef}. ` +
+          `The archive API answers an unknown index code with {"Table":[]} and ` +
+          `HTTP 200, so this is far more likely a wrong code than a month with ` +
+          `no trading. Check FillddlIndex (${INDEX_LIST_URL}).`,
         sourceRef,
       };
     }
-
-    if (!__sharedTransport.looksLikeCsv(res.text)) {
-      return {
-        ok: false,
-        reason: 'NOT_CSV',
-        detail: `Response for BSE "${requestCode}" is not CSV (HTML/JSON/other). The endpoint has moved or requires a session.`,
-        sourceRef,
-        bodySample: res.text.trimStart().slice(0, 300),
-      };
-    }
-
-    const parsed = parseBseIndexCsv(res.text);
-    if (parsed.rows.length === 0 && parsed.failures.some((f) => f.reason === 'missing_header')) {
-      return {
-        ok: false,
-        reason: 'PARSE_REJECTED',
-        detail: `No recognisable header in the BSE CSV for "${requestCode}". Add a fixture and bump the adapter version.`,
-        sourceRef,
-        bodySample: res.text.trimStart().slice(0, 300),
-      };
-    }
-
-    failures.push(...parsed.failures);
-    for (const row of parsed.rows) {
-      const key = row.date.getTime();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      rows.push(row);
-    }
+    return {
+      ok: false,
+      reason: 'PARSE_REJECTED',
+      detail:
+        `Unusable payload for BSE "${requestCode}" (${fatal.reason}). The ` +
+        `response shape has changed — capture a fixture and bump the adapter ` +
+        `version.`,
+      sourceRef,
+      bodySample: fatal.raw,
+    };
   }
-
-  rows.sort((a, b) => a.date.getTime() - b.date.getTime());
 
   return {
     ok: true,
-    rows,
-    failures,
+    rows: parsed.rows,
+    failures: parsed.failures,
     sourceRef,
     adapterId: BSE_INDICES_ADAPTER_ID,
     adapterVersion: BSE_INDICES_ADAPTER_VERSION,

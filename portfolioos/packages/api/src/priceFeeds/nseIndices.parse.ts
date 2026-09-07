@@ -1,43 +1,69 @@
 /**
- * Pure parser for niftyindices.com historical index CSV downloads.
+ * Pure parser for niftyindices.com Total Return Index history.
  *
  * `01-DATA-FOUNDATION.md` §3 (`nseIndices.ts`), Task 1.3 in `07`.
  *
  * PURE MODULE, per the §14 `.parse.ts` / `.v1.ts` split: no network, no fs, no
- * Prisma. The side-effecting fetcher (`nseIndices.v1.ts`, a later task) does the
- * cookie/header dance that `nseBhavcopy.service.ts` and `nseUniverse.service.ts`
- * already model, and hands the CSV text to `parseNiftyIndexCsv`. Keeping the
- * split means a niftyindices layout change is a *new fixture*, not a debugging
- * session against a live government-adjacent website.
+ * Prisma. The side-effecting fetcher (`nseIndices.v1.ts`) does the POST and
+ * hands the response body here.
  *
  * ---------------------------------------------------------------------------
- * ASSUMED INPUT FORMAT
+ * VERIFIED INPUT FORMAT (captured live 2026-09-07)
  * ---------------------------------------------------------------------------
- * A header row followed by data rows, roughly:
+ * This parser was rewritten from a real response. The previous version parsed
+ * a *CSV* that niftyindices does not actually serve: the "csv format" link on
+ * https://www.niftyindices.com/reports/historical-data is a client-side export
+ * built in the browser from an already-rendered HTML table, so no CSV ever
+ * crosses the wire. The wire format is JSON.
  *
- *   Index Name,Index Date,Open Index Value,High Index Value,Low Index Value,
- *   Closing Index Value,Points Change,Change(%),Volume,Turnover (Rs. Cr.),
- *   P/E,P/B,Div Yield
+ * `POST https://www.niftyindices.com/BackPage/getTotalReturnIndexString`
+ * answers HTTP 200 with a **JSON array** — note `content-type` is
+ * `text/html; charset=utf-8`, which is a lie and must not be trusted:
  *
- * Observed variations we tolerate deliberately:
- *   - Dates come as `DD MMM YYYY` from one endpoint and `DD-MM-YYYY` from
- *     another. Both are handled; so are `DD-MMM-YYYY` and ISO, because guessing
- *     wrong here silently shifts an entire index series by months.
- *   - Rows arrive newest-first. We always emit oldest-first (see below).
- *   - Numeric fields carry Indian digit grouping ("1,23,456.78") and are then
- *     quoted, so a naive `split(',')` mis-columns the row. We use a
- *     quote-aware splitter.
- *   - Trailing blank lines and a stray BOM.
+ * ```json
+ * [{"RequestNumber":"TRI63924364898181473400",
+ *   "Index Name":"Nifty 50",
+ *   "Date":"31 Jan 2024",
+ *   "TotalReturnsIndex":"31939.59",
+ *   "NTR_Value":"28933.54"}, ...]
+ * ```
  *
- * We read the CLOSING value only. Open/high/low are not stored: every metric in
- * `02-METRICS.md` is close-to-close, and storing unused columns invites someone
- * to compute a "true range" volatility that is not comparable to the NAV-based
- * volatility we compute for funds.
+ * Properties observed against the live endpoint, each of which this parser
+ * depends on and the fixtures pin:
+ *   - Rows arrive **newest-first**. We always emit oldest-first.
+ *   - `Date` is `DD MMM YYYY`. Other Indian formats are still accepted because
+ *     guessing wrong here shifts an entire index series by months.
+ *   - Every numeric field is a **string**, not a JSON number. That is a gift:
+ *     the value never passes through an IEEE-754 double before we see it, so
+ *     `toDecimal` receives the provider's exact digits (§3.2).
+ *   - `NTR_Value` is present only for NIFTY 50 / NIFTY MIDCAP 50 / NIFTY 500
+ *     and is the literal string `"-"` for every other index.
+ *   - `RequestNumber` is a per-request nonce and differs on every call. It
+ *     carries no information about the observation and is ignored.
  *
- * This file also owns the primitives (CSV splitting, date parsing, value
- * validation, gap detection) that `bseIndices.parse.ts` reuses. Two index
- * parsers that disagree about what "duplicate_date" means would be worse than
- * a cross-import.
+ * ---------------------------------------------------------------------------
+ * WHY WE READ `TotalReturnsIndex` AND NEVER `NTR_Value`
+ * ---------------------------------------------------------------------------
+ * `TotalReturnsIndex` is the gross Total Return Index: dividends reinvested in
+ * full on the ex-date. `NTR_Value` is the *Net* Total Return Index, which
+ * reinvests dividends after a notional withholding tax.
+ *
+ * Two independent reasons to take the gross series:
+ *   1. SEBI's Feb-2018 circular mandates TRI benchmarking for Indian mutual
+ *      funds, and the TRI every AMC and factsheet quotes is the gross one. A
+ *      metric computed against NTR is not comparable with any published number.
+ *   2. NSE publishes `NTR_Value` for exactly three indices. Silently preferring
+ *      it "when available" would put three of our eight benchmarks on a
+ *      different, systematically lower series than the other five — so a fund
+ *      benchmarked to NIFTY 50 would score better than an identical fund
+ *      benchmarked to NIFTY 100, purely because of which column we happened to
+ *      find. Consistency beats a marginally more "correct" tax treatment.
+ *
+ * ---------------------------------------------------------------------------
+ * This file also owns the primitives (date parsing, value validation, the row
+ * loop, gap detection) that `bseIndices.parse.ts` reuses. Two index parsers
+ * that disagreed about what "duplicate_date" means would be worse than a
+ * cross-import.
  */
 
 import type { Decimal } from 'decimal.js';
@@ -50,28 +76,47 @@ export interface IndexPriceRow {
 }
 
 /**
- * Why a row was dropped. Closed union so the job layer can map each reason to
- * an `IngestionFailure` reason string without a default branch that hides new
- * cases (§3.5 — failures are recorded, never swallowed).
+ * Why a row — or a whole payload — was rejected. Closed union so the job layer
+ * can map each reason to an `IngestionFailure` reason string without a default
+ * branch that hides new cases (§3.5 — failures are recorded, never swallowed).
  */
 export type IndexParseFailureReason =
-  /** No header row we recognise. The whole file is rejected. */
-  | 'missing_header'
-  /** Fewer columns than the header promised. */
-  | 'short_row'
+  /** Body is not JSON at all. Almost always an HTML error/login page served
+   *  with HTTP 200 — see the `content-type` lie documented above. */
+  | 'not_json'
+  /** Valid JSON, but not the array of row objects we expect. */
+  | 'not_array'
+  /**
+   * A syntactically perfect **empty** array.
+   *
+   * This is the single most dangerous response the endpoint produces: an index
+   * name it does not recognise returns `[]` with HTTP 200 rather than an error
+   * (verified live against `name: 'NIFTY NOT A REAL INDEX'`). Treated as a
+   * whole-payload failure, never as "the market was closed all month", because
+   * the two are indistinguishable downstream and only one of them is our bug.
+   */
+  | 'empty_payload'
+  /** An array element that is not an object (string, number, null). */
+  | 'not_an_object'
+  /** No `Date` property, or it is blank. */
+  | 'missing_date'
   /** Date cell present but not in any format we accept. */
   | 'bad_date'
-  /** Close cell empty, "-", "NA" — a genuine hole in the source. */
+  /** Value cell empty, "-", "NA" — a genuine hole in the source. */
   | 'missing_value'
-  /** Close cell present but not numeric. */
+  /** Value cell present but not numeric. */
   | 'bad_value'
   /** `01 §6`: index value <= 0 is rejected, never stored. */
   | 'non_positive_value'
-  /** `01 §6`: the same date appears twice in one file. */
+  /** `01 §6`: the same date appears twice in one payload. */
   | 'duplicate_date';
 
 export interface IndexParseFailure {
-  /** 1-based line number in the original text, so a human can open the file. */
+  /**
+   * 1-based position of the offending element in the response array, so an
+   * operator can find it in the captured payload. Whole-payload failures
+   * (`not_json`, `not_array`, `empty_payload`) report `1`.
+   */
   line: number;
   raw: string;
   reason: IndexParseFailureReason;
@@ -112,43 +157,6 @@ const DMY_NAMED = /^(\d{1,2})[\s/-]+([A-Za-z]{3,9})[\s/-]+(\d{4})$/;
 const DMY_NUMERIC = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/;
 /** Plain decimal after separators are stripped. Rejects "1.2.3", "12a", "". */
 const NUMERIC = /^-?\d+(?:\.\d+)?$/;
-
-/**
- * Split one CSV line, respecting double quotes and `""` escapes.
- *
- * Required, not optional: niftyindices quotes turnover ("1,23,456.78"), and a
- * `split(',')` shifts every column after it, which silently makes P/E the
- * closing value. Cheap hand-rolled splitter beats a dependency for one format.
- */
-export function splitCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!;
-    if (inQuotes) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cur += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ',') {
-      out.push(cur);
-      cur = '';
-    } else {
-      cur += ch;
-    }
-  }
-  out.push(cur);
-  return out.map((c) => c.trim());
-}
 
 /**
  * Parse an index date to UTC midnight.
@@ -237,75 +245,53 @@ export function parseIndexValue(raw: string): IndexValueOutcome {
 }
 
 /**
- * Locate the header row among the first few lines.
+ * Read one string field out of a decoded JSON row.
  *
- * Some index downloads prepend a title/date-range line before the header. We
- * scan instead of assuming line 1 so one cosmetic preamble does not reject the
- * whole file.
+ * The providers type every numeric as a string, but a future format change
+ * that switches to real JSON numbers must degrade to a `bad_*` failure rather
+ * than crashing on `.trim()` of a number — so numbers are stringified here,
+ * deliberately, and everything else (null, object, array, undefined) becomes
+ * the empty string, which the callers map to `missing_*`.
  */
-function findHeader(
-  lines: readonly string[],
-  matches: (cols: string[]) => boolean,
-  maxScan = 10,
-): { index: number; cols: string[] } | null {
-  const limit = Math.min(lines.length, maxScan);
-  for (let i = 0; i < limit; i++) {
-    const raw = lines[i];
-    if (!raw || !raw.trim()) continue;
-    // Strip a UTF-8 BOM off the first cell. NSE/BSE exports carry one, and it
-    // would otherwise leave the first header cell as "<BOM>Index Name",
-    // which no header matcher recognises — the whole file would be rejected
-    // for a single invisible byte.
-    const cols = splitCsvLine(raw).map((c) => c.replace(/^\uFEFF/, '').trim());
-    if (matches(cols)) return { index: i, cols };
-  }
-  return null;
-}
-
-function norm(h: string): string {
-  return h.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-/** Index of the first header whose normalised form satisfies `pred`, or -1. */
-function findCol(cols: readonly string[], pred: (n: string) => boolean): number {
-  return cols.findIndex((c) => pred(norm(c)));
+function readCell(row: Record<string, unknown>, key: string): string {
+  const v = row[key];
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') return String(v);
+  return '';
 }
 
 /**
- * Shared row loop for both NSE and BSE. Given resolved column positions, emit
- * rows and failures with identical semantics for every reason code.
+ * Shared row loop for both NSE and BSE. Given already-extracted date/value
+ * cells, emit rows and failures with identical semantics for every reason
+ * code, and always in ascending date order.
+ *
+ * `index` on each item is the 0-based array position; reported as `line`
+ * 1-based.
  */
-function collectRows(
-  lines: readonly string[],
-  headerIndex: number,
-  dateIdx: number,
-  closeIdx: number,
+export function collectIndexRows(
+  items: readonly { index: number; dateRaw: string; valueRaw: string; raw: string }[],
 ): IndexParseResult {
   const rows: IndexPriceRow[] = [];
   const failures: IndexParseFailure[] = [];
-  const seen = new Map<number, number>(); // epoch ms -> line number first seen
-  const minCols = Math.max(dateIdx, closeIdx) + 1;
+  const seen = new Set<number>();
 
-  for (let i = headerIndex + 1; i < lines.length; i++) {
-    const raw = lines[i]!;
-    if (!raw.trim()) continue; // blank / trailing newline — not a failure
-    const lineNo = i + 1;
-    const cols = splitCsvLine(raw);
+  for (const item of items) {
+    const line = item.index + 1;
 
-    if (cols.length < minCols) {
-      failures.push({ line: lineNo, raw, reason: 'short_row' });
+    if (!item.dateRaw.trim()) {
+      failures.push({ line, raw: item.raw, reason: 'missing_date' });
       continue;
     }
 
-    const date = parseIndexDate(cols[dateIdx]!);
+    const date = parseIndexDate(item.dateRaw);
     if (!date) {
-      failures.push({ line: lineNo, raw, reason: 'bad_date' });
+      failures.push({ line, raw: item.raw, reason: 'bad_date' });
       continue;
     }
 
-    const value = parseIndexValue(cols[closeIdx]!);
+    const value = parseIndexValue(item.valueRaw);
     if (!value.ok) {
-      failures.push({ line: lineNo, raw, reason: value.reason });
+      failures.push({ line, raw: item.raw, reason: value.reason });
       continue;
     }
 
@@ -314,56 +300,91 @@ function collectRows(
       // `01 §6`. Keep the FIRST occurrence and reject the later one. Arbitrary
       // but must be deterministic: "last wins" would make the parse depend on
       // the source's row order, and niftyindices order is not stable.
-      failures.push({ line: lineNo, raw, reason: 'duplicate_date' });
+      failures.push({ line, raw: item.raw, reason: 'duplicate_date' });
       continue;
     }
-    seen.set(key, lineNo);
+    seen.add(key);
     rows.push({ date, value: value.value });
   }
 
-  // Always oldest-first. The source serves newest-first, `detectGaps` and every
-  // metric window assume ascending, and a stable order is what makes the
+  // Always oldest-first. Both sources serve newest-first, `detectGaps` and
+  // every metric window assume ascending, and a stable order is what makes the
   // "parse twice, identical output" determinism test meaningful.
   rows.sort((a, b) => a.date.getTime() - b.date.getTime());
   return { rows, failures };
 }
 
 /**
- * Parse a niftyindices.com historical CSV.
+ * Decode a JSON body into an array of row objects, or explain why not.
  *
- * Never throws. A file we cannot make sense of yields
- * `{ rows: [], failures: [{ reason: 'missing_header' }] }` so the caller writes
- * one `IngestionFailure` and moves on (§3.5).
+ * Shared with `bseIndices.parse.ts`, which unwraps a `{ Table: [...] }`
+ * envelope first. Never throws — a provider serving an HTML error page under
+ * HTTP 200 is an expected operational state, not an exception (§3.5).
  */
-export function parseNiftyIndexCsv(text: string): IndexParseResult {
-  const lines = text.split(/\r?\n/);
-
-  const header = findHeader(
-    lines,
-    (cols) =>
-      findCol(cols, (n) => n === 'indexdate' || n === 'date' || n === 'historicaldate') !== -1 &&
-      findCol(cols, (n) => n.startsWith('closing') || n === 'close' || n === 'closeindexvalue') !== -1,
-  );
-
-  if (!header) {
-    return {
-      rows: [],
-      failures: [
-        { line: 1, raw: (lines[0] ?? '').slice(0, 300), reason: 'missing_header' },
-      ],
-    };
+export function decodeJsonRows(
+  text: string,
+  pick: (parsed: unknown) => unknown,
+): { ok: true; rows: unknown[] } | { ok: false; failure: IndexParseFailure } {
+  const sample = text.trimStart().slice(0, 300);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    // Not swallowed: converted into a typed, reported failure whose `raw`
+    // carries the first bytes so an operator can see the login wall / error
+    // page for themselves.
+    return { ok: false, failure: { line: 1, raw: sample, reason: 'not_json' } };
   }
 
-  const dateIdx = findCol(
-    header.cols,
-    (n) => n === 'indexdate' || n === 'date' || n === 'historicaldate',
-  );
-  const closeIdx = findCol(
-    header.cols,
-    (n) => n.startsWith('closing') || n === 'close' || n === 'closeindexvalue',
-  );
+  const picked = pick(parsed);
+  if (!Array.isArray(picked)) {
+    return { ok: false, failure: { line: 1, raw: sample, reason: 'not_array' } };
+  }
+  if (picked.length === 0) {
+    return { ok: false, failure: { line: 1, raw: sample, reason: 'empty_payload' } };
+  }
+  return { ok: true, rows: picked };
+}
 
-  return collectRows(lines, header.index, dateIdx, closeIdx);
+/** The fields we read off a niftyindices TRI row. See the header essay. */
+export const NIFTY_TRI_DATE_KEY = 'Date';
+export const NIFTY_TRI_VALUE_KEY = 'TotalReturnsIndex';
+
+/**
+ * Parse a `getTotalReturnIndexString` response body.
+ *
+ * Never throws. A body we cannot make sense of yields
+ * `{ rows: [], failures: [{ reason: 'not_json' | 'not_array' | 'empty_payload' }] }`
+ * so the caller writes one `IngestionFailure` and moves on (§3.5).
+ */
+export function parseNiftyTriJson(text: string): IndexParseResult {
+  const decoded = decodeJsonRows(text, (p) => p);
+  if (!decoded.ok) return { rows: [], failures: [decoded.failure] };
+
+  const items: { index: number; dateRaw: string; valueRaw: string; raw: string }[] = [];
+  const failures: IndexParseFailure[] = [];
+
+  decoded.rows.forEach((entry, i) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      failures.push({ line: i + 1, raw: JSON.stringify(entry) ?? 'undefined', reason: 'not_an_object' });
+      return;
+    }
+    const row = entry as Record<string, unknown>;
+    items.push({
+      index: i,
+      dateRaw: readCell(row, NIFTY_TRI_DATE_KEY),
+      valueRaw: readCell(row, NIFTY_TRI_VALUE_KEY),
+      raw: JSON.stringify(row).slice(0, 300),
+    });
+  });
+
+  const collected = collectIndexRows(items);
+  return {
+    rows: collected.rows,
+    // Element-shape failures come first so the reported line numbers stay
+    // ascending overall, which is what an operator scanning a DLQ row expects.
+    failures: [...failures, ...collected.failures].sort((a, b) => a.line - b.line),
+  };
 }
 
 /**
@@ -426,7 +447,3 @@ export function detectGaps(
   }
   return gaps;
 }
-
-/** Internal helpers shared with `bseIndices.parse.ts`. Not part of the feed's
- *  public contract; exported only so the sibling parser cannot drift. */
-export const __indexCsvInternals = { findHeader, findCol, collectRows, norm };

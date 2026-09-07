@@ -25,7 +25,7 @@ import type { MfHorizonMetrics, MfCurrentProfile } from '@portfolioos/shared';
 
 import { prisma } from '../../../src/lib/prisma.js';
 import { runAsSystem } from '../../../src/lib/requestContext.js';
-import { computeMetricsForScheme } from '../../../src/services/mfAnalytics/mfMetrics.service.js';
+import { computeMetricsForScheme, RISK_FREE_SERIES } from '../../../src/services/mfAnalytics/mfMetrics.service.js';
 import { runMfMetricsJob } from '../../../src/jobs/mfMetricsJob.js';
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,12 @@ const BENCH_GAPPED = `${P}_BENCH_GAP_TRI`;
  */
 const AS_OF = new Date(Date.UTC(2025, 5, 30));
 
-const RF_SERIES = 'TBILL_91D';
+// The live series id, not a literal. The service switched from RBI's
+// TBILL_91D to FBIL's FBIL_TBILL_3M when DBIE was found decommissioned, and a
+// literal here would keep seeding rows under a series the service no longer
+// reads -- every Sharpe/Sortino would come back null and this suite would
+// blame the maths.
+const RF_SERIES = RISK_FREE_SERIES;
 
 // ---------------------------------------------------------------------------
 // Deterministic series generation
@@ -328,6 +333,20 @@ beforeAll(async () => {
     const rfDates = businessDays(minusYears(AS_OF, 12), AS_OF).filter(
       (d) => d.getUTCDay() === 1,
     );
+    // `skipDuplicates` because this fixture no longer owns the series. The
+    // service reads the LIVE risk-free series (FBIL_TBILL_3M), and the local
+    // DB now carries real FBIL rows from 2017-08-23 onward under that same
+    // series -- so a fixture Monday on a date FBIL also has is a
+    // (series, date) unique-constraint violation, and vitest then skips every
+    // test in the file while looking like it merely "ran nothing".
+    //
+    // On a collision the REAL row wins and the fixture row is dropped, which
+    // is the right precedence for reference data on a shared database. The
+    // rate the tests see is therefore flat 6.5% before FBIL's history begins
+    // and real thereafter; nothing here asserts an exact Sharpe value, only
+    // statuses, shapes and byte-identical re-runs, so a mixed curve is fine.
+    // Cleanup below deletes only rows carrying this fixture's sourceHash
+    // prefix, so the real rows are never touched.
     await prisma.riskFreeRate.createMany({
       data: rfDates.map((d) => ({
         series: RF_SERIES,
@@ -335,6 +354,7 @@ beforeAll(async () => {
         ratePct: '6.500000',
         sourceHash: `${P}:rf:${d.toISOString().slice(0, 10)}`,
       })),
+      skipDuplicates: true,
     });
 
     await seedScheme({

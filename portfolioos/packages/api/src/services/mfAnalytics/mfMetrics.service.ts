@@ -69,6 +69,7 @@ import type {
   SeriesPoint,
   HoldingWeightRow,
 } from './mfMetricsMath.js';
+import { ACTIVE_RISK_FREE_SERIES, type RiskFreeSeries } from '../../priceFeeds/riskFree.parse.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -88,7 +89,11 @@ export const HOLDINGS_STALE_AFTER_DAYS = 60;
  * `RiskFreeRate.ratePct`, so every read divides by 100 before it reaches the
  * math module, which works in fractions throughout.
  */
-export const RISK_FREE_SERIES = 'TBILL_91D';
+// Re-exported under the name the rest of this file and its tests use. The
+// value is owned by the risk-free feed (see the comment there); hardcoding
+// 'TBILL_91D' here is exactly how the metrics layer ended up reading a series
+// nothing writes.
+export const RISK_FREE_SERIES: RiskFreeSeries = ACTIVE_RISK_FREE_SERIES;
 
 /** `02 §2.2`: the rolling windows we report, subject to fitting in the horizon. */
 const ROLLING_WINDOWS = [1, 3, 5] as const;

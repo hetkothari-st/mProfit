@@ -151,8 +151,9 @@ export const BENCHMARK_INDEX_SEED: readonly BenchmarkIndexSeedEntry[] = [
 
   // --- NSE hybrid ----------------------------------------------------------
   // The SEBI-prescribed benchmark for aggressive hybrid / balanced advantage
-  // schemes. Published by NSE under multi-asset indices, on a different
-  // niftyindices endpoint from the broad-market equity download.
+  // schemes. Published by NSE under multi-asset indices, but NOT served by the
+  // public historical-data endpoints (probed 2026-09-07 — see
+  // BENCHMARK_TRI_NOT_FREELY_AVAILABLE).
   {
     code: 'NIFTY50_HYBRID_COMPOSITE_DEBT_65_35_TRI',
     name: 'NIFTY 50 Hybrid Composite Debt 65:35 Index TRI',
@@ -187,21 +188,44 @@ export const BENCHMARK_INDEX_SEED: readonly BenchmarkIndexSeedEntry[] = [
   },
 
   // --- BSE -----------------------------------------------------------------
+  // Seeded so a scheme can name the correct benchmark, but NOT populated: BSE
+  // publishes no free total-return series (verified 2026-09-07 — see
+  // BENCHMARK_TRI_NOT_FREELY_AVAILABLE below and `bseIndices.v1.ts`).
   { code: 'SENSEX_TRI', name: 'S&P BSE SENSEX TRI', provider: 'BSE', isTotalReturn: true },
 ];
 
 /**
- * Codes with **no verified free daily TRI download** as of this writing.
+ * Codes with **no free daily TRI feed**. Every entry below was probed against
+ * the live sources on **2026-09-07**; this list is findings, not guesses.
  *
- * - `CRISIL_COMPOSITE_BOND` — CRISIL index history is a licensed, paid
- *   product. Confirmed unavailable free. Nothing will backfill it.
- * - `NIFTY_SHORT_DURATION_DEBT`, `NIFTY_CORPORATE_BOND`, `NIFTY_LIQUID` —
- *   NSE publishes these, but not on the same historical-download endpoint the
- *   equity TRI parser targets; the fixed-income series sit behind a separate
- *   (and historically flakier) niftyindices path. Treat the endpoint as
- *   UNVERIFIED until `nseIndices.v1.ts` proves it.
- * - `NIFTY50_HYBRID_COMPOSITE_DEBT_65_35_TRI` — believed downloadable, but on
- *   the multi-asset endpoint rather than the broad-market one. Also unverified.
+ * What IS available (so, deliberately absent from this list): the eight
+ * broad-market NSE equity TRI codes, all confirmed to return real rows from
+ * `POST niftyindices.com/BackPage/getTotalReturnIndexString`. See
+ * `NSE_INDEX_REQUEST_NAME` in `nseIndices.v1.ts` for the exact names.
+ *
+ * - `CRISIL_COMPOSITE_BOND` — CRISIL licenses its index history as a paid
+ *   product. There is no provider endpoint to probe. Nothing will backfill it.
+ *
+ * - `NIFTY_SHORT_DURATION_DEBT`, `NIFTY_CORPORATE_BOND`, `NIFTY_LIQUID`,
+ *   `NIFTY50_HYBRID_COMPOSITE_DEBT_65_35_TRI` — real NSE indices, but the
+ *   public historical-data tool does not serve them. Each was requested under
+ *   several spellings from BOTH `/BackPage/getTotalReturnIndexString` and
+ *   `/BackPage/getHistoricaldatatabletoString`, and every attempt returned an
+ *   empty array with HTTP 200 (the same answer a nonsense index name gets).
+ *   They are absent from the site's own `IndexMapping.json` too, which lists
+ *   258 indices including dozens of other bond series. NSE puts fixed-income
+ *   and hybrid history behind its paid data subscription. The earlier belief
+ *   that these sat on a "separate niftyindices path" was wrong: the
+ *   fixed-income G-Sec series that ARE public (e.g. "Nifty GS Compsite")
+ *   answer on the very same endpoint, so there is no other path to find.
+ *
+ * - `SENSEX_TRI` — **newly added to this list.** BSE publishes no free
+ *   total-return series at all. Its archive picker (`FillddlIndex`) lists 149
+ *   indices and not one is a TR variant; eight plausible TR codes all returned
+ *   `{"Table":[]}`; and its daily all-index snapshot CSV is price-return only.
+ *   The available `SENSEX` code is the PRICE-RETURN index (72,271.94 on
+ *   01-Jan-2024, roughly 38,000 points below the Sensex TRI that day) and must
+ *   never be substituted — see the essay above and `bseIndices.v1.ts`.
  *
  * `benchmarkPriceJob` should not raise the `06 §7` "no new row for > 3 business
  * days" alert for a code in this list — an alert that fires every day for a
@@ -213,6 +237,7 @@ export const BENCHMARK_TRI_NOT_FREELY_AVAILABLE: readonly string[] = [
   'NIFTY_CORPORATE_BOND',
   'NIFTY_LIQUID',
   'NIFTY50_HYBRID_COMPOSITE_DEBT_65_35_TRI',
+  'SENSEX_TRI',
 ];
 
 /** Lookup by code. Returns `undefined` for an unknown code — callers decide

@@ -11,7 +11,7 @@
  * EVERY URL AND PATH BELOW IS **UNVERIFIED**
  * =============================================================================
  * Same convention, and the same honesty, as `adapters/pf/epf/uanLookup.v1.ts`
- * and `priceFeeds/rbiRiskFree.v1.ts`.
+ * and `priceFeeds/fbilTbillCurve.v1.ts`.
  *
  * `06 §2` says "AMFI publishes scheme performance; MFAPI exposes it; a paid
  * feed is better". This repo has verified access to exactly one MFAPI route —
