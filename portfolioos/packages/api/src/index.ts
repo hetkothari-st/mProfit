@@ -21,6 +21,15 @@ import { startInsuranceJobs } from './jobs/insuranceJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
+// MF analytics layer (docs/mf-analytics/). Ordering below is load-bearing, not
+// cosmetic — see the comment at the call sites.
+import { startMfNavAdjustmentJob } from './jobs/mfNavAdjustmentJob.js';
+import { startMfMetricsJob } from './jobs/mfMetricsJob.js';
+import { startMfPeerRankJob } from './jobs/mfPeerRankJob.js';
+import { startMfMetadataJob } from './jobs/mfMetadataJob.js';
+import { startBenchmarkPriceJob } from './jobs/benchmarkPriceJob.js';
+import { startRiskFreeRateJob } from './jobs/riskFreeRateJob.js';
+import { startMfReconciliationJob } from './jobs/mfReconciliationJob.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 
@@ -102,6 +111,48 @@ const server = app.listen(env.PORT, '::', () => {
   startAlertJobs();
   startNetWorthSnapshotJob();
   startFoExpiryJob();
+  /**
+   * MF analytics pipeline. Each job only registers a cron schedule here; the
+   * schedules themselves encode the dependency chain, because each stage reads
+   * what the previous one wrote:
+   *
+   *   benchmarkPrice   20:00  daily   TRI levels; metrics need these for
+   *                                     every benchmark-relative figure
+   *   AMFI NAV sync (startPriceJobs, above)  ~22:00 IST
+   *     -> mfNavAdjustment  22:30  quarantine + adjustedNav
+   *     -> mfMetrics        23:15  per-scheme metrics, needs adjustedNav
+   *     -> mfPeerRank       00:30  universes + percentiles, needs every
+   *                                scheme's metrics row to rank one of them
+   *
+   *   riskFreeRate     Mon 06:00  weekly  T-bill yield (Sharpe/Sortino input)
+   *   mfReconciliation 5th 03:00  monthly accuracy check against published
+   *                               figures. NOT the 1st: AMCs publish
+   *                               month-end factsheets over the first few
+   *                               working days, so a 1st run would compare
+   *                               our fresh numbers against last month's
+   *                               published ones and breach all 30 schemes.
+   *   mfMetadata       1st 02:00  monthly scheme master; deliberately outside
+   *                               the nightly band because it rewrites
+   *                               sebiSubCategory/planType, which DECIDE a
+   *                               scheme's peer universe — running it under
+   *                               mfPeerRank would re-partition universes
+   *                               mid-ranking.
+   *
+   * Registering them in this order does not enforce the sequence — the cron
+   * times do. But a reader changing one time needs to see the chain, so they
+   * are grouped and commented rather than filed alphabetically.
+   *
+   * All three are reference-data jobs: they run under `runAsSystem`, write no
+   * user-scoped rows, and are safe to re-run (every write upserts on a natural
+   * key, per `01-DATA-FOUNDATION.md §5`).
+   */
+  startBenchmarkPriceJob();
+  startRiskFreeRateJob();
+  startMfMetadataJob();
+  startMfReconciliationJob();
+  startMfNavAdjustmentJob();
+  startMfMetricsJob();
+  startMfPeerRankJob();
   // Fire-and-forget: run initial data sync in background so server stays responsive
   runStartupSync().catch((err) => logger.error({ err }, 'Startup sync failed'));
 });
