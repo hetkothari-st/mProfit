@@ -23,6 +23,8 @@ import {
   computeSchemeSourceHash,
   parseAmfiDate,
   isEtfName,
+  parseOptionColumn,
+  resolvePlanAndOption,
   type ParsedSchemeRow,
 } from '../../src/priceFeeds/amfiSchemeMaster.parse.js';
 
@@ -602,4 +604,101 @@ describe('exchange-traded funds', () => {
     });
   });
 });
+
+describe('the real AMFI NAVAll.txt format (8 columns)', () => {
+  /**
+   * These exist because the synthetic fixtures were wrong about the feed.
+   *
+   * Every other fixture in this suite is six columns, folding plan and option
+   * into the scheme name. The live file AMFI publishes is EIGHT: it states
+   * Plan and Option as their own columns. Against the real September 2026
+   * file the six-column parser produced 702 rows out of 14,875 and rejected
+   * 13,614 as `unparseable_plan_option` -- a 95% failure rate that no
+   * synthetic fixture could have surfaced, because the fixtures were written
+   * from the same wrong assumption as the parser.
+   *
+   * The excerpt below is cut verbatim from that live download.
+   */
+  it('parses the real 8-column layout, preferring the explicit columns', async () => {
+    const { schemes, failures } = parseAmfiNavAll(await fixture('navall-real-8col.txt'));
+
+    expect(schemes.length).toBeGreaterThan(0);
+    expect(failures.filter((f) => f.reason === 'malformed_row')).toEqual([]);
+
+    const byCode = new Map(schemes.map((r) => [r.schemeCode, r]));
+
+    // Plan and option come from columns 5 and 6, not from the name -- this
+    // scheme's name carries neither marker.
+    const axisDirectGrowth = byCode.get('120465')!;
+    expect(axisDirectGrowth.schemeName).toBe('Axis Large Cap Fund');
+    expect(axisDirectGrowth.planType).toBe('DIRECT');
+    expect(axisDirectGrowth.optionType).toBe('GROWTH');
+
+    // NAV and date are columns 7 and 8. Under the six-column reading these
+    // were "Direct Plan" and "Growth Option", so the row was discarded.
+    expect(axisDirectGrowth.nav).toBe('69.6600');
+    expect(axisDirectGrowth.navDate?.toISOString().slice(0, 10)).toBe('2026-09-04');
+
+    // Same fund, regular plan, IDCW -- distinguished only by the columns.
+    const axisRegularIdcw = byCode.get('112278')!;
+    expect(axisRegularIdcw.planType).toBe('REGULAR');
+    expect(axisRegularIdcw.optionType).toBe('IDCW_PAYOUT');
+  });
+
+  it('resolves the real category header wording', async () => {
+    const { schemes } = parseAmfiNavAll(await fixture('navall-real-8col.txt'));
+
+    // "Equity Schemes - Large Cap Fund": AMFI writes Schemes PLURAL, wrapped
+    // in "Open Ended Schemes(...)". The normaliser matched only the singular,
+    // so every one of these was UNMAPPED and therefore excluded from its peer
+    // universe.
+    const large = schemes.find((r) => r.schemeCode === '120465')!;
+    expect(large.sebiSubCategory).toBe('Large Cap Fund');
+    expect(large.sebiCategory).toBe('EQUITY');
+
+    // A legacy pre-2017 header that AMFI never rewrote for older schemes.
+    const legacy = schemes.filter((r) =>
+      r.categoryHeaderText.includes('Income/Debt Oriented Schemes - Short Term Fund'),
+    );
+    if (legacy.length > 0) {
+      expect(legacy[0]!.sebiSubCategory).toBe('Short Duration Fund');
+    }
+
+    // The `**` footnote marker AMFI puts on the solution-oriented header must
+    // not defeat the lookup.
+    const retirement = schemes.filter((r) =>
+      r.categoryHeaderText.includes('Retirement Fund'),
+    );
+    if (retirement.length > 0) {
+      expect(retirement[0]!.sebiSubCategory).toBe('Retirement Fund');
+    }
+  });
+
+  it('recognises case variants of the Option column', () => {
+    // "GROWTH OPTION" (upper), "Growth", "Growth Option" all occur live.
+    expect(parseOptionColumn('GROWTH OPTION', 'X Fund')).toBe('GROWTH');
+    expect(parseOptionColumn('Growth', 'X Fund')).toBe('GROWTH');
+    expect(parseOptionColumn('Monthly IDCW', 'X Fund')).toBe('IDCW_PAYOUT');
+    expect(parseOptionColumn('IDCW (Income Distribution CUM Capital Withdrawal)', 'X')).toBe(
+      'IDCW_PAYOUT',
+    );
+    // A real AMC typo in the live file: DCW without the leading I.
+    expect(parseOptionColumn('MONTHLY DCW Payout', 'X Fund')).toBe('IDCW_PAYOUT');
+    expect(parseOptionColumn('', 'X Fund')).toBeNull();
+  });
+
+  it('falls back to the name when the columns are blank', () => {
+    // ~40% of live rows leave both columns empty, so neither source alone is
+    // sufficient.
+    expect(resolvePlanAndOption('', '', 'Some Fund - Direct Plan - Growth')).toEqual({
+      planType: 'DIRECT',
+      optionType: 'GROWTH',
+    });
+    // Columns win over the name where they disagree -- AMFI is authoritative.
+    expect(
+      resolvePlanAndOption('Regular Plan', 'IDCW', 'Nippon India Growth Fund - Direct - Growth'),
+    ).toEqual({ planType: 'REGULAR', optionType: 'IDCW_PAYOUT' });
+  });
+});
+
 

@@ -193,10 +193,10 @@ function extractCategoryPayload(headerText: string): string {
  * a guess: it is the other half of the same string.
  */
 const BROAD_CATEGORY_PREFIX: ReadonlyArray<[RegExp, SebiCategory]> = [
-  [/^\s*equity\s+scheme\b/i, 'EQUITY'],
-  [/^\s*debt\s+scheme\b/i, 'DEBT'],
-  [/^\s*hybrid\s+scheme\b/i, 'HYBRID'],
-  [/^\s*solution\s+oriented\s+scheme\b/i, 'SOLUTION_ORIENTED'],
+  [/^\s*equity\s+schemes?\b/i, 'EQUITY'],
+  [/^\s*debt\s+schemes?\b/i, 'DEBT'],
+  [/^\s*hybrid\s+schemes?\b/i, 'HYBRID'],
+  [/^\s*solution\s+oriented\s+schemes?\b/i, 'SOLUTION_ORIENTED'],
   [/^\s*other\s+scheme\b/i, 'OTHER'],
 ];
 
@@ -252,7 +252,9 @@ const RE_GROWTH = /\bgrowth\b|\(\s*g\s*\)|[-–]\s*g\s*$/i;
  * IDCW in all its spellings. `\bdiv\b` catches "Div - Payout"; the expanded
  * SEBI phrase catches "Payout of Income Distribution cum capital Withdrawal".
  */
-const RE_IDCW = /\bidcw\b|\bdividend\b|\bdiv\b|income\s+distribution\s+cum|\(\s*d\s*\)/i;
+// `DCW` (no leading I) occurs in the live file -- e.g. "MONTHLY DCW Payout".
+// It is an AMC typo for IDCW that AMFI passes through verbatim.
+const RE_IDCW = /\bi?dcw\b|\bdividend\b|\bdiv\b|income\s+distribution\s+cum|\(\s*d\s*\)/i;
 
 const RE_REINVEST = /re-?\s?invest(ment)?\b|\breinv\b|\(\s*(idcw\s*-\s*)?r(i|einv(est)?)?\s*\)/i;
 const RE_PAYOUT = /\bpay-?\s?out\b|\(\s*(idcw\s*-\s*)?p\s*\)/i;
@@ -329,6 +331,68 @@ export function isEtfName(schemeName: string): boolean {
  * suffix (rare, but some gold ETFs historically did) still has it honoured —
  * the suffix is evidence and beats the structural inference.
  */
+/**
+ * AMFI's own `Plan` column. Values seen in the live file: "Direct Plan",
+ * "Regular Plan", and blank.
+ */
+export function parsePlanColumn(raw: string | undefined): MfPlanType | null {
+  const v = (raw ?? '').trim().toLowerCase();
+  if (v.length === 0) return null;
+  if (v.includes('direct')) return 'DIRECT';
+  if (v.includes('regular')) return 'REGULAR';
+  return null;
+}
+
+/**
+ * AMFI's own `Option` column. The live file carries at least: "Growth",
+ * "Growth Option", "GROWTH", "IDCW", "IDCW Option", "Monthly IDCW",
+ * "Quarterly IDCW", "Weekly IDCW", "Daily IDCW", "Annual IDCW",
+ * "IDCW (Income Distribution CUM Capital Withdrawal)", and blank.
+ *
+ * Payout vs reinvestment is NOT in this column -- AMFI states the frequency,
+ * not the mode -- so an IDCW here resolves the same way an unqualified IDCW in
+ * the name does (payout; see the note on `parsePlanAndOption`), unless the
+ * name says reinvestment. The caller passes the name in for exactly that.
+ */
+export function parseOptionColumn(
+  raw: string | undefined,
+  schemeName: string,
+): MfOptionType | null {
+  const v = (raw ?? '').trim();
+  if (v.length === 0) return null;
+  if (RE_IDCW.test(v)) {
+    if (RE_REINVEST.test(v) || RE_REINVEST.test(schemeName)) return 'IDCW_REINVEST';
+    if (RE_PAYOUT.test(v) || RE_PAYOUT.test(schemeName)) return 'IDCW_PAYOUT';
+    return 'IDCW_PAYOUT';
+  }
+  if (RE_GROWTH.test(v)) return 'GROWTH';
+  return null;
+}
+
+/**
+ * Plan and option for a row, preferring AMFI's explicit columns and falling
+ * back to the scheme name.
+ *
+ * The live `NAVAll.txt` has EIGHT columns and states Plan and Option outright
+ * -- but leaves both blank on roughly 40% of rows (5,756 of 14,339 in the
+ * September 2026 file). So neither source alone is sufficient: the columns are
+ * authoritative where present, and the name heuristic below covers the rest.
+ * Reading the name when AMFI has already told us is how "Nippon India Growth
+ * Fund - Direct - IDCW" gets mis-filed.
+ */
+export function resolvePlanAndOption(
+  planCol: string | undefined,
+  optionCol: string | undefined,
+  schemeName: string,
+): PlanAndOption | null {
+  const fromName = parsePlanAndOption(schemeName);
+  const planType = parsePlanColumn(planCol) ?? fromName?.planType ?? null;
+  const optionType = parseOptionColumn(optionCol, schemeName) ?? fromName?.optionType ?? null;
+  if (optionType === null) return null;
+  // AMFI's convention: no plan marker anywhere means the regular plan.
+  return { planType: planType ?? 'REGULAR', optionType };
+}
+
 export function parsePlanAndOption(schemeName: string): PlanAndOption | null {
   const name = schemeName.replace(/\s+/g, ' ').trim();
 
@@ -737,7 +801,25 @@ export function parseAmfiNavAll(text: string): AmfiMasterParseResult {
       continue;
     }
 
-    const planOption = parsePlanAndOption(schemeName);
+    /**
+     * Column layout, decided per row rather than per file.
+     *
+     * The live AMFI file is EIGHT columns:
+     *   code;isinGrowth;isinReinvest;name;plan;option;nav;date
+     * Archived and third-party mirrors of the same feed are SIX, folding plan
+     * and option into the name:
+     *   code;isinGrowth;isinReinvest;name;nav;date
+     * Both are supported because the historical downloads used for a backfill
+     * are not guaranteed to match today's live shape, and a backfill that
+     * silently dropped every row would look like "no history exists".
+     */
+    const isEightColumn = parts.length >= 8;
+    const planCol = isEightColumn ? parts[4] : undefined;
+    const optionCol = isEightColumn ? parts[5] : undefined;
+    const navRaw = isEightColumn ? parts[6] : parts[4];
+    const dateRaw = isEightColumn ? parts[7] : parts[5];
+
+    const planOption = resolvePlanAndOption(planCol, optionCol, schemeName);
     if (!planOption) {
       // Excluded entirely, per `01 §3`.
       failures.push({
@@ -779,8 +861,8 @@ export function parseAmfiNavAll(text: string): AmfiMasterParseResult {
       planType: planOption.planType,
       optionType: planOption.optionType,
       isEtf: isEtfName(schemeName),
-      nav: parseNav(parts[4] ?? ''),
-      navDate: parseAmfiDate(parts[5] ?? ''),
+      nav: parseNav(navRaw ?? ''),
+      navDate: parseAmfiDate(dateRaw ?? ''),
       growthSiblingKey: growthSiblingKey(schemeName),
       growthSiblingSchemeCode: null,
       sourceAdapter: AMFI_SCHEME_MASTER_ADAPTER_ID,

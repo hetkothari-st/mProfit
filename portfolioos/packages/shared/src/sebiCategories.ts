@@ -345,6 +345,61 @@ const SUBCATEGORY_ALIASES: Record<string, SebiSubCategory> = {
   'fof (overseas/domestic)': 'FoF (Overseas/Domestic)',
   'childrens fund': "Children's Fund",
   'children fund': "Children's Fund",
+  // -- wording taken from the LIVE NAVAll.txt, not from the circular. AMFI's
+  // header text differs from SEBI's own category names in small ways that a
+  // reader would not predict, and each of these was an UNMAPPED scheme (and so
+  // an excluded universe member) until it was added.
+  "children's fund - childrens' fund": "Children's Fund",
+  "childrens' fund": "Children's Fund",
+  'elss- tax saver fund': 'ELSS',
+  'elss - tax saver fund': 'ELSS',
+  'tax saver fund': 'ELSS',
+  'sectoral/ thematic': 'Sectoral/Thematic Fund',
+  'sectoral/thematic': 'Sectoral/Thematic Fund',
+  'dynamic bond': 'Dynamic Bond Fund',
+  'floater fund': 'Floater Fund',
+  'money market fund': 'Money Market Fund',
+  'overnight fund': 'Overnight Fund',
+  'balanced hybrid fund': 'Balanced Hybrid Fund',
+  'dynamic asset allocation/balanced advantage':
+    'Dynamic Asset Allocation or Balanced Advantage Fund',
+  'retirement fund': 'Retirement Fund',
+  'other scheme - index funds': 'Index Funds/ETFs',
+  'gilt fund with 10 year constant duration':
+    'Gilt Fund with 10 year constant duration',
+
+  // -- Legacy AMFI headers, still used for schemes launched before the 2017
+  // categorisation circular. They are not SEBI category names any more, but
+  // AMFI never rewrote the historical blocks, and a fund carrying one is a
+  // live open-ended fund that would otherwise be UNMAPPED and silently absent
+  // from every peer universe. Mapped to the nearest current sub-category.
+  'income/debt oriented schemes - liquid fund': 'Liquid Fund',
+  'income/debt oriented schemes - overnight fund': 'Overnight Fund',
+  'income/debt oriented schemes - money market fund': 'Money Market Fund',
+  'income/debt oriented schemes - ultra short term fund': 'Ultra Short Duration Fund',
+  'income/debt oriented schemes - ultra short to short term fund': 'Low Duration Fund',
+  'income/debt oriented schemes - short term fund': 'Short Duration Fund',
+  'income/debt oriented schemes - medium term fund': 'Medium Duration Fund',
+  'income/debt oriented schemes - medium to long term fund': 'Medium to Long Duration Fund',
+  'income/debt oriented schemes - long term fund': 'Long Duration Fund',
+  'income/debt oriented schemes - corporate bond fund': 'Corporate Bond Fund',
+  'income/debt oriented schemes - credit risk fund': 'Credit Risk Fund',
+  'income/debt oriented schemes - banking and psu fund': 'Banking and PSU Fund',
+  'income/debt oriented schemes - gilt fund': 'Gilt Fund',
+  'income/debt oriented schemes - floating interest rates fund': 'Floater Fund',
+  'income/debt oriented schemes - dynamic bond': 'Dynamic Bond Fund',
+  'money market': 'Money Market Fund',
+  'index funds - equity funds': 'Index Funds/ETFs',
+  'index funds - debt funds': 'Index Funds/ETFs',
+  'index funds - hybrid fund': 'Index Funds/ETFs',
+  'other scheme - gold etf': 'Index Funds/ETFs',
+  'other scheme - other etfs': 'Index Funds/ETFs',
+  'other scheme - other  etfs': 'Index Funds/ETFs',
+  'overseas fund of funds - fund of funds investing overseas': 'FoF (Overseas/Domestic)',
+  'other scheme - fund of funds': 'FoF (Overseas/Domestic)',
+  "solution oriented scheme - children's fund": "Children's Fund",
+  'solution oriented schemes ** - retirement fund': 'Retirement Fund',
+  'solution oriented scheme - retirement fund': 'Retirement Fund',
 };
 
 /**
@@ -356,7 +411,13 @@ const SUBCATEGORY_ALIASES: Record<string, SebiSubCategory> = {
 export function normaliseCategoryText(text: string): string {
   return text
     .toLowerCase()
-    .replace(/^(equity|debt|hybrid|solution\s*oriented|other)\s*scheme\s*[-–—:]\s*/, '')
+    // Footnote markers and whitespace FIRST: AMFI writes
+    // "Solution Oriented Schemes ** - Retirement Fund", and the `**` sits
+    // between the prefix and its dash, so stripping the prefix before the
+    // markers leaves the prefix regex unable to match its own separator.
+    .replace(/\*+/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^(equity|debt|hybrid|solution\s*oriented|other)\s*schemes?\s*[-–—:]\s*/, '')
     .replace(/[.]+$/, '')
     .replace(/\s+/g, ' ')
     .trim();
