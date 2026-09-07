@@ -400,6 +400,53 @@ const SUBCATEGORY_ALIASES: Record<string, SebiSubCategory> = {
   "solution oriented scheme - children's fund": "Children's Fund",
   'solution oriented schemes ** - retirement fund': 'Retirement Fund',
   'solution oriented scheme - retirement fund': 'Retirement Fund',
+
+  // -- The remaining live headers, all verified against the 4-Sep-2026
+  // NAVAll.txt. Every one of these was an UNMAPPED scheme, i.e. silently
+  // absent from its peer universe and therefore unrateable.
+  //
+  // The ETF block is filed by ASSET, not by index: AMFI writes "Equity ETF",
+  // "Gold ETF", "Silver ETF". SEBI has one "Index Funds/ETFs" sub-category,
+  // so they all land there; `isEtf` on the row is what separates an ETF from
+  // an index fund for the INDEX model's STRUCTURE pillar.
+  'exchange traded funds (etfs) - equity etf': 'Index Funds/ETFs',
+  'exchange traded funds (etfs) - debt etf': 'Index Funds/ETFs',
+  'exchange traded funds (etfs) - hybrid etf': 'Index Funds/ETFs',
+  'exchange traded funds (etfs) - gold etf': 'Index Funds/ETFs',
+  'exchange traded funds (etfs) - silver etf': 'Index Funds/ETFs',
+  'exchange traded funds (etfs) - other etf': 'Index Funds/ETFs',
+  'exchange traded funds (etfs) - etfs investing overseas': 'FoF (Overseas/Domestic)',
+  'fund of funds scheme (domestic) - fund of funds scheme (domestic)':
+    'FoF (Overseas/Domestic)',
+
+  // Hybrid: AMFI drops the trailing "Fund" that the circular uses.
+  'hybrid scheme - equity savings': 'Equity Savings Fund',
+  'equity savings': 'Equity Savings Fund',
+  'hybrid scheme - multi asset allocation': 'Multi Asset Allocation Fund',
+  'multi asset allocation': 'Multi Asset Allocation Fund',
+  'hybrid schemes - balanced advantage fund/ dynamic asset allocation':
+    'Dynamic Asset Allocation or Balanced Advantage Fund',
+  'balanced advantage fund/ dynamic asset allocation':
+    'Dynamic Asset Allocation or Balanced Advantage Fund',
+
+  // Debt: more legacy wording.
+  'income/debt oriented schemes - banking and psu debt fund': 'Banking and PSU Fund',
+  'income/debt oriented schemes - 10-year constant maturity gilt fund':
+    'Gilt Fund with 10 year constant duration',
+  '10-year constant maturity gilt fund': 'Gilt Fund with 10 year constant duration',
+
+  // ⚠ Keys are matched AFTER `normaliseCategoryText` has stripped the broad
+  // prefix, so an alias written as "other scheme - gold etf" can never fire --
+  // by lookup time the text is just "gold etf". Aliases for anything under an
+  // Equity/Debt/Hybrid/Solution-Oriented/Other prefix must be the bare tail.
+  // (The "income/debt oriented schemes - ..." keys above DO keep their prefix,
+  // because that wording does not start with a bare broad-category word and so
+  // is never stripped.)
+  'gold etf': 'Index Funds/ETFs',
+  'silver etf': 'Index Funds/ETFs',
+  'other etfs': 'Index Funds/ETFs',
+  'other etf': 'Index Funds/ETFs',
+  'income/debt oriented schemes - dynamic term fund': 'Dynamic Bond Fund',
 };
 
 /**
@@ -416,6 +463,12 @@ export function normaliseCategoryText(text: string): string {
     // between the prefix and its dash, so stripping the prefix before the
     // markers leaves the prefix regex unable to match its own separator.
     .replace(/\*+/g, '')
+    // AMFI mixes curly and straight quotes inside one header --
+    // "Children’s Fund - Childrens' Fund" has both. Fold them to the
+    // straight forms so an alias table written in ASCII can match.
+    .replace(/[‘’‛]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, '-')
     .replace(/\s+/g, ' ')
     .replace(/^(equity|debt|hybrid|solution\s*oriented|other)\s*schemes?\s*[-–—:]\s*/, '')
     .replace(/[.]+$/, '')

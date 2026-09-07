@@ -106,6 +106,11 @@ const EnvSchema = z.object({
   // The 'false' default is the safe one and must STAY false in production
   // until the registration is actually confirmed — flipping it is a legal
   // decision, not a deploy-config tidy-up.
+  // Default stays 'false' even though the operator's RIA registration is now
+  // confirmed (Sept 2026). This is a per-environment switch, not a product
+  // decision: a dev box, a CI run or a fork should not emit prescriptive
+  // advice merely by starting the API. Each deployed environment that is
+  // covered by the registration sets it explicitly.
   RIA_VERDICTS_ENABLED: z.enum(['true', 'false']).default('false'),
   // Per §13: Anthropic zero-retention is an account-level setting, not a
   // per-request header. This env var is advisory — if set to 'true' we
