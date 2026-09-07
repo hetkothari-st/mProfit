@@ -1140,9 +1140,9 @@ model GmailScanJob {
   nextPageToken String?
 
   errorMessage String?
-  startedAt    DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime  @default(now())
+  startedAt    DateTime? @db.Timestamptz(3)
+  completedAt  DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
 
   documents GmailDiscoveredDoc[]
 
@@ -1171,7 +1171,7 @@ model GmailDiscoveredDoc {
   gmailAttachmentId String
   fromAddress       String
   subject           String
-  receivedAt        DateTime
+  receivedAt        DateTime @db.Timestamptz(3)
   fileName          String
   fileSize          Int
   mimeType          String
@@ -1193,12 +1193,12 @@ model GmailDiscoveredDoc {
   importJob      ImportJob? @relation(fields: [importJobId], references: [id], onDelete: SetNull)
   rejectedReason String?
 
-  approvedAt DateTime?
-  rejectedAt DateTime?
-  importedAt DateTime?
+  approvedAt DateTime? @db.Timestamptz(3)
+  rejectedAt DateTime? @db.Timestamptz(3)
+  importedAt DateTime? @db.Timestamptz(3)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([userId, gmailMessageId, gmailAttachmentId])
   @@unique([userId, contentHash])
@@ -1227,8 +1227,8 @@ model GmailAutoApproveRule {
   docType       String?
   enabled       Boolean   @default(true)
   approvedCount Int       @default(0)
-  lastUsedAt    DateTime?
-  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
 
   @@unique([userId, fromAddress, docType])
   @@index([userId, enabled])
@@ -2373,8 +2373,8 @@ model Loan {
   closedDate        DateTime? @db.Date
   lenderMatchKey    String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   payments        LoanPayment[]
   ownedProperties OwnedProperty[]
@@ -2395,7 +2395,7 @@ model LoanPayment {
   forMonth         String?
   canonicalEventId String?
   notes            String?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([loanId, paidOn])
 }
@@ -2417,8 +2417,8 @@ model CreditCard {
   interestRate       Decimal? @db.Decimal(6, 4)
   annualFee          Decimal? @db.Decimal(10, 2)
   status             String   @default("ACTIVE")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(3)
 
   statements CreditCardStatement[]
 
@@ -2437,7 +2437,7 @@ model CreditCardStatement {
   paidOn           DateTime?  @db.Date
   status           String
   canonicalEventId String?
-  createdAt        DateTime   @default(now())
+  createdAt        DateTime   @default(now()) @db.Timestamptz(3)
 
   @@unique([cardId, forMonth])
   @@index([dueDate, status])
@@ -2565,7 +2565,7 @@ model OwnedProperty {
   // Current value (manual; refresh prompt in UI when stale)
   currentValue       Decimal?  @db.Decimal(14, 2)
   currentValueSource String?   @default("manual")
-  currentValueAsOf   DateTime?
+  currentValueAsOf   DateTime? @db.Timestamptz(3)
 
   // Linkages — proper FKs (fixes loans pattern of bare string IDs)
   loanId            String?
@@ -2608,8 +2608,8 @@ model OwnedProperty {
   notes    String?
   isActive Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([userId, status])
   @@index([userId, propertyTaxDueMonth])
@@ -2690,19 +2690,19 @@ model ProvidentFundAccount {
   credentialsKeyId  String?
 
   status          PfAccountStatus @default(ACTIVE)
-  lastRefreshedAt DateTime?
+  lastRefreshedAt DateTime?       @db.Timestamptz(3)
   lastFetchSource PfFetchSource?
 
   /// When the most recent stale-account nudge alert was emitted (null = never).
-  lastNudgedAt      DateTime?
+  lastNudgedAt      DateTime? @db.Timestamptz(3)
   /// User-set future date until which nudges should be suppressed (null = no snooze).
-  nudgeSnoozedUntil DateTime?
+  nudgeSnoozedUntil DateTime? @db.Timestamptz(3)
 
   currentBalance Decimal? @db.Decimal(18, 4)
   assetKey       String
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   memberIds     EpfMemberId[]
   fetchSessions PfFetchSession[]
@@ -2741,8 +2741,8 @@ model PfFetchSession {
 
   source             PfFetchSource
   status             PfFetchStatus     @default(INITIATED)
-  startedAt          DateTime          @default(now())
-  completedAt        DateTime?
+  startedAt          DateTime          @default(now()) @db.Timestamptz(3)
+  completedAt        DateTime?         @db.Timestamptz(3)
   captchaAttempts    Int               @default(0)
   ocrUsed            Boolean           @default(false)
   ocrSucceeded       Boolean?
@@ -2776,7 +2776,7 @@ model ExtensionPairing {
 
   /// Short-lived 8-char human-readable code, e.g. "XK7-9MQ2". Unique + TTL-checked.
   pairingCode          String   @unique
-  pairingCodeExpiresAt DateTime
+  pairingCodeExpiresAt DateTime @db.Timestamptz(3)
 
   /// SHA-256(bearer) — used for O(1) bearer lookup. Never stores plaintext.
   bearerHash  String? @unique
@@ -2784,12 +2784,12 @@ model ExtensionPairing {
   bearerLast8 String?
 
   paired     Boolean   @default(false)
-  pairedAt   DateTime?
-  lastUsedAt DateTime?
+  pairedAt   DateTime? @db.Timestamptz(3)
+  lastUsedAt DateTime? @db.Timestamptz(3)
   revoked    Boolean   @default(false)
-  revokedAt  DateTime?
+  revokedAt  DateTime? @db.Timestamptz(3)
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([userId, paired])
   @@index([userId, revoked])
@@ -3600,7 +3600,7 @@ model MfSchemeMeta {
   /// single "Index Funds/ETFs" sub-category — the sub-category cannot separate
   /// them. A stored column is also queryable, which a name-matching helper is
   /// not: the scorer needs to partition a universe in SQL, not in memory.
-  isEtf                   Boolean         @default(false)
+  isEtf                   Boolean        @default(false)
   /// -> BenchmarkIndex.code. Tier-1 TRI only; a price-return index is
   /// rejected at seed time (01 §6).
   benchmarkIndexCode      String?
