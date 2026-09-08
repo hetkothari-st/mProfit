@@ -424,6 +424,7 @@ export function TenantKhataPage() {
       </div>
 
       <AddEntryDialog
+        key={entryDialog.direction}
         open={entryDialog.open}
         onOpenChange={(v) => setEntryDialog((d) => ({ ...d, open: v }))}
         tenancyId={ledger.tenancyId}
