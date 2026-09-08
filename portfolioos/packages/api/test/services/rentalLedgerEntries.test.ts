@@ -57,6 +57,13 @@ describe('rental ledger entries', () => {
       const ledger = await getTenancyLedger(scope.userId, tenancyId);
       expect(ledger.balanceDue).toBe('25000');
       expect(ledger.rows.some((r) => r.entryType === 'PAYMENT' && r.amount === '20000')).toBe(true);
+      // rows[] comes back newest-first, so rows[0] is the newest row. This
+      // fixture has no DEPOSIT/DEPOSIT_REFUND rows (which would carry the
+      // *previous* running balance forward rather than a new one), so
+      // rows[0] is a safe anchor for pinning the two independently-computed
+      // balances together: balanceDue (persisted by recomputeTenancyLedger)
+      // and runningBalance (replayed from scratch in getTenancyLedger).
+      expect(ledger.rows[0].runningBalance).toBe(ledger.balanceDue);
     });
   });
 
@@ -107,6 +114,31 @@ describe('rental ledger entries', () => {
       await deleteLedgerEntry(scope.userId, payment.id);
       const after = await getTenancyLedger(scope.userId, tenancyId);
       expect(after.balanceDue).toBe('45000');
+    });
+  });
+
+  it('pins runningBalance to balanceDue after a LATE_FEE moves the balance', async () => {
+    await scope.runAs(async () => {
+      // Starting fresh off the previous test: the PAYMENT was deleted, so
+      // the tenancy is back to just the 45000 RENT_CHARGE receipt.
+      await createLedgerEntry(scope.userId, tenancyId, {
+        entryType: 'LATE_FEE', amount: '500', entryDate: '2026-04-10', note: 'late fee',
+      });
+      const ledger = await getTenancyLedger(scope.userId, tenancyId);
+      expect(ledger.balanceDue).toBe('45500');
+      // Same anchor rationale as the payment test above: no deposit rows in
+      // this fixture, so the newest row (rows[0]) isn't one that would
+      // carry a stale running balance forward.
+      expect(ledger.rows[0].runningBalance).toBe(ledger.balanceDue);
+
+      // And again with a DISCOUNT layered on top, so the pin is checked
+      // against more than one charge/credit combination, not just one.
+      await createLedgerEntry(scope.userId, tenancyId, {
+        entryType: 'DISCOUNT', amount: '1500', entryDate: '2026-04-12', note: 'goodwill discount',
+      });
+      const afterDiscount = await getTenancyLedger(scope.userId, tenancyId);
+      expect(afterDiscount.balanceDue).toBe('44000');
+      expect(afterDiscount.rows[0].runningBalance).toBe(afterDiscount.balanceDue);
     });
   });
 
@@ -171,12 +203,15 @@ describe('rental ledger entries', () => {
         prisma.cashFlow.count({ where: { portfolioId: scope.portfolioId } }),
       ).resolves.toBe(1);
 
-      // 4. Patch to DEPOSIT_REFUND: the CashFlow direction is now OUTFLOW.
+      // 4. Patch to DEPOSIT_REFUND: the CashFlow direction is now OUTFLOW,
+      // and its description no longer names the old PAYMENT type.
       await updateLedgerEntry(scope.userId, created.id, { entryType: 'DEPOSIT_REFUND' });
       entry = await prisma.rentLedgerEntry.findUniqueOrThrow({ where: { id: created.id } });
       expect(entry.cashFlowId).not.toBeNull();
       const cf = await prisma.cashFlow.findUniqueOrThrow({ where: { id: entry.cashFlowId! } });
       expect(cf.type).toBe('OUTFLOW');
+      expect(cf.description).toContain('DEPOSIT_REFUND');
+      expect(cf.description).not.toContain('PAYMENT');
     });
   });
 });

@@ -345,6 +345,9 @@ export async function updateLedgerEntry(
   const effectiveAmount = parsedAmount ?? existing.amount;
   const effectiveEntryDate = parsedEntryDate ?? existing.entryDate;
   const property = existing.tenancy.property;
+  // Same format createLedgerEntry uses. Rebuilt from the *effective* (new)
+  // entryType so a type change never leaves a description naming the old one.
+  const effectiveDescription = `${nextType} — ${property.name} / ${existing.tenancy.tenantName}`;
 
   return runInTransaction(async (tx) => {
     if (!previousDirection && nextDirection) {
@@ -357,7 +360,7 @@ export async function updateLedgerEntry(
             date: effectiveEntryDate,
             type: nextDirection,
             amount: effectiveAmount,
-            description: `${nextType} — ${property.name} / ${existing.tenancy.tenantName}`,
+            description: effectiveDescription,
           },
           select: { id: true },
         });
@@ -372,10 +375,17 @@ export async function updateLedgerEntry(
     } else if (previousDirection && nextDirection && existing.cashFlowId) {
       // Still money-moving on both sides: keep the same row, but its
       // direction may have flipped (e.g. PAYMENT -> DEPOSIT_REFUND), not
-      // just its amount/date.
+      // just its amount/date — and its description, which was built at
+      // creation time from the *old* entryType, must be rebuilt too, or a
+      // DEPOSIT_REFUND row would keep reading "PAYMENT — …".
       await tx.cashFlow.update({
         where: { id: existing.cashFlowId },
-        data: { amount: effectiveAmount, date: effectiveEntryDate, type: nextDirection },
+        data: {
+          amount: effectiveAmount,
+          date: effectiveEntryDate,
+          type: nextDirection,
+          description: effectiveDescription,
+        },
       });
     }
 
