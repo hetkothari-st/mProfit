@@ -59,9 +59,22 @@
  * at the end, so the operator gets the full report (`drift` and
  * `semanticChanges` included) having written nothing. It is the same code
  * path parameterised on a `BackfillIo`, not a separate simulation, so what
- * it reports is what a real run would do. The one behavioural difference is
- * that it holds a single transaction for the whole sweep, which is fine for
- * an operator-initiated read-only preview but is why the real run does not.
+ * it reports is what a real run would do.
+ *
+ * `--dry-run` IS NOT READ-ONLY IN EFFECT — RUN IT IN A MAINTENANCE WINDOW.
+ * Rolling back at the end means it leaves nothing behind, not that it is
+ * cheap while it runs. Inside that one transaction it inserts ledger entries,
+ * updates every receipt and every tenancy, and takes an explicit
+ * `SELECT ... FOR UPDATE` on every `Tenancy` row via `recomputeTenancyLedger`
+ * — holding those locks, unscoped by user, for as long as the sweep takes (up
+ * to the timeout below). Any concurrent app write touching a rental tenancy
+ * blocks for the duration. Before the drift-reporting rewrite, `--dry-run`
+ * returned before any write and was harmless against a live database; it no
+ * longer is. This is a deliberate trade — the alternative, a separate
+ * in-memory simulation, would be a second copy of the very logic the operator
+ * is trying to check — but treat `--dry-run` with the same operational care
+ * as the real run: the real run additionally wants a snapshot, the dry run
+ * wants a quiet database.
  *
  * TWO DRIFT SOURCES TO EXPECT ON REAL DATA:
  *  1. A legacy over-payment (`receivedAmount > expectedAmount` was reachable
