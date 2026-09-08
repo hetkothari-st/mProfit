@@ -9,6 +9,8 @@
 
 import { Prisma } from '@prisma/client';
 import { prisma, runInTransaction } from '../lib/prisma.js';
+import { BadRequestError, NotFoundError, ForbiddenError } from '../lib/errors.js';
+import { formatINR } from '@portfolioos/shared';
 import {
   allocateCredits,
   deriveReceiptStatus,
@@ -192,4 +194,364 @@ export async function resolveRentReceiptReminders(
 /** Convenience wrapper for callers that are not already in a transaction. */
 export async function recomputeTenancy(tenancyId: string): Promise<LedgerSummary> {
   return runInTransaction((tx) => recomputeTenancyLedger(tx, tenancyId));
+}
+
+/**
+ * Ownership check shared by every tenancy-scoped service function. Lives
+ * here (rather than rental.service.ts, which imports from this file) so
+ * rentalLedger.service.ts has no dependency back on rental.service.ts.
+ */
+export async function getTenancyOwned(userId: string, tenancyId: string) {
+  const row = await prisma.tenancy.findUnique({
+    where: { id: tenancyId },
+    include: { property: { select: { userId: true, id: true } } },
+  });
+  if (!row) throw new NotFoundError('Tenancy not found');
+  if (row.property.userId !== userId) throw new ForbiddenError();
+  return row;
+}
+
+const CASH_FLOW_DIRECTION: Partial<Record<LedgerEntryType, 'INFLOW' | 'OUTFLOW'>> = {
+  PAYMENT: 'INFLOW',
+  DEPOSIT: 'INFLOW',
+  DEPOSIT_REFUND: 'OUTFLOW',
+};
+
+export interface CreateLedgerEntryInput {
+  entryType: LedgerEntryType;
+  amount: string;
+  entryDate: string;
+  forMonth?: string | null;
+  note?: string | null;
+  attachmentUrl?: string | null;
+}
+export type UpdateLedgerEntryInput = Partial<CreateLedgerEntryInput>;
+
+function parseAmount(raw: string): Prisma.Decimal {
+  let d: Prisma.Decimal;
+  try {
+    d = new Prisma.Decimal(raw);
+  } catch {
+    throw new BadRequestError(`Invalid decimal for amount: ${raw}`);
+  }
+  if (d.lte(0)) throw new BadRequestError('amount must be positive');
+  return d;
+}
+
+function parseDay(raw: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    throw new BadRequestError(`Invalid date (expected YYYY-MM-DD): ${raw}`);
+  }
+  return new Date(`${raw}T00:00:00.000Z`);
+}
+
+function assertEntryType(t: string): LedgerEntryType {
+  if (!(LEDGER_ENTRY_TYPES as readonly string[]).includes(t)) {
+    throw new BadRequestError(
+      `Invalid entryType: ${t}. Expected one of ${LEDGER_ENTRY_TYPES.join(', ')}`,
+    );
+  }
+  return t as LedgerEntryType;
+}
+
+async function getEntryOwned(userId: string, entryId: string) {
+  const row = await prisma.rentLedgerEntry.findUnique({
+    where: { id: entryId },
+    include: { tenancy: { include: { property: { select: { userId: true, portfolioId: true, name: true } } } } },
+  });
+  if (!row) throw new NotFoundError('Ledger entry not found');
+  if (row.tenancy.property.userId !== userId) throw new ForbiddenError();
+  return row;
+}
+
+export async function createLedgerEntry(
+  userId: string,
+  tenancyId: string,
+  input: CreateLedgerEntryInput,
+): Promise<{ id: string }> {
+  const tenancy = await getTenancyOwned(userId, tenancyId);
+  const entryType = assertEntryType(input.entryType);
+  const amount = parseAmount(input.amount);
+  const entryDate = parseDay(input.entryDate);
+  if (input.forMonth && !/^\d{4}-\d{2}$/.test(input.forMonth)) {
+    throw new BadRequestError(`Invalid forMonth (expected YYYY-MM): ${input.forMonth}`);
+  }
+
+  const property = await prisma.rentalProperty.findUniqueOrThrow({
+    where: { id: tenancy.propertyId },
+    select: { name: true, portfolioId: true },
+  });
+  const direction = CASH_FLOW_DIRECTION[entryType];
+
+  return runInTransaction(async (tx) => {
+    let cashFlowId: string | null = null;
+    if (direction && property.portfolioId) {
+      const cf = await tx.cashFlow.create({
+        data: {
+          portfolioId: property.portfolioId,
+          date: entryDate,
+          type: direction,
+          amount,
+          description: `${entryType} — ${property.name} / ${tenancy.tenantName}`,
+        },
+        select: { id: true },
+      });
+      cashFlowId = cf.id;
+    }
+    const entry = await tx.rentLedgerEntry.create({
+      data: {
+        tenancyId,
+        entryType,
+        amount,
+        entryDate,
+        forMonth: input.forMonth ?? null,
+        note: input.note ?? null,
+        attachmentUrl: input.attachmentUrl ?? null,
+        cashFlowId,
+      },
+      select: { id: true },
+    });
+    await recomputeTenancyLedger(tx, tenancyId);
+    return entry;
+  });
+}
+
+export async function updateLedgerEntry(
+  userId: string,
+  entryId: string,
+  patch: UpdateLedgerEntryInput,
+): Promise<{ id: string }> {
+  const existing = await getEntryOwned(userId, entryId);
+  const data: Prisma.RentLedgerEntryUpdateInput = {};
+  if (patch.entryType !== undefined) data.entryType = assertEntryType(patch.entryType);
+  if (patch.amount !== undefined) data.amount = parseAmount(patch.amount);
+  if (patch.entryDate !== undefined) data.entryDate = parseDay(patch.entryDate);
+  if (patch.forMonth !== undefined) data.forMonth = patch.forMonth;
+  if (patch.note !== undefined) data.note = patch.note;
+  if (patch.attachmentUrl !== undefined) data.attachmentUrl = patch.attachmentUrl;
+
+  return runInTransaction(async (tx) => {
+    const updated = await tx.rentLedgerEntry.update({
+      where: { id: entryId }, data, select: { id: true, cashFlowId: true, amount: true, entryDate: true },
+    });
+    if (updated.cashFlowId) {
+      await tx.cashFlow.update({
+        where: { id: updated.cashFlowId },
+        data: { amount: updated.amount, date: updated.entryDate },
+      });
+    }
+    await recomputeTenancyLedger(tx, existing.tenancyId);
+    return { id: updated.id };
+  });
+}
+
+export async function deleteLedgerEntry(userId: string, entryId: string): Promise<void> {
+  const existing = await getEntryOwned(userId, entryId);
+  await runInTransaction(async (tx) => {
+    if (existing.cashFlowId) {
+      await tx.cashFlow.deleteMany({ where: { id: existing.cashFlowId } });
+    }
+    await tx.rentLedgerEntry.delete({ where: { id: entryId } });
+    await recomputeTenancyLedger(tx, existing.tenancyId);
+  });
+}
+
+export interface LedgerRowDTO {
+  id: string;
+  kind: 'CHARGE' | 'CREDIT';
+  source: 'RECEIPT' | 'ENTRY';
+  entryType: string;
+  date: string;
+  amount: string;
+  note: string | null;
+  attachmentUrl: string | null;
+  forMonth: string | null;
+  /** Balance after this row, oldest-to-newest. */
+  runningBalance: string;
+}
+
+export interface TenancyLedgerDTO {
+  tenancyId: string;
+  tenantName: string;
+  tenantPhone: string | null;
+  propertyId: string;
+  propertyName: string;
+  monthlyRent: string;
+  balanceDue: string;
+  depositHeld: string;
+  /** Newest first. */
+  rows: LedgerRowDTO[];
+}
+
+export async function getTenancyLedger(
+  userId: string,
+  tenancyId: string,
+): Promise<TenancyLedgerDTO> {
+  const tenancy = await getTenancyOwned(userId, tenancyId);
+  const [property, receipts, entries, fresh] = await Promise.all([
+    prisma.rentalProperty.findUniqueOrThrow({
+      where: { id: tenancy.propertyId }, select: { id: true, name: true },
+    }),
+    prisma.rentReceipt.findMany({ where: { tenancyId }, orderBy: { dueDate: 'asc' } }),
+    prisma.rentLedgerEntry.findMany({ where: { tenancyId }, orderBy: { entryDate: 'asc' } }),
+    prisma.tenancy.findUniqueOrThrow({ where: { id: tenancyId } }),
+  ]);
+
+  type Row = Omit<LedgerRowDTO, 'runningBalance'> & { sortKey: number };
+  const rows: Row[] = [];
+  for (const r of receipts) {
+    if (r.isSkipped) continue;
+    rows.push({
+      id: r.id, kind: 'CHARGE', source: 'RECEIPT', entryType: 'RENT_CHARGE',
+      date: r.dueDate.toISOString().slice(0, 10),
+      amount: r.expectedAmount.toString(), note: r.notes,
+      attachmentUrl: null, forMonth: r.forMonth, sortKey: r.dueDate.getTime(),
+    });
+  }
+  for (const e of entries) {
+    const type = e.entryType as LedgerEntryType;
+    const kind: 'CHARGE' | 'CREDIT' = CHARGE_TYPES.has(type) ? 'CHARGE' : 'CREDIT';
+    rows.push({
+      id: e.id, kind, source: 'ENTRY', entryType: e.entryType,
+      date: e.entryDate.toISOString().slice(0, 10),
+      amount: e.amount.toString(), note: e.note,
+      attachmentUrl: e.attachmentUrl, forMonth: e.forMonth, sortKey: e.entryDate.getTime(),
+    });
+  }
+  rows.sort((a, b) => a.sortKey - b.sortKey);
+
+  // Deposits sit outside the rent balance, so they carry it unchanged.
+  let running = ZERO;
+  const withBalance: LedgerRowDTO[] = rows.map(({ sortKey: _sortKey, ...row }) => {
+    const amt = new Prisma.Decimal(row.amount);
+    if (row.entryType !== 'DEPOSIT' && row.entryType !== 'DEPOSIT_REFUND') {
+      running = row.kind === 'CHARGE' ? running.plus(amt) : running.minus(amt);
+    }
+    return { ...row, runningBalance: running.toString() };
+  });
+
+  return {
+    tenancyId,
+    tenantName: tenancy.tenantName,
+    tenantPhone: tenancy.tenantPhone,
+    propertyId: property.id,
+    propertyName: property.name,
+    monthlyRent: fresh.monthlyRent.toString(),
+    balanceDue: fresh.balanceDue.toString(),
+    depositHeld: fresh.depositHeld.toString(),
+    rows: withBalance.reverse(),
+  };
+}
+
+export interface CollectionRowDTO {
+  tenancyId: string;
+  tenantName: string;
+  tenantPhone: string | null;
+  propertyId: string;
+  propertyName: string;
+  balanceDue: string;
+  oldestUnpaidMonth: string | null;
+  oldestUnpaidDueDate: string | null;
+}
+
+export async function listCollections(userId: string): Promise<CollectionRowDTO[]> {
+  const tenancies = await prisma.tenancy.findMany({
+    where: { isActive: true, property: { userId }, balanceDue: { gt: 0 } },
+    include: { property: { select: { id: true, name: true } } },
+    orderBy: { balanceDue: 'desc' },
+  });
+  if (tenancies.length === 0) return [];
+
+  const oldest = await prisma.rentReceipt.findMany({
+    where: {
+      tenancyId: { in: tenancies.map((t) => t.id) },
+      isSkipped: false,
+      status: { in: ['EXPECTED', 'OVERDUE', 'PARTIAL'] },
+    },
+    orderBy: { dueDate: 'asc' },
+    select: { tenancyId: true, forMonth: true, dueDate: true },
+  });
+  const firstUnpaid = new Map<string, { forMonth: string; dueDate: Date }>();
+  for (const r of oldest) {
+    if (!firstUnpaid.has(r.tenancyId)) {
+      firstUnpaid.set(r.tenancyId, { forMonth: r.forMonth, dueDate: r.dueDate });
+    }
+  }
+
+  return tenancies.map((t) => {
+    const u = firstUnpaid.get(t.id);
+    return {
+      tenancyId: t.id,
+      tenantName: t.tenantName,
+      tenantPhone: t.tenantPhone,
+      propertyId: t.property.id,
+      propertyName: t.property.name,
+      balanceDue: t.balanceDue.toString(),
+      oldestUnpaidMonth: u?.forMonth ?? null,
+      oldestUnpaidDueDate: u?.dueDate.toISOString().slice(0, 10) ?? null,
+    };
+  });
+}
+
+/**
+ * Normalise an Indian mobile to E.164 digits for a wa.me link. Mirrors the
+ * rule in notifications/sms.service.ts, minus the leading '+' (wa.me wants
+ * bare digits). Returns null when the number is unusable, so the UI can
+ * disable the button instead of opening a broken link.
+ */
+function waDigits(raw: string | null): string | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/[\s\-()+]/g, '');
+  if (!/^\d{8,15}$/.test(cleaned)) return null;
+  if (cleaned.length === 10 && /^[6-9]\d{9}$/.test(cleaned)) return `91${cleaned}`;
+  return cleaned;
+}
+
+export async function buildReminderMessage(
+  userId: string,
+  tenancyId: string,
+): Promise<{ text: string; waUrl: string | null }> {
+  const ledger = await getTenancyLedger(userId, tenancyId);
+  const property = await prisma.rentalProperty.findUniqueOrThrow({
+    where: { id: ledger.propertyId },
+    select: { name: true, landlordName: true, paymentInstructions: true },
+  });
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId }, select: { name: true },
+  });
+
+  const due = formatINR(new Prisma.Decimal(ledger.balanceDue).toString());
+
+  // Correction 3: name the OLDEST unpaid month, not the newest. getTenancyLedger's
+  // rows are newest-first, so scanning them for a RECEIPT row would surface the
+  // most recent month. Query the oldest open receipt directly instead — the same
+  // definition listCollections uses.
+  const oldestUnpaid = await prisma.rentReceipt.findFirst({
+    where: {
+      tenancyId,
+      isSkipped: false,
+      status: { in: ['EXPECTED', 'OVERDUE', 'PARTIAL'] },
+    },
+    orderBy: { dueDate: 'asc' },
+    select: { forMonth: true },
+  });
+
+  const lines = [
+    `Hi ${ledger.tenantName},`,
+    '',
+    `This is a reminder that ${due} is outstanding on ${property.name}${
+      oldestUnpaid?.forMonth ? ` (oldest pending: ${oldestUnpaid.forMonth})` : ''
+    }.`,
+  ];
+  if (property.paymentInstructions) {
+    lines.push('', property.paymentInstructions);
+  }
+  lines.push('', `— ${property.landlordName ?? user.name ?? 'Your landlord'}`);
+  const text = lines.join('\n');
+
+  const digits = waDigits(ledger.tenantPhone);
+  return {
+    text,
+    waUrl: digits ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : null,
+  };
 }

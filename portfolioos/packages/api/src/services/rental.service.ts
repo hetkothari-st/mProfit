@@ -31,6 +31,7 @@ import {
   recomputeTenancyLedger,
   recomputeTenancy,
   resolveRentReceiptReminders,
+  getTenancyOwned,
   OVERDUE_GRACE_DAYS,
 } from './rentalLedger.service.js';
 
@@ -425,16 +426,6 @@ export async function createTenancy(userId: string, input: CreateTenancyInput) {
     await recomputeTenancyLedger(tx, tenancy.id);
     return tx.tenancy.findUniqueOrThrow({ where: { id: tenancy.id } });
   });
-}
-
-async function getTenancyOwned(userId: string, tenancyId: string) {
-  const row = await prisma.tenancy.findUnique({
-    where: { id: tenancyId },
-    include: { property: { select: { userId: true, id: true } } },
-  });
-  if (!row) throw new NotFoundError('Tenancy not found');
-  if (row.property.userId !== userId) throw new ForbiddenError();
-  return row;
 }
 
 export async function updateTenancy(
