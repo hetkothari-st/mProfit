@@ -35,6 +35,8 @@
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { ENDPOINTS as ICICI_ENDPOINTS } from '../adapters/mfFactsheet/icici.v1.js';
+import { ENDPOINTS as NIPPON_ENDPOINTS } from '../adapters/mfFactsheet/nippon.v1.js';
+import { ENDPOINTS as KOTAK_ENDPOINTS } from '../adapters/mfFactsheet/kotak.v1.js';
 import type { FactsheetFetchContext } from '../adapters/mfFactsheet/types.js';
 
 /** One document's pages, in order, keyed by the URL it came from. */
@@ -125,7 +127,11 @@ function normalise(s: string): string {
  * NOT name a different fund. Stopping at exactly one page would truncate a
  * manager list; taking a fixed two would import the next fund's TER.
  */
-function findSchemePages(pages: readonly string[], schemeName: string): string | null {
+function findSchemePages(
+  pages: readonly string[],
+  schemeName: string,
+  ownPageRe: RegExp,
+): string | null {
   const want = normalise(schemeName);
   if (want.length < 8) return null; // too generic to match safely
 
@@ -147,18 +153,30 @@ function findSchemePages(pages: readonly string[], schemeName: string): string |
   // regexes would have taken whichever came first: a real number, correctly
   // parsed, belonging to a different fund, with nothing downstream able to
   // tell.
+  // The name in the page's TITLE AREA is the primary signal, and on most AMCs
+  // it is already unique: measured on the July-2026 files, "Kotak Gilt Fund"
+  // heads exactly one of Kotak's 191 pages while appearing on eleven, and the
+  // other ten are footnotes and annexures.
+  //
+  // The marker is only a TIE-BREAKER, applied when the title test leaves more
+  // than one candidate. Requiring it outright was wrong: it is per-AMC wording,
+  // and demanding ICICI's "Closing AUM as on" of every AMC rejected Kotak's
+  // correct single page for not using the phrase, and Nippon's pages for not
+  // labelling AUM at all — two funds silently unreadable because of a string
+  // that was never about them.
   const TITLE_AREA_CHARS = 400;
-  const own = pages.filter(
-    (page) =>
-      /closing aum as on/i.test(page) &&
-      normalise(page.slice(0, TITLE_AREA_CHARS)).includes(want),
+  const titled = pages.filter((page) =>
+    normalise(page.slice(0, TITLE_AREA_CHARS)).includes(want),
   );
+  if (titled.length === 1) return titled[0]!;
+  if (titled.length === 0) return null;
 
-  if (own.length === 0) return null;
-  // More than one page claiming to be this fund's own page means the heuristic
-  // no longer holds — report nothing rather than pick.
-  if (own.length > 1) return null;
-  return own[0]!;
+  const narrowed = titled.filter((page) => ownPageRe.test(page));
+  // Still ambiguous means the heuristic does not hold for this document.
+  // Reporting nothing costs a DLQ row; picking would attribute another fund's
+  // expense ratio to this one, inside a pillar that feeds a rating.
+  if (narrowed.length !== 1) return null;
+  return narrowed[0]!;
 }
 
 /**
@@ -174,6 +192,15 @@ export function createFactsheetTextResolver(
   ctx: FactsheetFetchContext,
   urlFor: (asOf: Date) => string,
   asOf: Date,
+  /**
+   * What marks a page as a fund's OWN page rather than one that merely mentions
+   * it. Per-AMC because the wording is: ICICI writes "Closing AUM as on", Kotak
+   * and Nippon write their own variants. The default matches any AUM label,
+   * which is enough when combined with the title-area name test — the name
+   * appears in footnotes and annexures, but a fund's AUM figure only appears on
+   * its own page.
+   */
+  ownPageRe: RegExp = /AUM/i,
 ) {
   return async (schemeCode: string): Promise<string | null> => {
     const meta = await prisma.mfSchemeMeta.findUnique({
@@ -186,7 +213,7 @@ export function createFactsheetTextResolver(
     const pages = await loadPdfPages(url, ctx);
     if (pages === null) return null;
 
-    const text = findSchemePages(pages, meta.schemeName);
+    const text = findSchemePages(pages, meta.schemeName, ownPageRe);
     if (text === null) {
       logger.warn(
         { schemeCode, schemeName: meta.schemeName, url, pages: pages.length },
@@ -198,9 +225,35 @@ export function createFactsheetTextResolver(
   };
 }
 
-/** ICICI Pru's consolidated factsheet. */
+/** ICICI Pru's consolidated factsheet — one fund per page, 168 of them. */
 export function createIciciFactsheetTextResolver(ctx: FactsheetFetchContext, asOf: Date) {
-  return createFactsheetTextResolver(ctx, ICICI_ENDPOINTS.factsheetPdf, asOf);
+  return createFactsheetTextResolver(ctx, ICICI_ENDPOINTS.factsheetPdf, asOf, /closing aum as on/i);
+}
+
+/**
+ * Nippon (167 pages) and Kotak (191 pages) both publish a constructible
+ * consolidated PDF that downloads and extracts cleanly, and neither uses SBI's
+ * multi-fund column layout. They are still NOT wired, because the page-claiming
+ * heuristic that works on ICICI does not transfer:
+ *
+ *   - Nippon's title-area test matched three pages for one fund and the
+ *     tie-break chose a summary page — 10,209 characters containing no expense
+ *     ratio, no AUM and no as-of date. A page was found; it was the wrong one.
+ *   - Kotak's own page carries no AUM label at all, so nothing narrows a
+ *     multi-candidate match.
+ *
+ * Each needs its own page marker, as-of pattern and TER pattern read off its
+ * real document, the way ICICI's were. The extractor and the URL builders are
+ * ready; what is missing is per-AMC calibration, and guessing at it would
+ * attribute one fund's expense ratio to another inside a pillar that feeds a
+ * rating.
+ */
+export function createNipponFactsheetTextResolver(ctx: FactsheetFetchContext, asOf: Date) {
+  return createFactsheetTextResolver(ctx, NIPPON_ENDPOINTS.factsheetPdf, asOf);
+}
+
+export function createKotakFactsheetTextResolver(ctx: FactsheetFetchContext, asOf: Date) {
+  return createFactsheetTextResolver(ctx, KOTAK_ENDPOINTS.factsheetPdf, asOf);
 }
 
 /**
