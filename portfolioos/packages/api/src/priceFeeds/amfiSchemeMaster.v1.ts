@@ -153,8 +153,87 @@ export function resolveAmcCode(amcName: string): string {
  * writes, and `MfSchemeMeta.benchmarkIndexCode` is a soft reference with no FK
  * precisely so the two can land independently (`01 §2`).
  */
-export function resolveBenchmarkCode(sebiSubCategory: string): string | null {
+/**
+ * The eight indices we hold priced history for, and the ways an AMC writes each
+ * one in a scheme name.
+ *
+ * Only these eight, deliberately. `BenchmarkIndexPrice` holds nothing else, and
+ * naming an index we cannot price would move a fund from
+ * `no_benchmark_index_code` to `no_<CODE>_prices_in_window` — a different
+ * message for the same absence.
+ */
+const INDEX_FUND_ALIASES: ReadonlyArray<readonly [string, readonly string[]]> = Object.freeze([
+  ['NIFTY50_TRI', Object.freeze(['nifty50', 'nifty 50'])],
+  ['NIFTY100_TRI', Object.freeze(['nifty100', 'nifty 100'])],
+  ['NIFTY200_TRI', Object.freeze(['nifty200', 'nifty 200'])],
+  ['NIFTY500_TRI', Object.freeze(['nifty500', 'nifty 500'])],
+  ['NIFTY_MIDCAP150_TRI', Object.freeze(['nifty midcap150', 'nifty midcap 150'])],
+  ['NIFTY_SMALLCAP250_TRI', Object.freeze(['nifty smallcap250', 'nifty smallcap 250'])],
+  [
+    'NIFTY_LARGEMIDCAP250_TRI',
+    Object.freeze(['nifty largemidcap250', 'nifty largemidcap 250', 'nifty large midcap 250']),
+  ],
+  ['NIFTY_MIDSMALLCAP400_TRI', Object.freeze(['nifty midsmallcap400', 'nifty midsmallcap 400'])],
+] as const);
+
+/**
+ * Which index a plain index fund tracks, read from its name.
+ *
+ * `Index Funds/ETFs` is the one sub-category where a category default is
+ * actively wrong: the category holds 686 schemes tracking everything from the
+ * Nifty 50 to Nifty PSU Bank to MSCI India to a 2026 SDL maturity ladder, and
+ * one shared benchmark would manufacture tracking error and alpha for almost
+ * all of them. The index is instead in the fund's own name, which is why this
+ * reads the name rather than the category.
+ *
+ * THE MATCH IS EXACT ON THE RESIDUAL, NOT A SUBSTRING, and that is the whole
+ * design. "UTI Nifty Midcap 150 Quality 50 Index Fund" contains the string
+ * "Nifty Midcap 150" and tracks a DIFFERENT index — a factor variant whose
+ * returns diverge from the parent by more than the tracking error the INDEX
+ * model exists to measure. So the AMC name and the wrapper words are stripped
+ * and what remains must equal a known alias outright; the leftover "quality 50"
+ * makes it fail, which is correct. Measured over the 686: 107 match, and every
+ * rejection inspected was a factor variant, a sector index, a commodity, an
+ * international index or a G-Sec ladder — none of which we can price.
+ */
+export function resolveIndexFundBenchmark(schemeName: string): string | null {
+  let s = schemeName.toLowerCase();
+  // Parentheticals are AMFI's rename annotations, never the index.
+  s = s.replace(/\(.*?\)/g, ' ');
+  s = s.replace(
+    /\b(index fund|exchange traded fund|etf fund|etf|fund of fund|fof|index|fund|direct|growth|plan|scheme)\b/g,
+    ' ',
+  );
+  // Everything before the first index token is the fund house.
+  // No trailing \b: AMCs write both "Nifty 50" and "Nifty50", and a boundary
+  // after the token cannot match the second — a digit is a word character, so
+  // /\bnifty\b/ fails on "nifty50" and the fund silently goes unbenchmarked.
+  const start = s.search(/\b(nifty|bse|s&p)/);
+  if (start < 0) return null;
+  const residual = s
+    .slice(start)
+    .replace(/[^a-z0-9&: ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  for (const [code, aliases] of INDEX_FUND_ALIASES) {
+    if (aliases.includes(residual)) return code;
+  }
+  return null;
+}
+
+export function resolveBenchmarkCode(
+  sebiSubCategory: string,
+  schemeName?: string,
+): string | null {
   if (sebiSubCategory === UNMAPPED_SUBCATEGORY) return null;
+  // `Index Funds/ETFs` has no meaningful default — see
+  // `resolveIndexFundBenchmark`. When the caller can supply the name, the index
+  // is read from it; when it cannot, the answer stays null rather than falling
+  // through to a category default that would be wrong for almost every member.
+  if (sebiSubCategory === 'Index Funds/ETFs') {
+    return schemeName === undefined ? null : resolveIndexFundBenchmark(schemeName);
+  }
   // Indexed with a runtime string, so the lookup really can miss (a
   // sub-category the parser produced from an alias the map later dropped).
   // `specFor` types the miss away; this does not.
@@ -178,7 +257,11 @@ export function toSchemeMeta(row: ParsedSchemeRow): MappedSchemeMeta {
     sebiSubCategory: row.sebiSubCategory,
     planType: row.planType,
     optionType: row.optionType,
-    benchmarkIndexCode: resolveBenchmarkCode(row.sebiSubCategory),
+    // Index funds carry their benchmark in their own name; every other
+    // sub-category takes the SEBI category default. Passing the name lets the
+    // one case that cannot use a default stop being the case with no benchmark
+    // at all.
+    benchmarkIndexCode: resolveBenchmarkCode(row.sebiSubCategory, row.schemeName),
     growthSiblingSchemeCode: row.growthSiblingSchemeCode,
     sourceHash: row.sourceHash,
     navDate: row.navDate,
