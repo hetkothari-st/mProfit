@@ -77,7 +77,7 @@ import type {
 
 export const ICICI_AMC_CODE = 'ICICI_PRU';
 export const ICICI_ADAPTER_ID = 'mf.factsheet.iciciPru';
-export const ICICI_ADAPTER_VERSION = '1.0.0';
+export const ICICI_ADAPTER_VERSION = '1.1.0';
 
 export const ICICI_TABLE_SPEC: AmcTableSpec = {
   amcCode: ICICI_AMC_CODE,
@@ -106,7 +106,16 @@ export const ICICI_TABLE_SPEC: AmcTableSpec = {
   // deliberately ABSENT from this list: they are leaf CASH holdings, and
   // treating them as headings would silently zero cashPct.
   sectionNameRe:
-    /^(equity\s*&\s*equity\s*related|listed\s*\/\s*awaiting\s*listing|unlisted|privately\s*placed|units of (real estate|infrastructure|an alternative)|compulsory convertible debenture|non-?convertible debentures?|debt instruments|government securities|securiti[sz]ed debt|term deposits|deposits\s*\(|money market instruments|certificate of deposits|treasury bills|others$|interest rate swaps|details of stock future)/i,
+    /^(equity\s*&\s*equity\s*related|listed\s*\/\s*awaiting\s*listing|unlisted|privately\s*placed|units of (real estate|infrastructure|an alternative)|compulsory convertible debenture|non-?convertible debentures?|debt instruments|government securities|securiti[sz]ed debt|term deposits|deposits\s*\(|money market instruments|certificate of deposits|commercial papers?|reverse repo$|treasury bills|others$|interest rate swaps|details of stock future)/i,
+  /**
+   * VERIFIED on the Jul-2026 liquid-fund workbook: the table ends at
+   * "Total Net Assets" (100.00%) and continues with a numbered Notes block
+   * whose rows land under the mapped columns. Without this, the grand total is
+   * itself parsed as a holding and contributes a clean extra 100% to the
+   * weights sum — which reads as a parser that cannot add up, rather than one
+   * that walked past the end of the table.
+   */
+  endOfTableRe: /^(total net assets|grand total)/i,
   asOfPatterns: [
     // VERIFIED: "Portfolio as on Jul 31,2026" — no space after the comma.
     /Portfolio as on\s+([A-Za-z]{3,9}\.? \d{1,2},?\s*\d{2,4})/i,

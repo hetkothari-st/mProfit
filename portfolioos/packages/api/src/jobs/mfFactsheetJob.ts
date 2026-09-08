@@ -37,6 +37,8 @@
  * for its COST and PORTFOLIO pillars to stay unscored rather than to guess.
  */
 
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
@@ -52,6 +54,8 @@ import type {
   SchemeFactsRaw,
 } from '../adapters/mfFactsheet/types.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
+import { setIciciPortfolioUrlResolver } from '../adapters/mfFactsheet/icici.v1.js';
+import { createIciciPortfolioResolver, resetFactsheetZipCache } from './mfFactsheetZip.js';
 
 export const MF_FACTSHEET_ADAPTER_ID = 'mf.factsheet';
 
@@ -131,6 +135,13 @@ export function defaultDisclosureMonth(now: Date): Date {
  */
 export function createFetchContext(signal?: AbortSignal): FactsheetFetchContext {
   async function get(url: string, init?: { signal?: AbortSignal }): Promise<Response> {
+    // `file://` is how the zip resolver hands an extracted workbook back: the
+    // adapter contract is a URL to a single already-extracted xlsx, and Node's
+    // fetch does not implement the file scheme.
+    if (url.startsWith('file://')) {
+      const bytes = await readFile(fileURLToPath(url));
+      return new Response(new Uint8Array(bytes));
+    }
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
     const outer = init?.signal ?? signal;
@@ -390,6 +401,13 @@ export async function runMfFactsheetJob(
     result.schemesConsidered = schemes.length;
     const ctx = createFetchContext(options.abortSignal);
 
+    // Install the unzip step ICICI's adapter asks for. Scoped to the run and
+    // removed in the `finally` below: a module-level resolver left installed
+    // would leak a stale fetch context (and its abort signal) into the next
+    // caller, including tests.
+    setIciciPortfolioUrlResolver(createIciciPortfolioResolver(ctx));
+    try {
+
     for (const scheme of schemes) {
       if (options.abortSignal?.aborted) break;
 
@@ -437,9 +455,13 @@ export async function runMfFactsheetJob(
       await sleep(DELAY_MS);
     }
 
-    result.durationMs = Date.now() - t0;
-    logger.info({ ...result, asOf: asOf.toISOString() }, '[cron] mf factsheet job done');
-    return result;
+      result.durationMs = Date.now() - t0;
+      logger.info({ ...result, asOf: asOf.toISOString() }, '[cron] mf factsheet job done');
+      return result;
+    } finally {
+      setIciciPortfolioUrlResolver(null);
+      resetFactsheetZipCache();
+    }
   });
 }
 

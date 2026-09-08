@@ -147,6 +147,23 @@ export const iciciFactsheetAdapter: MfFactsheetAdapter = {
     // names the missing step beats a fetcher that appears to be having network
     // trouble.
     if (url === null) {
+      // Two different failures used to share this message, and the difference
+      // matters to whoever reads the DLQ: no resolver installed is a wiring
+      // gap, while a resolver that returned null means the archive was opened
+      // and this scheme was not in it — an AMFI-vs-AMC naming difference, which
+      // is fixed in the resolver's matcher, not here.
+      if (portfolioUrlResolver !== null) {
+        return factsheetFail(
+          'PORTAL_CHANGED',
+          `The monthly archive (${ENDPOINTS.monthlyPortfolioZip(asOf)}) was ` +
+            `reachable but holds no member for scheme ${schemeCode}. ICICI names ` +
+            `members ${ENDPOINTS.zipMemberTemplate}, spelled as the AMC writes it; ` +
+            "AMFI's name for the same fund can differ in wording, not just " +
+            'punctuation ("Focused Fund" vs "Focused Equity Fund"). Matching those ' +
+            'is deliberately left unmatched rather than guessed: the wrong ' +
+            "portfolio reported as this fund's is worse than none.",
+        );
+      }
       return factsheetFail(
         'PORTAL_CHANGED',
         'ICICI Pru ships the month as a ZIP of 146 per-scheme workbooks and this ' +
@@ -164,10 +181,12 @@ export const iciciFactsheetAdapter: MfFactsheetAdapter = {
       adapterId: ICICI_ADAPTER_ID,
       url,
       schemeCode,
-      // Per-scheme workbook, so the scheme-abbreviation sheet is the one to
-      // read; naming it explicitly rather than taking sheet 0 is what stops the
-      // `Derivative` sheet being parsed as holdings if the order ever flips.
-      sheetName: schemeCode,
+      // Per-scheme workbook: the holdings sheet carries ICICI's own scheme
+      // abbreviation ("LIQUID" for 120197), not the AMFI scheme code, so it
+      // cannot be named ahead of time. Excluding the `Derivative` sheet leaves
+      // exactly one candidate — which is still explicit, and still refuses to
+      // guess if the workbook ever grows a third sheet.
+      excludeSheets: ['Derivative'],
       asOf,
       ctx,
       parse: parseIciciPortfolio,

@@ -267,8 +267,19 @@ export async function fetchAndParsePortfolioWorkbook(args: {
   adapterId: string;
   url: string;
   schemeCode: string;
-  /** Worksheet holding this scheme. Omitted → the workbook's first sheet. */
+  /** Worksheet holding this scheme. Omitted → see `excludeSheets`. */
   sheetName?: string;
+  /**
+   * For a workbook that is ALREADY per-scheme, where the holdings sheet carries
+   * the AMC's own abbreviation and so cannot be named ahead of time: the sheets
+   * that are definitely not holdings. Exactly one sheet must remain.
+   *
+   * The alternative — taking sheet 0 — is what this exists to avoid: ICICI's
+   * per-scheme workbooks carry a `Derivative` sheet alongside the holdings, and
+   * parsing that as holdings would produce a portfolio that is wrong rather than
+   * missing. Ambiguity is reported, never guessed, for the same reason.
+   */
+  excludeSheets?: readonly string[];
   asOf: Date;
   ctx: FactsheetFetchContext;
   parse: (input: PortfolioParseInput) => MfFactsheetResult<PortfolioRaw>;
@@ -309,8 +320,26 @@ export async function fetchAndParsePortfolioWorkbook(args: {
     );
   }
 
-  const sheet =
-    args.sheetName === undefined ? wb.SheetNames[0] : findSheet(wb, args.sheetName);
+  let sheet: string | null | undefined;
+  if (args.sheetName !== undefined) {
+    sheet = findSheet(wb, args.sheetName);
+  } else if (args.excludeSheets !== undefined) {
+    const excluded = new Set(args.excludeSheets.map((s) => s.trim().toLowerCase()));
+    const candidates = wb.SheetNames.filter((n) => !excluded.has(n.trim().toLowerCase()));
+    if (candidates.length !== 1) {
+      return factsheetFail(
+        'PORTAL_CHANGED',
+        `Workbook at ${args.url} should hold exactly one holdings sheet after ` +
+          `excluding ${JSON.stringify(args.excludeSheets)}, but ${candidates.length} ` +
+          `remain: ${candidates.slice(0, 40).join(', ')}. ` +
+          'Picking one would risk parsing the wrong sheet as holdings.',
+        { sheetNames: wb.SheetNames },
+      );
+    }
+    sheet = candidates[0];
+  } else {
+    sheet = wb.SheetNames[0];
+  }
   if (sheet === null || sheet === undefined) {
     return factsheetFail(
       'PORTAL_CHANGED',
