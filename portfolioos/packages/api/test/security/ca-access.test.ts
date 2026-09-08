@@ -372,6 +372,29 @@ describe('CA access boundary', () => {
     ).rejects.toThrow();
   });
 
+  it('rebuilds derived rows under the CA own identity, without impersonation', async () => {
+    // recomputeForAsset writes HoldingProjection and CapitalGain. Those carry a
+    // CA write policy precisely so a correction can rebuild them without
+    // runAsUser(clientId) — the impersonation that would have reopened the
+    // family-shared hole. If the grant were missing this throws 42501.
+    const written = await ca.runAs(() =>
+      prisma.holdingProjection.updateMany({
+        where: { portfolioId: client.portfolioId },
+        data: { computedAt: new Date() },
+      }),
+    );
+    expect(written.count).toBeGreaterThanOrEqual(0);
+
+    // Still read-only where it should be: a portfolio cannot be conjured.
+    await expect(
+      ca.runAs(() =>
+        prisma.portfolio.create({
+          data: { userId: client.userId, name: 'Nope', type: 'INVESTMENT' },
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
   it('provisions a managed client that cannot log in', async () => {
     const managed = await ca.runAs(() =>
       createManagedClient(ca.userId, {

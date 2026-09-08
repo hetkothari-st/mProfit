@@ -55,7 +55,12 @@ import {
   updateAccountSchema,
   createVoucherSchema,
   updateVoucherSchema,
+  correctTransactionSchema,
 } from '../schemas/accounting.schema.js';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
+import { toDecimal, serializeMoney, type Decimal } from '@portfolioos/shared';
+import { recomputeForAsset } from '../services/holdingsProjection.js';
 
 /** Resolve the grant named in the URL, or refuse. */
 async function scopeOf(req: Request): Promise<CaScope> {
@@ -283,4 +288,119 @@ function auditCtx(scope: CaScope, req: Request) {
     clientId: scope.clientId,
     req,
   };
+}
+
+// ─── Transaction corrections ─────────────────────────────────────────
+
+/**
+ * Correct one of the client's transactions.
+ *
+ * The RLS grant on `Transaction` is FOR UPDATE only, so this endpoint cannot
+ * conjure a trade into existence or make one disappear however it is called —
+ * that boundary is Postgres's, not this handler's.
+ *
+ * The write and its audit entry share one transaction. The FIFO recompute runs
+ * AFTER that commits, which is the pattern `ingestion/projection.ts` already
+ * follows: a recompute is a rebuild of derived rows, it is idempotent, and if
+ * it throws the corrected ledger is still durable and the rebuild can be
+ * retried. Holding the transaction open across it would buy nothing and risk
+ * a long-running lock on someone else's books.
+ */
+export async function caCorrectTransaction(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  const id = req.params.id!;
+  const body = correctTransactionSchema.parse(req.body);
+
+  // Readable under portfolio_ca_read + transaction_ca_read; the ownership
+  // check is the point, not the read — a transaction id from the URL must be
+  // proved to belong to THIS client before anything is written.
+  const before = await prisma.transaction.findUnique({
+    where: { id },
+    include: { portfolio: { select: { userId: true } } },
+  });
+  if (!before || before.portfolio.userId !== scope.subjectUserId) {
+    throw new NotFoundError('Transaction not found for this client');
+  }
+
+  const patch: Prisma.TransactionUpdateInput = {
+    ...(body.tradeDate !== undefined && { tradeDate: new Date(body.tradeDate) }),
+    ...(body.quantity !== undefined && { quantity: body.quantity }),
+    ...(body.price !== undefined && { price: body.price }),
+    ...(body.brokerage !== undefined && { brokerage: body.brokerage }),
+    ...(body.stt !== undefined && { stt: body.stt }),
+    ...(body.stampDuty !== undefined && { stampDuty: body.stampDuty }),
+    ...(body.exchangeCharges !== undefined && { exchangeCharges: body.exchangeCharges }),
+    ...(body.gst !== undefined && { gst: body.gst }),
+    ...(body.sebiCharges !== undefined && { sebiCharges: body.sebiCharges }),
+    ...(body.otherCharges !== undefined && { otherCharges: body.otherCharges }),
+    ...(body.assetName !== undefined && { assetName: body.assetName }),
+    ...(body.isin !== undefined && { isin: body.isin }),
+    ...(body.broker !== undefined && { broker: body.broker }),
+    ...(body.orderNo !== undefined && { orderNo: body.orderNo }),
+    ...(body.tradeNo !== undefined && { tradeNo: body.tradeNo }),
+    ...(body.narration !== undefined && { narration: body.narration }),
+  };
+
+  // Money moved, so gross and net are re-derived rather than trusted from the
+  // request — a caller must never be able to state a total that disagrees with
+  // the quantity and price beside it.
+  const qty = toDecimal(body.quantity ?? before.quantity);
+  const price = toDecimal(body.price ?? before.price);
+  const chargeParts: Array<string | { toString(): string }> = [
+    body.brokerage ?? before.brokerage,
+    body.stt ?? before.stt,
+    body.stampDuty ?? before.stampDuty,
+    body.exchangeCharges ?? before.exchangeCharges,
+    body.gst ?? before.gst,
+    body.sebiCharges ?? before.sebiCharges,
+    body.otherCharges ?? before.otherCharges,
+  ];
+  const charges = chargeParts.reduce(
+    (sum: Decimal, c) => sum.plus(toDecimal(c)),
+    toDecimal('0'),
+  );
+
+  const gross = qty.times(price);
+  patch.grossAmount = serializeMoney(gross);
+  // A buy costs more than the trade; a sale nets less. Anything else is a
+  // movement of units, where charges still reduce the value received.
+  patch.netAmount = serializeMoney(
+    before.transactionType === 'BUY' ? gross.plus(charges) : gross.minus(charges),
+  );
+
+  const updated = await runInTransaction(async (tx) => {
+    const row = await tx.transaction.update({ where: { id }, data: patch });
+    await recordCaAudit(tx, auditCtx(scope, req), {
+      action: 'TRANSACTION_CORRECTED',
+      resourceType: 'Transaction',
+      resourceId: id,
+      summary: `Corrected ${before.assetName ?? 'a transaction'} dated ${before.tradeDate
+        .toISOString()
+        .slice(0, 10)}.`,
+      before: {
+        tradeDate: before.tradeDate.toISOString().slice(0, 10),
+        quantity: before.quantity.toString(),
+        price: before.price.toString(),
+        netAmount: before.netAmount.toString(),
+        narration: before.narration,
+      },
+      after: {
+        tradeDate: row.tradeDate.toISOString().slice(0, 10),
+        quantity: row.quantity.toString(),
+        price: row.price.toString(),
+        netAmount: row.netAmount.toString(),
+        narration: row.narration,
+      },
+    });
+    return row;
+  });
+
+  // Derived rows, rebuilt under the CA's own identity — HoldingProjection and
+  // CapitalGain carry a CA write policy precisely so this needs no
+  // impersonation of the client.
+  if (before.assetKey) {
+    await recomputeForAsset(before.portfolioId, before.assetKey);
+  }
+
+  ok(res, updated);
 }

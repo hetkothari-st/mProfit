@@ -27,6 +27,7 @@ import {
   caGetTrialBalance,
   caGetPnL,
   caGetBalanceSheet,
+  caCorrectTransaction,
 } from '../controllers/caAccounting.controller.js';
 
 /**
@@ -66,6 +67,11 @@ caRouter.get('/clients/:clientId/vouchers/:id', asyncHandler(caGetVoucher));
 caRouter.post('/clients/:clientId/vouchers', asyncHandler(caCreateVoucher));
 caRouter.patch('/clients/:clientId/vouchers/:id', asyncHandler(caUpdateVoucher));
 caRouter.delete('/clients/:clientId/vouchers/:id', asyncHandler(caDeleteVoucher));
+
+// Corrections. PATCH, never POST or DELETE — the RLS grant on Transaction is
+// FOR UPDATE only, so there is deliberately no route here that could create or
+// remove one even if someone added a handler for it.
+caRouter.patch('/clients/:clientId/transactions/:id', asyncHandler(caCorrectTransaction));
 
 caRouter.get('/clients/:clientId/ledger', asyncHandler(caGetLedger));
 caRouter.get('/clients/:clientId/trial-balance', asyncHandler(caGetTrialBalance));

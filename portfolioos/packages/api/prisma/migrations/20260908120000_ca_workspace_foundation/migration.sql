@@ -266,6 +266,56 @@ CREATE POLICY transaction_ca_correct ON "Transaction"
     )
   );
 
+-- Derived projections: writable, because a correction rebuilds them.
+--
+-- HoldingProjection and CapitalGain are not source data — they are replayed
+-- from Transaction rows by recomputeForAsset. A CA who may correct a
+-- transaction has, by definition, already changed what these tables should
+-- contain, so granting the write adds no authority they did not have; it only
+-- lets the rebuild run under the CA's own identity instead of forcing an
+-- impersonation of the client to do it.
+--
+-- That is the whole reason this grant exists. The alternative was
+-- runAsUser(clientId) around the recompute, which would have reopened the
+-- family-shared-portfolio hole this design was built to avoid, for the sake of
+-- rewriting two derived tables.
+
+CREATE POLICY holdingprojection_ca_write ON "HoldingProjection"
+  USING (
+    app_is_system()
+    OR EXISTS (
+      SELECT 1 FROM "Portfolio" p
+      WHERE p.id = "HoldingProjection"."portfolioId"
+        AND app_is_active_ca_for(p."userId")
+    )
+  )
+  WITH CHECK (
+    app_is_system()
+    OR EXISTS (
+      SELECT 1 FROM "Portfolio" p
+      WHERE p.id = "HoldingProjection"."portfolioId"
+        AND app_is_active_ca_for(p."userId")
+    )
+  );
+
+CREATE POLICY capitalgain_ca_write ON "CapitalGain"
+  USING (
+    app_is_system()
+    OR EXISTS (
+      SELECT 1 FROM "Portfolio" p
+      WHERE p.id = "CapitalGain"."portfolioId"
+        AND app_is_active_ca_for(p."userId")
+    )
+  )
+  WITH CHECK (
+    app_is_system()
+    OR EXISTS (
+      SELECT 1 FROM "Portfolio" p
+      WHERE p.id = "CapitalGain"."portfolioId"
+        AND app_is_active_ca_for(p."userId")
+    )
+  );
+
 -- ─── CA read surface for the accounting slice ────────────────────────
 --
 -- Reading a client's books needs the portfolios those books describe and the

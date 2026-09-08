@@ -126,6 +126,63 @@ export const caApi = {
     return unwrap(data);
   },
 
+  async createAccount(clientId: string, payload: CaAccountInput): Promise<CaAccountRow> {
+    const { data } = await api.post<ApiResponse<CaAccountRow>>(
+      `/api/ca/clients/${clientId}/accounts`,
+      payload,
+    );
+    return unwrap(data);
+  },
+
+  async updateAccount(
+    clientId: string,
+    id: string,
+    payload: Partial<CaAccountInput>,
+  ): Promise<CaAccountRow> {
+    const { data } = await api.patch<ApiResponse<CaAccountRow>>(
+      `/api/ca/clients/${clientId}/accounts/${id}`,
+      payload,
+    );
+    return unwrap(data);
+  },
+
+  async deleteAccount(clientId: string, id: string): Promise<void> {
+    await api.delete(`/api/ca/clients/${clientId}/accounts/${id}`);
+  },
+
+  async createVoucher(clientId: string, payload: CaVoucherInput): Promise<CaVoucherRow> {
+    const { data } = await api.post<ApiResponse<CaVoucherRow>>(
+      `/api/ca/clients/${clientId}/vouchers`,
+      payload,
+    );
+    return unwrap(data);
+  },
+
+  async deleteVoucher(clientId: string, id: string): Promise<void> {
+    await api.delete(`/api/ca/clients/${clientId}/vouchers/${id}`);
+  },
+
+  async nextVoucherNo(clientId: string, type: string): Promise<string> {
+    const { data } = await api.get<ApiResponse<{ voucherNo: string }>>(
+      `/api/ca/clients/${clientId}/vouchers/next-no`,
+      { params: { type } },
+    );
+    return unwrap(data).voucherNo;
+  },
+
+  /** Corrections only — the server refuses anything that isn't an edit. */
+  async correctTransaction(
+    clientId: string,
+    id: string,
+    payload: Record<string, string>,
+  ): Promise<unknown> {
+    const { data } = await api.patch<ApiResponse<unknown>>(
+      `/api/ca/clients/${clientId}/transactions/${id}`,
+      payload,
+    );
+    return unwrap(data);
+  },
+
   async trialBalance(clientId: string, asOf?: string): Promise<CaTrialBalanceRow[]> {
     const { data } = await api.get<ApiResponse<CaTrialBalanceRow[]>>(
       `/api/ca/clients/${clientId}/trial-balance`,
@@ -134,6 +191,40 @@ export const caApi = {
     return unwrap(data);
   },
 };
+
+export const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'INCOME', 'EXPENSE', 'EQUITY'] as const;
+export const VOUCHER_TYPES = [
+  'JOURNAL',
+  'PAYMENT',
+  'RECEIPT',
+  'CONTRA',
+  'PURCHASE',
+  'SALES',
+] as const;
+
+export interface CaAccountInput {
+  code: string;
+  name: string;
+  type: (typeof ACCOUNT_TYPES)[number];
+  parentId?: string | null;
+  openingBalance?: string;
+}
+
+export interface CaVoucherEntryInput {
+  debitAccountId: string;
+  creditAccountId: string;
+  /** Decimal string. Never a number — see the money discipline in CONTEXT.md. */
+  amount: string;
+  narration?: string;
+}
+
+export interface CaVoucherInput {
+  type: (typeof VOUCHER_TYPES)[number];
+  voucherNo: string;
+  date: string;
+  narration?: string;
+  entries: CaVoucherEntryInput[];
+}
 
 export interface CaAccountRow {
   id: string;

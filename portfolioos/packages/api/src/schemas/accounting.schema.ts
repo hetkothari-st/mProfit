@@ -61,3 +61,35 @@ export const createVoucherSchema = z.object({
 });
 
 export const updateVoucherSchema = createVoucherSchema.partial();
+
+/**
+ * What a CA may change on a client's transaction.
+ *
+ * A deliberate allow-list, not `Partial<CreateTransactionInput>`. Correcting a
+ * ledger means fixing what was recorded wrongly — a date, an amount, a charge,
+ * a description. It does not mean moving a trade into a different portfolio or
+ * changing what instrument it was, which is closer to inventing a different
+ * transaction than to correcting this one. `portfolioId`, `assetClass` and
+ * `transactionType` are therefore absent and cannot be supplied.
+ */
+export const correctTransactionSchema = z
+  .object({
+    tradeDate: isoDate,
+    quantity: moneyString,
+    price: moneyString,
+    brokerage: moneyString,
+    stt: moneyString,
+    stampDuty: moneyString,
+    exchangeCharges: moneyString,
+    gst: moneyString,
+    sebiCharges: moneyString,
+    otherCharges: moneyString,
+    assetName: z.string().max(200),
+    isin: z.string().max(12),
+    broker: z.string().max(100),
+    orderNo: z.string().max(100),
+    tradeNo: z.string().max(100),
+    narration: z.string().max(500),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'No corrections supplied' });

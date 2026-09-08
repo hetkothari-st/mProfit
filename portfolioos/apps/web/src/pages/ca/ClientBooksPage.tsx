@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, BookOpen, Scale, ScrollText } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, BookOpen, Scale, ScrollText, Plus, Pencil, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/cn';
-import { caApi } from '@/api/ca.api';
+import { caApi, type CaAccountRow } from '@/api/ca.api';
+import { apiErrorMessage } from '@/api/client';
 import { CaActivityFeed } from '@/components/ca/CaActivityFeed';
+import { AccountFormDialog } from '@/components/ca/AccountFormDialog';
+import { VoucherFormDialog } from '@/components/ca/VoucherFormDialog';
 
 /**
  * One client's books, as kept by their CA.
@@ -31,7 +35,30 @@ const TABS: { key: Tab; label: string }[] = [
 
 export function ClientBooksPage() {
   const { clientId = '' } = useParams();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('accounts');
+  const [accountDialog, setAccountDialog] = useState<{ open: boolean; account: CaAccountRow | null }>(
+    { open: false, account: null },
+  );
+  const [voucherOpen, setVoucherOpen] = useState(false);
+
+  const removeAccount = useMutation({
+    mutationFn: (id: string) => caApi.deleteAccount(clientId, id),
+    onSuccess: () => {
+      toast.success('Account deleted');
+      qc.invalidateQueries({ queryKey: ['ca', clientId] });
+    },
+    onError: (e) => toast.error(apiErrorMessage(e, 'Could not delete the account')),
+  });
+
+  const removeVoucher = useMutation({
+    mutationFn: (id: string) => caApi.deleteVoucher(clientId, id),
+    onSuccess: () => {
+      toast.success('Voucher deleted');
+      qc.invalidateQueries({ queryKey: ['ca', clientId] });
+    },
+    onError: (e) => toast.error(apiErrorMessage(e, 'Could not delete the voucher')),
+  });
 
   const { data: clients } = useQuery({
     queryKey: ['ca', 'clients'],
@@ -100,38 +127,88 @@ export function ClientBooksPage() {
       </div>
 
       {tab === 'accounts' && (
-        <LedgerTable
+        <>
+          <div className="mb-3 flex justify-end">
+            <Button size="sm" onClick={() => setAccountDialog({ open: true, account: null })}>
+              <Plus className="h-4 w-4" /> New account
+            </Button>
+          </div>
+          <LedgerTable
           loading={accounts.isLoading}
           empty={{
             icon: BookOpen,
             title: 'No chart of accounts yet',
             description: 'A default chart is created the first time these books are opened.',
           }}
-          columns={['Code', 'Account', 'Type']}
-          rows={(accounts.data ?? []).map((a) => [a.code, a.name, a.type])}
-        />
+            columns={['Code', 'Account', 'Type']}
+            rows={(accounts.data ?? []).map((a) => [a.code, a.name, a.type])}
+            rowActions={(i) => {
+              const a = (accounts.data ?? [])[i];
+              if (!a) return null;
+              return (
+                <>
+                  <RowButton
+                    label={`Edit ${a.name}`}
+                    onClick={() => setAccountDialog({ open: true, account: a })}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </RowButton>
+                  <RowButton
+                    label={`Delete ${a.name}`}
+                    danger
+                    disabled={removeAccount.isPending}
+                    onClick={() => removeAccount.mutate(a.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </RowButton>
+                </>
+              );
+            }}
+          />
+        </>
       )}
 
       {tab === 'vouchers' && (
-        <LedgerTable
+        <>
+          <div className="mb-3 flex justify-end">
+            <Button size="sm" onClick={() => setVoucherOpen(true)}>
+              <Plus className="h-4 w-4" /> Post voucher
+            </Button>
+          </div>
+          <LedgerTable
           loading={vouchers.isLoading}
           empty={{
             icon: ScrollText,
             title: 'No vouchers',
             description: 'Vouchers appear here once posted, or once generated from the client’s activity.',
           }}
-          columns={['No.', 'Type', 'Date', 'Narration']}
-          rows={(vouchers.data ?? []).map((v) => [
-            v.voucherNo,
-            v.type,
-            new Date(v.date).toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-            }),
-            v.narration ?? '—',
-          ])}
-        />
+            columns={['No.', 'Type', 'Date', 'Narration']}
+            rows={(vouchers.data ?? []).map((v) => [
+              v.voucherNo,
+              v.type,
+              new Date(v.date).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              }),
+              v.narration ?? '—',
+            ])}
+            rowActions={(i) => {
+              const v = (vouchers.data ?? [])[i];
+              if (!v) return null;
+              return (
+                <RowButton
+                  label={`Delete voucher ${v.voucherNo}`}
+                  danger
+                  disabled={removeVoucher.isPending}
+                  onClick={() => removeVoucher.mutate(v.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </RowButton>
+              );
+            }}
+          />
+        </>
       )}
 
       {tab === 'trial-balance' && (
@@ -148,6 +225,14 @@ export function ClientBooksPage() {
         />
       )}
 
+      <AccountFormDialog
+        clientId={clientId}
+        account={accountDialog.account}
+        open={accountDialog.open}
+        onOpenChange={(open) => setAccountDialog((d) => ({ ...d, open }))}
+      />
+      <VoucherFormDialog clientId={clientId} open={voucherOpen} onOpenChange={setVoucherOpen} />
+
       {tab === 'activity' && (
         <CaActivityFeed
           entries={activity.data ?? []}
@@ -159,12 +244,44 @@ export function ClientBooksPage() {
   );
 }
 
+/** A small icon button for a table row. */
+function RowButton({
+  label,
+  onClick,
+  children,
+  danger,
+  disabled,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'grid h-7 w-7 place-items-center rounded-md text-muted-foreground/70 transition-colors focus-ring disabled:opacity-40',
+        danger ? 'hover:bg-negative/10 hover:text-negative' : 'hover:bg-muted hover:text-foreground',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function LedgerTable({
   loading,
   columns,
   rows,
   empty,
   numericFrom,
+  rowActions,
 }: {
   loading: boolean;
   columns: string[];
@@ -172,6 +289,11 @@ function LedgerTable({
   empty: { icon: typeof BookOpen; title: string; description: string };
   /** Column index from which values are figures and should be right-aligned. */
   numericFrom?: number;
+  /**
+   * Actions for row `i`. Rendered in a trailing column that only exists when
+   * this is supplied, so read-only tables keep their full width.
+   */
+  rowActions?: (index: number) => React.ReactNode;
 }) {
   if (loading) {
     return (
@@ -206,6 +328,7 @@ function LedgerTable({
                   {c}
                 </th>
               ))}
+              {rowActions && <th className="w-[88px] px-4 py-2" />}
             </tr>
           </thead>
           <tbody>
@@ -224,6 +347,11 @@ function LedgerTable({
                     {cell ?? '—'}
                   </td>
                 ))}
+                {rowActions && (
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center justify-end gap-0.5">{rowActions(ri)}</div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
