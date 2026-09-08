@@ -103,9 +103,32 @@ export async function registerUser(input: {
   return issueSession(user);
 }
 
+
+/**
+ * A shadow client is a real `User` row that exists so a CA's client has books
+ * to own. It must never be able to authenticate.
+ *
+ * Its password hash is a hash of a discarded random secret, so nothing anyone
+ * can type will ever match — but that is one lock, and one lock on an account
+ * holding somebody's complete financial position is not enough. This is the
+ * second, independent one, and it is checked at EVERY entry point rather than
+ * once: password login, refresh, Google, and password reset. The reset path
+ * matters most, because a CA usually enters the client's real email address
+ * for correspondence — without this check, "forgot password" would happily
+ * mint a token and mail it to a real person for an account they never made.
+ */
+function assertNotShadowClient(user: { isShadowClient: boolean }): void {
+  if (user.isShadowClient) {
+    // Deliberately the same message an unknown account gets. A distinct one
+    // would confirm which addresses have shadow records behind them.
+    throw new UnauthorizedError('Invalid credentials');
+  }
+}
+
 export async function loginUser(email: string, password: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.isActive) throw new UnauthorizedError('Invalid credentials');
+  assertNotShadowClient(user);
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) throw new UnauthorizedError('Invalid credentials');
 
@@ -121,6 +144,7 @@ export async function refreshSession(refreshToken: string) {
     throw new UnauthorizedError('Invalid or expired refresh token');
   }
   if (!stored.user.isActive) throw new UnauthorizedError('Account deactivated');
+  assertNotShadowClient(stored.user);
 
   await prisma.refreshToken.update({
     where: { id: stored.id },
@@ -147,6 +171,9 @@ export async function logoutAllSessions(userId: string): Promise<void> {
 export async function requestPasswordReset(email: string): Promise<{ token: string } | null> {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return null;
+  // Silently no-op rather than throw, matching the existing "don't confirm
+  // which addresses exist" posture of returning null for an unknown email.
+  if (user.isShadowClient) return null;
   const token = crypto.randomBytes(32).toString('hex');
   await prisma.passwordResetToken.create({
     data: {
@@ -245,6 +272,9 @@ export async function loginOrRegisterWithGoogle(idToken: string) {
     isNew = true;
   }
   if (!user.isActive) throw new UnauthorizedError('Account deactivated');
+  // A CA may have entered the client's real Google address on the shadow
+  // record; signing in with it must not adopt those books.
+  assertNotShadowClient(user);
 
   return { ...(await issueSession(user)), isNew };
 }

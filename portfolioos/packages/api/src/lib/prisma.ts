@@ -145,6 +145,13 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'Income',
   'HealthScoreSnapshot',
   'AiChatSession',
+  // CA workspace. Client carries the grant itself (both sides may read their
+  // own rows); CaAuditLog is the two-sided trail. Both have policies in
+  // 20260908120000_ca_workspace_foundation, so both must be registered here —
+  // a policy without a registration issues no session variable and silently
+  // reads zero rows.
+  'Client',
+  'CaAuditLog',
 ]);
 
 const basePrisma =
