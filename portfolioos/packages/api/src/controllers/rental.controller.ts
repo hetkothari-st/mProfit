@@ -257,3 +257,97 @@ export async function markOverdueHandler(req: Request, res: Response) {
   const count = await markOverdueReceipts(req.user.id);
   ok(res, { flipped: count });
 }
+
+// ── Khata ledger handlers ────────────────────────────────────────────
+
+import {
+  createLedgerEntry,
+  updateLedgerEntry,
+  deleteLedgerEntry,
+  getTenancyLedger,
+  listCollections,
+  buildReminderMessage,
+  LEDGER_ENTRY_TYPES,
+} from '../services/rentalLedger.service.js';
+import { streamPdf, fmtNum, fmtDate, type ExportColumn } from '../services/export.service.js';
+
+const ledgerEntrySchema = z.object({
+  entryType: z.enum(LEDGER_ENTRY_TYPES),
+  amount: moneyString,
+  entryDate: isoDate,
+  forMonth: z.string().regex(/^\d{4}-\d{2}$/).nullable().optional(),
+  note: z.string().max(2000).nullable().optional(),
+  attachmentUrl: z.string().max(2000).nullable().optional(),
+});
+const ledgerEntryPatchSchema = ledgerEntrySchema.partial();
+
+export async function getTenancyLedgerHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  ok(res, await getTenancyLedger(userId, req.params.tenancyId!));
+}
+
+export async function createLedgerEntryHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  const input = ledgerEntrySchema.parse(req.body);
+  ok(res, await createLedgerEntry(userId, req.params.tenancyId!, input));
+}
+
+export async function updateLedgerEntryHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  const patch = ledgerEntryPatchSchema.parse(req.body);
+  ok(res, await updateLedgerEntry(userId, req.params.entryId!, patch));
+}
+
+export async function deleteLedgerEntryHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  await deleteLedgerEntry(userId, req.params.entryId!);
+  ok(res, { deleted: true });
+}
+
+export async function listCollectionsHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  ok(res, await listCollections(userId));
+}
+
+export async function getReminderLinkHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  ok(res, await buildReminderMessage(userId, req.params.tenancyId!));
+}
+
+export async function getTenancyStatementHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  const ledger = await getTenancyLedger(userId, req.params.tenancyId!);
+  const columns: ExportColumn[] = [
+    { key: 'date',           header: 'Date',    width: 12, formatter: fmtDate },
+    { key: 'description',    header: 'Details', width: 34 },
+    { key: 'youGave',        header: 'Charged', width: 14, formatter: (v) => fmtNum(v) },
+    { key: 'youGot',         header: 'Paid',    width: 14, formatter: (v) => fmtNum(v) },
+    { key: 'runningBalance', header: 'Balance', width: 14, formatter: (v) => fmtNum(v) },
+  ];
+  await streamPdf(res, {
+    title: `Rent statement — ${ledger.tenantName}`,
+    meta: {
+      Property: ledger.propertyName,
+      Tenant: ledger.tenantName,
+      'Balance Due': ledger.balanceDue,
+      'Deposit Held': ledger.depositHeld,
+      'Generated On': new Date().toISOString().slice(0, 10),
+    },
+    columns,
+    // Oldest first reads better on a statement than the screen's newest-first.
+    rows: [...ledger.rows].reverse().map((r) => ({
+      date: r.date,
+      description: r.note ?? r.entryType.replace(/_/g, ' ').toLowerCase(),
+      youGave: r.kind === 'CHARGE' ? r.amount : '',
+      youGot: r.kind === 'CREDIT' ? r.amount : '',
+      runningBalance: r.runningBalance,
+    })),
+  });
+}
