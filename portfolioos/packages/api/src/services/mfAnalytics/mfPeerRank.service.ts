@@ -606,8 +606,36 @@ function readMetricValue(
 export function computeUniversePeerRanks(input: UniverseComputeInput): MfPeerRankRow[] {
   const { universeKey, modelKey, asOf, candidates, metricsByScheme, navByScheme } = input;
 
-  const hasOkMetrics = (schemeCode: string, horizonYears: number): boolean =>
-    metricsByScheme.get(schemeCode)?.get(horizonYears)?.status === 'OK';
+  /**
+   * `BENCHMARK_UNAVAILABLE` counts as computable.
+   *
+   * The status describes ONE input to the row, not the row. A fund whose
+   * benchmark index we hold no prices for still has a max drawdown, a worst
+   * month, a share of negative months and a Sharpe ratio — all computed from
+   * its own NAV and the risk-free series, none of which the benchmark touches.
+   * Excluding it discarded every one of those and left the fund with no
+   * percentiles, no pillar scores and `INSUFFICIENT_HISTORY`, which reads as
+   * "this fund is too young to judge" about a fund with ten years of history.
+   *
+   * Measured on 2026-08-31: 1,051 schemes carry this status at the 3-year
+   * horizon against 266 `OK`, and every debt and hybrid fund in the database
+   * scored null on ALL SIX pillars because of it — including DOWNSIDE and
+   * CONSISTENCY, which reference no benchmark-relative metric at all.
+   *
+   * Nothing downstream needs protecting from this. Ranking is per metric and
+   * already skips nulls — `rollingBeatBenchPct` ranks 809 schemes where
+   * `maxDrawdown` ranks 1,113 — so a benchmark-relative metric simply continues
+   * to have no value for these funds, while the NAV-derived ones gain the peers
+   * they should always have had. Category medians computed over more of the
+   * category are more representative, not less.
+   *
+   * `QUARANTINED` and `INSUFFICIENT_DATA` stay excluded: those describe the NAV
+   * series itself, so nothing in the row is trustworthy.
+   */
+  const hasOkMetrics = (schemeCode: string, horizonYears: number): boolean => {
+    const status = metricsByScheme.get(schemeCode)?.get(horizonYears)?.status;
+    return status === 'OK' || status === 'BENCHMARK_UNAVAILABLE';
+  };
 
   const coversWindow = (schemeCode: string, horizonYears: number): boolean => {
     const daily = navByScheme.get(schemeCode);
