@@ -28,10 +28,27 @@ export const LEDGER_ENTRY_TYPES = [
 ] as const;
 export type LedgerEntryType = (typeof LEDGER_ENTRY_TYPES)[number];
 
-/** Charge side of the khata — increases what the tenant owes. */
+/**
+ * ALLOCATION charge side — increases what the tenant owes, so it takes part
+ * in `allocateCredits` and in `balanceDue`. Deliberately narrower than the
+ * DISPLAY charge side below; do not merge the two.
+ */
 const CHARGE_TYPES = new Set<LedgerEntryType>(['LATE_FEE', 'OTHER_CHARGE']);
 /** Credit side — reduces what the tenant owes. */
 const CREDIT_TYPES = new Set<LedgerEntryType>(['PAYMENT', 'DISCOUNT']);
+/**
+ * DISPLAY charge side — the khata's "You gave" column and the statement
+ * PDF's "Charged" column. A `DEPOSIT_REFUND` is money leaving the landlord,
+ * which the spec's §4 table puts on that side, and which the entry dialog
+ * already files under GAVE — so it must not fall through to CREDIT and read
+ * as money received. It stays OUT of `CHARGE_TYPES` because it changes
+ * `depositHeld`, never `balanceDue`, and it is excluded from
+ * `runningBalance` in `getTenancyLedger` for the same reason.
+ */
+const DISPLAY_CHARGE_TYPES = new Set<LedgerEntryType>([
+  ...CHARGE_TYPES,
+  'DEPOSIT_REFUND',
+]);
 
 export const OVERDUE_GRACE_DAYS = 7;
 
@@ -48,6 +65,23 @@ export async function recomputeTenancyLedger(
   tx: Prisma.TransactionClient,
   tenancyId: string,
 ): Promise<LedgerSummary> {
+  // Serialise every recompute of a given tenancy. Under READ COMMITTED, two
+  // concurrent writers — a user recording a payment while the auto-match
+  // hook projects a bank credit, say — each read a snapshot missing the
+  // other's entry, and whichever commits last overwrites `balanceDue` and
+  // the whole receipt projection with a total that silently omits one
+  // payment. Nothing self-heals that. Taking the lock as the FIRST statement
+  // means the loser blocks here and then re-reads both tables below, seeing
+  // the winner's committed rows.
+  //
+  // This runs under RLS as the app role: `Tenancy`'s policy is FOR ALL with
+  // an owner-join subquery, and Postgres applies it to `SELECT … FOR UPDATE`
+  // the same as to a plain read — a row the caller cannot see simply does
+  // not come back (and does not get locked). Verified against the dev
+  // database as `portfolioos_app` (NOSUPERUSER, NOBYPASSRLS); see
+  // test/invariants/rental-ledger-concurrency.test.ts.
+  await tx.$queryRaw`SELECT id FROM "Tenancy" WHERE id = ${tenancyId} FOR UPDATE`;
+
   const [receipts, entries] = await Promise.all([
     tx.rentReceipt.findMany({ where: { tenancyId }, orderBy: { dueDate: 'asc' } }),
     tx.rentLedgerEntry.findMany({ where: { tenancyId } }),
@@ -471,7 +505,7 @@ export async function getTenancyLedger(
   }
   for (const e of entries) {
     const type = e.entryType as LedgerEntryType;
-    const kind: 'CHARGE' | 'CREDIT' = CHARGE_TYPES.has(type) ? 'CHARGE' : 'CREDIT';
+    const kind: 'CHARGE' | 'CREDIT' = DISPLAY_CHARGE_TYPES.has(type) ? 'CHARGE' : 'CREDIT';
     rows.push({
       id: e.id, kind, source: 'ENTRY', entryType: e.entryType,
       date: e.entryDate.toISOString().slice(0, 10),
@@ -564,8 +598,13 @@ function waDigits(raw: string | null): string | null {
   if (!raw) return null;
   const cleaned = raw.replace(/[\s\-()+]/g, '');
   if (!/^\d{8,15}$/.test(cleaned)) return null;
-  if (cleaned.length === 10 && /^[6-9]\d{9}$/.test(cleaned)) return `91${cleaned}`;
-  return cleaned;
+  // "09876543210" is the commonest way an Indian mobile is written down. The
+  // trunk-prefix zero is not part of the number, and leaving it on produced
+  // a wa.me link to an 11-digit non-number — dead, with no error. Strip it
+  // before the 10-digit test so the country code still gets prepended.
+  const national = /^0\d{10}$/.test(cleaned) ? cleaned.slice(1) : cleaned;
+  if (national.length === 10 && /^[6-9]\d{9}$/.test(national)) return `91${national}`;
+  return national;
 }
 
 export async function buildReminderMessage(
@@ -581,30 +620,46 @@ export async function buildReminderMessage(
     where: { id: userId }, select: { name: true },
   });
 
-  const due = formatINR(new Prisma.Decimal(ledger.balanceDue).toString());
+  const balance = new Prisma.Decimal(ledger.balanceDue);
+  const owes = balance.gt(0);
 
   // Correction 3: name the OLDEST unpaid month, not the newest. getTenancyLedger's
   // rows are newest-first, so scanning them for a RECEIPT row would surface the
   // most recent month. Query the oldest open receipt directly instead — the same
   // definition listCollections uses.
-  const oldestUnpaid = await prisma.rentReceipt.findFirst({
-    where: {
-      tenancyId,
-      isSkipped: false,
-      status: { in: ['EXPECTED', 'OVERDUE', 'PARTIAL'] },
-    },
-    orderBy: { dueDate: 'asc' },
-    select: { forMonth: true },
-  });
+  const oldestUnpaid = owes
+    ? await prisma.rentReceipt.findFirst({
+        where: {
+          tenancyId,
+          isSkipped: false,
+          status: { in: ['EXPECTED', 'OVERDUE', 'PARTIAL'] },
+        },
+        orderBy: { dueDate: 'asc' },
+        select: { forMonth: true },
+      })
+    : null;
 
-  const lines = [
-    `Hi ${ledger.tenantName},`,
-    '',
-    `This is a reminder that ${due} is outstanding on ${property.name}${
-      oldestUnpaid?.forMonth ? ` (oldest pending: ${oldestUnpaid.forMonth})` : ''
-    }.`,
-  ];
-  if (property.paymentInstructions) {
+  // The khata's Remind button is always enabled, so a settled or in-advance
+  // tenant is reachable here. `balanceDue` is negative when the tenant is in
+  // advance, and formatting that straight into the sentence produced
+  // "a reminder that -₹5,000.00 is outstanding". Say what is actually true
+  // instead, and never quote a negative as an amount owed.
+  let headline: string;
+  if (owes) {
+    headline = `This is a reminder that ${formatINR(balance.toString())} is outstanding on ${
+      property.name
+    }${oldestUnpaid?.forMonth ? ` (oldest pending: ${oldestUnpaid.forMonth})` : ''}.`;
+  } else if (balance.isZero()) {
+    headline = `Your rent account for ${property.name} is fully settled — nothing is outstanding. Thank you!`;
+  } else {
+    headline = `Your rent account for ${property.name} is settled, and you are ${formatINR(
+      balance.abs().toString(),
+    )} in advance. Nothing is outstanding.`;
+  }
+
+  const lines = [`Hi ${ledger.tenantName},`, '', headline];
+  // Payment instructions only make sense when there is something to pay.
+  if (owes && property.paymentInstructions) {
     lines.push('', property.paymentInstructions);
   }
   lines.push('', `— ${property.landlordName ?? user.name ?? 'Your landlord'}`);

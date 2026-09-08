@@ -456,11 +456,13 @@ export async function updateTenancy(
     if (v.lte(0)) throw new BadRequestError('monthlyRent must be positive');
     data.monthlyRent = v;
   }
+  let nextSecurityDeposit: Prisma.Decimal | null | undefined;
   if (patch.securityDeposit !== undefined) {
-    data.securityDeposit = parseDecimalOptional(
+    nextSecurityDeposit = parseDecimalOptional(
       patch.securityDeposit,
       'securityDeposit',
-    );
+    ) ?? null;
+    data.securityDeposit = nextSecurityDeposit;
   }
   if (patch.notes !== undefined) data.notes = patch.notes;
   if (patch.isActive !== undefined) data.isActive = patch.isActive;
@@ -519,6 +521,67 @@ export async function updateTenancy(
         where: { tenancyId: id, status: 'PENDING_APPROVAL' },
         data: { channels },
       });
+    }
+
+    // Keep the seeded DEPOSIT entry in step with `Tenancy.securityDeposit`.
+    // `createTenancy` seeds one; editing the deposit from 50,000 to 60,000
+    // used to move only the Tenancy column, leaving the khata showing the
+    // old amount held forever, because `depositHeld` is derived purely from
+    // ledger entries.
+    //
+    // Residual asymmetry, accepted deliberately: a user may delete that
+    // DEPOSIT entry from the khata (legitimate — they may consider it
+    // wrong), and nothing then clears `Tenancy.securityDeposit`. We recreate
+    // an entry only when the deposit is edited to a positive value, so a
+    // deliberate deletion is not silently resurrected by an unrelated edit
+    // to, say, the tenant's phone number.
+    if (nextSecurityDeposit !== undefined) {
+      // The oldest DEPOSIT entry is the one that stands for
+      // `securityDeposit`: `createTenancy` seeds it with the tenancy, and
+      // `backfillRentalLedger` creates it dated `startDate` for legacy rows.
+      // Anything a user adds through the khata comes later.
+      const seeded = await tx.rentLedgerEntry.findFirst({
+        where: { tenancyId: id, entryType: 'DEPOSIT' },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (seeded) {
+        if (nextSecurityDeposit && nextSecurityDeposit.gt(0)) {
+          if (!seeded.amount.equals(nextSecurityDeposit)) {
+            await tx.rentLedgerEntry.update({
+              where: { id: seeded.id },
+              data: { amount: nextSecurityDeposit },
+            });
+            // A DEPOSIT is money-moving, so if this entry carries a
+            // CashFlow it moves with it (one CashFlow per money-moving
+            // entry, created/updated/deleted together). The seeded and
+            // backfilled entries carry none; a khata-created one does.
+            if (seeded.cashFlowId) {
+              await tx.cashFlow.updateMany({
+                where: { id: seeded.cashFlowId },
+                data: { amount: nextSecurityDeposit },
+              });
+            }
+          }
+        } else {
+          // Deposit cleared or zeroed: the entry no longer stands for
+          // anything, and leaving it would keep `depositHeld` diverged in
+          // the other direction.
+          if (seeded.cashFlowId) {
+            await tx.cashFlow.deleteMany({ where: { id: seeded.cashFlowId } });
+          }
+          await tx.rentLedgerEntry.delete({ where: { id: seeded.id } });
+        }
+      } else if (nextSecurityDeposit && nextSecurityDeposit.gt(0)) {
+        await tx.rentLedgerEntry.create({
+          data: {
+            tenancyId: id,
+            entryType: 'DEPOSIT',
+            amount: nextSecurityDeposit,
+            entryDate: existing.startDate,
+            note: 'Security deposit',
+          },
+        });
+      }
     }
 
     await recomputeTenancyLedger(tx, id);
