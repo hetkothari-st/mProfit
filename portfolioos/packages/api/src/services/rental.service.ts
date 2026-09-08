@@ -423,7 +423,7 @@ export async function createTenancy(userId: string, input: CreateTenancyInput) {
       });
     }
     await recomputeTenancyLedger(tx, tenancy.id);
-    return tenancy;
+    return tx.tenancy.findUniqueOrThrow({ where: { id: tenancy.id } });
   });
 }
 
@@ -532,7 +532,7 @@ export async function updateTenancy(
 
     await recomputeTenancyLedger(tx, id);
 
-    return updated;
+    return tx.tenancy.findUniqueOrThrow({ where: { id } });
   });
 }
 
@@ -654,7 +654,7 @@ export async function markReceiptReceived(
         cashFlowId,
       },
     });
-    if (input.notes) {
+    if (input.notes !== undefined) {
       await tx.rentReceipt.update({
         where: { id: receiptId },
         data: { notes: input.notes },
@@ -1051,10 +1051,13 @@ export async function hookAutoMatchRentalCredit(
 }
 
 /**
- * Undo a prior auto-match: flip the receipt back to EXPECTED and delete
- * the linked CashFlow. Keeps the `autoMatchedFromEventId` null so the
- * event won't re-match automatically — the user explicitly rejected
- * this pairing.
+ * Undo a prior auto-match by deleting the ledger `PAYMENT` entries this
+ * month carries a `canonicalEventId` on (and the CashFlow rows they
+ * created), then recomputing. With no matched entry left, the event won't
+ * re-match automatically — the user explicitly rejected this pairing — and
+ * the receipt's derived status falls back to whatever the remaining ledger
+ * entries produce (EXPECTED/OVERDUE if none, PARTIAL if a manual payment
+ * still stands against the month).
  */
 export async function undoAutoMatch(userId: string, receiptId: string) {
   const existing = await getReceiptOwned(userId, receiptId);
