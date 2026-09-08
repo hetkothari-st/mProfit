@@ -45,28 +45,59 @@
  * in `report.semanticChanges`, visible without being mistaken for a
  * regression.
  *
- * NO ROLLBACK ON DRIFT: each tenancy's recompute commits in its own
- * transaction (`runInTransaction` per tenancy, not one transaction for the
- * whole sweep — holding locks across every tenancy is the pattern this
+ * NO ROLLBACK ON DRIFT (real run): each tenancy's recompute commits in its
+ * own transaction (`runInTransaction` per tenancy, not one transaction for
+ * the whole sweep — holding locks across every tenancy is the pattern this
  * project's guidelines forbid). By the time `report.drift` is computed, any
  * drifted writes are already live; a non-empty `drift` array or non-zero
  * exit code is a post-hoc signal, not a rollback. Take a database snapshot
  * before running this against real data.
  *
- * Run: pnpm --filter @portfolioos/api exec tsx scripts/backfillRentalLedger.ts
+ * `--dry-run` EXISTS PRECISELY TO AVOID THAT: it runs the identical sequence
+ * — the same guards, the same inserts, the same per-tenancy recompute, the
+ * same parity pass — inside ONE transaction that is deliberately rolled back
+ * at the end, so the operator gets the full report (`drift` and
+ * `semanticChanges` included) having written nothing. It is the same code
+ * path parameterised on a `BackfillIo`, not a separate simulation, so what
+ * it reports is what a real run would do. The one behavioural difference is
+ * that it holds a single transaction for the whole sweep, which is fine for
+ * an operator-initiated read-only preview but is why the real run does not.
+ *
+ * TWO DRIFT SOURCES TO EXPECT ON REAL DATA:
+ *  1. A legacy over-payment (`receivedAmount > expectedAmount` was reachable
+ *     before the ledger) becomes a pinned credit that fills its own month and
+ *     then spills FIFO onto an older arrear — so TWO receipts move. That is a
+ *     genuine money change and needs review.
+ *  2. A legacy `EXPECTED` receipt already past the 7-day grace window that
+ *     the overdue cron never flipped will flip to `OVERDUE` during recompute.
+ *     That is benign catch-up, not regression. Those rows are tagged
+ *     `kind: 'OVERDUE_CATCHUP'` in `drift`; everything else is `'MONEY'`.
+ *     The exit code still goes non-zero on ANY drift — the operator decides.
+ *
+ * Run:      pnpm --filter @portfolioos/api exec tsx scripts/backfillRentalLedger.ts
+ * Dry run:  ... scripts/backfillRentalLedger.ts --dry-run
  */
 
+import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { prisma, runInTransaction } from '../src/lib/prisma.js';
 import { runAsSystem } from '../src/lib/requestContext.js';
 import { recomputeTenancyLedger } from '../src/services/rentalLedger.service.js';
 
+/**
+ * A drift row tagged `OVERDUE_CATCHUP` is a receipt the overdue cron should
+ * already have flipped and didn't; the recompute simply caught up. Anything
+ * else is `MONEY` and needs a human.
+ */
+export type DriftKind = 'MONEY' | 'OVERDUE_CATCHUP';
+
 export interface BackfillReport {
+  dryRun: boolean;
   paymentsCreated: number;
   depositsCreated: number;
   tenanciesRecomputed: number;
   /** Money-only: a receipt's `status` or `receivedAmount` moved. Must stay empty. */
-  drift: Array<{ receiptId: string; before: string; after: string }>;
+  drift: Array<{ receiptId: string; before: string; after: string; kind: DriftKind }>;
   /**
    * Non-money columns that moved because the ledger now derives them from
    * entries rather than storing them on the receipt (see header). Chiefly
@@ -86,11 +117,189 @@ const backfillPaymentHash = (receiptId: string) =>
 const backfillDepositHash = (tenancyId: string) =>
   `${BACKFILL_DEPOSIT_PREFIX}${hash(`rentledger:backfill:deposit:${tenancyId}`)}`;
 
+/**
+ * The slice of the Prisma client this script needs. Satisfied both by the
+ * shared `prisma` (real run — each call gets its own RLS transaction) and by
+ * a `Prisma.TransactionClient` (dry run — one transaction, rolled back).
+ */
+type BackfillDb = Pick<Prisma.TransactionClient, 'rentReceipt' | 'rentLedgerEntry' | 'tenancy'>;
+
+interface BackfillIo {
+  db: BackfillDb;
+  /** Recompute one tenancy's projection. Real run: its own transaction.
+   *  Dry run: the caller's single, rolled-back transaction. */
+  recompute: (tenancyId: string) => Promise<void>;
+}
+
+/** Thrown to force the dry run's transaction to roll back. Never escapes. */
+class DryRunRollback extends Error {
+  constructor() {
+    super('dry run — rolling back');
+    this.name = 'DryRunRollback';
+  }
+}
+
+/**
+ * The whole backfill, parameterised on how it reads/writes and how it
+ * recomputes. Real and dry runs execute THIS function — identical guards,
+ * identical inserts, identical parity pass — so the dry run's report is
+ * faithful to what a real run would produce.
+ */
+async function executeBackfill(io: BackfillIo, report: BackfillReport): Promise<void> {
+  const { db } = io;
+
+  const receipts = await db.rentReceipt.findMany({
+    where: { receivedAmount: { not: null } },
+  });
+  const tenancies = await db.tenancy.findMany();
+
+  // Snapshot the pre-backfill projection so the post-recompute pass can
+  // compare — every observable field the recompute might touch, not just
+  // the money-only pair used for `drift`.
+  const before = new Map(
+    (await db.rentReceipt.findMany()).map((r) => [
+      r.id,
+      {
+        status: r.status,
+        receivedAmount: r.receivedAmount?.toString() ?? null,
+        receivedOn: r.receivedOn?.toISOString() ?? null,
+        cashFlowId: r.cashFlowId,
+        autoMatchedFromEventId: r.autoMatchedFromEventId,
+      },
+    ]),
+  );
+
+  for (const r of receipts) {
+    // A live (non-backfill) PAYMENT already pinned to this tenancy+month
+    // means the receipt's current receivedAmount came from the real
+    // post-cutover payment flow, not stale legacy state. Don't create a
+    // second, synthetic payment for it — that would double-count in
+    // allocateCredits on the very next recompute.
+    const liveEntry = await db.rentLedgerEntry.findFirst({
+      where: {
+        tenancyId: r.tenancyId,
+        entryType: 'PAYMENT',
+        forMonth: r.forMonth,
+        OR: [
+          { sourceHash: null },
+          { NOT: { sourceHash: { startsWith: BACKFILL_PAYMENT_PREFIX } } },
+        ],
+      },
+    });
+    if (liveEntry) continue;
+
+    const sourceHash = backfillPaymentHash(r.id);
+    const exists = await db.rentLedgerEntry.findUnique({ where: { sourceHash } });
+    if (exists) continue;
+    await db.rentLedgerEntry.create({
+      data: {
+        tenancyId: r.tenancyId,
+        entryType: 'PAYMENT',
+        amount: r.receivedAmount!,
+        entryDate: r.receivedOn ?? r.dueDate,
+        forMonth: r.forMonth,
+        note: 'Backfilled from receipt',
+        cashFlowId: r.cashFlowId,
+        canonicalEventId: r.autoMatchedFromEventId,
+        sourceHash,
+      },
+    });
+    report.paymentsCreated += 1;
+  }
+
+  for (const t of tenancies) {
+    if (!t.securityDeposit || t.securityDeposit.lte(0)) continue;
+
+    // Mirror of the payment guard above, and just as load-bearing.
+    // `createTenancy` seeds a DEPOSIT entry with a null sourceHash for every
+    // tenancy created after cutover, so checking only this script's own
+    // deposit hash would find nothing and insert a SECOND deposit —
+    // doubling `depositHeld`. The drift check only inspects RentReceipt
+    // columns, so that corruption would not show up in the report at all.
+    const liveDeposit = await db.rentLedgerEntry.findFirst({
+      where: {
+        tenancyId: t.id,
+        entryType: 'DEPOSIT',
+        OR: [
+          { sourceHash: null },
+          { NOT: { sourceHash: { startsWith: BACKFILL_DEPOSIT_PREFIX } } },
+        ],
+      },
+    });
+    if (liveDeposit) continue;
+
+    const sourceHash = backfillDepositHash(t.id);
+    const exists = await db.rentLedgerEntry.findUnique({ where: { sourceHash } });
+    if (exists) continue;
+    await db.rentLedgerEntry.create({
+      data: {
+        tenancyId: t.id,
+        entryType: 'DEPOSIT',
+        amount: t.securityDeposit,
+        entryDate: t.startDate,
+        note: 'Security deposit (backfilled from tenancy)',
+        sourceHash,
+      },
+    });
+    report.depositsCreated += 1;
+  }
+
+  for (const t of tenancies) {
+    await io.recompute(t.id);
+    report.tenanciesRecomputed += 1;
+  }
+
+  for (const r of await db.rentReceipt.findMany()) {
+    const prior = before.get(r.id);
+    if (prior === undefined) continue;
+
+    const afterMoney = `${r.status}|${r.receivedAmount?.toString() ?? ''}`;
+    const priorMoney = `${prior.status}|${prior.receivedAmount ?? ''}`;
+    if (priorMoney !== afterMoney) {
+      // An EXPECTED row past the grace window flipping to OVERDUE, with no
+      // money attached either side, is the overdue cron catching up — not a
+      // regression. Everything else needs a human.
+      const isOverdueCatchup =
+        prior.status === 'EXPECTED'
+        && r.status === 'OVERDUE'
+        && prior.receivedAmount === null
+        && r.receivedAmount === null;
+      report.drift.push({
+        receiptId: r.id,
+        before: priorMoney,
+        after: afterMoney,
+        kind: isOverdueCatchup ? 'OVERDUE_CATCHUP' : 'MONEY',
+      });
+    }
+
+    const afterReceivedOn = r.receivedOn?.toISOString() ?? null;
+    if (prior.receivedOn !== afterReceivedOn) {
+      report.semanticChanges.push({
+        receiptId: r.id, field: 'receivedOn', before: prior.receivedOn, after: afterReceivedOn,
+      });
+    }
+    if (prior.cashFlowId !== r.cashFlowId) {
+      report.semanticChanges.push({
+        receiptId: r.id, field: 'cashFlowId', before: prior.cashFlowId, after: r.cashFlowId,
+      });
+    }
+    if (prior.autoMatchedFromEventId !== r.autoMatchedFromEventId) {
+      report.semanticChanges.push({
+        receiptId: r.id,
+        field: 'autoMatchedFromEventId',
+        before: prior.autoMatchedFromEventId,
+        after: r.autoMatchedFromEventId,
+      });
+    }
+  }
+}
+
 export async function backfillRentalLedger(
   opts: { dryRun?: boolean } = {},
 ): Promise<BackfillReport> {
   return runAsSystem(async () => {
     const report: BackfillReport = {
+      dryRun: opts.dryRun === true,
       paymentsCreated: 0,
       depositsCreated: 0,
       tenanciesRecomputed: 0,
@@ -98,123 +307,48 @@ export async function backfillRentalLedger(
       semanticChanges: [],
     };
 
-    const receipts = await prisma.rentReceipt.findMany({
-      where: { receivedAmount: { not: null } },
-    });
-    const tenancies = await prisma.tenancy.findMany();
+    if (opts.dryRun) {
+      // Do the real work — inserts, recompute, parity — then throw so the
+      // transaction rolls back. The operator gets the full report having
+      // written nothing, instead of the old choice between "counts only" and
+      // "commit irreversibly, then find out". `report` is mutated in place,
+      // so it survives the rollback.
+      try {
+        await runInTransaction(
+          async (tx) => {
+            await executeBackfill(
+              {
+                db: tx,
+                recompute: async (tenancyId) => {
+                  await recomputeTenancyLedger(tx, tenancyId);
+                },
+              },
+              report,
+            );
+            throw new DryRunRollback();
+          },
+          // One transaction for the whole sweep, unlike the real run. Safe
+          // here because it is operator-initiated and discards its work, but
+          // it needs far more headroom than the 30s default.
+          { timeout: 10 * 60_000 },
+        );
+      } catch (err) {
+        if (!(err instanceof DryRunRollback)) throw err;
+      }
+      return report;
+    }
 
-    // Snapshot the pre-backfill projection so the post-recompute pass can
-    // compare — every observable field the recompute might touch, not just
-    // the money-only pair used for `drift`.
-    const before = new Map(
-      (await prisma.rentReceipt.findMany()).map((r) => [
-        r.id,
-        {
-          status: r.status,
-          receivedAmount: r.receivedAmount?.toString() ?? null,
-          receivedOn: r.receivedOn?.toISOString() ?? null,
-          cashFlowId: r.cashFlowId,
-          autoMatchedFromEventId: r.autoMatchedFromEventId,
+    await executeBackfill(
+      {
+        // The shared client, not a transaction: each call carries its own
+        // RLS transaction, and the recompute below commits per tenancy.
+        db: prisma,
+        recompute: async (tenancyId) => {
+          await runInTransaction((tx) => recomputeTenancyLedger(tx, tenancyId));
         },
-      ]),
+      },
+      report,
     );
-
-    for (const r of receipts) {
-      // A live (non-backfill) PAYMENT already pinned to this tenancy+month
-      // means the receipt's current receivedAmount came from the real
-      // post-cutover payment flow, not stale legacy state. Don't create a
-      // second, synthetic payment for it — that would double-count in
-      // allocateCredits on the very next recompute.
-      const liveEntry = await prisma.rentLedgerEntry.findFirst({
-        where: {
-          tenancyId: r.tenancyId,
-          entryType: 'PAYMENT',
-          forMonth: r.forMonth,
-          OR: [
-            { sourceHash: null },
-            { NOT: { sourceHash: { startsWith: BACKFILL_PAYMENT_PREFIX } } },
-          ],
-        },
-      });
-      if (liveEntry) continue;
-
-      const sourceHash = backfillPaymentHash(r.id);
-      const exists = await prisma.rentLedgerEntry.findUnique({ where: { sourceHash } });
-      if (exists) continue;
-      if (opts.dryRun) { report.paymentsCreated += 1; continue; }
-      await prisma.rentLedgerEntry.create({
-        data: {
-          tenancyId: r.tenancyId,
-          entryType: 'PAYMENT',
-          amount: r.receivedAmount!,
-          entryDate: r.receivedOn ?? r.dueDate,
-          forMonth: r.forMonth,
-          note: 'Backfilled from receipt',
-          cashFlowId: r.cashFlowId,
-          canonicalEventId: r.autoMatchedFromEventId,
-          sourceHash,
-        },
-      });
-      report.paymentsCreated += 1;
-    }
-
-    for (const t of tenancies) {
-      if (!t.securityDeposit || t.securityDeposit.lte(0)) continue;
-      const sourceHash = backfillDepositHash(t.id);
-      const exists = await prisma.rentLedgerEntry.findUnique({ where: { sourceHash } });
-      if (exists) continue;
-      if (opts.dryRun) { report.depositsCreated += 1; continue; }
-      await prisma.rentLedgerEntry.create({
-        data: {
-          tenancyId: t.id,
-          entryType: 'DEPOSIT',
-          amount: t.securityDeposit,
-          entryDate: t.startDate,
-          note: 'Security deposit (backfilled from tenancy)',
-          sourceHash,
-        },
-      });
-      report.depositsCreated += 1;
-    }
-
-    if (opts.dryRun) return report;
-
-    for (const t of tenancies) {
-      await runInTransaction((tx) => recomputeTenancyLedger(tx, t.id));
-      report.tenanciesRecomputed += 1;
-    }
-
-    for (const r of await prisma.rentReceipt.findMany()) {
-      const prior = before.get(r.id);
-      if (prior === undefined) continue;
-
-      const afterMoney = `${r.status}|${r.receivedAmount?.toString() ?? ''}`;
-      const priorMoney = `${prior.status}|${prior.receivedAmount ?? ''}`;
-      if (priorMoney !== afterMoney) {
-        report.drift.push({ receiptId: r.id, before: priorMoney, after: afterMoney });
-      }
-
-      const afterReceivedOn = r.receivedOn?.toISOString() ?? null;
-      if (prior.receivedOn !== afterReceivedOn) {
-        report.semanticChanges.push({
-          receiptId: r.id, field: 'receivedOn', before: prior.receivedOn, after: afterReceivedOn,
-        });
-      }
-      if (prior.cashFlowId !== r.cashFlowId) {
-        report.semanticChanges.push({
-          receiptId: r.id, field: 'cashFlowId', before: prior.cashFlowId, after: r.cashFlowId,
-        });
-      }
-      if (prior.autoMatchedFromEventId !== r.autoMatchedFromEventId) {
-        report.semanticChanges.push({
-          receiptId: r.id,
-          field: 'autoMatchedFromEventId',
-          before: prior.autoMatchedFromEventId,
-          after: r.autoMatchedFromEventId,
-        });
-      }
-    }
-
     return report;
   });
 }
@@ -225,6 +359,14 @@ if (process.argv[1]?.endsWith('backfillRentalLedger.ts')) {
   backfillRentalLedger({ dryRun })
     .then((r) => {
       console.log(JSON.stringify(r, null, 2));
+      const catchup = r.drift.filter((d) => d.kind === 'OVERDUE_CATCHUP').length;
+      if (r.drift.length > 0) {
+        console.error(
+          `DRIFT: ${r.drift.length} receipt(s) moved — ${catchup} benign overdue catch-up, ` +
+            `${r.drift.length - catchup} needing review.` +
+            (r.dryRun ? ' Nothing was written (dry run).' : ''),
+        );
+      }
       process.exit(r.drift.length === 0 ? 0 : 1);
     })
     .catch((err) => {
