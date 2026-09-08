@@ -37,6 +37,8 @@ import {
 } from '../services/reportBuilder/statement/capitalGains.js';
 import { buildIncomeStatement } from '../services/reportBuilder/statement/income.js';
 import { buildLedgerStatement } from '../services/reportBuilder/statement/ledger.js';
+import { buildProvidentFundStatement } from '../services/reportBuilder/statement/providentFund.js';
+import { buildFyBundle } from '../services/reports/fyBundle.service.js';
 import type { AssetClass } from '@prisma/client';
 
 async function assertOwnedPortfolio(req: Request): Promise<string> {
@@ -952,6 +954,7 @@ import {
   buildLayoutForSubjects,
   buildPayloadForSubjects,
   requireSingleSubject,
+  runForSubject,
 } from '../services/reports/reportSubjects.js';
 
 async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {
@@ -1261,18 +1264,87 @@ export async function downloadBankReconciliation(req: Request, res: Response) {
 // See services/reportBuilder/tally/. XML-only format: bypasses
 // emitMprofit/MprofitLayout entirely (not a banded report).
 
+/**
+ * Tally exports stream XML rather than going through `emitMprofit`, which is
+ * how they escaped the subject rewrite that made the other forty-odd downloads
+ * `?subject=`-aware: the transformation matched on the emitter these do not
+ * use. Until now Tally could only ever be your own books — backwards for the
+ * one artefact most likely to be pulled on someone else's behalf, since it is
+ * how a ledger leaves this app and enters accounting software.
+ *
+ * `requireSingleSubject` because a Tally company file describes one set of
+ * books. A merged one is not a company file for anybody, the same reason a
+ * combined Schedule 112A is not a filing.
+ */
 export async function downloadTallyMasters(req: Request, res: Response) {
-  const userId = req.user!.id;
-  await ensureAccountingProjected(userId);
-  const { xml, filenameStem } = await buildTallyMastersXml(userId);
-  streamTallyXml(res, xml, filenameStem);
+  const resolved = await resolveReportSubjects(req);
+  const userId = requireSingleSubject(resolved, 'The Tally masters export').userId;
+  await runForSubject(resolved.via, userId, async () => {
+    await ensureAccountingProjected(userId);
+    const { xml, filenameStem } = await buildTallyMastersXml(userId);
+    streamTallyXml(res, xml, filenameStem);
+  });
 }
 
 export async function downloadTallyVouchers(req: Request, res: Response) {
-  const userId = req.user!.id;
+  const resolved = await resolveReportSubjects(req);
+  const userId = requireSingleSubject(resolved, 'The Tally vouchers export').userId;
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  const { xml, filenameStem } = await buildTallyVouchersXml(userId, { from, to });
-  streamTallyXml(res, xml, filenameStem);
+  await runForSubject(resolved.via, userId, async () => {
+    await ensureAccountingProjected(userId);
+    const { xml, filenameStem } = await buildTallyVouchersXml(userId, { from, to });
+    streamTallyXml(res, xml, filenameStem);
+  });
+}
+
+/**
+ * Provident fund statement — the first export this data has ever had.
+ *
+ * Subject-aware from the outset rather than retrofitted, which is the lesson
+ * the Tally handlers taught: a download added without going through
+ * `resolveReportSubjects` silently works for its author and nobody else.
+ */
+export async function downloadProvidentFund(req: Request, res: Response) {
+  const resolved = await resolveReportSubjects(req);
+  const fromStr = (req.query.from as string | undefined)?.trim();
+  const toStr = (req.query.to as string | undefined)?.trim();
+  const from = fromStr ? new Date(fromStr) : undefined;
+  const to = toStr ? new Date(toStr) : undefined;
+  if (from && Number.isNaN(from.getTime())) throw new BadRequestError('Invalid `from` date');
+  if (to && Number.isNaN(to.getTime())) throw new BadRequestError('Invalid `to` date');
+
+  const payload = await buildPayloadForSubjects(resolved, (userId) =>
+    buildProvidentFundStatement({ userId, from, to }),
+  );
+  await emit(req, res, payload);
+}
+
+/**
+ * One financial year, one zip, for whoever `?subject=` names.
+ *
+ * `requireSingleSubject` because a bundle is a year of one person's affairs.
+ * Merging two people's filings into one archive would produce something that
+ * looks like a submission and is not one for either of them — the same reason
+ * Schedule 112A and the Tally company file are single-subject.
+ */
+export async function downloadFyBundle(req: Request, res: Response) {
+  const fy = (req.query.fy as string | undefined)?.trim();
+  if (!fy) throw new BadRequestError('fy query param required (e.g. 2025-26)');
+
+  const resolved = await resolveReportSubjects(req);
+  const subject = requireSingleSubject(resolved, 'The financial-year bundle');
+
+  const result = await runForSubject(resolved.via, subject.userId, () =>
+    buildFyBundle(subject.userId, fy),
+  );
+
+  const stem = subject.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${stem || 'portfolioos'}-FY${fy}.zip"`);
+  // Surfaced in headers too, so a caller scripting this can tell a complete
+  // bundle from a partial one without unzipping it.
+  res.setHeader('X-Bundle-Included', String(result.included.length));
+  res.setHeader('X-Bundle-Failed', String(result.failed.length));
+  res.send(result.zip);
 }

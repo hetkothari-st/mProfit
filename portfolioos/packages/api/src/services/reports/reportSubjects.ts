@@ -27,6 +27,8 @@ import { prisma } from '../../lib/prisma.js';
 import { runAsUser } from '../../lib/requestContext.js';
 import { BadRequestError, ForbiddenError } from '../../lib/errors.js';
 import { parseFamilyId } from '../../lib/familyHeader.js';
+import { parseClientId } from '../../lib/clientHeader.js';
+import { getCaScope } from '../ca/caAccess.service.js';
 import {
   getEffectiveScope,
   NON_AC_CATEGORIES,
@@ -40,12 +42,52 @@ export interface ReportSubject {
   label: string;
 }
 
+/**
+ * HOW the caller earned the right to these subjects, which decides how their
+ * rows are reached.
+ *
+ * SELF   — the caller's own data; nothing special needed.
+ * FAMILY — a household grant. Reached by `runAsUser(member)`, because most
+ *          tables have no family-aware policy and impersonation is the
+ *          established pattern for a caller who is ALREADY a member of that
+ *          family.
+ * CA     — a professional grant. Reached under the CA's OWN identity, via the
+ *          `app_is_active_ca_for` policies. Never impersonated: under the
+ *          client's identity `Portfolio`'s family branch fires and the CA
+ *          would read family-shared portfolios owned by the client's
+ *          relatives, who granted them nothing. A client can consent to
+ *          sharing their own data; they cannot consent for their family.
+ *
+ * This field exists so that distinction cannot be lost between the resolver
+ * and the builders — the leak is silent, so it has to be impossible to reach
+ * rather than remembered.
+ */
+export type SubjectVia = 'SELF' | 'FAMILY' | 'CA';
+
 export interface ResolvedSubjects {
   subjects: ReportSubject[];
   /** Household name when the report spans a family; undefined for one person. */
   familyLabel?: string;
   /** True when the caller asked for the whole household. */
   isFamily: boolean;
+  via: SubjectVia;
+}
+
+/**
+ * Run `fn` in whatever identity context this grant requires.
+ *
+ * The single place the impersonate-or-not decision is made. Every report
+ * builder goes through it, so adding a new one cannot accidentally pick the
+ * wrong one.
+ */
+export async function runForSubject<T>(
+  via: SubjectVia,
+  userId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (via === 'FAMILY') return runAsUser(userId, fn);
+  // SELF is already the caller. CA must stay the CA — see SubjectVia.
+  return fn();
 }
 
 /** `?subject=` — 'self' (default), 'family', or a member's userId. */
@@ -54,11 +96,30 @@ export async function resolveReportSubjects(req: Request): Promise<ResolvedSubje
   const raw = (req.query.subject as string | undefined)?.trim();
   const familyId = parseFamilyId(req);
 
+  // A CA acting for a client takes precedence and does not compose with the
+  // family selector: a CA sees exactly one client, even if that client heads a
+  // household elsewhere. Sending both is a contradiction, so it is refused
+  // rather than silently resolved one way.
+  const clientId = parseClientId(req);
+  if (clientId) {
+    if (familyId) {
+      throw new BadRequestError(
+        'Choose either a family view or a client, not both — a professional grant covers one person.',
+      );
+    }
+    const scope = await getCaScope(callerId, clientId);
+    return {
+      subjects: [{ userId: scope.subjectUserId, label: scope.subjectLabel }],
+      isFamily: false,
+      via: 'CA',
+    };
+  }
+
   // Default and explicit self both mean "just me", and neither needs a family
   // context. Keeping this branch first means a caller with no family at all
   // never pays for a scope resolution.
   if (!raw || raw === 'self') {
-    return { subjects: [await selfSubject(callerId)], isFamily: false };
+    return { subjects: [await selfSubject(callerId)], isFamily: false, via: 'SELF' };
   }
 
   if (!familyId) {
@@ -75,7 +136,7 @@ export async function resolveReportSubjects(req: Request): Promise<ResolvedSubje
   // Asking for yourself by id is asking for yourself. Caps never apply to a
   // member's own data, so this must not fall through to the check below.
   if (raw === callerId) {
-    return { subjects: [await selfSubject(callerId)], isFamily: false };
+    return { subjects: [await selfSubject(callerId)], isFamily: false, via: 'SELF' };
   }
 
   assertMayReportOnOthers(scope);
@@ -90,6 +151,7 @@ export async function resolveReportSubjects(req: Request): Promise<ResolvedSubje
       subjects,
       familyLabel: family?.name ?? 'Household',
       isFamily: true,
+      via: 'FAMILY',
     };
   }
 
@@ -100,7 +162,7 @@ export async function resolveReportSubjects(req: Request): Promise<ResolvedSubje
     throw new ForbiddenError('That member is not part of a family you can see.');
   }
 
-  return { subjects: await labelledSubjects([raw]), isFamily: false };
+  return { subjects: await labelledSubjects([raw]), isFamily: false, via: 'FAMILY' };
 }
 
 /**
@@ -189,13 +251,13 @@ export async function buildLayoutForSubjects(
 
   if (subjects.length === 1) {
     const only = subjects[0]!;
-    const layout = await runAsUser(only.userId, () => build(only.userId));
+    const layout = await runForSubject(resolved.via, only.userId, () => build(only.userId));
     return { ...layout, member: only.label, ...(familyLabel ? { family: familyLabel } : {}) };
   }
 
   const built: Array<{ subject: ReportSubject; layout: MprofitLayout }> = [];
   for (const subject of subjects) {
-    const layout = await runAsUser(subject.userId, () => build(subject.userId));
+    const layout = await runForSubject(resolved.via, subject.userId, () => build(subject.userId));
     built.push({ subject, layout });
   }
 
@@ -278,12 +340,15 @@ export async function buildPayloadForSubjects<
 
   if (subjects.length === 1) {
     const only = subjects[0]!;
-    return runAsUser(only.userId, () => build(only.userId));
+    return runForSubject(resolved.via, only.userId, () => build(only.userId));
   }
 
   const built: Array<{ subject: ReportSubject; payload: T }> = [];
   for (const subject of subjects) {
-    built.push({ subject, payload: await runAsUser(subject.userId, () => build(subject.userId)) });
+    built.push({
+      subject,
+      payload: await runForSubject(resolved.via, subject.userId, () => build(subject.userId)),
+    });
   }
 
   const first = built[0]!.payload;
