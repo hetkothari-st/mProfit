@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import { EMERGENCY_FUND_MONTHS } from '@portfolioos/shared';
 import { ageBasedEquityGuidelinePct } from './riskProfileMath.js';
 
 /**
@@ -12,7 +13,16 @@ function clampScore(n: number): number {
   return Math.max(0, Math.min(100, n));
 }
 
-/** Liquid assets ÷ (6 × monthly expenses) × 100, capped [0,100]. */
+/**
+ * Liquid assets ÷ (EMERGENCY_FUND_MONTHS × monthly expenses) × 100, capped
+ * [0,100].
+ *
+ * The 6-month target comes from `@portfolioos/shared` rather than a literal
+ * here: the advisor's CASH_DEPLOYMENT rule and the MF analytics
+ * NO_LIQUID_BUFFER finding both reason about the same buffer, and a `6` typed
+ * separately into three files is how they end up disagreeing about whether a
+ * user has one.
+ */
 export function emergencyFundScore(
   liquidAssets: Decimal,
   monthlyExpenses: Decimal,
@@ -21,7 +31,7 @@ export function emergencyFundScore(
     return { score: 100, monthsCovered: liquidAssets.greaterThan(0) ? Infinity : 0 };
   }
   const monthsCovered = liquidAssets.dividedBy(monthlyExpenses).toNumber();
-  const score = clampScore((monthsCovered / 6) * 100);
+  const score = clampScore((monthsCovered / EMERGENCY_FUND_MONTHS) * 100);
   return { score, monthsCovered };
 }
 

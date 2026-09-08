@@ -1,0 +1,36 @@
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+
+Open Ended Schemes(Equity Scheme - Large Cap Fund)
+
+Aditya Birla Sun Life Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+119551;INF209K01YM2;INF209K01YN0;Aditya Birla Sun Life Frontline Equity Fund - Direct Plan - IDCW;38.4500;31-Dec-2025
+119552;INF209K01YP5;;Aditya Birla Sun Life Frontline Equity Fund - Direct Plan - Growth;521.3400;31-Dec-2025
+
+HDFC Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+118989;INF179K01YV8;;HDFC Top 100 Fund - Direct Plan - Growth;1198.7650;31-Dec-2025
+118990;INF179K01YW6;INF179K01YX4;HDFC Top 100 Fund - Regular Plan - IDCW Reinvestment;65.1200;31-Dec-2025
+
+Open Ended Schemes(Debt Scheme - Liquid Fund)
+
+Aditya Birla Sun Life Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+119553;INF209K01ZB2;;Aditya Birla Sun Life Liquid Fund - Direct Plan - Growth;412.8891;31-Dec-2025
+
+Nippon India Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+119805;INF204K01XY7;;Nippon India Liquid Fund - Direct Plan - Growth;6012.4432;31-Dec-2025
+119806;INF204K01XZ4;INF204K01YA5;Nippon India Liquid Fund - Direct Plan - Daily IDCW Reinvestment;1000.1500;31-Dec-2025
+
+Open Ended Schemes(Equity Scheme - Dividend Yield Fund)
+
+Aditya Birla Sun Life Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+119560;INF209K01ZQ0;;Aditya Birla Sun Life Dividend Yield Fund - Direct Plan - Growth;412.1200;31-Dec-2025
+119561;INF209K01ZR8;;Aditya Birla Sun Life Dividend Yield Fund - Direct Plan - IDCW;28.9900;31-Dec-2025

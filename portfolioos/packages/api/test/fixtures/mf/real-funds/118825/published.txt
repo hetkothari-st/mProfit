@@ -1,0 +1,54 @@
+### Mirae Asset Large Cap Fund -- active-factsheet---august-2026.pdf -- page 25 (ratios; data as on 31 July 2026)
+=== PAGE 25 ===
+MIRAE ASSET 
+LARGE CAP FUND 
+(Large Cap Fund - An open ended equity scheme predominantly investing across large cap stocks) 
+Monthly Factsheet as on 31 July, 2026 
+Fund Information 
+Fund Managers   : 
+Mr. Gaurav Misra 
+Allotment Date :   4 th   April 2008 
+Benchmark :   Nifty 100 (TRI) 
+Net AUM (Cr.)   38,728.90 
+Exit Load :   Please refer page no.10 
+Plan Available :   Regular Plan and Direct
+Plan 
+Minimum Investment Amount 
+₹ 5,000/- and in multiples of   ₹ 1/- thereafter. Minimum
+Additional Application Amount:   ₹ 1,000/- per
+application and in multiples of   ₹ 1/- thereafter. 
+Net Asset Value (NAV) 
+Direct   Regular 
+Growth   ₹   128.859   ₹   113.181 
+IDCW   ₹   67.264   ₹   28.990 
+Ratios @   (Annualised) 
+Volatility   14.04% 
+Beta   0.93 
+R Squared   0.97 
+Sharpe Ratio#   0.26 
+Information Ratio   -0.52 
+Portfolio Turnover Ratio   0.41 times 
+Please refer page no 84 for detail 
+Base Expense Ratio 
+
+### page 60 (fund performance)
+=== PAGE 60 ===
+FUND PERFORMANCE 
+Monthly Factsheet as on 31 July, 2026 
+Mirae Asset Large Cap Fund   - Fund Managers -   Mr. Gaurav Misra 
+Period   Mirae Asset Large Cap Fund   Scheme Benchmark*   Additional Benchmark** 
+Last 1 Year   0.85%   1.54%   -2.76% 
+Last 3 Years   9.05%   10.23%   6.75% 
+Last 5 Years   9.36%   10.92%   9.53% 
+Last 10 Years   12.13%   12.48%   12.10% 
+Last 15 Years   13.71%   12.26%   11.64% 
+Since Inception   14.15%   11.36%   10.76% 
+Value of Rs. 10000 invested (in Rs.) Since Inception   1,13,181.00   71,871.53   65,165.68 
+NAV as on   31 st   July 2026   ₹ 113.181 
+Index Value   31 st   July 2026   Index Value of Scheme Benchmark is 35,316.520   and BSE Sensex (TRI) is 1,23,476.721 
+Allotment Date   4 th   April 2008 
+Scheme Benchmark   * Nifty 100 (TRI) 
+
+### page 84 (methodology footnote)
+@The Volatility, Beta, R Squared, Sharpe Ratio & Information Ratio are calculated on returns from last three years Monthly data points. 
+# Risk free rate: FBILOVERNIGHTMIBOR as on 31st July 2026 

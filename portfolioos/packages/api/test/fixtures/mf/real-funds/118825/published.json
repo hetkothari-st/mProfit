@@ -1,0 +1,50 @@
+{
+  "asOf": "2026-07-31",
+  "capturedAt": "2026-09-07",
+  "factsheetRatioPlan": "REGULAR",
+  "schemeCode": 118825,
+  "schemeName": "Mirae Asset Large Cap Fund - Direct Plan - Growth",
+  "regularPlanCode": 107578,
+  "category": "Equity - Large Cap",
+  "benchmarkNamed": "Nifty 100 (TRI)",
+  "benchmarkIndexCode": "NIFTY100_TRI",
+  "source": {
+    "url": "https://www.miraeassetmf.co.in/docs/default-source/fachsheet/active-factsheet---august-2026.pdf",
+    "edition": "Active Factsheet, August 2026 (Monthly Factsheet as on 31 July, 2026)",
+    "sha256": "b7d9969828ff5002c30ab0c6ad14f493a7917fd87bb4d807d98fba4c779101bb",
+    "pages": {
+      "ratios": 25,
+      "performance": 60,
+      "methodology": 84
+    },
+    "capturedAt": "2026-09-07"
+  },
+  "methodology": {
+    "window": "last three years",
+    "frequency": "monthly data points",
+    "riskFree": "FBIL OVERNIGHT MIBOR as on 31st July 2026 (rate value not printed)",
+    "verbatim": "@The Volatility, Beta, R Squared, Sharpe Ratio & Information Ratio are calculated on returns from last three years Monthly data points. # Risk free rate: FBILOVERNIGHTMIBOR as on 31st July 2026",
+    "planNote": "Page 25 note 1: \"The reference and details provided here in are of Regular Plan - Growth Option\". No Direct-plan point-to-point returns are printed anywhere in this factsheet."
+  },
+  "riskFreeAnnualPct": null,
+  "returns": {
+    "regular": {
+      "return1y": "0.85",
+      "return3y": "9.05",
+      "return5y": "9.36",
+      "return10y": "12.13"
+    },
+    "direct": null,
+    "benchmark": {
+      "return1y": "1.54",
+      "return3y": "10.23",
+      "return5y": "10.92",
+      "return10y": "12.48"
+    }
+  },
+  "stdDev3y": "14.04",
+  "sharpe3y": "0.26",
+  "beta3y": "0.93",
+  "rSquared3y": "0.97",
+  "informationRatio3y": "-0.52"
+}

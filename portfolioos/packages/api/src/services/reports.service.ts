@@ -17,6 +17,29 @@ import {
   fetchFmvOn31Jan2018,
   adjustGainForGrandfathering,
 } from './specialReports.service.js';
+import { ltcg112aExemptionForFy } from '@portfolioos/shared';
+
+/**
+ * The Section 112A allowance for the financial year a report covers.
+ *
+ * It is FY-dependent — ₹1,00,000 up to FY 2023-24, ₹1,25,000 from FY 2024-25
+ * (Finance (No. 2) Act 2024). This used to be a hardcoded `new Decimal(100000)`
+ * at both Schedule 112A call sites, which quietly overstated taxable LTCG for
+ * every year from FY 2024-25 onwards by ₹25,000 of allowance.
+ *
+ * `fy` is optional on these reports: undefined means "every year the user has
+ * gains in". A single annual allowance is not strictly meaningful across
+ * several years — the allowance resets each April — so we apply the current
+ * year's figure and the caller shows it as `exemptionLimit` for the reader to
+ * interpret. Scoping the report to one FY is the accurate way to use it, and
+ * is what the UI does.
+ */
+function exemptionForReport(fy: string | undefined): Decimal {
+  const forFy = ltcg112aExemptionForFy(fy ?? financialYearOf(new Date()));
+  // null = the year predates §112A, when listed-equity LTCG was wholly exempt
+  // under §10(38). No allowance applies because no tax did.
+  return forFy ?? new Decimal(0);
+}
 
 async function listUserPortfolioIds(userId: string): Promise<string[]> {
   const ps = await prisma.portfolio.findMany({ where: { userId }, select: { id: true } });
@@ -100,7 +123,7 @@ export async function schedule112AReport(portfolioId: string, fy?: string) {
     return { ...r, gainLoss: adjGain };
   });
   const totalGain = adjusted.reduce((acc, r) => acc.plus(r.gainLoss), new Decimal(0));
-  const exemptionLimit = new Decimal(100000);
+  const exemptionLimit = exemptionForReport(fy);
   const taxable = Decimal.max(totalGain.minus(exemptionLimit), new Decimal(0));
   return {
     rows: adjusted,
@@ -463,7 +486,7 @@ export async function userSchedule112AReport(userId: string, fy?: string) {
     return { ...r, gainLoss: adjGain };
   });
   const totalGain = adjusted.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
-  const exemptionLimit = new Decimal(100000);
+  const exemptionLimit = exemptionForReport(fy);
   const taxable = Decimal.max(totalGain.minus(exemptionLimit), new Decimal(0));
   return {
     rows: adjusted,

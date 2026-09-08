@@ -1,0 +1,19 @@
+-- Persist the ETF/index-fund distinction on MfSchemeMeta.
+--
+-- AMFI files exchange-traded funds and conventional index funds under one
+-- sub-category, "Index Funds/ETFs", so the sub-category alone cannot tell them
+-- apart. docs/mf-analytics/03-SCORING.md §5 needs them separated: the INDEX
+-- model's STRUCTURE pillar scores an ETF on bid-ask spread / iNAV deviation
+-- and an index fund on its cash drag. Those are different inputs, not a
+-- different weighting of the same one.
+--
+-- The value is derivable from the scheme name (`isEtfName` in
+-- amfiSchemeMaster.parse.ts recognises "ETF", "BeES" and "Exchange Traded"),
+-- and the parser already computes it — but a derived helper cannot be used to
+-- partition a universe in SQL, which is what the scorer does. Storing it keeps
+-- the classification decided once, at ingest, by the code that has the whole
+-- file in front of it.
+--
+-- Defaults false: existing rows are re-classified on the next mfMetadataJob
+-- run, which compares more than sourceHash and will pick this up.
+ALTER TABLE "MfSchemeMeta" ADD COLUMN IF NOT EXISTS "isEtf" BOOLEAN NOT NULL DEFAULT false;

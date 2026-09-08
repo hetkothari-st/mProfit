@@ -33,6 +33,19 @@ export const FEATURE_MIN_TIER = {
   // risk-profiled target allocation. Sits with AI_INSIGHTS and GOAL_PROJECTIONS
   // because it consumes both and would be incoherent without them.
   ADVICE_ENGINE: 'PLUS',
+  // The mutual fund analytics layer: scheme scores and ratings, category peer
+  // ranks, rolling/risk metrics, overlap, look-through, weighted cost, tax
+  // lots. All of that is *research and information*, not advice, which is why
+  // it sits at PLUS beside the other analytical features rather than behind an
+  // advisor-only tier.
+  //
+  // The verdict layer on top of it (SWITCH_CANDIDATE naming a replacement
+  // scheme) IS advice under the SEBI Investment Adviser Regulations, and it
+  // does not ride on this flag: it requires ADVICE_ENGINE *and* the
+  // deployment-level RIA_VERDICTS_ENABLED env gate. So granting MF_ANALYTICS
+  // alone can never expose advice — that separation is the whole point of
+  // having two gates.
+  MF_ANALYTICS: 'PLUS',
   ACCOUNTING_MODULE: 'PRO_ADVISOR', // Trial Balance, P&L, Balance Sheet, Chart of Accounts, Tally export
   UNLIMITED_CLIENTS: 'PRO_ADVISOR',
   FNO_SCHEDULE_43: 'PRO_ADVISOR',

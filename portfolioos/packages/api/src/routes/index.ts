@@ -25,6 +25,9 @@ import { dashboardRouter } from './dashboard.routes.js';
 import { mfCentralRouter } from './mfCentral.routes.js';
 import { mfCasMailbackRouter } from './mfCasMailback.routes.js';
 import { mfCasparserRouter } from './mfCasparser.routes.js';
+import { mfAnalyticsRouter } from './mfAnalytics.routes.js';
+import { mfPortfolioRouter } from './mfPortfolio.routes.js';
+import { mfQualitativeFactsRouter } from './mfQualitativeFacts.routes.js';
 import { foRouter } from './fo.routes.js';
 import { catalogRouter, valuationRouter } from './valuation.routes.js';
 import { documentsRouter } from './documents.routes.js';
@@ -76,6 +79,18 @@ export function registerRoutes(app: Express): void {
   app.use('/api/mf-central', mfCentralRouter);
   app.use('/api/mf-cas-mailback', mfCasMailbackRouter);
   app.use('/api/mf-casparser', mfCasparserRouter);
+  // Two routers share `/api/mf-analytics`. The user-scoped one is mounted
+  // FIRST and uses per-route middleware, so a `/schemes/...` request falls
+  // through it untouched into the reference router below. Mounted the other
+  // way round, `mfAnalyticsRouter`'s router-level `requireFeature` would 403
+  // the deliberately un-gated `/methodology` route before it was ever reached.
+  app.use('/api/mf-analytics', mfPortfolioRouter);
+  app.use('/api/mf-analytics', mfAnalyticsRouter);
+  // Separate mount, and deliberately NOT under `/api/mf-analytics`: this is the
+  // ADMIN write surface over shared reference data, gated by role rather than by
+  // the MF_ANALYTICS plan entitlement. See the router header for why the two
+  // gates must not be conflated.
+  app.use('/api/admin/mf-qualitative-facts', mfQualitativeFactsRouter);
   app.use('/api/fo', foRouter);
   app.use('/api/catalog', catalogRouter);
   app.use('/api/valuations', valuationRouter);

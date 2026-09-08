@@ -1,0 +1,103 @@
+### HDFC Flexi Cap Fund -- HDFC MF Factsheet - July 2026.pdf -- page 7 (quantitative data / risk ratio)
+=== PAGE 7 ===
+For Product label and Riskometers, refer page no: 124-139 
+7   |   July 2026 
+HDFC Flexi Cap Fund 
+An open ended dynamic equity scheme investing across large cap, mid cap & small cap stocks.(This is a
+simple and performing scheme which is eligible for distribution by new cadre of distributors) 
+CATEGORY OF SCHEME
+FLEXI CAP FUND 
+INVESTMENT OBJECTIVE:   To generate capital appreciation / income from a portfolio, predominantly invested in equity & equity related instruments. There is no assurance
+that the investment objective of the Scheme will be achieved. 
+FUND MANAGER   ¥ 
+Name   Since   Total Exp 
+Amit Ganatra   February
+01, 2026   Over 19 years 
+DATE OF ALLOTMENT/INCEPTION DATE 
+January 01, 1995 
+NAV 
+(As On JULY 31, 2026)   NAV PER 
+UNIT(₹) 
+Regular Plan - Growth Option   2,059.826 
+Regular Plan - IDCW Option   74.433 
+Direct Plan - Growth Option   2,267.177 
+Direct Plan - IDCW Option   91.671 
+ASSETS UNDER MANAGEMENT   € 
+As on July 31, 2026 
+Average for Month of July,
+2026 
+₹ 110,736.41Cr. 
+₹ 108,673.56Cr . 
+QUANTITATIVE DATA 
+Portfolio Turnover 
+Equity Turnover 
+Total Turnover 
+11.18% 
+11.87% 
+Total Turnover = Equity + Debt + Derivative 
+Risk Ratio 
+Standard Deviation 
+Beta 
+Sharpe Ratio* 
+12.899% 
+0.790 
+0.821 
+Computed for the 3-yr period ended July 31,
+2026 Based on month-end NAV.* Risk free rate:
+5.41% (Source: FIMMDA MIBOR) For schemes
+which have not completed 3 years, data is
+computed since inception. 
+EXPENSE RATIO 
+(As On July 31, 2026) 
+Base expense Ratio Including statutory levies on
+expenses part of BER, excluding brokerage, transaction
+cost and execution related statutory levies^ 
+Regular: 1.27%   Direct: 0.65% 
+#BENCHMARK INDEX 
+
+### page 8 (performance, Regular Plan - Growth Option)
+PERFORMANCE ^ - Regular Plan - Growth Option 
+Date   Period   Scheme
+Returns (%) 
+Benchmark
+Returns (%)# 
+Additional
+Benchmark
+Returns (%)
+## 
+Value of   ₹   10,000 invested 
+Scheme ( ₹ )   Benchmark
+( ₹ )# 
+Additional
+Benchmark
+( ₹ )## 
+Jul 31, 25   Last 1 Year   4.60   3.37   -0.43   10,460   10,337   9,957 
+Jul 31, 23   Last 3 Years   16.27   12.29   8.56   15,725   14,163   12,798 
+Jul 30, 21   Last 5 Years   17.99   12.53   10.39   22,886   18,055   16,405 
+Jul 29, 16   Last 10 Years   15.54   13.55   12.27   42,476   35,688   31,857 
+Jan 01, 95   Since Inception   18.36   12.17   11.31   2,059,826   376,921   295,853 
+
+### page 115 (performance, Direct Plan)
+HDFC FLEXI CAP FUND   NAV as at July 31, 2026   ₹ 2267.177 
+Date   Period   Scheme
+Returns
+(%) 
+Benchmark
+Returns
+(%)# 
+Additional
+Benchmark
+Returns
+(%)## 
+Value of ₹10,000 invested 
+Scheme 
+(₹) 
+Benchmark 
+(₹)# 
+Additional
+Benchmark 
+(₹)## 
+Jul 31, 25   Last 1 Year   5.29   3.37   -0.43   10,529   10,337   9,957 
+Jul 31, 23   Last 3 Years   17.04   12.29   8.56   16,039   14,163   12,798 
+Jul 30, 21   Last 5 Years   18.76   12.53   10.39   23,649   18,055   16,405 
+Jul 29, 16   Last 10 Years   16.35   13.55   12.27   45,523   35,688   31,857 

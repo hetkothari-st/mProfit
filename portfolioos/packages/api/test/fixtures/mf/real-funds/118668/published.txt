@@ -1,0 +1,54 @@
+### Nippon India Growth Mid Cap Fund -- Nippon-FS-AUGUST-2026.pdf -- page 9 (details as on July 31, 2026; volatility measures)
+Nippon India Growth Mid Cap Fund 
+Mid Cap Fund 
+Details as on July 31, 2026 
+Type of Scheme 
+Mid   Cap   Fund   - An   open   ended   equity   scheme   predominantly
+investing in mid cap stocks. 
+Current Investment Philosophy 
+The fund endeavors to invest in mid cap companies that have the
+potential   to   substantially   increase   their   pro fi tability   and   have
+consistent track record. The fund focuses on identifying potential
+market leaders at an early stage with a view to create long term
+alpha. The fund attempts to identify growth stocks that are available
+at reasonable valuation, thus adopting a GARP (Growth at Reasonable
+Price) style for investing. 
+Date of Allotment 
+October 08, 1995 
+Fund Manager(s) 
+Rupesh Patel (Managing Since Jan 2023) 
+Total Experience of more than 26 years 
+AMFI Tier 1 Benchmark 
+NIFTY Midcap 150 TRI 
+Fund Size 
+Monthly Average:   ₹   50,056.59 Cr 
+Month End:   ₹   50,750.81 Cr 
+NAV as on July 31, 2026 
+Growth Plan   ₹   4,515.6980 
+IDCW Plan   ₹   121.4410 
+Bonus Option   ₹   751.7329 
+Direct - Growth Plan   ₹   4,987.0854 
+Direct - IDCW Plan   ₹   193.4402 
+Direct - Bonus Option   ₹   828.5363 
+Institutional - IDCW Plan   ₹   1,377.2329 
+Volatility Measures 
+Standard Deviation   17.81 
+Beta   0.94 
+Sharpe Ratio   0.84 
+
+### page 117 (fund performance, Regular and Direct)
+Nippon India Growth Mid Cap Fund 
+Fund / Benchmark (Value of   ₹ 10, 000 invested)   1 Year   3 Year   5 Year   Since Inception 
+Amount in   ₹   Returns (%)   Amount in   ₹   Returns (%)   Amount in   ₹   Returns (%)   Amount in   ₹   Returns (%) 
+NAV as on July 31, 2026:   ₹ 4,515.6980 
+Nippon India Growth Mid Cap Fund - Regular   Inception Date :   Oct 8, 1995 
+Nippon India Growth Mid Cap Fund   10,970   9.70   17,475   20.43   23,735   18.85   45,15,743   21.93 
+B:NIFTY Midcap 150 TRI   10,901   9.01   16,659   18.53   22,810   17.91   NA   NA 
+AB:BSE Sensex TRI   9,724   -2.76   12,168   6.75   15,771   9.53   3,43,145   12.15 
+NAV as on July 31, 2026:   ₹ 4,987.0854 
+Nippon India Growth Mid Cap Fund - Direct   Inception Date :   Jan 1, 2013 
+Nippon India Growth Mid Cap Fund   11,056   10.56   17,900   21.40   24,698   19.80   99,536   18.43 
+B:NIFTY Midcap 150 TRI   10,901   9.01   16,659   18.53   22,810   17.91   97,676   18.26 
+AB:BSE Sensex TRI   9,724   -2.76   12,168   6.75   15,771   9.53   47,563   12.16 
+Fund Manager : Rupesh Patel (Since Jan 2023) 
+As TRI data is not available since Since Inception of the scheme, benchmark performance is calculated using composite CAGR of BSE Sensex PRI values from date 06-Oct-1995 to date 19-Aug-1996 and TRI values since

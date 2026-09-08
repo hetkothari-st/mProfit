@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, Lock } from 'lucide-react';
+import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, Lock, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ImportJobDTO, ImportStatus } from '@portfolioos/shared';
 import { IMPORT_STATUS_LABELS } from '@portfolioos/shared';
@@ -198,6 +198,14 @@ export function MutualFundsPage() {
         description="MF holdings across all portfolios, priced from AMFI NAV"
         actions={
           <div className="flex flex-wrap gap-2">
+            {/* The only entry point to the portfolio analysis (Task 4.3). It is
+                not an asset class, so it does not belong in the sidebar's
+                asset-class list; it is a lens on the holdings shown here. */}
+            <Button variant="outline" asChild>
+              <Link to="/mutual-funds/analysis">
+                <Sparkles className="h-4 w-4" /> Portfolio analysis
+              </Link>
+            </Button>
             <DownloadReportButton type="holdings" assetClasses={['MUTUAL_FUND']} />
             <Button onClick={() => setSyncDialogOpen(true)}>
               <Download className="h-4 w-4" /> Sync MF via CASParser
