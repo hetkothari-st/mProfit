@@ -77,7 +77,7 @@ import type {
 
 export const ICICI_AMC_CODE = 'ICICI_PRU';
 export const ICICI_ADAPTER_ID = 'mf.factsheet.iciciPru';
-export const ICICI_ADAPTER_VERSION = '1.1.0';
+export const ICICI_ADAPTER_VERSION = '1.2.0';
 
 export const ICICI_TABLE_SPEC: AmcTableSpec = {
   amcCode: ICICI_AMC_CODE,
@@ -126,12 +126,30 @@ export const ICICI_TABLE_SPEC: AmcTableSpec = {
 export const ICICI_FACTS_SPEC: AmcFactsSpec = {
   amcCode: ICICI_AMC_CODE,
   asOfPatterns: [
+    // VERIFIED Jul-2026: neither "Data as on" nor "Factsheet as on" appears on
+    // a fund page. The dated line that does, on every one of them, is the AUM
+    // block: "Closing AUM as on 31-Jul-26".
+    /Closing AUM as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
+    /Monthly AAUM as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
     /Data as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
     /Factsheet as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
   ],
   // The separator class before "Direct" is what keeps "Other than Direct" out.
-  terDirectPatterns: [/Total Expense Ratio[^\n]*?[|/,;–-]\s*Direct\s*:?\s*([\d.]+)\s*%/i],
+  terDirectPatterns: [
+    // VERIFIED Jul-2026: ICICI labels this "Base Expense Ratio", never "Total
+    // Expense Ratio" — the only occurrence of the latter in the document is
+    // inside a URL fragment. The line reads "Base Expense Ratio @@ : Other :
+    // 1.13% p. a. Direct : 0.71% p. a.". Both patterns anchor on the label:
+    // the same page carries "Direct Plan Growth Option : 121.20", which a bare
+    // /Direct\s*:/ would read as an expense ratio of 121.2%. The class is
+    // [\s\S] and not a line-bounded one because pdfjs emits newlines between
+    // the label and its values, which a same-line pattern cannot cross.
+    /Base Expense Ratio[\s\S]{0,120}?Direct\s*:\s*([\d.]+)\s*%/i,
+    /Total Expense Ratio[^\n]*?[|/,;–-]\s*Direct\s*:?\s*([\d.]+)\s*%/i,
+  ],
   terRegularPatterns: [
+    // ICICI writes the regular-plan figure as "Other", not "Regular".
+    /Base Expense Ratio[\s\S]{0,120}?Other\s*:\s*([\d.]+)\s*%/i,
     /Total Expense Ratio[^\n]*?Other than Direct\s*:?\s*([\d.]+)\s*%/i,
     /Total Expense Ratio[^\n]*?Regular\s*:?\s*([\d.]+)\s*%/i,
   ],

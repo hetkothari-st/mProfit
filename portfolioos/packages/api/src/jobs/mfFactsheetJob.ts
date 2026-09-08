@@ -54,8 +54,15 @@ import type {
   SchemeFactsRaw,
 } from '../adapters/mfFactsheet/types.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
-import { setIciciPortfolioUrlResolver } from '../adapters/mfFactsheet/icici.v1.js';
+import {
+  setIciciPortfolioUrlResolver,
+  setIciciFactsheetTextResolver,
+} from '../adapters/mfFactsheet/icici.v1.js';
 import { createIciciPortfolioResolver, resetFactsheetZipCache } from './mfFactsheetZip.js';
+import {
+  createIciciFactsheetTextResolver,
+  resetFactsheetPdfCache,
+} from './mfFactsheetPdf.js';
 
 export const MF_FACTSHEET_ADAPTER_ID = 'mf.factsheet';
 
@@ -406,6 +413,7 @@ export async function runMfFactsheetJob(
     // would leak a stale fetch context (and its abort signal) into the next
     // caller, including tests.
     setIciciPortfolioUrlResolver(createIciciPortfolioResolver(ctx));
+    setIciciFactsheetTextResolver(createIciciFactsheetTextResolver(ctx, asOf));
     try {
 
     for (const scheme of schemes) {
@@ -460,7 +468,9 @@ export async function runMfFactsheetJob(
       return result;
     } finally {
       setIciciPortfolioUrlResolver(null);
+      setIciciFactsheetTextResolver(null);
       resetFactsheetZipCache();
+      resetFactsheetPdfCache();
     }
   });
 }
