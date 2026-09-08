@@ -27,6 +27,12 @@ import {
   NotFoundError,
 } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
+import {
+  recomputeTenancyLedger,
+  recomputeTenancy,
+  resolveRentReceiptReminders,
+  OVERDUE_GRACE_DAYS,
+} from './rentalLedger.service.js';
 
 /**
  * Transaction client type as handed to $transaction callbacks on our
@@ -405,6 +411,18 @@ export async function createTenancy(userId: string, input: CreateTenancyInput) {
       monthlyRent,
       rentDueDay,
     );
+    if (securityDeposit && securityDeposit.gt(0)) {
+      await tx.rentLedgerEntry.create({
+        data: {
+          tenancyId: tenancy.id,
+          entryType: 'DEPOSIT',
+          amount: securityDeposit,
+          entryDate: startDate,
+          note: 'Security deposit',
+        },
+      });
+    }
+    await recomputeTenancyLedger(tx, tenancy.id);
     return tenancy;
   });
 }
@@ -488,9 +506,9 @@ export async function updateTenancy(
           where: {
             tenancyId: id,
             dueDate: { gt: newEndDate },
-            status: { in: [RECEIPT_STATUS.EXPECTED, RECEIPT_STATUS.OVERDUE] },
+            receivedAmount: null,
           },
-          data: { status: RECEIPT_STATUS.SKIPPED },
+          data: { isSkipped: true },
         });
       }
     }
@@ -511,6 +529,8 @@ export async function updateTenancy(
         data: { channels },
       });
     }
+
+    await recomputeTenancyLedger(tx, id);
 
     return updated;
   });
@@ -590,10 +610,6 @@ export async function markReceiptReceived(
   input: MarkReceivedInput,
 ): Promise<RentReceipt> {
   const existing = await getReceiptOwned(userId, receiptId);
-  if (existing.status === RECEIPT_STATUS.RECEIVED) {
-    return existing;
-  }
-
   const received = parseDecimal(input.receivedAmount, 'receivedAmount');
   if (received.lte(0)) {
     throw new BadRequestError('receivedAmount must be positive');
@@ -612,12 +628,6 @@ export async function markReceiptReceived(
     }))?.id ??
     null;
 
-  const expected = new Prisma.Decimal(existing.expectedAmount.toString());
-  const status: ReceiptStatus =
-    received.lt(expected)
-      ? RECEIPT_STATUS.PARTIAL
-      : RECEIPT_STATUS.RECEIVED;
-
   return runInTransaction(async (tx) => {
     let cashFlowId: string | null = null;
     if (portfolioId) {
@@ -633,21 +643,25 @@ export async function markReceiptReceived(
       });
       cashFlowId = cf.id;
     }
-    const updated = await tx.rentReceipt.update({
-      where: { id: receiptId },
+    await tx.rentLedgerEntry.create({
       data: {
-        status,
-        receivedAmount: received,
-        receivedOn,
-        notes: input.notes ?? existing.notes,
+        tenancyId: existing.tenancyId,
+        entryType: 'PAYMENT',
+        amount: received,
+        entryDate: receivedOn,
+        forMonth: existing.forMonth,
+        note: input.notes ?? null,
         cashFlowId,
       },
     });
-    // Receipt is settled — abandon any pending reminders/alerts for this
-    // row so we don't bother the tenant (or the owner) about money we
-    // already received.
-    await resolveRentReceiptReminders(tx, receiptId);
-    return updated;
+    if (input.notes) {
+      await tx.rentReceipt.update({
+        where: { id: receiptId },
+        data: { notes: input.notes },
+      });
+    }
+    await recomputeTenancyLedger(tx, existing.tenancyId);
+    return tx.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
   });
 }
 
@@ -657,107 +671,63 @@ export async function skipReceipt(
   reason?: string | null,
 ) {
   const existing = await getReceiptOwned(userId, receiptId);
-  if (
-    existing.status === RECEIPT_STATUS.RECEIVED ||
-    existing.status === RECEIPT_STATUS.PARTIAL
-  ) {
+  if (existing.receivedAmount && existing.receivedAmount.gt(0)) {
     throw new BadRequestError(
-      'Cannot skip a receipt already marked received — edit/unlink first',
+      'Cannot skip a receipt with payments against it — remove the payment from the khata first',
     );
   }
   return runInTransaction(async (tx) => {
-    const updated = await tx.rentReceipt.update({
+    await tx.rentReceipt.update({
       where: { id: receiptId },
-      data: {
-        status: RECEIPT_STATUS.SKIPPED,
-        notes: reason ?? existing.notes,
-      },
+      data: { isSkipped: true, notes: reason ?? existing.notes },
     });
+    await recomputeTenancyLedger(tx, existing.tenancyId);
     await resolveRentReceiptReminders(tx, receiptId);
-    return updated;
+    return tx.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
+  });
+}
+
+export async function unskipReceipt(userId: string, receiptId: string) {
+  const existing = await getReceiptOwned(userId, receiptId);
+  if (!existing.isSkipped) {
+    throw new BadRequestError('Receipt is not skipped — nothing to undo');
+  }
+  return runInTransaction(async (tx) => {
+    await tx.rentReceipt.update({ where: { id: receiptId }, data: { isSkipped: false } });
+    await recomputeTenancyLedger(tx, existing.tenancyId);
+    return tx.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
   });
 }
 
 /**
- * Pick the right "unsettled" status to revert to. If the original dueDate
- * is past the OVERDUE grace window we land back on OVERDUE so the alert
- * resurfaces; otherwise we drop to EXPECTED. Used by both undo-received
- * and undo-skipped paths so a misclick doesn't quietly disappear a
- * receipt that's still genuinely overdue.
- */
-function unsettledStatusFor(dueDate: Date): ReceiptStatus {
-  const cutoff = new Date();
-  cutoff.setUTCDate(cutoff.getUTCDate() - OVERDUE_GRACE_DAYS);
-  cutoff.setUTCHours(0, 0, 0, 0);
-  return dueDate <= cutoff ? RECEIPT_STATUS.OVERDUE : RECEIPT_STATUS.EXPECTED;
-}
-
-/**
- * A receipt just settled (received/partial/auto-matched) — clear out
- * anything still nagging about it: pending reminders and the persisted
- * `rent_overdue:<receiptId>` Alert row. We delete (not soft-dismiss) the
- * alert so that if the receipt is later unmarked and goes overdue again,
- * `generateRentOverdueAlerts`'s dedup-by-key check doesn't see a stale
- * row and skip recreating it.
- */
-async function resolveRentReceiptReminders(tx: ExtendedTx, receiptId: string) {
-  await tx.rentReminder.updateMany({
-    where: { receiptId, status: 'PENDING_APPROVAL' },
-    data: { status: 'SUPERSEDED' },
-  });
-  await tx.alert.deleteMany({
-    where: { type: 'CUSTOM', metadata: { path: ['key'], equals: `rent_overdue:${receiptId}` } },
-  });
-}
-
-/**
- * Undo a manual "mark received" / "auto-match" click. Resets the receipt
- * back to EXPECTED or OVERDUE depending on its dueDate, clears the
- * received fields, and removes any CashFlow row we created when the
- * mark-received originally fired so the portfolio's cash position
- * doesn't double-count.
+ * Undo a manual "mark received" / "auto-match" click by deleting the payment
+ * entries pinned to this month (and the CashFlow rows they created), then
+ * recomputing. A payment that landed on this month via FIFO rather than a
+ * pin is not deleted — that money genuinely belongs to the tenant's khata,
+ * so the user removes it from the khata directly instead.
  */
 export async function unmarkReceived(userId: string, receiptId: string) {
   const existing = await getReceiptOwned(userId, receiptId);
-  if (
-    existing.status !== RECEIPT_STATUS.RECEIVED &&
-    existing.status !== RECEIPT_STATUS.PARTIAL
-  ) {
+  const pinned = await prisma.rentLedgerEntry.findMany({
+    where: {
+      tenancyId: existing.tenancyId,
+      entryType: 'PAYMENT',
+      forMonth: existing.forMonth,
+    },
+  });
+  if (pinned.length === 0) {
     throw new BadRequestError(
-      'Receipt is not in a received state — nothing to undo',
+      'No payment is pinned to this month — remove the payment from the khata instead',
     );
   }
-  const nextStatus = unsettledStatusFor(existing.dueDate);
   return runInTransaction(async (tx) => {
-    if (existing.cashFlowId) {
-      await tx.cashFlow.deleteMany({ where: { id: existing.cashFlowId } });
+    const cashFlowIds = pinned.map((e) => e.cashFlowId).filter((v): v is string => !!v);
+    if (cashFlowIds.length > 0) {
+      await tx.cashFlow.deleteMany({ where: { id: { in: cashFlowIds } } });
     }
-    return tx.rentReceipt.update({
-      where: { id: receiptId },
-      data: {
-        status: nextStatus,
-        receivedAmount: null,
-        receivedOn: null,
-        cashFlowId: null,
-        autoMatchedFromEventId: null,
-      },
-    });
-  });
-}
-
-/**
- * Undo a manual "skip" click. Drops back to EXPECTED or OVERDUE
- * depending on dueDate so a skipped-by-mistake receipt re-enters the
- * alert queue.
- */
-export async function unskipReceipt(userId: string, receiptId: string) {
-  const existing = await getReceiptOwned(userId, receiptId);
-  if (existing.status !== RECEIPT_STATUS.SKIPPED) {
-    throw new BadRequestError('Receipt is not skipped — nothing to undo');
-  }
-  return prisma.rentReceipt.update({
-    where: { id: receiptId },
-    data: { status: unsettledStatusFor(existing.dueDate) },
+    await tx.rentLedgerEntry.deleteMany({ where: { id: { in: pinned.map((e) => e.id) } } });
+    await recomputeTenancyLedger(tx, existing.tenancyId);
+    return tx.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
   });
 }
 
@@ -881,42 +851,43 @@ export async function propertyPnL(
 
 // ── Overdue cron + auto-match ────────────────────────────────────────
 
-const OVERDUE_GRACE_DAYS = 7;
 const AUTO_MATCH_AMOUNT_TOLERANCE = new Prisma.Decimal(10);
 const AUTO_MATCH_DATE_WINDOW_DAYS = 5;
 const AUTO_MATCH_NAME_SIMILARITY = 0.5;
 
 /**
- * Flip every EXPECTED receipt whose `dueDate` is older than today by at
- * least `OVERDUE_GRACE_DAYS` into `OVERDUE`. Returns the number of rows
- * updated. Scoped to `userId` when provided; the daily cron calls it
- * with no userId and it pans across all users (RLS bypass handled by
- * the caller via `runInSystemContext`).
+ * Daily cron. Status is derived now, so instead of a blind updateMany we
+ * recompute every tenancy that has an unpaid receipt past the grace window
+ * and let `deriveReceiptStatus` decide. Returns the number of receipts that
+ * actually flipped to OVERDUE.
  */
 export async function markOverdueReceipts(userId?: string): Promise<number> {
   const cutoff = new Date();
   cutoff.setUTCDate(cutoff.getUTCDate() - OVERDUE_GRACE_DAYS);
   cutoff.setUTCHours(0, 0, 0, 0);
 
-  const where: Prisma.RentReceiptWhereInput = {
-    status: RECEIPT_STATUS.EXPECTED,
-    dueDate: { lte: cutoff },
-  };
-  if (userId) {
-    where.tenancy = { property: { userId } };
+  const candidates = await prisma.rentReceipt.findMany({
+    where: {
+      status: RECEIPT_STATUS.EXPECTED,
+      dueDate: { lte: cutoff },
+      ...(userId ? { tenancy: { property: { userId } } } : {}),
+    },
+    select: { id: true, tenancyId: true },
+  });
+  if (candidates.length === 0) return 0;
+
+  const tenancyIds = [...new Set(candidates.map((r) => r.tenancyId))];
+  for (const tenancyId of tenancyIds) {
+    await recomputeTenancy(tenancyId);
   }
 
-  const result = await prisma.rentReceipt.updateMany({
-    where,
-    data: { status: RECEIPT_STATUS.OVERDUE },
+  const flipped = await prisma.rentReceipt.count({
+    where: { id: { in: candidates.map((r) => r.id) }, status: RECEIPT_STATUS.OVERDUE },
   });
-  if (result.count > 0) {
-    logger.info(
-      { count: result.count, userId: userId ?? '<all>' },
-      'rental.overdue.flipped',
-    );
+  if (flipped > 0) {
+    logger.info({ count: flipped, userId: userId ?? '<all>' }, 'rental.overdue.flipped');
   }
-  return result.count;
+  return flipped;
 }
 
 export interface AutoMatchCandidateEvent {
@@ -1011,14 +982,7 @@ export async function applyAutoMatch(
     ? new Prisma.Decimal(event.amount.toString())
     : new Prisma.Decimal(existing.expectedAmount.toString());
   const receivedOn = event.eventDate;
-
   const portfolioId = existing.tenancy.property.portfolioId ?? null;
-
-  const expected = new Prisma.Decimal(existing.expectedAmount.toString());
-  const status: ReceiptStatus =
-    received.lt(expected)
-      ? RECEIPT_STATUS.PARTIAL
-      : RECEIPT_STATUS.RECEIVED;
 
   return runInTransaction(async (tx) => {
     let cashFlowId: string | null = existingCashFlowId;
@@ -1035,18 +999,21 @@ export async function applyAutoMatch(
       });
       cashFlowId = cf.id;
     }
-    const updated = await tx.rentReceipt.update({
-      where: { id: receiptId },
+    await tx.rentLedgerEntry.create({
       data: {
-        status,
-        receivedAmount: received,
-        receivedOn,
+        tenancyId: existing.tenancyId,
+        entryType: 'PAYMENT',
+        amount: received,
+        entryDate: receivedOn,
+        forMonth: existing.forMonth,
+        note: 'Auto-matched from bank credit',
         cashFlowId,
-        autoMatchedFromEventId: event.id,
+        canonicalEventId: event.id,
+        sourceHash: `rentledger:automatch:${event.id}:${receiptId}`,
       },
     });
-    await resolveRentReceiptReminders(tx, receiptId);
-    return updated;
+    await recomputeTenancyLedger(tx, existing.tenancyId);
+    return tx.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
   });
 }
 
@@ -1091,22 +1058,23 @@ export async function hookAutoMatchRentalCredit(
  */
 export async function undoAutoMatch(userId: string, receiptId: string) {
   const existing = await getReceiptOwned(userId, receiptId);
-  if (!existing.autoMatchedFromEventId) {
+  const matched = await prisma.rentLedgerEntry.findMany({
+    where: {
+      tenancyId: existing.tenancyId,
+      forMonth: existing.forMonth,
+      canonicalEventId: { not: null },
+    },
+  });
+  if (matched.length === 0) {
     throw new BadRequestError('Receipt was not auto-matched');
   }
   return runInTransaction(async (tx) => {
-    if (existing.cashFlowId) {
-      await tx.cashFlow.deleteMany({ where: { id: existing.cashFlowId } });
+    const cashFlowIds = matched.map((e) => e.cashFlowId).filter((v): v is string => !!v);
+    if (cashFlowIds.length > 0) {
+      await tx.cashFlow.deleteMany({ where: { id: { in: cashFlowIds } } });
     }
-    return tx.rentReceipt.update({
-      where: { id: receiptId },
-      data: {
-        status: RECEIPT_STATUS.EXPECTED,
-        receivedAmount: null,
-        receivedOn: null,
-        cashFlowId: null,
-        autoMatchedFromEventId: null,
-      },
-    });
+    await tx.rentLedgerEntry.deleteMany({ where: { id: { in: matched.map((e) => e.id) } } });
+    await recomputeTenancyLedger(tx, existing.tenancyId);
+    return tx.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
   });
 }
