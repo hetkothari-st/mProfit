@@ -1,16 +1,48 @@
 /**
  * One-time backfill: turn legacy RentReceipt payment state into
  * RentLedgerEntry rows, then recompute every tenancy and assert nothing
- * moved.
- *
- * Idempotent — each generated entry carries a deterministic `sourceHash`
- * (CLAUDE.md §3.3), so a second run inserts nothing.
+ * that should be preserved moved.
  *
  * `runAsSystem` lives in `../src/lib/requestContext.js`, not
  * `../src/lib/prisma.js` — confirmed against `test/helpers/db.ts`, whose
  * header comment says setup/cleanup run under `runAsSystem` and which
  * imports it from `requestContext.js`. `prisma.ts` only re-exports `prisma`
  * and `runInTransaction`.
+ *
+ * IDEMPOTENCY, PRECISELY: each generated entry carries a deterministic
+ * `sourceHash` prefixed with `backfill:payment:`/`backfill:deposit:`
+ * (CLAUDE.md §3.3), so re-running THIS SCRIPT inserts nothing new. That is
+ * not the same as "safe to run after go-live": once the app's normal write
+ * paths are live, a receipt's `receivedAmount` may reflect a genuine
+ * `RentLedgerEntry` created through the real payment flow rather than this
+ * script. Before creating a synthetic payment, the payment loop therefore
+ * also checks for any existing non-backfill `PAYMENT` entry already pinned
+ * to that tenancy+month (identified by a `sourceHash` that is null or does
+ * not carry the backfill prefix) and skips the receipt if one exists — so a
+ * post-cutover re-run does not double-count a receipt that has since been
+ * paid for real.
+ *
+ * SEMANTIC CHANGE, DELIBERATE: `RentReceipt.receivedOn` is redefined by the
+ * ledger as "the date this receipt became fully settled" (see
+ * `rentalLedger.service.ts` / `allocateCredits`'s `settledOn`), not "the
+ * date any money arrived." A PARTIAL receipt's pinned credit never fully
+ * satisfies its charge, so `receivedOn` legitimately clears to `null` after
+ * backfill even though the original payment date is preserved on the new
+ * `RentLedgerEntry.entryDate`. That is correct, not data loss — but a
+ * silent column change in a one-way migration is exactly what this script
+ * must not hide. `report.drift` therefore stays money-only (`status` +
+ * `receivedAmount`); every other observable change — `receivedOn`,
+ * `cashFlowId`, `autoMatchedFromEventId` — is reported separately in
+ * `report.semanticChanges` so it is visible without being mistaken for a
+ * regression.
+ *
+ * NO ROLLBACK ON DRIFT: each tenancy's recompute commits in its own
+ * transaction (`runInTransaction` per tenancy, not one transaction for the
+ * whole sweep — holding locks across every tenancy is the pattern this
+ * project's guidelines forbid). By the time `report.drift` is computed, any
+ * drifted writes are already live; a non-empty `drift` array or non-zero
+ * exit code is a post-hoc signal, not a rollback. Take a database snapshot
+ * before running this against real data.
  *
  * Run: pnpm --filter @portfolioos/api exec tsx scripts/backfillRentalLedger.ts
  */
@@ -24,10 +56,24 @@ export interface BackfillReport {
   paymentsCreated: number;
   depositsCreated: number;
   tenanciesRecomputed: number;
+  /** Money-only: a receipt's `status` or `receivedAmount` moved. Must stay empty. */
   drift: Array<{ receiptId: string; before: string; after: string }>;
+  /**
+   * Non-money columns that changed as an intended consequence of the ledger
+   * redefining their meaning (see header). Not a failure signal — a record
+   * for review.
+   */
+  semanticChanges: Array<{ receiptId: string; field: string; before: string | null; after: string | null }>;
 }
 
+const BACKFILL_PAYMENT_PREFIX = 'backfill:payment:';
+const BACKFILL_DEPOSIT_PREFIX = 'backfill:deposit:';
+
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
+const backfillPaymentHash = (receiptId: string) =>
+  `${BACKFILL_PAYMENT_PREFIX}${hash(`rentledger:backfill:payment:${receiptId}`)}`;
+const backfillDepositHash = (tenancyId: string) =>
+  `${BACKFILL_DEPOSIT_PREFIX}${hash(`rentledger:backfill:deposit:${tenancyId}`)}`;
 
 export async function backfillRentalLedger(
   opts: { dryRun?: boolean } = {},
@@ -38,6 +84,7 @@ export async function backfillRentalLedger(
       depositsCreated: 0,
       tenanciesRecomputed: 0,
       drift: [],
+      semanticChanges: [],
     };
 
     const receipts = await prisma.rentReceipt.findMany({
@@ -45,16 +92,42 @@ export async function backfillRentalLedger(
     });
     const tenancies = await prisma.tenancy.findMany();
 
-    // Snapshot the pre-backfill projection so step 5 can compare.
+    // Snapshot the pre-backfill projection so the post-recompute pass can
+    // compare — every observable field the recompute might touch, not just
+    // the money-only pair used for `drift`.
     const before = new Map(
       (await prisma.rentReceipt.findMany()).map((r) => [
         r.id,
-        `${r.status}|${r.receivedAmount?.toString() ?? ''}`,
+        {
+          status: r.status,
+          receivedAmount: r.receivedAmount?.toString() ?? null,
+          receivedOn: r.receivedOn?.toISOString() ?? null,
+          cashFlowId: r.cashFlowId,
+          autoMatchedFromEventId: r.autoMatchedFromEventId,
+        },
       ]),
     );
 
     for (const r of receipts) {
-      const sourceHash = hash(`rentledger:backfill:payment:${r.id}`);
+      // A live (non-backfill) PAYMENT already pinned to this tenancy+month
+      // means the receipt's current receivedAmount came from the real
+      // post-cutover payment flow, not stale legacy state. Don't create a
+      // second, synthetic payment for it — that would double-count in
+      // allocateCredits on the very next recompute.
+      const liveEntry = await prisma.rentLedgerEntry.findFirst({
+        where: {
+          tenancyId: r.tenancyId,
+          entryType: 'PAYMENT',
+          forMonth: r.forMonth,
+          OR: [
+            { sourceHash: null },
+            { NOT: { sourceHash: { startsWith: BACKFILL_PAYMENT_PREFIX } } },
+          ],
+        },
+      });
+      if (liveEntry) continue;
+
+      const sourceHash = backfillPaymentHash(r.id);
       const exists = await prisma.rentLedgerEntry.findUnique({ where: { sourceHash } });
       if (exists) continue;
       if (opts.dryRun) { report.paymentsCreated += 1; continue; }
@@ -76,7 +149,7 @@ export async function backfillRentalLedger(
 
     for (const t of tenancies) {
       if (!t.securityDeposit || t.securityDeposit.lte(0)) continue;
-      const sourceHash = hash(`rentledger:backfill:deposit:${t.id}`);
+      const sourceHash = backfillDepositHash(t.id);
       const exists = await prisma.rentLedgerEntry.findUnique({ where: { sourceHash } });
       if (exists) continue;
       if (opts.dryRun) { report.depositsCreated += 1; continue; }
@@ -101,10 +174,33 @@ export async function backfillRentalLedger(
     }
 
     for (const r of await prisma.rentReceipt.findMany()) {
-      const after = `${r.status}|${r.receivedAmount?.toString() ?? ''}`;
       const prior = before.get(r.id);
-      if (prior !== undefined && prior !== after) {
-        report.drift.push({ receiptId: r.id, before: prior, after });
+      if (prior === undefined) continue;
+
+      const afterMoney = `${r.status}|${r.receivedAmount?.toString() ?? ''}`;
+      const priorMoney = `${prior.status}|${prior.receivedAmount ?? ''}`;
+      if (priorMoney !== afterMoney) {
+        report.drift.push({ receiptId: r.id, before: priorMoney, after: afterMoney });
+      }
+
+      const afterReceivedOn = r.receivedOn?.toISOString() ?? null;
+      if (prior.receivedOn !== afterReceivedOn) {
+        report.semanticChanges.push({
+          receiptId: r.id, field: 'receivedOn', before: prior.receivedOn, after: afterReceivedOn,
+        });
+      }
+      if (prior.cashFlowId !== r.cashFlowId) {
+        report.semanticChanges.push({
+          receiptId: r.id, field: 'cashFlowId', before: prior.cashFlowId, after: r.cashFlowId,
+        });
+      }
+      if (prior.autoMatchedFromEventId !== r.autoMatchedFromEventId) {
+        report.semanticChanges.push({
+          receiptId: r.id,
+          field: 'autoMatchedFromEventId',
+          before: prior.autoMatchedFromEventId,
+          after: r.autoMatchedFromEventId,
+        });
       }
     }
 
