@@ -65,7 +65,7 @@ import type {
 
 export const KOTAK_AMC_CODE = 'KOTAK';
 export const KOTAK_ADAPTER_ID = 'mf.factsheet.kotak';
-export const KOTAK_ADAPTER_VERSION = '1.0.0';
+export const KOTAK_ADAPTER_VERSION = '1.1.0';
 
 export const KOTAK_TABLE_SPEC: AmcTableSpec = {
   amcCode: KOTAK_AMC_CODE,
@@ -101,6 +101,10 @@ export const KOTAK_TABLE_SPEC: AmcTableSpec = {
 export const KOTAK_FACTS_SPEC: AmcFactsSpec = {
   amcCode: KOTAK_AMC_CODE,
   asOfPatterns: [
+    // VERIFIED Jul-2026 on a real fund page: "(as on July 31, 2026)". Neither
+    // "Factsheet as on" nor "Data as on" appears on one.
+    /\(as on\s+([A-Za-z]{3,9}\.?\s+\d{1,2},?\s*\d{4})\)/i,
+    /as on\s+(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})/i,
     /Factsheet as on\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
     /Data as on\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
     /Factsheet as on\s+(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})/i,
@@ -109,19 +113,43 @@ export const KOTAK_FACTS_SPEC: AmcFactsSpec = {
   // pattern, including the ones whose current wording does not need it. The
   // failure it prevents (reporting the regular plan's TER as the direct plan's)
   // is silent, and the wording an AMC uses next year is not knowable now.
-  terDirectPatterns: [/Total Expense Ratio[^\n]*?(?<!other than )Direct Plan\s*:?\s*([\d.]+)\s*%/i],
-  terRegularPatterns: [/Total Expense Ratio[^\n]*?Regular Plan\s*:?\s*([\d.]+)\s*%/i],
+  /**
+   * VERIFIED Jul-2026 against a real fund page. Kotak prints the LABELS first
+   * and the VALUES after, in label order:
+   *
+   *     Expense Ratio** Regular Plan: Direct Plan: 0.38% 0.16%
+   *
+   * Neither figure sits beside its own label, so the pattern has to count
+   * rather than read: first percentage is the regular plan, second is direct
+   * (0.16 < 0.38, as a direct plan must be). Both anchor on the "Expense Ratio"
+   * label so an unrelated pair of percentages elsewhere on the page cannot be
+   * mistaken for them, and the direct pattern requires the regular figure to
+   * precede it — which encodes the ordering, so a layout change that swapped
+   * them would fail to match rather than silently report the regular plan's TER
+   * as the direct plan's.
+   */
+  terDirectPatterns: [
+    /Expense Ratio\*{0,2}[\s\S]{0,60}?Direct Plan\s*:?[\s\S]{0,20}?[\d.]+\s*%\s*([\d.]+)\s*%/i,
+    /Total Expense Ratio[^\n]*?(?<!other than )Direct Plan\s*:?\s*([\d.]+)\s*%/i,
+  ],
+  terRegularPatterns: [
+    /Expense Ratio\*{0,2}[\s\S]{0,60}?Direct Plan\s*:?[\s\S]{0,20}?([\d.]+)\s*%/i,
+    /Total Expense Ratio[^\n]*?Regular Plan\s*:?\s*([\d.]+)\s*%/i,
+  ],
   terSinglePatterns: [/Total Expense Ratio\s*:\s*([\d.]+)\s*%/i],
   aumPatterns: [
     // "AAUM (Monthly Average)" contains the letters A-U-M but not the token
     // "AUM as on", so the month-end pattern cannot steal it.
     {
-      re: /\bAUM as on[^\n:]*:\s*(?:Rs\.?|₹)?\s*([\d,.]+)\s*crore/i,
+      // VERIFIED Jul-2026: Kotak abbreviates crore as "crs" and renders the
+      // rupee glyph as a backtick — "AUM: ` 30,296.53 crs". A pattern that only
+      // knew the word "crore" matched nothing on a real page.
+      re: /\bAUM\s*(?:as on[^\n:]*)?:\s*[`₹Rs.\s]*([\d,.]+)\s*(?:crs|crore)/i,
       unit: 'CRORE',
       basis: 'MONTH_END',
     },
     {
-      re: /\bAAUM[^\n:]*:\s*(?:Rs\.?|₹)?\s*([\d,.]+)\s*crore/i,
+      re: /\bAAUM[^\n:]*:\s*[`₹Rs.\s]*([\d,.]+)\s*(?:crs|crore)/i,
       unit: 'CRORE',
       basis: 'MONTHLY_AVERAGE',
     },
