@@ -418,8 +418,27 @@ export const rentalApi = {
     );
     return unwrap(data);
   },
-  statementUrl(tenancyId: string): string {
-    return `/api/rental/tenancies/${tenancyId}/statement`;
+  /**
+   * Authed PDF download, same pattern as documentsApi.openDownload and
+   * useDownloadReport. A plain `<a href>` cannot work here: the API lives on
+   * a different origin (see api/baseUrl.ts) and auth is a Bearer token with
+   * `withCredentials: false` (api/client.ts), so a browser navigation to a
+   * relative path hits the SPA and an absolute one 401s. Fetch through the
+   * axios client instead, then synthesise the download.
+   */
+  async downloadStatement(tenancyId: string, fileName: string): Promise<void> {
+    const res = await api.get(`/api/rental/tenancies/${tenancyId}/statement`, {
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(res.data as Blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   },
 };
 

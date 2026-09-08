@@ -191,11 +191,12 @@ function AddEntryDialog({
 
 function LedgerRow({
   row,
-  onDelete,
+  onAskDelete,
   isDeleting,
 }: {
   row: LedgerRowDTO;
-  onDelete: () => void;
+  /** Opens the inline confirm card — deleting is never one click. */
+  onAskDelete: () => void;
   isDeleting: boolean;
 }) {
   const isReceipt = row.source === 'RECEIPT';
@@ -224,13 +225,49 @@ function LedgerRow({
             variant="ghost"
             size="sm"
             className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-destructive"
-            onClick={onDelete}
+            onClick={onAskDelete}
             disabled={isDeleting}
             title="Delete entry"
           >
             {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Inline confirm for a ledger-entry delete, mirroring the property-delete
+ * card on RentalListPage. Deleting an entry removes a money row AND its
+ * CashFlow irreversibly, and it is the documented recovery route for
+ * `unmarkReceived`'s FIFO-spillover limitation — so it must not be one
+ * unguarded click.
+ */
+function ConfirmDeleteRow({
+  row,
+  onConfirm,
+  onCancel,
+  isDeleting,
+}: {
+  row: LedgerRowDTO;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isDeleting: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 py-3 px-4 border-b border-border/60 last:border-b-0 bg-destructive/5">
+      <p className="text-sm font-medium">
+        Delete this {humanizeEntryType(row.entryType).toLowerCase()} of {formatINR(row.amount)} on{' '}
+        {formatRowDate(row.date)}?
+      </p>
+      <div className="flex gap-2">
+        <Button variant="destructive" size="sm" disabled={isDeleting} onClick={onConfirm}>
+          {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes, delete'}
+        </Button>
+        <Button variant="ghost" size="sm" disabled={isDeleting} onClick={onCancel}>
+          Cancel
+        </Button>
       </div>
     </div>
   );
@@ -264,22 +301,28 @@ export function TenantKhataPage() {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to build reminder'),
   });
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const deleteMutation = useMutation({
     mutationFn: (entryId: string) => rentalApi.deleteLedgerEntry(entryId),
     onSuccess: () => {
       toast.success('Entry deleted');
+      setConfirmDeleteId(null);
       qc.invalidateQueries({ queryKey: ['tenancy-ledger', tenancyId] });
       qc.invalidateQueries({ queryKey: ['rental-collections'] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to delete entry'),
   });
 
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  function handleDelete(id: string) {
-    setDeletingId(id);
-    deleteMutation.mutate(id, { onSettled: () => setDeletingId(null) });
-  }
+  const statementMutation = useMutation({
+    mutationFn: () =>
+      rentalApi.downloadStatement(
+        tenancyId!,
+        `rent-statement-${(ledger?.tenantName ?? 'tenant').replace(/[^\w-]+/g, '-')}.pdf`,
+      ),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Failed to download statement'),
+  });
 
   const months = useMemo(() => {
     if (!ledger) return [];
@@ -353,10 +396,17 @@ export function TenantKhataPage() {
             >
               <MessageCircle className="h-4 w-4" /> Remind
             </Button>
-            <Button asChild variant="outline">
-              <a href={rentalApi.statementUrl(ledger.tenancyId)} target="_blank" rel="noopener noreferrer">
-                <Share2 className="h-4 w-4" /> Share statement
-              </a>
+            <Button
+              variant="outline"
+              onClick={() => statementMutation.mutate()}
+              disabled={statementMutation.isPending}
+            >
+              {statementMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Share2 className="h-4 w-4" />
+              )}{' '}
+              Share statement
             </Button>
           </div>
         }
@@ -395,14 +445,24 @@ export function TenantKhataPage() {
             <div className="text-right">You got</div>
             <div className="text-right min-w-[6rem]">Balance</div>
           </div>
-          {ledger.rows.map((row) => (
-            <LedgerRow
-              key={row.id}
-              row={row}
-              onDelete={() => handleDelete(row.id)}
-              isDeleting={deletingId === row.id && deleteMutation.isPending}
-            />
-          ))}
+          {ledger.rows.map((row) =>
+            confirmDeleteId === row.id ? (
+              <ConfirmDeleteRow
+                key={row.id}
+                row={row}
+                onConfirm={() => deleteMutation.mutate(row.id)}
+                onCancel={() => setConfirmDeleteId(null)}
+                isDeleting={deleteMutation.isPending}
+              />
+            ) : (
+              <LedgerRow
+                key={row.id}
+                row={row}
+                onAskDelete={() => setConfirmDeleteId(row.id)}
+                isDeleting={false}
+              />
+            ),
+          )}
         </Card>
       )}
 
