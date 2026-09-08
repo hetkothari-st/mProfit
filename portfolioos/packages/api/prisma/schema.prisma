@@ -172,9 +172,7 @@ model User {
   // CA workspace. `clients` above is the ADVISOR side (rows this user owns as
   // a CA). These two are the other side: the Client rows where this user IS
   // the subject, and both ends of the CA audit trail.
-  clientRecords     Client[]     @relation("ClientSubject")
-  caAuditsPerformed CaAuditLog[] @relation("CaAuditActor")
-  caAuditsAbout     CaAuditLog[] @relation("CaAuditSubject")
+  clientRecords Client[] @relation("ClientSubject")
 }
 
 model UserNotificationConfig {
@@ -3570,12 +3568,16 @@ model CaAuditLog {
   id String @id @default(cuid())
 
   /// Who did it — always the CA's real user id, never a client's.
+  ///
+  /// Deliberately NOT a foreign key, for the same reason as `clientId` below.
+  /// An onDelete: Cascade relation here would let deleting either party's
+  /// account erase every entry naming them — precisely the erasure this table
+  /// is built to prevent, reached by a different column. Referential integrity
+  /// is worth less here than the record surviving the people in it.
   actorUserId String
-  actor       User   @relation("CaAuditActor", fields: [actorUserId], references: [id], onDelete: Cascade)
 
-  /// Whose books it was done to.
+  /// Whose books it was done to. Not a foreign key, same reasoning.
   subjectUserId String
-  subject       User   @relation("CaAuditSubject", fields: [subjectUserId], references: [id], onDelete: Cascade)
 
   /// The Client row that authorised it, kept for provenance. Not a foreign key
   /// so that revoking or deleting a grant can never erase the record of what

@@ -31,18 +31,35 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { getCaScope, createManagedClient } from '../../src/services/ca/caAccess.service.js';
+import {
+  getCaScope,
+  createManagedClient,
+  inviteClient,
+  acceptInvitation,
+} from '../../src/services/ca/caAccess.service.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 
 let ca: TestScope;
 let client: TestScope;
 let stranger: TestScope;
 let clientId: string;
+/** TestScope exposes only ids, and the accept flow is email-bound. */
+let strangerEmail: string;
+let clientEmail: string;
 
 beforeAll(async () => {
   ca = await createTestScope('ca-user');
   client = await createTestScope('ca-client');
   stranger = await createTestScope('ca-stranger');
+
+  [strangerEmail, clientEmail] = await runAsSystem(async () => {
+    const users = await prisma.user.findMany({
+      where: { id: { in: [stranger.userId, client.userId] } },
+      select: { id: true, email: true },
+    });
+    const byId = new Map(users.map((u) => [u.id, u.email]));
+    return [byId.get(stranger.userId)!, byId.get(client.userId)!];
+  });
 
   clientId = await runAsSystem(async () => {
     const row = await prisma.client.create({
@@ -111,7 +128,7 @@ describe('CA access boundary', () => {
     await expect(
       ca.runAs(() =>
         prisma.portfolio.create({
-          data: { userId: client.userId, name: 'Should not exist', type: 'EQUITY' },
+          data: { userId: client.userId, name: 'Should not exist', type: 'INVESTMENT' },
         }),
       ),
     ).rejects.toThrow();
@@ -147,7 +164,7 @@ describe('CA access boundary', () => {
           userId: stranger.userId, // a relative's book, shared into the household
           familyId: fam.id,
           name: 'Relative shared book',
-          type: 'EQUITY',
+          type: 'INVESTMENT',
         },
       });
       return fam.id;
@@ -224,6 +241,86 @@ describe('CA access boundary', () => {
       prisma.caAuditLog.findMany({ where: { subjectUserId: client.userId } }),
     );
     expect(seen).toEqual([]);
+  });
+
+  /**
+   * The end-to-end consented flow, which had no coverage at all and was
+   * therefore completely broken on first write: runAsSystem nested INSIDE
+   * runInTransaction is a no-op, so the token lookup ran as the invitee and a
+   * PENDING row matches no branch of the Client policy. Every valid invitation
+   * failed. Fabricating ACTIVE grants in the other tests hid it.
+   */
+  it('completes an invitation end to end, and only for the invited address', async () => {
+    const { client: invited, token } = await ca.runAs(() =>
+      inviteClient(ca.userId, { name: 'Invited Person', email: strangerEmail }),
+    );
+
+    // Pending: the CA can see the row but cannot act for them yet.
+    await expect(ca.runAs(() => getCaScope(ca.userId, invited.id))).rejects.toThrow(
+      /has not accepted/i,
+    );
+
+    // Wrong recipient is refused even holding a valid token.
+    await expect(
+      client.runAs(() => acceptInvitation(client.userId, clientEmail, token)),
+    ).rejects.toThrow(/different email address/i);
+
+    const accepted = await stranger.runAs(() =>
+      acceptInvitation(stranger.userId, strangerEmail, token),
+    );
+    expect(accepted.userId).toBe(stranger.userId);
+    expect(accepted.status).toBe('ACTIVE');
+
+    // Now, and only now, the grant resolves.
+    const scope = await ca.runAs(() => getCaScope(ca.userId, invited.id));
+    expect(scope.subjectUserId).toBe(stranger.userId);
+
+    // Single use: the token is cleared, so a replay finds nothing.
+    await expect(
+      stranger.runAs(() => acceptInvitation(stranger.userId, strangerEmail, token)),
+    ).rejects.toThrow(/not found/i);
+
+    await runAsSystem(async () => {
+      await prisma.caAuditLog.deleteMany({ where: { clientId: invited.id } });
+      await prisma.client.delete({ where: { id: invited.id } });
+    });
+  });
+
+  it('lets a CA correct a client transaction but never create one', async () => {
+    // transaction_ca_correct is FOR UPDATE only — the distinction between
+    // correcting a ledger and rewriting it. Both halves asserted, because the
+    // grant working matters as much as the restriction holding.
+    const tx = await runAsSystem(() =>
+      prisma.transaction.findFirst({ where: { portfolioId: client.portfolioId } }),
+    );
+
+    if (tx) {
+      const updated = await ca.runAs(() =>
+        prisma.transaction.updateMany({
+          where: { id: tx.id },
+          data: { narration: 'Corrected by CA' },
+        }),
+      );
+      expect(updated.count).toBe(1);
+    }
+
+    await expect(
+      ca.runAs(() =>
+        prisma.transaction.create({
+          data: {
+            portfolioId: client.portfolioId,
+            assetClass: 'EQUITY',
+            transactionType: 'BUY',
+            tradeDate: new Date(),
+            quantity: '1',
+            price: '1',
+            grossAmount: '1',
+            netAmount: '1',
+            assetName: 'Should not exist',
+          },
+        }),
+      ),
+    ).rejects.toThrow();
   });
 
   it('provisions a managed client that cannot log in', async () => {

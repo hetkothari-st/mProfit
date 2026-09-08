@@ -12,9 +12,21 @@
  * siblings permit it, not because the caller has been disguised as the client.
  * That is what confines a CA to five tables no matter what this file does.
  *
+ * Requests are validated with the SAME schemas the client's own accounting
+ * controller uses. `accounting.service.ts` does no format checking of its
+ * own, so those schemas are the only place a money string is proved to be
+ * one — and this is the surface where the caller does not own the ledger.
+ *
  * Reads are audited only where they are the point (the activity feed lives in
- * ca.controller). Mutations are audited without exception, inside the same
- * transaction as the change.
+ * ca.controller). Every mutation writes an audit entry.
+ *
+ * KNOWN GAP, stated rather than implied: the audit entry is written in its own
+ * transaction, AFTER the mutation has committed, so a failing audit write
+ * leaves an unrecorded change. Closing it means threading a transaction client
+ * through the shared accounting services, which currently take only a userId.
+ * Until that lands, `caAudit.service.ts`'s "the entry and the change share a
+ * fate" holds for the grant lifecycle in caAccess.service.ts but NOT for the
+ * handlers below.
  */
 
 import type { Request, Response } from 'express';
@@ -41,7 +53,13 @@ import {
   getPnL,
   getBalanceSheet,
 } from '../services/accounting.service.js';
-import type { VoucherType } from '@prisma/client';
+import type { AccountType, VoucherType } from '@prisma/client';
+import {
+  createAccountSchema,
+  updateAccountSchema,
+  createVoucherSchema,
+  updateVoucherSchema,
+} from '../schemas/accounting.schema.js';
 
 /** Resolve the grant named in the URL, or refuse. */
 async function scopeOf(req: Request): Promise<CaScope> {
@@ -68,7 +86,11 @@ export async function caListAccountsFlat(req: Request, res: Response) {
 
 export async function caCreateAccount(req: Request, res: Response) {
   const scope = await scopeOf(req);
-  const account = await createAccount(scope.subjectUserId, req.body);
+  const body = createAccountSchema.parse(req.body);
+  const account = await createAccount(scope.subjectUserId, {
+    ...body,
+    type: body.type as AccountType,
+  });
   await runInTransaction((tx) =>
     recordCaAudit(tx, auditCtx(scope, req), {
       action: 'ACCOUNT_CREATED',
@@ -89,7 +111,11 @@ export async function caUpdateAccount(req: Request, res: Response) {
   const before = (await listAccountsFlat(scope.subjectUserId)).find((a) => a.id === id);
   if (!before) throw new NotFoundError('Account not found');
 
-  const account = await updateAccount(scope.subjectUserId, id, req.body);
+  const body = updateAccountSchema.parse(req.body);
+  const account = await updateAccount(scope.subjectUserId, id, {
+    ...body,
+    type: body.type as AccountType | undefined,
+  });
   await runInTransaction((tx) =>
     recordCaAudit(tx, auditCtx(scope, req), {
       action: 'ACCOUNT_UPDATED',
@@ -151,7 +177,11 @@ export async function caNextVoucherNo(req: Request, res: Response) {
 
 export async function caCreateVoucher(req: Request, res: Response) {
   const scope = await scopeOf(req);
-  const voucher = await createVoucher(scope.subjectUserId, req.body);
+  const body = createVoucherSchema.parse(req.body);
+  const voucher = await createVoucher(scope.subjectUserId, {
+    ...body,
+    type: body.type as VoucherType,
+  });
   await runInTransaction((tx) =>
     recordCaAudit(tx, auditCtx(scope, req), {
       action: 'VOUCHER_CREATED',
@@ -168,7 +198,11 @@ export async function caUpdateVoucher(req: Request, res: Response) {
   const scope = await scopeOf(req);
   const id = req.params.id!;
   const before = await getVoucher(scope.subjectUserId, id);
-  const voucher = await updateVoucher(scope.subjectUserId, id, req.body);
+  const body = updateVoucherSchema.parse(req.body);
+  const voucher = await updateVoucher(scope.subjectUserId, id, {
+    ...body,
+    type: body.type as VoucherType | undefined,
+  });
   await runInTransaction((tx) =>
     recordCaAudit(tx, auditCtx(scope, req), {
       action: 'VOUCHER_UPDATED',

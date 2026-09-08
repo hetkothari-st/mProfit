@@ -24,7 +24,7 @@
  */
 
 import crypto from 'node:crypto';
-import type { Client, User } from '@prisma/client';
+import type { Client } from '@prisma/client';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
@@ -162,22 +162,24 @@ export async function createManagedClient(
   const passwordHash = await hashPassword(unusablePassword);
 
   return runInTransaction(async (tx) => {
-    // Creating a User is inherently a cross-tenant act — the row belongs to
-    // nobody until it exists. Bounded: one row, fixed shape, shadow-flagged.
-    const shadow = await runAsSystem(() =>
-      tx.user.create({
-        data: {
-          email: shadowEmail,
-          name,
-          passwordHash,
-          isShadowClient: true,
-          role: 'INVESTOR',
-          plan: 'FREE',
-          pan: input.pan ?? null,
-          phone: input.phone ?? null,
-        },
-      }),
-    );
+    // No runAsSystem here, deliberately: inside runInTransaction it would be a
+    // no-op (see the note in acceptInvitation) and a no-op that looks load-
+    // bearing is worse than none. This works because `User` carries no RLS
+    // policy at all. If one is ever added, this insert breaks — which is the
+    // right failure, because it would then need the same hoisting treatment
+    // rather than a decoration that never did anything.
+    const shadow = await tx.user.create({
+      data: {
+        email: shadowEmail,
+        name,
+        passwordHash,
+        isShadowClient: true,
+        role: 'INVESTOR',
+        plan: 'FREE',
+        pan: input.pan ?? null,
+        phone: input.phone ?? null,
+      },
+    });
 
     const client = await tx.client.create({
       data: {
@@ -276,44 +278,62 @@ export async function acceptInvitation(
   callerEmail: string,
   token: string,
 ): Promise<Client> {
-  return runInTransaction(async (tx) => {
-    const client = await runAsSystem(() => tx.client.findUnique({ where: { inviteToken: token } }));
+  // runAsSystem MUST wrap runInTransaction, not sit inside it.
+  //
+  // runInTransaction reads the ambient identity ONCE, before opening the
+  // transaction, and hands the callback a base-client `tx` that does not pass
+  // through the $allOperations hook. A runAsSystem() inside the callback
+  // therefore changes the AsyncLocalStorage store and nothing ever reads it
+  // again — the session variable stays whatever was set at transaction start.
+  //
+  // That silently broke this entire flow: the session stayed as the invitee,
+  // and a PENDING row (advisorId = the CA, userId still null) matches no
+  // branch of the Client policy, so every valid token read back zero rows and
+  // threw "Invitation not found."
+  return runAsSystem(() =>
+    runInTransaction(async (tx) => {
+      const client = await tx.client.findUnique({ where: { inviteToken: token } });
 
-    if (!client || client.kind !== 'INVITED') throw new NotFoundError('Invitation not found.');
-    if (client.status === 'REVOKED') throw new ForbiddenError('That invitation is no longer valid.');
-    if (client.acceptedAt) throw new BadRequestError('That invitation has already been used.');
-    if (!client.inviteExpiresAt || client.inviteExpiresAt < new Date()) {
-      throw new BadRequestError('That invitation has expired. Ask your CA to send a new one.');
-    }
-    if ((client.invitedEmail ?? '').toLowerCase() !== callerEmail.toLowerCase()) {
-      throw new ForbiddenError('That invitation was sent to a different email address.');
-    }
+      if (!client || client.kind !== 'INVITED') throw new NotFoundError('Invitation not found.');
+      if (client.status === 'REVOKED') {
+        throw new ForbiddenError('That invitation is no longer valid.');
+      }
+      if (client.acceptedAt) throw new BadRequestError('That invitation has already been used.');
+      if (!client.inviteExpiresAt || client.inviteExpiresAt < new Date()) {
+        throw new BadRequestError('That invitation has expired. Ask your CA to send a new one.');
+      }
+      // The token proves possession; this proves it reached the right person.
+      // Checked inside the transaction that consumes the token, so a race
+      // cannot accept one invitation under another account's email.
+      if ((client.invitedEmail ?? '').toLowerCase() !== callerEmail.toLowerCase()) {
+        throw new ForbiddenError('That invitation was sent to a different email address.');
+      }
 
-    const updated = await runAsSystem(() =>
-      tx.client.update({
+      const updated = await tx.client.update({
         where: { id: client.id },
         data: {
           userId: callerId,
           status: 'ACTIVE',
           acceptedAt: new Date(),
+          // Single use: clearing the token makes a replay find nothing.
           inviteToken: null,
         },
-      }),
-    );
+      });
 
-    await recordCaAudit(
-      tx,
-      { actorUserId: callerId, subjectUserId: callerId, clientId: client.id },
-      {
-        action: 'GRANT_ACCEPTED',
-        resourceType: 'Client',
-        resourceId: client.id,
-        summary: 'You granted your CA access to your books.',
-      },
-    );
+      await recordCaAudit(
+        tx,
+        { actorUserId: callerId, subjectUserId: callerId, clientId: client.id },
+        {
+          action: 'GRANT_ACCEPTED',
+          resourceType: 'Client',
+          resourceId: client.id,
+          summary: 'You granted your CA access to your books.',
+        },
+      );
 
-    return updated;
-  });
+      return updated;
+    }),
+  );
 }
 
 /**
@@ -377,6 +397,3 @@ export async function listCaActivity(callerId: string, opts: { clientId?: string
     take: Math.min(opts.limit ?? 100, 500),
   });
 }
-
-/** Narrow type guard used by the controllers to keep `User` fields honest. */
-export type ShadowSafeUser = Pick<User, 'id' | 'isShadowClient'>;

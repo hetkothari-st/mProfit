@@ -99,15 +99,16 @@ CREATE INDEX "CaAuditLog_subjectUserId_createdAt_idx" ON "CaAuditLog"("subjectUs
 CREATE INDEX "CaAuditLog_actorUserId_createdAt_idx"   ON "CaAuditLog"("actorUserId", "createdAt");
 CREATE INDEX "CaAuditLog_clientId_createdAt_idx"      ON "CaAuditLog"("clientId", "createdAt");
 
-ALTER TABLE "CaAuditLog"
-  ADD CONSTRAINT "CaAuditLog_actorUserId_fkey"
-  FOREIGN KEY ("actorUserId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "CaAuditLog"
-  ADD CONSTRAINT "CaAuditLog_subjectUserId_fkey"
-  FOREIGN KEY ("subjectUserId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- `clientId` is deliberately NOT a foreign key. Revoking or deleting a grant
--- must never cascade away the record of what was done under it.
+-- NONE of actorUserId, subjectUserId or clientId is a foreign key, and that is
+-- the point. A cascading relation would let deleting a grant — or either
+-- party's account — erase every entry naming them, which is exactly the
+-- erasure this table exists to prevent. Referential integrity is worth less
+-- here than the record outliving the people in it.
+--
+-- The tension with a DPDP erasure request is real and is left to a deliberate
+-- decision at that time rather than pre-resolved by an ON DELETE clause that
+-- would silently destroy a professional's audit trail as a side effect of
+-- routine account cleanup.
 
 -- ─── The grant predicate ─────────────────────────────────────────────
 --
