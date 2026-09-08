@@ -124,20 +124,24 @@ export function SidebarNav({
         {/* Overview */}
         <NavSection section={{ heading: 'Overview', items: OVERVIEW_ITEMS }} collapsed={collapsed} />
 
-        {caWorkspace.allowed && (
-          <>
-            {collapsed && <div className="mx-3 h-px bg-sidebar-border/50" />}
-            <NavSection
-              section={{ heading: 'Practice', items: [{ label: 'Clients', to: '/ca', icon: Briefcase }] }}
-              collapsed={collapsed}
-            />
-          </>
-        )}
+
 
         {collapsed && <div className="mx-3 h-px bg-sidebar-border/50" />}
 
         {/* Asset Classes — drag/hide enabled */}
         <AssetClassSectionList items={ASSET_CLASS_ITEMS} collapsed={collapsed} />
+
+        {/* Sits at the foot of the asset-class block rather than inside it.
+            That list renders from server-stored AssetSectionPref rows keyed by
+            path, so an entry added to ASSET_CLASS_ITEMS with no matching
+            preference simply would not appear — and being reorderable and
+            hideable is wrong for a workspace holding other people's books. */}
+        {caWorkspace.allowed && (
+          <NavSection
+            section={{ items: [{ label: 'Account Access', to: '/ca', icon: Briefcase }] }}
+            collapsed={collapsed}
+          />
+        )}
 
         {/* Inbox + Tools */}
         {NAV_SECTIONS.map((section, i) => (
