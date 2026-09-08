@@ -42,6 +42,12 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'Tenancy',
   'RentReceipt',
   'PropertyExpense',
+  // Khatabook ledger (20260908000000_rental_ledger). Same owner-join RLS
+  // pattern as RentReceipt/RentReminder (Tenancy → RentalProperty → User) —
+  // must be registered here or the policy's WITH CHECK never sees
+  // app.current_user_id and every write fails 42501, per the Goal/BankAccount
+  // incident documented below.
+  'RentLedgerEntry',
   'InsurancePolicy',
   'PremiumPayment',
   'InsuranceClaim',

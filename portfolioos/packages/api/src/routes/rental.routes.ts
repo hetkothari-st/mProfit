@@ -19,6 +19,13 @@ import {
   removeExpenseHandler,
   propertyPnLHandler,
   markOverdueHandler,
+  getTenancyLedgerHandler,
+  createLedgerEntryHandler,
+  updateLedgerEntryHandler,
+  deleteLedgerEntryHandler,
+  listCollectionsHandler,
+  getReminderLinkHandler,
+  getTenancyStatementHandler,
 } from '../controllers/rental.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
@@ -37,6 +44,16 @@ rentalRouter.get('/properties/:id/pnl', asyncHandler(propertyPnLHandler));
 
 // Tenancies (nested under a property for create; flat for mutate/delete)
 rentalRouter.post('/properties/:id/tenancies', asyncHandler(createTenancyHandler));
+
+// Khata ledger — must precede the bare /tenancies/:tenancyId routes.
+rentalRouter.get('/collections', asyncHandler(listCollectionsHandler));
+rentalRouter.get('/tenancies/:tenancyId/ledger', asyncHandler(getTenancyLedgerHandler));
+rentalRouter.post('/tenancies/:tenancyId/entries', asyncHandler(createLedgerEntryHandler));
+rentalRouter.get('/tenancies/:tenancyId/reminder-link', asyncHandler(getReminderLinkHandler));
+rentalRouter.get('/tenancies/:tenancyId/statement', asyncHandler(getTenancyStatementHandler));
+rentalRouter.patch('/entries/:entryId', asyncHandler(updateLedgerEntryHandler));
+rentalRouter.delete('/entries/:entryId', asyncHandler(deleteLedgerEntryHandler));
+
 rentalRouter.patch('/tenancies/:tenancyId', asyncHandler(updateTenancyHandler));
 rentalRouter.delete('/tenancies/:tenancyId', asyncHandler(deleteTenancyHandler));
 

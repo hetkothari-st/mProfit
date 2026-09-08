@@ -1771,8 +1771,15 @@ model Tenancy {
   notes           String?
   createdAt       DateTime       @default(now())
 
-  rentReceipts RentReceipt[]
-  reminders    RentReminder[]
+  // Derived by rentalLedger.service.recomputeTenancyLedger — never hand-edited.
+  // Positive means the tenant owes; negative means they are in advance.
+  balanceDue        Decimal   @db.Decimal(12, 2) @default(0)
+  depositHeld       Decimal   @db.Decimal(12, 2) @default(0)
+  balanceComputedAt DateTime?
+
+  rentReceipts  RentReceipt[]
+  reminders     RentReminder[]
+  ledgerEntries RentLedgerEntry[]
 
   @@index([propertyId, isActive])
 }
@@ -1791,10 +1798,43 @@ model RentReceipt {
   notes                  String?
   autoMatchedFromEventId String?
 
+  // User intent to skip this month (moved out of `status`, which is now
+  // derived from the ledger). `status` renders SKIPPED when this is true.
+  isSkipped Boolean @default(false)
+
   reminders RentReminder[]
 
   @@unique([tenancyId, forMonth])
   @@index([dueDate, status])
+}
+
+// Khatabook-style ledger row for a tenancy. Everything except the monthly
+// rent charge lives here; the rent charge stays in RentReceipt. Payments
+// allocate to charges (pinned month first, then FIFO) inside
+// rentalLedger.service.recomputeTenancyLedger — there is no allocation table.
+model RentLedgerEntry {
+  id        String  @id @default(cuid())
+  tenancyId String
+  tenancy   Tenancy @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
+
+  // PAYMENT | DISCOUNT | LATE_FEE | OTHER_CHARGE | DEPOSIT | DEPOSIT_REFUND
+  entryType     String
+  amount        Decimal  @db.Decimal(12, 2)
+  entryDate     DateTime @db.Date
+  // "YYYY-MM" pin. Null means allocate FIFO to the oldest open charge.
+  forMonth      String?
+  note          String?
+  attachmentUrl String?
+
+  cashFlowId       String?
+  canonicalEventId String?
+  sourceHash       String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenancyId, entryDate])
+  @@index([tenancyId, forMonth])
 }
 
 // Tenant rent reminder queue. The cron creates one row per (receipt,

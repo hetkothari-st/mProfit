@@ -40,6 +40,7 @@ import { VehicleValuePage } from './pages/vehicles/VehicleValuePage';
 import { CashFlowsPage } from './pages/cashflows/CashFlowsPage';
 import { RentalListPage } from './pages/rental/RentalListPage';
 import { RentalDetailPage } from './pages/rental/RentalDetailPage';
+import { TenantKhataPage } from './pages/rental/TenantKhataPage';
 import { InsuranceListPage } from './pages/insurance/InsuranceListPage';
 import { InsuranceDetailPage } from './pages/insurance/InsuranceDetailPage';
 import { LoanListPage } from './pages/loans/LoanListPage';
@@ -142,6 +143,7 @@ export function App() {
         <Route path="/vehicles/value" element={<VehicleValuePage />} />
         <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
         <Route path="/rental" element={<RentalListPage />} />
+        <Route path="/rental/tenancies/:tenancyId" element={<TenantKhataPage />} />
         <Route path="/rental/:id" element={<RentalDetailPage />} />
         <Route path="/insurance" element={<InsuranceListPage />} />
         <Route path="/insurance/:id" element={<InsuranceDetailPage />} />

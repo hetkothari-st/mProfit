@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  ArrowUpRight,
   Plus,
   CheckCircle2,
   Clock,
@@ -402,13 +403,11 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
 
   return (
     <div className="rounded-xl border border-border/70 bg-card/40 overflow-hidden">
-      <button
-        type="button"
-        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors text-left"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-      >
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors">
+        <Link
+          to={`/rental/tenancies/${tenancy.id}`}
+          className="group/tenancy-link flex items-center gap-3 min-w-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-md"
+        >
           <div
             aria-hidden="true"
             className={`h-10 w-10 rounded-full grid place-items-center shrink-0 text-[11px] font-semibold tracking-wide ring-1 ${
@@ -436,6 +435,7 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
                   {overdueCount} overdue
                 </span>
               )}
+              <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover/tenancy-link:text-accent transition-colors shrink-0" />
             </div>
             <div className="text-[11.5px] text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
               <span className="font-medium text-foreground tabular-nums">
@@ -461,8 +461,13 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
               )}
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4 text-right shrink-0">
+        </Link>
+        <button
+          type="button"
+          className="flex items-center gap-4 text-right shrink-0"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+        >
           <div className="hidden sm:block">
             <p className="text-[10px] uppercase tracking-kerned text-muted-foreground">
               Total received
@@ -478,8 +483,8 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
           >
             <ChevronDown className="h-4 w-4" />
           </div>
-        </div>
-      </button>
+        </button>
+      </div>
 
       {expanded && (
         <>
