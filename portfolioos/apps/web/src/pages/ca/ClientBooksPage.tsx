@@ -1,7 +1,17 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, BookOpen, Scale, ScrollText, Plus, Pencil, Trash2, Receipt, Landmark } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpen,
+  Scale,
+  ScrollText,
+  Plus,
+  Pencil,
+  Trash2,
+  Receipt,
+  Landmark,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -53,9 +63,10 @@ export function ClientBooksPage() {
   const { clientId = '' } = useParams();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('accounts');
-  const [accountDialog, setAccountDialog] = useState<{ open: boolean; account: CaAccountRow | null }>(
-    { open: false, account: null },
-  );
+  const [accountDialog, setAccountDialog] = useState<{
+    open: boolean;
+    account: CaAccountRow | null;
+  }>({ open: false, account: null });
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [correcting, setCorrecting] = useState<CaTransactionRow | null>(null);
   const [fmvDialog, setFmvDialog] = useState<{ open: boolean; row: CaFmvRow | null }>({
@@ -176,12 +187,12 @@ export function ClientBooksPage() {
             </Button>
           </div>
           <LedgerTable
-          loading={accounts.isLoading}
-          empty={{
-            icon: BookOpen,
-            title: 'No chart of accounts yet',
-            description: 'A default chart is created the first time these books are opened.',
-          }}
+            loading={accounts.isLoading}
+            empty={{
+              icon: BookOpen,
+              title: 'No chart of accounts yet',
+              description: 'A default chart is created the first time these books are opened.',
+            }}
             columns={['Code', 'Account', 'Type']}
             rows={(accounts.data ?? []).map((a) => [a.code, a.name, a.type])}
             rowActions={(i) => {
@@ -218,14 +229,15 @@ export function ClientBooksPage() {
             </Button>
           </div>
           <LedgerTable
-          loading={vouchers.isLoading}
-          empty={{
-            icon: ScrollText,
-            title: 'No vouchers',
-            description: 'Vouchers appear here once posted, or once generated from the client’s activity.',
-          }}
+            loading={vouchers.isLoading}
+            empty={{
+              icon: ScrollText,
+              title: 'No vouchers',
+              description:
+                'Vouchers appear here once posted, or once generated from the client’s activity.',
+            }}
             columns={['No.', 'Type', 'Date', 'Narration']}
-            rows={(vouchers.data ?? []).map((v) => [
+            rows={(vouchers.data?.vouchers ?? []).map((v) => [
               v.voucherNo,
               v.type,
               new Date(v.date).toLocaleDateString('en-IN', {
@@ -236,7 +248,7 @@ export function ClientBooksPage() {
               v.narration ?? '—',
             ])}
             rowActions={(i) => {
-              const v = (vouchers.data ?? [])[i];
+              const v = (vouchers.data?.vouchers ?? [])[i];
               if (!v) return null;
               return (
                 <RowButton
@@ -279,7 +291,10 @@ export function ClientBooksPage() {
             const t = (transactions.data ?? [])[i];
             if (!t) return null;
             return (
-              <RowButton label={`Correct ${t.assetName ?? 'transaction'}`} onClick={() => setCorrecting(t)}>
+              <RowButton
+                label={`Correct ${t.assetName ?? 'transaction'}`}
+                onClick={() => setCorrecting(t)}
+              >
                 <Pencil className="h-3.5 w-3.5" />
               </RowButton>
             );
@@ -405,7 +420,9 @@ function RowButton({
       disabled={disabled}
       className={cn(
         'grid h-7 w-7 place-items-center rounded-md text-muted-foreground/70 transition-colors focus-ring disabled:opacity-40',
-        danger ? 'hover:bg-negative/10 hover:text-negative' : 'hover:bg-muted hover:text-foreground',
+        danger
+          ? 'hover:bg-negative/10 hover:text-negative'
+          : 'hover:bg-muted hover:text-foreground',
       )}
     >
       {children}

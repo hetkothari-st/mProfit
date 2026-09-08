@@ -122,13 +122,23 @@ export function ClientDocumentsTab({ clientId }: { clientId: string }) {
             variant="ghost"
             size="sm"
             onClick={() =>
-              setSelected(selected.size === rows.length ? new Set() : new Set(rows.map((d) => d.id)))
+              setSelected(
+                selected.size === rows.length ? new Set() : new Set(rows.map((d) => d.id)),
+              )
             }
           >
             {selected.size === rows.length ? 'Clear' : 'Select all'}
           </Button>
-          <Button size="sm" disabled={selected.size === 0 || busy} onClick={() => void downloadSelected()}>
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+          <Button
+            size="sm"
+            disabled={selected.size === 0 || busy}
+            onClick={() => void downloadSelected()}
+          >
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileDown className="h-3.5 w-3.5" />
+            )}
             Download selected
           </Button>
         </div>

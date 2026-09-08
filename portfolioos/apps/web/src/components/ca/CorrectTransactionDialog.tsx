@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -96,6 +97,9 @@ export function CorrectTransactionDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Correct transaction</DialogTitle>
+          <DialogDescription>
+            Fix what was recorded wrongly. Your client can see this correction and what it changed.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -141,7 +145,11 @@ export function CorrectTransactionDialog({
 
           <div>
             <Label>Asset name</Label>
-            <Input value={assetName} onChange={(e) => setAssetName(e.target.value)} maxLength={200} />
+            <Input
+              value={assetName}
+              onChange={(e) => setAssetName(e.target.value)}
+              maxLength={200}
+            />
           </div>
 
           <div>

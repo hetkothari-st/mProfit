@@ -115,11 +115,19 @@ export const caApi = {
     return unwrap(data);
   },
 
+  /**
+   * Returns the paginated envelope, not a bare array.
+   *
+   * `listVouchers` has always answered `{ vouchers, total, page, limit }`.
+   * Typing this as `CaVoucherRow[]` compiled fine — a type declaration is a
+   * claim, not a check — and then crashed at runtime the first time the tab
+   * was opened, because `.map` is not a function on an object.
+   */
   async vouchers(
     clientId: string,
     params: { from?: string; to?: string; type?: string } = {},
-  ): Promise<CaVoucherRow[]> {
-    const { data } = await api.get<ApiResponse<CaVoucherRow[]>>(
+  ): Promise<CaVoucherPage> {
+    const { data } = await api.get<ApiResponse<CaVoucherPage>>(
       `/api/ca/clients/${clientId}/vouchers`,
       { params },
     );
@@ -307,6 +315,13 @@ export interface CaDocumentRow {
   mimeType: string;
   sizeBytes: number;
   createdAt: string;
+}
+
+export interface CaVoucherPage {
+  vouchers: CaVoucherRow[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface CaTrialBalanceRow {
