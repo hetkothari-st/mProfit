@@ -662,8 +662,29 @@ export function ratingFromComposite(
 // Rating status gate (`00-README` invariant 2, `03 §1`, `03 §4`)
 // ---------------------------------------------------------------------------
 
-/** `03 §4`: "A rating requires PERFORMANCE and CONSISTENCY to be non-null". */
-export const RATING_REQUIRED_PILLARS: readonly string[] = ['PERFORMANCE', 'CONSISTENCY'];
+/**
+ * `03 §4`: "A rating requires PERFORMANCE and CONSISTENCY to be non-null".
+ *
+ * TRACKING is listed alongside them for the INDEX model, which declares neither
+ * of the other two — a tracker's job is not to outperform, and `03 §4` says its
+ * TRACKING and COST pillars "carry the equivalent burden". The loop below skips
+ * a pillar a model does not declare, so naming all three here is a no-op for
+ * every active model except INDEX.
+ *
+ * Without it, an index fund that cannot be scored at all falls past this gate to
+ * the peer-group one and is told "only 0 peers in category". Measured on
+ * 2026-08-31, all 571 INDEX schemes reported exactly that — in a category
+ * holding 686 funds, with all four of their pillars null because the index each
+ * one tracks is not in `BenchmarkIndexPrice`, their TER is not ingested and
+ * their AUM is not either. The peer count was 0 because nothing cleared the
+ * gates, not because the peers were missing; the message sent the reader
+ * looking for funds that were all there.
+ */
+export const RATING_REQUIRED_PILLARS: readonly string[] = [
+  'PERFORMANCE',
+  'CONSISTENCY',
+  'TRACKING',
+];
 
 export interface RatingStatusInput {
   /** Months of usable NAV history. A genuine count, so a number. */
