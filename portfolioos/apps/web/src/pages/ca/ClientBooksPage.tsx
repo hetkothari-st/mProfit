@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, BookOpen, Scale, ScrollText, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Scale, ScrollText, Plus, Pencil, Trash2, Receipt, Landmark } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/cn';
-import { caApi, type CaAccountRow } from '@/api/ca.api';
+import { caApi, type CaAccountRow, type CaTransactionRow, type CaFmvRow } from '@/api/ca.api';
 import { apiErrorMessage } from '@/api/client';
 import { CaActivityFeed } from '@/components/ca/CaActivityFeed';
 import { AccountFormDialog } from '@/components/ca/AccountFormDialog';
 import { VoucherFormDialog } from '@/components/ca/VoucherFormDialog';
+import { CorrectTransactionDialog } from '@/components/ca/CorrectTransactionDialog';
+import { FmvFormDialog } from '@/components/ca/FmvFormDialog';
 
 /**
  * One client's books, as kept by their CA.
@@ -24,11 +26,13 @@ import { VoucherFormDialog } from '@/components/ca/VoucherFormDialog';
  * have to guess which, so the page says so instead of implying it.
  */
 
-type Tab = 'accounts' | 'vouchers' | 'trial-balance' | 'activity';
+type Tab = 'accounts' | 'vouchers' | 'transactions' | 'fmv' | 'trial-balance' | 'activity';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'accounts', label: 'Chart of accounts' },
   { key: 'vouchers', label: 'Vouchers' },
+  { key: 'transactions', label: 'Transactions' },
+  { key: 'fmv', label: 'FMV (31 Jan 2018)' },
   { key: 'trial-balance', label: 'Trial balance' },
   { key: 'activity', label: 'Activity' },
 ];
@@ -41,6 +45,20 @@ export function ClientBooksPage() {
     { open: false, account: null },
   );
   const [voucherOpen, setVoucherOpen] = useState(false);
+  const [correcting, setCorrecting] = useState<CaTransactionRow | null>(null);
+  const [fmvDialog, setFmvDialog] = useState<{ open: boolean; row: CaFmvRow | null }>({
+    open: false,
+    row: null,
+  });
+
+  const removeFmv = useMutation({
+    mutationFn: (isin: string) => caApi.deleteFmv(clientId, isin),
+    onSuccess: () => {
+      toast.success('Override removed');
+      qc.invalidateQueries({ queryKey: ['ca', clientId] });
+    },
+    onError: (e) => toast.error(apiErrorMessage(e, 'Could not remove the override')),
+  });
 
   const removeAccount = useMutation({
     mutationFn: (id: string) => caApi.deleteAccount(clientId, id),
@@ -82,6 +100,18 @@ export function ClientBooksPage() {
     queryKey: ['ca', clientId, 'trial-balance'],
     queryFn: () => caApi.trialBalance(clientId),
     enabled: tab === 'trial-balance' && !!clientId,
+  });
+
+  const transactions = useQuery({
+    queryKey: ['ca', clientId, 'transactions'],
+    queryFn: () => caApi.transactions(clientId),
+    enabled: tab === 'transactions' && !!clientId,
+  });
+
+  const fmv = useQuery({
+    queryKey: ['ca', clientId, 'fmv'],
+    queryFn: () => caApi.fmvOverrides(clientId),
+    enabled: tab === 'fmv' && !!clientId,
   });
 
   const activity = useQuery({
@@ -211,6 +241,86 @@ export function ClientBooksPage() {
         </>
       )}
 
+      {tab === 'transactions' && (
+        <LedgerTable
+          loading={transactions.isLoading}
+          empty={{
+            icon: Receipt,
+            title: 'No transactions',
+            description: 'This client has no recorded trades yet.',
+          }}
+          columns={['Date', 'Asset', 'Type', 'Qty', 'Price', 'Net']}
+          numericFrom={3}
+          rows={(transactions.data ?? []).map((t) => [
+            new Date(t.tradeDate).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            }),
+            t.assetName ?? t.isin ?? '—',
+            t.transactionType,
+            t.quantity,
+            t.price,
+            t.netAmount,
+          ])}
+          rowActions={(i) => {
+            const t = (transactions.data ?? [])[i];
+            if (!t) return null;
+            return (
+              <RowButton label={`Correct ${t.assetName ?? 'transaction'}`} onClick={() => setCorrecting(t)}>
+                <Pencil className="h-3.5 w-3.5" />
+              </RowButton>
+            );
+          }}
+        />
+      )}
+
+      {tab === 'fmv' && (
+        <>
+          <div className="mb-3 flex justify-end">
+            <Button size="sm" onClick={() => setFmvDialog({ open: true, row: null })}>
+              <Plus className="h-4 w-4" /> Set a value
+            </Button>
+          </div>
+          <LedgerTable
+            loading={fmv.isLoading}
+            empty={{
+              icon: Landmark,
+              title: 'No overrides set',
+              description:
+                'Set the 31-Jan-2018 fair market value for a scrip to grandfather its long-term gains under Section 55(2)(ac).',
+            }}
+            columns={['ISIN', 'Scrip', 'FMV per unit', 'Source']}
+            numericFrom={2}
+            rows={(fmv.data ?? []).map((f) => [f.isin, f.scripName ?? '—', f.fmvPerUnit, f.source])}
+            rowActions={(i) => {
+              const f = (fmv.data ?? [])[i];
+              // Seeded values are reference data, not this client's own
+              // judgement — editing one here would silently fork it.
+              if (!f || f.source !== 'USER') return null;
+              return (
+                <>
+                  <RowButton
+                    label={`Edit ${f.isin}`}
+                    onClick={() => setFmvDialog({ open: true, row: f })}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </RowButton>
+                  <RowButton
+                    label={`Remove ${f.isin}`}
+                    danger
+                    disabled={removeFmv.isPending}
+                    onClick={() => removeFmv.mutate(f.isin)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </RowButton>
+                </>
+              );
+            }}
+          />
+        </>
+      )}
+
       {tab === 'trial-balance' && (
         <LedgerTable
           loading={trialBalance.isLoading}
@@ -232,6 +342,18 @@ export function ClientBooksPage() {
         onOpenChange={(open) => setAccountDialog((d) => ({ ...d, open }))}
       />
       <VoucherFormDialog clientId={clientId} open={voucherOpen} onOpenChange={setVoucherOpen} />
+      <CorrectTransactionDialog
+        clientId={clientId}
+        transaction={correcting}
+        open={!!correcting}
+        onOpenChange={(open) => !open && setCorrecting(null)}
+      />
+      <FmvFormDialog
+        clientId={clientId}
+        existing={fmvDialog.row}
+        open={fmvDialog.open}
+        onOpenChange={(open) => setFmvDialog((d) => ({ ...d, open }))}
+      />
 
       {tab === 'activity' && (
         <CaActivityFeed

@@ -93,3 +93,9 @@ export const correctTransactionSchema = z
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'No corrections supplied' });
+
+/** A Section 55(2)(ac) fair-market-value override, as a decimal string. */
+export const setFmvSchema = z.object({
+  fmvPerUnit: moneyString,
+  scripName: z.string().max(200).optional(),
+});

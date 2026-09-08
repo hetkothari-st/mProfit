@@ -28,6 +28,10 @@ import {
   caGetPnL,
   caGetBalanceSheet,
   caCorrectTransaction,
+  caListTransactions,
+  caListFmv,
+  caSetFmv,
+  caDeleteFmv,
 } from '../controllers/caAccounting.controller.js';
 
 /**
@@ -71,7 +75,15 @@ caRouter.delete('/clients/:clientId/vouchers/:id', asyncHandler(caDeleteVoucher)
 // Corrections. PATCH, never POST or DELETE — the RLS grant on Transaction is
 // FOR UPDATE only, so there is deliberately no route here that could create or
 // remove one even if someone added a handler for it.
+caRouter.get('/clients/:clientId/transactions', asyncHandler(caListTransactions));
 caRouter.patch('/clients/:clientId/transactions/:id', asyncHandler(caCorrectTransaction));
+
+// Section 55(2)(ac) fair market values. PUT is an upsert keyed by ISIN — the
+// override either exists for that scrip or it does not, so there is no
+// separate create and update to keep in step.
+caRouter.get('/clients/:clientId/fmv', asyncHandler(caListFmv));
+caRouter.put('/clients/:clientId/fmv/:isin', asyncHandler(caSetFmv));
+caRouter.delete('/clients/:clientId/fmv/:isin', asyncHandler(caDeleteFmv));
 
 caRouter.get('/clients/:clientId/ledger', asyncHandler(caGetLedger));
 caRouter.get('/clients/:clientId/trial-balance', asyncHandler(caGetTrialBalance));

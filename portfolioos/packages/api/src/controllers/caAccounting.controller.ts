@@ -56,11 +56,18 @@ import {
   createVoucherSchema,
   updateVoucherSchema,
   correctTransactionSchema,
+  setFmvSchema,
 } from '../schemas/accounting.schema.js';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { toDecimal, serializeMoney, type Decimal } from '@portfolioos/shared';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
+import {
+  listUserFmvOverrides,
+  getFmvForIsin,
+  upsertUserFmv,
+  deleteUserFmv,
+} from '../services/fmvOverride.service.js';
 
 /** Resolve the grant named in the URL, or refuse. */
 async function scopeOf(req: Request): Promise<CaScope> {
@@ -403,4 +410,117 @@ export async function caCorrectTransaction(req: Request, res: Response) {
   }
 
   ok(res, updated);
+}
+
+// ─── Section 55(2)(ac) FMV overrides ─────────────────────────────────
+//
+// The 31-Jan-2018 fair market value used to grandfather long-term equity
+// gains. It is a judgement a CA makes from historical quotes, which is exactly
+// why they can set it here — and why every change is recorded with its prior
+// value: a different FMV produces a different taxable gain on a return.
+
+export async function caListFmv(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  const rows = await listUserFmvOverrides(scope.subjectUserId);
+  ok(
+    res,
+    rows.map((r) => ({
+      isin: r.isin,
+      scripName: r.scripName,
+      fmvPerUnit: serializeMoney(r.fmvPerUnit),
+      source: r.source,
+    })),
+  );
+}
+
+export async function caSetFmv(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  const isin = (req.params.isin ?? '').trim().toUpperCase();
+  if (!isin) throw new BadRequestError('isin required');
+  const body = setFmvSchema.parse(req.body);
+
+  // The prior value is read first: "the FMV changed" is not a useful record on
+  // a figure that decides someone's tax. What it changed FROM is.
+  const existing = await getFmvForIsin(scope.subjectUserId, isin);
+
+  const saved = await runInTransaction(async (tx) => {
+    const row = await upsertUserFmv(
+      scope.subjectUserId,
+      isin,
+      body.fmvPerUnit,
+      body.scripName,
+      tx,
+    );
+    await recordCaAudit(tx, auditCtx(scope, req), {
+      action: 'FMV_OVERRIDE_SET',
+      resourceType: 'FmvOverride',
+      resourceId: isin,
+      summary: `Set the 31-Jan-2018 fair market value for ${body.scripName ?? isin}.`,
+      before: existing ? { fmvPerUnit: serializeMoney(existing.fmvPerUnit) } : undefined,
+      after: { fmvPerUnit: body.fmvPerUnit },
+    });
+    return row;
+  });
+
+  ok(res, {
+    isin: saved.isin,
+    scripName: saved.scripName,
+    fmvPerUnit: serializeMoney(saved.fmvPerUnit),
+    source: saved.source,
+  });
+}
+
+export async function caDeleteFmv(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  const isin = (req.params.isin ?? '').trim().toUpperCase();
+  if (!isin) throw new BadRequestError('isin required');
+
+  const existing = await getFmvForIsin(scope.subjectUserId, isin);
+  if (!existing) throw new NotFoundError('No override set for that ISIN');
+
+  await runInTransaction(async (tx) => {
+    await deleteUserFmv(scope.subjectUserId, isin, tx);
+    await recordCaAudit(tx, auditCtx(scope, req), {
+      action: 'FMV_OVERRIDE_DELETED',
+      resourceType: 'FmvOverride',
+      resourceId: isin,
+      summary: `Removed the fair market value override for ${existing.scripName ?? isin}.`,
+      before: { fmvPerUnit: serializeMoney(existing.fmvPerUnit) },
+    });
+  });
+
+  noContent(res);
+}
+
+// ─── The client's transactions, for correcting ───────────────────────
+
+export async function caListTransactions(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  const rows = await prisma.transaction.findMany({
+    where: { portfolio: { userId: scope.subjectUserId } },
+    orderBy: { tradeDate: 'desc' },
+    take: 200,
+    select: {
+      id: true,
+      tradeDate: true,
+      assetClass: true,
+      transactionType: true,
+      assetName: true,
+      isin: true,
+      quantity: true,
+      price: true,
+      netAmount: true,
+      narration: true,
+    },
+  });
+  ok(
+    res,
+    rows.map((t) => ({
+      ...t,
+      tradeDate: t.tradeDate.toISOString().slice(0, 10),
+      quantity: t.quantity.toString(),
+      price: t.price.toString(),
+      netAmount: t.netAmount.toString(),
+    })),
+  );
 }

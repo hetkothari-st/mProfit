@@ -183,6 +183,34 @@ export const caApi = {
     return unwrap(data);
   },
 
+  async transactions(clientId: string): Promise<CaTransactionRow[]> {
+    const { data } = await api.get<ApiResponse<CaTransactionRow[]>>(
+      `/api/ca/clients/${clientId}/transactions`,
+    );
+    return unwrap(data);
+  },
+
+  async fmvOverrides(clientId: string): Promise<CaFmvRow[]> {
+    const { data } = await api.get<ApiResponse<CaFmvRow[]>>(`/api/ca/clients/${clientId}/fmv`);
+    return unwrap(data);
+  },
+
+  async setFmv(
+    clientId: string,
+    isin: string,
+    payload: { fmvPerUnit: string; scripName?: string },
+  ): Promise<CaFmvRow> {
+    const { data } = await api.put<ApiResponse<CaFmvRow>>(
+      `/api/ca/clients/${clientId}/fmv/${isin}`,
+      payload,
+    );
+    return unwrap(data);
+  },
+
+  async deleteFmv(clientId: string, isin: string): Promise<void> {
+    await api.delete(`/api/ca/clients/${clientId}/fmv/${isin}`);
+  },
+
   async trialBalance(clientId: string, asOf?: string): Promise<CaTrialBalanceRow[]> {
     const { data } = await api.get<ApiResponse<CaTrialBalanceRow[]>>(
       `/api/ca/clients/${clientId}/trial-balance`,
@@ -240,6 +268,27 @@ export interface CaVoucherRow {
   type: string;
   date: string;
   narration: string | null;
+}
+
+export interface CaTransactionRow {
+  id: string;
+  tradeDate: string;
+  assetClass: string;
+  transactionType: string;
+  assetName: string | null;
+  isin: string | null;
+  /** Decimal strings throughout — never parsed into a number. */
+  quantity: string;
+  price: string;
+  netAmount: string;
+  narration: string | null;
+}
+
+export interface CaFmvRow {
+  isin: string;
+  scripName: string | null;
+  fmvPerUnit: string;
+  source: 'SEED' | 'USER';
 }
 
 export interface CaTrialBalanceRow {
