@@ -18,6 +18,7 @@ import { AnalyticsDisclaimer } from './components/AnalyticsDisclaimer';
 import { PeerPercentiles } from './components/PeerPercentiles';
 import { FundAnalysis } from './components/FundAnalysis';
 import { SectionUnavailable } from './components/MetricValue';
+import { PlainOverview } from './components/PlainOverview';
 
 /**
  * Fund detail page (`07-IMPLEMENTATION-PLAN.md` Task 3.2).
@@ -45,6 +46,13 @@ import { SectionUnavailable } from './components/MetricValue';
 
 export function FundDetailPage() {
   const { schemeCode } = useParams<{ schemeCode: string }>();
+  /**
+   * Overview is the default because the reader who needs the most help is the
+   * one least likely to go looking for a toggle. Someone who wants Sortino and
+   * tracking error knows to ask for them; someone who does not know what they
+   * are cannot be expected to discover that the page has a friendlier half.
+   */
+  const [view, setView] = useState<'overview' | 'detailed'>('overview');
   // Same `FEATURE_MIN_TIER` map the server's `requireFeature` reads, so the
   // page never fires a request it already knows will come back 403.
   const { allowed, requiredTier } = useEntitlement('MF_ANALYTICS');
@@ -154,6 +162,22 @@ export function FundDetailPage() {
 
         {data && (
           <div className="space-y-10">
+            <div className="flex justify-end">
+              <Tabs
+                value={view}
+                onValueChange={(v) => setView(v === 'detailed' ? 'detailed' : 'overview')}
+              >
+                <TabsList>
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="detailed">Detailed calculations</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            {view === 'overview' ? (
+              <PlainOverview data={data} onShowDetail={() => setView('detailed')} />
+            ) : (
+              <>
             <ScoreCard meta={data.meta} score={data.score} categoryStats={data.categoryStats} />
 
             <section data-testid="mf-horizons">
@@ -212,7 +236,12 @@ export function FundDetailPage() {
             <PortfolioCharacteristics profile={data.profile} />
 
             <StructuralFacts meta={data.meta} profile={data.profile} />
+              </>
+            )}
 
+            {/* Outside the toggle: the disclaimer applies to the plain
+                summary exactly as much as to the calculations behind it, and
+                the reader on the simpler view is the one who most needs it. */}
             <AnalyticsDisclaimer />
           </div>
         )}
