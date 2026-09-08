@@ -124,7 +124,7 @@ export const dspFactsheetAdapter: MfFactsheetAdapter = {
 
   async fetchSchemeFacts(
     schemeCode: string,
-    _ctx: FactsheetFetchContext,
+    ctx: FactsheetFetchContext,
   ): Promise<MfFactsheetResult<SchemeFactsRaw>> {
     const text = factsheetTextResolver === null ? null : await factsheetTextResolver(schemeCode);
     if (text === null || text.trim().length === 0) {
@@ -139,7 +139,12 @@ export const dspFactsheetAdapter: MfFactsheetAdapter = {
           `${ENDPOINTS.terPage} — so a null terPct from this AMC is expected.`,
       );
     }
-    return parseDspSchemeFacts({ schemeCode, text });
+    // A consolidated factsheet states one TER per plan on one line, so the
+    // parser refuses to pick between them unless told which plan this scheme
+    // code is. Without this it reads both figures off the page and discards
+    // them, and MfSchemeTer stays empty while AUM from the same text writes.
+    const planType = ctx.schemePlanType === undefined ? null : await ctx.schemePlanType(schemeCode);
+    return parseDspSchemeFacts({ schemeCode, text, ...(planType === null ? {} : { planType }) });
   },
 
   async fetchPortfolio(
