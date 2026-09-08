@@ -143,8 +143,12 @@ export function deriveReceiptStatus(args: {
   if (args.allocated.gte(args.expected)) return 'RECEIVED';
   if (args.allocated.gt(ZERO)) return 'PARTIAL';
 
+  // <= (not <) deliberately mirrors markOverdueReceipts's
+  // `dueDate: { lte: cutoff } }` in rental.service.ts — the grace-boundary
+  // day itself (dueDate + graceDays) is already OVERDUE in production.
+  // Don't "fix" this to `<` again; it was tried and reverted.
   const cutoff = new Date(args.today.getTime());
   cutoff.setUTCDate(cutoff.getUTCDate() - args.graceDays);
   cutoff.setUTCHours(0, 0, 0, 0);
-  return args.dueDate < cutoff ? 'OVERDUE' : 'EXPECTED';
+  return args.dueDate <= cutoff ? 'OVERDUE' : 'EXPECTED';
 }

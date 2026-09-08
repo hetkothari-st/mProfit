@@ -156,9 +156,15 @@ describe('deriveReceiptStatus', () => {
     })).toBe('OVERDUE');
   });
 
-  it('is still EXPECTED exactly on the grace boundary', () => {
+  it('is OVERDUE exactly on the grace boundary (dueDate + 7d)', () => {
     expect(deriveReceiptStatus({
       ...base, isSkipped: false, allocated: D('0'), today: day('2026-04-08'),
+    })).toBe('OVERDUE');
+  });
+
+  it('is still EXPECTED one day inside the grace window (dueDate + 6d)', () => {
+    expect(deriveReceiptStatus({
+      ...base, isSkipped: false, allocated: D('0'), today: day('2026-04-07'),
     })).toBe('EXPECTED');
   });
 });
