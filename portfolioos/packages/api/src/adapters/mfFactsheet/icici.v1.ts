@@ -115,7 +115,7 @@ export const iciciFactsheetAdapter: MfFactsheetAdapter = {
 
   async fetchSchemeFacts(
     schemeCode: string,
-    _ctx: FactsheetFetchContext,
+    ctx: FactsheetFetchContext,
   ): Promise<MfFactsheetResult<SchemeFactsRaw>> {
     const text = factsheetTextResolver === null ? null : await factsheetTextResolver(schemeCode);
     if (text === null || text.trim().length === 0) {
@@ -129,7 +129,16 @@ export const iciciFactsheetAdapter: MfFactsheetAdapter = {
           'the pages covering this scheme.',
       );
     }
-    return parseIciciSchemeFacts({ schemeCode, text });
+    // Without the plan, `parseFactsFromText` reads both per-plan TERs off the
+    // page and then discards them rather than guess which one this scheme code
+    // is — the reason MfSchemeTer stayed empty while AUM, which has no such
+    // dependency, wrote fine from the same text.
+    const planType = ctx.schemePlanType === undefined ? null : await ctx.schemePlanType(schemeCode);
+    return parseIciciSchemeFacts({
+      schemeCode,
+      text,
+      ...(planType === null ? {} : { planType }),
+    });
   },
 
   async fetchPortfolio(

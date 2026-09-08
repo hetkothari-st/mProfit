@@ -77,7 +77,7 @@ import type {
 
 export const ICICI_AMC_CODE = 'ICICI_PRU';
 export const ICICI_ADAPTER_ID = 'mf.factsheet.iciciPru';
-export const ICICI_ADAPTER_VERSION = '1.2.0';
+export const ICICI_ADAPTER_VERSION = '1.3.0';
 
 export const ICICI_TABLE_SPEC: AmcTableSpec = {
   amcCode: ICICI_AMC_CODE,

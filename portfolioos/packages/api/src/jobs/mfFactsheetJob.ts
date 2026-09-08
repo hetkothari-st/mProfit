@@ -177,6 +177,19 @@ export function createFetchContext(signal?: AbortSignal): FactsheetFetchContext 
 
   return {
     abortSignal: signal,
+    /**
+     * The factsheet states one TER per plan on one line, so a TER cannot be
+     * read without knowing which plan the scheme code denotes. The parser
+     * refuses to guess; this is how it is told.
+     */
+    async schemePlanType(schemeCode: string) {
+      const meta = await prisma.mfSchemeMeta.findUnique({
+        where: { schemeCode },
+        select: { planType: true },
+      });
+      if (meta === null) return null;
+      return meta.planType === 'DIRECT' || meta.planType === 'REGULAR' ? meta.planType : null;
+    },
     async fetchText(url, init) {
       return (await get(url, init)).text();
     },
