@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import {
   listAccountsTree,
   listAccountsFlat,
@@ -22,37 +21,11 @@ import {
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import type { AccountType, VoucherType } from '@prisma/client';
-
-const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'INCOME', 'EXPENSE', 'EQUITY'] as const;
-const VOUCHER_TYPES = ['JOURNAL', 'PAYMENT', 'RECEIPT', 'CONTRA', 'PURCHASE', 'SALES'] as const;
-
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
-const moneyString = z.string().regex(/^\d+(\.\d+)?$/, 'Expected positive decimal string');
-
-const createAccountSchema = z.object({
-  code: z.string().min(1).max(20),
-  name: z.string().min(1).max(200),
-  type: z.enum(ACCOUNT_TYPES),
-  parentId: z.string().nullable().optional(),
-  openingBalance: moneyString.optional(),
-});
-
-const voucherEntrySchema = z.object({
-  debitAccountId: z.string().min(1),
-  creditAccountId: z.string().min(1),
-  amount: moneyString,
-  narration: z.string().max(500).optional(),
-});
-
-const createVoucherSchema = z.object({
-  type: z.enum(VOUCHER_TYPES),
-  voucherNo: z.string().min(1).max(50),
-  date: isoDate,
-  narration: z.string().max(500).optional(),
-  entries: z.array(voucherEntrySchema).min(1),
-});
-
-const updateVoucherSchema = createVoucherSchema.partial();
+import {
+  createAccountSchema,
+  createVoucherSchema,
+  updateVoucherSchema,
+} from '../schemas/accounting.schema.js';
 
 // ─── Accounts ────────────────────────────────────────────────────────────────
 

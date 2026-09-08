@@ -99,12 +99,20 @@ describe('USER_SCOPED_MODELS covers every RLS-protected table', () => {
     // Background jobs run under runAsSystem, which sets app.bypass_rls rather
     // than app.current_user_id. A policy without the branch filters them out
     // completely — which is how goal_owner blocked every job touching goals.
+    //
+    // Both clauses are examined, not just `qual`. A FOR INSERT policy has no
+    // USING clause at all — pg_policies reports qual as NULL and puts the
+    // predicate in with_check — so a qual-only check flagged every insert-only
+    // policy as broken while simultaneously being unable to notice a
+    // with_check that genuinely lacked the branch. Concatenating means a
+    // policy passes when the branch appears in whichever clauses it actually
+    // has, which is the property this test was always trying to assert.
     const rows = await runAsSystem(() =>
       prisma.$queryRawUnsafe<Array<{ tablename: string; policyname: string }>>(
         `SELECT tablename, policyname
            FROM pg_policies
           WHERE schemaname = 'public'
-            AND COALESCE(qual, '') NOT LIKE '%app_is_system%'
+            AND (COALESCE(qual, '') || COALESCE(with_check, '')) NOT LIKE '%app_is_system%'
           ORDER BY 1, 2`,
       ),
     );

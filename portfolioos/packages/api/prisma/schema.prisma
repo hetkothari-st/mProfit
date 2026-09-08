@@ -31,6 +31,13 @@ model User {
   plan                  PlanTier  @default(FREE)
   planExpiresAt         DateTime?
   isActive              Boolean   @default(true)
+  /// A CA-owned client record: a real User row that exists so the client's
+  /// books have an owner, but which can NEVER authenticate. Every auth entry
+  /// point refuses these outright — see auth.service.ts. Deliberately its own
+  /// column rather than an overload of `isActive`, which already means
+  /// "deactivated account" in ~60 places and would silently drag this into
+  /// gates it was never meant to affect.
+  isShadowClient        Boolean   @default(false)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -161,6 +168,11 @@ model User {
   advisorApprovedProducts AdvisorApprovedProduct[]
   advisorRuns             AdvisorRun[]
   advisorRecommendations  AdvisorRecommendation[]
+
+  // CA workspace. `clients` above is the ADVISOR side (rows this user owns as
+  // a CA). These two are the other side: the Client rows where this user IS
+  // the subject, and both ends of the CA audit trail.
+  clientRecords Client[] @relation("ClientSubject")
 }
 
 model UserNotificationConfig {
@@ -307,6 +319,18 @@ model PasswordResetToken {
 
 // ─── CLIENTS (for Advisor/CA role) ──────────────────────────────
 
+/// A CA's client, in both directions the product supports.
+///
+/// SHADOW  — the CA created this record for someone with no login. A shadow
+///           `User` is provisioned immediately and `userId` points at it, so
+///           the client's books have a real owner and every per-userId table,
+///           RLS policy and report builder in the app works on them unchanged.
+/// INVITED — a real, independently-logging-in user consented to the CA. The
+///           row is PENDING with no `userId` until they accept.
+///
+/// There are deliberately NO visibility-cap columns here. A CA grant is
+/// all-or-nothing, and the absence of a field to widen is what enforces that
+/// — there is nothing for a CA to escalate into.
 model Client {
   id        String   @id @default(cuid())
   advisorId String
@@ -317,10 +341,58 @@ model Client {
   phone     String?
   category  String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The User whose books this record grants access to. Null only while an
+  /// INVITED grant is still PENDING — there is no data to reach before the
+  /// invitee accepts, so nothing needs backfilling on acceptance.
+  userId     String?
+  clientUser User?   @relation("ClientSubject", fields: [userId], references: [id], onDelete: SetNull)
+
+  kind   ClientKind   @default(SHADOW)
+  status ClientStatus @default(PENDING)
+
+  // Consent flow (INVITED only). Shaped like FamilyInvitation's token/expiry
+  // rather than a second table: there is at most one pending invite per row,
+  // no multi-invitee choice and no seat billing.
+  invitedEmail    String?
+  inviteToken     String?   @unique
+  inviteExpiresAt DateTime?
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  /// Who ended it — the client or the CA. Both can, and the audit trail must
+  /// not be ambiguous about which.
+  revokedByUserId String?
+
+  /// DPDP lawful-basis capture for SHADOW records, where the subject is a real
+  /// person who never agreed to anything in this product. The platform cannot
+  /// verify this; recording it puts the CA's basis on the record instead of
+  /// leaving the obligation with nobody.
+  consentBasis CaConsentBasis?
+  consentNote  String?
 
   portfolios Portfolio[]
 
-  @@index([advisorId])
+  @@index([advisorId, status])
+  @@index([userId, status])
+}
+
+enum ClientKind {
+  SHADOW
+  INVITED
+}
+
+enum ClientStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
+enum CaConsentBasis {
+  ENGAGEMENT_LETTER
+  WRITTEN_CONSENT
+  EXISTING_CLIENT_RELATIONSHIP
+  OTHER
 }
 
 // ─── PORTFOLIOS & GROUPS ─────────────────────────────────────────
@@ -3515,4 +3587,75 @@ model AdvisorRecommendation {
   @@index([userId, status, priority])
   @@index([userId, ruleId, dedupeKey])
   @@index([generationRunId])
+}
+
+// ─── CA workspace audit trail ────────────────────────────────────────
+//
+// A separate table from AuditLog on purpose. AuditLog's `userId` is the ACTOR
+// and its policy reads on that column alone, so a client could never see rows
+// their CA wrote about them without widening that policy for every actor in
+// the system. This table is two-sided from the start: the CA reads their own
+// actions, the client reads everything done to their books, and both read the
+// same row so the two accounts can never disagree.
+//
+// It is structurally append-only. The migration gives it SELECT and INSERT
+// policies and NO update or delete policy at all, so under FORCE ROW LEVEL
+// SECURITY those commands match nothing and affect zero rows — for every role
+// the application can use, including system context. Removing a row takes a
+// superuser migration, which is the right bar for a record that exists to hold
+// a professional accountable.
+model CaAuditLog {
+  id String @id @default(cuid())
+
+  /// Who did it — always the CA's real user id, never a client's.
+  ///
+  /// Deliberately NOT a foreign key, for the same reason as `clientId` below.
+  /// An onDelete: Cascade relation here would let deleting either party's
+  /// account erase every entry naming them — precisely the erasure this table
+  /// is built to prevent, reached by a different column. Referential integrity
+  /// is worth less here than the record surviving the people in it.
+  actorUserId String
+
+  /// Whose books it was done to. Not a foreign key, same reasoning.
+  subjectUserId String
+
+  /// The Client row that authorised it, kept for provenance. Not a foreign key
+  /// so that revoking or deleting a grant can never erase the record of what
+  /// was done under it.
+  clientId String
+
+  action       CaAuditAction
+  resourceType String?
+  resourceId   String?
+  /// Rendered verbatim in the client's activity feed, so it must read as a
+  /// sentence to a non-technical person.
+  summary      String
+  /// { before, after } for corrections; parameters for reads. Without a before
+  /// state the trail cannot answer "what did this used to say", which is most
+  /// of the point.
+  metadata     Json?
+
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([subjectUserId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([clientId, createdAt])
+}
+
+enum CaAuditAction {
+  CLIENT_RECORD_CREATED
+  CLIENT_INVITED
+  GRANT_ACCEPTED
+  GRANT_REVOKED
+  ACCOUNT_CREATED
+  ACCOUNT_UPDATED
+  ACCOUNT_DELETED
+  VOUCHER_CREATED
+  VOUCHER_UPDATED
+  VOUCHER_DELETED
+  TRANSACTION_CORRECTED
+  FMV_OVERRIDE_SET
+  FMV_OVERRIDE_DELETED
 }

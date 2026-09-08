@@ -36,6 +36,23 @@ export function financialYearOf(date: Date | string): string {
   return `${year - 1}-${String(year % 100).padStart(2, '0')}`;
 }
 
+/**
+ * The inverse of `financialYearOf`: "2025-26" → 1 Apr 2025 to 31 Mar 2026.
+ *
+ * Reports take whichever of fy, from/to or asOf they were written for, so
+ * anything assembling a whole year has to translate between the three. Doing
+ * that in one place means a bundle and a single report can never disagree
+ * about where a year starts.
+ */
+export function financialYearRange(fy: string): { from: string; to: string } {
+  const match = /^(\d{4})-(\d{2})$/.exec(fy.trim());
+  if (!match) {
+    throw new Error(`Invalid financial year "${fy}" — expected the form 2025-26`);
+  }
+  const startYear = Number.parseInt(match[1]!, 10);
+  return { from: `${startYear}-04-01`, to: `${startYear + 1}-03-31` };
+}
+
 export function daysBetween(from: Date | string, to: Date | string): number {
   const a = typeof from === 'string' ? new Date(from) : from;
   const b = typeof to === 'string' ? new Date(to) : to;

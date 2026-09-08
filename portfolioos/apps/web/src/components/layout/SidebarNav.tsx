@@ -6,6 +6,8 @@ import { UpgradeSidebarCard } from './UpgradeSidebarCard';
 import { AssetClassSectionList } from './AssetClassSectionList';
 import { FamilyNavTree } from './FamilyNavTree';
 import { NavSection, OVERVIEW_ITEMS, ASSET_CLASS_ITEMS, NAV_SECTIONS } from './navItems';
+import { Briefcase } from 'lucide-react';
+import { useEntitlement } from '@/hooks/useEntitlement';
 
 /**
  * Where each nav list was scrolled to, keyed by `scrollKey`.
@@ -37,6 +39,11 @@ export function SidebarNav({
   scrollKey?: string;
 }) {
   const navRef = useRef<HTMLElement | null>(null);
+  // Practice section. Shown only to a plan that actually has the CA workspace
+  // — for everyone else it is a section about a job they don't do, and an
+  // upsell in the primary nav is worse than a nav without it. The Pricing
+  // page is where the pitch belongs.
+  const caWorkspace = useEntitlement('CA_WORKSPACE');
 
   // Layout effect, not effect: the restore has to land before the browser
   // paints, or the drawer visibly opens at the top and then jumps.
@@ -117,10 +124,24 @@ export function SidebarNav({
         {/* Overview */}
         <NavSection section={{ heading: 'Overview', items: OVERVIEW_ITEMS }} collapsed={collapsed} />
 
+
+
         {collapsed && <div className="mx-3 h-px bg-sidebar-border/50" />}
 
         {/* Asset Classes — drag/hide enabled */}
         <AssetClassSectionList items={ASSET_CLASS_ITEMS} collapsed={collapsed} />
+
+        {/* Sits at the foot of the asset-class block rather than inside it.
+            That list renders from server-stored AssetSectionPref rows keyed by
+            path, so an entry added to ASSET_CLASS_ITEMS with no matching
+            preference simply would not appear — and being reorderable and
+            hideable is wrong for a workspace holding other people's books. */}
+        {caWorkspace.allowed && (
+          <NavSection
+            section={{ items: [{ label: 'Account Access', to: '/ca', icon: Briefcase }] }}
+            collapsed={collapsed}
+          />
+        )}
 
         {/* Inbox + Tools */}
         {NAV_SECTIONS.map((section, i) => (

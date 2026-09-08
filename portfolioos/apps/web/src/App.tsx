@@ -12,6 +12,10 @@ import { SettingsPage } from './pages/settings/SettingsPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { AcceptInvitationPage } from './pages/family/AcceptInvitationPage';
 import { FamilyPage } from './pages/family/FamilyPage';
+import { CaWorkspacePage } from './pages/ca/CaWorkspacePage';
+import { ClientBooksPage } from './pages/ca/ClientBooksPage';
+import { AcceptCaInvitationPage } from './pages/ca/AcceptCaInvitationPage';
+import { ProfessionalAccessPage } from './pages/settings/ProfessionalAccessPage';
 import { FamilyMemberPage } from './pages/family/FamilyMemberPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
 import { StocksPage } from './pages/assetClasses/StocksPage';
@@ -107,6 +111,12 @@ export function App() {
         <Route path="/portfolio-groups/:id" element={<PortfolioGroupDetailPage />} />
         <Route path="/family" element={<FamilyPage />} />
         <Route path="/family/members/:userId" element={<FamilyMemberPage />} />
+        {/* CA workspace. The client-facing routes deliberately sit outside it:
+            seeing and withdrawing access must not depend on a plan. */}
+        <Route path="/ca" element={<CaWorkspacePage />} />
+        <Route path="/ca/clients/:clientId" element={<ClientBooksPage />} />
+        <Route path="/ca/invitations/:token/accept" element={<AcceptCaInvitationPage />} />
+        <Route path="/settings/professional-access" element={<ProfessionalAccessPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/stocks" element={<StocksPage />} />
         <Route path="/mutual-funds" element={<MutualFundsPage />} />

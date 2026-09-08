@@ -1,4 +1,6 @@
-import { Router, json } from 'express';
+import {
+  Router,
+  json } from 'express';
 import {
   convertDocToPdf,
   detail,
@@ -10,6 +12,8 @@ import {
   remove,
   update,
   upload,
+  listAllDocumentsHandler,
+  bulkDownloadDocumentsHandler,
 } from '../controllers/document.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
@@ -30,6 +34,10 @@ documentsRouter.post(
 documentsRouter.use(authenticate);
 
 documentsRouter.get('/', asyncHandler(list));
+// Across every owner type, for the resolved subject. `/all` rather than a
+// flag on '/' so the unfiltered read is an explicit request.
+documentsRouter.get('/all', asyncHandler(listAllDocumentsHandler));
+documentsRouter.post('/bulk-download', asyncHandler(bulkDownloadDocumentsHandler));
 documentsRouter.post('/', uploadDocumentFile, asyncHandler(upload));
 documentsRouter.get('/:id', asyncHandler(detail));
 documentsRouter.patch('/:id', asyncHandler(update));
