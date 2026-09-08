@@ -87,6 +87,11 @@ function AddEntryDialog({
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to add entry'),
   });
 
+  function handleOpenChange(v: boolean) {
+    onOpenChange(v);
+    if (!v) resetForm(direction);
+  }
+
   function handleSubmit() {
     let parsed: Decimal;
     try {
@@ -109,13 +114,7 @@ function AddEntryDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        onOpenChange(v);
-        if (!v) resetForm(direction);
-      }}
-    >
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{direction === 'GOT' ? 'You got' : 'You gave'}</DialogTitle>
@@ -176,7 +175,7 @@ function AddEntryDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={mutation.isPending}>
