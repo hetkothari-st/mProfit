@@ -44,6 +44,7 @@ import { advisorRouter } from './advisor.routes.js';
 import { incomeRouter } from './income.routes.js';
 import { intelligenceRouter } from './intelligence.routes.js';
 import { finfactorRouter, finfactorWebhookRouter } from './finfactor.routes.js';
+import { caRouter, professionalAccessRouter } from './ca.routes.js';
 import { familiesRouter } from './families.routes.js';
 import { aiAssistantRouter } from './aiAssistant.routes.js';
 import { billingRouter } from './billing.routes.js';
@@ -99,6 +100,8 @@ export function registerRoutes(app: Express): void {
   app.use('/api/integrations/finfactor/webhook', finfactorWebhookRouter);
   if (env.ENABLE_FAMILY === 'true') {
     app.use('/api/families', familiesRouter);
+    app.use('/api/ca', caRouter);
+    app.use('/api/me/professional-access', professionalAccessRouter);
   }
   app.use('/api/assistant', aiAssistantRouter);
   app.use('/api/billing', billingRouter);

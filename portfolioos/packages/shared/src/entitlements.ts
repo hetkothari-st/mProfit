@@ -34,6 +34,10 @@ export const FEATURE_MIN_TIER = {
   // because it consumes both and would be incoherent without them.
   ADVICE_ENGINE: 'PLUS',
   ACCOUNTING_MODULE: 'PRO_ADVISOR', // Trial Balance, P&L, Balance Sheet, Chart of Accounts, Tally export
+  // The CA workspace: hold client records, keep their books, run their
+  // reports. Sits at PRO_ADVISOR beside ACCOUNTING_MODULE because a CA
+  // maintaining a client's ledger needs both, and neither is coherent alone.
+  CA_WORKSPACE: 'PRO_ADVISOR',
   UNLIMITED_CLIENTS: 'PRO_ADVISOR',
   FNO_SCHEDULE_43: 'PRO_ADVISOR',
   PRIORITY_AA_REFRESH: 'PRO_ADVISOR',
