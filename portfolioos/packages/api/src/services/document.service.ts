@@ -9,14 +9,18 @@
  * DocumentServer's internal cache invalidates and clients refetch bytes.
  */
 
-import { randomUUID } from 'node:crypto';
-import { Prisma, type Document, DocumentOwnerType } from '@prisma/client';
+import {
+  randomUUID } from 'node:crypto';
+import { Prisma,
+  type Document,
+  DocumentOwnerType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import {
   buildStorageKey,
   saveBuffer,
   fileSize,
   deleteFile,
+  readBuffer,
 } from '../lib/documentStorage.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 
@@ -195,4 +199,69 @@ export async function deleteDocument(userId: string, id: string): Promise<void> 
   const doc = await loadOwnedDocument(userId, id);
   await prisma.document.delete({ where: { id } });
   await deleteFile(userId, doc.storageKey);
+}
+
+/**
+ * Every document a person holds, across every owner type.
+ *
+ * `listDocuments` has always supported this — both filters are optional — but
+ * nothing ever called it unfiltered, so the vault was only ever reachable one
+ * record at a time. For anyone assembling a year's paperwork that is the wrong
+ * shape: they want the client's documents, not this rental agreement.
+ */
+export async function listAllDocuments(
+  userId: string,
+  filter?: { from?: Date; to?: Date },
+) {
+  const where: Prisma.DocumentWhereInput = { userId };
+  if (filter?.from || filter?.to) {
+    where.createdAt = {
+      ...(filter.from ? { gte: filter.from } : {}),
+      ...(filter.to ? { lte: filter.to } : {}),
+    };
+  }
+  const rows = await prisma.document.findMany({ where, orderBy: { createdAt: 'desc' } });
+  return rows.map(toDocumentDTO);
+}
+
+/**
+ * Bundle the named documents into a zip.
+ *
+ * Every id is re-checked against `userId` rather than trusted from the
+ * request: a caller could otherwise mix one id of their own with somebody
+ * else's and receive both. Ids that do not belong are silently absent rather
+ * than reported, so this cannot be used to probe which document ids exist.
+ *
+ * File names are made unique by prefixing the row id, because two rental
+ * agreements called "agreement.pdf" would otherwise overwrite each other
+ * inside the archive and the zip would quietly contain less than it claims.
+ */
+export async function zipDocuments(userId: string, ids: string[]): Promise<Buffer> {
+  const rows = await prisma.document.findMany({
+    where: { userId, id: { in: ids } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const { default: JSZip } = await import('jszip');
+  const zip = new JSZip();
+
+  for (const doc of rows) {
+    const bytes = await readBuffer(userId, doc.storageKey);
+    zip.file(`${doc.id.slice(-6)}-${doc.fileName}`, bytes);
+  }
+
+  // A manifest, because a zip of opaque files is hard to reconcile against
+  // anything. It also records what was asked for but could not be included.
+  const missing = ids.filter((id) => !rows.some((r) => r.id === id));
+  const manifest = [
+    `Documents exported ${new Date().toISOString()}`,
+    `Included: ${rows.length}`,
+    ...rows.map((r) => `  ${r.id.slice(-6)}-${r.fileName}  (${r.ownerType}, ${r.sizeBytes} bytes)`),
+    ...(missing.length > 0
+      ? ['', `Not included: ${missing.length} document(s) not found or not accessible.`]
+      : []),
+  ].join('\n');
+  zip.file('manifest.txt', manifest);
+
+  return zip.generateAsync({ type: 'nodebuffer' });
 }

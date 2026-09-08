@@ -211,6 +211,13 @@ export const caApi = {
     await api.delete(`/api/ca/clients/${clientId}/fmv/${isin}`);
   },
 
+  async documents(clientId: string): Promise<CaDocumentRow[]> {
+    const { data } = await api.get<ApiResponse<CaDocumentRow[]>>('/api/documents/all', {
+      params: { clientId },
+    });
+    return unwrap(data);
+  },
+
   async trialBalance(clientId: string, asOf?: string): Promise<CaTrialBalanceRow[]> {
     const { data } = await api.get<ApiResponse<CaTrialBalanceRow[]>>(
       `/api/ca/clients/${clientId}/trial-balance`,
@@ -289,6 +296,17 @@ export interface CaFmvRow {
   scripName: string | null;
   fmvPerUnit: string;
   source: 'SEED' | 'USER';
+}
+
+export interface CaDocumentRow {
+  id: string;
+  ownerType: string;
+  ownerId: string;
+  category: string | null;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
 }
 
 export interface CaTrialBalanceRow {

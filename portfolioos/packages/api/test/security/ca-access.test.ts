@@ -395,6 +395,89 @@ describe('CA access boundary', () => {
     ).rejects.toThrow();
   });
 
+  /**
+   * The read surface is an allow-list, and this is what stops it creeping.
+   *
+   * A CA gets a client's financial position. Not their credentials, not their
+   * household, not their private conversations with the assistant. Each of
+   * these would be a plausible-looking addition to a "let the CA see
+   * everything they need" sweep, which is exactly why the ban is asserted
+   * rather than left to review.
+   */
+  it('never grants a CA read on credentials, family, or AI history', async () => {
+    const forbidden = [
+      'BrokerCredential',
+      'MailboxAccount',
+      'BrokerAccount',
+      'GmailScanJob',
+      'GmailDiscoveredDoc',
+      'GmailAutoApproveRule',
+      'PfFetchSession',
+      'ExtensionPairing',
+      'AaConsent',
+      'Family',
+      'FamilyMember',
+      'FamilyInvitation',
+      'PendingFamilyInvite',
+      'AiChatSession',
+      'AiConversation',
+      'AiUsage',
+      'LlmSpend',
+      'RiskProfileAssessment',
+      'ModelPortfolio',
+      'AdvisorRun',
+      'AdvisorRecommendation',
+    ];
+
+    const leaked = await runAsSystem(() =>
+      prisma.$queryRawUnsafe<Array<{ tablename: string; policyname: string }>>(
+        `SELECT tablename, policyname
+           FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename = ANY($1)
+            AND (COALESCE(qual, '') || COALESCE(with_check, '')) LIKE '%app_is_active_ca_for%'`,
+        forbidden,
+      ),
+    );
+
+    expect(
+      leaked.map((r) => `${r.tablename}.${r.policyname}`),
+      'A CA grant reaches the financial position of a client — never their ' +
+        'secrets, their household, or their private conversations.',
+    ).toEqual([]);
+  });
+
+  it('does grant a CA read on the tables reports actually need', async () => {
+    // The other half: a missing grant does not error, it silently returns an
+    // empty section in a report, which reads as "this client has no insurance"
+    // rather than "you cannot see it".
+    const required = [
+      'InsurancePolicy',
+      'Vehicle',
+      'Loan',
+      'RentalProperty',
+      'BankAccount',
+      'CreditCard',
+      'ProvidentFundAccount',
+      'Document',
+      'Income',
+      'OwnedProperty',
+    ];
+
+    const granted = await runAsSystem(() =>
+      prisma.$queryRawUnsafe<Array<{ tablename: string }>>(
+        `SELECT DISTINCT tablename
+           FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename = ANY($1)
+            AND COALESCE(qual, '') LIKE '%app_is_active_ca_for%'`,
+        required,
+      ),
+    );
+
+    expect(granted.map((r) => r.tablename).sort()).toEqual([...required].sort());
+  });
+
   it('provisions a managed client that cannot log in', async () => {
     const managed = await ca.runAs(() =>
       createManagedClient(ca.userId, {

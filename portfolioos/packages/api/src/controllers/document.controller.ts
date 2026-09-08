@@ -1,5 +1,11 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
+import {
+  resolveReportSubjects,
+  requireSingleSubject,
+  runForSubject,
+} from '../services/reports/reportSubjects.js';
+import {
+  z } from 'zod';
 import { DocumentOwnerType } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { Readable } from 'node:stream';
@@ -11,6 +17,8 @@ import {
   listDocuments,
   replaceDocumentBytes,
   updateDocumentMeta,
+  listAllDocuments,
+  zipDocuments,
 } from '../services/document.service.js';
 import { readStream } from '../lib/documentStorage.js';
 import { created, noContent, ok } from '../lib/response.js';
@@ -326,3 +334,52 @@ export async function convertDocToPdf(req: Request, res: Response) {
 // when fs streams are typed externally). Trivial guard — drop if linter
 // stops flagging.
 void Readable;
+
+/**
+ * Every document for the resolved subject, across all owner types.
+ *
+ * Subject-aware, so a CA can assemble a client's paperwork and a family owner
+ * can see a member's — the same mechanism the reports use, rather than a
+ * second notion of "whose documents".
+ */
+export async function listAllDocumentsHandler(req: Request, res: Response) {
+  const resolved = await resolveReportSubjects(req);
+  const subject = requireSingleSubject(resolved, 'The document list');
+  const fromStr = (req.query.from as string | undefined)?.trim();
+  const toStr = (req.query.to as string | undefined)?.trim();
+
+  const rows = await runForSubject(resolved.via, subject.userId, () =>
+    listAllDocuments(subject.userId, {
+      from: fromStr ? new Date(fromStr) : undefined,
+      to: toStr ? new Date(toStr) : undefined,
+    }),
+  );
+  ok(res, rows);
+}
+
+/**
+ * Download several documents as one zip.
+ *
+ * POST rather than GET because the id list can be long enough to run into URL
+ * limits, and because a body is the honest place for a selection.
+ */
+export async function bulkDownloadDocumentsHandler(req: Request, res: Response) {
+  const resolved = await resolveReportSubjects(req);
+  const subject = requireSingleSubject(resolved, 'A document download');
+
+  const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]) : [];
+  const cleanIds = ids.filter((v): v is string => typeof v === 'string' && v.length > 0);
+  if (cleanIds.length === 0) throw new BadRequestError('Select at least one document');
+  // A ceiling, so one request cannot try to read an unbounded number of files
+  // into memory at once.
+  if (cleanIds.length > 200) throw new BadRequestError('Select at most 200 documents at a time');
+
+  const zip = await runForSubject(resolved.via, subject.userId, () =>
+    zipDocuments(subject.userId, cleanIds),
+  );
+
+  const stem = subject.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${stem || 'documents'}-documents.zip"`);
+  res.send(zip);
+}

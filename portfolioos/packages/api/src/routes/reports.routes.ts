@@ -65,6 +65,8 @@ import {
   downloadDayBook,
   downloadDividendReport,
   downloadBankReconciliation,
+  downloadProvidentFund,
+  downloadFyBundle,
   downloadTallyMasters,
   downloadTallyVouchers,
 } from '../controllers/reports.controller.js';
@@ -101,6 +103,10 @@ reportsRouter.get('/statement/holdings', asyncHandler(getStatementHoldings));
 reportsRouter.get('/statement/capital-gains', asyncHandler(getStatementCapitalGains));
 reportsRouter.get('/statement/income', asyncHandler(getStatementIncome));
 reportsRouter.get('/statement/ledger', asyncHandler(getStatementLedger));
+reportsRouter.get('/statement/provident-fund', gateTax, asyncHandler(downloadProvidentFund));
+
+// Everything for a financial year, as one archive.
+reportsRouter.get('/fy-bundle', gateTax, asyncHandler(downloadFyBundle));
 
 // Specialised reports — Indian-broker layouts (grandfathering / demat / M2M).
 reportsRouter.get('/grandfathering', asyncHandler(getGrandfatheringReport));

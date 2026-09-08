@@ -15,6 +15,8 @@ import { AccountFormDialog } from '@/components/ca/AccountFormDialog';
 import { VoucherFormDialog } from '@/components/ca/VoucherFormDialog';
 import { CorrectTransactionDialog } from '@/components/ca/CorrectTransactionDialog';
 import { FmvFormDialog } from '@/components/ca/FmvFormDialog';
+import { ClientReportsTab } from '@/components/ca/ClientReportsTab';
+import { ClientDocumentsTab } from '@/components/ca/ClientDocumentsTab';
 
 /**
  * One client's books, as kept by their CA.
@@ -26,7 +28,15 @@ import { FmvFormDialog } from '@/components/ca/FmvFormDialog';
  * have to guess which, so the page says so instead of implying it.
  */
 
-type Tab = 'accounts' | 'vouchers' | 'transactions' | 'fmv' | 'trial-balance' | 'activity';
+type Tab =
+  | 'accounts'
+  | 'vouchers'
+  | 'transactions'
+  | 'fmv'
+  | 'trial-balance'
+  | 'reports'
+  | 'documents'
+  | 'activity';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'accounts', label: 'Chart of accounts' },
@@ -34,6 +44,8 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'transactions', label: 'Transactions' },
   { key: 'fmv', label: 'FMV (31 Jan 2018)' },
   { key: 'trial-balance', label: 'Trial balance' },
+  { key: 'reports', label: 'Reports' },
+  { key: 'documents', label: 'Documents' },
   { key: 'activity', label: 'Activity' },
 ];
 
@@ -354,6 +366,10 @@ export function ClientBooksPage() {
         open={fmvDialog.open}
         onOpenChange={(open) => setFmvDialog((d) => ({ ...d, open }))}
       />
+
+      {tab === 'reports' && <ClientReportsTab clientId={clientId} />}
+
+      {tab === 'documents' && <ClientDocumentsTab clientId={clientId} />}
 
       {tab === 'activity' && (
         <CaActivityFeed
