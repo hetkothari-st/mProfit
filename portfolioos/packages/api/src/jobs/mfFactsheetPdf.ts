@@ -153,30 +153,78 @@ function findSchemePages(
   // regexes would have taken whichever came first: a real number, correctly
   // parsed, belonging to a different fund, with nothing downstream able to
   // tell.
-  // The name in the page's TITLE AREA is the primary signal, and on most AMCs
-  // it is already unique: measured on the July-2026 files, "Kotak Gilt Fund"
-  // heads exactly one of Kotak's 191 pages while appearing on eleven, and the
-  // other ten are footnotes and annexures.
+  // ── Scoring, not gating ────────────────────────────────────────────────
   //
-  // The marker is only a TIE-BREAKER, applied when the title test leaves more
-  // than one candidate. Requiring it outright was wrong: it is per-AMC wording,
-  // and demanding ICICI's "Closing AUM as on" of every AMC rejected Kotak's
-  // correct single page for not using the phrase, and Nippon's pages for not
-  // labelling AUM at all — two funds silently unreadable because of a string
-  // that was never about them.
+  // The first version required one AMC's phrase ("Closing AUM as on") of every
+  // document, and rejected Kotak's correct page for not using it and every
+  // Nippon page for not labelling AUM at all. The second made the name in the
+  // title area sufficient, and Nippon then matched three pages and returned a
+  // summary sheet carrying no expense ratio, no AUM and no date.
+  //
+  // Both failed the same way: one signal, treated as decisive. A fund's own
+  // page in a consolidated factsheet is instead recognisable by AGREEMENT among
+  // several weak signals, none of which every AMC uses:
+  //
+  //   - its name at the very top, where a heading goes, rather than buried in
+  //     a footnote for a fund that shares its manager;
+  //   - the vocabulary of a fund fact panel — expense ratio, AUM, NAV,
+  //     inception, benchmark, riskometer, fund manager, exit load;
+  //   - an as-of date, which a fact panel carries and an annexure row does not.
+  //
+  // Pages are scored on those and the best is taken only if it clearly beats
+  // the runner-up AND looks like a fact panel at all. A near-tie means the
+  // document is not laid out the way this assumes, and a wrong page is worse
+  // than none: it puts one fund's expense ratio under another fund's name,
+  // inside a pillar that feeds a rating, with nothing downstream able to tell.
   const TITLE_AREA_CHARS = 400;
-  const titled = pages.filter((page) =>
-    normalise(page.slice(0, TITLE_AREA_CHARS)).includes(want),
-  );
-  if (titled.length === 1) return titled[0]!;
-  if (titled.length === 0) return null;
 
-  const narrowed = titled.filter((page) => ownPageRe.test(page));
-  // Still ambiguous means the heuristic does not hold for this document.
-  // Reporting nothing costs a DLQ row; picking would attribute another fund's
-  // expense ratio to this one, inside a pillar that feeds a rating.
-  if (narrowed.length !== 1) return null;
-  return narrowed[0]!;
+  /** Vocabulary a per-fund fact panel uses; no AMC uses all of it. */
+  const FACT_PANEL_SIGNALS: readonly RegExp[] = [
+    /expense ratio/i,
+    /AUM|assets under management/i,
+    /NAV|net asset value/i,
+    /inception|allotment date/i,
+    /benchmark/i,
+    /riskometer|risk-o-meter/i,
+    /fund manager/i,
+    /exit load/i,
+    /as on\s|as at\s/i,
+  ];
+
+  const scored = pages
+    .map((page) => {
+      const head = normalise(page.slice(0, TITLE_AREA_CHARS));
+      const inTitle = head.includes(want);
+      if (!inTitle && !normalise(page).includes(want)) return null;
+
+      let score = 0;
+      // A heading is worth far more than a mention: it is the difference
+      // between "this page is about the fund" and "this page names it".
+      if (inTitle) score += 10;
+      // Earlier in the title area still means closer to the heading.
+      if (inTitle) score += Math.max(0, 3 - Math.floor(head.indexOf(want) / 80));
+      const signals = FACT_PANEL_SIGNALS.filter((re) => re.test(page)).length;
+      score += signals;
+      if (ownPageRe.test(page)) score += 4;
+
+      return { page, score, signals, inTitle };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length === 0) return null;
+
+  const best = scored[0]!;
+  const runnerUp = scored[1];
+
+  // Three independent ways to refuse, each covering a real failure seen while
+  // building this.
+  const MIN_FACT_SIGNALS = 3;
+  if (!best.inTitle) return null; // named only in a footnote
+  if (best.signals < MIN_FACT_SIGNALS) return null; // Nippon's summary sheet
+  if (runnerUp !== undefined && best.score - runnerUp.score < 3) return null; // genuine tie
+
+  return best.page;
 }
 
 /**

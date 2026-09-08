@@ -58,9 +58,13 @@ import {
   setIciciPortfolioUrlResolver,
   setIciciFactsheetTextResolver,
 } from '../adapters/mfFactsheet/icici.v1.js';
+import { setNipponFactsheetTextResolver } from '../adapters/mfFactsheet/nippon.v1.js';
+import { setKotakFactsheetTextResolver } from '../adapters/mfFactsheet/kotak.v1.js';
 import { createIciciPortfolioResolver, resetFactsheetZipCache } from './mfFactsheetZip.js';
 import {
   createIciciFactsheetTextResolver,
+  createNipponFactsheetTextResolver,
+  createKotakFactsheetTextResolver,
   resetFactsheetPdfCache,
 } from './mfFactsheetPdf.js';
 
@@ -427,6 +431,8 @@ export async function runMfFactsheetJob(
     // caller, including tests.
     setIciciPortfolioUrlResolver(createIciciPortfolioResolver(ctx));
     setIciciFactsheetTextResolver(createIciciFactsheetTextResolver(ctx, asOf));
+    setNipponFactsheetTextResolver(createNipponFactsheetTextResolver(ctx, asOf));
+    setKotakFactsheetTextResolver(createKotakFactsheetTextResolver(ctx, asOf));
     try {
 
     for (const scheme of schemes) {
@@ -482,6 +488,8 @@ export async function runMfFactsheetJob(
     } finally {
       setIciciPortfolioUrlResolver(null);
       setIciciFactsheetTextResolver(null);
+      setNipponFactsheetTextResolver(null);
+      setKotakFactsheetTextResolver(null);
       resetFactsheetZipCache();
       resetFactsheetPdfCache();
     }
