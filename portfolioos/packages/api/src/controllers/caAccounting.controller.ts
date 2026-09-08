@@ -76,19 +76,39 @@ async function scopeOf(req: Request): Promise<CaScope> {
   return getCaScope(req.user!.id, clientId);
 }
 
+
+/**
+ * Seed the client's chart if it is missing, and say so on the record.
+ *
+ * Opening a books tab is a read to the CA and a WRITE to the client: the
+ * default chart is created on first view. Every other change a CA makes is
+ * recorded, and this one was not — a consented client would have watched
+ * twenty accounts appear with nothing in their activity feed to explain them.
+ */
+async function ensureChartAudited(scope: CaScope, req: Request): Promise<void> {
+  const created = await ensureDefaultAccounts(scope.subjectUserId);
+  if (created.length === 0) return;
+  await runInTransaction((tx) =>
+    recordCaAudit(tx, auditCtx(scope, req), {
+      action: 'ACCOUNT_CREATED',
+      resourceType: 'Account',
+      summary: `Created the default chart of accounts (${created.length} accounts).`,
+      after: { codes: created },
+    }),
+  );
+}
+
 // ─── Chart of accounts ───────────────────────────────────────────────
 
 export async function caListAccountsTree(req: Request, res: Response) {
   const scope = await scopeOf(req);
-  // A client who has never opened the accounting module has no chart yet;
-  // seeding on first read is what the user's own path already does.
-  await ensureDefaultAccounts(scope.subjectUserId);
+  await ensureChartAudited(scope, req);
   ok(res, await listAccountsTree(scope.subjectUserId));
 }
 
 export async function caListAccountsFlat(req: Request, res: Response) {
   const scope = await scopeOf(req);
-  await ensureDefaultAccounts(scope.subjectUserId);
+  await ensureChartAudited(scope, req);
   ok(res, await listAccountsFlat(scope.subjectUserId));
 }
 

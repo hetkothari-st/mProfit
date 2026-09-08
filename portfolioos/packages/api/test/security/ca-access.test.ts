@@ -478,6 +478,22 @@ describe('CA access boundary', () => {
     expect(granted.map((r) => r.tablename).sort()).toEqual([...required].sort());
   });
 
+  it('records the default chart when opening a client book creates it', async () => {
+    // Opening a books tab is a read for the CA and a WRITE for the client: the
+    // default chart is seeded on first view. It went unrecorded, so a client
+    // would have seen twenty accounts appear with nothing in their activity
+    // feed. Asserted because the write is invisible from the CA's side.
+    const { ensureDefaultAccounts } = await import('../../src/services/accounting.service.js');
+
+    const firstOpen = await ca.runAs(() => ensureDefaultAccounts(client.userId));
+    expect(firstOpen.length).toBeGreaterThan(0);
+
+    // Idempotent: opening it again reports nothing created, so a CA browsing
+    // the tab repeatedly does not spam the client's trail.
+    const secondOpen = await ca.runAs(() => ensureDefaultAccounts(client.userId));
+    expect(secondOpen).toEqual([]);
+  });
+
   it('provisions a managed client that cannot log in', async () => {
     const managed = await ca.runAs(() =>
       createManagedClient(ca.userId, {

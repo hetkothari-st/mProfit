@@ -70,20 +70,37 @@ const DEFAULT_COA: Array<{
 // Additively ensure every default code exists for this user. Existing rows
 // are left untouched; only missing codes are created. This way new defaults
 // (e.g. "5008 Loan Interest") roll out to users created before the addition.
-export async function ensureDefaultAccounts(userId: string): Promise<void> {
-  const existing = await prisma.account.findMany({
+/**
+ * Seed the default chart if it is missing. Idempotent — existing codes are
+ * skipped.
+ *
+ * Returns the codes it actually created, which matters on the CA path: this
+ * runs when a books tab is merely OPENED, so a professional looking at a
+ * client's chart for the first time writes twenty-odd rows into that client's
+ * books as a side effect. Silent creation is fine for your own account and
+ * wrong for somebody else's, so the caller needs to know whether anything
+ * happened in order to record it.
+ */
+export async function ensureDefaultAccounts(
+  userId: string,
+  db: Db = defaultDb,
+): Promise<string[]> {
+  const existing = await db.account.findMany({
     where: { userId },
     select: { id: true, code: true },
   });
   const codeToId = new Map(existing.map((a) => [a.code, a.id]));
+  const createdCodes: string[] = [];
   for (const acct of DEFAULT_COA) {
     if (codeToId.has(acct.code)) continue;
     const parentId = acct.parentCode ? codeToId.get(acct.parentCode) : undefined;
-    const created = await prisma.account.create({
+    const created = await db.account.create({
       data: { userId, code: acct.code, name: acct.name, type: acct.type, parentId },
     });
     codeToId.set(acct.code, created.id);
+    createdCodes.push(acct.code);
   }
+  return createdCodes;
 }
 
 // ─── Chart of Accounts ───────────────────────────────────────────────────────
