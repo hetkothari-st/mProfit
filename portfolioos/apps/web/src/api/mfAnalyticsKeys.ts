@@ -56,6 +56,8 @@ export const mfAnalyticsKeys = {
     ['mf-analytics', 'scheme', schemeCode, 'holdings'] as const,
 
   /** The composed read the fund detail page uses (one round trip, not five). */
+  alternatives: (schemeCode: string) =>
+    ['mf-analytics', 'scheme', schemeCode, 'alternatives'] as const,
   analytics: (schemeCode: string) =>
     ['mf-analytics', 'scheme', schemeCode, 'analytics'] as const,
 

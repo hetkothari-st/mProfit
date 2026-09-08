@@ -39,6 +39,7 @@ import {
   getSchemeMetrics,
   getSchemeScore,
   getSchemePeers,
+  getSchemeAlternatives,
   getSchemeHoldings,
   getFundAnalytics,
 } from '../controllers/mfAnalytics.controller.js';
@@ -72,6 +73,9 @@ mfAnalyticsRouter.get('/schemes/:schemeCode/score', asyncHandler(getSchemeScore)
 
 // Category percentiles and medians per horizon, at the latest ranked asOf.
 mfAnalyticsRouter.get('/schemes/:schemeCode/peers', asyncHandler(getSchemePeers));
+
+/** Better-scoring funds in the same category. Reference data, not advice. */
+mfAnalyticsRouter.get('/schemes/:schemeCode/alternatives', asyncHandler(getSchemeAlternatives));
 
 // The horizon-0 row: latest portfolio disclosure plus the structural block.
 mfAnalyticsRouter.get('/schemes/:schemeCode/holdings', asyncHandler(getSchemeHoldings));

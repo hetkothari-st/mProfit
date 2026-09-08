@@ -1,3 +1,4 @@
+import { loadAlternatives } from '../services/mfAnalytics/mfAlternatives.service.js';
 /**
  * HTTP surface for the mutual-fund analytics REFERENCE layer
  * (`/api/mf-analytics`, `docs/mf-analytics/07-IMPLEMENTATION-PLAN.md` Task 3.1).
@@ -559,6 +560,20 @@ export async function getSchemeScore(req: Request, res: Response): Promise<void>
  * `GET /api/mf-analytics/schemes/:schemeCode/peers` → percentiles and category
  * medians per horizon, at the latest ranked `asOf`; `?horizon=` narrows it.
  */
+/**
+ * `GET /api/mf-analytics/schemes/:schemeCode/alternatives` → `MfAlternativesDto`.
+ *
+ * Reference data with no owner, like the rest of this controller: which funds
+ * outscore this one in its own category is the same fact for every reader.
+ * Anything that depends on what the reader holds — switch cost, tax, a
+ * recommendation — belongs to the verdict endpoints, which are user-scoped.
+ */
+export async function getSchemeAlternatives(req: Request, res: Response): Promise<void> {
+  const schemeCode = req.params.schemeCode!;
+  await requireScheme(schemeCode);
+  ok(res, await loadAlternatives(schemeCode));
+}
+
 export async function getSchemePeers(req: Request, res: Response): Promise<void> {
   const schemeCode = req.params.schemeCode!;
   await requireScheme(schemeCode);

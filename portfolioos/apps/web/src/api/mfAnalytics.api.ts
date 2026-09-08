@@ -1,4 +1,5 @@
 import { api, unwrap } from './client';
+import type { MfAlternativesDto } from '@portfolioos/shared';
 import type {
   ApiResponse,
   MfAnalysisRunDto,
@@ -109,6 +110,17 @@ export const mfAnalyticsApi = {
     >(`${base}/${encodeURIComponent(schemeCode)}/peers`, {
       params: horizon === undefined ? undefined : { horizon: String(horizon) },
     });
+    return unwrap(data);
+  },
+
+  /**
+   * `GET /schemes/:schemeCode/alternatives` → better-scoring funds in the same
+   * category. Reference data, not a recommendation — see the DTO's own note.
+   */
+  async alternatives(schemeCode: string): Promise<MfAlternativesDto> {
+    const { data } = await api.get<ApiResponse<MfAlternativesDto>>(
+      `${base}/${encodeURIComponent(schemeCode)}/alternatives`,
+    );
     return unwrap(data);
   },
 

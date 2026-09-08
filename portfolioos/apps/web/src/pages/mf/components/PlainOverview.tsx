@@ -33,6 +33,7 @@
  */
 
 import type {
+  MfAlternativesDto,
   MfFundAnalyticsDto,
   MfHorizonMetrics,
   MfHorizonYears,
@@ -271,9 +272,11 @@ function pickSummaryHorizon(data: MfFundAnalyticsDto): MfHorizonYears | null {
 
 export function PlainOverview({
   data,
+  alternatives,
   onShowDetail,
 }: {
   data: MfFundAnalyticsDto;
+  alternatives: MfAlternativesDto | null;
   onShowDetail: () => void;
 }) {
   const score = data.score;
@@ -423,6 +426,84 @@ export function PlainOverview({
           </p>
         </section>
       )}
+
+      {/* ── Alternatives ─────────────────────────────────────────────── */}
+      {alternatives !== null && alternatives.alternatives.length > 0 && (
+        <section>
+          <h3 className="mb-1 font-display text-[18px] text-foreground">
+            Funds in this category that score higher
+          </h3>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Ranked the same way, in the same category and plan. This is a comparison, not a
+            recommendation to switch — moving funds can trigger an exit load and a tax bill that
+            this page cannot see.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="py-2 pr-4 font-medium">Fund</th>
+                  <th className="py-2 pr-4 font-medium">Rating</th>
+                  <th className="py-2 pr-4 font-medium">Score</th>
+                  <th className="py-2 font-medium">Cost / yr</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alternatives.alternatives.map((a) => (
+                  <tr key={a.schemeCode} className="border-b border-border/50">
+                    <td className="py-3 pr-4">
+                      <a
+                        href={`/mutual-funds/${a.schemeCode}`}
+                        className="font-medium text-foreground underline underline-offset-4"
+                      >
+                        {a.schemeName}
+                      </a>
+                      <div className="text-xs text-muted-foreground">{a.amcName}</div>
+                    </td>
+                    <td className="py-3 pr-4 text-primary">
+                      {a.rating === null ? '—' : '★'.repeat(a.rating)}
+                    </td>
+                    <td className="py-3 pr-4 text-foreground">
+                      {num(a.composite)?.toFixed(1) ?? '—'}
+                      {num(a.compositeDelta) !== null && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          (+{num(a.compositeDelta)!.toFixed(1)})
+                        </span>
+                      )}
+                    </td>
+                    {/* TER is null until this AMC's factsheet is ingested. An
+                        em dash says "not known", where a 0 would say "free". */}
+                    <td className="py-3 text-foreground">
+                      {a.terPct === null ? (
+                        <span className="text-muted-foreground">not disclosed to us</span>
+                      ) : (
+                        `${num(a.terPct)!.toFixed(2)}%`
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {alternatives.subjectTerPct !== null && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              This fund charges {num(alternatives.subjectTerPct)!.toFixed(2)}% a year.
+            </p>
+          )}
+        </section>
+      )}
+
+      {alternatives !== null &&
+        alternatives.alternatives.length === 0 &&
+        alternatives.subjectComposite !== null && (
+          <section className="rounded-xl border border-dashed border-border p-5">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">Nothing in its category scores higher.</span>{' '}
+              Among the {alternatives.universeSize} rated funds we hold for this category, none
+              outscores this one.
+            </p>
+          </section>
+        )}
 
       <button
         type="button"

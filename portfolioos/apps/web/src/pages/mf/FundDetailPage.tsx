@@ -79,6 +79,14 @@ export function FundDetailPage() {
   // score card, and a refresh invalidates only what it actually changed.
   const queryClient = useQueryClient();
 
+  // Reference data, so it sits with the composed read rather than the
+  // user-scoped block below — but as its own query: a fund with no score yet
+  // still renders everything else while this returns an empty list.
+  const alternativesQuery = useQuery({
+    queryKey: mfAnalyticsKeys.alternatives(schemeCode ?? ''),
+    queryFn: () => mfAnalyticsApi.alternatives(schemeCode!),
+    enabled: allowed && Boolean(schemeCode),
+  });
   const runQuery = useQuery({
     queryKey: mfAnalyticsKeys.latestRun(),
     queryFn: () => mfAnalyticsApi.latestRun(),
@@ -175,7 +183,11 @@ export function FundDetailPage() {
             </div>
 
             {view === 'overview' ? (
-              <PlainOverview data={data} onShowDetail={() => setView('detailed')} />
+              <PlainOverview
+                data={data}
+                alternatives={alternativesQuery.data ?? null}
+                onShowDetail={() => setView('detailed')}
+              />
             ) : (
               <>
             <ScoreCard meta={data.meta} score={data.score} categoryStats={data.categoryStats} />

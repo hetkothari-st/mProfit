@@ -841,3 +841,41 @@ export interface MfFundAnalyticsDto {
   findings: MfFinding[];
   verdict: MfFundVerdictDto | null;
 }
+
+/**
+ * One better-scoring fund in the same category, for the "alternatives" block.
+ *
+ * Deliberately NOT a recommendation, and the shape says so: there is no "switch
+ * to this" field, no projected gain, and no ranking of the reader's options.
+ * A recommendation needs the reader's holding size, cost basis, exit load and
+ * capital-gains position — none of which a research page can see, and all of
+ * which can turn a better fund into a worse decision.
+ *
+ * What this is: the funds a reader would find if they sorted the same category
+ * by the same score, with the numbers that explain the difference.
+ */
+export interface MfAlternativeDto {
+  schemeCode: string;
+  schemeName: string;
+  amcName: string;
+  rating: 1 | 2 | 3 | 4 | 5 | null;
+  composite: Ratio | null;
+  /** Latest disclosed expense ratio, percent units. Null when not yet ingested. */
+  terPct: Pct | null;
+  /** This fund's score minus the subject's, so the UI need not recompute it. */
+  compositeDelta: Ratio | null;
+}
+
+export interface MfAlternativesDto {
+  /** The scheme the alternatives are for. */
+  schemeCode: string;
+  universeKey: string;
+  /** How many rated schemes the category holds — the pool these came from. */
+  universeSize: number;
+  asOf: string;
+  subjectComposite: Ratio | null;
+  subjectRating: 1 | 2 | 3 | 4 | 5 | null;
+  subjectTerPct: Pct | null;
+  /** Better-scoring funds, best first. Empty when the fund leads its category. */
+  alternatives: MfAlternativeDto[];
+}
