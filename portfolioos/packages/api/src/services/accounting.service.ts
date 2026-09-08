@@ -1,7 +1,31 @@
 import { Decimal as PrismaDecimal } from '@prisma/client/runtime/library';
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError, BadRequestError } from '../lib/errors.js';
-import type { AccountType, VoucherType } from '@prisma/client';
+import type { AccountType, VoucherType, Prisma } from '@prisma/client';
+
+/**
+ * Optional transaction client for the mutating helpers below.
+ *
+ * The CA workspace writes an audit entry for every change it makes to somebody
+ * else's books, and that entry must share the change's fate: a rolled-back
+ * correction cannot leave a record claiming it happened, and a committed one
+ * cannot go unrecorded. Both writes therefore have to land on ONE transaction,
+ * so these functions accept the caller's client.
+ *
+ * Defaults to the global client, leaving the user's own accounting path
+ * untouched — each call still gets its own short transaction from the
+ * $allOperations hook, exactly as before.
+ */
+type Db = Prisma.TransactionClient;
+
+/**
+ * The global client stands in for a transaction client when no caller supplies
+ * one. The two are structurally identical for the plain delegate calls below;
+ * they differ only in the `$extends` machinery TypeScript cannot reconcile
+ * into a callable union. `canonicalEvents.service.ts` documents the same
+ * equivalence for the same reason.
+ */
+const defaultDb = prisma as unknown as Db;
 
 // ─── Default Chart of Accounts ───────────────────────────────────────────────
 
@@ -125,16 +149,17 @@ export async function listAccountsFlat(userId: string) {
 export async function createAccount(
   userId: string,
   data: { code: string; name: string; type: AccountType; parentId?: string | null; openingBalance?: string },
+  db: Db = defaultDb,
 ) {
-  const existing = await prisma.account.findFirst({ where: { userId, code: data.code } });
+  const existing = await db.account.findFirst({ where: { userId, code: data.code } });
   if (existing) throw new BadRequestError(`Account code ${data.code} already exists`);
 
   if (data.parentId) {
-    const parent = await prisma.account.findFirst({ where: { id: data.parentId, userId } });
+    const parent = await db.account.findFirst({ where: { id: data.parentId, userId } });
     if (!parent) throw new NotFoundError(`Parent account ${data.parentId} not found`);
   }
 
-  const account = await prisma.account.create({
+  const account = await db.account.create({
     data: {
       userId,
       code: data.code,
@@ -151,16 +176,17 @@ export async function updateAccount(
   userId: string,
   id: string,
   data: Partial<{ code: string; name: string; type: AccountType; parentId: string | null; openingBalance: string }>,
+  db: Db = defaultDb,
 ) {
-  const account = await prisma.account.findFirst({ where: { id, userId } });
+  const account = await db.account.findFirst({ where: { id, userId } });
   if (!account) throw new NotFoundError(`Account ${id} not found`);
 
   if (data.code && data.code !== account.code) {
-    const conflict = await prisma.account.findFirst({ where: { userId, code: data.code } });
+    const conflict = await db.account.findFirst({ where: { userId, code: data.code } });
     if (conflict) throw new BadRequestError(`Account code ${data.code} already exists`);
   }
 
-  const updated = await prisma.account.update({
+  const updated = await db.account.update({
     where: { id },
     data: {
       ...(data.code && { code: data.code }),
@@ -173,21 +199,21 @@ export async function updateAccount(
   return { ...updated, openingBalance: updated.openingBalance.toString() };
 }
 
-export async function deleteAccount(userId: string, id: string) {
-  const account = await prisma.account.findFirst({ where: { id, userId } });
+export async function deleteAccount(userId: string, id: string, db: Db = defaultDb) {
+  const account = await db.account.findFirst({ where: { id, userId } });
   if (!account) throw new NotFoundError(`Account ${id} not found`);
 
-  const entryCount = await prisma.voucherEntry.count({
+  const entryCount = await db.voucherEntry.count({
     where: { OR: [{ debitAccountId: id }, { creditAccountId: id }] },
   });
   if (entryCount > 0) {
     throw new BadRequestError('Cannot delete account with existing voucher entries');
   }
-  const childCount = await prisma.account.count({ where: { parentId: id } });
+  const childCount = await db.account.count({ where: { parentId: id } });
   if (childCount > 0) {
     throw new BadRequestError('Cannot delete account with sub-accounts');
   }
-  await prisma.account.delete({ where: { id } });
+  await db.account.delete({ where: { id } });
 }
 
 // ─── Vouchers ────────────────────────────────────────────────────────────────
@@ -207,9 +233,9 @@ export interface VoucherInput {
   entries: VoucherEntryInput[];
 }
 
-async function assertAccountsOwnedByUser(userId: string, ids: string[]) {
+async function assertAccountsOwnedByUser(userId: string, ids: string[], db: Db = defaultDb) {
   const unique = [...new Set(ids)];
-  const found = await prisma.account.findMany({ where: { id: { in: unique }, userId } });
+  const found = await db.account.findMany({ where: { id: { in: unique }, userId } });
   if (found.length !== unique.length) {
     throw new BadRequestError('One or more account IDs not found');
   }
@@ -291,15 +317,15 @@ export async function getVoucher(userId: string, id: string) {
   return formatVoucher(v);
 }
 
-export async function createVoucher(userId: string, data: VoucherInput) {
+export async function createVoucher(userId: string, data: VoucherInput, db: Db = defaultDb) {
   if (data.entries.length === 0) throw new BadRequestError('Voucher must have at least one entry');
   const accountIds = data.entries.flatMap((e) => [e.debitAccountId, e.creditAccountId]);
-  await assertAccountsOwnedByUser(userId, accountIds);
+  await assertAccountsOwnedByUser(userId, accountIds, db);
 
-  const existing = await prisma.voucher.findFirst({ where: { userId, type: data.type, voucherNo: data.voucherNo } });
+  const existing = await db.voucher.findFirst({ where: { userId, type: data.type, voucherNo: data.voucherNo } });
   if (existing) throw new BadRequestError(`Voucher number ${data.voucherNo} already exists for type ${data.type}`);
 
-  const voucher = await prisma.voucher.create({
+  const voucher = await db.voucher.create({
     data: {
       userId,
       type: data.type,
@@ -320,16 +346,16 @@ export async function createVoucher(userId: string, data: VoucherInput) {
   return formatVoucher(voucher);
 }
 
-export async function updateVoucher(userId: string, id: string, data: Partial<VoucherInput>) {
-  const existing = await prisma.voucher.findFirst({ where: { id, userId } });
+export async function updateVoucher(userId: string, id: string, data: Partial<VoucherInput>, db: Db = defaultDb) {
+  const existing = await db.voucher.findFirst({ where: { id, userId } });
   if (!existing) throw new NotFoundError(`Voucher ${id} not found`);
 
   if (data.entries) {
     const accountIds = data.entries.flatMap((e) => [e.debitAccountId, e.creditAccountId]);
-    await assertAccountsOwnedByUser(userId, accountIds);
+    await assertAccountsOwnedByUser(userId, accountIds, db);
   }
 
-  const voucher = await prisma.voucher.update({
+  const voucher = await db.voucher.update({
     where: { id },
     data: {
       ...(data.type && { type: data.type }),
@@ -353,10 +379,10 @@ export async function updateVoucher(userId: string, id: string, data: Partial<Vo
   return formatVoucher(voucher);
 }
 
-export async function deleteVoucher(userId: string, id: string) {
-  const existing = await prisma.voucher.findFirst({ where: { id, userId } });
+export async function deleteVoucher(userId: string, id: string, db: Db = defaultDb) {
+  const existing = await db.voucher.findFirst({ where: { id, userId } });
   if (!existing) throw new NotFoundError(`Voucher ${id} not found`);
-  await prisma.voucher.delete({ where: { id } });
+  await db.voucher.delete({ where: { id } });
 }
 
 // ─── Next voucher number ──────────────────────────────────────────────────────

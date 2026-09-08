@@ -197,31 +197,39 @@ CREATE POLICY caauditlog_insert ON "CaAuditLog"
 -- policies per command, so each sits alongside the existing owner policy and
 -- widens it only for an active CA. The owner policies are untouched.
 --
+-- Each also carries app_is_system(), which is strictly redundant — the owner
+-- policy beside it already grants system context, and OR means one is enough.
+-- It is here because test/invariants/user-scoped-coverage.test.ts requires the
+-- branch on EVERY policy, and a uniform rule that a test can check is worth
+-- more than eleven exemptions someone has to reason about later.
+--
 -- The set of writable tables IS the permission model. There is no capability
 -- column on Client to widen, and no policy on Portfolio, FamilyMember,
 -- BrokerCredential or User — so a CA cannot create a portfolio, join a family,
 -- read credentials or change an identity, whatever the application layer does.
 
 CREATE POLICY account_ca_access ON "Account"
-  USING (app_is_active_ca_for("userId"))
-  WITH CHECK (app_is_active_ca_for("userId"));
+  USING (app_is_system() OR app_is_active_ca_for("userId"))
+  WITH CHECK (app_is_system() OR app_is_active_ca_for("userId"));
 
 CREATE POLICY voucher_ca_access ON "Voucher"
-  USING (app_is_active_ca_for("userId"))
-  WITH CHECK (app_is_active_ca_for("userId"));
+  USING (app_is_system() OR app_is_active_ca_for("userId"))
+  WITH CHECK (app_is_system() OR app_is_active_ca_for("userId"));
 
 -- VoucherEntry has no userId of its own; it joins through Voucher, the same
 -- shape the existing owner policy uses.
 CREATE POLICY voucherentry_ca_access ON "VoucherEntry"
   USING (
-    EXISTS (
+    app_is_system()
+    OR EXISTS (
       SELECT 1 FROM "Voucher" v
       WHERE v.id = "VoucherEntry"."voucherId"
         AND app_is_active_ca_for(v."userId")
     )
   )
   WITH CHECK (
-    EXISTS (
+    app_is_system()
+    OR EXISTS (
       SELECT 1 FROM "Voucher" v
       WHERE v.id = "VoucherEntry"."voucherId"
         AND app_is_active_ca_for(v."userId")
@@ -229,8 +237,8 @@ CREATE POLICY voucherentry_ca_access ON "VoucherEntry"
   );
 
 CREATE POLICY fmvoverride_ca_access ON "FmvOverride"
-  USING (app_is_active_ca_for("userId"))
-  WITH CHECK (app_is_active_ca_for("userId"));
+  USING (app_is_system() OR app_is_active_ca_for("userId"))
+  WITH CHECK (app_is_system() OR app_is_active_ca_for("userId"));
 
 -- Transactions: CORRECT ONLY.
 --
@@ -242,14 +250,16 @@ CREATE POLICY fmvoverride_ca_access ON "FmvOverride"
 CREATE POLICY transaction_ca_correct ON "Transaction"
   FOR UPDATE
   USING (
-    EXISTS (
+    app_is_system()
+    OR EXISTS (
       SELECT 1 FROM "Portfolio" p
       WHERE p.id = "Transaction"."portfolioId"
         AND app_is_active_ca_for(p."userId")
     )
   )
   WITH CHECK (
-    EXISTS (
+    app_is_system()
+    OR EXISTS (
       SELECT 1 FROM "Portfolio" p
       WHERE p.id = "Transaction"."portfolioId"
         AND app_is_active_ca_for(p."userId")
@@ -267,12 +277,13 @@ CREATE POLICY transaction_ca_correct ON "Transaction"
 
 CREATE POLICY portfolio_ca_read ON "Portfolio"
   FOR SELECT
-  USING (app_is_active_ca_for("userId"));
+  USING (app_is_system() OR app_is_active_ca_for("userId"));
 
 CREATE POLICY transaction_ca_read ON "Transaction"
   FOR SELECT
   USING (
-    EXISTS (
+    app_is_system()
+    OR EXISTS (
       SELECT 1 FROM "Portfolio" p
       WHERE p.id = "Transaction"."portfolioId"
         AND app_is_active_ca_for(p."userId")
@@ -282,7 +293,8 @@ CREATE POLICY transaction_ca_read ON "Transaction"
 CREATE POLICY holdingprojection_ca_read ON "HoldingProjection"
   FOR SELECT
   USING (
-    EXISTS (
+    app_is_system()
+    OR EXISTS (
       SELECT 1 FROM "Portfolio" p
       WHERE p.id = "HoldingProjection"."portfolioId"
         AND app_is_active_ca_for(p."userId")
@@ -292,7 +304,8 @@ CREATE POLICY holdingprojection_ca_read ON "HoldingProjection"
 CREATE POLICY capitalgain_ca_read ON "CapitalGain"
   FOR SELECT
   USING (
-    EXISTS (
+    app_is_system()
+    OR EXISTS (
       SELECT 1 FROM "Portfolio" p
       WHERE p.id = "CapitalGain"."portfolioId"
         AND app_is_active_ca_for(p."userId")
@@ -302,7 +315,8 @@ CREATE POLICY capitalgain_ca_read ON "CapitalGain"
 CREATE POLICY cashflow_ca_read ON "CashFlow"
   FOR SELECT
   USING (
-    EXISTS (
+    app_is_system()
+    OR EXISTS (
       SELECT 1 FROM "Portfolio" p
       WHERE p.id = "CashFlow"."portfolioId"
         AND app_is_active_ca_for(p."userId")

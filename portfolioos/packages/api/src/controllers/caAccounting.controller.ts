@@ -18,15 +18,11 @@
  * one — and this is the surface where the caller does not own the ledger.
  *
  * Reads are audited only where they are the point (the activity feed lives in
- * ca.controller). Every mutation writes an audit entry.
- *
- * KNOWN GAP, stated rather than implied: the audit entry is written in its own
- * transaction, AFTER the mutation has committed, so a failing audit write
- * leaves an unrecorded change. Closing it means threading a transaction client
- * through the shared accounting services, which currently take only a userId.
- * Until that lands, `caAudit.service.ts`'s "the entry and the change share a
- * fate" holds for the grant lifecycle in caAccess.service.ts but NOT for the
- * handlers below.
+ * ca.controller). Every mutation writes an audit entry, and the two share one
+ * transaction: the accounting services take an optional client, so the change
+ * and its record commit together or not at all. A rolled-back correction
+ * cannot leave an entry claiming it happened, and a committed one cannot go
+ * unrecorded.
  */
 
 import type { Request, Response } from 'express';
@@ -87,19 +83,21 @@ export async function caListAccountsFlat(req: Request, res: Response) {
 export async function caCreateAccount(req: Request, res: Response) {
   const scope = await scopeOf(req);
   const body = createAccountSchema.parse(req.body);
-  const account = await createAccount(scope.subjectUserId, {
-    ...body,
-    type: body.type as AccountType,
-  });
-  await runInTransaction((tx) =>
-    recordCaAudit(tx, auditCtx(scope, req), {
+  const account = await runInTransaction(async (tx) => {
+    const created_ = await createAccount(
+      scope.subjectUserId,
+      { ...body, type: body.type as AccountType },
+      tx,
+    );
+    await recordCaAudit(tx, auditCtx(scope, req), {
       action: 'ACCOUNT_CREATED',
       resourceType: 'Account',
-      resourceId: account.id,
-      summary: `Created account ${account.code} — ${account.name}.`,
-      after: { code: account.code, name: account.name, type: account.type },
-    }),
-  );
+      resourceId: created_.id,
+      summary: `Created account ${created_.code} — ${created_.name}.`,
+      after: { code: created_.code, name: created_.name, type: created_.type },
+    });
+    return created_;
+  });
   created(res, account);
 }
 
@@ -112,20 +110,23 @@ export async function caUpdateAccount(req: Request, res: Response) {
   if (!before) throw new NotFoundError('Account not found');
 
   const body = updateAccountSchema.parse(req.body);
-  const account = await updateAccount(scope.subjectUserId, id, {
-    ...body,
-    type: body.type as AccountType | undefined,
-  });
-  await runInTransaction((tx) =>
-    recordCaAudit(tx, auditCtx(scope, req), {
+  const account = await runInTransaction(async (tx) => {
+    const updated = await updateAccount(
+      scope.subjectUserId,
+      id,
+      { ...body, type: body.type as AccountType | undefined },
+      tx,
+    );
+    await recordCaAudit(tx, auditCtx(scope, req), {
       action: 'ACCOUNT_UPDATED',
       resourceType: 'Account',
       resourceId: id,
-      summary: `Updated account ${account.code} — ${account.name}.`,
+      summary: `Updated account ${updated.code} — ${updated.name}.`,
       before: { code: before.code, name: before.name, type: before.type },
-      after: { code: account.code, name: account.name, type: account.type },
-    }),
-  );
+      after: { code: updated.code, name: updated.name, type: updated.type },
+    });
+    return updated;
+  });
   ok(res, account);
 }
 
@@ -135,16 +136,16 @@ export async function caDeleteAccount(req: Request, res: Response) {
   const before = (await listAccountsFlat(scope.subjectUserId)).find((a) => a.id === id);
   if (!before) throw new NotFoundError('Account not found');
 
-  await deleteAccount(scope.subjectUserId, id);
-  await runInTransaction((tx) =>
-    recordCaAudit(tx, auditCtx(scope, req), {
+  await runInTransaction(async (tx) => {
+    await deleteAccount(scope.subjectUserId, id, tx);
+    await recordCaAudit(tx, auditCtx(scope, req), {
       action: 'ACCOUNT_DELETED',
       resourceType: 'Account',
       resourceId: id,
       summary: `Deleted account ${before.code} — ${before.name}.`,
       before: { code: before.code, name: before.name, type: before.type },
-    }),
-  );
+    });
+  });
   noContent(res);
 }
 
@@ -178,19 +179,21 @@ export async function caNextVoucherNo(req: Request, res: Response) {
 export async function caCreateVoucher(req: Request, res: Response) {
   const scope = await scopeOf(req);
   const body = createVoucherSchema.parse(req.body);
-  const voucher = await createVoucher(scope.subjectUserId, {
-    ...body,
-    type: body.type as VoucherType,
-  });
-  await runInTransaction((tx) =>
-    recordCaAudit(tx, auditCtx(scope, req), {
+  const voucher = await runInTransaction(async (tx) => {
+    const posted = await createVoucher(
+      scope.subjectUserId,
+      { ...body, type: body.type as VoucherType },
+      tx,
+    );
+    await recordCaAudit(tx, auditCtx(scope, req), {
       action: 'VOUCHER_CREATED',
       resourceType: 'Voucher',
-      resourceId: voucher.id,
-      summary: `Posted ${voucher.type} voucher ${voucher.voucherNo}.`,
-      after: { voucherNo: voucher.voucherNo, type: voucher.type, date: voucher.date },
-    }),
-  );
+      resourceId: posted.id,
+      summary: `Posted ${posted.type} voucher ${posted.voucherNo}.`,
+      after: { voucherNo: posted.voucherNo, type: posted.type, date: posted.date },
+    });
+    return posted;
+  });
   created(res, voucher);
 }
 
@@ -199,20 +202,23 @@ export async function caUpdateVoucher(req: Request, res: Response) {
   const id = req.params.id!;
   const before = await getVoucher(scope.subjectUserId, id);
   const body = updateVoucherSchema.parse(req.body);
-  const voucher = await updateVoucher(scope.subjectUserId, id, {
-    ...body,
-    type: body.type as VoucherType | undefined,
-  });
-  await runInTransaction((tx) =>
-    recordCaAudit(tx, auditCtx(scope, req), {
+  const voucher = await runInTransaction(async (tx) => {
+    const edited = await updateVoucher(
+      scope.subjectUserId,
+      id,
+      { ...body, type: body.type as VoucherType | undefined },
+      tx,
+    );
+    await recordCaAudit(tx, auditCtx(scope, req), {
       action: 'VOUCHER_UPDATED',
       resourceType: 'Voucher',
       resourceId: id,
-      summary: `Edited ${voucher.type} voucher ${voucher.voucherNo}.`,
+      summary: `Edited ${edited.type} voucher ${edited.voucherNo}.`,
       before,
-      after: voucher,
-    }),
-  );
+      after: edited,
+    });
+    return edited;
+  });
   ok(res, voucher);
 }
 
@@ -220,16 +226,16 @@ export async function caDeleteVoucher(req: Request, res: Response) {
   const scope = await scopeOf(req);
   const id = req.params.id!;
   const before = await getVoucher(scope.subjectUserId, id);
-  await deleteVoucher(scope.subjectUserId, id);
-  await runInTransaction((tx) =>
-    recordCaAudit(tx, auditCtx(scope, req), {
+  await runInTransaction(async (tx) => {
+    await deleteVoucher(scope.subjectUserId, id, tx);
+    await recordCaAudit(tx, auditCtx(scope, req), {
       action: 'VOUCHER_DELETED',
       resourceType: 'Voucher',
       resourceId: id,
       summary: `Deleted voucher ${before?.voucherNo ?? id}.`,
       before,
-    }),
-  );
+    });
+  });
   noContent(res);
 }
 

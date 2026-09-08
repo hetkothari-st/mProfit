@@ -46,6 +46,15 @@ let clientId: string;
 /** TestScope exposes only ids, and the accept flow is email-bound. */
 let strangerEmail: string;
 let clientEmail: string;
+/**
+ * A real transaction and a real credential belonging to the client.
+ *
+ * Without these, "a CA cannot delete a transaction" and "a CA cannot read
+ * broker credentials" pass because the tables are EMPTY, not because the
+ * policies hold — the exact way a security suite lies about what it proved.
+ * createTestScope seeds only a user, a portfolio and stock masters.
+ */
+let clientTransactionId: string;
 
 beforeAll(async () => {
   ca = await createTestScope('ca-user');
@@ -59,6 +68,26 @@ beforeAll(async () => {
     });
     const byId = new Map(users.map((u) => [u.id, u.email]));
     return [byId.get(stranger.userId)!, byId.get(client.userId)!];
+  });
+
+  clientTransactionId = await runAsSystem(async () => {
+    const tx = await prisma.transaction.create({
+      data: {
+        portfolioId: client.portfolioId,
+        assetClass: 'EQUITY',
+        transactionType: 'BUY',
+        tradeDate: new Date('2025-06-02'),
+        quantity: '10',
+        price: '100',
+        grossAmount: '1000',
+        netAmount: '1000',
+        assetName: 'Client holding',
+      },
+    });
+    await prisma.brokerCredential.create({
+      data: { userId: client.userId, brokerId: 'zerodha', apiKey: 'encrypted-secret' },
+    });
+    return tx.id;
   });
 
   clientId = await runAsSystem(async () => {
@@ -80,6 +109,7 @@ afterAll(async () => {
   await runAsSystem(async () => {
     await prisma.caAuditLog.deleteMany({ where: { actorUserId: ca.userId } });
     await prisma.client.deleteMany({ where: { advisorId: ca.userId } });
+    await prisma.brokerCredential.deleteMany({ where: { userId: client.userId } });
   });
   await ca.cleanup();
   await client.cleanup();
@@ -134,15 +164,35 @@ describe('CA access boundary', () => {
     ).rejects.toThrow();
   });
 
-  it('cannot insert or delete a client transaction — only correct one', async () => {
+  it('cannot delete a client transaction, though one exists to delete', async () => {
+    // The row is seeded, so count: 0 means the policy refused it rather than
+    // there being nothing there.
+    const before = await runAsSystem(() =>
+      prisma.transaction.count({ where: { portfolioId: client.portfolioId } }),
+    );
+    expect(before).toBeGreaterThan(0);
+
     await expect(
       ca.runAs(() =>
         prisma.transaction.deleteMany({ where: { portfolioId: client.portfolioId } }),
       ),
     ).resolves.toMatchObject({ count: 0 });
+
+    const after = await runAsSystem(() =>
+      prisma.transaction.count({ where: { portfolioId: client.portfolioId } }),
+    );
+    expect(after).toBe(before);
   });
 
-  it('cannot read the client\'s broker credentials', async () => {
+  it('cannot read the client\'s broker credentials, though one exists', async () => {
+    // Asserting the row is really there first. Credentials are the one thing a
+    // grant must never reach, so this test must never be able to pass just
+    // because the table happens to be empty.
+    const seeded = await runAsSystem(() =>
+      prisma.brokerCredential.count({ where: { userId: client.userId } }),
+    );
+    expect(seeded).toBe(1);
+
     const creds = await ca.runAs(() =>
       prisma.brokerCredential.findMany({ where: { userId: client.userId } }),
     );
@@ -290,19 +340,18 @@ describe('CA access boundary', () => {
     // transaction_ca_correct is FOR UPDATE only — the distinction between
     // correcting a ledger and rewriting it. Both halves asserted, because the
     // grant working matters as much as the restriction holding.
-    const tx = await runAsSystem(() =>
-      prisma.transaction.findFirst({ where: { portfolioId: client.portfolioId } }),
+    const updated = await ca.runAs(() =>
+      prisma.transaction.updateMany({
+        where: { id: clientTransactionId },
+        data: { narration: 'Corrected by CA' },
+      }),
     );
+    expect(updated.count).toBe(1);
 
-    if (tx) {
-      const updated = await ca.runAs(() =>
-        prisma.transaction.updateMany({
-          where: { id: tx.id },
-          data: { narration: 'Corrected by CA' },
-        }),
-      );
-      expect(updated.count).toBe(1);
-    }
+    const persisted = await runAsSystem(() =>
+      prisma.transaction.findUniqueOrThrow({ where: { id: clientTransactionId } }),
+    );
+    expect(persisted.narration).toBe('Corrected by CA');
 
     await expect(
       ca.runAs(() =>
