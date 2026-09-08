@@ -15,6 +15,8 @@ import {
   Map as MapIcon,
   Car,
   MapPin,
+  CheckCircle2,
+  MessageCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
@@ -33,10 +35,12 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   rentalApi,
   type RentalPropertyDTO,
   type CreatePropertyInput,
+  type CollectionRowDTO,
 } from '@/api/rental.api';
 import { RentalRemindersPanel } from './RentalRemindersPanel';
 
@@ -539,6 +543,106 @@ function SummaryStrip({ properties }: { properties: RentalPropertyDTO[] }) {
   );
 }
 
+// ── Collections tab ───────────────────────────────────────────────────
+
+function CollectionRow({ row }: { row: CollectionRowDTO }) {
+  const balance = new Decimal(row.balanceDue);
+
+  const remindMutation = useMutation({
+    mutationFn: () => rentalApi.getReminderLink(row.tenancyId),
+    onSuccess: (result) => {
+      if (result.waUrl) {
+        window.open(result.waUrl, '_blank', 'noopener');
+      } else {
+        toast.error('Add a phone number for this tenant first');
+      }
+    },
+    onError: () => toast.error('Failed to prepare reminder link'),
+  });
+
+  return (
+    <Card>
+      <CardContent className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <Link
+            to={`/rental/tenancies/${row.tenancyId}`}
+            className="font-medium text-foreground hover:text-accent transition-colors"
+          >
+            {row.tenantName}
+          </Link>
+          <p className="text-sm text-muted-foreground truncate">{row.propertyName}</p>
+          {row.oldestUnpaidMonth && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Oldest pending: {row.oldestUnpaidMonth}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-4 shrink-0">
+          <p
+            className="text-lg font-semibold tabular-nums text-right"
+            style={{ color: 'hsl(var(--destructive))' }}
+          >
+            {formatINR(balance.toString())}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!row.tenantPhone || remindMutation.isPending}
+            onClick={() => remindMutation.mutate()}
+          >
+            {remindMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <>
+                <MessageCircle className="h-3.5 w-3.5" /> Remind
+              </>
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CollectionsTab() {
+  const { data: rows, isLoading } = useQuery({
+    queryKey: ['rental-collections'],
+    queryFn: () => rentalApi.listCollections(),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Card key={i} className="h-20 animate-pulse bg-muted/60" />
+        ))}
+      </div>
+    );
+  }
+
+  const sorted = [...(rows ?? [])].sort((a, b) =>
+    new Decimal(b.balanceDue).comparedTo(new Decimal(a.balanceDue)),
+  );
+
+  if (sorted.length === 0) {
+    return (
+      <EmptyState
+        icon={CheckCircle2}
+        title="All rent collected"
+        description="No tenant has an outstanding balance right now."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {sorted.map((row) => (
+        <CollectionRow key={row.tenancyId} row={row} />
+      ))}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────
 
 export function RentalListPage() {
@@ -579,63 +683,76 @@ export function RentalListPage() {
         }
       />
 
-      {!isLoading && list.length > 0 && <SummaryStrip properties={list} />}
+      <Tabs defaultValue="properties">
+        <TabsList>
+          <TabsTrigger value="properties">Properties</TabsTrigger>
+          <TabsTrigger value="collections">Collections</TabsTrigger>
+        </TabsList>
 
-      {!isLoading && list.length > 0 && (
-        <div className="mt-4 mb-4">
-          <RentalRemindersPanel />
-        </div>
-      )}
+        <TabsContent value="properties">
+          {!isLoading && list.length > 0 && <SummaryStrip properties={list} />}
 
-      {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="h-44 animate-pulse bg-muted/60" />
-          ))}
-        </div>
-      )}
-
-      {!isLoading && list.length === 0 && (
-        <EmptyState
-          icon={Building2}
-          title="No rental properties yet"
-          description="Add a property, set up a tenancy, and let PortfolioOS track rent receipts automatically."
-          action={
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" /> Add your first property
-            </Button>
-          }
-        />
-      )}
-
-      {!isLoading && list.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {list.map((p) => (
-            <div key={p.id}>
-              {confirmDeleteId === p.id ? (
-                <Card className="border-destructive">
-                  <CardContent className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm font-medium">Delete "{p.name}"?</p>
-                    <div className="flex gap-2">
-                      <Button variant="destructive" size="sm" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(p.id)}>
-                        {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes, delete'}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <PropertyCard
-                  property={p}
-                  onEdit={() => { setEditProperty(p); setCreateOpen(true); }}
-                  onDelete={() => setConfirmDeleteId(p.id)}
-                  isDeleting={deleteMutation.isPending && confirmDeleteId === p.id}
-                />
-              )}
+          {!isLoading && list.length > 0 && (
+            <div className="mt-4 mb-4">
+              <RentalRemindersPanel />
             </div>
-          ))}
-        </div>
-      )}
+          )}
+
+          {isLoading && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Card key={i} className="h-44 animate-pulse bg-muted/60" />
+              ))}
+            </div>
+          )}
+
+          {!isLoading && list.length === 0 && (
+            <EmptyState
+              icon={Building2}
+              title="No rental properties yet"
+              description="Add a property, set up a tenancy, and let PortfolioOS track rent receipts automatically."
+              action={
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-4 w-4" /> Add your first property
+                </Button>
+              }
+            />
+          )}
+
+          {!isLoading && list.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {list.map((p) => (
+                <div key={p.id}>
+                  {confirmDeleteId === p.id ? (
+                    <Card className="border-destructive">
+                      <CardContent className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm font-medium">Delete "{p.name}"?</p>
+                        <div className="flex gap-2">
+                          <Button variant="destructive" size="sm" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(p.id)}>
+                            {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes, delete'}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <PropertyCard
+                      property={p}
+                      onEdit={() => { setEditProperty(p); setCreateOpen(true); }}
+                      onDelete={() => setConfirmDeleteId(p.id)}
+                      isDeleting={deleteMutation.isPending && confirmDeleteId === p.id}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="collections">
+          <CollectionsTab />
+        </TabsContent>
+      </Tabs>
 
       <CreatePropertyDialog
         open={createOpen}
