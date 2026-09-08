@@ -682,8 +682,33 @@ function computeHorizon(
   );
   const benchUsable = benchAssessment.usable;
 
-  const fundMonthly = math.toMonthEndSeries(windowDaily);
-  const benchMonthly = benchUsable ? math.toMonthEndSeries(benchWindowDaily) : null;
+  // Monthly metrics get their own window, anchored to month ends.
+  //
+  // `windowDaily` runs to `asOf` exactly, which is right for the daily-sampled
+  // metrics below (drawdown is measured on the daily series). It is wrong for
+  // the monthly ones: sampled at month ends, a window starting mid-month loses
+  // its first observation, so a nightly job reports INSUFFICIENT_DATA for the
+  // 1-year horizon on every day that is not a month end. See
+  // `lastCompletedMonthEnd`. Anchoring makes the monthly window "the last
+  // N years of completed months", independent of the run date.
+  const monthlyTo = math.lastCompletedMonthEnd(asOf);
+
+  // The slice must *begin* on or before the anchor month end, not on the
+  // calendar date N years back. `toMonthEndSeries` samples each month end by
+  // the last NAV at or before it, so a slice starting the day after a month end
+  // silently drops that month — and month ends are frequently non-trading days
+  // (31 Aug 2025 is a Sunday). `windowStartPoint` resolves the calendar target
+  // back to the last real observation, which is exactly the anchor needed.
+  const monthlyStart = math.windowStartPoint(navDaily, monthlyTo, horizonYears);
+  const monthlyBenchStart = math.windowStartPoint(benchmarkDaily, monthlyTo, horizonYears);
+
+  const fundMonthly = math.toMonthEndSeries(
+    monthlyStart === null ? [] : sliceSeries(navDaily, monthlyStart.date, monthlyTo),
+  );
+  const benchMonthly =
+    benchUsable && monthlyBenchStart !== null
+      ? math.toMonthEndSeries(sliceSeries(benchmarkDaily, monthlyBenchStart.date, monthlyTo))
+      : null;
   const table = buildMonthlyTable(fundMonthly, benchMonthly, riskFreeAnnual);
   const observationsMonthly = table.fund.length;
 

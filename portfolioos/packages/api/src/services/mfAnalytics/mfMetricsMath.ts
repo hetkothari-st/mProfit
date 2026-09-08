@@ -331,6 +331,35 @@ function startOfDayUtc(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
+/**
+ * The last completed month end at or before `asOf` — `asOf` itself when it is
+ * already one.
+ *
+ * Monthly metrics are sampled at month ends (`toMonthEndSeries`), so an
+ * N-year window running to an arbitrary `asOf` is not N years of monthly
+ * observations. Ending 8 Sept, the window `2025-09-08 → 2026-09-08` contains
+ * the month ends Sep-25 … Aug-26: twelve points, and therefore eleven
+ * returns, one short of `MIN_MONTHLY_OBSERVATIONS`. Ending 31 Aug, the window
+ * `2025-08-31 → 2026-08-31` starts *on* a month end, giving thirteen points
+ * and twelve returns.
+ *
+ * The metrics cron runs nightly (`15 23 * * *`), so without anchoring, every
+ * 1-year row is INSUFFICIENT_DATA on all ~29 non-month-end days of the month
+ * and correct on the one day it happens to land on. Same NAV, same fund,
+ * different answer depending on the calendar — and the failure is silent, a
+ * horizon full of "not enough history" for a fund with thirteen years of it.
+ *
+ * Anchoring to month ends makes "1-year metrics as of 8 Sept" mean the last
+ * twelve completed months, which is what a monthly-sampled window can honestly
+ * report, and makes the result independent of which day the job ran.
+ */
+export function lastCompletedMonthEnd(asOf: Date): Date {
+  const end = endOfMonthUtc(asOf.getUTCFullYear(), asOf.getUTCMonth());
+  if (end.getTime() <= startOfDayUtc(asOf).getTime()) return end;
+  // asOf falls before this month's end — step back to the previous month.
+  return endOfMonthUtc(asOf.getUTCFullYear(), asOf.getUTCMonth() - 1);
+}
+
 // ---------------------------------------------------------------------------
 // §1 — Series builders
 // ---------------------------------------------------------------------------
