@@ -752,7 +752,23 @@ export function computeUniversePeerRanks(input: UniverseComputeInput): MfPeerRan
             : readMetricValue(metricsByScheme.get(code)?.get(horizonYears)?.metrics ?? null, spec);
         if (v !== null) values.set(code, v);
       }
-      if (values.size > 0) valuesByMetric.set(spec.metric, values);
+      // A percentile needs a POOL, and the pool for a metric is the members
+      // that actually carry it — not the members of the universe.
+      //
+      // `universeSize` counts funds with usable metrics, so it can be 26 while
+      // exactly one of them has a TER. Ranking that fund against itself yields
+      // percentile 0.500000 and a "category median" equal to its own value,
+      // and COST then contributes 15% of its rating on the strength of a number
+      // with nothing behind it. Observed on ICICI Prudential Large & Mid Cap:
+      // value 0.67, universeMedian 0.67, percentile exactly 0.5 — and the fund
+      // page told the reader cost was its weakest area because of it.
+      //
+      // The floor is `MIN_UNIVERSE_SIZE`, the same one `03 §1` already applies
+      // to category statistics elsewhere; applying it per metric rather than
+      // per universe is the whole correction. Dropping a metric here costs no
+      // rating: it is not a `RATING_REQUIRED_PILLAR` input, so its pillar
+      // simply redistributes weight to the inputs that do have a pool.
+      if (values.size >= MIN_UNIVERSE_SIZE) valuesByMetric.set(spec.metric, values);
     }
 
     const universeSize = selection.rankingUniverse.length;
@@ -1172,7 +1188,20 @@ export function computeStructuralPeerRanks(
       const v = readStructuralValue(profileByScheme.get(code) ?? null, spec);
       if (v !== null) values.set(code, v);
     }
-    if (values.size === 0) continue;
+    // Same floor as the horizon metrics above, and this is the pass where it
+    // actually bites. TER and AUM come from factsheets, which are ingested per
+    // AMC, so a category of 26 rated funds routinely has ONE fund carrying a
+    // TER. Ranking it against itself produced percentile 0.500000 and a
+    // "category median" equal to its own value — and COST, at 15% weight, was
+    // scored on that. ICICI Prudential Large & Mid Cap read value 0.67,
+    // universeMedian 0.67, percentile 0.5, and its fund page told the reader
+    // cost was its weakest area purely because of the degenerate midpoint.
+    //
+    // Withholding costs no rating — COST is not a RATING_REQUIRED_PILLAR input,
+    // so the pillar redistributes weight to inputs that have a pool — and it
+    // restores the honest answer, which the plain overview already knows how to
+    // render: "we could not score Cost for this fund".
+    if (values.size < MIN_UNIVERSE_SIZE) continue;
     valuesByMetric.set(spec.metric, values);
     const med = medianOf([...values.values()]);
     if (med !== null) medianByMetric.set(spec.metric, med);

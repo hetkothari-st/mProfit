@@ -498,7 +498,23 @@ function rankValues(
   modelKey: MfModelKey,
 ): LocalRank {
   const percentiles = new Map<string, Decimal>();
-  if (values.size === 0) return { percentiles, median: null };
+  // A percentile needs a pool. Ranking one fund against itself returns exactly
+  // 0.5 and a "category median" equal to its own value, which is not a middling
+  // result — it is no result, wearing the shape of one.
+  //
+  // This bites hardest on the structural metrics, TER and AUM, because those
+  // come from factsheets ingested per AMC: a category of 26 rated funds
+  // routinely has ONE carrying a TER. ICICI Prudential Large & Mid Cap scored
+  // COST 0.5 on value 0.67 against a median of 0.67 — its own — and at 15%
+  // weight that reached the rating, while the fund page told the reader cost
+  // was its weakest area.
+  //
+  // `MIN_UNIVERSE_SIZE` is the floor `03 §1` already applies to category
+  // statistics elsewhere. Withholding costs no rating: COST and PORTFOLIO are
+  // not `RATING_REQUIRED_PILLARS` inputs, so their pillars redistribute weight
+  // to inputs that have a pool, and the plain overview already renders the
+  // honest answer — "we could not score Cost for this fund".
+  if (values.size < MIN_UNIVERSE_SIZE) return { percentiles, median: null };
   const all = [...values.values()];
   for (const [code, target] of values) {
     const pct = percentileRankForMetric(metric, all, target, modelKey);
