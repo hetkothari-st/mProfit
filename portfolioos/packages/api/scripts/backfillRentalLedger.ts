@@ -22,18 +22,27 @@
  * post-cutover re-run does not double-count a receipt that has since been
  * paid for real.
  *
- * SEMANTIC CHANGE, DELIBERATE: `RentReceipt.receivedOn` is redefined by the
- * ledger as "the date this receipt became fully settled" (see
- * `rentalLedger.service.ts` / `allocateCredits`'s `settledOn`), not "the
- * date any money arrived." A PARTIAL receipt's pinned credit never fully
- * satisfies its charge, so `receivedOn` legitimately clears to `null` after
- * backfill even though the original payment date is preserved on the new
- * `RentLedgerEntry.entryDate`. That is correct, not data loss — but a
- * silent column change in a one-way migration is exactly what this script
- * must not hide. `report.drift` therefore stays money-only (`status` +
- * `receivedAmount`); every other observable change — `receivedOn`,
- * `cashFlowId`, `autoMatchedFromEventId` — is reported separately in
- * `report.semanticChanges` so it is visible without being mistaken for a
+ * `receivedOn` IS PRESERVED, NOT REDEFINED: the ledger projects
+ * `RentReceipt.receivedOn` from the entryDate of the FIRST credit allocated
+ * to a receipt (`allocateCredits`'s `firstCreditDate`), which is the
+ * column's pre-ledger meaning — "the date money first arrived for this
+ * month". This script dates each synthetic PAYMENT at the receipt's own
+ * `receivedOn`, so a legacy receipt — RECEIVED or PARTIAL alike — keeps the
+ * date it already had. It moves only when the money itself moves (e.g. a
+ * receipt whose stale legacy `receivedAmount` is discarded), and then it
+ * moves alongside a `drift` row. This matters concretely: the dashboard's
+ * YTD rental income and `propertyPnL` both filter
+ * `status IN ('RECEIVED','PARTIAL') AND receivedOn >= <date>`, so clearing
+ * `receivedOn` on PARTIAL rows would erase partly-paid months from both.
+ *
+ * SEMANTIC CHANGES, STILL REPORTED: `cashFlowId` and
+ * `autoMatchedFromEventId` stop being receipt-owned facts — the ledger
+ * derives them from whichever entry contributed first, so they can move or
+ * clear when FIFO spillover changes that. A silent column change in a
+ * one-way migration is exactly what this script must not hide, so
+ * `report.drift` stays money-only (`status` + `receivedAmount`) and every
+ * other observable change — including any `receivedOn` movement — is listed
+ * in `report.semanticChanges`, visible without being mistaken for a
  * regression.
  *
  * NO ROLLBACK ON DRIFT: each tenancy's recompute commits in its own
@@ -59,9 +68,11 @@ export interface BackfillReport {
   /** Money-only: a receipt's `status` or `receivedAmount` moved. Must stay empty. */
   drift: Array<{ receiptId: string; before: string; after: string }>;
   /**
-   * Non-money columns that changed as an intended consequence of the ledger
-   * redefining their meaning (see header). Not a failure signal — a record
-   * for review.
+   * Non-money columns that moved because the ledger now derives them from
+   * entries rather than storing them on the receipt (see header). Chiefly
+   * `cashFlowId` / `autoMatchedFromEventId`; `receivedOn` is preserved by
+   * the backfill and appears here only when it genuinely shifted. Not a
+   * failure signal — a record for review.
    */
   semanticChanges: Array<{ receiptId: string; field: string; before: string | null; after: string | null }>;
 }

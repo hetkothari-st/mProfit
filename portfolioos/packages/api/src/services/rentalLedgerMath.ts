@@ -37,7 +37,24 @@ export interface CreditInput {
 
 export interface ChargeAllocation {
   allocated: Prisma.Decimal;
-  /** entryDate of the credit that brought this charge to fully-paid. */
+  /**
+   * entryDate of the FIRST credit that put any money against this charge.
+   *
+   * This — not `settledOn` — is what `RentReceipt.receivedOn` is projected
+   * from. `receivedOn` predates the ledger and two consumers already read it
+   * as "the date money first arrived for this month": the dashboard's YTD
+   * rental income (`dashboard.service.ts`) and `propertyPnL`
+   * (`rental.service.ts`) both filter
+   * `status IN ('RECEIVED','PARTIAL') AND receivedOn >= <date>`. Driving
+   * `receivedOn` from `settledOn` leaves every PARTIAL receipt with a null
+   * date, which silently drops partly-paid months out of both totals.
+   */
+  firstCreditDate: Date | null;
+  /**
+   * entryDate of the credit that brought this charge to fully-paid.
+   * Retained for callers that specifically need "when did this month close";
+   * deliberately NOT the source of `receivedOn` (see `firstCreditDate`).
+   */
   settledOn: Date | null;
   /** Keys of every credit that contributed, in allocation order. */
   creditKeys: string[];
@@ -81,7 +98,12 @@ export function allocateCredits(
   const perCharge = new Map<string, ChargeAllocation>();
   const remaining = new Map<string, Prisma.Decimal>();
   for (const c of ordered) {
-    perCharge.set(c.key, { allocated: ZERO, settledOn: null, creditKeys: [] });
+    perCharge.set(c.key, {
+      allocated: ZERO,
+      firstCreditDate: null,
+      settledOn: null,
+      creditKeys: [],
+    });
     remaining.set(c.key, c.amount);
   }
 
@@ -90,6 +112,9 @@ export function allocateCredits(
     if (!left || left.lte(ZERO) || pool.lte(ZERO)) return pool;
     const take = Prisma.Decimal.min(left, pool);
     const alloc = perCharge.get(chargeKey)!;
+    // First money against this charge, in allocation order. Credits are
+    // sorted by entryDate, so this is also the earliest-dated contributor.
+    if (alloc.creditKeys.length === 0) alloc.firstCreditDate = credit.entryDate;
     alloc.allocated = alloc.allocated.plus(take);
     alloc.creditKeys.push(credit.key);
     remaining.set(chargeKey, left.minus(take));

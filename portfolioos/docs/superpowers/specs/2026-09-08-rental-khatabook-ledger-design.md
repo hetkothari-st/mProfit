@@ -132,8 +132,17 @@ Algorithm — pure, deterministic, idempotent:
 4. **Write back**, per receipt:
    - `receivedAmount` = total allocated (null when zero, preserving the
      existing nullable column's meaning)
-   - `receivedOn` = `entryDate` of the credit whose allocation brought the
-     receipt to fully-paid; null while not fully paid
+   - `receivedOn` = `entryDate` of the **first** credit allocated to this
+     receipt; null only while nothing has been allocated at all. This
+     preserves the column's pre-ledger meaning — "the date money first
+     arrived for this month" — which two consumers that predate this work
+     depend on: the dashboard's YTD rental income (`dashboard.service.ts`)
+     and `propertyPnL` (`rental.service.ts`) both filter
+     `status IN ('RECEIVED','PARTIAL') AND receivedOn >= <date>`. Projecting
+     the *settling* credit's date here would leave every `PARTIAL` receipt
+     null and silently drop partly-paid months from both totals.
+     `allocateCredits` still exposes `settledOn` (the date the month closed)
+     for callers that specifically need it.
    - `status`:
 
      | condition | status |

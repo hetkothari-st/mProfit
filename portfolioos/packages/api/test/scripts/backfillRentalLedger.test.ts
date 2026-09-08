@@ -61,25 +61,37 @@ describe('backfillRentalLedger parity', () => {
     expect(report.paymentsCreated).toBeGreaterThanOrEqual(2);
     expect(report.depositsCreated).toBeGreaterThanOrEqual(1);
 
-    // FIX 1: the PARTIAL receipt's pinned credit never fully settles its
-    // charge, so `receivedOn` legitimately clears to null. That's a real
-    // column change the migration must surface — just not as `drift`,
-    // because the money (status/receivedAmount) didn't move.
-    expect(report.semanticChanges).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          receiptId: partialReceiptId,
-          field: 'receivedOn',
-          before: '2026-02-06T00:00:00.000Z',
-          after: null,
-        }),
-      ]),
-    );
-    // The fully-RECEIVED receipt settles immediately, so its receivedOn is
-    // untouched — no semantic change should be reported for it.
+    // `receivedOn` is projected from the FIRST credit allocated to a
+    // receipt, and this script dates each synthetic PAYMENT at the
+    // receipt's own legacy `receivedOn` — so BOTH receipts keep the date
+    // they already had, and neither shows up as a semantic change. The
+    // PARTIAL one especially: nulling it would drop partly-paid months out
+    // of the dashboard's YTD rental income and of propertyPnL, which both
+    // filter `status IN ('RECEIVED','PARTIAL') AND receivedOn >= <date>`.
+    expect(
+      report.semanticChanges.filter(
+        (c) => c.field === 'receivedOn'
+          && (c.receiptId === partialReceiptId || c.receiptId === receivedReceiptId),
+      ),
+    ).toEqual([]);
     expect(
       report.semanticChanges.some((c) => c.receiptId === receivedReceiptId),
     ).toBe(false);
+  });
+
+  it('keeps receivedOn on a partly-paid receipt so income reports still see it', async () => {
+    await scope.runAs(async () => {
+      const partial = await prisma.rentReceipt.findUniqueOrThrow({
+        where: { id: partialReceiptId },
+      });
+      expect(partial.status).toBe('PARTIAL');
+      expect(partial.receivedOn?.toISOString()).toBe('2026-02-06T00:00:00.000Z');
+
+      const received = await prisma.rentReceipt.findUniqueOrThrow({
+        where: { id: receivedReceiptId },
+      });
+      expect(received.receivedOn?.toISOString()).toBe('2026-01-04T00:00:00.000Z');
+    });
   });
 
   it('preserves every receipt status and amount', async () => {

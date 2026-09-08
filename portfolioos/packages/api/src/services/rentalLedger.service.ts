@@ -111,7 +111,16 @@ export async function recomputeTenancyLedger(
     if (!wasSettled && isSettled) settledReceiptIds.push(r.id);
 
     const nextReceived = allocated.gt(ZERO) ? allocated : null;
-    const nextReceivedOn = alloc?.settledOn ?? null;
+    // `receivedOn` = the date money FIRST landed against this month, which is
+    // the meaning it carried before the ledger existed and the meaning two
+    // pre-existing consumers depend on: dashboard.service.ts's YTD rental
+    // income and rental.service.ts's propertyPnL both select
+    // `status IN ('RECEIVED','PARTIAL') AND receivedOn >= <date>`. Projecting
+    // `settledOn` here instead would leave every PARTIAL receipt null and
+    // silently drop partly-paid months from both totals — a tenant who paid
+    // ₹20,000 of ₹45,000 would contribute ₹0 to each. Don't "simplify" this
+    // back to `settledOn`.
+    const nextReceivedOn = alloc?.firstCreditDate ?? null;
     const unchanged =
       r.status === status &&
       (r.receivedAmount?.toString() ?? null) === (nextReceived?.toString() ?? null) &&
