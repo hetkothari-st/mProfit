@@ -1,40 +1,35 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Prisma } from '@prisma/client';
 import {
+  applyAutoMatch,
   hookAutoMatchRentalCredit,
   type AutoMatchCandidateEvent,
 } from '../../src/services/rental.service.js';
-import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
+import { createTestScope, prisma } from '../helpers/db.js';
 
 /**
  * INVARIANT: applyAutoMatch's ledger entry carries a deterministic
  * `sourceHash` (`rentledger:automatch:<eventId>:<receiptId>`) so a replayed
  * canonical event never double-credits a receipt.
  *
- * The realistic replay is two *concurrent* deliveries of the same canonical
- * event (e.g. a duplicate webhook / at-least-once queue redelivery) landing
- * before either has committed — a sequential retry can't exercise this path
- * at all, because once the first attempt commits, the receipt leaves the
- * EXPECTED/OVERDUE candidate pool `tryAutoMatchRentReceipt` selects from, so
- * `hookAutoMatchRentalCredit` short-circuits to `no_match` before ever
- * calling `applyAutoMatch` again. Only two callers racing each other — both
- * reading the receipt as still EXPECTED before either has written — reach
- * `applyAutoMatch` a second time and hit the `sourceHash` unique constraint,
- * which is exactly what `hookAutoMatchRentalCredit`'s catch is for.
+ * Both tests below are deterministic — no `Promise.all`, no timing
+ * dependency. A prior version of this file drove the duplicate through two
+ * concurrent `hookAutoMatchRentalCredit` calls; that could not distinguish
+ * "the sourceHash constraint stopped the duplicate" from "the two calls
+ * never actually raced and the second one found no candidate at all" — both
+ * produce identical passing assertions, so the test could silently prove
+ * nothing depending on scheduling. These two replace it.
  */
-describe('invariant: auto-match idempotency under concurrent replay', () => {
-  let scope: TestScope;
-  let tenancyId: string;
-  let receiptId: string;
-  let event: AutoMatchCandidateEvent;
-
-  beforeAll(async () => {
-    scope = await createTestScope('rental-automatch-idempotency');
+describe('invariant: auto-match idempotency', () => {
+  async function seedTenancyWithReceipt(label: string, expectedAmount: string) {
+    const scope = await createTestScope(label);
+    let tenancyId = '';
+    let receiptId = '';
     await scope.runAs(async () => {
       const property = await prisma.rentalProperty.create({
         data: {
           userId: scope.userId,
-          name: 'Automatch Idempotency',
+          name: label,
           propertyType: 'RESIDENTIAL',
           portfolioId: scope.portfolioId,
         },
@@ -42,72 +37,140 @@ describe('invariant: auto-match idempotency under concurrent replay', () => {
       const tenancy = await prisma.tenancy.create({
         data: {
           propertyId: property.id,
-          tenantName: 'Race Tenant',
+          tenantName: 'Idempotency Tenant',
           startDate: new Date('2026-07-01T00:00:00.000Z'),
-          monthlyRent: '20000',
+          monthlyRent: expectedAmount,
           rentDueDay: 1,
         },
       });
       tenancyId = tenancy.id;
       const receipt = await prisma.rentReceipt.create({
         data: {
-          tenancyId, forMonth: '2026-07', expectedAmount: '20000',
+          tenancyId, forMonth: '2026-07', expectedAmount,
           dueDate: new Date('2026-07-01T00:00:00.000Z'), status: 'EXPECTED',
         },
       });
       receiptId = receipt.id;
     });
+    return { scope, tenancyId, receiptId };
+  }
 
-    event = {
-      id: 'canonical-event-automatch-race',
-      userId: scope.userId,
-      eventDate: new Date('2026-07-03T00:00:00.000Z'),
-      amount: new Prisma.Decimal('20000'),
-      counterparty: null,
-    };
+  /**
+   * TEST A: the sourceHash unique constraint itself, driven deterministically
+   * through applyAutoMatch — no candidate lookup, no timing.
+   *
+   * The receipt's expectedAmount (45000) is kept larger than the event's
+   * amount (20000) specifically so the first call leaves the receipt PARTIAL
+   * rather than RECEIVED — applyAutoMatch's own
+   * `if (existing.status === RECEIPT_STATUS.RECEIVED) return existing;`
+   * early-return only fires on RECEIVED, so a second call with the identical
+   * event does NOT short-circuit there and actually reaches
+   * `tx.rentLedgerEntry.create(...)`, which must then collide on the
+   * deterministic `sourceHash`.
+   */
+  it('applyAutoMatch rejects a duplicate call with the same event on the sourceHash constraint', async () => {
+    const { scope, tenancyId, receiptId } = await seedTenancyWithReceipt(
+      'rental-automatch-sourcehash',
+      '45000',
+    );
+    try {
+      await scope.runAs(async () => {
+        const event: AutoMatchCandidateEvent = {
+          id: 'canonical-event-sourcehash',
+          userId: scope.userId,
+          eventDate: new Date('2026-07-03T00:00:00.000Z'),
+          amount: new Prisma.Decimal('20000'),
+          counterparty: null,
+        };
+
+        const first = await applyAutoMatch(scope.userId, receiptId, event, null);
+        expect(first.status).toBe('PARTIAL');
+        expect(first.receivedAmount?.toString()).toBe('20000');
+
+        // Second call, identical event: the receipt is PARTIAL (not
+        // RECEIVED), so applyAutoMatch's early-return does not fire and it
+        // proceeds to insert a second RentLedgerEntry with the same
+        // deterministic sourceHash as the first — this must be what
+        // rejects the call, not any other guard.
+        let caught: unknown;
+        try {
+          await applyAutoMatch(scope.userId, receiptId, event, null);
+        } catch (err) {
+          caught = err;
+        }
+        expect(caught).toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+        expect((caught as Prisma.PrismaClientKnownRequestError).code).toBe('P2002');
+
+        const entries = await prisma.rentLedgerEntry.findMany({
+          where: { tenancyId, entryType: 'PAYMENT' },
+        });
+        expect(entries).toHaveLength(1);
+
+        const cashFlowIds = entries.map((e) => e.cashFlowId).filter((v): v is string => !!v);
+        const flows = await prisma.cashFlow.findMany({ where: { id: { in: cashFlowIds } } });
+        expect(flows).toHaveLength(1);
+
+        const receipt = await prisma.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
+        expect(receipt.status).toBe('PARTIAL');
+        expect(receipt.receivedAmount?.toString()).toBe('20000');
+      });
+    } finally {
+      await scope.cleanup();
+    }
   });
 
-  afterAll(async () => {
-    await scope.cleanup();
-  });
+  /**
+   * TEST B: the realistic production replay — a duplicate canonical-event
+   * delivery landing sequentially, well after the first has fully committed
+   * (e.g. a queue redelivery after a lost ack). The second
+   * `hookAutoMatchRentalCredit` call only starts once the first has fully
+   * resolved, so there is nothing timing-dependent here either.
+   *
+   * The event amount equals the full expectedAmount here, so the first call
+   * settles the receipt to RECEIVED. Which mechanism stops the second call
+   * is left to the code, not asserted directly — RECEIVED puts the receipt
+   * outside `tryAutoMatchRentReceipt`'s EXPECTED/OVERDUE candidate filter,
+   * so in practice the second call never reaches `applyAutoMatch` at all and
+   * returns `no_match` from the candidate lookup, not from a caught
+   * `sourceHash` collision. That is a valid, expected way to be idempotent
+   * — the assertion below only pins the observable end state.
+   */
+  it('hookAutoMatchRentalCredit is idempotent under a sequential replay of the same event', async () => {
+    const { scope, tenancyId, receiptId } = await seedTenancyWithReceipt(
+      'rental-automatch-sequential',
+      '20000',
+    );
+    try {
+      await scope.runAs(async () => {
+        const event: AutoMatchCandidateEvent = {
+          id: 'canonical-event-sequential-replay',
+          userId: scope.userId,
+          eventDate: new Date('2026-07-03T00:00:00.000Z'),
+          amount: new Prisma.Decimal('20000'),
+          counterparty: null,
+        };
 
-  it('two concurrent deliveries of the same event produce exactly one payment', async () => {
-    await scope.runAs(async () => {
-      const [first, second] = await Promise.all([
-        hookAutoMatchRentalCredit(event, null),
-        hookAutoMatchRentalCredit(event, null),
-      ]);
+        const first = await hookAutoMatchRentalCredit(event, null);
+        expect(first.kind).toBe('matched');
 
-      // Exactly one of the two racers actually matched; the other lost the
-      // sourceHash race (caught as a P2002 inside hookAutoMatchRentalCredit,
-      // surfaced as no_match) — or, if the loser's SELECT happened to run
-      // after the winner had already committed, it never found a candidate
-      // in the first place. Either way, never two matches.
-      const outcomes = [first, second];
-      const matchedCount = outcomes.filter((o) => o.kind === 'matched').length;
-      expect(matchedCount).toBe(1);
-      expect(outcomes.some((o) => o.kind === 'no_match')).toBe(true);
+        const second = await hookAutoMatchRentalCredit(event, null);
+        expect(second.kind).not.toBe('matched');
 
-      const entries = await prisma.rentLedgerEntry.findMany({
-        where: { tenancyId, entryType: 'PAYMENT' },
+        const entries = await prisma.rentLedgerEntry.findMany({
+          where: { tenancyId, entryType: 'PAYMENT' },
+        });
+        expect(entries).toHaveLength(1);
+
+        const cashFlowIds = entries.map((e) => e.cashFlowId).filter((v): v is string => !!v);
+        const flows = await prisma.cashFlow.findMany({ where: { id: { in: cashFlowIds } } });
+        expect(flows).toHaveLength(1);
+
+        const receipt = await prisma.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
+        expect(receipt.status).toBe('RECEIVED');
+        expect(receipt.receivedAmount?.toString()).toBe('20000');
       });
-      expect(entries).toHaveLength(1);
-      expect(entries[0]!.canonicalEventId).toBe(event.id);
-      expect(entries[0]!.sourceHash).toBe(
-        `rentledger:automatch:${event.id}:${receiptId}`,
-      );
-
-      const cashFlowIds = entries.map((e) => e.cashFlowId).filter((v): v is string => !!v);
-      const flows = await prisma.cashFlow.findMany({
-        where: { id: { in: cashFlowIds } },
-      });
-      expect(flows).toHaveLength(1);
-
-      // A single full-amount payment settles the receipt exactly the way
-      // one `markReceiptReceived` call for the same amount would.
-      const receipt = await prisma.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
-      expect(receipt.status).toBe('RECEIVED');
-      expect(receipt.receivedAmount?.toString()).toBe('20000');
-    });
+    } finally {
+      await scope.cleanup();
+    }
   });
 });
