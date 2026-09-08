@@ -142,26 +142,46 @@ interface PillarNote {
 }
 
 /**
- * Split scored pillars into strengths and weaknesses.
+ * Rank the scored pillars, and say which are strong and which are this fund's
+ * weakest — which are not the same question.
  *
- * The cut is the pillar's own score, not its rank: 0.6 and above reads as a
- * genuine strength, below 0.4 as a genuine weakness, and the middle is left out
- * of both lists rather than padded into whichever is shorter. A page that
- * always shows three strengths and three weaknesses teaches the reader that the
- * lists are decoration.
+ * Pillar scores are percentile-shaped: across the scored universe they average
+ * 0.50 and run 0.01 to 0.98. So an absolute cut ("below 0.4 is a weakness")
+ * describes a fund against its category, and for a genuinely good fund it
+ * returns nothing at all. The first version of this did exactly that and the
+ * page told the reader there was nothing to watch on a fund whose downside
+ * protection was visibly its weakest side — true as stated, useless as
+ * guidance, and it reads as a broken panel.
+ *
+ * So there are two bands, and the copy distinguishes them honestly:
+ *
+ *   - Below 0.4 is a weakness against the category, and is described that way.
+ *   - Otherwise the lowest-scoring pillar is this fund's OWN weakest area, and
+ *     is described that way — "its weakest area, though still ahead of most
+ *     funds in its category" — rather than being dressed up as a problem.
+ *
+ * That is a reframing of a real ranking, not an invented finding. What it will
+ * not do is pad: a fund with one scored pillar has no meaningful "weakest",
+ * and gets nothing.
+ *
+ * `PEOPLE_PARENT` is excluded from strengths. It is currently 0.75 for every
+ * scored scheme in the database — min, mean and max are all 0.75 — so it
+ * separates no fund from any other, and presenting it as something this fund
+ * does well would be telling the reader a constant.
  */
+const UNINFORMATIVE_PILLARS = new Set(['PEOPLE_PARENT']);
+
 function splitPillars(pillars: Record<string, MfPillarScore>): {
   strengths: PillarNote[];
   weaknesses: PillarNote[];
+  relativeWeakest: PillarNote | null;
   unscored: string[];
 } {
-  const strengths: PillarNote[] = [];
-  const weaknesses: PillarNote[] = [];
+  const scored: PillarNote[] = [];
   const unscored: string[] = [];
 
   for (const [key, pillar] of Object.entries(pillars)) {
     const score = num(pillar.score);
-    const weight = num(pillar.weight) ?? 0;
     const label = PILLAR_LABEL[key] ?? key;
     if (score === null) {
       // A pillar at zero weight contributed nothing to the rating. Saying so is
@@ -170,20 +190,20 @@ function splitPillars(pillars: Record<string, MfPillarScore>): {
       unscored.push(label);
       continue;
     }
-    const note: PillarNote = {
-      key,
-      label,
-      meaning: PILLAR_MEANING[key] ?? '',
-      score,
-      weight,
-    };
-    if (score >= 0.6) strengths.push(note);
-    else if (score < 0.4) weaknesses.push(note);
+    scored.push({ key, label, meaning: PILLAR_MEANING[key] ?? '', score, weight: num(pillar.weight) ?? 0 });
   }
 
-  strengths.sort((a, b) => b.score - a.score);
-  weaknesses.sort((a, b) => a.score - b.score);
-  return { strengths, weaknesses, unscored };
+  const informative = scored.filter((p) => !UNINFORMATIVE_PILLARS.has(p.key));
+  const strengths = informative.filter((p) => p.score >= 0.6).sort((a, b) => b.score - a.score);
+  const weaknesses = scored.filter((p) => p.score < 0.4).sort((a, b) => a.score - b.score);
+
+  // Only when nothing is weak in absolute terms, and only with something to
+  // rank against.
+  const ranked = [...informative].sort((a, b) => a.score - b.score);
+  const relativeWeakest =
+    weaknesses.length === 0 && ranked.length >= 2 ? (ranked[0] ?? null) : null;
+
+  return { strengths, weaknesses, relativeWeakest, unscored };
 }
 
 interface PlainMetric {
@@ -285,8 +305,18 @@ export function PlainOverview({
 
   const rating = score?.rating ?? null;
   const verdict = rating === null ? null : RATING_VERDICT[rating];
-  const { strengths, weaknesses, unscored } =
-    score === null ? { strengths: [], weaknesses: [], unscored: [] } : splitPillars(score.pillars);
+  const { strengths, weaknesses, relativeWeakest, unscored } =
+    score === null
+      ? { strengths: [], weaknesses: [], relativeWeakest: null, unscored: [] }
+      : splitPillars(score.pillars);
+
+  // Cost is only shown when somebody's cost is actually known: we hold a TER
+  // for the funds whose AMC factsheet has been ingested, which today is a
+  // minority of them.
+  const anyCostKnown =
+    alternatives !== null &&
+    (alternatives.subjectTerPct !== null ||
+      alternatives.alternatives.some((a) => a.terPct !== null));
 
   const composite = num(score?.composite);
   const median = num(data.categoryStats.medianComposite);
@@ -346,7 +376,7 @@ export function PlainOverview({
       </section>
 
       {/* ── What's good / what to watch ───────────────────────────────── */}
-      {(strengths.length > 0 || weaknesses.length > 0) && (
+      {(strengths.length > 0 || weaknesses.length > 0 || relativeWeakest !== null) && (
         <section className="grid gap-6 md:grid-cols-2">
           <div className="rounded-xl border border-border bg-card p-6">
             <h3 className="font-display text-[18px] text-foreground">What it does well</h3>
@@ -369,9 +399,20 @@ export function PlainOverview({
           <div className="rounded-xl border border-border bg-card p-6">
             <h3 className="font-display text-[18px] text-foreground">What to watch</h3>
             {weaknesses.length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                Nothing stands out as a clear weakness against its peers.
-              </p>
+              relativeWeakest === null ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Nothing stands out as a clear weakness against its peers.
+                </p>
+              ) : (
+                <div className="mt-3 text-sm">
+                  <span className="font-medium text-foreground">{relativeWeakest.label}</span>
+                  <span className="text-muted-foreground"> — {relativeWeakest.meaning}.</span>
+                  <p className="mt-2 text-muted-foreground">
+                    This is its weakest area, though it is still ahead of most funds in its
+                    category. Nothing here is a red flag.
+                  </p>
+                </div>
+              )
             ) : (
               <ul className="mt-3 space-y-3">
                 {weaknesses.map((p) => (
@@ -445,7 +486,7 @@ export function PlainOverview({
                   <th className="py-2 pr-4 font-medium">Fund</th>
                   <th className="py-2 pr-4 font-medium">Rating</th>
                   <th className="py-2 pr-4 font-medium">Score</th>
-                  <th className="py-2 font-medium">Cost / yr</th>
+                  {anyCostKnown && <th className="py-2 font-medium">Cost / yr</th>}
                 </tr>
               </thead>
               <tbody>
@@ -471,23 +512,33 @@ export function PlainOverview({
                         </span>
                       )}
                     </td>
-                    {/* TER is null until this AMC's factsheet is ingested. An
-                        em dash says "not known", where a 0 would say "free". */}
-                    <td className="py-3 text-foreground">
-                      {a.terPct === null ? (
-                        <span className="text-muted-foreground">not disclosed to us</span>
-                      ) : (
-                        `${num(a.terPct)!.toFixed(2)}%`
-                      )}
-                    </td>
+                    {/* The column appears only when at least one row can fill
+                        it. A column of "not disclosed" for every fund is not
+                        honesty, it is furniture — and it crowds out the numbers
+                        that are known. */}
+                    {anyCostKnown && (
+                      <td className="py-3 text-foreground">
+                        {a.terPct === null ? (
+                          <span className="text-muted-foreground">not disclosed to us</span>
+                        ) : (
+                          `${num(a.terPct)!.toFixed(2)}%`
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {alternatives.subjectTerPct !== null && (
+          {alternatives.subjectTerPct !== null ? (
             <p className="mt-3 text-xs text-muted-foreground">
               This fund charges {num(alternatives.subjectTerPct)!.toFixed(2)}% a year.
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-muted-foreground">
+              We do not yet hold expense ratios for these funds, so cost is not compared here.
+              Cost is one of the strongest predictors of long-term return — worth checking on the
+              AMC's own factsheet before deciding anything.
             </p>
           )}
         </section>

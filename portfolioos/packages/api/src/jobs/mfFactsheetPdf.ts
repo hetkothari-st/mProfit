@@ -162,12 +162,19 @@ function findSchemePages(pages: readonly string[], schemeName: string): string |
 }
 
 /**
- * The resolver to install via `setIciciFactsheetTextResolver`.
+ * A factsheet-text resolver for any AMC that publishes one consolidated PDF.
  *
- * Returns null — never a guess — when the month is unpublished or the fund is
- * not found by name.
+ * The shape is identical across AMCs — build a monthly URL, extract per page,
+ * claim the fund's own page — so the only per-AMC input is the URL builder.
+ * `findSchemePages`' two conditions hold generally: a consolidated factsheet
+ * gives each fund a page headed by its name, and repeats that name in footnotes
+ * and annexures elsewhere.
  */
-export function createIciciFactsheetTextResolver(ctx: FactsheetFetchContext, asOf: Date) {
+export function createFactsheetTextResolver(
+  ctx: FactsheetFetchContext,
+  urlFor: (asOf: Date) => string,
+  asOf: Date,
+) {
   return async (schemeCode: string): Promise<string | null> => {
     const meta = await prisma.mfSchemeMeta.findUnique({
       where: { schemeCode },
@@ -175,7 +182,7 @@ export function createIciciFactsheetTextResolver(ctx: FactsheetFetchContext, asO
     });
     if (meta === null) return null;
 
-    const url = ICICI_ENDPOINTS.factsheetPdf(asOf);
+    const url = urlFor(asOf);
     const pages = await loadPdfPages(url, ctx);
     if (pages === null) return null;
 
@@ -190,3 +197,38 @@ export function createIciciFactsheetTextResolver(ctx: FactsheetFetchContext, asO
     return text;
   };
 }
+
+/** ICICI Pru's consolidated factsheet. */
+export function createIciciFactsheetTextResolver(ctx: FactsheetFetchContext, asOf: Date) {
+  return createFactsheetTextResolver(ctx, ICICI_ENDPOINTS.factsheetPdf, asOf);
+}
+
+/**
+ * SBI's consolidated factsheet URL. Verified 2026-09-08: july and june return
+ * 200, ~10 MB.
+ *
+ * NOT WIRED, and text-per-page extraction cannot read it. SBI lays a page out
+ * as a TABLE OF SEVERAL FUNDS IN COLUMNS:
+ *
+ *     Month end AUM        55,417.22    5,810.72
+ *     Monthly Avg. AUM     55,222.03    5,790.26
+ *
+ * Two funds, side by side, on one line of extracted text. Nothing in a
+ * flattened page string says which column belongs to which fund, so a facts
+ * regex would take the first number it met and attribute another fund's AUM and
+ * TER to this one — the exact failure the page-indexing above exists to
+ * prevent, reintroduced one level down.
+ *
+ * Reading it needs column-aware extraction: pdfjs gives each text item an x
+ * position in `transform`, so the columns can be recovered by clustering on x
+ * and mapping each to the fund named in its header. That is a different
+ * extractor, not a different URL, which is why this export exists without a
+ * resolver beside it.
+ */
+export const SBI_FACTSHEET_PDF = (asOf: Date): string => {
+  const month = asOf.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }).toLowerCase();
+  return (
+    'https://www.sbimf.com/docs/default-source/scheme-factsheets/' +
+    `all-sbimf-schemes-factsheet-${month}-${asOf.getUTCFullYear()}.pdf`
+  );
+};
