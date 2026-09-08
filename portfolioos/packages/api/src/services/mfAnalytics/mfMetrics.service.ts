@@ -228,6 +228,55 @@ function calendarDaysBetween(a: Date, b: Date): number {
 }
 
 /** Inclusive slice of an ascending-by-date series. */
+/**
+ * Why the window could not be opened, in terms an operator can act on.
+ *
+ * The previous message measured the fund's whole span — first NAV to `asOf` —
+ * and reported it as coverage of the window. For a fund whose feed stopped it
+ * read `nav_history_covers_163_of_36_months`: an impossible sentence that says
+ * the fund has four times the history it needs and the arithmetic is broken.
+ *
+ * Tata Dynamic Bond Fund is the real case. Its NAV runs 2013-01-02 to
+ * 2022-09-23 and stops. The 3-year window ending 2026-08-31 contains not one
+ * observation, so refusing it is right — but "covers 163 of 36 months" sends
+ * the reader into `windowStartPoint` instead of at the feed, which is where the
+ * problem is. A stale series and a young fund are different operational
+ * problems and now say so:
+ *
+ *   - the series ENDS before the window opens: a dead or broken feed, and the
+ *     scheme is probably no longer ACTIVE either;
+ *   - the series STARTS after the window opens: an ordinary young fund;
+ *   - neither: a gap at the window boundary wider than the tolerance.
+ *
+ * Exported for tests: it is a message, and the thing worth pinning is which of
+ * the three it produces.
+ */
+export function describeWindowGap(
+  navDaily: readonly SeriesPoint[],
+  asOf: Date,
+  horizonYears: MfHorizonYears,
+): string {
+  if (navDaily.length === 0) return 'no_adjusted_nav_history';
+
+  const first = navDaily[0]!.date;
+  const last = navDaily[navDaily.length - 1]!.date;
+  const windowFrom = new Date(
+    Date.UTC(asOf.getUTCFullYear() - horizonYears, asOf.getUTCMonth(), asOf.getUTCDate()),
+  );
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+  if (last.getTime() < windowFrom.getTime()) {
+    return `nav_series_ends_${iso(last)}_before_window_opens_${iso(windowFrom)}`;
+  }
+  if (first.getTime() > windowFrom.getTime()) {
+    const covered = Math.floor(calendarDaysBetween(first, asOf) / 30.44);
+    return `nav_history_covers_${covered}_of_${horizonYears * 12}_months`;
+  }
+  // The series brackets the window start but has no observation near enough to
+  // it — a hole in the middle of an otherwise live feed.
+  return `no_nav_within_tolerance_of_${iso(windowFrom)}`;
+}
+
 function sliceSeries(series: readonly SeriesPoint[], from: Date, to: Date): SeriesPoint[] {
   const lo = from.getTime();
   const hi = to.getTime();
@@ -653,18 +702,12 @@ function computeHorizon(
   // rather than a 3-year CAGR computed from an inception NAV.
   const windowStart = math.windowStartPoint(navDaily, asOf, horizonYears);
   if (windowStart === null) {
-    const covered =
-      navDaily.length > 0
-        ? Math.floor(calendarDaysBetween(navDaily[0]!.date, asOf) / 30.44)
-        : 0;
     return emptyHorizon(
       asOf,
       horizonYears,
       benchmarkCode,
       'INSUFFICIENT_DATA',
-      navDaily.length === 0
-        ? 'no_adjusted_nav_history'
-        : `nav_history_covers_${covered}_of_${horizonYears * 12}_months`,
+      describeWindowGap(navDaily, asOf, horizonYears),
     );
   }
 
