@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { BudgetGauge } from './BudgetGauge';
 import { UpgradeSidebarCard } from './UpgradeSidebarCard';
@@ -7,13 +7,46 @@ import { AssetClassSectionList } from './AssetClassSectionList';
 import { FamilyNavTree } from './FamilyNavTree';
 import { NavSection, OVERVIEW_ITEMS, ASSET_CLASS_ITEMS, NAV_SECTIONS } from './navItems';
 
+/**
+ * Where each nav list was scrolled to, keyed by `scrollKey`.
+ *
+ * The mobile drawer lives inside a Radix portal, and Radix UNMOUNTS portal
+ * children when the dialog closes. So the scrollable <nav> below is destroyed
+ * on close and a fresh element is created on open — a new element starts at
+ * scrollTop 0, which is why the drawer always reopened at the top. The desktop
+ * sidebar never unmounts, which is why the bug is mobile-only.
+ *
+ * Module-level rather than localStorage on purpose: this is view state for the
+ * current session, and it must be readable synchronously during layout. A full
+ * page reload legitimately starts at the top.
+ */
+const scrollPositions = new Map<string, number>();
+
 export function SidebarNav({
   collapsed,
   renderToggle,
+  scrollKey,
 }: {
   collapsed: boolean;
   renderToggle?: ReactNode;
+  /**
+   * Opt in to remembering this list's scroll position across unmounts. Only
+   * the mobile drawer needs it; the desktop rail stays mounted and keeps its
+   * own scroll for free.
+   */
+  scrollKey?: string;
 }) {
+  const navRef = useRef<HTMLElement | null>(null);
+
+  // Layout effect, not effect: the restore has to land before the browser
+  // paints, or the drawer visibly opens at the top and then jumps.
+  useLayoutEffect(() => {
+    if (!scrollKey) return;
+    const el = navRef.current;
+    const saved = scrollPositions.get(scrollKey);
+    if (el && saved) el.scrollTop = saved;
+  }, [scrollKey]);
+
   return (
     <div className="flex flex-col h-full">
       {/* brand mark + collapse */}
@@ -67,6 +100,12 @@ export function SidebarNav({
       )}
 
       <nav
+        ref={navRef}
+        onScroll={
+          scrollKey
+            ? (e) => scrollPositions.set(scrollKey, e.currentTarget.scrollTop)
+            : undefined
+        }
         className={cn(
           'flex-1 overflow-y-auto py-4',
           collapsed ? 'px-2 space-y-3' : 'px-3 space-y-5',
