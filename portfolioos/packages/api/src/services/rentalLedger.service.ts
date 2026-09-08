@@ -142,10 +142,23 @@ export async function recomputeTenancyLedger(
   }
 
   const balanceDue = chargeTotal.minus(creditTotal);
-  await tx.tenancy.update({
-    where: { id: tenancyId },
-    data: { balanceDue, depositHeld, balanceComputedAt: new Date() },
-  });
+
+  // Idempotency guard: only touch the row (and bump balanceComputedAt) when
+  // the computed totals actually differ from what's stored. Without this,
+  // a no-op recompute — e.g. the daily overdue cron running against an
+  // untouched ledger — would still write every Tenancy row on every run,
+  // which both violates "recompute twice changes nothing" and means
+  // balanceComputedAt would record "last recomputed" rather than "last
+  // changed". Don't remove this guard to "simplify" the write.
+  const tenancy = await tx.tenancy.findUniqueOrThrow({ where: { id: tenancyId } });
+  const balanceChanged =
+    !tenancy.balanceDue.equals(balanceDue) || !tenancy.depositHeld.equals(depositHeld);
+  if (balanceChanged) {
+    await tx.tenancy.update({
+      where: { id: tenancyId },
+      data: { balanceDue, depositHeld, balanceComputedAt: new Date() },
+    });
+  }
 
   for (const receiptId of settledReceiptIds) {
     await resolveRentReceiptReminders(tx, receiptId);
