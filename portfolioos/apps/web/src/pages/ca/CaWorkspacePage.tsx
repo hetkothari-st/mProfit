@@ -12,18 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/cn';
-import {
-  caApi,
-  CONSENT_BASIS_LABEL,
-  type CaClient,
-  type CaConsentBasis,
-} from '@/api/ca.api';
+import { caApi, CONSENT_BASIS_LABEL, type CaClient, type CaConsentBasis } from '@/api/ca.api';
 
 /**
  * A CA's client list.
@@ -157,9 +153,13 @@ function ClientGroup({
         <h2 className="text-[10px] font-medium uppercase tracking-kerned text-foreground/70">
           {label}
         </h2>
-        <span className="numeric tabular-nums text-[11px] text-muted-foreground">{rows.length}</span>
+        <span className="numeric tabular-nums text-[11px] text-muted-foreground">
+          {rows.length}
+        </span>
       </div>
-      {caption && <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">{caption}</p>}
+      {caption && (
+        <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">{caption}</p>
+      )}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           {rows.map((c) => (
@@ -174,10 +174,7 @@ function ClientGroup({
                     {KIND_LABEL[c.kind]}
                   </span>
                   <span
-                    className={cn(
-                      'text-[9.5px] uppercase tracking-kerned',
-                      statusTone(c.status),
-                    )}
+                    className={cn('text-[9.5px] uppercase tracking-kerned', statusTone(c.status))}
                   >
                     {c.status.toLowerCase()}
                   </span>
@@ -249,7 +246,10 @@ function ManagedClientDialog({
       toast.success('Client record created');
       qc.invalidateQueries({ queryKey: ['ca', 'clients'] });
       onOpenChange(false);
-      setName(''); setEmail(''); setPan(''); setConsentNote('');
+      setName('');
+      setEmail('');
+      setPan('');
+      setConsentNote('');
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -259,13 +259,16 @@ function ManagedClientDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Add a managed client</DialogTitle>
+          <DialogDescription>
+            For a client who does not use this app. You will hold their books.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-            For a client who doesn&apos;t use this app. You will hold their books, and they
-            will have no account and no way to see or end this — so the basis on which you
-            hold their data is recorded here.
+            For a client who doesn&apos;t use this app. You will hold their books, and they will
+            have no account and no way to see or end this — so the basis on which you hold their
+            data is recorded here.
           </p>
 
           <div>
@@ -275,11 +278,19 @@ function ManagedClientDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Email (optional)</Label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="For your records" />
+              <Input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="For your records"
+              />
             </div>
             <div>
               <Label>PAN (optional)</Label>
-              <Input value={pan} onChange={(e) => setPan(e.target.value.toUpperCase())} maxLength={10} />
+              <Input
+                value={pan}
+                onChange={(e) => setPan(e.target.value.toUpperCase())}
+                maxLength={10}
+              />
             </div>
           </div>
 
@@ -314,10 +325,14 @@ function ManagedClientDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
           <Button
             onClick={() => create.mutate()}
-            disabled={!name.trim() || create.isPending || (consentBasis === 'OTHER' && !consentNote.trim())}
+            disabled={
+              !name.trim() || create.isPending || (consentBasis === 'OTHER' && !consentNote.trim())
+            }
           >
             {create.isPending ? 'Creating…' : 'Create record'}
           </Button>
@@ -351,7 +366,10 @@ function InviteClientDialog({
 
   function close() {
     onOpenChange(false);
-    setName(''); setEmail(''); setLink(null); setCopied(false);
+    setName('');
+    setEmail('');
+    setLink(null);
+    setCopied(false);
   }
 
   return (
@@ -359,13 +377,18 @@ function InviteClientDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{link ? 'Send this to your client' : 'Invite a client'}</DialogTitle>
+          <DialogDescription>
+            {link
+              ? 'The link works once and expires in 14 days.'
+              : 'They keep their own account and can withdraw access at any time.'}
+          </DialogDescription>
         </DialogHeader>
 
         {link ? (
           <div className="space-y-3">
             <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-              We don&apos;t email this yet — send it yourself. It works once, expires in 14
-              days, and only for the address you entered.
+              We don&apos;t email this yet — send it yourself. It works once, expires in 14 days,
+              and only for the address you entered.
             </p>
             <div className="flex items-center gap-2">
               <Input readOnly value={link} className="text-[12px]" />
@@ -380,14 +403,16 @@ function InviteClientDialog({
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
             </div>
-            <Button onClick={close} className="w-full">Done</Button>
+            <Button onClick={close} className="w-full">
+              Done
+            </Button>
           </div>
         ) : (
           <>
             <div className="space-y-3">
               <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                They keep their own account and grant you access. They can see everything you
-                do and withdraw it at any time.
+                They keep their own account and grant you access. They can see everything you do and
+                withdraw it at any time.
               </p>
               <div>
                 <Label>Client name</Label>
@@ -403,7 +428,9 @@ function InviteClientDialog({
               </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={close}>Cancel</Button>
+              <Button variant="ghost" onClick={close}>
+                Cancel
+              </Button>
               <Button
                 onClick={() => invite.mutate()}
                 disabled={!name.trim() || !email.trim() || invite.isPending}

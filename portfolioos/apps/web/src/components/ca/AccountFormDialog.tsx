@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,6 +82,11 @@ export function AccountFormDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit account' : 'New account'}</DialogTitle>
+          <DialogDescription>
+            {isEdit
+              ? 'Rename this account or change its code.'
+              : 'Add an account to this client’s chart.'}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -97,9 +103,9 @@ export function AccountFormDialog({
 
           {isEdit ? (
             <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-              Type is <span className="text-foreground">{account!.type}</span> and cannot be
-              changed here — it decides which side of the statements this balance falls on.
-              Delete and re-create if it was wrong.
+              Type is <span className="text-foreground">{account!.type}</span> and cannot be changed
+              here — it decides which side of the statements this balance falls on. Delete and
+              re-create if it was wrong.
             </p>
           ) : (
             <>

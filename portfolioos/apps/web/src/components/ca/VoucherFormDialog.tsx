@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -116,6 +117,10 @@ export function VoucherFormDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Post a voucher</DialogTitle>
+          <DialogDescription>
+            Each entry is a debit and the credit that answers it, so the voucher balances by
+            construction.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -168,8 +173,8 @@ export function VoucherFormDialog({
 
             {rows.length === 0 ? (
               <p className="text-[12.5px] text-muted-foreground">
-                This client has no chart of accounts yet. Open the Chart of accounts tab once
-                to create the defaults.
+                This client has no chart of accounts yet. Open the Chart of accounts tab once to
+                create the defaults.
               </p>
             ) : (
               <div className="space-y-2">
@@ -241,7 +246,9 @@ export function VoucherFormDialog({
                   </div>
                 ))}
 
-                {entries.some((e) => e.debitAccountId && e.debitAccountId === e.creditAccountId) && (
+                {entries.some(
+                  (e) => e.debitAccountId && e.debitAccountId === e.creditAccountId,
+                ) && (
                   <p className="text-[11.5px] text-negative">
                     An entry cannot debit and credit the same account.
                   </p>

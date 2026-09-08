@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,13 +78,16 @@ export function FmvFormDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit fair market value' : 'Set a fair market value'}</DialogTitle>
+          <DialogDescription>
+            The 31 January 2018 value used to grandfather long-term equity gains.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-            The value on 31 January 2018, used to grandfather long-term equity gains under
-            Section 55(2)(ac). Changing it changes your client&apos;s taxable gain, so the
-            previous figure is kept on the record.
+            The value on 31 January 2018, used to grandfather long-term equity gains under Section
+            55(2)(ac). Changing it changes your client&apos;s taxable gain, so the previous figure
+            is kept on the record.
           </p>
 
           <div>

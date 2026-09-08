@@ -42,9 +42,9 @@ export function AcceptCaInvitationPage() {
           </div>
 
           <p className="text-[13.5px] leading-relaxed text-muted-foreground">
-            Accepting lets them see your complete financial position — holdings,
-            transactions, capital gains — and keep your books: creating and editing
-            vouchers, your chart of accounts, and corrections to your records.
+            Accepting lets them see your complete financial position — holdings, transactions,
+            capital gains — and keep your books: creating and editing vouchers, your chart of
+            accounts, and corrections to your records.
           </p>
 
           <ul className="space-y-1.5 text-[12.5px] leading-relaxed text-muted-foreground">

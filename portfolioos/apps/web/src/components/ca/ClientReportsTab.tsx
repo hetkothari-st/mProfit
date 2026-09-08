@@ -102,8 +102,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
   const shown = needle
     ? REPORTS.filter(
         (r) =>
-          r.title.toLowerCase().includes(needle) ||
-          r.description.toLowerCase().includes(needle),
+          r.title.toLowerCase().includes(needle) || r.description.toLowerCase().includes(needle),
       )
     : REPORTS;
 
@@ -178,17 +177,37 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
               variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() => void downloadRaw(`/api/reports/statement/provident-fund?format=xlsx&clientId=${clientId}`, `provident-fund-${fy}.xlsx`, 'pf')}
+              onClick={() =>
+                void downloadRaw(
+                  `/api/reports/statement/provident-fund?format=xlsx&clientId=${clientId}`,
+                  `provident-fund-${fy}.xlsx`,
+                  'pf',
+                )
+              }
             >
-              {busy === 'pf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+              {busy === 'pf' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileDown className="h-3.5 w-3.5" />
+              )}
               Provident fund
             </Button>
             <Button
               size="sm"
               disabled={busy !== null}
-              onClick={() => void downloadRaw(`/api/reports/fy-bundle?fy=${fy}&clientId=${clientId}`, `FY${fy}-bundle.zip`, 'bundle')}
+              onClick={() =>
+                void downloadRaw(
+                  `/api/reports/fy-bundle?fy=${fy}&clientId=${clientId}`,
+                  `FY${fy}-bundle.zip`,
+                  'bundle',
+                )
+              }
             >
-              {busy === 'bundle' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+              {busy === 'bundle' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileDown className="h-3.5 w-3.5" />
+              )}
               Everything for {fy}
             </Button>
           </div>
