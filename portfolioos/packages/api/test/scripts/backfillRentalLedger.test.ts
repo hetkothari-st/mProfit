@@ -173,3 +173,139 @@ describe('backfillRentalLedger — skipped receipt with legacy receivedAmount', 
     ).toBe(true);
   });
 });
+
+/**
+ * FIX 2: the guard against double-counting a receipt that is already backed
+ * by a genuine, live (non-backfill) RentLedgerEntry — the entry the normal
+ * app payment flow would have created after go-live. This is the
+ * highest-consequence line in the script: if it doesn't fire, a re-run
+ * after cutover creates a second synthetic payment and double-counts real
+ * money in `allocateCredits`.
+ *
+ * Two separate tenancies so "the entry count for that tenancy stays at
+ * one" is a literal, unambiguous check for each:
+ *   - `tenancyLive`  — one receipt already backed by a genuine live PAYMENT
+ *                      entry. The guard must skip it: no synthetic entry.
+ *   - `tenancyLegacy` — a sibling receipt with a legacy receivedAmount and
+ *                       NO live entry. This is the contrast case: it must
+ *                       still get backfilled normally, otherwise a guard
+ *                       that skips everything would pass this test too.
+ */
+describe('backfillRentalLedger — post-cutover double-count guard', () => {
+  let scope: TestScope;
+  let tenancyLiveId: string;
+  let tenancyLegacyId: string;
+  let liveReceiptId: string;
+  let legacyReceiptId: string;
+  const LIVE_SOURCE_HASH = 'live-app-entry:test-manual-2026-04';
+
+  beforeAll(async () => {
+    scope = await createTestScope('rental-ledger-backfill-guard');
+    await scope.runAs(async () => {
+      const property = await prisma.rentalProperty.create({
+        data: { userId: scope.userId, name: 'Backfill Guard Test', propertyType: 'RESIDENTIAL' },
+      });
+
+      const tenancyLive = await prisma.tenancy.create({
+        data: {
+          propertyId: property.id,
+          tenantName: 'Live Payment Tenant',
+          startDate: new Date('2026-04-01T00:00:00.000Z'),
+          monthlyRent: '25000',
+          rentDueDay: 1,
+        },
+      });
+      tenancyLiveId = tenancyLive.id;
+      const liveReceipt = await prisma.rentReceipt.create({
+        data: {
+          tenancyId: tenancyLiveId, forMonth: '2026-04', expectedAmount: '25000',
+          dueDate: new Date('2026-04-01T00:00:00.000Z'),
+          status: 'RECEIVED', receivedAmount: '25000',
+          receivedOn: new Date('2026-04-02T00:00:00.000Z'),
+        },
+      });
+      liveReceiptId = liveReceipt.id;
+      // The genuine, post-cutover entry the real app payment flow would
+      // have created — non-null sourceHash that does NOT carry the
+      // backfill prefix.
+      await prisma.rentLedgerEntry.create({
+        data: {
+          tenancyId: tenancyLiveId,
+          entryType: 'PAYMENT',
+          amount: '25000',
+          entryDate: new Date('2026-04-02T00:00:00.000Z'),
+          forMonth: '2026-04',
+          note: 'Live app payment (post-cutover)',
+          sourceHash: LIVE_SOURCE_HASH,
+        },
+      });
+
+      const tenancyLegacy = await prisma.tenancy.create({
+        data: {
+          propertyId: property.id,
+          tenantName: 'Legacy No-Live-Entry Tenant',
+          startDate: new Date('2026-05-01T00:00:00.000Z'),
+          monthlyRent: '25000',
+          rentDueDay: 1,
+        },
+      });
+      tenancyLegacyId = tenancyLegacy.id;
+      const legacyReceipt = await prisma.rentReceipt.create({
+        data: {
+          tenancyId: tenancyLegacyId, forMonth: '2026-05', expectedAmount: '25000',
+          dueDate: new Date('2026-05-01T00:00:00.000Z'),
+          status: 'RECEIVED', receivedAmount: '25000',
+          receivedOn: new Date('2026-05-03T00:00:00.000Z'),
+        },
+      });
+      legacyReceiptId = legacyReceipt.id;
+    });
+  });
+
+  afterAll(async () => {
+    await scope.cleanup();
+  });
+
+  it('skips the receipt already backed by a live entry, but still backfills its sibling', async () => {
+    const report = await backfillRentalLedger();
+
+    await scope.runAs(async () => {
+      // The live-backed tenancy must still have exactly one entry: the
+      // live one. No synthetic duplicate.
+      const liveEntries = await prisma.rentLedgerEntry.findMany({
+        where: { tenancyId: tenancyLiveId },
+      });
+      expect(liveEntries).toHaveLength(1);
+      expect(liveEntries[0]!.sourceHash).toBe(LIVE_SOURCE_HASH);
+      expect(liveEntries[0]!.sourceHash?.startsWith('backfill:payment:')).toBe(false);
+
+      const liveReceiptRow = await prisma.rentReceipt.findUniqueOrThrow({
+        where: { id: liveReceiptId },
+      });
+      expect(liveReceiptRow.status).toBe('RECEIVED');
+      expect(liveReceiptRow.receivedAmount?.toString()).toBe('25000');
+
+      // Contrast: the sibling with no live entry must still be backfilled
+      // normally — exactly one entry, and it IS the synthetic one.
+      const legacyEntries = await prisma.rentLedgerEntry.findMany({
+        where: { tenancyId: tenancyLegacyId },
+      });
+      expect(legacyEntries).toHaveLength(1);
+      expect(legacyEntries[0]!.sourceHash?.startsWith('backfill:payment:')).toBe(true);
+
+      const legacyReceiptRow = await prisma.rentReceipt.findUniqueOrThrow({
+        where: { id: legacyReceiptId },
+      });
+      expect(legacyReceiptRow.status).toBe('RECEIVED');
+      expect(legacyReceiptRow.receivedAmount?.toString()).toBe('25000');
+    });
+
+    // Neither receipt should register as drift — the live one was left
+    // alone, and the legacy one was faithfully reconstructed.
+    expect(
+      report.drift.filter(
+        (d) => d.receiptId === liveReceiptId || d.receiptId === legacyReceiptId,
+      ),
+    ).toEqual([]);
+  });
+});
