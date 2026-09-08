@@ -30,6 +30,7 @@
 import cron from 'node-cron';
 import type { MfRatingStatus } from '@portfolioos/shared';
 import { logger } from '../lib/logger.js';
+import { warnIfNotMonthEnd } from './mfAsOfGuard.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
@@ -205,6 +206,8 @@ export async function runMfScoreJob(asOf: Date = todayAsOf()): Promise<MfScoreJo
   }
   running = true;
   const t0 = Date.now();
+
+  warnIfNotMonthEnd(asOf, 'mf score job');
   try {
     // Reference data, but `runAsSystem` all the same: the Prisma hook needs an
     // ambient context, and the `IngestionFailure` / `User` rows this job

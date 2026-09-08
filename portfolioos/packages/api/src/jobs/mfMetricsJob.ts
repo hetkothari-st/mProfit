@@ -31,6 +31,7 @@
 
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
+import { warnIfNotMonthEnd } from './mfAsOfGuard.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
@@ -226,6 +227,8 @@ export async function runMfMetricsJob(
   const asOf = options.asOf ?? todayAsOf();
   const chunkSize = options.chunkSize ?? CHUNK_SIZE;
   const t0 = Date.now();
+
+  warnIfNotMonthEnd(asOf, 'mf metrics job');
 
   return runAsSystem(async () => {
     // ACTIVE only (`01 §5`). MERGED and WOUND_UP schemes still matter for

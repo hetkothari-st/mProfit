@@ -34,6 +34,7 @@
 
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
+import { warnIfNotMonthEnd } from './mfAsOfGuard.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
@@ -207,6 +208,8 @@ export async function runMfPeerRankJob(
   }
   running = true;
   const t0 = Date.now();
+
+  warnIfNotMonthEnd(asOf, 'mf peer rank job');
   try {
     return await runAsSystem(async () => {
       const refs = await listUniverses();
