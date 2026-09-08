@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   createLedgerEntry,
+  updateLedgerEntry,
   deleteLedgerEntry,
   getTenancyLedger,
   listCollections,
@@ -106,6 +107,76 @@ describe('rental ledger entries', () => {
       await deleteLedgerEntry(scope.userId, payment.id);
       const after = await getTenancyLedger(scope.userId, tenancyId);
       expect(after.balanceDue).toBe('45000');
+    });
+  });
+
+  it('reconciles the CashFlow across entryType transitions on update', async () => {
+    await scope.runAs(async () => {
+      // A separate property, linked to a real portfolio (unlike the
+      // fixture above), so PAYMENT/DEPOSIT/DEPOSIT_REFUND entries actually
+      // get a CashFlow row to reconcile.
+      const property = await prisma.rentalProperty.create({
+        data: {
+          userId: scope.userId,
+          portfolioId: scope.portfolioId,
+          name: 'Cash Flow Transitions',
+          propertyType: 'RESIDENTIAL',
+        },
+      });
+      const tenancy = await prisma.tenancy.create({
+        data: {
+          propertyId: property.id,
+          tenantName: 'Transition Tenant',
+          startDate: new Date('2026-05-01T00:00:00.000Z'),
+          monthlyRent: '10000',
+          rentDueDay: 1,
+        },
+      });
+      await prisma.rentReceipt.create({
+        data: {
+          tenancyId: tenancy.id, forMonth: '2026-05', expectedAmount: '10000',
+          dueDate: new Date('2026-05-01T00:00:00.000Z'), status: 'EXPECTED',
+        },
+      });
+
+      // 1. Create a PAYMENT; exactly one CashFlow exists for it.
+      const created = await createLedgerEntry(scope.userId, tenancy.id, {
+        entryType: 'PAYMENT', amount: '4000', entryDate: '2026-05-05',
+      });
+      let entry = await prisma.rentLedgerEntry.findUniqueOrThrow({ where: { id: created.id } });
+      expect(entry.cashFlowId).not.toBeNull();
+      await expect(
+        prisma.cashFlow.count({ where: { portfolioId: scope.portfolioId } }),
+      ).resolves.toBe(1);
+      const afterCreate = await getTenancyLedger(scope.userId, tenancy.id);
+      expect(afterCreate.balanceDue).toBe('6000');
+
+      // 2. Patch to DISCOUNT: the CashFlow is gone, cashFlowId is null, and
+      // balanceDue is unchanged (PAYMENT and DISCOUNT are both credit types
+      // that reduce the balance by the same amount).
+      await updateLedgerEntry(scope.userId, created.id, { entryType: 'DISCOUNT' });
+      entry = await prisma.rentLedgerEntry.findUniqueOrThrow({ where: { id: created.id } });
+      expect(entry.cashFlowId).toBeNull();
+      await expect(
+        prisma.cashFlow.count({ where: { portfolioId: scope.portfolioId } }),
+      ).resolves.toBe(0);
+      const afterDiscount = await getTenancyLedger(scope.userId, tenancy.id);
+      expect(afterDiscount.balanceDue).toBe('6000');
+
+      // 3. Patch back to PAYMENT: exactly one CashFlow exists again — not two.
+      await updateLedgerEntry(scope.userId, created.id, { entryType: 'PAYMENT' });
+      entry = await prisma.rentLedgerEntry.findUniqueOrThrow({ where: { id: created.id } });
+      expect(entry.cashFlowId).not.toBeNull();
+      await expect(
+        prisma.cashFlow.count({ where: { portfolioId: scope.portfolioId } }),
+      ).resolves.toBe(1);
+
+      // 4. Patch to DEPOSIT_REFUND: the CashFlow direction is now OUTFLOW.
+      await updateLedgerEntry(scope.userId, created.id, { entryType: 'DEPOSIT_REFUND' });
+      entry = await prisma.rentLedgerEntry.findUniqueOrThrow({ where: { id: created.id } });
+      expect(entry.cashFlowId).not.toBeNull();
+      const cf = await prisma.cashFlow.findUniqueOrThrow({ where: { id: entry.cashFlowId! } });
+      expect(cf.type).toBe('OUTFLOW');
     });
   });
 });

@@ -322,24 +322,66 @@ export async function updateLedgerEntry(
   patch: UpdateLedgerEntryInput,
 ): Promise<{ id: string }> {
   const existing = await getEntryOwned(userId, entryId);
+  const previousType = existing.entryType as LedgerEntryType;
+  const parsedAmount = patch.amount !== undefined ? parseAmount(patch.amount) : undefined;
+  const parsedEntryDate = patch.entryDate !== undefined ? parseDay(patch.entryDate) : undefined;
+  const nextType = patch.entryType !== undefined ? assertEntryType(patch.entryType) : previousType;
+
   const data: Prisma.RentLedgerEntryUpdateInput = {};
-  if (patch.entryType !== undefined) data.entryType = assertEntryType(patch.entryType);
-  if (patch.amount !== undefined) data.amount = parseAmount(patch.amount);
-  if (patch.entryDate !== undefined) data.entryDate = parseDay(patch.entryDate);
+  if (patch.entryType !== undefined) data.entryType = nextType;
+  if (parsedAmount !== undefined) data.amount = parsedAmount;
+  if (parsedEntryDate !== undefined) data.entryDate = parsedEntryDate;
   if (patch.forMonth !== undefined) data.forMonth = patch.forMonth;
   if (patch.note !== undefined) data.note = patch.note;
   if (patch.attachmentUrl !== undefined) data.attachmentUrl = patch.attachmentUrl;
 
+  // Reconcile the CashFlow against the effective (possibly patched) entryType,
+  // amount and date, rather than assuming "money-moving-ness" is unchanged.
+  // Money moves in exactly one place — the CashFlow row created alongside a
+  // PAYMENT/DEPOSIT/DEPOSIT_REFUND entry — so a patch that crosses that
+  // boundary must create or delete it, not just leave a stale row behind.
+  const previousDirection = CASH_FLOW_DIRECTION[previousType];
+  const nextDirection = CASH_FLOW_DIRECTION[nextType];
+  const effectiveAmount = parsedAmount ?? existing.amount;
+  const effectiveEntryDate = parsedEntryDate ?? existing.entryDate;
+  const property = existing.tenancy.property;
+
   return runInTransaction(async (tx) => {
-    const updated = await tx.rentLedgerEntry.update({
-      where: { id: entryId }, data, select: { id: true, cashFlowId: true, amount: true, entryDate: true },
-    });
-    if (updated.cashFlowId) {
+    if (!previousDirection && nextDirection) {
+      // Was not money-moving, now is: create the CashFlow (same shape as
+      // createLedgerEntry), guarded on the property having a portfolio.
+      if (property.portfolioId) {
+        const cf = await tx.cashFlow.create({
+          data: {
+            portfolioId: property.portfolioId,
+            date: effectiveEntryDate,
+            type: nextDirection,
+            amount: effectiveAmount,
+            description: `${nextType} — ${property.name} / ${existing.tenancy.tenantName}`,
+          },
+          select: { id: true },
+        });
+        data.cashFlowId = cf.id;
+      }
+    } else if (previousDirection && !nextDirection) {
+      // Was money-moving, now is not: delete the CashFlow and unlink it.
+      if (existing.cashFlowId) {
+        await tx.cashFlow.deleteMany({ where: { id: existing.cashFlowId } });
+      }
+      data.cashFlowId = null;
+    } else if (previousDirection && nextDirection && existing.cashFlowId) {
+      // Still money-moving on both sides: keep the same row, but its
+      // direction may have flipped (e.g. PAYMENT -> DEPOSIT_REFUND), not
+      // just its amount/date.
       await tx.cashFlow.update({
-        where: { id: updated.cashFlowId },
-        data: { amount: updated.amount, date: updated.entryDate },
+        where: { id: existing.cashFlowId },
+        data: { amount: effectiveAmount, date: effectiveEntryDate, type: nextDirection },
       });
     }
+
+    const updated = await tx.rentLedgerEntry.update({
+      where: { id: entryId }, data, select: { id: true },
+    });
     await recomputeTenancyLedger(tx, existing.tenancyId);
     return { id: updated.id };
   });
