@@ -10,6 +10,7 @@
  */
 
 import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
 import { finfactorPost } from './client.js';
 import {
   demoConsentApproved,
@@ -108,8 +109,11 @@ export async function listUserConsents(userId: string) {
       // Best-effort merge — we don't fail the request if Finfactor changes
       // its payload shape.
       await mergeUpstreamConsents(userId, upstream);
-    } catch {
-      // Surface the local view even if upstream is unreachable.
+    } catch (err) {
+      // The local view is still served — an unreachable Finfactor must not
+      // blank a user's consent list — but a merge that never succeeds means
+      // that list is drifting, and silence is how it stays undetected.
+      logger.warn({ err, userId }, '[finfactor] upstream consent merge failed; serving local view');
     }
   }
   return prisma.aaConsent.findMany({

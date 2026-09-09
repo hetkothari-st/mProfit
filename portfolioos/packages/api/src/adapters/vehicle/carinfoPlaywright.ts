@@ -105,7 +105,12 @@ export async function initiateCarInfoScrape(regNo: string, mobileNo: string): Pr
           postData: request.postData(),
         });
       }
-    } catch (e) { /* ignore */ }
+    } catch (err) {
+      // A throw inside a Playwright listener becomes an unhandled rejection,
+      // so it is caught here — but capture failing means the diagnostics for
+      // the whole run are incomplete, which is worth a line.
+      logger.debug({ err, url: request.url() }, '[carinfo-pw] request capture failed');
+    }
   });
   page.on('response', async (response) => {
     try {
@@ -117,8 +122,8 @@ export async function initiateCarInfoScrape(regNo: string, mobileNo: string): Pr
           (session as any).apiResponses.push({ url, status: response.status(), json });
         }
       }
-    } catch (e) {
-      // ignore
+    } catch (err) {
+      logger.debug({ err, url: response.url() }, '[carinfo-pw] response capture failed');
     }
   });
 
@@ -173,7 +178,8 @@ async function expandCarInfoSections(page: any): Promise<void> {
   })()`);
   try {
     await page.waitForLoadState('networkidle', { timeout: 4000 });
-  } catch { /* continue */ }
+    // eslint-disable-next-line portfolioos/no-silent-catch -- the timeout is the point: this is "give the page up to 4s to settle", and a page that never goes idle is the normal case on a site with polling
+  } catch { /* four seconds was the budget */ }
 }
 
 // Check if JSON.parse intercept captured vehicle data yet.
@@ -240,7 +246,9 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
             logger.info({ regNo, sessionId, url, status: response.status(), ct, textLen: text.length }, '[carinfo-pw] carinfo auth response (raw)');
           }
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        logger.debug({ err, regNo, sessionId }, '[carinfo-pw] auth response capture failed');
+      }
     });
 
     // Click verify — success signal is MODAL CLOSING, not a specific URL pattern.
@@ -261,7 +269,7 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
     let verifyResponseBody: Record<string, unknown> | null = null;
 
     // Helper: check if OTP was rejected (error message visible)
-    async function checkOtpError(): Promise<void> {
+    const checkOtpError = async (): Promise<void> => {
       try {
         if (await errorMsg.isVisible({ timeout: 500 })) {
           const text = await errorMsg.innerText();
@@ -273,7 +281,7 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
         if (e instanceof Error && e.message.startsWith('CarInfo OTP Error:')) throw e;
         // isVisible timeout / not found — ok
       }
-    }
+    };
 
     // CarInfo sometimes auto-submits when the last OTP digit is entered (no button needed).
     // Check for that first before clicking anything.
@@ -397,7 +405,12 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
       const bodyTextDebug = await page.evaluate('document.body ? document.body.innerText : ""').catch(() => '');
       fs.writeFileSync(`extraction_${timestamp}.txt`, String(bodyTextDebug));
       logger.info({ regNo, ts: timestamp }, '[carinfo-pw] saved extraction debug files');
-    } catch (e) {}
+    } catch (err) {
+      // Debug artefacts only. Losing them must not fail an extraction that
+      // otherwise worked, but it should not vanish either — a disk that
+      // cannot be written to is worth knowing about before it matters.
+      logger.debug({ err, regNo }, '[carinfo-pw] could not save extraction debug files');
+    }
 
     // Read vehicle captures from our JSON.parse interceptor
     const vehicleCaptures = (await page.evaluate('window.__vehicleCaptures || []').catch(() => [])) as unknown[];
@@ -607,7 +620,9 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
       const allCapture = { requests: apiRequests, responses: apiResponses };
       fs.writeFileSync(`api_capture_${ts}.json`, JSON.stringify(allCapture, null, 2));
       logger.info({ regNo, file: `api_capture_${ts}.json`, reqCount: apiRequests.length, respCount: apiResponses.length }, '[carinfo-pw] saved API capture');
-    } catch (e) { /* non-fatal */ }
+    } catch (err) {
+      logger.debug({ err, regNo }, '[carinfo-pw] could not save API capture');
+    }
 
     logger.info({ regNo, scraped: (domData as any)?.scraped }, '[carinfo-pw] DOM scrape result');
 
@@ -670,7 +685,8 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
           logger.info({ regNo, source: 'json_parse_capture', fields: Object.keys(rec).filter(k => (rec as any)[k]) }, '[carinfo-pw] parsed from JSON.parse capture');
           break;
         }
-      } catch { /* continue */ }
+      // eslint-disable-next-line portfolioos/no-silent-catch -- every captured JSON.parse argument is a candidate; the ones that are not vehicle payloads are meant to fall through to strategy (2)
+      } catch { /* not a vehicle payload */ }
     }
 
     // (2) Raw CryptoJS decrypt strings
@@ -685,7 +701,8 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
             logger.info({ regNo, source: 'cryptojs_capture' }, '[carinfo-pw] parsed from CryptoJS capture');
             break;
           }
-        } catch { /* continue */ }
+        // eslint-disable-next-line portfolioos/no-silent-catch -- as above: candidate blobs, falling through to the next strategy is the design
+        } catch { /* not a vehicle payload */ }
       }
     }
 
@@ -703,7 +720,8 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
               break;
             }
           }
-        } catch { /* continue */ }
+        // eslint-disable-next-line portfolioos/no-silent-catch -- as above, over captured API responses
+        } catch { /* not a vehicle payload */ }
       }
     }
 
@@ -737,7 +755,7 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
           color: sc.color ? String(sc.color).toUpperCase() : undefined,
           ownerName: sc.ownerName ? String(sc.ownerName).toUpperCase() : undefined,
           chassisLast4: sc.chassisNo ? String(sc.chassisNo).replace(/\s+/g, '').slice(-4).toUpperCase() : undefined,
-          rtoCode: sc.rto ? String(sc.rto).match(/[A-Z]{2}[\-\s]?\d{1,2}/)?.[0]?.replace(/\s|-/g, '') : undefined,
+          rtoCode: sc.rto ? String(sc.rto).match(/[A-Z]{2}[-\s]?\d{1,2}/)?.[0]?.replace(/\s|-/g, '') : undefined,
           insuranceExpiry: isoDate(sc.insuranceExpiry),
           pucExpiry: isoDate(sc.pucExpiry),
           fitnessExpiry: isoDate(sc.fitnessExpiry),
@@ -757,7 +775,13 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
 
     // (5) Last-ditch: non-OTP HTTP page fetch
     if (!parsed) {
-      try { parsed = await fetchCarInfoRC(regNo); } catch { /* ignore */ }
+      try {
+        parsed = await fetchCarInfoRC(regNo);
+      } catch (err) {
+        // Every strategy has now failed, so the caller gets nothing back. The
+        // reason the last one failed is the only clue left as to why.
+        logger.warn({ err, regNo }, '[carinfo-pw] last-ditch HTTP fetch failed; no data extracted');
+      }
     }
 
     return {
@@ -777,7 +801,12 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
       await page.screenshot({ path: `error_${timestamp}.png` });
       const html = await page.content();
       fs.writeFileSync(`error_${timestamp}.html`, html);
-    } catch (e) {}
+    } catch (err) {
+      // Best-effort forensics for the failure being handled below. The
+      // original error is what gets rethrown; this one is only noted so a
+      // missing screenshot is not mistaken for a screenshot never attempted.
+      logger.debug({ err, regNo }, '[carinfo-pw] could not capture failure artefacts');
+    }
     await playwrightSessionManager.closeSession(sessionId);
     logger.error({ error, regNo }, '[carinfo-pw] Failed to verify OTP');
     throw error;

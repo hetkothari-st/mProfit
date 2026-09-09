@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FileDown, Loader2, Receipt } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { toDecimal } from '@portfolioos/shared';
 import { taxApi } from '@/api/tax.api';
+import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { cn } from '@/lib/cn';
 
@@ -71,8 +73,10 @@ export function DashboardTaxStrip() {
       a.download = `capital-gains-tax-${fy}.pdf`;
       a.click();
       URL.revokeObjectURL(a.href);
-    } catch {
-      // Silently fail on the strip — user can download from the Tax page
+    } catch (err) {
+      // It used to fail silently here, so the button simply did nothing and
+      // the user had no way to know the download had been attempted at all.
+      toast.error(apiErrorMessage(err, 'Could not download the tax report'));
     } finally {
       setDownloading(false);
     }

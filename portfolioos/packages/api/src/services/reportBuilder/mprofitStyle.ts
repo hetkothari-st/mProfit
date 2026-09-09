@@ -261,7 +261,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     function renderReportTitle(yStart: number): number {
       doc.fillColor(PAL.ink).font(PDF_FONT_BOLD).fontSize(11)
         .text(pdfSafe(layout.reportTitle), ML, yStart, { width: pageW, lineBreak: false });
-      let y = yStart + 14;
+      const y = yStart + 14;
       if (layout.pan) {
         doc.font(PDF_FONT).fontSize(8.5).fillColor(PAL.muted)
           .text(pdfSafe(`PAN: ${layout.pan}`), ML, y, { width: pageW, align: 'right', lineBreak: false });

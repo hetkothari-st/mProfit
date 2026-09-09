@@ -11,10 +11,10 @@ import { prisma } from '../../lib/prisma.js';
  *   "RELIANCE26NOVFUT"  — stock future
  *   "RELIANCE26NOV1300CE" — stock option
  */
-const FUT_RE = /^([A-Z][A-Z0-9&\-]+?)(\d{2})([A-Z]{3})FUT$/;
-const OPT_MONTHLY_RE = /^([A-Z][A-Z0-9&\-]+?)(\d{2})([A-Z]{3})(\d+(?:\.\d+)?)(CE|PE)$/;
+const FUT_RE = /^([A-Z][A-Z0-9&-]+?)(\d{2})([A-Z]{3})FUT$/;
+const OPT_MONTHLY_RE = /^([A-Z][A-Z0-9&-]+?)(\d{2})([A-Z]{3})(\d+(?:\.\d+)?)(CE|PE)$/;
 // Weekly: YY + month-letter (1-9, O, N, D) + DD
-const OPT_WEEKLY_RE = /^([A-Z][A-Z0-9&\-]+?)(\d{2})([1-9OND])(\d{2})(\d+(?:\.\d+)?)(CE|PE)$/;
+const OPT_WEEKLY_RE = /^([A-Z][A-Z0-9&-]+?)(\d{2})([1-9OND])(\d{2})(\d+(?:\.\d+)?)(CE|PE)$/;
 
 const MONTH_IDX: Record<string, number> = {
   JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,

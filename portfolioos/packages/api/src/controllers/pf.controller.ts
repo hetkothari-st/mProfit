@@ -451,8 +451,13 @@ export async function uploadManualPassbookHandler(req: Request, res: Response) {
           update: {},
         });
         inserted++;
-      } catch {
-        // P2002 unique constraint = duplicate → skip
+      } catch (err) {
+        // Only a duplicate is a skip. Everything else — a bad enum, a failed
+        // constraint, a dropped connection — used to be counted as one too,
+        // so an import could drop events and still report success.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue;
+        logger.error({ err, userId: e.userId, sourceHash: e.sourceHash }, '[pf] canonical event insert failed');
+        throw err;
       }
     }
   });
@@ -694,8 +699,13 @@ export async function extensionRawPayloadHandler(req: Request, res: Response): P
           update: {},
         });
         eventsCreated++;
-      } catch {
-        // P2002 unique — duplicate, skip
+      } catch (err) {
+        // Only a duplicate is a skip. Everything else — a bad enum, a failed
+        // constraint, a dropped connection — used to be counted as one too,
+        // so an import could drop events and still report success.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue;
+        logger.error({ err, userId: e.userId, sourceHash: e.sourceHash }, '[pf] canonical event insert failed');
+        throw err;
       }
     }
   });

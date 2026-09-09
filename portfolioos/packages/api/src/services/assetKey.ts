@@ -115,16 +115,16 @@ export function extractUnderlyingFromAssetName(s: string | null | undefined): st
   if (!s) return null;
   const u = s.toUpperCase();
   // Monthly future: <UND><YY><MMM>FUT
-  const fut = u.match(/^([A-Z][A-Z0-9&\-]+?)\d{2}[A-Z]{3}FUT$/);
+  const fut = u.match(/^([A-Z][A-Z0-9&-]+?)\d{2}[A-Z]{3}FUT$/);
   if (fut?.[1]) return fut[1];
   // Monthly option: <UND><YY><MMM><STRIKE>(CE|PE)
-  const optMo = u.match(/^([A-Z][A-Z0-9&\-]+?)\d{2}[A-Z]{3}\d+(?:\.\d+)?(CE|PE)$/);
+  const optMo = u.match(/^([A-Z][A-Z0-9&-]+?)\d{2}[A-Z]{3}\d+(?:\.\d+)?(CE|PE)$/);
   if (optMo?.[1]) return optMo[1];
   // Weekly option: <UND><YY><M-letter><DD><STRIKE>(CE|PE)
-  const optWk = u.match(/^([A-Z][A-Z0-9&\-]+?)\d{2}[1-9OND]\d{2}\d+(?:\.\d+)?(CE|PE)$/);
+  const optWk = u.match(/^([A-Z][A-Z0-9&-]+?)\d{2}[1-9OND]\d{2}\d+(?:\.\d+)?(CE|PE)$/);
   if (optWk?.[1]) return optWk[1];
   // Weekly with embedded month-letter mid-symbol: NIFTY26N28CE24500
-  const optWkAlt = u.match(/^([A-Z][A-Z0-9&\-]+?)\d{2}[1-9OND]\d{2}(CE|PE)\d+(?:\.\d+)?$/);
+  const optWkAlt = u.match(/^([A-Z][A-Z0-9&-]+?)\d{2}[1-9OND]\d{2}(CE|PE)\d+(?:\.\d+)?$/);
   if (optWkAlt?.[1]) return optWkAlt[1];
   return null;
 }
