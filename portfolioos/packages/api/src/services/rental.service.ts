@@ -31,6 +31,7 @@ import {
   recomputeTenancyLedger,
   recomputeTenancy,
   resolveRentReceiptReminders,
+  resolveRentalPortfolioId,
   getTenancyOwned,
   OVERDUE_GRACE_DAYS,
 } from './rentalLedger.service.js';
@@ -670,17 +671,10 @@ export async function markReceiptReceived(
   }
   const receivedOn = parseIsoDate(input.receivedOn);
 
-  const portfolioId =
-    existing.tenancy.property.portfolioId ??
-    (await prisma.portfolio.findFirst({
-      where: { userId, isDefault: true },
-      select: { id: true },
-    }))?.id ??
-    (await prisma.portfolio.findFirst({
-      where: { userId },
-      select: { id: true },
-    }))?.id ??
-    null;
+  const portfolioId = await resolveRentalPortfolioId(
+    userId,
+    existing.tenancy.property.portfolioId,
+  );
 
   return runInTransaction(async (tx) => {
     let cashFlowId: string | null = null;
@@ -1044,7 +1038,10 @@ export async function applyAutoMatch(
     ? new Prisma.Decimal(event.amount.toString())
     : new Prisma.Decimal(existing.expectedAmount.toString());
   const receivedOn = event.eventDate;
-  const portfolioId = existing.tenancy.property.portfolioId ?? null;
+  const portfolioId = await resolveRentalPortfolioId(
+    userId,
+    existing.tenancy.property.portfolioId,
+  );
 
   return runInTransaction(async (tx) => {
     let cashFlowId: string | null = existingCashFlowId;

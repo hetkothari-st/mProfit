@@ -25,6 +25,11 @@ const RENTAL_QUERY_PREFIXES = [
   'rental-pnl',
   'rental-receipts',
   'rental-reminders',
+  // Rent money lands in the portfolio as a CashFlow, so the Cash Activity
+  // page and any bank-account view showing it are downstream of a khata entry
+  // just as much as the khata is.
+  'cashflows',
+  'bank-accounts',
   'dashboard',
   'alerts',
   'alerts-unread',
