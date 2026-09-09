@@ -94,7 +94,11 @@ export const mfCasParser: Parser = {
       throw err;
     }
 
-    let { transactions, warnings } = parseMfCasText(text);
+    // Parsed once. Only `warnings` is appended to (by the AI fallback below),
+    // so the two bindings differ.
+    const parsed = parseMfCasText(text);
+    const { transactions } = parsed;
+    let warnings = parsed.warnings;
     
     // AI Fallback: If regex parsing found no trades, try the Gemini-powered AI parser
     if (transactions.length === 0 && process.env.GEMINI_API_KEY) {

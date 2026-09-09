@@ -139,7 +139,12 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
       if (!isEdit && vehicle?.id) {
         try {
           await vehiclesApi.refresh(vehicle.id, { mode: 'auto' });
-        } catch { /* non-fatal */ }
+        } catch {
+          // The vehicle is saved either way. Saying so matters because the
+          // detail page will otherwise show empty RC fields with nothing to
+          // explain them, and the user can retry from there.
+          toast('Saved. Could not fetch RC details automatically — retry from the vehicle page.');
+        }
       }
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
       toast.success(isEdit ? 'Vehicle updated' : 'Vehicle added');
@@ -198,7 +203,11 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
       }
       try {
         await vehiclesApi.refresh(vehicle.id, { mode: 'auto' });
-      } catch { /* non-fatal — minimum row already in DB */ }
+      } catch {
+        // Same as above: the row exists, the backfill did not happen, and the
+        // detail page we are about to open would not say why.
+        toast('Saved. Could not fetch RC details automatically — retry from the vehicle page.');
+      }
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
       toast.success('Vehicle added');
       onOpenChange(false);

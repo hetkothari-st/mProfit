@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, TrendingDown, Coins, Calendar, Package, ImageIcon, Pencil } from 'lucide-react';
+import { TrendingUp, TrendingDown, Coins, Calendar, Package, ImageIcon, ImageOff, Pencil } from 'lucide-react';
 import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@portfolioos/shared';
 import type { TransactionDTO } from '@portfolioos/shared';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -46,17 +46,25 @@ function StatCard({ label, value, sub, positive }: {
 
 function PhotoGrid({ txnId, photos }: { txnId: string; photos: TransactionDTO['photos'] }) {
   const [srcs, setSrcs] = useState<Record<string, string>>({});
+  /** Photos whose blob fetch failed, so a dead thumbnail is not shown as a pending one. */
+  const [failed, setFailed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const newSrcs: Record<string, string> = {};
+    const missing = new Set<string>();
     Promise.all(
       photos.map(async (p) => {
         try {
           const { data } = await api.get(`/api/transactions/${txnId}/photos/${p.id}`, { responseType: 'blob' });
           newSrcs[p.id] = URL.createObjectURL(data);
-        } catch {}
+        } catch {
+          missing.add(p.id);
+        }
       }),
-    ).then(() => setSrcs(newSrcs));
+    ).then(() => {
+      setSrcs(newSrcs);
+      setFailed(missing);
+    });
     return () => Object.values(newSrcs).forEach(URL.revokeObjectURL);
   }, [txnId, photos]);
 
@@ -66,7 +74,14 @@ function PhotoGrid({ txnId, photos }: { txnId: string; photos: TransactionDTO['p
         <div key={p.id} className="h-20 w-20 rounded-lg border overflow-hidden bg-muted/30">
           {srcs[p.id]
             ? <img src={srcs[p.id]} alt={p.fileName} className="h-full w-full object-cover" />
-            : <div className="h-full w-full flex items-center justify-center"><ImageIcon className="h-6 w-6 text-muted-foreground" /></div>
+            : <div
+                className="h-full w-full flex items-center justify-center"
+                title={failed.has(p.id) ? `${p.fileName} could not be loaded` : undefined}
+              >
+                {failed.has(p.id)
+                  ? <ImageOff className="h-6 w-6 text-muted-foreground/50" />
+                  : <ImageIcon className="h-6 w-6 text-muted-foreground" />}
+              </div>
           }
         </div>
       ))}

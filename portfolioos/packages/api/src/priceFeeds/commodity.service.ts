@@ -308,7 +308,7 @@ async function refreshLivePrices(): Promise<LiveCache> {
   //   3. SILVERBEES.NS NAV from yahoo-finance2 (one Yahoo call, but crumb-gated)
   //   4. SILVERBEES.NS NAV via direct /v8/chart REST (no crumb — survives
   //      Railway / cloud-IP captcha walls)
-  let SILVER = primary.SILVER ?? yahoo.silverInrPerGram ?? yahoo.etfNavs['SILVERBEES'] ?? silverbeesDirect;
+  const SILVER = primary.SILVER ?? yahoo.silverInrPerGram ?? yahoo.etfNavs['SILVERBEES'] ?? silverbeesDirect;
   if (SILVER === silverbeesDirect && silverbeesDirect) {
     logger.info({ silverbees: silverbeesDirect.toString() }, '[commodity] silver via SILVERBEES /v8/chart');
   }

@@ -42,6 +42,7 @@ function todayKey(): string {
 
 function parseBhavcopyCsv(text: string): Map<string, Decimal> {
   const map = new Map<string, Decimal>();
+  let unparseable = 0;
   const lines = text.split(/\r?\n/);
   if (lines.length < 2) return map;
 
@@ -70,8 +71,16 @@ function parseBhavcopyCsv(text: string): Map<string, Decimal> {
     try {
       map.set(sym, new Decimal(close));
     } catch {
-      // bad numeric value — skip row
+      unparseable += 1;
     }
+  }
+  // One junk row in a bhavcopy is normal. A tenth of them is NSE changing the
+  // format, which used to show up only as prices quietly going stale.
+  if (unparseable > 0) {
+    logger.warn(
+      { unparseable, parsed: map.size },
+      '[nseBhavcopy] rows skipped for an unparseable close price',
+    );
   }
   return map;
 }

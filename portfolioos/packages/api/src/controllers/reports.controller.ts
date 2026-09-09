@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type ExcelJSType from 'exceljs';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 import { ok } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import {
@@ -367,7 +368,7 @@ export async function getHoldingsExport(req: Request, res: Response) {
     wb.creator = 'PortfolioOS';
     wb.created = new Date();
 
-    function addSheet(ws: ExcelJSType.Worksheet, payload: ExportPayload) {
+    const addSheet = (ws: ExcelJSType.Worksheet, payload: ExportPayload): void => {
       ws.getCell(1, 1).value = payload.title;
       ws.getCell(1, 1).font = { bold: true, size: 13 };
       let row = 2;
@@ -404,7 +405,7 @@ export async function getHoldingsExport(req: Request, res: Response) {
           ws.getCell(row, 2).value = String(v); row++;
         }
       }
-    }
+    };
 
     addSheet(wb.addWorksheet('Holdings'), holdingsPayload);
     addSheet(wb.addWorksheet('Transactions'), transactionsPayload);
@@ -865,11 +866,11 @@ async function ensureAccountingProjected(req: Request, userId: string): Promise<
     // else's ledger, so the projection goes on that client's audit trail
     // rather than happening invisibly behind a download.
     await projectBooks(userId, await caProjectionAudit(req, userId));
-  } catch (e) {
+  } catch (err) {
     // Don't block the download — surface the bug via logs and continue
-    // with whatever vouchers already exist.
-    // eslint-disable-next-line no-console
-    console.error('[accounting] auto-project failed', e);
+    // with whatever vouchers already exist. console.error never reached the
+    // pino pipeline, so this failure was invisible in production.
+    logger.error({ err, userId }, 'reports.auto_project_failed');
   }
 }
 

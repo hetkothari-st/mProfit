@@ -170,7 +170,7 @@ function parseVariantsFromPricePage(html: string, modelSlug: string): Variant[] 
     const end = i + 1 < matches.length ? matches[i + 1]!.index! : Math.min(start + 8000, stripped.length);
     const chunk = stripped.slice(start, end).replace(/\s+/g, ' ');
 
-    const trimMatch = chunk.match(/([A-Za-z][A-Za-z0-9 +\-/\.]{1,79})<span class="varfueltype">\s*\(([^)]+)\)/);
+    const trimMatch = chunk.match(/([A-Za-z][A-Za-z0-9 +\-/.]{1,79})<span class="varfueltype">\s*\(([^)]+)\)/);
     if (!trimMatch) continue;
     let trim = trimMatch[1]!.trim();
     const fuel = trimMatch[2]!.trim().toUpperCase();

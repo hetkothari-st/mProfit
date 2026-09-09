@@ -122,7 +122,10 @@ export const aiAssistantApi = {
       try {
         payload = (await response.json()) as Record<string, unknown>;
       } catch {
-        /* ignore */
+        // A non-JSON error body (a proxy's HTML 502 page, say). Reset it so
+        // the fallback message below is chosen deliberately rather than from
+        // whatever half-parsed object was left behind.
+        payload = {};
       }
       onEvent({
         type: 'error',
@@ -141,6 +144,10 @@ export const aiAssistantApi = {
     }
     const decoder = new TextDecoder();
     let buf = '';
+    // Frames that arrived but could not be parsed. Each one is a piece of the
+    // answer the user will never see, so the count is reported once at the end
+    // rather than swallowed per-frame or shouted about mid-stream.
+    let dropped = 0;
     try {
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -160,9 +167,15 @@ export const aiAssistantApi = {
             const parsed = JSON.parse(payload) as StreamEvent;
             onEvent(parsed);
           } catch {
-            /* skip malformed events */
+            dropped += 1;
           }
         }
+      }
+      if (dropped > 0) {
+        onEvent({
+          type: 'error',
+          message: `Part of the response was lost (${dropped} unreadable event${dropped === 1 ? '' : 's'}).`,
+        });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'stream_aborted';

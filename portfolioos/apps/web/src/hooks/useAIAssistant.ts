@@ -161,8 +161,9 @@ export function useAIAssistant(active: boolean) {
     try {
       const q = await aiAssistantApi.suggested();
       setState((s) => ({ ...s, suggestedQuestions: q }));
+      // eslint-disable-next-line portfolioos/no-silent-catch -- prompt chips are a convenience; keeping the previous set is a better outcome than an error banner over a working chat
     } catch {
-      /* ignore */
+      /* keep the questions already on screen */
     }
   }, []);
 
@@ -170,8 +171,9 @@ export function useAIAssistant(active: boolean) {
     try {
       const q = await aiAssistantApi.quota();
       setState((s) => ({ ...s, quota: q }));
+      // eslint-disable-next-line portfolioos/no-silent-catch -- the quota display is advisory; the server enforces it on every send, so a stale number cannot let anything through
     } catch {
-      /* ignore */
+      /* keep the last known quota */
     }
   }, []);
 

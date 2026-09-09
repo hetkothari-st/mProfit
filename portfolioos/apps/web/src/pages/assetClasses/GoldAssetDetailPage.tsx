@@ -73,6 +73,14 @@ function PhotoCarousel({
 }) {
   const [idx, setIdx] = useState(0);
   const [srcs, setSrcs] = useState<Record<string, string>>({});
+  /**
+   * Photos whose blob fetch failed.
+   *
+   * Swallowing that error left the frame showing "Loading" for as long as the
+   * page stayed open, which reads as a slow network rather than a photo that
+   * is never going to arrive.
+   */
+  const [failed, setFailed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (idx >= photos.length) setIdx(0);
@@ -80,14 +88,20 @@ function PhotoCarousel({
 
   useEffect(() => {
     const loaded: Record<string, string> = {};
+    const missing = new Set<string>();
     Promise.all(
       photos.map(async (p) => {
         try {
           const { data } = await api.get(`/api/transactions/${p.txnId}/photos/${p.id}`, { responseType: 'blob' });
           loaded[p.id] = URL.createObjectURL(data);
-        } catch {}
+        } catch {
+          missing.add(p.id);
+        }
       }),
-    ).then(() => setSrcs({ ...loaded }));
+    ).then(() => {
+      setSrcs({ ...loaded });
+      setFailed(missing);
+    });
     return () => Object.values(loaded).forEach(URL.revokeObjectURL);
   }, [photos]);
 
@@ -108,7 +122,9 @@ function PhotoCarousel({
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
               <ImageIcon className="h-10 w-10 opacity-30" />
-              <span className="text-xs tracking-widest uppercase">Loading</span>
+              <span className="text-xs tracking-widest uppercase">
+                {current && failed.has(current.id) ? 'Unavailable' : 'Loading'}
+              </span>
             </div>
           )}
 

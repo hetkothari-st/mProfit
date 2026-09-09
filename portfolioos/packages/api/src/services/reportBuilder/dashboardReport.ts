@@ -28,6 +28,7 @@ import type { Response } from 'express';
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
 import { fmtNum, fmtDate } from '../export.service.js';
 import { computePortfolioXirr } from '../xirr.service.js';
 import { computePortfolioCapitalGains } from '../capitalGains.service.js';
@@ -143,7 +144,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   }
 
   // ─── F&O realised P&L ───────────────────────────────────────────────────────
-  let foRealisedRows: Array<Record<string, unknown>> = [];
+  const foRealisedRows: Array<Record<string, unknown>> = [];
   let foRealisedTotal = new Decimal(0);
   let foTurnoverTotal = new Decimal(0);
   const foFySummary = new Map<string, { spec: Decimal; nonSpec: Decimal; total: Decimal; turnover: Decimal; trades: number }>();
@@ -163,7 +164,9 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
         e.trades += r.closedTradeCount;
         foFySummary.set(r.financialYear, e);
       });
-    } catch { /* portfolio may have no F&O */ }
+    } catch (err) {
+      logger.warn({ err, portfolioId: pid }, '[dashboardReport] F&O section omitted');
+    }
   }
 
   // ─── Capital gains ──────────────────────────────────────────────────────────
@@ -193,7 +196,9 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
         e.total    = e.total.plus(e.intraday).plus(e.stcg).plus(e.ltcg);
         cgByFy.set(fy, e);
       }
-    } catch { /* ok */ }
+    } catch (err) {
+      logger.warn({ err, portfolioId: pid }, '[dashboardReport] capital-gains section omitted');
+    }
   }
 
   // ─── Recent transactions (last 200) ─────────────────────────────────────────
@@ -218,7 +223,9 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     try {
       const x = await computePortfolioXirr(resolvedIds[0]!);
       if (x.xirr != null) xirrPct = `${(x.xirr * 100).toFixed(2)}%`;
-    } catch { /* ok */ }
+    } catch (err) {
+      logger.warn({ err, portfolioId: resolvedIds[0] }, '[dashboardReport] XIRR omitted');
+    }
   }
 
   // ─── Historical line (monthly cost basis) ───────────────────────────────────
