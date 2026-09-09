@@ -456,241 +456,226 @@ export function PlainOverview({
   const topQuartile = num(data.categoryStats.topQuartileComposite);
 
   return (
-    <div className="space-y-8" data-testid="mf-plain-overview">
+    <div data-testid="mf-plain-overview">
       {/* Never let a borrowed rating read as this scheme's own. An IDCW option
           is not ranked — peer universes are growth-only — so its numbers come
-          from the growth option of the same fund, and the reader is told so
-          before they read anything else. */}
+          from the growth option of the same fund, and the reader is told before
+          they read anything else. */}
       {data.analyticsFromSchemeCode !== null && (
-        <section className="rounded-xl border border-dashed border-border p-4">
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">
-              These figures come from this fund&rsquo;s growth option.
-            </span>{' '}
-            Payout and reinvest options are not ranked separately — it is the same portfolio, run
-            the same way, differing only in how it pays you. Your own returns will differ from the
-            growth figures by whatever has been distributed.
+        <p className="mb-8 border-l-2 border-l-muted-foreground/40 pl-4 text-sm text-muted-foreground">
+          <span className="text-foreground">These figures are the growth option&rsquo;s.</span>{' '}
+          Payout and reinvest options are not ranked separately: same portfolio, same manager,
+          differing only in how it pays you. Your own returns will trail the growth figures by
+          whatever has been distributed.
+        </p>
+      )}
+
+      {/* ── The verdict ───────────────────────────────────────────────────
+          No card. This is the page's one loud moment and it sits on the page
+          ground; boxing it would make it one tile among six. */}
+      {rating === null || verdict === undefined || verdict === null ? (
+        <section className="border-b border-border pb-10">
+          <h2 className="font-display text-[26px] text-foreground">Not rated</h2>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            {score === null
+              ? 'We have not scored this fund. That is a gap in our data, not a judgement about the fund.'
+              : score.ratingStatus === 'INSUFFICIENT_HISTORY'
+                ? 'Not enough track record to rate it fairly yet. A rating on a short history says more about timing than about the fund.'
+                : `We rate a fund only against enough peers for the comparison to mean something. Its category holds ${data.categoryStats.universeSize} scheme${data.categoryStats.universeSize === 1 ? '' : 's'} we can score, which is too few.`}
           </p>
         </section>
-      )}
-      {/* ── The verdict ───────────────────────────────────────────────── */}
-      <section className="rounded-xl border border-border bg-card p-6">
-        {rating === null || verdict === undefined || verdict === null ? (
-          <div>
-            <h2 className="font-display text-[22px] text-foreground">Not rated yet</h2>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              {score === null
-                ? 'We have not scored this fund. That is a gap in our data, not a judgement about the fund.'
-                : score.ratingStatus === 'INSUFFICIENT_HISTORY'
-                  ? 'This fund does not yet have enough track record for us to rate it fairly. A rating on a short history says more about timing than about the fund.'
-                  : `We rate a fund only against enough peers to make the comparison mean something. Its category currently holds ${data.categoryStats.universeSize} scheme${data.categoryStats.universeSize === 1 ? '' : 's'} we can score, which is too few.`}
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-8 md:grid-cols-[auto_1fr] md:items-start">
-            {/* The score, at the size its importance deserves. Tabular figures
-                so 99.1 and 48.5 occupy the same width and the eye can compare
-                two funds without re-measuring. */}
+      ) : (
+        <section className="border-b border-border pb-10">
+          <div className="flex flex-wrap items-end gap-x-10 gap-y-6">
             <div>
               <div className="flex items-baseline gap-2">
                 <span
-                  className="font-display text-[76px] leading-[0.85] text-foreground"
+                  className="font-display text-[92px] leading-[0.8] text-foreground"
                   style={{ fontVariantNumeric: 'tabular-nums' }}
                 >
                   {composite === null ? '—' : composite.toFixed(1)}
                 </span>
-                <span className="text-sm text-muted-foreground">/100</span>
+                <span className="font-display text-[22px] leading-none text-muted-foreground">
+                  /100
+                </span>
               </div>
-              <div className="mt-3">
-                <Stars rating={rating} size={20} />
+              <div className="mt-4">
+                <Stars rating={rating} size={19} />
               </div>
             </div>
 
-            <div className="max-w-xl">
-              <h2 className="font-display text-[28px] leading-tight text-foreground">
+            <div className="max-w-lg flex-1">
+              <h2 className="font-display text-[27px] leading-[1.15] text-foreground">
                 {verdict.headline}
               </h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{verdict.body}</p>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Ranked against{' '}
-                <span className="text-foreground">{data.categoryStats.universeSize} similar funds</span>
-                {' in the same category and plan.'}
+              <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
+                {verdict.body}
               </p>
-              {composite !== null && median !== null && (
-                <CategoryScale score={composite} median={median} topQuartile={topQuartile} />
-              )}
             </div>
           </div>
-        )}
-      </section>
 
-      {/* ── What's good / what to watch ───────────────────────────────── */}
-      {(strengths.length > 0 || weaknesses.length > 0 || relativeWeakest !== null) && (
-        <section className="grid gap-6 md:grid-cols-2">
-          {/* The two cards carry opposite meanings and used to look identical.
-              A single accent rule down the leading edge separates them at a
-              glance without adding a second border, a badge or a tint. */}
-          <div className="rounded-xl border border-border bg-card p-6 border-l-2 border-l-primary">
-            <h3 className="font-display text-[18px] text-foreground">What it does well</h3>
-            {strengths.length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                Nothing stands out as a clear strength against its peers.
+          {composite !== null && median !== null && (
+            <div className="mt-9 max-w-2xl">
+              <CategoryScale score={composite} median={median} topQuartile={topQuartile} />
+              <p className="mt-3 text-[13px] text-muted-foreground">
+                Against {data.categoryStats.universeSize} funds in {data.meta.sebiSubCategory}
+                {data.meta.planType === 'DIRECT' ? ', direct plans' : ', regular plans'}.
               </p>
-            ) : (
-              <ul className="mt-3 space-y-3">
-                {strengths.map((p) => (
-                  <li key={p.key} className="flex gap-3 text-sm">
-                    <span aria-hidden className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                    <span>
-                      <span className="font-medium text-foreground">{p.label}</span>
-                      <span className="text-muted-foreground"> — {p.meaning}.</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-6 border-l-2 border-l-destructive/70">
-            <h3 className="font-display text-[18px] text-foreground">What to watch</h3>
-            {weaknesses.length === 0 ? (
-              relativeWeakest === null ? (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Nothing stands out as a clear weakness against its peers.
-                </p>
-              ) : (
-                <div className="mt-3 text-sm">
-                  <span className="font-medium text-foreground">{relativeWeakest.label}</span>
-                  <span className="text-muted-foreground"> — {relativeWeakest.meaning}.</span>
-                  <p className="mt-2 text-muted-foreground">
-                    This is its weakest area, though it is still ahead of most funds in its
-                    category. Nothing here is a red flag.
-                  </p>
-                </div>
-              )
-            ) : (
-              <ul className="mt-3 space-y-3">
-                {weaknesses.map((p) => (
-                  <li key={p.key} className="flex gap-3 text-sm">
-                    <span aria-hidden className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-destructive/70" />
-                    <span>
-                      <span className="font-medium text-foreground">{p.label}</span>
-                      <span className="text-muted-foreground"> — {p.meaning}.</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+            </div>
+          )}
         </section>
       )}
 
-      {/* ── The basic numbers ─────────────────────────────────────────── */}
+      {/* ── The assessment ────────────────────────────────────────────────
+          One list, not two columns. Strengths and weaknesses are the same
+          judgement read in two directions, and splitting them into matching
+          boxes made the page look like a template rather than an opinion. The
+          pillar name is set in the display face and its meaning in the body
+          face: typographic contrast carries what an em dash was carrying. */}
+      {(strengths.length > 0 || weaknesses.length > 0 || relativeWeakest !== null) && (
+        <section className="border-b border-border py-10">
+          <dl className="grid gap-x-12 gap-y-7 sm:grid-cols-2">
+            {strengths.map((p) => (
+              <div key={p.key} className="flex gap-4">
+                <span aria-hidden className="mt-2 h-6 w-[3px] shrink-0 rounded-full bg-primary" />
+                <div>
+                  <dt className="font-display text-[17px] text-foreground">{p.label}</dt>
+                  <dd className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    {p.meaning}.
+                  </dd>
+                </div>
+              </div>
+            ))}
+
+            {weaknesses.map((p) => (
+              <div key={p.key} className="flex gap-4">
+                <span
+                  aria-hidden
+                  className="mt-2 h-6 w-[3px] shrink-0 rounded-full bg-destructive/80"
+                />
+                <div>
+                  <dt className="font-display text-[17px] text-foreground">{p.label}</dt>
+                  <dd className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    {p.meaning}. Weaker here than most of its category.
+                  </dd>
+                </div>
+              </div>
+            ))}
+
+            {weaknesses.length === 0 && relativeWeakest !== null && (
+              <div className="flex gap-4">
+                <span
+                  aria-hidden
+                  className="mt-2 h-6 w-[3px] shrink-0 rounded-full bg-muted-foreground/50"
+                />
+                <div>
+                  <dt className="font-display text-[17px] text-foreground">
+                    {relativeWeakest.label}
+                  </dt>
+                  <dd className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    {relativeWeakest.meaning}. Its weakest side, though still ahead of most of the
+                    category, and not a red flag.
+                  </dd>
+                </div>
+              </div>
+            )}
+          </dl>
+
+          {unscored.length > 0 && (
+            <p className="mt-8 text-[13px] leading-relaxed text-muted-foreground">
+              We could not measure {unscored.join(', ').toLowerCase()}, so the rating rests on what
+              is left. Shown rather than hidden: a missing input is not a pass.
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* ── The record ────────────────────────────────────────────────────
+          A factsheet sets its figures in a row of columns divided by rules,
+          not in tiles. Same here: the numbers belong to one statement about
+          the fund, so they share one block. */}
       {metrics !== undefined && horizon !== null && (
-        <section>
-          <h3 className="mb-4 font-display text-[18px] text-foreground">The numbers that matter</h3>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {plainMetrics(metrics, horizon).map((m) => (
-              <div key={m.label} className="rounded-xl border border-border bg-card p-5">
-                <div className="text-sm text-muted-foreground">{m.label}</div>
+        <section className="border-b border-border py-10">
+          <div className="grid gap-y-8 sm:grid-cols-3 sm:gap-x-10 sm:divide-x sm:divide-border">
+            {plainMetrics(metrics, horizon).map((m, i) => (
+              <div key={m.label} className={i > 0 ? 'sm:pl-10' : undefined}>
                 <div
-                  className={`mt-1 font-display text-[26px] ${
+                  className={`font-display text-[34px] leading-none ${
                     m.tone === 'good'
                       ? 'text-primary'
                       : m.tone === 'bad'
                         ? 'text-destructive'
                         : 'text-foreground'
                   }`}
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
                 >
                   {m.value}
                 </div>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{m.help}</p>
+                <div className="mt-2 text-[15px] text-foreground">{m.label}</div>
+                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{m.help}</p>
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* ── Honesty about what the rating is missing ──────────────────── */}
-      {unscored.length > 0 && (
-        <section className="rounded-xl border border-dashed border-border p-5">
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">
-              Not everything could be measured.
-            </span>{' '}
-            We could not score {unscored.join(', ')} for this fund, so the rating above is built on
-            the rest. We show this rather than hide it — a missing input is not a passing grade.
-          </p>
-        </section>
-      )}
-
-      {/* ── Alternatives ─────────────────────────────────────────────── */}
+      {/* ── The alternatives ──────────────────────────────────────────────
+          Hairline rows, not cards: this is a ranked list read top to bottom,
+          and a border around each entry fights the ordering it is meant to
+          show. */}
       {alternatives !== null && alternatives.alternatives.length > 0 && (
-        <section>
-          <h3 className="mb-1 font-display text-[18px] text-foreground">
-            Funds in this category that score higher
-          </h3>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Ranked the same way, in the same category and plan. This is a comparison, not a
-            recommendation to switch — moving funds can trigger an exit load and a tax bill that
-            this page cannot see.
+        <section className="border-b border-border py-10">
+          <h3 className="font-display text-[19px] text-foreground">Better-scoring funds here</h3>
+          <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+            Same category, same plan, same scoring. A comparison, not advice to switch: moving
+            funds can trigger an exit load and a tax bill this page cannot see.
           </p>
-          {/* Cards, not a table. A table asks the reader to compare four
-              columns; the decision here is "is one of these clearly better,
-              and by how much". So the score gap leads, the house mark gives
-              the row a scannable left edge, and the whole card is the link. */}
-          <ul className="space-y-2">
+
+          <ul className="mt-6 divide-y divide-border border-y border-border">
             {alternatives.alternatives.map((a) => {
               const delta = num(a.compositeDelta);
               return (
                 <li key={a.schemeCode}>
                   <a
                     href={`/mutual-funds/${a.schemeCode}`}
-                    className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 transition-colors hover:border-muted-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="group flex items-center gap-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <HouseMark amcName={a.amcName} />
 
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium text-foreground">
+                      <span className="block truncate text-[15px] text-foreground group-hover:underline group-hover:underline-offset-4">
                         {a.schemeName}
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
+                      <span className="block truncate text-[13px] text-muted-foreground">
                         {a.amcName}
                       </span>
                     </span>
 
                     {a.rating !== null && (
                       <span className="hidden sm:block">
-                        <Stars rating={a.rating} size={14} />
+                        <Stars rating={a.rating} size={13} />
+                      </span>
+                    )}
+
+                    {anyCostKnown && (
+                      <span className="hidden w-24 text-right text-[13px] text-muted-foreground md:block">
+                        {a.terPct === null ? 'cost unknown' : `${num(a.terPct)!.toFixed(2)}% a year`}
                       </span>
                     )}
 
                     <span className="w-24 text-right">
                       <span
-                        className="block font-display text-[22px] leading-none text-foreground"
+                        className="block font-display text-[24px] leading-none text-foreground"
                         style={{ fontVariantNumeric: 'tabular-nums' }}
                       >
                         {num(a.composite)?.toFixed(1) ?? '—'}
                       </span>
                       {delta !== null && (
-                        <span className="mt-1 block text-xs text-primary">
-                          {delta.toFixed(1)} higher
+                        <span className="mt-1 block text-[12px] text-primary">
+                          +{delta.toFixed(1)}
                         </span>
                       )}
                     </span>
-
-                    {anyCostKnown && (
-                      <span className="hidden w-28 text-right text-sm md:block">
-                        {a.terPct === null ? (
-                          <span className="text-muted-foreground">cost unknown</span>
-                        ) : (
-                          <>
-                            <span className="text-foreground">{num(a.terPct)!.toFixed(2)}%</span>
-                            <span className="block text-xs text-muted-foreground">a year</span>
-                          </>
-                        )}
-                      </span>
-                    )}
                   </a>
                 </li>
               );
@@ -698,14 +683,14 @@ export function PlainOverview({
           </ul>
 
           {alternatives.subjectTerPct !== null ? (
-            <p className="mt-3 text-xs text-muted-foreground">
+            <p className="mt-4 text-[13px] text-muted-foreground">
               This fund charges {num(alternatives.subjectTerPct)!.toFixed(2)}% a year.
             </p>
           ) : (
-            <p className="mt-3 text-xs text-muted-foreground">
-              We do not yet hold expense ratios for these funds, so cost is not compared here.
-              Cost is one of the strongest predictors of long-term return — worth checking on the
-              AMC's own factsheet before deciding anything.
+            <p className="mt-4 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+              We hold no expense ratios for these funds, so cost is not compared. It is one of the
+              strongest predictors of long-term return, and worth checking on each AMC&rsquo;s own
+              factsheet.
             </p>
           )}
         </section>
@@ -714,11 +699,10 @@ export function PlainOverview({
       {alternatives !== null &&
         alternatives.alternatives.length === 0 &&
         alternatives.subjectComposite !== null && (
-          <section className="rounded-xl border border-dashed border-border p-5">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Nothing in its category scores higher.</span>{' '}
-              Among the {alternatives.universeSize} rated funds we hold for this category, none
-              outscores this one.
+          <section className="border-b border-border py-10">
+            <p className="max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
+              <span className="text-foreground">Nothing in its category scores higher.</span> Of
+              the {alternatives.universeSize} funds we can rate here, none beats it.
             </p>
           </section>
         )}
@@ -726,7 +710,7 @@ export function PlainOverview({
       <button
         type="button"
         onClick={onShowDetail}
-        className="text-sm font-medium text-primary underline underline-offset-4"
+        className="mt-8 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
       >
         Show the full calculations
       </button>
