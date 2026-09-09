@@ -18,6 +18,7 @@ import { getApiBaseUrl } from '@/api/baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { useReportSubject } from '@/components/reports/useReportSubject';
+import { currentReportTheme } from '@/lib/reportTheme';
 import { cn } from '@/lib/cn';
 
 // Accounting-specific exports (Trial Balance, P&L, Balance Sheet, Chart of
@@ -564,7 +565,7 @@ export function TaxMisDownloads({
     }
     setBusy(`${report.key}-${format}`);
     try {
-      const params = new URLSearchParams({ format });
+      const params = new URLSearchParams({ format, theme: currentReportTheme() });
       if (report.params.includes('fy') && fy) params.set('fy', fy);
       if (report.params.includes('asOf') && asOf) params.set('asOf', asOf);
       if (report.params.includes('from') && from) params.set('from', from);

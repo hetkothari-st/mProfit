@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
 import { getApiBaseUrl } from '@/api/baseUrl';
+import { currentReportTheme } from '@/lib/reportTheme';
 
 export type ReportFormat = 'pdf' | 'xlsx';
 
@@ -15,7 +16,14 @@ export function useDownloadReport() {
   ): Promise<void> {
     const base = getApiBaseUrl();
     const qs = new URLSearchParams();
-    for (const [k, v] of Object.entries(params)) {
+    // Matches the app's current theme by default; a caller can override by
+    // including its own `theme` in `params` (e.g. from a light/dark toggle
+    // on the download dialog) — that spreads in after this default and wins.
+    const merged: Record<string, string | string[] | undefined> = {
+      theme: currentReportTheme(),
+      ...params,
+    };
+    for (const [k, v] of Object.entries(merged)) {
       if (v === undefined || v === '') continue;
       if (Array.isArray(v)) {
         if (v.length > 0) qs.set(k, v.join(','));

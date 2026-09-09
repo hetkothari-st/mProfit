@@ -1,6 +1,7 @@
 import { api } from './client';
 import { getApiBaseUrl } from './baseUrl';
 import type { ApiResponse } from '@portfolioos/shared';
+import { currentReportTheme } from '@/lib/reportTheme';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);
@@ -196,7 +197,7 @@ export const reportsApi = {
     fy?: string,
   ): string => {
     const base = getApiBaseUrl();
-    return `${base}/api/reports/${endpoint}${qs({ portfolioId, fy, format })}`;
+    return `${base}/api/reports/${endpoint}${qs({ portfolioId, fy, format, theme: currentReportTheme() })}`;
   },
 
   holdingsExportUrl: (
@@ -209,6 +210,7 @@ export const reportsApi = {
       `${base}/api/reports/holdings-export` +
       qs({
         format,
+        theme: currentReportTheme(),
         portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
         assetClasses: assetClasses && assetClasses.length > 0 ? assetClasses.join(',') : undefined,
       })
@@ -223,7 +225,7 @@ export const reportsApi = {
     const base = getApiBaseUrl();
     return (
       `${base}/api/reports/dashboard-export` +
-      qs({ format, scope, portfolioId })
+      qs({ format, scope, portfolioId, theme: currentReportTheme() })
     );
   },
 
@@ -238,6 +240,7 @@ export const reportsApi = {
       `${base}/api/reports/statement/holdings` +
       qs({
         format,
+        theme: currentReportTheme(),
         portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
         asOf,
       })
@@ -256,6 +259,7 @@ export const reportsApi = {
       qs({
         format,
         kind,
+        theme: currentReportTheme(),
         portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
         fy,
       })
@@ -272,6 +276,7 @@ export const reportsApi = {
       `${base}/api/reports/statement/income` +
       qs({
         format,
+        theme: currentReportTheme(),
         portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
         fy,
       })
@@ -289,6 +294,7 @@ export const reportsApi = {
       `${base}/api/reports/statement/ledger` +
       qs({
         format,
+        theme: currentReportTheme(),
         portfolioIds: portfolioIds.length > 0 ? portfolioIds.join(',') : undefined,
         from,
         to,
