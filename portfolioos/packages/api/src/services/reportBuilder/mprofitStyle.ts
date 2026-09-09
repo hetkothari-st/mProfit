@@ -23,23 +23,54 @@ import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
 import { Decimal } from '@portfolioos/shared';
 import { pdfSafe } from '../charts/pdfCharts.js';
+import { DARK_THEME, LIGHT_THEME, hexToArgb, type ThemeName } from '../charts/pdfTheme.js';
 
 // ─── Palette — pulled from the screenshots ───────────────────────
+//
+// mProfit's legacy desktop report uses pastel identity bands — pink header,
+// sky-blue group banner, yellow subtotal, green grand total — on a white
+// page. The dark theme keeps that same identity but tints every band dark
+// enough to sit on a near-black page; the light theme renders the pastels
+// close to the original screenshots. Base ink/muted/negative/border/white
+// come from the shared theme so this stays in step with every other report.
 
-export const MPROFIT_PALETTE = {
-  pageBg: '#0D0D0D',             // full page canvas
-  bandPink: '#1E2210',           // top family/member band + table header (dark olive-lime tint)
-  bandPinkSoft: '#141414',       // outer header strip
-  groupBlue: '#101F2E',          // top-level group banner (dark navy tint)
-  subPink: '#1C1530',            // script header row (dark violet tint)
-  subtotalYellow: '#2A2008',     // per-script total (dark amber tint)
-  grandGreen: '#132B0C',         // grand total (dark green tint)
-  border: '#3D3D3D',
-  ink: '#F0F0F0',
-  muted: '#9E9E9E',
-  negative: '#F0574C',
-  white: '#171717',
-} as const;
+function paletteFor(theme: ThemeName) {
+  if (theme === 'light') {
+    return {
+      pageBg: LIGHT_THEME.pageBg,
+      bandPink: '#F9D9E6',           // top family/member band + table header
+      bandPinkSoft: '#FCEFF4',       // outer header strip
+      groupBlue: '#D6EAF8',          // top-level group banner
+      subPink: '#F3E1F5',            // script header row
+      subtotalYellow: '#FFF3B0',     // per-script total
+      grandGreen: '#C8E6C9',         // grand total
+      border: LIGHT_THEME.border,
+      ink: LIGHT_THEME.ink,
+      muted: LIGHT_THEME.muted,
+      negative: LIGHT_THEME.negative,
+      white: '#FFFFFF',
+    } as const;
+  }
+  return {
+    pageBg: DARK_THEME.pageBg,
+    bandPink: '#1E2210',           // dark olive-lime tint
+    bandPinkSoft: '#141414',
+    groupBlue: '#101F2E',          // dark navy tint
+    subPink: '#1C1530',            // dark violet tint
+    subtotalYellow: '#2A2008',     // dark amber tint
+    grandGreen: '#132B0C',         // dark green tint
+    border: DARK_THEME.border,
+    ink: DARK_THEME.ink,
+    muted: DARK_THEME.muted,
+    negative: DARK_THEME.negative,
+    white: '#171717',
+  } as const;
+}
+
+export type MprofitPalette = ReturnType<typeof paletteFor>;
+
+/** @deprecated kept only so nothing importing the old constant breaks; prefer `paletteFor(theme)`. */
+export const MPROFIT_PALETTE = paletteFor('dark');
 
 // ─── Layout types ────────────────────────────────────────────────
 
@@ -104,6 +135,8 @@ export interface MprofitLayout {
   grandTotal?: ScriptSubtotal;
   /** Filename without extension. */
   filenameStem: string;
+  /** Defaults to 'dark' — the app's own brand skin — same as every other report. */
+  theme?: ThemeName;
 }
 
 // ─── Number / string utilities ───────────────────────────────────
@@ -175,6 +208,7 @@ const PDF_FONT_BOLD = 'Helvetica-Bold';
 
 export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    const PAL = paletteFor(layout.theme ?? 'dark');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${layout.filenameStem}.pdf"`);
 
@@ -186,7 +220,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     doc.on('error', reject);
     res.on('error', reject);
     doc.pipe(res);
-    doc.rect(0, 0, doc.page.width, doc.page.height).fill(MPROFIT_PALETTE.pageBg);
+    doc.rect(0, 0, doc.page.width, doc.page.height).fill(PAL.pageBg);
 
     const ML = doc.page.margins.left;
     const pageW = doc.page.width - ML - doc.page.margins.right;
@@ -200,7 +234,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     function renderTopBand(): number {
       const bandH = 28;
       const y = doc.y;
-      doc.rect(ML, y, pageW, bandH).fillAndStroke(MPROFIT_PALETTE.bandPinkSoft, MPROFIT_PALETTE.border);
+      doc.rect(ML, y, pageW, bandH).fillAndStroke(PAL.bandPinkSoft, PAL.border);
 
       const cells: Array<{ label: string; value: string }> = [];
       if (layout.family && layout.family !== layout.member) {
@@ -214,22 +248,22 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
       cells.forEach((c, i) => {
         const cx = ML + i * colW;
         if (i > 0) {
-          doc.moveTo(cx, y).lineTo(cx, y + bandH).strokeColor(MPROFIT_PALETTE.border).lineWidth(0.6).stroke();
+          doc.moveTo(cx, y).lineTo(cx, y + bandH).strokeColor(PAL.border).lineWidth(0.6).stroke();
         }
-        doc.font(PDF_FONT_BOLD).fontSize(8).fillColor(MPROFIT_PALETTE.muted)
+        doc.font(PDF_FONT_BOLD).fontSize(8).fillColor(PAL.muted)
           .text(pdfSafe(c.label.toUpperCase()), cx + 6, y + 4, { width: colW - 12, characterSpacing: 0.5, lineBreak: false });
-        doc.font(PDF_FONT_BOLD).fontSize(10).fillColor(MPROFIT_PALETTE.ink)
+        doc.font(PDF_FONT_BOLD).fontSize(10).fillColor(PAL.ink)
           .text(pdfSafe(c.value), cx + 6, y + 14, { width: colW - 12, lineBreak: false, ellipsis: true });
       });
       return y + bandH + 4;
     }
 
     function renderReportTitle(yStart: number): number {
-      doc.fillColor(MPROFIT_PALETTE.ink).font(PDF_FONT_BOLD).fontSize(11)
+      doc.fillColor(PAL.ink).font(PDF_FONT_BOLD).fontSize(11)
         .text(pdfSafe(layout.reportTitle), ML, yStart, { width: pageW, lineBreak: false });
       let y = yStart + 14;
       if (layout.pan) {
-        doc.font(PDF_FONT).fontSize(8.5).fillColor(MPROFIT_PALETTE.muted)
+        doc.font(PDF_FONT).fontSize(8.5).fillColor(PAL.muted)
           .text(pdfSafe(`PAN: ${layout.pan}`), ML, y, { width: pageW, align: 'right', lineBreak: false });
       }
       return y + 8;
@@ -270,9 +304,9 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
         const isLeaf = grp.spanCols === 1;
         const cellH = isLeaf ? rowH * 2 : rowH;
         doc.rect(cursorX, y, w, cellH)
-          .fillAndStroke(grp.bg ?? MPROFIT_PALETTE.bandPink, MPROFIT_PALETTE.border);
+          .fillAndStroke(grp.bg ?? PAL.bandPink, PAL.border);
         const textY = isLeaf ? y + (cellH / 2) - 8 : y + 4;
-        doc.font(PDF_FONT_BOLD).fontSize(8).fillColor(MPROFIT_PALETTE.ink)
+        doc.font(PDF_FONT_BOLD).fontSize(8).fillColor(PAL.ink)
           .text(pdfSafe(grp.label), cursorX + 2, textY, {
             width: w - 4, height: cellH - 4, align: 'center',
             lineBreak: true, ellipsis: true,
@@ -292,8 +326,8 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
             const w = colWs[r2]!;
             const sub = layout.headerRow2[r2];
             doc.rect(cur2X, y + rowH, w, rowH)
-              .fillAndStroke(MPROFIT_PALETTE.bandPink, MPROFIT_PALETTE.border);
-            doc.font(PDF_FONT_BOLD).fontSize(8).fillColor(MPROFIT_PALETTE.ink)
+              .fillAndStroke(PAL.bandPink, PAL.border);
+            doc.font(PDF_FONT_BOLD).fontSize(8).fillColor(PAL.ink)
               .text(pdfSafe(sub?.label ?? ''), cur2X + 2, y + rowH + 4, {
                 width: w - 4, height: rowH - 4, align: sub?.align ?? 'center',
                 lineBreak: true, ellipsis: true,
@@ -308,7 +342,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
 
     function newPage(): number {
       doc.addPage();
-      doc.rect(0, 0, doc.page.width, doc.page.height).fill(MPROFIT_PALETTE.pageBg);
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill(PAL.pageBg);
       let y = doc.page.margins.top;
       doc.y = y;
       y = renderTopBand();
@@ -347,20 +381,20 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     ): number {
       const rowH = 16;
       if (y + rowH > BOT) y = newPage();
-      doc.rect(ML, y, pageW, rowH).fillAndStroke(bg, MPROFIT_PALETTE.border);
+      doc.rect(ML, y, pageW, rowH).fillAndStroke(bg, PAL.border);
       for (let i = 0; i < layout.columns.length; i++) {
         const c = layout.columns[i]!;
         const x = colXs[i]!;
         const w = colWs[i]!;
         const raw = cells[c.key];
         const display = c.formatter ? c.formatter(raw) : raw == null ? '' : String(raw);
-        let textColor: string = MPROFIT_PALETTE.ink;
+        let textColor: string = PAL.ink;
         if (c.signed && typeof display === 'string' && isParensNegative(display)) {
-          textColor = MPROFIT_PALETTE.negative;
+          textColor = PAL.negative;
         }
         if (i > 0) {
           doc.moveTo(x, y).lineTo(x, y + rowH)
-            .strokeColor(MPROFIT_PALETTE.border).lineWidth(0.4).stroke();
+            .strokeColor(PAL.border).lineWidth(0.4).stroke();
         }
         const safe = fitToWidth(pdfSafe(display), 8, w - 6, bold);
         doc.font(bold ? PDF_FONT_BOLD : PDF_FONT).fontSize(8).fillColor(textColor)
@@ -376,8 +410,8 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     function renderSpanRow(y: number, text: string, bg: string, bold = true): number {
       const rowH = 18;
       if (y + rowH > BOT) y = newPage();
-      doc.rect(ML, y, pageW, rowH).fillAndStroke(bg, MPROFIT_PALETTE.border);
-      doc.font(bold ? PDF_FONT_BOLD : PDF_FONT).fontSize(8.5).fillColor(MPROFIT_PALETTE.ink)
+      doc.rect(ML, y, pageW, rowH).fillAndStroke(bg, PAL.border);
+      doc.font(bold ? PDF_FONT_BOLD : PDF_FONT).fontSize(8.5).fillColor(PAL.ink)
         .text(pdfSafe(text), ML + 6, y + 5, { width: pageW - 12, lineBreak: false, ellipsis: true });
       return y + rowH;
     }
@@ -394,7 +428,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
     ): number {
       const rowH = 18;
       if (y + rowH > BOT) y = newPage();
-      doc.rect(ML, y, pageW, rowH).fillAndStroke(bg, MPROFIT_PALETTE.border);
+      doc.rect(ML, y, pageW, rowH).fillAndStroke(bg, PAL.border);
 
       doc.font(PDF_FONT_BOLD).fontSize(8.5);
       const labelW = doc.widthOfString(label) + 12;
@@ -407,7 +441,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
         runningW += colWs[spanCols]!;
         spanCols += 1;
       }
-      doc.fillColor(MPROFIT_PALETTE.ink)
+      doc.fillColor(PAL.ink)
         .text(fitToWidth(pdfSafe(label), 8.5, runningW - 8, true), ML + 4, y + 5, {
           width: runningW - 8, align: 'left', lineBreak: false,
         });
@@ -418,12 +452,12 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
         const w = colWs[i]!;
         const raw = values[c.key];
         const display = c.formatter ? c.formatter(raw) : raw == null ? '' : String(raw);
-        let textColor: string = MPROFIT_PALETTE.ink;
+        let textColor: string = PAL.ink;
         if (c.signed && typeof display === 'string' && isParensNegative(display)) {
-          textColor = MPROFIT_PALETTE.negative;
+          textColor = PAL.negative;
         }
         doc.moveTo(x, y).lineTo(x, y + rowH)
-          .strokeColor(MPROFIT_PALETTE.border).lineWidth(0.4).stroke();
+          .strokeColor(PAL.border).lineWidth(0.4).stroke();
         const safe = fitToWidth(pdfSafe(display), 8.5, w - 6, true);
         doc.font(PDF_FONT_BOLD).fontSize(8.5).fillColor(textColor)
           .text(safe, x + 3, y + 5, {
@@ -435,21 +469,21 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
 
     for (const section of layout.sections) {
       if (section.banner) {
-        cy = renderSpanRow(cy, section.banner, MPROFIT_PALETTE.groupBlue);
+        cy = renderSpanRow(cy, section.banner, PAL.groupBlue);
       }
       for (const g of section.groups) {
         if (g.header) {
-          cy = renderSpanRow(cy, g.header, MPROFIT_PALETTE.subPink);
+          cy = renderSpanRow(cy, g.header, PAL.subPink);
         }
         for (const r of g.rows) {
-          cy = renderBodyRow(cy, r.cells, r.bg ?? MPROFIT_PALETTE.white);
+          cy = renderBodyRow(cy, r.cells, r.bg ?? PAL.white);
         }
         if (g.subtotal) {
           cy = renderTotalRow(
             cy,
             g.subtotal.label,
             g.subtotal.values,
-            MPROFIT_PALETTE.subtotalYellow,
+            PAL.subtotalYellow,
           );
         }
       }
@@ -460,7 +494,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
         cy,
         layout.grandTotal.label,
         layout.grandTotal.values,
-        MPROFIT_PALETTE.grandGreen,
+        PAL.grandGreen,
       );
     }
 
@@ -471,6 +505,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
 // ─── Excel renderer ──────────────────────────────────────────────
 
 export async function streamMprofitExcel(res: Response, layout: MprofitLayout): Promise<void> {
+  const PAL = paletteFor(layout.theme ?? 'dark');
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PortfolioOS';
   wb.created = new Date();
@@ -486,8 +521,8 @@ export async function streamMprofitExcel(res: Response, layout: MprofitLayout): 
   if (layout.member) topParts.push(layout.member);
   if (layout.financialYear) topParts.push(`FY ${layout.financialYear}`);
   ws.getCell(1, 1).value = topParts.join(' · ');
-  ws.getCell(1, 1).fill = solid(MPROFIT_PALETTE.bandPinkSoft);
-  ws.getCell(1, 1).font = { bold: true, size: 11 };
+  ws.getCell(1, 1).fill = solid(PAL.bandPinkSoft);
+  ws.getCell(1, 1).font = { bold: true, size: 11, color: { argb: hexToArgb(PAL.ink) } };
   ws.getCell(1, 1).alignment = { horizontal: 'center', vertical: 'middle' };
   ws.getRow(1).height = 22;
 
@@ -505,26 +540,26 @@ export async function streamMprofitExcel(res: Response, layout: MprofitLayout): 
     if (grp.spanCols === 1) {
       ws.mergeCells(4, colIdx, 5, colIdx);
       ws.getCell(4, colIdx).value = grp.label;
-      ws.getCell(4, colIdx).fill = solid(grp.bg ?? MPROFIT_PALETTE.bandPink);
+      ws.getCell(4, colIdx).fill = solid(grp.bg ?? PAL.bandPink);
       ws.getCell(4, colIdx).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      ws.getCell(4, colIdx).font = { bold: true, size: 9 };
-      ws.getCell(4, colIdx).border = allBorders();
+      ws.getCell(4, colIdx).font = { bold: true, size: 9, color: { argb: hexToArgb(PAL.ink) } };
+      ws.getCell(4, colIdx).border = allBorders(PAL.border);
       colIdx += 1;
     } else {
       ws.mergeCells(4, colIdx, 4, colIdx + grp.spanCols - 1);
       ws.getCell(4, colIdx).value = grp.label;
-      ws.getCell(4, colIdx).fill = solid(grp.bg ?? MPROFIT_PALETTE.bandPink);
+      ws.getCell(4, colIdx).fill = solid(grp.bg ?? PAL.bandPink);
       ws.getCell(4, colIdx).alignment = { horizontal: 'center' };
-      ws.getCell(4, colIdx).font = { bold: true, size: 9 };
-      ws.getCell(4, colIdx).border = allBorders();
+      ws.getCell(4, colIdx).font = { bold: true, size: 9, color: { argb: hexToArgb(PAL.ink) } };
+      ws.getCell(4, colIdx).border = allBorders(PAL.border);
       for (let k = 0; k < grp.spanCols; k++) {
         const c = ws.getCell(5, colIdx + k);
         const sub = layout.headerRow2[leafCol - 1 + k];
         c.value = sub?.label ?? '';
-        c.fill = solid(MPROFIT_PALETTE.bandPink);
+        c.fill = solid(PAL.bandPink);
         c.alignment = { horizontal: sub?.align ?? 'center' };
-        c.font = { bold: true, size: 9 };
-        c.border = allBorders();
+        c.font = { bold: true, size: 9, color: { argb: hexToArgb(PAL.ink) } };
+        c.border = allBorders(PAL.border);
       }
       colIdx += grp.spanCols;
     }
@@ -541,15 +576,22 @@ export async function streamMprofitExcel(res: Response, layout: MprofitLayout): 
       const cell = ws.getCell(row, i + 1);
       cell.value = display;
       cell.fill = solid(fill);
+      // Always an explicit colour, not just on the negative branch — Excel's
+      // own default text colour is black, which the dark theme's tinted
+      // bands (e.g. `subtotalYellow` at '#2A2008') would swallow entirely.
       cell.font = {
         bold,
         size: 9,
-        color: c.signed && typeof display === 'string' && isParensNegative(display)
-          ? { argb: 'FFF0574C' }
-          : undefined,
+        color: {
+          argb: hexToArgb(
+            c.signed && typeof display === 'string' && isParensNegative(display)
+              ? PAL.negative
+              : PAL.ink,
+          ),
+        },
       };
       cell.alignment = { horizontal: c.align ?? 'left' };
-      cell.border = allBorders();
+      cell.border = allBorders(PAL.border);
     }
     row += 1;
   }
@@ -558,21 +600,21 @@ export async function streamMprofitExcel(res: Response, layout: MprofitLayout): 
     ws.mergeCells(row, 1, row, totalCols);
     ws.getCell(row, 1).value = label;
     ws.getCell(row, 1).fill = solid(fill);
-    ws.getCell(row, 1).font = { bold: true, size: 9 };
+    ws.getCell(row, 1).font = { bold: true, size: 9, color: { argb: hexToArgb(PAL.ink) } };
     ws.getCell(row, 1).alignment = { horizontal: 'left' };
-    ws.getCell(row, 1).border = allBorders();
+    ws.getCell(row, 1).border = allBorders(PAL.border);
     row += 1;
   }
 
   for (const section of layout.sections) {
-    if (section.banner) writeBanner(section.banner, MPROFIT_PALETTE.groupBlue);
+    if (section.banner) writeBanner(section.banner, PAL.groupBlue);
     for (const g of section.groups) {
-      if (g.header) writeBanner(g.header, MPROFIT_PALETTE.subPink);
-      for (const r of g.rows) writeRow(r.cells, r.bg ?? MPROFIT_PALETTE.white);
+      if (g.header) writeBanner(g.header, PAL.subPink);
+      for (const r of g.rows) writeRow(r.cells, r.bg ?? PAL.white);
       if (g.subtotal) {
         writeRow(
           { [layout.columns[0]!.key]: g.subtotal.label, ...g.subtotal.values },
-          MPROFIT_PALETTE.subtotalYellow,
+          PAL.subtotalYellow,
           true,
         );
       }
@@ -582,7 +624,7 @@ export async function streamMprofitExcel(res: Response, layout: MprofitLayout): 
   if (layout.grandTotal) {
     writeRow(
       { [layout.columns[0]!.key]: layout.grandTotal.label, ...layout.grandTotal.values },
-      MPROFIT_PALETTE.grandGreen,
+      PAL.grandGreen,
       true,
     );
   }
@@ -604,7 +646,7 @@ function solid(argb: string): ExcelJS.FillPattern {
   return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + hex.toUpperCase() } };
 }
 
-function allBorders(): ExcelJS.Borders {
-  const style: ExcelJS.Border = { style: 'thin', color: { argb: 'FF3D3D3D' } };
+function allBorders(borderColor: string): ExcelJS.Borders {
+  const style: ExcelJS.Border = { style: 'thin', color: { argb: hexToArgb(borderColor) } };
   return { top: style, left: style, right: style, bottom: style } as ExcelJS.Borders;
 }
