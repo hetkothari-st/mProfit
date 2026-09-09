@@ -3,6 +3,27 @@ import { backfillRentalLedger } from '../../scripts/backfillRentalLedger.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 
 /**
+ * The tenancies belonging to one test's own user.
+ *
+ * Every invocation below is scoped through this. The script sweeps EVERY
+ * tenancy in the database by default, which is right for a real migration and
+ * catastrophic in a test: an unscoped run once inserted ten synthetic payments
+ * into a demo fixture that merely shared the database.
+ */
+const scopeTenancies = async (scope: TestScope): Promise<string[]> =>
+  // Under runAs: the shared client enforces RLS, so an unscoped read here
+  // returns nothing and the backfill would silently sweep everything instead.
+  scope.runAs(async () =>
+    (
+      await prisma.tenancy.findMany({
+        where: { property: { userId: scope.userId } },
+        select: { id: true },
+      })
+    ).map((t) => t.id),
+  );
+
+
+/**
  * INVARIANT: backfilling a legacy tenancy must not move a single receipt.
  * Statuses and received amounts recorded before the ledger existed have to
  * survive the migration byte-for-byte.
@@ -56,7 +77,7 @@ describe('backfillRentalLedger parity', () => {
   });
 
   it('creates entries and reports zero drift', async () => {
-    const report = await backfillRentalLedger();
+    const report = await backfillRentalLedger({ onlyTenancyIds: await scopeTenancies(scope) });
     expect(report.drift).toEqual([]);
     expect(report.paymentsCreated).toBeGreaterThanOrEqual(2);
     expect(report.depositsCreated).toBeGreaterThanOrEqual(1);
@@ -110,7 +131,7 @@ describe('backfillRentalLedger parity', () => {
   });
 
   it('is idempotent — a second run creates nothing new', async () => {
-    const report = await backfillRentalLedger();
+    const report = await backfillRentalLedger({ onlyTenancyIds: await scopeTenancies(scope) });
     expect(report.paymentsCreated).toBe(0);
     expect(report.depositsCreated).toBe(0);
     expect(report.drift).toEqual([]);
@@ -163,7 +184,7 @@ describe('backfillRentalLedger — skipped receipt with legacy receivedAmount', 
   });
 
   it('records the real outcome instead of assuming one', async () => {
-    const report = await backfillRentalLedger();
+    const report = await backfillRentalLedger({ onlyTenancyIds: await scopeTenancies(scope) });
 
     // Observed behaviour: recomputeTenancyLedger excludes isSkipped receipts
     // from the charge set entirely (rentalLedger.service.ts), so this
@@ -279,7 +300,7 @@ describe('backfillRentalLedger — post-cutover double-count guard', () => {
   });
 
   it('skips the receipt already backed by a live entry, but still backfills its sibling', async () => {
-    const report = await backfillRentalLedger();
+    const report = await backfillRentalLedger({ onlyTenancyIds: await scopeTenancies(scope) });
 
     await scope.runAs(async () => {
       // The live-backed tenancy must still have exactly one entry: the
@@ -392,7 +413,7 @@ describe('backfillRentalLedger — deposit double-count guard', () => {
   });
 
   it('skips a tenancy that already has a live DEPOSIT, but still backfills a bare one', async () => {
-    await backfillRentalLedger();
+    await backfillRentalLedger({ onlyTenancyIds: await scopeTenancies(scope) });
 
     await scope.runAs(async () => {
       const seededEntries = await prisma.rentLedgerEntry.findMany({
@@ -421,7 +442,7 @@ describe('backfillRentalLedger — deposit double-count guard', () => {
   });
 
   it('stays at one deposit after a second run', async () => {
-    await backfillRentalLedger();
+    await backfillRentalLedger({ onlyTenancyIds: await scopeTenancies(scope) });
     await scope.runAs(async () => {
       for (const id of [tenancySeededId, tenancyBareId]) {
         const entries = await prisma.rentLedgerEntry.findMany({
@@ -523,7 +544,7 @@ describe('backfillRentalLedger — dry run reports drift and writes nothing', ()
   });
 
   it('reports the full drift a real run would produce', async () => {
-    const report = await backfillRentalLedger({ dryRun: true });
+    const report = await backfillRentalLedger({ dryRun: true, onlyTenancyIds: await scopeTenancies(scope) });
 
     expect(report.dryRun).toBe(true);
     expect(report.tenanciesRecomputed).toBeGreaterThanOrEqual(2);
@@ -566,6 +587,81 @@ describe('backfillRentalLedger — dry run reports drift and writes nothing', ()
         expect(t.balanceDue.toString()).toBe('0');
         expect(t.balanceComputedAt).toBeNull();
       }
+    });
+  });
+});
+
+/**
+ * REGRESSION: the post-cutover guard originally matched a live PAYMENT by
+ * `tenancyId + forMonth`. But a payment recorded without pinning a month
+ * carries `forMonth: null` and is allocated by FIFO — it settles a month
+ * without ever naming it. Those receipts looked unbackfilled, so a run after
+ * go-live gave each one a duplicate synthetic payment: the exact double-count
+ * the guard exists to prevent, reached by the ordinary route.
+ *
+ * Found by running the api suite against a database that also held a demo
+ * fixture: the fixture came back with ten synthetic payments it never made.
+ */
+describe('backfillRentalLedger — an UNPINNED live payment also blocks the backfill', () => {
+  let scope: TestScope;
+  let tenancyId: string;
+
+  beforeAll(async () => {
+    scope = await createTestScope('rental-ledger-backfill-unpinned');
+    await scope.runAs(async () => {
+      const property = await prisma.rentalProperty.create({
+        data: { userId: scope.userId, name: 'Unpinned Guard', propertyType: 'RESIDENTIAL' },
+      });
+      const tenancy = await prisma.tenancy.create({
+        data: {
+          propertyId: property.id,
+          tenantName: 'FIFO Payer',
+          startDate: new Date('2026-01-01T00:00:00.000Z'),
+          monthlyRent: '30000',
+          rentDueDay: 1,
+        },
+      });
+      tenancyId = tenancy.id;
+      await prisma.rentReceipt.create({
+        data: {
+          tenancyId,
+          forMonth: '2026-01',
+          expectedAmount: '30000',
+          dueDate: new Date('2026-01-01T00:00:00.000Z'),
+          status: 'RECEIVED',
+          receivedAmount: '30000',
+          receivedOn: new Date('2026-01-05T00:00:00.000Z'),
+        },
+      });
+      // The live entry a real, unpinned payment produces: no forMonth.
+      await prisma.rentLedgerEntry.create({
+        data: {
+          tenancyId,
+          entryType: 'PAYMENT',
+          amount: '30000',
+          entryDate: new Date('2026-01-05T00:00:00.000Z'),
+          forMonth: null,
+          sourceHash: null,
+        },
+      });
+    });
+  });
+
+  afterAll(async () => {
+    await scope.cleanup();
+  });
+
+  it('creates no synthetic payment for a month settled by an unpinned one', async () => {
+    await backfillRentalLedger({ onlyTenancyIds: await scopeTenancies(scope) });
+    await scope.runAs(async () => {
+      const entries = await prisma.rentLedgerEntry.findMany({
+        where: { tenancyId, entryType: 'PAYMENT' },
+      });
+      expect(entries).toHaveLength(1);
+      expect(entries[0].sourceHash).toBeNull();
+
+      const tenancy = await prisma.tenancy.findUniqueOrThrow({ where: { id: tenancyId } });
+      expect(tenancy.balanceDue.toString()).toBe('0');
     });
   });
 });

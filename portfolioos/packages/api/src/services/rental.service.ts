@@ -868,13 +868,20 @@ export async function propertyPnL(
   const fromDate = parseIsoDate(from);
   const toDate = parseIsoDate(to);
 
-  const receipts = await prisma.rentReceipt.findMany({
+  // Income is the money that actually arrived, so it comes from PAYMENT
+  // ledger entries rather than from `RentReceipt.receivedAmount`. Those two
+  // used to be the same number — before the ledger, `receivedAmount` only
+  // moved when cash did. The ledger widened it to "amount settled against
+  // this month", which a DISCOUNT also does, so summing it reported a waiver
+  // as rent earned. DEPOSIT is excluded for the same reason: money held is
+  // not money earned.
+  const payments = await prisma.rentLedgerEntry.findMany({
     where: {
       tenancy: { propertyId },
-      status: { in: [RECEIPT_STATUS.RECEIVED, RECEIPT_STATUS.PARTIAL] },
-      receivedOn: { gte: fromDate, lte: toDate },
+      entryType: 'PAYMENT',
+      entryDate: { gte: fromDate, lte: toDate },
     },
-    select: { receivedAmount: true },
+    select: { amount: true },
   });
   const expenses = await prisma.propertyExpense.findMany({
     where: {
@@ -885,9 +892,7 @@ export async function propertyPnL(
   });
 
   let rentTotal = new Prisma.Decimal(0);
-  for (const r of receipts) {
-    if (r.receivedAmount) rentTotal = rentTotal.plus(r.receivedAmount.toString());
-  }
+  for (const p of payments) rentTotal = rentTotal.plus(p.amount.toString());
   let expTotal = new Prisma.Decimal(0);
   for (const e of expenses) expTotal = expTotal.plus(e.amount.toString());
 
@@ -898,7 +903,10 @@ export async function propertyPnL(
     rentReceived: rentTotal.toFixed(2),
     expensesTotal: expTotal.toFixed(2),
     netPnL: rentTotal.minus(expTotal).toFixed(2),
-    receiptCount: receipts.length,
+    // Now a count of payments received in the window rather than of receipts
+    // touched — one month paid in two instalments counts twice, which is what
+    // the figure beside `rentReceived` should mean.
+    receiptCount: payments.length,
     expenseCount: expenses.length,
   };
 }
