@@ -311,16 +311,18 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   }
 
   function sectionBand(label: string, cy: number, parent?: PDFKit.PDFOutline): { cy: number; bookmark: PDFKit.PDFOutline } {
-    const newCy = ensureSpace(cy, 36);
-    const H = 20;
-    // Light blue band + accent left bar + ink text. Lighter than the cover
-    // header so a stack of sections doesn't read as a wall of navy.
-    doc.rect(ML, newCy, W, H).fill(C.headerBg);
-    doc.rect(ML, newCy, 3, H).fill(C.accent);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(C.ink)
-       .text(truncToFit(doc, pdfSafe(label), W - 18), ML + 10, newCy + 6, { width: W - 18, lineBreak: false });
+    // Reserve enough for the heading AND the first few rows beneath it, so a
+    // section title can never sit alone at the foot of a page with its table
+    // starting overleaf. The old 36pt reserved the heading and nothing else.
+    const newCy = ensureSpace(cy, 96);
+    // A heading, not a coloured band: name in bold over a hairline spanning
+    // the measure. Stacked fifteen deep, filled bands with accent bars read as
+    // applied decoration; a rule reads as structure and prints cleanly.
+    doc.font('Helvetica-Bold').fontSize(10.5).fillColor(C.ink)
+       .text(truncToFit(doc, pdfSafe(label), W), ML, newCy, { width: W, lineBreak: false });
+    doc.rect(ML, newCy + 15, W, 0.6).fill(C.border);
     const bookmark = (parent ?? rootBookmark).addItem(label);
-    return { cy: newCy + H + 6, bookmark };
+    return { cy: newCy + 15 + 9, bookmark };
   }
 
   // ─── COVER ────────────────────────────────────────────────────────────────
@@ -329,18 +331,18 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
 
   // Headline metric cards
   const headlineCards = [
-    { label: 'NET WORTH',         value: `Rs. ${fmtNum(nw.totalNetWorth)}`, neg: false },
-    { label: 'INVESTMENTS VALUE', value: `Rs. ${fmtNum(nw.portfolio.currentValue)}`, neg: false },
-    { label: 'INVESTED',          value: `Rs. ${fmtNum(nw.portfolio.totalInvested)}`, neg: false },
-    { label: 'UNREALISED P&L',    value: `Rs. ${fmtNum(nw.portfolio.unrealisedPnL)}`, neg: nw.portfolio.unrealisedPnL.startsWith('-') },
+    { label: 'Net worth',         value: `Rs. ${fmtNum(nw.totalNetWorth)}`, neg: false },
+    { label: 'Investments value', value: `Rs. ${fmtNum(nw.portfolio.currentValue)}`, neg: false },
+    { label: 'Invested',          value: `Rs. ${fmtNum(nw.portfolio.totalInvested)}`, neg: false },
+    { label: 'Unrealised P&L',    value: `Rs. ${fmtNum(nw.portfolio.unrealisedPnL)}`, neg: nw.portfolio.unrealisedPnL.startsWith('-') },
   ];
   cy = drawMetricCards(doc, ML, W, cy, headlineCards, C);
 
   const secondaryCards = [
     { label: 'XIRR',              value: xirrPct ?? '—', neg: false },
-    { label: 'F&O REALISED P&L',  value: `Rs. ${fmtNum(foRealisedTotal.toString())}`, neg: foRealisedTotal.isNegative() },
-    { label: 'REAL ESTATE',       value: `Rs. ${fmtNum(nw.realEstate.totalValue)}`, neg: false },
-    { label: 'LIABILITIES',       value: `Rs. ${fmtNum(nw.totalLiabilities)}`, neg: false },
+    { label: 'F&O realised P&L',  value: `Rs. ${fmtNum(foRealisedTotal.toString())}`, neg: foRealisedTotal.isNegative() },
+    { label: 'Real estate',       value: `Rs. ${fmtNum(nw.realEstate.totalValue)}`, neg: false },
+    { label: 'Liabilities',       value: `Rs. ${fmtNum(nw.totalLiabilities)}`, neg: false },
   ];
   cy = drawMetricCards(doc, ML, W, cy, secondaryCards, C);
   cy += 8;
@@ -804,20 +806,27 @@ function drawMetricCards(
   cards: CardSpec[],
   C: PdfTheme,
 ): number {
-  const gap = 6;
-  const cardW = (width - gap * (cards.length - 1)) / cards.length;
-  const cardH = 44;
+  // A stat strip, not a row of cards. Factsheets and bank statements set key
+  // figures this way: hairline rules top and bottom, thin dividers between the
+  // metrics, nothing else. The previous treatment filled each metric with a
+  // tinted block and stamped a 3px accent bar down its left edge — eight bars
+  // on the cover before a single figure was read, carrying no information.
+  const cardH = 40;
+  const colW = width / cards.length;
+
+  doc.rect(x, cy, width, 0.6).fill(C.border);
   cards.forEach((c, i) => {
-    const cx = x + i * (cardW + gap);
-    doc.rect(cx, cy, cardW, cardH).fill(C.headerBg);
-    doc.rect(cx, cy, 3, cardH).fill(C.accent);
-    doc.font('Helvetica').fontSize(7).fillColor(C.muted)
-       .text(c.label, cx + 9, cy + 7, { width: cardW - 12, characterSpacing: 0.4, lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(12).fillColor(c.neg ? C.negative : C.ink);
-    const fitted = truncToFit(doc, pdfSafe(c.value), cardW - 16);
-    doc.text(fitted, cx + 9, cy + 22, { width: cardW - 12, lineBreak: false });
+    const cx = x + i * colW;
+    // Dividers stop short of the rules so the strip reads as one band.
+    if (i > 0) doc.rect(cx, cy + 8, 0.5, cardH - 16).fill(C.border);
+    doc.font('Helvetica').fontSize(7.5).fillColor(C.muted)
+       .text(c.label, cx + 10, cy + 9, { width: colW - 16, lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(12.5).fillColor(c.neg ? C.negative : C.ink);
+    const fitted = truncToFit(doc, pdfSafe(c.value), colW - 20);
+    doc.text(fitted, cx + 10, cy + 21, { width: colW - 16, lineBreak: false });
   });
-  return cy + cardH + 10;
+  doc.rect(x, cy + cardH, width, 0.6).fill(C.border);
+  return cy + cardH + 14;
 }
 
 interface ColDef {
