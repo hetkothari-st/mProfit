@@ -172,16 +172,23 @@ export async function getDashboardNetWorth(
     return n + p.tenancies.reduce((t, tn) => t + tn.rentReceipts.length, 0);
   }, 0);
 
-  // YTD rental income (received receipts since April 1)
+  // YTD rental income: the money that actually arrived since April 1, summed
+  // from PAYMENT ledger entries rather than from `RentReceipt.receivedAmount`.
+  // Those used to be the same number — before the ledger, `receivedAmount`
+  // only moved when cash did. The ledger widened it to "amount settled against
+  // this month", which a DISCOUNT also does, so summing it reported a waiver
+  // as income. DEPOSIT is excluded for the same reason: money held is not
+  // money earned. See test/regressions/rental-discount-not-income.test.ts.
   const fy = fyStart();
-  const receivedReceipts = await prisma.rentReceipt.findMany({
+  const rentPayments = await prisma.rentLedgerEntry.findMany({
     where: {
       tenancy: { property: { userId } },
-      receivedOn: { gte: fy },
-      status: { in: ['RECEIVED', 'PARTIAL'] },
+      entryType: 'PAYMENT',
+      entryDate: { gte: fy },
     },
+    select: { amount: true },
   });
-  const rentalIncomeYTD = receivedReceipts.reduce((s, r) => s.plus(d(r.receivedAmount)), ZERO);
+  const rentalIncomeYTD = rentPayments.reduce((s, p) => s.plus(d(p.amount)), ZERO);
 
   // YTD expenses
   const expenses = await prisma.propertyExpense.findMany({

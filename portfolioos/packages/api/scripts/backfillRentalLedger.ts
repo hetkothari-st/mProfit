@@ -158,19 +158,32 @@ class DryRunRollback extends Error {
  * identical inserts, identical parity pass — so the dry run's report is
  * faithful to what a real run would produce.
  */
-async function executeBackfill(io: BackfillIo, report: BackfillReport): Promise<void> {
+async function executeBackfill(
+  io: BackfillIo,
+  report: BackfillReport,
+  /**
+   * Restricts the sweep to these tenancies. Undefined means every tenancy in
+   * the database, which is what a real migration wants — but it is also why
+   * this script must never be invoked unscoped from a test: doing so mutates
+   * whatever rental data happens to share the database, which is how a demo
+   * fixture once acquired ten synthetic payments from a test run.
+   */
+  onlyTenancyIds?: string[],
+): Promise<void> {
   const { db } = io;
+  const scope = onlyTenancyIds ? { tenancyId: { in: onlyTenancyIds } } : {};
+  const tenancyScope = onlyTenancyIds ? { id: { in: onlyTenancyIds } } : {};
 
   const receipts = await db.rentReceipt.findMany({
-    where: { receivedAmount: { not: null } },
+    where: { receivedAmount: { not: null }, ...scope },
   });
-  const tenancies = await db.tenancy.findMany();
+  const tenancies = await db.tenancy.findMany({ where: tenancyScope });
 
   // Snapshot the pre-backfill projection so the post-recompute pass can
   // compare — every observable field the recompute might touch, not just
   // the money-only pair used for `drift`.
   const before = new Map(
-    (await db.rentReceipt.findMany()).map((r) => [
+    (await db.rentReceipt.findMany({ where: scope })).map((r) => [
       r.id,
       {
         status: r.status,
@@ -183,16 +196,23 @@ async function executeBackfill(io: BackfillIo, report: BackfillReport): Promise<
   );
 
   for (const r of receipts) {
-    // A live (non-backfill) PAYMENT already pinned to this tenancy+month
-    // means the receipt's current receivedAmount came from the real
-    // post-cutover payment flow, not stale legacy state. Don't create a
-    // second, synthetic payment for it — that would double-count in
-    // allocateCredits on the very next recompute.
+    // Any live (non-backfill) PAYMENT anywhere on this tenancy means the
+    // ledger is already the source of truth for it, so its receipts'
+    // receivedAmount is derived state rather than stale legacy data. Creating
+    // a synthetic payment on top would double-count on the next recompute.
+    //
+    // Deliberately scoped to the TENANCY, not to tenancy+month. An earlier
+    // version matched `forMonth: r.forMonth` and missed the common case: a
+    // payment recorded without pinning a month carries `forMonth: null` and
+    // is allocated by FIFO, so it settles a month without ever naming it.
+    // Those receipts looked unbackfilled and got a duplicate — the exact
+    // double-count this guard exists to prevent. A tenancy either predates
+    // the ledger (no live entries, backfill it) or is ledger-native (leave it
+    // alone); there is no meaningful half-migrated state in between.
     const liveEntry = await db.rentLedgerEntry.findFirst({
       where: {
         tenancyId: r.tenancyId,
         entryType: 'PAYMENT',
-        forMonth: r.forMonth,
         OR: [
           { sourceHash: null },
           { NOT: { sourceHash: { startsWith: BACKFILL_PAYMENT_PREFIX } } },
@@ -262,7 +282,7 @@ async function executeBackfill(io: BackfillIo, report: BackfillReport): Promise<
     report.tenanciesRecomputed += 1;
   }
 
-  for (const r of await db.rentReceipt.findMany()) {
+  for (const r of await db.rentReceipt.findMany({ where: scope })) {
     const prior = before.get(r.id);
     if (prior === undefined) continue;
 
@@ -308,7 +328,7 @@ async function executeBackfill(io: BackfillIo, report: BackfillReport): Promise<
 }
 
 export async function backfillRentalLedger(
-  opts: { dryRun?: boolean } = {},
+  opts: { dryRun?: boolean; onlyTenancyIds?: string[] } = {},
 ): Promise<BackfillReport> {
   return runAsSystem(async () => {
     const report: BackfillReport = {
@@ -337,6 +357,7 @@ export async function backfillRentalLedger(
                 },
               },
               report,
+              opts.onlyTenancyIds,
             );
             throw new DryRunRollback();
           },
@@ -361,6 +382,7 @@ export async function backfillRentalLedger(
         },
       },
       report,
+      opts.onlyTenancyIds,
     );
     return report;
   });

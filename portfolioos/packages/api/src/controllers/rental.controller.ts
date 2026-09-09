@@ -324,33 +324,58 @@ export async function getTenancyStatementHandler(req: Request, res: Response) {
   const userId = req.user?.id;
   if (!userId) throw new UnauthorizedError();
   const ledger = await getTenancyLedger(userId, req.params.tenancyId!);
+
+  // Sentence case, so a system label never sits next to a user's own note
+  // looking like a different class of thing ("rent charge" beside "Security
+  // deposit"). Rent rows name their month, which is what makes a statement
+  // line reconcilable against a receipt.
+  const label = (r: (typeof ledger.rows)[number]): string => {
+    if (r.source === 'RECEIPT') return `Rent — ${r.forMonth ?? ''}`.trim();
+    const typeName = r.entryType.charAt(0) + r.entryType.slice(1).toLowerCase().replace(/_/g, ' ');
+    return r.note ? `${typeName} — ${r.note}` : typeName;
+  };
+
+  const oldestFirst = [...ledger.rows].reverse();
+
+  const period =
+    oldestFirst.length > 0
+      ? `${fmtDate(oldestFirst[0]!.date)} to ${fmtDate(oldestFirst.at(-1)!.date)}`
+      : 'No activity yet';
+
   const columns: ExportColumn[] = [
-    { key: 'date',           header: 'Date',    width: 12, formatter: fmtDate },
-    { key: 'description',    header: 'Details', width: 34 },
-    { key: 'youGave',        header: 'Charged', width: 14, formatter: (v) => fmtNum(v) },
-    { key: 'youGot',         header: 'Paid',    width: 14, formatter: (v) => fmtNum(v) },
-    { key: 'runningBalance', header: 'Balance', width: 14, formatter: (v) => fmtNum(v) },
+    { key: 'date',           header: 'Date',    width: 13, formatter: fmtDate },
+    { key: 'description',    header: 'Details', width: 37 },
+    { key: 'youGave',        header: 'Charged', width: 16, formatter: (v) => fmtNum(v), align: 'right' },
+    { key: 'youGot',         header: 'Paid',    width: 16, formatter: (v) => fmtNum(v), align: 'right' },
+    { key: 'runningBalance', header: 'Balance', width: 18, formatter: (v) => fmtNum(v), align: 'right' },
   ];
+
   await streamPdf(res, {
     title: `Rent statement — ${ledger.tenantName}`,
+    subtitle: `${ledger.propertyName} · ${period}`,
+    // Identity in the thin meta strip; the money as metric cards, which is
+    // what `footer` renders as and what a reader looks for first.
     meta: {
       Property: ledger.propertyName,
       Tenant: ledger.tenantName,
-      // Through fmtNum like every table cell below — a raw "380000" in the
-      // meta strip beside a formatted "3,80,000.00" in the table reads as a
-      // different number at a glance.
+      Period: period,
+    },
+    footer: {
+      // Through fmtNum like every table cell below — a raw "380000" beside a
+      // formatted "3,80,000.00" reads as a different number at a glance.
       'Balance Due': fmtNum(ledger.balanceDue),
       'Deposit Held': fmtNum(ledger.depositHeld),
-      'Generated On': new Date().toISOString().slice(0, 10),
+      'Monthly Rent': fmtNum(ledger.monthlyRent),
     },
     columns,
     // Oldest first reads better on a statement than the screen's newest-first.
-    rows: [...ledger.rows].reverse().map((r) => ({
+    rows: oldestFirst.map((r) => ({
       date: r.date,
-      description: r.note ?? r.entryType.replace(/_/g, ' ').toLowerCase(),
+      description: label(r),
       youGave: r.kind === 'CHARGE' ? r.amount : '',
       youGot: r.kind === 'CREDIT' ? r.amount : '',
       runningBalance: r.runningBalance,
     })),
+    mainSectionLabel: 'Statement of account',
   });
 }

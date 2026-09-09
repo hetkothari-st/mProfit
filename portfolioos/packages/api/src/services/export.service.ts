@@ -9,6 +9,12 @@ export interface ExportColumn {
   header: string;
   width?: number;
   formatter?: (value: unknown) => string;
+  /**
+   * Alignment for the header AND every cell in the column. Omit to infer it
+   * from the column's own data: a column whose first non-empty value looks
+   * numeric aligns right, anything else left.
+   */
+  align?: 'left' | 'right';
 }
 
 export interface ExportSection {
@@ -307,6 +313,27 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
   const colWidths   = o.columns.map(c => ((c.width ?? 10) / totalWeight) * o.width);
   const ROW_H       = 16;
 
+  const looksNumeric = (s: string): boolean =>
+    /^[+-]?[\d,.]+%?$/.test(s.trim()) || /^[+-]?Rs/.test(s.trim());
+
+  const cellText = (col: ExportColumn, row: Record<string, unknown>): string => {
+    const raw = row[col.key];
+    return pdfSafe(col.formatter ? col.formatter(raw) : raw == null ? '' : String(raw));
+  };
+
+  // One alignment per column, shared by the header and every cell. Previously
+  // each cell decided for itself while the header was always left — so the
+  // header of a money column floated left of its own right-aligned figures,
+  // in every report this renderer produces.
+  const colAlign: Array<'left' | 'right'> = o.columns.map((c) => {
+    if (c.align) return c.align;
+    for (const row of o.rows) {
+      const s = cellText(c, row).trim();
+      if (s) return looksNumeric(s) ? 'right' : 'left';
+    }
+    return 'left';
+  });
+
   const drawHeader = (yy: number): void => {
     // Table column header — dark slate background, ink text. Distinct from
     // section header (headerBg) and row background (rowAlt).
@@ -316,7 +343,7 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
     for (let i = 0; i < o.columns.length; i++) {
       const cellW = (colWidths[i] ?? 80) - 8;
       doc.text(fitText(doc, pdfSafe(o.columns[i]!.header), cellW), x + 4, yy + 5, {
-        width: cellW, lineBreak: false,
+        width: cellW, align: colAlign[i] ?? 'left', lineBreak: false,
       });
       x += colWidths[i] ?? 80;
     }
@@ -338,12 +365,9 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
     doc.font('Helvetica').fontSize(8);
     for (let i = 0; i < o.columns.length; i++) {
       const col = o.columns[i]!;
-      const raw = o.rows[idx]![col.key];
-      const rawVal = col.formatter ? col.formatter(raw) : (raw == null ? '' : String(raw));
-      const safe = pdfSafe(rawVal);
-      const isNumeric = /^[+-]?[\d,.]+%?$/.test(safe.trim()) || /^[+-]?Rs/.test(safe.trim());
+      const safe = cellText(col, o.rows[idx]!);
       const isNeg = safe.trim().startsWith('-');
-      const align = isNumeric ? 'right' : 'left';
+      const align = colAlign[i] ?? 'left';
       const cellW = (colWidths[i] ?? 80) - 8;
       // Manually truncate so we can guarantee single-line — PDFKit's
       // lineBreak:false + ellipsis:true combo is unreliable when text is
