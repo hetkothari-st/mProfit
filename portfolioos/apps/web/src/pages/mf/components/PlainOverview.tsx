@@ -706,16 +706,16 @@ function DistributionChart({
       )}
       <polyline
         points={shape}
-        fill="hsl(var(--accent))"
-        fillOpacity={0.42}
+        fill="hsl(var(--foreground))"
+        fillOpacity={0.14}
         stroke="none"
         clipPath={`url(#hp-gain-${uid})`}
       />
       <polyline
         points={shape}
         fill="none"
-        stroke="hsl(var(--accent))"
-        strokeOpacity={0.95}
+        stroke="hsl(var(--foreground))"
+        strokeOpacity={0.8}
         strokeWidth={1.5}
         vectorEffect="non-scaling-stroke"
       />
@@ -727,8 +727,8 @@ function DistributionChart({
           x2={zeroX}
           y1={-4}
           y2={CHART_H}
-          stroke="hsl(var(--foreground))"
-          strokeOpacity={0.5}
+          stroke="hsl(var(--muted-foreground))"
+          strokeOpacity={0.9}
           strokeWidth={1.5}
           vectorEffect="non-scaling-stroke"
         />
@@ -739,8 +739,8 @@ function DistributionChart({
         x2={x(median)}
         y1={0}
         y2={CHART_H}
-        stroke="hsl(var(--accent))"
-        strokeWidth={2}
+        stroke="hsl(var(--foreground))"
+        strokeWidth={2.5}
         vectorEffect="non-scaling-stroke"
       />
     </svg>
@@ -798,7 +798,7 @@ function MedianLabel({ median, lo, hi }: { median: number; lo: number; hi: numbe
         style={{
           left: `${pct}%`,
           transform: pct > 88 ? 'translateX(-100%)' : 'translateX(-50%)',
-          color: 'hsl(var(--accent))',
+          color: 'hsl(var(--foreground))',
           fontVariantNumeric: 'tabular-nums',
         }}
       >
@@ -881,7 +881,7 @@ function HoldingPeriods({
           <span
             aria-hidden
             className="h-2.5 w-4 rounded-[2px]"
-            style={{ backgroundColor: 'hsl(var(--accent) / 0.42)' }}
+            style={{ backgroundColor: 'hsl(var(--foreground) / 0.22)' }}
           />
           made money
         </span>
@@ -889,7 +889,7 @@ function HoldingPeriods({
           <span
             aria-hidden
             className="h-3.5 w-[2px]"
-            style={{ backgroundColor: 'hsl(var(--accent))' }}
+            style={{ backgroundColor: 'hsl(var(--foreground))' }}
           />
           the typical period
         </span>
