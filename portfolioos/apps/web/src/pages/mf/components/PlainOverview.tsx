@@ -194,7 +194,6 @@ function splitPillars(pillars: Record<string, MfPillarScore>): {
   }
 
   const informative = scored.filter((p) => !UNINFORMATIVE_PILLARS.has(p.key));
-  const strengths = informative.filter((p) => p.score >= 0.6).sort((a, b) => b.score - a.score);
   const weaknesses = scored.filter((p) => p.score < 0.4).sort((a, b) => a.score - b.score);
 
   // Only when nothing is weak in absolute terms, and only with something to
@@ -202,6 +201,16 @@ function splitPillars(pillars: Record<string, MfPillarScore>): {
   const ranked = [...informative].sort((a, b) => a.score - b.score);
   const relativeWeakest =
     weaknesses.length === 0 && ranked.length >= 2 ? (ranked[0] ?? null) : null;
+
+  // A pillar can clear the strength bar AND still be the lowest of them — on a
+  // five-star fund every pillar does. Listing it in both places rendered
+  // "Protection in falls" twice on the same screen, once as something the fund
+  // does well and once as its weak side. The weaker statement is the more
+  // useful one, so the pillar is claimed by `relativeWeakest` and dropped from
+  // the strengths rather than appearing in both.
+  const strengths = informative
+    .filter((p) => p.score >= 0.6 && p.key !== relativeWeakest?.key)
+    .sort((a, b) => b.score - a.score);
 
   return { strengths, weaknesses, relativeWeakest, unscored };
 }
@@ -295,6 +304,33 @@ function pickSummaryHorizon(data: MfFundAnalyticsDto): MfHorizonYears | null {
 // ---------------------------------------------------------------------------
 
 /**
+ * What colour a score is printed in.
+ *
+ * Tied to the STAR BANDS, not to round numbers. The composite is a percentile
+ * blend, so 60 means nothing fixed — in a tight liquid-fund category the top
+ * quarter starts at 56, in a spread-out equity one at 67. Colouring on
+ * arbitrary thresholds would call the same fund good in one category and
+ * average in another, which is exactly the error the rating exists to prevent.
+ * The bands already encode "against its peers", so the colour follows them.
+ *
+ * The green stop is `--accent`, NOT `--primary`. In this theme `--primary` is
+ * near-white (0 0% 96%) and `--accent` carries the signature lime; reading the
+ * names the other way round printed every four- and five-star score in plain
+ * white and cost the scale its top stop entirely.
+ *
+ * Amber is a literal because the palette has no mid state — a three-stop scale
+ * needs something between lime and coral that belongs to neither.
+ */
+const SCORE_AMBER = 'hsl(38 92% 62%)';
+
+function scoreColor(rating: number | null): string | undefined {
+  if (rating === null) return undefined;
+  if (rating >= 4) return 'hsl(var(--accent))';
+  if (rating === 3) return SCORE_AMBER;
+  return 'hsl(var(--destructive))';
+}
+
+/**
  * Stars, drawn rather than typed.
  *
  * The glyph "★" renders at a different weight in Fraunces than in the body
@@ -336,47 +372,75 @@ function CategoryScale({
   score,
   median,
   topQuartile,
+  markColor,
 }: {
   score: number;
   median: number;
   topQuartile: number | null;
+  markColor?: string;
 }) {
-  const clamp = (n: number) => Math.max(2, Math.min(98, n));
+  /**
+   * The axis is the category's range, not 0–100.
+   *
+   * Drawn full-scale, a liquid-fund page put the median at 52, the top quarter
+   * at 56 and this fund at 54.3 — three marks inside four points of a hundred,
+   * so the fund sat on top of the median and the labels collided. Eighty per
+   * cent of the width carried no information while the part that did was
+   * unreadable.
+   *
+   * The window is centred on the median and widened to hold every mark with
+   * room to spare. `MIN_SPAN` stops the opposite failure: when a fund really is
+   * a hair from the median, a window that hugged the marks would magnify a
+   * rounding difference into a visible gap and claim a distinction the numbers
+   * do not support.
+   */
+  const MIN_SPAN = 12;
+  const marks = [score, median, ...(topQuartile === null ? [] : [topQuartile])];
+  const reach = Math.max(...marks.map((m) => Math.abs(m - median)));
+  const half = Math.max(MIN_SPAN / 2, reach * 1.7);
+  const lo = median - half;
+  const hi = median + half;
+  const at = (v: number) => Math.max(1, Math.min(99, ((v - lo) / (hi - lo)) * 100));
+
+  const scoreAt = at(score);
+  const medianAt = at(median);
+  const tqAt = topQuartile === null ? null : at(topQuartile);
+  // Only stagger when the labels would actually overlap.
+  const crowded = tqAt !== null && Math.abs(tqAt - medianAt) < 22;
+
   return (
-    <div className="mt-6">
+    <div>
       <div className="relative h-[3px] w-full rounded-full bg-muted">
-        {topQuartile !== null && (
+        {tqAt !== null && (
           <div
-            className="absolute inset-y-0 rounded-full bg-primary/15"
-            style={{ left: `${clamp(topQuartile)}%`, right: 0 }}
+            className="absolute inset-y-0 rounded-full bg-accent/25"
+            style={{ left: `${tqAt}%`, right: 0 }}
           />
         )}
         <div
-          className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-muted-foreground/50"
-          style={{ left: `${clamp(median)}%` }}
+          className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-muted-foreground/60"
+          style={{ left: `${medianAt}%` }}
         />
         <div
-          className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-background bg-primary"
-          style={{ left: `${clamp(score)}%` }}
+          className="absolute top-1/2 h-[14px] w-[14px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-background"
+          style={{ left: `${scoreAt}%`, backgroundColor: markColor }}
         />
       </div>
-      {/* Two labels on one row collide whenever the median and the top
-          quartile are close, which in a tight category they usually are —
-          measured at 52 and 56 on a liquid-fund page. Staggering them keeps
-          both anchored to their real positions instead of trading accuracy for
-          legibility. */}
-      <div className="relative mt-2 h-4 text-[11px] text-muted-foreground">
-        <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${clamp(median)}%` }}>
+
+      <div className="relative mt-2 h-4 text-[12px] text-muted-foreground">
+        <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${medianAt}%` }}>
           median {median.toFixed(0)}
         </span>
+        {tqAt !== null && !crowded && (
+          <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${tqAt}%` }}>
+            top quarter {topQuartile!.toFixed(0)}
+          </span>
+        )}
       </div>
-      {topQuartile !== null && (
-        <div className="relative h-4 text-[11px] text-muted-foreground">
-          <span
-            className="absolute -translate-x-1/2 whitespace-nowrap"
-            style={{ left: `${clamp(topQuartile)}%` }}
-          >
-            top quarter {topQuartile.toFixed(0)}
+      {tqAt !== null && crowded && (
+        <div className="relative h-4 text-[12px] text-muted-foreground">
+          <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${tqAt}%` }}>
+            top quarter {topQuartile!.toFixed(0)}
           </span>
         </div>
       )}
@@ -490,8 +554,8 @@ export function PlainOverview({
             <div>
               <div className="flex items-baseline gap-2">
                 <span
-                  className="font-display text-[92px] leading-[0.8] text-foreground"
-                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                  className="font-display text-[92px] leading-[0.8]"
+                  style={{ fontVariantNumeric: 'tabular-nums', color: scoreColor(rating) }}
                 >
                   {composite === null ? '—' : composite.toFixed(1)}
                 </span>
@@ -516,7 +580,12 @@ export function PlainOverview({
 
           {composite !== null && median !== null && (
             <div className="mt-9 max-w-2xl">
-              <CategoryScale score={composite} median={median} topQuartile={topQuartile} />
+              <CategoryScale
+                score={composite}
+                median={median}
+                topQuartile={topQuartile}
+                markColor={scoreColor(rating)}
+              />
               <p className="mt-3 text-[13px] text-muted-foreground">
                 Against {data.categoryStats.universeSize} funds in {data.meta.sebiSubCategory}
                 {data.meta.planType === 'DIRECT' ? ', direct plans' : ', regular plans'}.
@@ -536,8 +605,10 @@ export function PlainOverview({
         <section className="border-b border-border py-10">
           <dl className="grid gap-x-12 gap-y-7 sm:grid-cols-2">
             {strengths.map((p) => (
-              <div key={p.key} className="flex gap-4">
-                <span aria-hidden className="mt-2 h-6 w-[3px] shrink-0 rounded-full bg-primary" />
+              <div
+                key={p.key}
+                className="flex gap-4 rounded-lg border border-border bg-card p-5"
+              >
                 <div>
                   <dt className="font-display text-[17px] text-foreground">{p.label}</dt>
                   <dd className="mt-1 text-sm leading-relaxed text-muted-foreground">
@@ -548,11 +619,10 @@ export function PlainOverview({
             ))}
 
             {weaknesses.map((p) => (
-              <div key={p.key} className="flex gap-4">
-                <span
-                  aria-hidden
-                  className="mt-2 h-6 w-[3px] shrink-0 rounded-full bg-destructive/80"
-                />
+              <div
+                key={p.key}
+                className="flex gap-4 rounded-lg border border-border bg-card p-5"
+              >
                 <div>
                   <dt className="font-display text-[17px] text-foreground">{p.label}</dt>
                   <dd className="mt-1 text-sm leading-relaxed text-muted-foreground">
@@ -563,11 +633,7 @@ export function PlainOverview({
             ))}
 
             {weaknesses.length === 0 && relativeWeakest !== null && (
-              <div className="flex gap-4">
-                <span
-                  aria-hidden
-                  className="mt-2 h-6 w-[3px] shrink-0 rounded-full bg-muted-foreground/50"
-                />
+              <div className="flex gap-4 rounded-lg border border-border bg-card p-5">
                 <div>
                   <dt className="font-display text-[17px] text-foreground">
                     {relativeWeakest.label}
@@ -602,7 +668,7 @@ export function PlainOverview({
                 <div
                   className={`font-display text-[34px] leading-none ${
                     m.tone === 'good'
-                      ? 'text-primary'
+                      ? 'text-accent'
                       : m.tone === 'bad'
                         ? 'text-destructive'
                         : 'text-foreground'
@@ -665,13 +731,13 @@ export function PlainOverview({
 
                     <span className="w-24 text-right">
                       <span
-                        className="block font-display text-[24px] leading-none text-foreground"
-                        style={{ fontVariantNumeric: 'tabular-nums' }}
+                        className="block font-display text-[24px] leading-none"
+                        style={{ fontVariantNumeric: 'tabular-nums', color: scoreColor(a.rating) }}
                       >
                         {num(a.composite)?.toFixed(1) ?? '—'}
                       </span>
                       {delta !== null && (
-                        <span className="mt-1 block text-[12px] text-primary">
+                        <span className="mt-1 block text-[12px] text-accent">
                           +{delta.toFixed(1)}
                         </span>
                       )}
