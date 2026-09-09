@@ -66,6 +66,7 @@ import {
   specFor,
   universeKey as buildUniverseKey,
   wholeMonthsBetween,
+  MIN_RATING_HISTORY_MONTHS,
   MIN_UNIVERSE_SIZE,
   UNMAPPED_SUBCATEGORY,
 } from '@portfolioos/shared';
@@ -967,16 +968,31 @@ export function rateUniverse(input: UniverseScoringInput): MfSchemeScoreRow[] {
   };
   const universe = { modelKey, spec, asOf, locals };
 
-  // ── Pass 1: pillars, composite, and the gates that do not need the pool ──
+  // ── Pass 1: pillars, composite, and the one gate that does not need the pool ──
+  //
+  // Membership is the fund's OWN history, not its pillars.
+  //
+  // It used to be the pillars, and that became circular the moment a percentile
+  // started requiring a pool of `MIN_UNIVERSE_SIZE`: in a category below the
+  // floor every fund's percentile-fed pillars are null, so no fund qualifies,
+  // so the pool is zero, so every fund is told it has "only 0 peers" — in a
+  // category that plainly holds eight. The size that the CATEGORY_TOO_SMALL
+  // copy quotes must not itself depend on ranks that the size decides.
+  //
+  // History is the only gate that is genuinely intrinsic to a scheme, and it is
+  // the right one: the pool is "funds in this category we could score", which is
+  // also what the reader is told it is. Whether one of them individually has a
+  // computable Sharpe ratio does not shrink the peer group its neighbours were
+  // ranked against.
   const scored = schemes.map((ctx) => {
     const s = scorePillars(model, ctx, universe);
     const historyMonths = wholeMonthsBetween(ctx.meta.inceptionDate, asOf);
-    const gatesExceptSize = ratingStatusFor({
+    return {
+      ctx,
+      s,
       historyMonths,
-      universeSize: MIN_UNIVERSE_SIZE,
-      pillars: s.pillarScores,
-    });
-    return { ctx, s, historyMonths, poolMember: gatesExceptSize === 'RATED' && s.composite !== null };
+      poolMember: historyMonths >= MIN_RATING_HISTORY_MONTHS && s.composite !== null,
+    };
   });
 
   const pool = scored.filter((x) => x.poolMember).map((x) => x.s.composite as Decimal);

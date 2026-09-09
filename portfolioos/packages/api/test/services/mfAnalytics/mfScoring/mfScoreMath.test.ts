@@ -699,15 +699,50 @@ describe('ratingStatusFor gate precedence', () => {
    * to zero. `06 §6` renders that status as "only {n} peers in category", so
    * each fund was told it had no peers when the real cause was its own
    * unscoreable pillar.
+   *
+   * Those categories cleared `MIN_UNIVERSE_SIZE`, which is what makes the null
+   * pillar the fund's own gap rather than a consequence of the pool — so the
+   * blame still lands on the fund.
    */
-  it('blames the fund own null pillar, not the peer count, when both fail', () => {
+  it('blames the fund own null pillar, not the peer count, when the category is big enough', () => {
     const status = ratingStatusFor({
       historyMonths: 120,
-      universeSize: 0,
+      universeSize: MIN_UNIVERSE_SIZE,
       pillars: {
         PERFORMANCE: { score: null },
         CONSISTENCY: { score: new Decimal('0.5') },
       },
+    });
+    expect(status).toBe('INSUFFICIENT_HISTORY');
+  });
+
+  /**
+   * The mirror case, and the reason the size gate now runs first.
+   *
+   * Below `MIN_UNIVERSE_SIZE` there are no percentiles to build a pillar from
+   * (`00-README` invariant 3: such a category gets metrics and findings but no
+   * peer-relative claim), so EVERY fund in it has a null PERFORMANCE however
+   * long its history. Blaming the pillar there would tell a twenty-year-old
+   * fund it has "not enough track record", which is both wrong and something it
+   * can never fix — the size of its category is not its to change.
+   */
+  it('blames the category, not the pillar, when the category is below the floor', () => {
+    const status = ratingStatusFor({
+      historyMonths: 240,
+      universeSize: MIN_UNIVERSE_SIZE - 1,
+      pillars: {
+        PERFORMANCE: { score: null },
+        CONSISTENCY: { score: null },
+      },
+    });
+    expect(status).toBe('CATEGORY_TOO_SMALL');
+  });
+
+  it('still blames the fund history first, whatever the category size', () => {
+    const status = ratingStatusFor({
+      historyMonths: 12,
+      universeSize: 3,
+      pillars: { PERFORMANCE: { score: null }, CONSISTENCY: { score: null } },
     });
     expect(status).toBe('INSUFFICIENT_HISTORY');
   });

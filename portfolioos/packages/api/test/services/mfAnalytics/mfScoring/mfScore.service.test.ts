@@ -643,17 +643,34 @@ describe('mfScore.service', () => {
   });
 
   describe('small universe (§11.7)', () => {
-    it('8 schemes ⇒ CATEGORY_TOO_SMALL for all, pillars still published, nothing rated', async () => {
+    it('8 schemes ⇒ CATEGORY_TOO_SMALL for all, rows still written, nothing rated', async () => {
       const result = await runAsSystem(() => scoreUniverse(refFor(SUB_SMALL), ASOF));
       expect(result.scored).toBe(8);
       expect(result.ratingStatusCounts.CATEGORY_TOO_SMALL).toBe(8);
       expect(result.ratingStatusCounts.RATED).toBe(0);
       for (const row of result.rows) {
+        /**
+         * The count the CATEGORY_TOO_SMALL copy quotes is the whole category,
+         * not the survivors of the pillar gate.
+         *
+         * It used to be the latter, which was circular: below the floor there
+         * are no percentiles, so no fund's pillars score, so the pool was zero
+         * and eight funds were each told they had "only 0 peers". The pool is
+         * now the funds whose own history clears the bar, which is also what
+         * the reader is told it is.
+         */
         expect(row.universeSize).toBe(8);
         expect(row.composite).toBeNull();
         expect(row.rating).toBeNull();
-        expect(row.pillars['PERFORMANCE']!.score).not.toBeNull();
-        expect(row.diagnostics.compositeBeforeGate).not.toBeNull();
+        /**
+         * `00-README` invariant 3: a category below `MIN_UNIVERSE_SIZE` gets
+         * metrics and findings but no peer-relative claim. PERFORMANCE is built
+         * from percentiles, so there is nothing honest to publish — and a
+         * pillar score here would be a rank among eight presented as a category
+         * standing.
+         */
+        expect(row.pillars['PERFORMANCE']!.score).toBeNull();
+        expect(row.pillars['PERFORMANCE']!.status).not.toBe('OK');
       }
       const stored = await loadRows(SUB_SMALL);
       expect(stored).toHaveLength(8);

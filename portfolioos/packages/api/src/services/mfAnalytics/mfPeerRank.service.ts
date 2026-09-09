@@ -369,6 +369,20 @@ export interface UniverseComputeInput {
   metricsByScheme: ReadonlyMap<string, ReadonlyMap<number, LoadedSchemeMetrics>>;
   /** `schemeCode` → cleaned daily adjusted-NAV series. */
   navByScheme: ReadonlyMap<string, readonly SeriesPoint[]>;
+  /**
+   * Smallest pool a metric may be ranked in. Defaults to `MIN_UNIVERSE_SIZE`.
+   *
+   * Only tests pass anything else, and only to test the RANKING MATHS — the
+   * tie rule, the direction of `LOWER_IS_BETTER`, the median that accompanies
+   * a percentile. Those are properties of the arithmetic, not of the policy,
+   * and a fixture would have to seed ten near-identical funds to reach them,
+   * which tests the seeding rather than the sums.
+   *
+   * The policy itself is not opted out of anywhere: production never passes
+   * this, and a dedicated test asserts the default withholds percentiles for
+   * an under-sized pool.
+   */
+  minPoolSize?: number;
 }
 
 export interface LoadedSchemeMetrics {
@@ -605,6 +619,7 @@ function readMetricValue(
  */
 export function computeUniversePeerRanks(input: UniverseComputeInput): MfPeerRankRow[] {
   const { universeKey, modelKey, asOf, candidates, metricsByScheme, navByScheme } = input;
+  const minPoolSize = input.minPoolSize ?? MIN_UNIVERSE_SIZE;
 
   /**
    * `BENCHMARK_UNAVAILABLE` counts as computable.
@@ -768,7 +783,7 @@ export function computeUniversePeerRanks(input: UniverseComputeInput): MfPeerRan
       // per universe is the whole correction. Dropping a metric here costs no
       // rating: it is not a `RATING_REQUIRED_PILLAR` input, so its pillar
       // simply redistributes weight to the inputs that do have a pool.
-      if (values.size >= MIN_UNIVERSE_SIZE) valuesByMetric.set(spec.metric, values);
+      if (values.size >= minPoolSize) valuesByMetric.set(spec.metric, values);
     }
 
     const universeSize = selection.rankingUniverse.length;
@@ -1154,6 +1169,20 @@ export interface StructuralComputeInput {
   candidates: readonly MfUniverseCandidate[];
   /** `schemeCode` → the stored horizon-0 profile, where one exists. */
   profileByScheme: ReadonlyMap<string, MfCurrentProfile>;
+  /**
+   * Smallest pool a metric may be ranked in. Defaults to `MIN_UNIVERSE_SIZE`.
+   *
+   * Only tests pass anything else, and only to test the RANKING MATHS — the
+   * tie rule, the direction of `LOWER_IS_BETTER`, the median that accompanies
+   * a percentile. Those are properties of the arithmetic, not of the policy,
+   * and a fixture would have to seed ten near-identical funds to reach them,
+   * which tests the seeding rather than the sums.
+   *
+   * The policy itself is not opted out of anywhere: production never passes
+   * this, and a dedicated test asserts the default withholds percentiles for
+   * an under-sized pool.
+   */
+  minPoolSize?: number;
 }
 
 export interface StructuralRankResult {
@@ -1176,6 +1205,7 @@ export function computeStructuralPeerRanks(
   input: StructuralComputeInput,
 ): StructuralRankResult {
   const { universeKey, modelKey, asOf, candidates, profileByScheme } = input;
+  const minPoolSize = input.minPoolSize ?? MIN_UNIVERSE_SIZE;
 
   const universe = selectStructuralUniverseMembers(candidates, profileByScheme);
   if (universe.length === 0) return { rows: [], patches: [] };
@@ -1201,7 +1231,7 @@ export function computeStructuralPeerRanks(
     // so the pillar redistributes weight to inputs that have a pool — and it
     // restores the honest answer, which the plain overview already knows how to
     // render: "we could not score Cost for this fund".
-    if (values.size < MIN_UNIVERSE_SIZE) continue;
+    if (values.size < minPoolSize) continue;
     valuesByMetric.set(spec.metric, values);
     const med = medianOf([...values.values()]);
     if (med !== null) medianByMetric.set(spec.metric, med);
@@ -1662,6 +1692,7 @@ export interface UniverseRunResult {
 export async function runPeerRankForUniverse(
   ref: UniverseRef,
   asOf: Date,
+  opts: { minPoolSize?: number } = {},
 ): Promise<UniverseRunResult> {
   const day = startOfUtcDay(asOf);
   const candidates = await loadCandidates(ref);
@@ -1691,6 +1722,7 @@ export async function runPeerRankForUniverse(
     candidates: eligible,
     metricsByScheme,
     navByScheme,
+    minPoolSize: opts.minPoolSize,
   });
 
   // ── Horizon-0 structural pass ──────────────────────────────────────────
@@ -1721,6 +1753,7 @@ export async function runPeerRankForUniverse(
     asOf: day,
     candidates: eligible,
     profileByScheme,
+    minPoolSize: opts.minPoolSize,
   });
 
   const written = await persistPeerRanks([...rows, ...structural.rows]);

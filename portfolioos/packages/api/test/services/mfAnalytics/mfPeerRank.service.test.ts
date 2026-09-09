@@ -312,6 +312,22 @@ const SUB_YOUNG = 'Multi Cap Fund';
 
 // ---------------------------------------------------------------------------
 
+/**
+ * These fixtures seed three to eight funds, which is below the production
+ * `MIN_UNIVERSE_SIZE` pool floor.
+ *
+ * That is on purpose. What they check is the ranking ARITHMETIC — the
+ * (worse + 0.5·equal)/n tie rule, the direction of LOWER_IS_BETTER, the median
+ * published beside a percentile — and a five-fund universe with sortinos
+ * 1,1,2,3,3 states the tie rule in a form a reader can verify by hand. Padding
+ * each to ten would test the seed helper, not the sums.
+ *
+ * The floor is not opted out of, only moved aside for these: production never
+ * passes it, and `withholds percentiles for an under-sized pool` below asserts
+ * the default behaviour directly.
+ */
+const MATHS_POOL = { minPoolSize: 1 };
+
 describe('mfPeerRank.service', () => {
   beforeAll(async () => {
     await runAsSystem(async () => {
@@ -568,7 +584,7 @@ describe('mfPeerRank.service', () => {
   // -------------------------------------------------------------------------
 
   it('percentiles use the (worse + 0.5·equal)/n tie rule', async () => {
-    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TIES), ASOF));
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TIES), ASOF, MATHS_POOL));
     const rows = (await loadRows(SUB_TIES)).filter((r) => r.horizonYears === 3);
 
     expect(rows).toHaveLength(5);
@@ -584,7 +600,7 @@ describe('mfPeerRank.service', () => {
   });
 
   it('excludes IDCW options from the universe and resolves them to the growth sibling', async () => {
-    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_IDCW), ASOF));
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_IDCW), ASOF, MATHS_POOL));
     const rows = (await loadRows(SUB_IDCW)).filter((r) => r.horizonYears === 3);
 
     const idcwCode = createdSchemeCodes.find((c) => c.endsWith('IDCW0'))!;
@@ -620,7 +636,7 @@ describe('mfPeerRank.service', () => {
   });
 
   it('excludes MERGED schemes from ranking but includes them in the median', async () => {
-    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_MERGED), ASOF));
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_MERGED), ASOF, MATHS_POOL));
     const rows = (await loadRows(SUB_MERGED)).filter((r) => r.horizonYears === 3);
     const dead = createdSchemeCodes.find((c) => c.endsWith('MRDEAD'))!;
 
@@ -656,8 +672,8 @@ describe('mfPeerRank.service', () => {
   });
 
   it('ranks DIRECT and REGULAR plans in separate universes', async () => {
-    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_PLANS, 'DIRECT'), ASOF));
-    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_PLANS, 'REGULAR'), ASOF));
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_PLANS, 'DIRECT'), ASOF, MATHS_POOL));
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_PLANS, 'REGULAR'), ASOF, MATHS_POOL));
 
     const direct = (await loadRows(SUB_PLANS, 'DIRECT')).filter((r) => r.horizonYears === 3);
     const regular = (await loadRows(SUB_PLANS, 'REGULAR')).filter((r) => r.horizonYears === 3);
@@ -676,7 +692,7 @@ describe('mfPeerRank.service', () => {
   });
 
   it('computes membership per horizon — a 3y-only fund is absent from the 5y universe', async () => {
-    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_HORIZON), ASOF));
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_HORIZON), ASOF, MATHS_POOL));
     const rows = await loadRows(SUB_HORIZON);
     const short = createdSchemeCodes.find((c) => c.endsWith('HZSHORT'))!;
 
@@ -691,14 +707,15 @@ describe('mfPeerRank.service', () => {
     for (const r of h5) expect(r.peer.universeSize).toBe(2);
   });
 
-  it('publishes percentiles for an under-sized universe and reports the size', async () => {
-    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_SMALL), ASOF));
+  it('publishes rows for an under-sized universe, reports the size, and still ranks it', async () => {
+    // With the floor lowered, the arithmetic is unchanged by universe size.
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_SMALL), ASOF, MATHS_POOL));
     const rows = (await loadRows(SUB_SMALL)).filter((r) => r.horizonYears === 3);
 
     expect(rows).toHaveLength(8);
     for (const r of rows) {
-      // `03 §1`: metrics and percentiles are still published; only the RATING
-      // is withheld, and the caller needs the size to decide that.
+      // `03 §1`: the row is written whatever the size, and the caller needs
+      // that size to decide whether a RATING may be published.
       expect(r.peer.universeSize).toBe(8);
       expect(r.peer.percentiles.sortino).toBeDefined();
     }
@@ -709,13 +726,38 @@ describe('mfPeerRank.service', () => {
     expect(rows.some((r) => r.peer.percentiles.sortino === '0.062500')).toBe(true);
   });
 
+  it('withholds percentiles for an under-sized pool under the production floor', async () => {
+    /**
+     * The regression this floor exists for.
+     *
+     * A percentile needs a pool. Ranking a fund against a pool of eight — or,
+     * as observed on ICICI Prudential Large & Mid Cap, a pool of ONE where the
+     * category had 26 rated funds but only one carried a TER — produced
+     * percentile 0.500000 and a "category median" equal to the fund's own
+     * value, and the fund page then told the reader cost was its weakest area
+     * on the strength of that degenerate midpoint.
+     *
+     * So: same fixture, same eight funds, no `MATHS_POOL`. The row is still
+     * written and still reports its size — a caller needs both to explain
+     * itself — but it carries no percentile to be wrong with.
+     */
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_SMALL), ASOF));
+    const rows = (await loadRows(SUB_SMALL)).filter((r) => r.horizonYears === 3);
+
+    expect(rows).toHaveLength(8);
+    for (const r of rows) {
+      expect(r.peer.universeSize).toBe(8);
+      expect(r.peer.percentiles.sortino).toBeUndefined();
+    }
+  });
+
   // -------------------------------------------------------------------------
   // Horizon-0 structural ranks (TER, AUM)
   // -------------------------------------------------------------------------
 
   describe('horizon-0 structural ranks', () => {
     it('ranks TER lower-is-better — the cheapest fund gets the highest percentile', async () => {
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TER), ASOF));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TER), ASOF, MATHS_POOL));
       const rows = await loadStructuralRows(SUB_TER);
 
       // All six are members: five have a TER, the sixth has an AUM.
@@ -751,7 +793,7 @@ describe('mfPeerRank.service', () => {
     });
 
     it('publishes the category TER median on every profile in the universe', async () => {
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TER), ASOF));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TER), ASOF, MATHS_POOL));
 
       // median of [0.2, 0.2, 0.5, 1.0, 1.5] = 0.5, in percent units.
       for (const label of ['TER0', 'TER2', 'TER4', 'TERNONE']) {
@@ -766,7 +808,7 @@ describe('mfPeerRank.service', () => {
     });
 
     it('gives a fund with no TER on file null with a status — never 0', async () => {
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TER), ASOF));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TER), ASOF, MATHS_POOL));
       const noTer = createdSchemeCodes.find((c) => c.endsWith('TERNONE'))!;
 
       const profile = await loadProfile(noTer);
@@ -784,7 +826,7 @@ describe('mfPeerRank.service', () => {
     });
 
     it('plateaus AUM at the cap — a huge fund and a merely large one tie at the top', async () => {
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_AUM), ASOF));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_AUM), ASOF, MATHS_POOL));
       const rows = await loadStructuralRows(SUB_AUM);
       expect(rows).toHaveLength(4);
 
@@ -805,7 +847,7 @@ describe('mfPeerRank.service', () => {
     });
 
     it('includes a 12-month fund in the TER universe though it has no 3y record', async () => {
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_YOUNG), ASOF));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_YOUNG), ASOF, MATHS_POOL));
       const rows = await loadRows(SUB_YOUNG);
       const young = createdSchemeCodes.find((c) => c.endsWith('YNGNEW'))!;
 
@@ -833,8 +875,8 @@ describe('mfPeerRank.service', () => {
     });
 
     it('leaves MfCurrentProfile and MfPeerRank holding the same number', async () => {
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TER), ASOF));
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_AUM), ASOF));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TER), ASOF, MATHS_POOL));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_AUM), ASOF, MATHS_POOL));
 
       for (const sub of [SUB_TER, SUB_AUM]) {
         for (const row of await loadStructuralRows(sub)) {
@@ -858,14 +900,14 @@ describe('mfPeerRank.service', () => {
     });
 
     it('is idempotent — a second run leaves identical rank rows and profiles', async () => {
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_AUM), ASOF));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_AUM), ASOF, MATHS_POOL));
       const firstRows = await prisma.mfPeerRank.findMany({
         where: { universeKey: universeKey(SUB_AUM, 'DIRECT'), asOf: ASOF },
         orderBy: [{ schemeCode: 'asc' }, { horizonYears: 'asc' }],
       });
       const firstProfiles = await Promise.all(firstRows.map((r) => loadProfile(r.schemeCode)));
 
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_AUM), ASOF));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_AUM), ASOF, MATHS_POOL));
       const secondRows = await prisma.mfPeerRank.findMany({
         where: { universeKey: universeKey(SUB_AUM, 'DIRECT'), asOf: ASOF },
         orderBy: [{ schemeCode: 'asc' }, { horizonYears: 'asc' }],
@@ -884,7 +926,7 @@ describe('mfPeerRank.service', () => {
     });
 
     it('unblocks mf.cost.high-ter — a real ranked profile now fires the rule', async () => {
-      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_YOUNG), ASOF));
+      await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_YOUNG), ASOF, MATHS_POOL));
       // TERs 0.40 / 0.80 / 0.10 over n = 3, so the dearest fund lands at
       // (0 + 0.5)/3 = 0.166667, under the 0.25 ceiling.
       const dearest = createdSchemeCodes.find((c) => c.endsWith('YNGB'))!;
@@ -916,13 +958,13 @@ describe('mfPeerRank.service', () => {
   });
 
   it('is idempotent — a second run writes identical rows', async () => {
-    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TIES), ASOF));
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TIES), ASOF, MATHS_POOL));
     const first = await prisma.mfPeerRank.findMany({
       where: { universeKey: universeKey(SUB_TIES, 'DIRECT'), asOf: ASOF },
       orderBy: [{ schemeCode: 'asc' }, { horizonYears: 'asc' }],
     });
 
-    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TIES), ASOF));
+    await runAsSystem(() => runPeerRankForUniverse(refFor(SUB_TIES), ASOF, MATHS_POOL));
     const second = await prisma.mfPeerRank.findMany({
       where: { universeKey: universeKey(SUB_TIES, 'DIRECT'), asOf: ASOF },
       orderBy: [{ schemeCode: 'asc' }, { horizonYears: 'asc' }],
