@@ -880,6 +880,16 @@ export interface MfAlternativeDto {
   terPct: Pct | null;
   /** This fund's score minus the subject's, so the UI need not recompute it. */
   compositeDelta: Ratio | null;
+  /**
+   * Rolling-window return distributions, so a reader can compare what holding
+   * each fund has actually meant rather than only its score.
+   *
+   * Taken from the longest horizon that has them, which is the fullest account
+   * of the fund's record. Empty when the fund has no computed metrics — a
+   * shorter history is a real difference between two funds, not a rendering
+   * problem, so the row simply shows nothing rather than borrowing a figure.
+   */
+  rolling: MfRollingStats[];
 }
 
 export interface MfAlternativesDto {

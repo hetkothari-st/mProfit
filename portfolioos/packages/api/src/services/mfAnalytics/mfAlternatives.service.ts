@@ -34,7 +34,13 @@
  */
 
 import { prisma } from '../../lib/prisma.js';
-import type { MfAlternativesDto, MfAlternativeDto, Pct, Ratio } from '@portfolioos/shared';
+import type {
+  MfAlternativesDto,
+  MfAlternativeDto,
+  MfRollingStats,
+  Pct,
+  Ratio,
+} from '@portfolioos/shared';
 
 /**
  * How many to return.
@@ -64,6 +70,69 @@ async function latestTerFor(schemeCodes: readonly string[]): Promise<Map<string,
   });
   for (const row of rows) {
     if (!out.has(row.schemeCode)) out.set(row.schemeCode, row.terPct.toString() as Pct);
+  }
+  return out;
+}
+
+/**
+ * Longest horizon first.
+ *
+ * Each metric row carries rolling stats computed inside its own window, so the
+ * 10-year row knows every one-year period in ten years while the 3-year row
+ * knows only those in three. Taking the longest available is taking the fullest
+ * account of the fund's record.
+ */
+const ROLLING_HORIZON_PREFERENCE = [10, 7, 5, 3, 1] as const;
+
+/**
+ * Rolling distributions for each candidate, read out of the stored metrics JSON.
+ *
+ * `MfSchemeMetrics.metrics` IS the `MfHorizonMetrics` DTO — the metrics job
+ * writes the serialised DTO into that column — so this reads a field off it
+ * rather than recomputing anything. Recomputing would mean reloading each
+ * candidate's full NAV history to answer a question already answered on disk.
+ *
+ * Anything malformed yields an empty list. A comparison panel is not the place
+ * to throw on one bad row: the honest outcome is that this fund shows no
+ * distribution, which is also what a fund with too little history shows.
+ */
+async function rollingFor(
+  schemeCodes: readonly string[],
+  asOf: Date,
+): Promise<Map<string, MfRollingStats[]>> {
+  const out = new Map<string, MfRollingStats[]>();
+  if (schemeCodes.length === 0) return out;
+
+  const rows = await prisma.mfSchemeMetrics.findMany({
+    where: { schemeCode: { in: [...schemeCodes] }, asOf, status: 'OK' },
+    select: { schemeCode: true, horizonYears: true, metrics: true },
+  });
+
+  const byScheme = new Map<string, Map<number, unknown>>();
+  for (const row of rows) {
+    let horizons = byScheme.get(row.schemeCode);
+    if (horizons === undefined) {
+      horizons = new Map<number, unknown>();
+      byScheme.set(row.schemeCode, horizons);
+    }
+    horizons.set(row.horizonYears, row.metrics);
+  }
+
+  for (const [code, horizons] of byScheme) {
+    for (const h of ROLLING_HORIZON_PREFERENCE) {
+      const raw = horizons.get(h);
+      if (raw === undefined || raw === null || typeof raw !== 'object') continue;
+      const returns = (raw as { returns?: unknown }).returns;
+      if (returns === null || returns === undefined || typeof returns !== 'object') continue;
+      const r = returns as Record<string, unknown>;
+      const picked = ['rolling1y', 'rolling3y', 'rolling5y']
+        .map((k) => r[k])
+        .filter((v): v is MfRollingStats => v !== null && v !== undefined && typeof v === 'object');
+      if (picked.length > 0) {
+        out.set(code, picked);
+        break;
+      }
+    }
   }
   return out;
 }
@@ -123,6 +192,10 @@ export async function loadAlternatives(schemeCode: string): Promise<MfAlternativ
   });
   const metaBy = new Map(metas.map((m) => [m.schemeCode, m]));
   const terBy = await latestTerFor(candidates.map((c) => c.schemeCode));
+  const rollingBy = await rollingFor(
+    candidates.map((c) => c.schemeCode),
+    subject.asOf,
+  );
 
   const alternatives: MfAlternativeDto[] = candidates.flatMap((c) => {
     const meta = metaBy.get(c.schemeCode);
@@ -138,6 +211,7 @@ export async function loadAlternatives(schemeCode: string): Promise<MfAlternativ
         rating: c.rating as MfAlternativeDto['rating'],
         composite: asRatio(c.composite),
         terPct: terBy.get(c.schemeCode) ?? null,
+        rolling: rollingBy.get(c.schemeCode) ?? [],
         compositeDelta:
           c.composite === null || subjectComposite === null
             ? null

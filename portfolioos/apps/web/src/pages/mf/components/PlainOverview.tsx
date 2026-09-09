@@ -285,6 +285,14 @@ function plainMetrics(m: MfHorizonMetrics, horizon: MfHorizonYears): PlainMetric
  */
 const SUMMARY_HORIZON_PREFERENCE: MfHorizonYears[] = [3, 5, 10, 7, 1];
 
+/**
+ * Longest first: the rolling stats on the 10-year row were computed over the
+ * 10-year window and know every completed period in it, while the 3-year row
+ * only knows the periods inside its own three years. Taking the longest is
+ * taking the fullest account of the fund's record.
+ */
+const ROLLING_HORIZON_PREFERENCE: MfHorizonYears[] = [10, 7, 5, 3, 1];
+
 function pickSummaryHorizon(data: MfFundAnalyticsDto): MfHorizonYears | null {
   for (const h of SUMMARY_HORIZON_PREFERENCE) {
     const m = data.metrics[`${h}`];
@@ -487,6 +495,231 @@ function HouseMark({ amcName }: { amcName: string }) {
   );
 }
 
+/**
+ * What holding this fund has actually meant, over every period in its record.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY A RANGE OF PAST PERIODS AND NOT A PROJECTION
+ * ---------------------------------------------------------------------------
+ *
+ * The obvious version of this panel is "your probable return over 1, 2 and 5
+ * years". It cannot be built honestly. SEBI does not permit indicative-return
+ * communications for mutual funds, this page's own disclaimer says no analysis
+ * here predicts future returns, and a projected figure is precisely the kind of
+ * confident number with nothing behind it that the rating gates exist to keep
+ * out — a fund's future return is not a quantity we hold.
+ *
+ * What we do hold is every completed holding period in the fund's history. For
+ * ICICI Prudential Large & Mid Cap that is 1,232 separate one-year periods:
+ * the worst lost 3.0%, the median made 17.4%, the best made 88.5%, and 0.5% of
+ * them ended below where they started. That answers the question the reader is
+ * actually asking — "what might this do for me" — with the fund's own evidence
+ * rather than an extrapolation, and it shows the spread, which a single
+ * projected number would hide.
+ *
+ * The band is p10–p90 rather than min–max: one 2020 window should not set the
+ * width of the whole picture, and the tails are still drawn as ticks so nothing
+ * is concealed.
+ */
+
+interface RollingStatsLike {
+  windowYears: 1 | 3 | 5;
+  observations: number;
+  median: string | null;
+  min: string | null;
+  max: string | null;
+  p10: string | null;
+  p25: string | null;
+  p75: string | null;
+  p90: string | null;
+  pctNegative: string | null;
+}
+
+function HoldingPeriodBar({
+  stats,
+  lo,
+  hi,
+  height = 'h-6',
+}: {
+  stats: RollingStatsLike;
+  lo: number;
+  hi: number;
+  height?: string;
+}) {
+  const at = (v: number) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
+  const p10 = num(stats.p10);
+  const p90 = num(stats.p90);
+  const median = num(stats.median);
+  const min = num(stats.min);
+  const max = num(stats.max);
+  if (p10 === null || p90 === null || median === null) return null;
+
+  return (
+    <div className={`relative ${height}`}>
+      {/* zero line — the difference between making and losing money */}
+      {lo < 0 && hi > 0 && (
+        <div
+          className="absolute inset-y-0 w-px bg-border"
+          style={{ left: `${at(0)}%` }}
+          aria-hidden
+        />
+      )}
+      {min !== null && max !== null && (
+        <div
+          className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/30"
+          style={{ left: `${at(min)}%`, width: `${Math.max(0.5, at(max) - at(min))}%` }}
+          aria-hidden
+        />
+      )}
+      <div
+        className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-muted-foreground/35"
+        style={{ left: `${at(p10)}%`, width: `${Math.max(1, at(p90) - at(p10))}%` }}
+        aria-hidden
+      />
+      <div
+        className="absolute top-1/2 h-[14px] w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{ left: `${at(median)}%`, backgroundColor: median >= 0 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))' }}
+        aria-hidden
+      />
+    </div>
+  );
+}
+
+/**
+ * The axis every bar on the page is drawn against.
+ *
+ * One axis for the subject fund AND its alternatives, not one per fund. A bar
+ * is only readable against its neighbours, and rescaling each fund to its own
+ * extremes would draw a steady fund and a wild one at identical widths — the
+ * exact comparison the panel exists to make, silently erased.
+ */
+export function holdingPeriodAxis(
+  groups: ReadonlyArray<ReadonlyArray<RollingStatsLike>>,
+): { lo: number; hi: number } | null {
+  const all = groups
+    .flat()
+    .flatMap((r) => [num(r.min), num(r.max)].filter((v): v is number => v !== null));
+  if (all.length === 0) return null;
+  return { lo: Math.min(0, ...all), hi: Math.max(...all) };
+}
+
+/**
+ * The same distribution at the density an alternatives row can carry.
+ *
+ * Full-size rows under each of three alternatives would be four near-identical
+ * blocks down the page, and the reader would stop reading before the third. So
+ * the label, the count and the money translation go, and what stays is the bar
+ * and the typical figure — which is what the comparison turns on. The axis is
+ * the subject fund's, so the bars line up column-wise: a band sitting further
+ * right than the fund above it means exactly that.
+ */
+function HoldingPeriodsCompact({
+  rolling,
+  lo,
+  hi,
+}: {
+  rolling: ReadonlyArray<RollingStatsLike>;
+  lo: number;
+  hi: number;
+}) {
+  const usable = rolling.filter((r) => num(r.median) !== null && r.observations > 0);
+  if (usable.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5">
+      {usable.map((r) => {
+        const median = num(r.median)!;
+        return (
+          <div key={r.windowYears} className="flex items-center gap-3">
+            <span className="w-6 shrink-0 text-[12px] text-muted-foreground">
+              {r.windowYears}y
+            </span>
+            <span className="min-w-0 flex-1">
+              <HoldingPeriodBar stats={r} lo={lo} hi={hi} height="h-4" />
+            </span>
+            <span
+              className="w-14 shrink-0 text-right text-[12px] text-muted-foreground"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              {(median * 100).toFixed(1)}%
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HoldingPeriods({
+  rolling,
+  lo,
+  hi,
+  lakhs = 1,
+}: {
+  rolling: ReadonlyArray<RollingStatsLike>;
+  lo: number;
+  hi: number;
+  lakhs?: number;
+}) {
+  const usable = rolling.filter((r) => num(r.median) !== null && r.observations > 0);
+  if (usable.length === 0) return null;
+
+  const money = (ratio: number, years: number) =>
+    `₹${(lakhs * Math.pow(1 + ratio, years)).toFixed(2)}L`;
+
+  return (
+    <div className="space-y-6">
+      {usable.map((r) => {
+        const median = num(r.median)!;
+        const p10 = num(r.p10);
+        const p90 = num(r.p90);
+        const neg = num(r.pctNegative);
+        return (
+          <div key={r.windowYears}>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <span className="text-[15px] text-foreground">
+                Held {r.windowYears} year{r.windowYears === 1 ? '' : 's'}
+              </span>
+              <span className="text-[13px] text-muted-foreground">
+                {r.observations.toLocaleString('en-IN')} such periods since launch
+              </span>
+            </div>
+
+            <div className="mt-2">
+              <HoldingPeriodBar stats={r} lo={lo} hi={hi} />
+            </div>
+
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-6 gap-y-1 text-[13px]">
+              <span className="text-muted-foreground">
+                typically{' '}
+                <span
+                  className="font-display text-[17px]"
+                  style={{ color: median >= 0 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))' }}
+                >
+                  {(median * 100).toFixed(1)}%
+                </span>{' '}
+                a year — ₹{lakhs.toFixed(0)}L became {money(median, r.windowYears)}
+              </span>
+              {p10 !== null && p90 !== null && (
+                <span className="text-muted-foreground">
+                  most landed between {(p10 * 100).toFixed(1)}% and {(p90 * 100).toFixed(1)}%
+                </span>
+              )}
+              {neg !== null && (
+                <span className="text-muted-foreground">
+                  {neg <= 0
+                    ? 'never ended below where it started'
+                    : `ended down in ${(neg * 100).toFixed(neg < 0.01 ? 1 : 0)}% of them`}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PlainOverview({
   data,
   alternatives,
@@ -514,6 +747,33 @@ export function PlainOverview({
     alternatives !== null &&
     (alternatives.subjectTerPct !== null ||
       alternatives.alternatives.some((a) => a.terPct !== null));
+
+  /**
+   * Rolling stats come from the LONGEST horizon that has them.
+   *
+   * Every horizon row carries its own copy computed over its own window, so
+   * the 3-year row knows 736 one-year periods while the 10-year row knows
+   * 2,463. The longest is simply the fullest account of the fund's record, and
+   * a shorter one would quietly discard history the fund actually has.
+   */
+  const rollingSource = ROLLING_HORIZON_PREFERENCE.map((h) => data.metrics[`${h}`]).find(
+    (m) => m !== undefined && m.status === 'OK' && m.returns.rolling1y !== null,
+  );
+
+  const rollingSet = rollingSource
+    ? [
+        rollingSource.returns.rolling1y,
+        rollingSource.returns.rolling3y,
+        rollingSource.returns.rolling5y,
+      ].filter((r): r is NonNullable<typeof r> => r !== null)
+    : [];
+
+  // The subject and every alternative share one axis, so a band drawn further
+  // right genuinely is further right.
+  const rollingAxis = holdingPeriodAxis([
+    rollingSet,
+    ...(alternatives?.alternatives ?? []).map((a) => a.rolling),
+  ]);
 
   const composite = num(score?.composite);
   const median = num(data.categoryStats.medianComposite);
@@ -685,6 +945,25 @@ export function PlainOverview({
         </section>
       )}
 
+      {/* ── What holding it has meant ─────────────────────────────────────
+          Not a forecast. Every completed holding period the fund has had, with
+          the spread a single number would hide. */}
+      {rollingSet.length > 0 && rollingAxis !== null && (
+        <section className="border-b border-border py-10">
+          <h3 className="font-display text-[19px] text-foreground">
+            What holding it has meant
+          </h3>
+          <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+            Every completed holding period since launch, not a forecast. The bar shows where most
+            periods landed; the line through it is the typical one. What the fund does next is not
+            something this or any page can know.
+          </p>
+          <div className="mt-7">
+            <HoldingPeriods rolling={rollingSet} lo={rollingAxis.lo} hi={rollingAxis.hi} />
+          </div>
+        </section>
+      )}
+
       {/* ── The alternatives ──────────────────────────────────────────────
           Hairline rows, not cards: this is a ranked list read top to bottom,
           and a border around each entry fights the ordering it is meant to
@@ -743,10 +1022,29 @@ export function PlainOverview({
                       )}
                     </span>
                   </a>
+
+                  {rollingAxis !== null && a.rolling.length > 0 && (
+                    <div className="pb-4 pl-[52px] pr-1">
+                      <HoldingPeriodsCompact
+                        rolling={a.rolling}
+                        lo={rollingAxis.lo}
+                        hi={rollingAxis.hi}
+                      />
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
+
+          {rollingAxis !== null &&
+            alternatives.alternatives.some((a) => a.rolling.length > 0) && (
+              <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
+                The bars under each fund are its own completed 1, 3 and 5-year holding periods,
+                drawn on the same scale as this fund&rsquo;s above, so they can be read against
+                each other.
+              </p>
+            )}
 
           {alternatives.subjectTerPct !== null ? (
             <p className="mt-4 text-[13px] text-muted-foreground">
