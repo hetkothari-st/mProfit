@@ -120,8 +120,9 @@ describe('CA access boundary', () => {
   it('runs against a role that actually enforces RLS', async () => {
     // Guards every other assertion in this file. `postgres` and the Neon owner
     // carry BYPASSRLS, under which none of the policies below are evaluated.
-    const rows = await runAsSystem(() =>
-      prisma.$queryRaw<Array<{ rolbypassrls: boolean }>>`
+    const rows = await runAsSystem(
+      () =>
+        prisma.$queryRaw<Array<{ rolbypassrls: boolean }>>`
         SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user
       `,
     );
@@ -135,12 +136,12 @@ describe('CA access boundary', () => {
   });
 
   it('refuses a CA who holds no grant over that client', async () => {
-    await expect(
-      stranger.runAs(() => getCaScope(stranger.userId, clientId)),
-    ).rejects.toThrow(/not yours/i);
+    await expect(stranger.runAs(() => getCaScope(stranger.userId, clientId))).rejects.toThrow(
+      /not yours/i,
+    );
   });
 
-  it('lets the CA read and write the client\'s books', async () => {
+  it("lets the CA read and write the client's books", async () => {
     const account = await ca.runAs(() =>
       prisma.account.create({
         data: { userId: client.userId, code: 'CA100', name: 'Opened by CA', type: 'ASSET' },
@@ -148,7 +149,9 @@ describe('CA access boundary', () => {
     );
     expect(account.userId).toBe(client.userId);
 
-    const read = await ca.runAs(() => prisma.account.findMany({ where: { userId: client.userId } }));
+    const read = await ca.runAs(() =>
+      prisma.account.findMany({ where: { userId: client.userId } }),
+    );
     expect(read.map((a) => a.code)).toContain('CA100');
   });
 
@@ -173,9 +176,7 @@ describe('CA access boundary', () => {
     expect(before).toBeGreaterThan(0);
 
     await expect(
-      ca.runAs(() =>
-        prisma.transaction.deleteMany({ where: { portfolioId: client.portfolioId } }),
-      ),
+      ca.runAs(() => prisma.transaction.deleteMany({ where: { portfolioId: client.portfolioId } })),
     ).resolves.toMatchObject({ count: 0 });
 
     const after = await runAsSystem(() =>
@@ -184,7 +185,7 @@ describe('CA access boundary', () => {
     expect(after).toBe(before);
   });
 
-  it('cannot read the client\'s broker credentials, though one exists', async () => {
+  it("cannot read the client's broker credentials, though one exists", async () => {
     // Asserting the row is really there first. Credentials are the one thing a
     // grant must never reach, so this test must never be able to pass just
     // because the table happens to be empty.
@@ -199,7 +200,7 @@ describe('CA access boundary', () => {
     expect(creds).toEqual([]);
   });
 
-  it('does not reach the client\'s family-shared portfolios', async () => {
+  it("does not reach the client's family-shared portfolios", async () => {
     // The whole reason this feature keeps the CA's own identity. If someone
     // reintroduces runAsUser(clientId), this is what breaks.
     const familyId = await runAsSystem(async () => {
@@ -492,6 +493,67 @@ describe('CA access boundary', () => {
     // the tab repeatedly does not spam the client's trail.
     const secondOpen = await ca.runAs(() => ensureDefaultAccounts(client.userId));
     expect(secondOpen).toEqual([]);
+  });
+
+  it('projects the client books, so the tab and the report cannot disagree', async () => {
+    // Trial Balance, P&L and Balance Sheet are all computed from vouchers, and
+    // vouchers are derived from activity by a projection that nothing else
+    // runs. The report downloads projected first; the CA's books tabs did not.
+    // A CA therefore saw an empty Trial balance tab and a populated Trial
+    // Balance report for the same client on the same date.
+    //
+    // The projection is also a WRITE into someone else's ledger under the CA's
+    // own identity, so this asserts three things at once: RLS permits it, it
+    // produces figures, and it lands on the client's audit trail.
+    const { projectBooks } = await import('../../src/services/ca/caProjection.service.js');
+    const { getTrialBalance } = await import('../../src/services/accounting.service.js');
+
+    const audit = {
+      actorUserId: ca.userId,
+      subjectUserId: client.userId,
+      clientId,
+    };
+
+    // The bug, stated as an assertion: the chart exists (an earlier test
+    // seeded it) and the client has a real transaction, yet every figure is
+    // zero until something projects. This is exactly what the CA saw.
+    const before = await ca.runAs(() => getTrialBalance(client.userId));
+    expect(before.length).toBeGreaterThan(0);
+    expect(
+      before.every((r) => parseFloat(r.totalDebit) === 0 && parseFloat(r.totalCredit) === 0),
+    ).toBe(true);
+
+    const first = await ca.runAs(() => projectBooks(client.userId, audit));
+    expect(first.created).toBeGreaterThan(0);
+
+    // The tab's own query, run as the CA, now shows the same figures the
+    // report is built from. Before the fix this was all zeroes.
+    const tb = await ca.runAs(() => getTrialBalance(client.userId));
+    const moved = tb.filter((r) => parseFloat(r.totalDebit) > 0 || parseFloat(r.totalCredit) > 0);
+    expect(moved.length).toBeGreaterThan(0);
+
+    // A trial balance that does not balance is not one.
+    const debits = tb.reduce((sum, r) => sum + parseFloat(r.totalDebit), 0);
+    const credits = tb.reduce((sum, r) => sum + parseFloat(r.totalCredit), 0);
+    expect(Math.abs(debits - credits)).toBeLessThan(0.005);
+
+    const recorded = await runAsSystem(() =>
+      prisma.caAuditLog.findMany({
+        where: { clientId, action: 'VOUCHER_CREATED', resourceType: 'Voucher' },
+      }),
+    );
+    expect(recorded.length).toBe(1);
+    expect(recorded[0]!.summary).toContain(`${first.created} voucher`);
+
+    // Idempotent, and silent when it is. Re-opening the tab must not create
+    // duplicate vouchers or bury the client's feed in entries about nothing.
+    const second = await ca.runAs(() => projectBooks(client.userId, audit));
+    expect(second.created).toBe(0);
+
+    const after = await runAsSystem(() =>
+      prisma.caAuditLog.count({ where: { clientId, action: 'VOUCHER_CREATED' } }),
+    );
+    expect(after).toBe(1);
   });
 
   it('provisions a managed client that cannot log in', async () => {

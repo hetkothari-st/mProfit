@@ -70,3 +70,30 @@ export async function recordCaAudit(
     },
   });
 }
+
+/**
+ * Record an accounting projection, if it actually created anything.
+ *
+ * `generateVouchersFromActivity` turns a client's transactions, loan payments,
+ * rent receipts and premiums into double-entry vouchers. It runs when a CA
+ * opens the books and again before an accounting report is built — so a CA can
+ * create dozens of financial records in someone else's ledger without ever
+ * pressing a button labelled "create". That is precisely the kind of write
+ * that has to be on the record, and it was not.
+ *
+ * Silent when nothing was created, so a CA re-opening a tab does not fill the
+ * client's activity feed with entries about nothing happening.
+ */
+export async function recordProjectionIfAny(
+  tx: Prisma.TransactionClient,
+  ctx: CaAuditContext,
+  created: number,
+): Promise<void> {
+  if (created <= 0) return;
+  await recordCaAudit(tx, ctx, {
+    action: 'VOUCHER_CREATED',
+    resourceType: 'Voucher',
+    summary: `Generated ${created} voucher${created === 1 ? '' : 's'} from this client's recorded activity.`,
+    after: { generated: created },
+  });
+}

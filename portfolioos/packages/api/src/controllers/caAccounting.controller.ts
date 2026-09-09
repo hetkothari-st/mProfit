@@ -29,8 +29,10 @@ import type { Request, Response } from 'express';
 import { ok, created, noContent } from '../lib/response.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { runInTransaction } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 import { getCaScope, type CaScope } from '../services/ca/caAccess.service.js';
 import { recordCaAudit } from '../services/ca/caAudit.service.js';
+import { projectBooks } from '../services/ca/caProjection.service.js';
 import {
   ensureDefaultAccounts,
   listAccountsTree,
@@ -76,7 +78,6 @@ async function scopeOf(req: Request): Promise<CaScope> {
   return getCaScope(req.user!.id, clientId);
 }
 
-
 /**
  * Seed the client's chart if it is missing, and say so on the record.
  *
@@ -96,6 +97,46 @@ async function ensureChartAudited(scope: CaScope, req: Request): Promise<void> {
       after: { codes: created },
     }),
   );
+}
+
+/**
+ * Bring the client's books up to date before reading them.
+ *
+ * Vouchers are derived from the client's recorded activity, and nothing
+ * derives them for a client who enters transactions by hand. The accounting
+ * report downloads have always projected first; these tabs did not, so a CA
+ * saw an empty Trial balance and a populated Trial Balance report for the same
+ * client on the same date. Projecting here is what makes the screen and the
+ * download agree.
+ *
+ * Defensive, so a projection failure degrades to stale-but-real numbers rather
+ * than a broken tab — the same trade the download path makes. The explicit
+ * "Generate from activity" action does not swallow errors, because a CA who
+ * asked for it is owed the reason it did not work.
+ */
+async function ensureBooksProjected(scope: CaScope, req: Request): Promise<void> {
+  await ensureChartAudited(scope, req);
+  try {
+    await projectBooks(scope.subjectUserId, auditCtx(scope, req));
+  } catch (err) {
+    logger.error(
+      { err, clientId: scope.clientId, actorUserId: req.user!.id },
+      'ca-accounting.auto_project_failed',
+    );
+  }
+}
+
+/**
+ * Project on demand.
+ *
+ * The tabs already project on open, so this exists for the case the automatic
+ * pass cannot cover: the client added transactions while the CA had the page
+ * open, and the CA wants the books to catch up without hunting for a reload.
+ */
+export async function caGenerateFromActivity(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  await ensureChartAudited(scope, req);
+  ok(res, await projectBooks(scope.subjectUserId, auditCtx(scope, req)));
 }
 
 // ─── Chart of accounts ───────────────────────────────────────────────
@@ -185,6 +226,7 @@ export async function caDeleteAccount(req: Request, res: Response) {
 
 export async function caListVouchers(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  await ensureBooksProjected(scope, req);
   const type = (req.query.type as VoucherType | undefined) ?? undefined;
   ok(
     res,
@@ -277,6 +319,7 @@ export async function caGetLedger(req: Request, res: Response) {
   const scope = await scopeOf(req);
   const accountId = (req.query.accountId as string | undefined)?.trim();
   if (!accountId) throw new BadRequestError('accountId required');
+  await ensureBooksProjected(scope, req);
   ok(
     res,
     await getAccountLedger(scope.subjectUserId, accountId, {
@@ -288,11 +331,13 @@ export async function caGetLedger(req: Request, res: Response) {
 
 export async function caGetTrialBalance(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  await ensureBooksProjected(scope, req);
   ok(res, await getTrialBalance(scope.subjectUserId, req.query.asOf as string | undefined));
 }
 
 export async function caGetPnL(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  await ensureBooksProjected(scope, req);
   ok(
     res,
     await getPnL(
@@ -305,6 +350,7 @@ export async function caGetPnL(req: Request, res: Response) {
 
 export async function caGetBalanceSheet(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  await ensureBooksProjected(scope, req);
   ok(res, await getBalanceSheet(scope.subjectUserId, req.query.asOf as string | undefined));
 }
 
@@ -382,10 +428,7 @@ export async function caCorrectTransaction(req: Request, res: Response) {
     body.sebiCharges ?? before.sebiCharges,
     body.otherCharges ?? before.otherCharges,
   ];
-  const charges = chargeParts.reduce(
-    (sum: Decimal, c) => sum.plus(toDecimal(c)),
-    toDecimal('0'),
-  );
+  const charges = chargeParts.reduce((sum: Decimal, c) => sum.plus(toDecimal(c)), toDecimal('0'));
 
   const gross = qty.times(price);
   patch.grossAmount = serializeMoney(gross);
@@ -464,13 +507,7 @@ export async function caSetFmv(req: Request, res: Response) {
   const existing = await getFmvForIsin(scope.subjectUserId, isin);
 
   const saved = await runInTransaction(async (tx) => {
-    const row = await upsertUserFmv(
-      scope.subjectUserId,
-      isin,
-      body.fmvPerUnit,
-      body.scripName,
-      tx,
-    );
+    const row = await upsertUserFmv(scope.subjectUserId, isin, body.fmvPerUnit, body.scripName, tx);
     await recordCaAudit(tx, auditCtx(scope, req), {
       action: 'FMV_OVERRIDE_SET',
       resourceType: 'FmvOverride',
