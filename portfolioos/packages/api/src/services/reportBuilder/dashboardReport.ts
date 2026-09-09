@@ -37,13 +37,12 @@ import {
   drawPieChart,
   drawHorizontalBarChart,
   drawLineChart,
-  BRAND,
-  PIE_COLORS,
   pdfSafe,
   type PieSlice,
   type BarDatum,
   type LineDatum,
 } from '../charts/pdfCharts.js';
+import { themeFor, type ThemeName, type PdfTheme } from '../charts/pdfTheme.js';
 
 export type DashboardScope = 'single' | 'all';
 
@@ -51,6 +50,8 @@ export interface DashboardReportParams {
   userId: string;
   portfolioId?: string;
   scope: DashboardScope;
+  /** Defaults to 'dark' — the app's own brand skin — same as every other report. */
+  theme?: ThemeName;
 }
 
 const ASSET_CLASS_LABELS: Record<string, string> = {
@@ -252,6 +253,11 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     orderBy: { createdAt: 'desc' },
   });
 
+  // Theme drives both the page chrome and the chart palette below — 'dark'
+  // when the caller doesn't ask (every existing caller), 'light' for a
+  // printable version of the same report.
+  const C = themeFor(params.theme);
+
   // ─── Build pie data: financial classes + F&O + Real Estate + Vehicles ───────
   // Use the canonical allocationBreakdown from nw, then add F&O if missing.
   const pieData: PieSlice[] = [...nw.allocationBreakdown]
@@ -259,10 +265,10 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     .map((a, i) => ({
       label: a.label,
       value: a.numericValue,
-      color: PIE_COLORS[i % PIE_COLORS.length],
+      color: C.chartColors[i % C.chartColors.length],
     }));
   if (foTotalValue.greaterThan(0)) {
-    pieData.push({ label: 'F&O', value: foTotalValue.toNumber(), color: PIE_COLORS[pieData.length % PIE_COLORS.length] });
+    pieData.push({ label: 'F&O', value: foTotalValue.toNumber(), color: C.chartColors[pieData.length % C.chartColors.length] });
   }
   pieData.sort((a, b) => b.value - a.value);
 
@@ -282,13 +288,16 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   const rootBookmark = outline.addItem('Portfolio Report');
 
   function renderHeader(): void {
-    doc.rect(0, 0, doc.page.width, doc.page.height).fill(BRAND.pageBg);
-    doc.rect(0, 0, doc.page.width, 56).fill(BRAND.headerBarBg);
-    doc.font('Helvetica-Bold').fontSize(16).fillColor(BRAND.white)
+    doc.rect(0, 0, doc.page.width, doc.page.height).fill(C.pageBg);
+    doc.rect(0, 0, doc.page.width, 56).fill(C.headerBarBg);
+    // titleInk, not `white` — the light theme's header bar is the same
+    // colour as the page (no dark block to sit on), so literal white text
+    // here would be invisible.
+    doc.font('Helvetica-Bold').fontSize(16).fillColor(C.titleInk)
        .text('PortfolioOS', ML, 14, { lineBreak: false });
-    doc.font('Helvetica').fontSize(9.5).fillColor(BRAND.muted)
+    doc.font('Helvetica').fontSize(9.5).fillColor(C.muted)
        .text('Comprehensive Portfolio Report', ML, 36, { lineBreak: false });
-    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+    doc.font('Helvetica').fontSize(8).fillColor(C.muted)
        .text(pdfSafe(`${portfolioLabel}  ·  ${todayStr}`), ML, 24, { width: W, align: 'right', lineBreak: false });
   }
 
@@ -306,9 +315,9 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     const H = 20;
     // Light blue band + accent left bar + ink text. Lighter than the cover
     // header so a stack of sections doesn't read as a wall of navy.
-    doc.rect(ML, newCy, W, H).fill(BRAND.headerBg);
-    doc.rect(ML, newCy, 3, H).fill(BRAND.accent);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(BRAND.ink)
+    doc.rect(ML, newCy, W, H).fill(C.headerBg);
+    doc.rect(ML, newCy, 3, H).fill(C.accent);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(C.ink)
        .text(truncToFit(doc, pdfSafe(label), W - 18), ML + 10, newCy + 6, { width: W - 18, lineBreak: false });
     const bookmark = (parent ?? rootBookmark).addItem(label);
     return { cy: newCy + H + 6, bookmark };
@@ -325,7 +334,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     { label: 'INVESTED',          value: `Rs. ${fmtNum(nw.portfolio.totalInvested)}`, neg: false },
     { label: 'UNREALISED P&L',    value: `Rs. ${fmtNum(nw.portfolio.unrealisedPnL)}`, neg: nw.portfolio.unrealisedPnL.startsWith('-') },
   ];
-  cy = drawMetricCards(doc, ML, W, cy, headlineCards);
+  cy = drawMetricCards(doc, ML, W, cy, headlineCards, C);
 
   const secondaryCards = [
     { label: 'XIRR',              value: xirrPct ?? '—', neg: false },
@@ -333,14 +342,14 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     { label: 'REAL ESTATE',       value: `Rs. ${fmtNum(nw.realEstate.totalValue)}`, neg: false },
     { label: 'LIABILITIES',       value: `Rs. ${fmtNum(nw.totalLiabilities)}`, neg: false },
   ];
-  cy = drawMetricCards(doc, ML, W, cy, secondaryCards);
+  cy = drawMetricCards(doc, ML, W, cy, secondaryCards, C);
   cy += 8;
 
   // Asset allocation pie chart
   cy = ensureSpace(cy, 220);
   const allocSec = sectionBand('Asset Allocation', cy);
   cy = allocSec.cy;
-  cy = drawPieChart(doc, pieData, { x: ML, y: cy, width: W, height: 200 });
+  cy = drawPieChart(doc, pieData, { x: ML, y: cy, width: W, height: 200 }, C);
   cy += 12;
 
   // Allocation breakdown table
@@ -366,14 +375,14 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     { key: 'category',header: 'Category',         width: 80,  align: 'left' },
     { key: 'value',   header: 'Value (Rs.)',      width: 110, align: 'right', money: true },
     { key: 'percent', header: '% of Net Worth',   width: 70,  align: 'right' },
-  ], allocRows);
+  ], allocRows, C);
 
   // Historical portfolio value
   if (historicalLine.length >= 2) {
     cy = ensureSpace(cy, 200);
     const histSec = sectionBand('Portfolio Value — Monthly (Cost Basis)', cy);
     cy = histSec.cy;
-    cy = drawLineChart(doc, historicalLine, { x: ML, y: cy, width: W, height: 160 });
+    cy = drawLineChart(doc, historicalLine, { x: ML, y: cy, width: W, height: 160 }, C);
     cy += 10;
   }
 
@@ -385,7 +394,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     cy = ensureSpace(cy, cgBars.length * 22 + 50);
     const cgChartSec = sectionBand('Capital Gains by Financial Year', cy);
     cy = cgChartSec.cy;
-    cy = drawHorizontalBarChart(doc, cgBars, { x: ML, y: cy, width: W, height: cgBars.length * 22 + 10 });
+    cy = drawHorizontalBarChart(doc, cgBars, { x: ML, y: cy, width: W, height: cgBars.length * 22 + 10 }, C);
     cy += 10;
   }
 
@@ -430,7 +439,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
         { key: 'value',         header: 'Value (Rs.)',    width: 80, align: 'right', money: true },
         { key: 'pnl',           header: 'P&L (Rs.)',      width: 70, align: 'right', money: true, signed: true },
         { key: 'pct',           header: '%',              width: 40, align: 'right' },
-      ], classRows);
+      ], classRows, C);
 
       // Recent transactions for this class
       const classTxns = recentTxns.filter(t => t.assetClass === cls).slice(0, 25);
@@ -455,7 +464,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
           { key: 'price',     header: 'Price (Rs.)',    width: 70,  align: 'right', money: true },
           { key: 'netAmount', header: 'Net Amt (Rs.)',  width: 90,  align: 'right', money: true },
           { key: 'broker',    header: 'Broker',         width: 80,  align: 'left' },
-        ], txnRows);
+        ], txnRows, C);
       }
     }
   }
@@ -494,7 +503,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { key: 'invested',      header: 'Invested (Rs.)',width: 80,  align: 'right', money: true },
       { key: 'value',         header: 'Value (Rs.)',   width: 80,  align: 'right', money: true },
       { key: 'unrealizedPnl', header: 'UnRl P&L (Rs.)',width: 80,  align: 'right', money: true, signed: true },
-    ], foOpenRows);
+    ], foOpenRows, C);
   }
 
   // ─── F&O REALISED P&L (per instrument by FY) ────────────────────────────────
@@ -513,7 +522,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { key: 'closedTradeCount', header: 'Trades',       width: 40,  align: 'right' },
       { key: 'turnover',         header: 'Turnover (Rs.)', width: 80, align: 'right', money: true },
       { key: 'realizedPnl',      header: 'Realised (Rs.)', width: 80, align: 'right', money: true, signed: true },
-    ], foRealisedRows);
+    ], foRealisedRows, C);
   }
 
   // ─── F&O TAX SUMMARY ────────────────────────────────────────────────────────
@@ -538,7 +547,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { key: 'speculative',    header: 'Speculative P&L (Rs.)',    width: 120, align: 'right', money: true, signed: true },
       { key: 'nonSpeculative', header: 'Non-Spec. P&L (Rs.)',      width: 110, align: 'right', money: true, signed: true },
       { key: 'total',          header: 'Total Realised (Rs.)',     width: 110, align: 'right', money: true, signed: true },
-    ], taxRows);
+    ], taxRows, C);
   }
 
   // ─── CAPITAL GAINS ──────────────────────────────────────────────────────────
@@ -556,7 +565,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { key: 'buyAmount',     header: 'Cost (Rs.)', width: 70, align: 'right', money: true },
       { key: 'sellAmount',    header: 'Proceeds (Rs.)', width: 80, align: 'right', money: true },
       { key: 'gainLoss',      header: 'Gain/Loss (Rs.)',width: 80, align: 'right', money: true, signed: true },
-    ], cgRows);
+    ], cgRows, C);
   }
 
   // ─── INCOME RECEIVED ────────────────────────────────────────────────────────
@@ -579,7 +588,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { key: 'assetName',     header: 'Asset',     width: 140, align: 'left' },
       { key: 'amount',        header: 'Amount (Rs.)', width: 90, align: 'right', money: true, signed: true },
       { key: 'narration',     header: 'Narration', width: 110, align: 'left' },
-    ], incRows);
+    ], incRows, C);
   }
 
   // ─── REAL ESTATE ────────────────────────────────────────────────────────────
@@ -609,7 +618,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { key: 'tenant',       header: 'Tenant',            width: 90,  align: 'left' },
       { key: 'rent',         header: 'Rent (Rs./mo)',     width: 80,  align: 'right', money: true },
       { key: 'active',       header: 'Active',            width: 40,  align: 'center' },
-    ], reRows);
+    ], reRows, C);
   }
 
   // ─── VEHICLES ───────────────────────────────────────────────────────────────
@@ -640,7 +649,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { key: 'insExp',   header: 'Ins. Expiry',  width: 70,  align: 'left' },
       { key: 'pucExp',   header: 'PUC Expiry',   width: 70,  align: 'left' },
       { key: 'challans', header: 'Open Challans',width: 70,  align: 'right' },
-    ], vRows);
+    ], vRows, C);
   }
 
   // ─── INSURANCE ──────────────────────────────────────────────────────────────
@@ -669,7 +678,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { key: 'freq',    header: 'Frequency',        width: 60,  align: 'left' },
       { key: 'nextDue', header: 'Next Due',         width: 70,  align: 'left' },
       { key: 'status',  header: 'Status',           width: 60,  align: 'left' },
-    ], insRows);
+    ], insRows, C);
   }
 
   // ─── LIABILITIES ────────────────────────────────────────────────────────────
@@ -682,7 +691,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { label: 'MONTHLY EMI TOTAL',   value: `Rs. ${fmtNum(nw.liabilities.monthlyEmiTotal)}`, neg: false },
       { label: 'ACTIVE LOANS',        value: String(nw.liabilities.loanCount), neg: false },
       { label: 'CC OUTSTANDING',      value: `Rs. ${fmtNum(nw.liabilities.totalCreditCardOutstanding)}`, neg: false },
-    ]);
+    ], C);
 
     if (loans.length > 0) {
       cy = ensureSpace(cy, 40);
@@ -705,7 +714,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
         { key: 'rate',      header: 'Rate %',          width: 60,  align: 'right' },
         { key: 'tenure',    header: 'Tenure (mo)',     width: 70,  align: 'right' },
         { key: 'emi',       header: 'EMI (Rs.)',       width: 80,  align: 'right', money: true },
-      ], loanRows);
+      ], loanRows, C);
     }
 
     if (creditCards.length > 0) {
@@ -727,7 +736,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
         { key: 'network', header: 'Network',        width: 60,  align: 'left' },
         { key: 'limit',   header: 'Limit (Rs.)',    width: 100, align: 'right', money: true },
         { key: 'status',  header: 'Status',         width: 60,  align: 'center' },
-      ], ccRows);
+      ], ccRows, C);
     }
   }
 
@@ -757,7 +766,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       { key: 'price',     header: 'Price (Rs.)',   width: 65, align: 'right', money: true },
       { key: 'netAmount', header: 'Net (Rs.)',     width: 85, align: 'right', money: true },
       { key: 'broker',    header: 'Broker',        width: 65, align: 'left' },
-    ], txnRows);
+    ], txnRows, C);
   }
 
   // ─── Page numbers ───────────────────────────────────────────────────────────
@@ -775,7 +784,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     const txt = pdfSafe(`PortfolioOS  ·  Comprehensive Report  ·  Page ${i + 1} of ${range.count}`);
     const tw  = doc.widthOfString(txt);
     const tx  = ML + (W - tw) / 2;
-    doc.fillColor(BRAND.muted).text(txt, tx, pageH - 22, { lineBreak: false });
+    doc.fillColor(C.muted).text(txt, tx, pageH - 22, { lineBreak: false });
   }
   doc.flushPages();
   doc.end();
@@ -793,17 +802,18 @@ function drawMetricCards(
   width: number,
   cy: number,
   cards: CardSpec[],
+  C: PdfTheme,
 ): number {
   const gap = 6;
   const cardW = (width - gap * (cards.length - 1)) / cards.length;
   const cardH = 44;
   cards.forEach((c, i) => {
     const cx = x + i * (cardW + gap);
-    doc.rect(cx, cy, cardW, cardH).fill(BRAND.headerBg);
-    doc.rect(cx, cy, 3, cardH).fill(BRAND.accent);
-    doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted)
+    doc.rect(cx, cy, cardW, cardH).fill(C.headerBg);
+    doc.rect(cx, cy, 3, cardH).fill(C.accent);
+    doc.font('Helvetica').fontSize(7).fillColor(C.muted)
        .text(c.label, cx + 9, cy + 7, { width: cardW - 12, characterSpacing: 0.4, lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(12).fillColor(c.neg ? BRAND.negative : BRAND.ink);
+    doc.font('Helvetica-Bold').fontSize(12).fillColor(c.neg ? C.negative : C.ink);
     const fitted = truncToFit(doc, pdfSafe(c.value), cardW - 16);
     doc.text(fitted, cx + 9, cy + 22, { width: cardW - 12, lineBreak: false });
   });
@@ -829,6 +839,7 @@ function drawTable(
   ensureSpace: (cy: number, needed: number) => number,
   cols: ColDef[],
   rows: Record<string, unknown>[],
+  C: PdfTheme,
 ): number {
   const totalColW = cols.reduce((s, c) => s + c.width, 0);
   const scale     = W / totalColW;
@@ -839,8 +850,8 @@ function drawTable(
   function drawHead(y: number): void {
     // Dark slate — visually distinct from the section band above and the
     // alternating row tint below.
-    doc.rect(ML, y, W, ROW_H).fill(BRAND.tableHeaderBg);
-    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
+    doc.rect(ML, y, W, ROW_H).fill(C.tableHeaderBg);
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.ink);
     let x = ML;
     for (const col of scaled) {
       const w = col.width - 6;
@@ -855,8 +866,8 @@ function drawTable(
   cy += ROW_H;
 
   if (rows.length === 0) {
-    doc.rect(ML, cy, W, 28).fill(BRAND.rowAlt);
-    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+    doc.rect(ML, cy, W, 28).fill(C.rowAlt);
+    doc.font('Helvetica').fontSize(8).fillColor(C.muted)
        .text('No records.', ML, cy + 9, { width: W, align: 'center', lineBreak: false });
     return cy + 36;
   }
@@ -865,7 +876,7 @@ function drawTable(
     cy = ensureSpace(cy, ROW_H);
     if (cy === 72) { drawHead(cy); cy += ROW_H; } // page just broken
 
-    if (i % 2 === 1) doc.rect(ML, cy, W, ROW_H).fill(BRAND.rowAlt);
+    if (i % 2 === 1) doc.rect(ML, cy, W, ROW_H).fill(C.rowAlt);
     let x = ML;
     doc.font('Helvetica').fontSize(7.5);
     for (const col of scaled) {
@@ -879,7 +890,7 @@ function drawTable(
         display = pdfSafe(raw == null ? '' : String(raw));
       }
       const isNeg = (col.signed || col.money) && String(raw).startsWith('-');
-      doc.fillColor(isNeg ? BRAND.negative : BRAND.ink);
+      doc.fillColor(isNeg ? C.negative : C.ink);
       const w = col.width - 6;
       doc.text(truncToFit(doc, display, w), x + 3, cy + 4, {
         width: w, lineBreak: false, align: col.align,

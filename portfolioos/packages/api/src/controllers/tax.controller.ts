@@ -16,6 +16,7 @@ import {
 } from '../services/tax.service.js';
 import { buildSchedule43Report } from '../services/reports/schedule43.report.js';
 import { streamCapitalGainsTaxReport } from '../services/reportBuilder/statement/capitalGainsTaxReport.js';
+import { parseThemeQuery } from '../services/charts/pdfTheme.js';
 import {
   resolveReportSubjects,
   requireSingleSubject,
@@ -131,6 +132,7 @@ export async function downloadCapitalGainsTaxReport(req: Request, res: Response)
       fy,
       userName: user?.name ?? undefined,
       pan: user?.pan ?? undefined,
+      theme: parseThemeQuery(req.query.theme),
     }),
   );
 }

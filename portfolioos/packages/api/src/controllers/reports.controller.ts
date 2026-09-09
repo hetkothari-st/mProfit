@@ -28,6 +28,7 @@ import {
 } from '../services/xirr.service.js';
 import { persistCapitalGainsForPortfolio } from '../services/capitalGains.service.js';
 import { streamExcel, streamPdf, fmtNum, fmtDate, type ExportColumn, type ExportPayload } from '../services/export.service.js';
+import { parseThemeQuery, themeFor, hexToArgb } from '../services/charts/pdfTheme.js';
 import { buildHoldingsExport } from '../services/reportBuilder/holdingsReport.js';
 import { streamDashboardPdf, streamDashboardExcel, type DashboardScope } from '../services/reportBuilder/dashboardReport.js';
 import { buildHoldingsStatement } from '../services/reportBuilder/statement/holdings.js';
@@ -354,11 +355,14 @@ export async function getHoldingsExport(req: Request, res: Response) {
   }
 
   const format = getFormat(req);
+  const theme = parseThemeQuery(req.query.theme);
   const { holdingsPayload, transactionsPayload, summaryTitle } = await buildHoldingsExport({
     userId,
     portfolioIds,
     assetClasses,
   });
+  holdingsPayload.theme = theme;
+  transactionsPayload.theme = theme;
 
   if (format === 'xlsx') {
     // Multi-sheet workbook
@@ -366,6 +370,7 @@ export async function getHoldingsExport(req: Request, res: Response) {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'PortfolioOS';
     wb.created = new Date();
+    const C = themeFor(theme);
 
     function addSheet(ws: ExcelJSType.Worksheet, payload: ExportPayload) {
       ws.getCell(1, 1).value = payload.title;
@@ -384,8 +389,10 @@ export async function getHoldingsExport(req: Request, res: Response) {
       payload.columns.forEach((col, i) => {
         const cell = headerRow.getCell(i + 1);
         cell.value = col.header;
-        cell.font = { bold: true };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF20240F' } };
+        // Themed, like streamExcel's header — a fixed near-black fill sat
+        // under text Excel always renders dark, unreadable either way.
+        cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(C.tableHeaderBg) } };
         if (col.width) ws.getColumn(i + 1).width = col.width;
       });
       row++;
@@ -462,14 +469,15 @@ export async function getDashboardExport(req: Request, res: Response) {
   }
 
   const format = getFormat(req);
+  const theme = parseThemeQuery(req.query.theme);
 
   if (format === 'xlsx') {
-    await streamDashboardExcel(res, { userId, portfolioId, scope });
+    await streamDashboardExcel(res, { userId, portfolioId, scope, theme });
     return;
   }
 
   // PDF (default)
-  await streamDashboardPdf(res, { userId, portfolioId, scope });
+  await streamDashboardPdf(res, { userId, portfolioId, scope, theme });
 }
 
 // ─── Specialized section exports (Vehicles / Insurance / Loans / Credit Cards / Rental) ─────
@@ -488,6 +496,7 @@ export async function getSectionExport(req: Request, res: Response) {
   const payload = await buildPayloadForSubjects(resolved, (userId) =>
     sectionPayload(userId, section),
   );
+  payload.theme = parseThemeQuery(req.query.theme);
 
   if (format === 'xlsx') return streamExcel(res, payload);
   if (format === 'pdf')  return streamPdf(res, payload);
@@ -734,6 +743,12 @@ async function emit(
   payload: Parameters<typeof streamExcel>[1],
 ): Promise<void> {
   const format = getFormat(req);
+  // Single chokepoint: every report that flows through here (intraday/stcg/
+  // ltcg/112A/income/unrealised, the four statement-style reports, and the
+  // provident-fund download) picks up `?theme=` without each handler having
+  // to read it itself. `?theme=` only matters for pdf/xlsx; the json branch
+  // ignores it.
+  payload.theme = payload.theme ?? parseThemeQuery(req.query.theme);
   if (format === 'xlsx') return streamExcel(res, payload);
   if (format === 'pdf') return streamPdf(res, payload);
   ok(res, payload);
@@ -959,6 +974,9 @@ import {
 
 async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {
   const format = getFormat(req);
+  // Threads `?theme=` through to every one of the ~40 mprofit-style
+  // downloads below without touching each `downloadXxx` handler.
+  layout.theme = layout.theme ?? parseThemeQuery(req.query.theme);
   if (format === 'xlsx') return streamMprofitExcel(res, layout);
   return streamMprofitPdf(res, layout);
 }
@@ -1334,9 +1352,10 @@ export async function downloadFyBundle(req: Request, res: Response) {
 
   const resolved = await resolveReportSubjects(req);
   const subject = requireSingleSubject(resolved, 'The financial-year bundle');
+  const theme = parseThemeQuery(req.query.theme);
 
   const result = await runForSubject(resolved.via, subject.userId, () =>
-    buildFyBundle(subject.userId, fy),
+    buildFyBundle(subject.userId, fy, theme),
   );
 
   const stem = subject.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

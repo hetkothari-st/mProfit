@@ -2,63 +2,10 @@ import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
 import { Decimal, toDecimal } from '@portfolioos/shared';
-import { BRAND, drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
+import { drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
+import { themeFor, hexToArgb, type PdfTheme, type ThemeName } from './charts/pdfTheme.js';
 
-
-/**
- * A statement is a document someone prints, files, or forwards to a tenant —
- * so it gets ink-on-paper treatment rather than the app's dark brand skin:
- * white ground, near-black text, hairline rules, and no decorative accent
- * bars. BRAND stays the default for the analytical reports, which are read on
- * screen.
- */
-export interface PdfTheme {
-  pageBg: string;
-  headerBarBg: string;
-  tableHeaderBg: string;
-  ink: string;
-  titleInk: string;
-  accent: string;
-  positive: string;
-  negative: string;
-  muted: string;
-  headerBg: string;
-  rowAlt: string;
-  border: string;
-  white: string;
-  /** Draws the 3px vertical accent bar on cards and section bands. */
-  accentBar: boolean;
-  /** Hairline under the page header, for themes with no dark header block. */
-  headerRule: boolean;
-}
-
-const BRAND_THEME: PdfTheme = {
-  ...BRAND,
-  titleInk: BRAND.white,
-  accentBar: true,
-  headerRule: false,
-};
-
-const STATEMENT_THEME: PdfTheme = {
-  pageBg: '#FFFFFF',
-  headerBarBg: '#FFFFFF',
-  tableHeaderBg: '#EDEDED',
-  ink: '#1A1A1A',
-  titleInk: '#1A1A1A',
-  accent: '#1A1A1A',
-  positive: '#1A1A1A',
-  negative: '#B3261E',
-  muted: '#5C5C5C',
-  headerBg: '#F5F5F5',
-  rowAlt: '#F7F7F7',
-  border: '#C8C8C8',
-  white: '#FFFFFF',
-  accentBar: false,
-  headerRule: true,
-};
-
-const themeFor = (t: ExportPayload['theme']): PdfTheme =>
-  t === 'statement' ? STATEMENT_THEME : BRAND_THEME;
+export type { PdfTheme, ThemeName } from './charts/pdfTheme.js';
 
 export interface ExportColumn {
   key: string;
@@ -78,6 +25,13 @@ export interface ExportSection {
   columns: ExportColumn[];
   rows: Array<Record<string, unknown>>;
   emptyMessage?: string;
+  /**
+   * Optional final row, keyed the same as `rows`, rendered distinct from the
+   * data rows (top rule, bold, the theme's table-header background).
+   * Formatted through each column's own `formatter`, same as any other row.
+   * Omit entirely to render no totals row.
+   */
+  totals?: Record<string, unknown>;
 }
 
 export interface ExportPayload {
@@ -91,8 +45,12 @@ export interface ExportPayload {
   // Optional bar chart of top items by value.
   chartRows?: BarDatum[];
   chartTitle?: string;
-  /** 'statement' switches to the printable light theme. Defaults to brand. */
-  theme?: 'brand' | 'statement';
+  /**
+   * 'light' switches to the printable ink-on-paper theme; 'dark' is the
+   * app's own brand skin. Defaults to 'dark' — every caller that never
+   * opted into a theme keeps rendering exactly as it always has.
+   */
+  theme?: ThemeName;
   // Optional explicit filename (no extension). Falls back to slugified title.
   filenameStem?: string;
   // Additional sections rendered after the main table (e.g. Transactions,
@@ -100,11 +58,24 @@ export interface ExportPayload {
   additionalSections?: ExportSection[];
   // Optional label shown on the main table band (defaults to "Details").
   mainSectionLabel?: string;
+  /**
+   * Optional final row for the MAIN table only, keyed the same as `rows`.
+   * See `ExportSection.totals` for the rendering contract.
+   */
+  totals?: Record<string, unknown>;
+  /**
+   * Optional short line rendered in muted text directly beneath the main
+   * table — for a caveat the totals row alone can't carry (e.g. "Paid
+   * includes a security deposit not applied to this balance"). Omit when
+   * there's nothing to explain.
+   */
+  note?: string;
 }
 
 // ─── Excel (XLSX) ───────────────────────────────────────────────────
 
 export async function streamExcel(res: Response, payload: ExportPayload): Promise<void> {
+  const C = themeFor(payload.theme);
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PortfolioOS';
   wb.created = new Date();
@@ -129,11 +100,15 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
   payload.columns.forEach((col, i) => {
     const cell = headerRow.getCell(i + 1);
     cell.value = col.header;
-    cell.font = { bold: true };
+    // Fill + font both come from the theme so the header reads whichever
+    // theme was requested — the previous fixed near-black fill (`FF20240F`)
+    // sat under cell text that Excel always renders dark, making the header
+    // unreadable regardless of theme.
+    cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
     cell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FF20240F' },
+      fgColor: { argb: hexToArgb(C.tableHeaderBg) },
     };
     if (col.width) ws.getColumn(i + 1).width = col.width;
   });
@@ -147,6 +122,26 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
         ? col.formatter(raw)
         : (raw as ExcelJS.CellValue);
     });
+    row += 1;
+  }
+
+  if (payload.totals) {
+    const r = ws.getRow(row);
+    payload.columns.forEach((col, i) => {
+      const raw = payload.totals![col.key];
+      const cell = r.getCell(i + 1);
+      cell.value = col.formatter ? col.formatter(raw) : (raw as ExcelJS.CellValue);
+      cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(C.tableHeaderBg) } };
+      cell.border = { top: { style: 'thin', color: { argb: hexToArgb(C.border) } } };
+    });
+    row += 1;
+  }
+
+  if (payload.note) {
+    row += 1;
+    ws.getCell(row, 1).value = payload.note;
+    ws.getCell(row, 1).font = { italic: true, color: { argb: hexToArgb(C.muted) } };
     row += 1;
   }
 
@@ -282,9 +277,24 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       rows: payload.rows,
       emptyMessage: 'No records to display.',
       onPageBreak: () => { doc.addPage(); renderPageHeader(); return 72; },
-        C,
+      C,
+      totals: payload.totals,
+      // 34pt covers the note's two wrapped lines plus its leading gap.
+      reserveBelow: payload.note ? 34 : 0,
     });
     cy += 10;
+
+    // ─── RECONCILIATION NOTE — directly beneath the main table only ──
+    if (payload.note) {
+      if (cy + 30 > BOT) {
+        doc.addPage();
+        renderPageHeader();
+        cy = 72;
+      }
+      doc.font('Helvetica-Oblique').fontSize(7.5).fillColor(C.muted)
+         .text(pdfSafe(payload.note), ML, cy, { width: pageW });
+      cy = doc.y + 10;
+    }
 
     // ─── ADDITIONAL SECTIONS (e.g. Transactions, Realised Trades) ────
     for (const section of payload.additionalSections ?? []) {
@@ -302,6 +312,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
         emptyMessage: section.emptyMessage ?? 'None.',
         onPageBreak: () => { doc.addPage(); renderPageHeader(); return 72; },
         C,
+        totals: section.totals,
       });
       cy += 10;
     }
@@ -360,12 +371,21 @@ interface RenderTableOpts {
   emptyMessage: string;
   onPageBreak: () => number;  // returns new cy after adding page + header
   C: PdfTheme;
+  /** Vertical space to keep free below the table, e.g. for a following note. */
+  reserveBelow?: number;
+  /** Optional final row — see `ExportSection.totals`. Skipped when there are no rows. */
+  totals?: Record<string, unknown>;
 }
 
 function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts): number {
   const C = o.C;
   let cy = drawSectionBand(doc, o.x, o.width, o.y, o.label, C);
-  const BOT = o.pageH - 40;
+  // Reserve the note's strip when one follows this table, so the table breaks a
+  // row early rather than filling the page and stranding the note alone on the
+  // next one. A second page carrying nothing but a caveat reads as a printing
+  // accident — and that caveat is exactly what stops a reader concluding the
+  // totals are wrong.
+  const BOT = o.pageH - 40 - (o.reserveBelow ?? 0);
 
   if (o.rows.length === 0) {
     doc.rect(o.x, cy, o.width, 36).fill(C.rowAlt);
@@ -443,6 +463,37 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
            width: cellW, align, lineBreak: false,
          });
       x += colWidths[i] ?? 80;
+    }
+    cy += ROW_H;
+  }
+
+  // ─── TOTALS ROW — visually distinct from the data above it: a top rule,
+  // bold text, the theme's table-header background. Skipped when the caller
+  // didn't supply one, so every other report is unaffected.
+  if (o.totals) {
+    if (cy + ROW_H > BOT) {
+      cy = o.onPageBreak();
+      cy = drawSectionBand(doc, o.x, o.width, cy, `${o.label} (continued)`, C);
+      drawHeader(cy);
+      cy += ROW_H;
+    }
+    doc.rect(o.x, cy, o.width, 0.75).fill(C.border);  // top rule
+    cy += 1;                                          // nudge past the rule
+    doc.rect(o.x, cy, o.width, ROW_H).fill(C.tableHeaderBg);
+    let tx = o.x;
+    doc.font('Helvetica-Bold').fontSize(8);
+    for (let i = 0; i < o.columns.length; i++) {
+      const col = o.columns[i]!;
+      const safe = cellText(col, o.totals);
+      const isNeg = safe.trim().startsWith('-');
+      const align = colAlign[i] ?? 'left';
+      const cellW = (colWidths[i] ?? 80) - 8;
+      const display = fitText(doc, safe, cellW);
+      doc.fillColor(isNeg ? C.negative : C.ink)
+         .text(display, tx + 4, cy + 5, {
+           width: cellW, align, lineBreak: false,
+         });
+      tx += colWidths[i] ?? 80;
     }
     cy += ROW_H;
   }

@@ -1,20 +1,8 @@
 import type PDFDocument from 'pdfkit';
+import { DARK_THEME, type PdfTheme } from './pdfTheme.js';
 
-// Brand palette — matches the app's editorial colour scheme
-export const BRAND = {
-  pageBg: '#0D0D0D',
-  headerBarBg: '#171717',
-  tableHeaderBg: '#232323',
-  ink: '#F0F0F0',
-  accent: '#E2FE53',
-  positive: '#A1E444',
-  negative: '#F0574C',
-  muted: '#9E9E9E',
-  headerBg: '#20240F',
-  rowAlt: '#171717',
-  border: '#333333',
-  white: '#FFFFFF',
-} as const;
+export { DARK_THEME, LIGHT_THEME, themeFor, parseThemeQuery, hexToArgb } from './pdfTheme.js';
+export type { PdfTheme, ThemeName } from './pdfTheme.js';
 
 // PDFKit built-in Helvetica does not support U+20B9 (₹). Replace before render.
 // Also normalises a couple of other common chars that drop in Helvetica.
@@ -36,13 +24,6 @@ export function pdfSafe(s: string | number | null | undefined): string {
     .replace(/\s+/g, ' ')    // collapse runs of whitespace
     .trim();
 }
-
-// Allocation colour wheel — 12 distinct, vivid colours tuned for near-black backgrounds
-export const PIE_COLORS = [
-  '#E2FE53', '#E0E0E0', '#F0574C', '#3FC6C0',
-  '#B79EF0', '#F5B93D', '#5CA8F5', '#EF87C0',
-  '#5CC98B', '#EB8C4C', '#C595E8', '#5CC4D6',
-];
 
 export interface PieSlice  { label: string; value: number; color?: string }
 export interface BarDatum   { label: string; value: number; color?: string }
@@ -70,25 +51,29 @@ function arcPath(cx: number, cy: number, r: number, a1: number, a2: number): str
 
 // ─── Pie / Donut chart ────────────────────────────────────────────────────────
 // Returns the y-coordinate of the bottom of the rendered chart so callers can
-// advance the cursor.
-
+// advance the cursor. `theme` defaults to the dark brand palette — the same
+// default every report has always had — and supplies both the categorical
+// slice colours (`theme.chartColors`) and the ink/muted/pageBg used for
+// labels and the donut hole, so a light-themed caller never ends up with a
+// dark-tuned slice colour on a white hole or vice versa.
 export function drawPieChart(
   doc: InstanceType<typeof PDFDocument>,
   data: PieSlice[],
   box: ChartBox,
+  theme: PdfTheme = DARK_THEME,
 ): number {
   const { x, y, width, height, title } = box;
   let oy = y;
 
   if (title) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink)
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(theme.ink)
        .text(pdfSafe(title), x, oy, { width, lineBreak: false });
     oy += 15;
   }
 
   const total = data.reduce((s, d) => s + d.value, 0);
   if (total <= 0) {
-    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+    doc.font('Helvetica').fontSize(8).fillColor(theme.muted)
        .text('No data', x, oy, { width, lineBreak: false });
     doc.y = oy + 14;
     return oy + 14;
@@ -99,19 +84,20 @@ export function drawPieChart(
   const radius = Math.min(width * 0.18, availableH / 2 - 4);
   const cx = x + radius + 6;
   const cy = oy + radius;
+  const palette = theme.chartColors;
 
   let startAngle = -Math.PI / 2;
   data.forEach((seg, i) => {
     if (seg.value <= 0) return;
     const sweep = (seg.value / total) * 2 * Math.PI;
     const end   = startAngle + sweep;
-    const color = seg.color ?? PIE_COLORS[i % PIE_COLORS.length]!;
+    const color = seg.color ?? palette[i % palette.length]!;
     doc.path(arcPath(cx, cy, radius, startAngle, end)).fill(color);
     startAngle = end;
   });
 
   // Donut hole shows the page background through it
-  doc.circle(cx, cy, radius * 0.5).fill(BRAND.pageBg);
+  doc.circle(cx, cy, radius * 0.5).fill(theme.pageBg);
 
   // Legend — right side. Each row uses two SEPARATE text writes with
   // explicit (x, y) + lineBreak:false so PDFKit cannot wrap and advance
@@ -125,14 +111,14 @@ export function drawPieChart(
   const rowH     = 13;
 
   items.forEach((seg, i) => {
-    const color = seg.color ?? PIE_COLORS[i % PIE_COLORS.length]!;
+    const color = seg.color ?? palette[i % palette.length]!;
     const pct   = ((seg.value / total) * 100).toFixed(1);
     doc.rect(legX, legY + 1, 7, 7).fill(color);
-    doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.ink)
+    doc.font('Helvetica').fontSize(7.5).fillColor(theme.ink)
        .text(pdfSafe(seg.label), legX + 10, legY, {
          width: labelColW, lineBreak: false,
        });
-    doc.fillColor(BRAND.muted)
+    doc.fillColor(theme.muted)
        .text(`${pct}%`, legX + 10 + labelColW + 2, legY, {
          width: pctColW, align: 'right', lineBreak: false,
        });
@@ -150,18 +136,19 @@ export function drawHorizontalBarChart(
   doc: InstanceType<typeof PDFDocument>,
   data: BarDatum[],
   box: ChartBox,
+  theme: PdfTheme = DARK_THEME,
 ): number {
   const { x, y, width, height, title } = box;
   let oy = y;
 
   if (title) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink)
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(theme.ink)
        .text(pdfSafe(title), x, oy, { width, lineBreak: false });
     oy += 16;
   }
 
   if (data.length === 0) {
-    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+    doc.font('Helvetica').fontSize(8).fillColor(theme.muted)
        .text('No data', x, oy, { width, lineBreak: false });
     doc.y = oy + 14;
     return oy + 14;
@@ -177,17 +164,17 @@ export function drawHorizontalBarChart(
   data.forEach((item) => {
     const isNeg = item.value < 0;
     const barW  = Math.max(1, (Math.abs(item.value) / max) * barAreaW);
-    const color = item.color ?? (isNeg ? BRAND.negative : BRAND.accent);
+    const color = item.color ?? (isNeg ? theme.negative : theme.accent);
 
-    doc.font('Helvetica').fontSize(8).fillColor(BRAND.ink)
+    doc.font('Helvetica').fontSize(8).fillColor(theme.ink)
        .text(pdfSafe(item.label), x, oy + 2, { width: labelW - 6, lineBreak: false });
 
     // bar track
-    doc.rect(x + labelW, oy + 3, barAreaW, barH - 6).fill(BRAND.rowAlt);
+    doc.rect(x + labelW, oy + 3, barAreaW, barH - 6).fill(theme.rowAlt);
     // bar fill
     doc.rect(x + labelW, oy + 3, barW, barH - 6).fill(color);
 
-    doc.font('Helvetica-Bold').fontSize(8).fillColor(isNeg ? BRAND.negative : BRAND.ink)
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(isNeg ? theme.negative : theme.ink)
        .text(pdfSafe(fmtCompact(item.value)), x + labelW + barAreaW + 4, oy + 2, {
          width: valueW, align: 'right', lineBreak: false,
        });
@@ -206,18 +193,19 @@ export function drawLineChart(
   doc: InstanceType<typeof PDFDocument>,
   data: LineDatum[],
   box: ChartBox,
+  theme: PdfTheme = DARK_THEME,
 ): number {
   const { x, y, width, height, title } = box;
   let oy = y;
 
   if (title) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(BRAND.ink)
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(theme.ink)
        .text(pdfSafe(title), x, oy, { width, lineBreak: false });
     oy += 16;
   }
 
   if (data.length < 2) {
-    doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+    doc.font('Helvetica').fontSize(8).fillColor(theme.muted)
        .text('Not enough data', x, oy, { width, lineBreak: false });
     doc.y = oy + 14;
     return oy + 14;
@@ -241,7 +229,7 @@ export function drawLineChart(
   for (let i = 0; i <= 3; i++) {
     const gy = oy + (chartH * i) / 3;
     doc.moveTo(x, gy).lineTo(x + width, gy)
-       .strokeColor(BRAND.border).lineWidth(0.25).dash(2, { space: 2 }).stroke();
+       .strokeColor(theme.border).lineWidth(0.25).dash(2, { space: 2 }).stroke();
   }
   doc.undash();
 
@@ -251,7 +239,7 @@ export function drawLineChart(
   doc.moveTo(pts[0]!.px, oy + chartH);
   pts.forEach(p => { doc.lineTo(p.px, p.py); });
   doc.lineTo(pts[pts.length - 1]!.px, oy + chartH);
-  doc.closePath().fillColor(BRAND.accent).fill();
+  doc.closePath().fillColor(theme.accent).fill();
   doc.restore();
 
   // Line
@@ -259,11 +247,11 @@ export function drawLineChart(
   for (let i = 1; i < pts.length; i++) {
     doc.lineTo(pts[i]!.px, pts[i]!.py);
   }
-  doc.strokeColor(BRAND.accent).lineWidth(1.5).stroke();
+  doc.strokeColor(theme.accent).lineWidth(1.5).stroke();
 
   // X labels — show ~6 evenly spaced
   const step = Math.max(1, Math.round(data.length / 6));
-  doc.font('Helvetica').fontSize(6.5).fillColor(BRAND.muted);
+  doc.font('Helvetica').fontSize(6.5).fillColor(theme.muted);
   for (let i = 0; i < data.length; i += step) {
     doc.text(pdfSafe(data[i]!.label), pts[i]!.px - 18, oy + chartH + 4, {
       width: 36, align: 'center', lineBreak: false,

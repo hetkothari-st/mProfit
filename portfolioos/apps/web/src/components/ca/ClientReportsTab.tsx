@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/cn';
 import { getApiBaseUrl } from '@/api/baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
+import { currentReportTheme } from '@/lib/reportTheme';
 import { REPORTS, type ReportDef } from '@/pages/reports/TaxMisDownloads';
 
 /**
@@ -55,7 +56,8 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
   async function downloadRaw(path: string, filename: string, key: string) {
     setBusy(key);
     try {
-      const r = await fetch(`${getApiBaseUrl()}${path}`, {
+      const sep = path.includes('?') ? '&' : '?';
+      const r = await fetch(`${getApiBaseUrl()}${path}${sep}theme=${currentReportTheme()}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!r.ok) throw new Error(await r.text());
@@ -75,7 +77,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
   async function download(report: ReportDef, format: 'pdf' | 'xlsx' | 'xml') {
     setBusy(`${report.key}-${format}`);
     try {
-      const params = new URLSearchParams({ format, clientId });
+      const params = new URLSearchParams({ format, clientId, theme: currentReportTheme() });
       if (report.params.includes('fy') && fy) params.set('fy', fy);
       if (report.params.includes('asOf') && asOf) params.set('asOf', asOf);
       if (report.params.includes('from') && from) params.set('from', from);

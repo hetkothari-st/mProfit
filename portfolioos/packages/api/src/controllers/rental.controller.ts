@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import {
   listProperties,
   getProperty,
@@ -270,6 +271,7 @@ import {
   LEDGER_ENTRY_TYPES,
 } from '../services/rentalLedger.service.js';
 import { streamPdf, fmtNum, fmtDate, type ExportColumn } from '../services/export.service.js';
+import { parseThemeQuery } from '../services/charts/pdfTheme.js';
 
 const ledgerEntrySchema = z.object({
   entryType: z.enum(LEDGER_ENTRY_TYPES),
@@ -350,10 +352,13 @@ export async function getTenancyStatementHandler(req: Request, res: Response) {
     { key: 'runningBalance', header: 'Balance', width: 18, formatter: (v) => fmtNum(v), align: 'right' },
   ];
 
+  const { totals, note } = buildStatementTotals(oldestFirst, ledger.balanceDue);
+
   await streamPdf(res, {
-    // Ink on paper, not the app's dark skin: this is a document a landlord
-    // prints, files, or forwards to a tenant.
-    theme: 'statement',
+    // Follows `?theme=light|dark` like every other report — defaults to the
+    // app's own dark skin, but a landlord printing this for a tenant will
+    // usually want the light, ink-on-paper version instead.
+    theme: parseThemeQuery(req.query.theme),
     title: `Rent statement — ${ledger.tenantName}`,
     subtitle: `${ledger.propertyName} · ${period}`,
     // Identity in the thin meta strip; the money as metric cards, which is
@@ -380,5 +385,62 @@ export async function getTenancyStatementHandler(req: Request, res: Response) {
       runningBalance: r.runningBalance,
     })),
     mainSectionLabel: 'Statement of account',
+    totals,
+    note,
   });
+}
+
+/**
+ * Totals for the statement table, plus the reconciliation line explaining
+ * why (Charged total) − (Paid total) is NOT the closing balance whenever a
+ * security deposit moved during the period.
+ *
+ * The Charged/Paid totals are the honest sum of exactly what's displayed in
+ * those two columns — deposits are never quietly dropped to force the
+ * arithmetic to close, because then the column wouldn't equal the cells
+ * printed above it. The Balance cell instead carries the actual closing
+ * balance (`balanceDue`), which is what a totals row on a running-balance
+ * ledger is supposed to show — not a sum of a running balance, which is
+ * meaningless.
+ */
+export function buildStatementTotals(
+  rows: Array<{ kind: 'CHARGE' | 'CREDIT'; amount: string; entryType: string }>,
+  balanceDue: string,
+): { totals: Record<string, unknown>; note: string | undefined } {
+  let totalCharged = new Prisma.Decimal(0);
+  let totalPaid = new Prisma.Decimal(0);
+  let depositIn = new Prisma.Decimal(0);   // DEPOSIT — lands in the Paid column
+  let depositOut = new Prisma.Decimal(0);  // DEPOSIT_REFUND — lands in the Charged column
+
+  for (const r of rows) {
+    const amt = new Prisma.Decimal(r.amount);
+    if (r.kind === 'CHARGE') totalCharged = totalCharged.plus(amt);
+    else totalPaid = totalPaid.plus(amt);
+
+    if (r.entryType === 'DEPOSIT') depositIn = depositIn.plus(amt);
+    if (r.entryType === 'DEPOSIT_REFUND') depositOut = depositOut.plus(amt);
+  }
+
+  const totals: Record<string, unknown> = {
+    date: '',
+    description: 'Total',
+    youGave: totalCharged.toString(),
+    youGot: totalPaid.toString(),
+    runningBalance: balanceDue,
+  };
+
+  let note: string | undefined;
+  if (depositIn.greaterThan(0) && depositOut.greaterThan(0)) {
+    note = `Paid includes a Rs ${fmtNum(depositIn)} security deposit, and Charged includes a ` +
+      `Rs ${fmtNum(depositOut)} deposit refund. Deposits are held separately and are not ` +
+      'applied to the rent balance.';
+  } else if (depositIn.greaterThan(0)) {
+    note = `Paid includes Rs ${fmtNum(depositIn)} of security deposit, which is held separately ` +
+      'and is not applied to the rent balance.';
+  } else if (depositOut.greaterThan(0)) {
+    note = `Charged includes Rs ${fmtNum(depositOut)} of security deposit refund, which is held ` +
+      'separately and is not applied to the rent balance.';
+  }
+
+  return { totals, note };
 }

@@ -1,5 +1,6 @@
 import { api } from './client';
 import type { ApiResponse } from '@portfolioos/shared';
+import { currentReportTheme } from '@/lib/reportTheme';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);
@@ -428,6 +429,7 @@ export const rentalApi = {
    */
   async downloadStatement(tenancyId: string, fileName: string): Promise<void> {
     const res = await api.get(`/api/rental/tenancies/${tenancyId}/statement`, {
+      params: { theme: currentReportTheme() },
       responseType: 'blob',
     });
     const url = URL.createObjectURL(res.data as Blob);

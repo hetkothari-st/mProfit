@@ -14,7 +14,8 @@
 import PDFDocument from 'pdfkit';
 import { Decimal } from 'decimal.js';
 import type { Response } from 'express';
-import { BRAND, pdfSafe } from '../../charts/pdfCharts.js';
+import { pdfSafe } from '../../charts/pdfCharts.js';
+import { themeFor, type ThemeName } from '../../charts/pdfTheme.js';
 import { fmtNum } from '../../export.service.js';
 import { buildTaxSummary, taxHarvestReport } from '../../tax.service.js';
 import { buildCapitalGainsStatement } from './capitalGains.js';
@@ -25,6 +26,8 @@ export interface CapitalGainsTaxReportParams {
   fy: string; // e.g. "2024-25"
   userName?: string;
   pan?: string;
+  /** Defaults to 'dark' — the app's own brand skin — same as every other report. */
+  theme?: ThemeName;
 }
 
 export async function streamCapitalGainsTaxReport(
@@ -68,6 +71,7 @@ export async function streamCapitalGainsTaxReport(
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
   return new Promise<void>((resolve, reject) => {
+    const C = themeFor(params.theme);
     const doc = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape', bufferPages: true });
     doc.on('end', resolve);
     doc.on('error', reject);
@@ -82,30 +86,32 @@ export async function streamCapitalGainsTaxReport(
     // ─── PHASE 2 — cover page rendering functions ───────────────────
 
     function fillPageBg(): void {
-      doc.rect(0, 0, doc.page.width, doc.page.height).fill(BRAND.pageBg);
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill(C.pageBg);
     }
 
     function renderHeaderBar(subtitle: string): number {
       fillPageBg();
-      doc.rect(0, 0, doc.page.width, 56).fill(BRAND.headerBarBg);
-      doc.font('Helvetica-Bold').fontSize(17).fillColor(BRAND.white)
+      doc.rect(0, 0, doc.page.width, 56).fill(C.headerBarBg);
+      // titleInk, not `white` — the light theme's header bar is the same
+      // colour as the page, so literal white text would be invisible.
+      doc.font('Helvetica-Bold').fontSize(17).fillColor(C.titleInk)
         .text('PortfolioOS', ML, 14, { lineBreak: false });
-      doc.font('Helvetica').fontSize(10).fillColor(BRAND.muted)
+      doc.font('Helvetica').fontSize(10).fillColor(C.muted)
         .text(subtitle, ML, 36, { lineBreak: false });
       const genStr = `Generated: ${new Date().toLocaleDateString('en-IN', {
         year: 'numeric', month: 'short', day: 'numeric',
       })}`;
-      doc.font('Helvetica').fontSize(8.5).fillColor(BRAND.muted)
+      doc.font('Helvetica').fontSize(8.5).fillColor(C.muted)
         .text(genStr, ML, 14, { align: 'right', width: pageW, lineBreak: false });
-      doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+      doc.font('Helvetica').fontSize(8).fillColor(C.muted)
         .text(`Financial Year: ${params.fy}`, ML, 38, { align: 'right', width: pageW, lineBreak: false });
       return 72;
     }
 
     function renderIdentityBand(cy: number): number {
       const bandH = 28;
-      doc.rect(ML, cy, pageW, bandH).fill(BRAND.headerBg);
-      doc.rect(ML, cy, 3, bandH).fill(BRAND.accent);
+      doc.rect(ML, cy, pageW, bandH).fill(C.headerBg);
+      doc.rect(ML, cy, 3, bandH).fill(C.accent);
 
       const parts: Array<[string, string]> = [
         ['Member', pdfSafe(params.userName ?? 'Investor')],
@@ -116,9 +122,9 @@ export async function streamCapitalGainsTaxReport(
       const cellW = pageW / parts.length;
       parts.forEach(([label, value], i) => {
         const cx = ML + i * cellW;
-        doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted)
+        doc.font('Helvetica').fontSize(7).fillColor(C.muted)
           .text(label.toUpperCase(), cx + 10, cy + 6, { width: cellW - 12, characterSpacing: 0.4, lineBreak: false });
-        doc.font('Helvetica-Bold').fontSize(9.5).fillColor(BRAND.ink)
+        doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.ink)
           .text(value, cx + 10, cy + 16, { width: cellW - 12, lineBreak: false });
       });
       return cy + bandH + 10;
@@ -137,25 +143,25 @@ export async function streamCapitalGainsTaxReport(
           label: 'Net realised gain',
           value: `Rs. ${fmtNum(gain.toFixed(2))}`,
           sub: `FY ${params.fy}`,
-          accent: gain.isNegative() ? BRAND.negative : BRAND.positive,
+          accent: gain.isNegative() ? C.negative : C.positive,
         },
         {
           label: 'Estimated tax liability',
           value: `Rs. ${fmtNum(tax.toFixed(2))}`,
           sub: 'Excl. surcharge & cess',
-          accent: BRAND.accent,
+          accent: C.accent,
         },
         {
           label: 'Effective tax rate',
           value: effectiveRate,
           sub: 'Tax / realised gain',
-          accent: BRAND.accent,
+          accent: C.accent,
         },
         {
           label: 'LTCG exemption used',
           value: `Rs. ${fmtNum(exemptionUsed.toFixed(2))}`,
           sub: `of Rs. ${fmtNum(ltcgExemptLimit.toFixed(2))} limit`,
-          accent: exemptionUsed.gte(ltcgExemptLimit) ? BRAND.negative : BRAND.positive,
+          accent: exemptionUsed.gte(ltcgExemptLimit) ? C.negative : C.positive,
         },
       ];
 
@@ -165,13 +171,13 @@ export async function streamCapitalGainsTaxReport(
 
       cards.forEach((card, i) => {
         const cx = ML + i * (cardW + gap);
-        doc.rect(cx, cy, cardW, cardH).fill(BRAND.headerBg);
+        doc.rect(cx, cy, cardW, cardH).fill(C.headerBg);
         doc.rect(cx, cy, 3, cardH).fill(card.accent);
-        doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.muted)
+        doc.font('Helvetica').fontSize(7.5).fillColor(C.muted)
           .text(card.label.toUpperCase(), cx + 10, cy + 9, { width: cardW - 14, characterSpacing: 0.4, lineBreak: false });
-        doc.font('Helvetica-Bold').fontSize(14).fillColor(BRAND.ink)
+        doc.font('Helvetica-Bold').fontSize(14).fillColor(C.ink)
           .text(card.value, cx + 10, cy + 22, { width: cardW - 14, lineBreak: false });
-        doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted)
+        doc.font('Helvetica').fontSize(7).fillColor(C.muted)
           .text(card.sub, cx + 10, cy + 39, { width: cardW - 14, lineBreak: false });
       });
       return cy + cardH + 14;
@@ -179,9 +185,9 @@ export async function streamCapitalGainsTaxReport(
 
     function renderSectionBand(cy: number, label: string): number {
       const H = 20;
-      doc.rect(ML, cy, pageW, H).fill(BRAND.headerBg);
-      doc.rect(ML, cy, 3, H).fill(BRAND.accent);
-      doc.font('Helvetica-Bold').fontSize(9.5).fillColor(BRAND.ink)
+      doc.rect(ML, cy, pageW, H).fill(C.headerBg);
+      doc.rect(ML, cy, 3, H).fill(C.accent);
+      doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.ink)
         .text(pdfSafe(label), ML + 10, cy + 6, { width: pageW - 18, lineBreak: false });
       return cy + H + 4;
     }
@@ -200,10 +206,10 @@ export async function streamCapitalGainsTaxReport(
       const ROW_H = 17;
       const colWidths = cols.map((c) => c.w * pageW);
 
-      doc.rect(ML, cy, pageW, ROW_H).fill(BRAND.tableHeaderBg);
+      doc.rect(ML, cy, pageW, ROW_H).fill(C.tableHeaderBg);
       let hx = ML;
       cols.forEach((c, i) => {
-        doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink)
+        doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.ink)
           .text(c.label, hx + 4, cy + 5, { width: colWidths[i]! - 8, align: c.right ? 'right' : 'left', lineBreak: false });
         hx += colWidths[i]!;
       });
@@ -268,7 +274,7 @@ export async function streamCapitalGainsTaxReport(
           doc.addPage();
           cy = renderHeaderBar('Capital Gains Tax Report');
         }
-        if (idx % 2 === 1) doc.rect(ML, cy, pageW, ROW_H).fill(BRAND.rowAlt);
+        if (idx % 2 === 1) doc.rect(ML, cy, pageW, ROW_H).fill(C.rowAlt);
 
         const cells = [
           { val: r.section, right: false },
@@ -286,7 +292,7 @@ export async function streamCapitalGainsTaxReport(
           const src = numericSource[ci];
           const isNeg = src != null && new Decimal(src).isNegative();
           doc.font('Helvetica').fontSize(8)
-            .fillColor(isNeg ? BRAND.negative : BRAND.ink)
+            .fillColor(isNeg ? C.negative : C.ink)
             .text(pdfSafe(cell.val), cx + 4, cy + 5, {
               width: colWidths[ci]! - 8,
               align: cell.right ? 'right' : 'left',
@@ -298,7 +304,7 @@ export async function streamCapitalGainsTaxReport(
       });
 
       // Total row
-      doc.rect(ML, cy, pageW, ROW_H + 2).fill(BRAND.accent);
+      doc.rect(ML, cy, pageW, ROW_H + 2).fill(C.accent);
       const totalCells = [
         { val: 'TOTAL', right: false },
         { val: '', right: false },
@@ -309,7 +315,10 @@ export async function streamCapitalGainsTaxReport(
       ];
       let tcx = ML;
       totalCells.forEach((cell, ci) => {
-        doc.font('Helvetica-Bold').fontSize(9).fillColor('#0D0D0D')
+        // onAccent, not a literal hex — dark text reads on the dark theme's
+        // bright lime accent, but the light theme's accent is near-black, so
+        // this row needs light text there instead.
+        doc.font('Helvetica-Bold').fontSize(9).fillColor(C.onAccent)
           .text(pdfSafe(cell.val), tcx + 4, cy + 6, {
             width: colWidths[ci]! - 8,
             align: cell.right ? 'right' : 'left',
@@ -337,11 +346,11 @@ export async function streamCapitalGainsTaxReport(
       let idx = 0;
       rows.forEach(([label, val]) => {
         if (new Decimal(val).isZero()) return;
-        if (idx % 2 === 1) doc.rect(ML, cy, pageW, rowH).fill(BRAND.rowAlt);
+        if (idx % 2 === 1) doc.rect(ML, cy, pageW, rowH).fill(C.rowAlt);
         idx += 1;
-        doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+        doc.font('Helvetica').fontSize(8).fillColor(C.muted)
           .text(pdfSafe(label), ML + 10, cy + 4, { width: pageW * 0.6, lineBreak: false });
-        doc.font('Helvetica').fontSize(8).fillColor(BRAND.ink)
+        doc.font('Helvetica').fontSize(8).fillColor(C.ink)
           .text(`Rs. ${fmtNum(val)}`, ML + pageW * 0.6, cy + 4, { width: pageW * 0.38, align: 'right', lineBreak: false });
         cy += rowH;
       });
@@ -354,11 +363,11 @@ export async function streamCapitalGainsTaxReport(
       const rowH = 16;
       const colW = [0.35, 0.15, 0.25, 0.25].map((w) => w * pageW);
 
-      doc.rect(ML, cy, pageW, rowH).fill(BRAND.tableHeaderBg);
+      doc.rect(ML, cy, pageW, rowH).fill(C.tableHeaderBg);
       const hCells = ['Classification', 'Holdings', 'Unrealised gain', 'Est. tax if sold'];
       let hx = ML;
       hCells.forEach((h, i) => {
-        doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink)
+        doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.ink)
           .text(h, hx + 4, cy + 5, { width: colW[i]! - 8, align: i > 0 ? 'right' : 'left', lineBreak: false });
         hx += colW[i]!;
       });
@@ -418,7 +427,7 @@ export async function streamCapitalGainsTaxReport(
 
       snapshotRows.forEach((r) => {
         if (r.count === 0) return;
-        if (rowIdx % 2 === 1) doc.rect(ML, cy, pageW, rowH).fill(BRAND.rowAlt);
+        if (rowIdx % 2 === 1) doc.rect(ML, cy, pageW, rowH).fill(C.rowAlt);
         rowIdx += 1;
         totalHoldings += r.count;
         totalGain = totalGain.plus(r.gain);
@@ -428,7 +437,7 @@ export async function streamCapitalGainsTaxReport(
         const vals = [r.label, String(r.count), `Rs. ${fmtNum(r.gain.toFixed(2))}`, `Rs. ${fmtNum(r.tax.toFixed(2))}`];
         vals.forEach((v, vi) => {
           doc.font('Helvetica').fontSize(8)
-            .fillColor(vi === 2 && r.gain.isNegative() ? BRAND.negative : BRAND.ink)
+            .fillColor(vi === 2 && r.gain.isNegative() ? C.negative : C.ink)
             .text(pdfSafe(v), cx + 4, cy + 4, { width: colW[vi]! - 8, align: vi > 0 ? 'right' : 'left', lineBreak: false });
           cx += colW[vi]!;
         });
@@ -436,16 +445,16 @@ export async function streamCapitalGainsTaxReport(
       });
 
       if (totalHoldings === 0) {
-        doc.rect(ML, cy, pageW, 30).fill(BRAND.rowAlt);
-        doc.font('Helvetica').fontSize(9).fillColor(BRAND.muted)
+        doc.rect(ML, cy, pageW, 30).fill(C.rowAlt);
+        doc.font('Helvetica').fontSize(9).fillColor(C.muted)
           .text('No open holdings to report.', ML, cy + 11, { width: pageW, align: 'center', lineBreak: false });
         return cy + 34;
       }
 
-      doc.rect(ML, cy, pageW, rowH).fill(BRAND.border);
+      doc.rect(ML, cy, pageW, rowH).fill(C.border);
       let tx = ML;
       [`Total (${totalHoldings} holdings)`, '', `Rs. ${fmtNum(totalGain.toFixed(2))}`, `Rs. ${fmtNum(totalTax.toFixed(2))}`].forEach((v, vi) => {
-        doc.font('Helvetica-Bold').fontSize(8).fillColor(BRAND.ink)
+        doc.font('Helvetica-Bold').fontSize(8).fillColor(C.ink)
           .text(pdfSafe(v), tx + 4, cy + 4, { width: colW[vi]! - 8, align: vi > 0 ? 'right' : 'left', lineBreak: false });
         tx += colW[vi]!;
       });
@@ -463,9 +472,9 @@ export async function streamCapitalGainsTaxReport(
       const colW = [0.30, 0.12, 0.14, 0.14, 0.30].map((w) => w * pageW);
       const headers = ['Asset', 'Class', 'Unrealised loss', 'Est. tax offset', 'Note'];
       let hx = ML;
-      doc.rect(ML, cy, pageW, rowH).fill(BRAND.tableHeaderBg);
+      doc.rect(ML, cy, pageW, rowH).fill(C.tableHeaderBg);
       headers.forEach((h, i) => {
-        doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink)
+        doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.ink)
           .text(h, hx + 4, cy + 5, { width: colW[i]! - 8, align: i >= 2 && i <= 3 ? 'right' : 'left', lineBreak: false });
         hx += colW[i]!;
       });
@@ -473,7 +482,7 @@ export async function streamCapitalGainsTaxReport(
 
       harvestCandidates.forEach((r, idx) => {
         if (cy + rowH > BOT) return; // capped at 10 rows above; don't overflow this page
-        if (idx % 2 === 1) doc.rect(ML, cy, pageW, rowH).fill(BRAND.rowAlt);
+        if (idx % 2 === 1) doc.rect(ML, cy, pageW, rowH).fill(C.rowAlt);
 
         const loss = new Decimal(r.unrealisedPnL).abs();
         const isStcgLoss = r.classification === 'STCG_LOSS';
@@ -486,7 +495,7 @@ export async function streamCapitalGainsTaxReport(
         let cx = ML;
         [r.assetName, r.assetClass, `(Rs. ${fmtNum(loss.toFixed(2))})`, `Rs. ${fmtNum(taxOffset.toFixed(2))}`, note].forEach((v, vi) => {
           doc.font('Helvetica').fontSize(8)
-            .fillColor(vi === 2 ? BRAND.negative : BRAND.ink)
+            .fillColor(vi === 2 ? C.negative : C.ink)
             .text(pdfSafe(v), cx + 4, cy + 4, { width: colW[vi]! - 8, align: vi >= 2 && vi <= 3 ? 'right' : 'left', lineBreak: false });
           cx += colW[vi]!;
         });
@@ -510,9 +519,9 @@ export async function streamCapitalGainsTaxReport(
         'This report is for reference only — verify all figures with your Chartered Accountant ' +
         'before filing your Income Tax Return (ITR).';
 
-      doc.rect(ML, cy, pageW, 2).fill(BRAND.border);
+      doc.rect(ML, cy, pageW, 2).fill(C.border);
       cy += 8;
-      doc.font('Helvetica').fontSize(7).fillColor(BRAND.muted)
+      doc.font('Helvetica').fontSize(7).fillColor(C.muted)
         .text(pdfSafe(disclaimerText), ML, cy, { width: pageW, align: 'justify' });
       return doc.y + 8;
     }
@@ -557,8 +566,8 @@ export async function streamCapitalGainsTaxReport(
       cy = renderSectionBand(cy, section.label);
 
       if (section.rows.length === 0) {
-        doc.rect(ML, cy, pageW, 32).fill(BRAND.rowAlt);
-        doc.font('Helvetica').fontSize(9).fillColor(BRAND.muted)
+        doc.rect(ML, cy, pageW, 32).fill(C.rowAlt);
+        doc.font('Helvetica').fontSize(9).fillColor(C.muted)
           .text('No records to display.', ML, cy + 11, { width: pageW, align: 'center', lineBreak: false });
         cy += 40;
         continue;
@@ -569,10 +578,10 @@ export async function streamCapitalGainsTaxReport(
       const ROW_H = 15;
 
       const drawDetailHeader = (y: number): number => {
-        doc.rect(ML, y, pageW, ROW_H).fill(BRAND.tableHeaderBg);
+        doc.rect(ML, y, pageW, ROW_H).fill(C.tableHeaderBg);
         let hx = ML;
         section.columns.forEach((col, i) => {
-          doc.font('Helvetica-Bold').fontSize(7).fillColor(BRAND.ink)
+          doc.font('Helvetica-Bold').fontSize(7).fillColor(C.ink)
             .text(pdfSafe(col.header), hx + 3, y + 5, { width: colWidths[i]! - 6, lineBreak: false });
           hx += colWidths[i]!;
         });
@@ -589,7 +598,7 @@ export async function streamCapitalGainsTaxReport(
           cy = renderSectionBand(cy, `${section.label} (continued)`);
           cy = drawDetailHeader(cy);
         }
-        if (idx % 2 === 1) doc.rect(ML, cy, pageW, ROW_H).fill(BRAND.rowAlt);
+        if (idx % 2 === 1) doc.rect(ML, cy, pageW, ROW_H).fill(C.rowAlt);
 
         let cx = ML;
         section.columns.forEach((col, ci) => {
@@ -599,7 +608,7 @@ export async function streamCapitalGainsTaxReport(
           const isNumeric = /^[+-]?[\d,.]+%?$/.test(safe.trim()) || /^[+-]?Rs/.test(safe.trim());
           const isNeg = safe.trim().startsWith('-');
           doc.font('Helvetica').fontSize(7.5)
-            .fillColor(isNeg ? BRAND.negative : BRAND.ink)
+            .fillColor(isNeg ? C.negative : C.ink)
             .text(safe, cx + 3, cy + 4, { width: colWidths[ci]! - 6, align: isNumeric ? 'right' : 'left', lineBreak: false });
           cx += colWidths[ci]!;
         });
@@ -612,7 +621,7 @@ export async function streamCapitalGainsTaxReport(
     if (!anyDetailRows) {
       // All sections were empty — surface one clear message instead of a
       // page of stacked "No records" bands.
-      doc.font('Helvetica').fontSize(9).fillColor(BRAND.muted)
+      doc.font('Helvetica').fontSize(9).fillColor(C.muted)
         .text('No capital gains transactions recorded for this financial year.', ML, cy + 6, {
           width: pageW, align: 'center', lineBreak: false,
         });
@@ -627,7 +636,7 @@ export async function streamCapitalGainsTaxReport(
       const txt = `PortfolioOS Capital Gains Tax Report  ·  FY ${params.fy}  ·  Page ${i + 1} of ${range.count}`;
       const tw = doc.widthOfString(txt);
       const tx = ML + (pageW - tw) / 2;
-      doc.fillColor(BRAND.muted).text(txt, tx, pageH - 22, { lineBreak: false });
+      doc.fillColor(C.muted).text(txt, tx, pageH - 22, { lineBreak: false });
     }
 
     doc.flushPages();

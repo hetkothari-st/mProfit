@@ -1,6 +1,7 @@
 import { api } from './client';
 import { getApiBaseUrl } from './baseUrl';
 import type { ApiResponse } from '@portfolioos/shared';
+import { currentReportTheme } from '@/lib/reportTheme';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);
@@ -226,7 +227,7 @@ export const taxApi = {
   },
   capitalGainsTaxReportUrl: (fy: string, portfolioIds?: string[]): string => {
     const base = getApiBaseUrl();
-    const params = new URLSearchParams({ fy });
+    const params = new URLSearchParams({ fy, theme: currentReportTheme() });
     if (portfolioIds && portfolioIds.length > 0) {
       params.set('portfolioIds', portfolioIds.join(','));
     }
