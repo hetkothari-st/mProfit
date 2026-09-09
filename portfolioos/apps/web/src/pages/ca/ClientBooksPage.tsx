@@ -11,6 +11,7 @@ import {
   Trash2,
   Receipt,
   Landmark,
+  RefreshCw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -18,7 +19,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/cn';
-import { caApi, type CaAccountRow, type CaTransactionRow, type CaFmvRow } from '@/api/ca.api';
+import { formatINR, toDecimal } from '@portfolioos/shared';
+import {
+  caApi,
+  type CaAccountRow,
+  type CaTransactionRow,
+  type CaFmvRow,
+  type CaTrialBalanceRow,
+} from '@/api/ca.api';
 import { apiErrorMessage } from '@/api/client';
 import { CaActivityFeed } from '@/components/ca/CaActivityFeed';
 import { AccountFormDialog } from '@/components/ca/AccountFormDialog';
@@ -91,6 +99,40 @@ export function ClientBooksPage() {
     },
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not delete the account')),
   });
+
+  /**
+   * Re-derive the client's vouchers from their recorded activity.
+   *
+   * The tabs already project when they load, so this is for the case that
+   * cannot cover: the client added transactions while this page was open. It
+   * says how many were created rather than a bare "Done", because a run that
+   * creates nothing is the common and correct outcome and should not look
+   * like a failure.
+   */
+  const generate = useMutation({
+    mutationFn: () => caApi.generateVouchers(clientId),
+    onSuccess: (r) => {
+      toast.success(
+        r.created > 0
+          ? `Generated ${r.created} voucher${r.created === 1 ? '' : 's'}`
+          : 'Books are already up to date',
+      );
+      qc.invalidateQueries({ queryKey: ['ca', clientId] });
+    },
+    onError: (e) => toast.error(apiErrorMessage(e, 'Could not generate vouchers')),
+  });
+
+  const generateButton = (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={generate.isPending}
+      onClick={() => generate.mutate()}
+    >
+      <RefreshCw className={cn('h-3.5 w-3.5', generate.isPending && 'animate-spin')} />
+      {generate.isPending ? 'Generating…' : 'Generate from activity'}
+    </Button>
+  );
 
   const removeVoucher = useMutation({
     mutationFn: (id: string) => caApi.deleteVoucher(clientId, id),
@@ -223,7 +265,8 @@ export function ClientBooksPage() {
 
       {tab === 'vouchers' && (
         <>
-          <div className="mb-3 flex justify-end">
+          <div className="mb-3 flex justify-end gap-2">
+            {generateButton}
             <Button size="sm" onClick={() => setVoucherOpen(true)}>
               <Plus className="h-4 w-4" /> Post voucher
             </Button>
@@ -232,9 +275,10 @@ export function ClientBooksPage() {
             loading={vouchers.isLoading}
             empty={{
               icon: ScrollText,
-              title: 'No vouchers',
+              title: 'No vouchers yet',
               description:
-                'Vouchers appear here once posted, or once generated from the client’s activity.',
+                'Vouchers are the double-entry record behind the trial balance, P&L and balance sheet. They are derived from what this client has recorded — trades, loan payments, rent, premiums — so there is nothing to derive them from yet.',
+              action: generateButton,
             }}
             columns={['No.', 'Type', 'Date', 'Narration']}
             rows={(vouchers.data?.vouchers ?? []).map((v) => [
@@ -349,16 +393,10 @@ export function ClientBooksPage() {
       )}
 
       {tab === 'trial-balance' && (
-        <LedgerTable
+        <TrialBalanceTab
           loading={trialBalance.isLoading}
-          empty={{
-            icon: Scale,
-            title: 'Nothing to balance yet',
-            description: 'The trial balance fills in once vouchers exist.',
-          }}
-          columns={['Code', 'Account', 'Debit', 'Credit']}
-          numericFrom={2}
-          rows={(trialBalance.data ?? []).map((r) => [r.code, r.name, r.debit, r.credit])}
+          rows={trialBalance.data ?? []}
+          action={generateButton}
         />
       )}
 
@@ -430,6 +468,89 @@ function RowButton({
   );
 }
 
+/**
+ * The trial balance.
+ *
+ * Two things make this more than a `LedgerTable` call. First, the server
+ * returns one row per account whether or not anything has been posted to it,
+ * so "no rows" is not what an unposted balance looks like — a full chart of
+ * zeroes is. Rendering that as a table of dashes is how this tab came to look
+ * broken; emptiness here has to be measured on the figures, not the row count.
+ *
+ * Second, the totals. A trial balance exists to be checked, and the check is
+ * that the two columns agree. Leaving a CA to add up twenty rows to find that
+ * out would be leaving out the only part they came for.
+ */
+function TrialBalanceTab({
+  loading,
+  rows,
+  action,
+}: {
+  loading: boolean;
+  rows: CaTrialBalanceRow[];
+  action: React.ReactNode;
+}) {
+  // Decimal, not floats: these are the two figures a CA compares to decide
+  // whether the books balance, and a rounding artefact in the last paisa is
+  // indistinguishable on screen from a genuinely unbalanced ledger.
+  const nz = (v: string) => !toDecimal(v).isZero();
+  const totalDebit = rows.reduce((sum, r) => sum.plus(toDecimal(r.totalDebit)), toDecimal(0));
+  const totalCredit = rows.reduce((sum, r) => sum.plus(toDecimal(r.totalCredit)), toDecimal(0));
+  const difference = totalDebit.minus(totalCredit);
+  const posted = rows.some((r) => nz(r.totalDebit) || nz(r.totalCredit) || nz(r.openingBalance));
+
+  return (
+    <div className="space-y-3">
+      {posted && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[12px] text-muted-foreground">
+            {difference.isZero()
+              ? 'Debits and credits agree.'
+              : `Out of balance by ${formatINR(difference.abs().toFixed(4))}.`}
+          </p>
+          {action}
+        </div>
+      )}
+      <LedgerTable
+        loading={loading}
+        empty={{
+          icon: Scale,
+          title: 'Nothing posted yet',
+          description:
+            'The chart of accounts is set up, but no vouchers have been posted against it, so every balance is zero. Generating them from the client’s recorded activity is what fills this in.',
+          action,
+        }}
+        columns={['Code', 'Account', 'Opening', 'Debit', 'Credit', 'Balance']}
+        numericFrom={2}
+        rows={
+          posted
+            ? rows.map((r) => [
+                r.code,
+                r.name,
+                formatINR(r.openingBalance),
+                nz(r.totalDebit) ? formatINR(r.totalDebit) : null,
+                nz(r.totalCredit) ? formatINR(r.totalCredit) : null,
+                formatINR(r.closingBalance),
+              ])
+            : []
+        }
+        footer={
+          posted
+            ? [
+                'Total',
+                null,
+                null,
+                formatINR(totalDebit.toFixed(4)),
+                formatINR(totalCredit.toFixed(4)),
+                formatINR(difference.toFixed(4)),
+              ]
+            : undefined
+        }
+      />
+    </div>
+  );
+}
+
 function LedgerTable({
   loading,
   columns,
@@ -437,11 +558,20 @@ function LedgerTable({
   empty,
   numericFrom,
   rowActions,
+  footer,
 }: {
   loading: boolean;
   columns: string[];
   rows: Array<Array<string | null>>;
-  empty: { icon: typeof BookOpen; title: string; description: string };
+  empty: {
+    icon: typeof BookOpen;
+    title: string;
+    description: string;
+    /** Offered inside the empty state, for the thing that would fill it. */
+    action?: React.ReactNode;
+  };
+  /** A totals line, rendered in the same columns. Omitted when absent. */
+  footer?: Array<string | null>;
   /** Column index from which values are figures and should be right-aligned. */
   numericFrom?: number;
   /**
@@ -463,7 +593,14 @@ function LedgerTable({
   }
 
   if (rows.length === 0) {
-    return <EmptyState icon={empty.icon} title={empty.title} description={empty.description} />;
+    return (
+      <EmptyState
+        icon={empty.icon}
+        title={empty.title}
+        description={empty.description}
+        action={empty.action}
+      />
+    );
   }
 
   return (
@@ -509,6 +646,24 @@ function LedgerTable({
                 )}
               </tr>
             ))}
+            {footer && (
+              <tr className="border-t-2 border-border bg-muted/40 font-semibold">
+                {footer.map((cell, ci) => (
+                  <td
+                    key={ci}
+                    className={cn(
+                      'px-4 py-2.5 text-[13px] text-foreground',
+                      numericFrom !== undefined && ci >= numericFrom
+                        ? 'numeric tabular-nums text-right'
+                        : 'text-left',
+                    )}
+                  >
+                    {cell ?? ''}
+                  </td>
+                ))}
+                {rowActions && <td className="px-4 py-2.5" />}
+              </tr>
+            )}
           </tbody>
         </table>
       </CardContent>
