@@ -836,6 +836,22 @@ export interface MfFundAnalyticsDto {
     medianComposite: Ratio | null;
     topQuartileComposite: Ratio | null;
   };
+  /**
+   * When the numbers above belong to a DIFFERENT scheme code than the one
+   * asked for: the growth option of the same fund.
+   *
+   * Peer universes are GROWTH-only (`03 SS1`), so an IDCW scheme is never
+   * ranked and has no score of its own. It is the same portfolio run by the
+   * same manager — only the distribution differs — so its growth sibling's
+   * rating is the honest answer to "is this fund any good", and returning
+   * nothing would tell an IDCW holder their fund is unrated when it is not.
+   *
+   * Null when the scheme carries its own analytics. Non-null means the reader
+   * must be told whose numbers these are; the shape exists so the UI cannot
+   * present them as this scheme's own by accident.
+   */
+  analyticsFromSchemeCode: string | null;
+
   /** Present only when the caller holds the scheme. */
   held: MfHeldFundDto | null;
   findings: MfFinding[];

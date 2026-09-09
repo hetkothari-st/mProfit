@@ -324,6 +324,22 @@ export function PlainOverview({
 
   return (
     <div className="space-y-8" data-testid="mf-plain-overview">
+      {/* Never let a borrowed rating read as this scheme's own. An IDCW option
+          is not ranked — peer universes are growth-only — so its numbers come
+          from the growth option of the same fund, and the reader is told so
+          before they read anything else. */}
+      {data.analyticsFromSchemeCode !== null && (
+        <section className="rounded-xl border border-dashed border-border p-4">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">
+              These figures come from this fund&rsquo;s growth option.
+            </span>{' '}
+            Payout and reinvest options are not ranked separately — it is the same portfolio, run
+            the same way, differing only in how it pays you. Your own returns will differ from the
+            growth figures by whatever has been distributed.
+          </p>
+        </section>
+      )}
       {/* ── The verdict ───────────────────────────────────────────────── */}
       <section className="rounded-xl border border-border bg-card p-6">
         {rating === null || verdict === undefined || verdict === null ? (

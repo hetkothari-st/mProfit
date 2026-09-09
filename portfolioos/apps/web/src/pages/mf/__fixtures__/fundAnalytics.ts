@@ -379,7 +379,8 @@ export function makeAnalytics(
     // Null/empty because the user-scoped analysis engine (Phase 4/5) has not
     // been built. NOT a clean bill of health, and the page renders no section
     // that could be read as one.
-    held: null,
+    analyticsFromSchemeCode: null,
+  held: null,
     findings: [],
     verdict: null,
     ...overrides,

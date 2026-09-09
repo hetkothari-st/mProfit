@@ -629,13 +629,51 @@ export async function getFundAnalytics(req: Request, res: Response): Promise<voi
 
   // Independent reads; nothing here depends on another's result except
   // categoryStats, which needs the score's universe and methodology version.
-  const [metrics, profile, score, peer, qualitative] = await Promise.all([
+  let [metrics, profile, score, peer, qualitative] = await Promise.all([
     loadHorizonMetrics(schemeCode, undefined),
     loadProfile(schemeCode),
     loadScore(schemeCode, undefined),
     loadPeers(schemeCode, undefined),
     loadQualitative(schemeCode, asOf),
   ]);
+
+  /**
+   * An IDCW scheme inherits its growth sibling's analytics.
+   *
+   * Peer universes are GROWTH-only (`03 §1`), so a payout or reinvest option is
+   * never ranked and has no score of its own — 4,711 of the ACTIVE schemes in
+   * this database, against 2,110 growth ones. Returning nothing for them tells
+   * an IDCW holder their fund is unrated when the fund is rated; it is the same
+   * portfolio, the same manager and the same mandate, differing only in how it
+   * distributes.
+   *
+   * The substitution is never silent: `analyticsFromSchemeCode` names whose
+   * numbers these are, and the DTO has no way to express the swap without it.
+   * Only the shared, portfolio-level reads are taken — score, metrics, profile
+   * and peer rank. `meta` stays the scheme the caller asked for, because its
+   * plan, option and NAV really are its own.
+   */
+  const sibling = scheme.growthSiblingSchemeCode;
+  const needsSibling = score === null && sibling !== null && sibling !== schemeCode;
+  let analyticsFromSchemeCode: string | null = null;
+
+  if (needsSibling) {
+    const [sMetrics, sProfile, sScore, sPeer] = await Promise.all([
+      loadHorizonMetrics(sibling, undefined),
+      loadProfile(sibling),
+      loadScore(sibling, undefined),
+      loadPeers(sibling, undefined),
+    ]);
+    // Only claim the substitution when it actually produced a rating; a
+    // sibling with no score either leaves the reader exactly where they were.
+    if (sScore !== null) {
+      metrics = sMetrics;
+      profile = sProfile;
+      score = sScore;
+      peer = sPeer;
+      analyticsFromSchemeCode = sibling;
+    }
+  }
 
   const dto: MfFundAnalyticsDto = {
     meta: toMetaDto(scheme, asOf),
@@ -645,6 +683,7 @@ export async function getFundAnalytics(req: Request, res: Response): Promise<voi
     peer,
     qualitative,
     categoryStats: await categoryStatsFor(scheme, score),
+    analyticsFromSchemeCode,
     held: null,
     findings: [],
     verdict: null,
