@@ -35,6 +35,19 @@ const ENTRY_TYPES_BY_DIRECTION: Record<Direction, LedgerEntryType[]> = {
   GAVE: ['LATE_FEE', 'OTHER_CHARGE', 'DEPOSIT_REFUND'],
 };
 
+/**
+ * One grid for the header and every row, so the two cannot drift apart.
+ *
+ * The date column is capped rather than given an equal share — "01 Dec 2026"
+ * plus "Rent · 2026-12" needs about 9rem, and letting it take a third of the
+ * width pushed the three money columns into the right-hand edge. The trailing
+ * 2rem column holds the delete button and is always rendered, even for the
+ * receipt rows that have none: when the button shared the balance column,
+ * rows that had one sat their balance ~1.5rem left of the rows that didn't.
+ */
+const KHATA_GRID =
+  'grid-cols-[minmax(9rem,1.2fr)_minmax(6rem,1fr)_minmax(6rem,1fr)_minmax(7rem,1fr)_2rem]';
+
 function humanizeEntryType(entryType: string): string {
   const lower = entryType.replace(/_/g, ' ').toLowerCase();
   return lower.charAt(0).toUpperCase() + lower.slice(1);
@@ -203,8 +216,8 @@ function LedgerRow({
   const subLabel = isReceipt ? `Rent · ${row.forMonth ?? ''}` : row.note || humanizeEntryType(row.entryType);
 
   return (
-    <div className="grid grid-cols-[1fr_1fr_1fr_auto] items-start gap-3 py-3 px-4 border-b border-border/60 last:border-b-0">
-      <div>
+    <div className={`grid ${KHATA_GRID} items-start gap-3 py-3 px-4 border-b border-border/60 last:border-b-0`}>
+      <div className="min-w-0">
         <p className="text-sm text-foreground whitespace-nowrap">{formatRowDate(row.date)}</p>
         <p className="text-xs text-muted-foreground truncate">{subLabel}</p>
       </div>
@@ -218,8 +231,12 @@ function LedgerRow({
           <span className="text-positive font-medium">{formatINR(row.amount)}</span>
         )}
       </div>
-      <div className="flex items-center justify-end gap-2 min-w-[6rem]">
+      <div className="text-right">
         <p className="text-sm font-medium tabular-nums pt-0.5">{formatINR(row.runningBalance)}</p>
+      </div>
+      {/* Its own column, always rendered, so a row with a delete button and a
+          row without one still line their balances up with the header. */}
+      <div className="flex justify-end pt-0.5">
         {!isReceipt && (
           <Button
             variant="ghost"
@@ -439,11 +456,12 @@ export function TenantKhataPage() {
         />
       ) : (
         <Card className="overflow-hidden">
-          <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 py-2 px-4 border-b border-border/60 bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+          <div className={`grid ${KHATA_GRID} gap-3 py-2 px-4 border-b border-border/60 bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground font-medium`}>
             <div>Date</div>
             <div className="text-right">You gave</div>
             <div className="text-right">You got</div>
-            <div className="text-right min-w-[6rem]">Balance</div>
+            <div className="text-right">Balance</div>
+            <div aria-hidden />
           </div>
           {ledger.rows.map((row) =>
             confirmDeleteId === row.id ? (
