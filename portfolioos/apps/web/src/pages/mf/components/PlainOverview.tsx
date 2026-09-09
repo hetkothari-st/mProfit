@@ -290,6 +290,139 @@ function pickSummaryHorizon(data: MfFundAnalyticsDto): MfHorizonYears | null {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Presentation
+// ---------------------------------------------------------------------------
+
+/**
+ * Stars, drawn rather than typed.
+ *
+ * The glyph "★" renders at a different weight in Fraunces than in the body
+ * face and sits off the baseline next to a 72px numeral. An inline SVG keeps
+ * the row optically aligned with the score and lets a half-filled state exist
+ * later without a font that has one.
+ */
+function Stars({ rating, size = 18 }: { rating: number; size?: number }) {
+  return (
+    <span className="inline-flex items-center gap-1" aria-label={`${rating} out of 5`}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <svg
+          key={i}
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          aria-hidden
+          className={i <= rating ? 'fill-primary' : 'fill-muted-foreground/25'}
+        >
+          <path d="M12 2.4l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.25l-5.81 3.05 1.11-6.47-4.7-4.58 6.5-.95z" />
+        </svg>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Where this fund sits against its own category.
+ *
+ * A score of 54 means nothing on its own; it means something against a median
+ * of 52 and a top quartile starting at 56. The scale is the reason the big
+ * numeral is worth printing, so it sits directly beneath it rather than being
+ * buried in the sentence below.
+ *
+ * Rendered only when we hold a median — an invented axis would be worse than
+ * no axis.
+ */
+function CategoryScale({
+  score,
+  median,
+  topQuartile,
+}: {
+  score: number;
+  median: number;
+  topQuartile: number | null;
+}) {
+  const clamp = (n: number) => Math.max(2, Math.min(98, n));
+  return (
+    <div className="mt-6">
+      <div className="relative h-[3px] w-full rounded-full bg-muted">
+        {topQuartile !== null && (
+          <div
+            className="absolute inset-y-0 rounded-full bg-primary/15"
+            style={{ left: `${clamp(topQuartile)}%`, right: 0 }}
+          />
+        )}
+        <div
+          className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-muted-foreground/50"
+          style={{ left: `${clamp(median)}%` }}
+        />
+        <div
+          className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-background bg-primary"
+          style={{ left: `${clamp(score)}%` }}
+        />
+      </div>
+      {/* Two labels on one row collide whenever the median and the top
+          quartile are close, which in a tight category they usually are —
+          measured at 52 and 56 on a liquid-fund page. Staggering them keeps
+          both anchored to their real positions instead of trading accuracy for
+          legibility. */}
+      <div className="relative mt-2 h-4 text-[11px] text-muted-foreground">
+        <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${clamp(median)}%` }}>
+          median {median.toFixed(0)}
+        </span>
+      </div>
+      {topQuartile !== null && (
+        <div className="relative h-4 text-[11px] text-muted-foreground">
+          <span
+            className="absolute -translate-x-1/2 whitespace-nowrap"
+            style={{ left: `${clamp(topQuartile)}%` }}
+          >
+            top quarter {topQuartile.toFixed(0)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A fund house mark, built from its own name.
+ *
+ * There are no logo assets in this repo and no endpoint that serves them, so a
+ * real logo would mean a broken image on every row. Initials in a tinted disc
+ * are honest about being a placeholder, stay stable per AMC across renders, and
+ * give the list the scannable left edge that a bare table of names does not.
+ *
+ * The hue is a hash of the name so two houses are rarely the same colour;
+ * saturation and lightness are fixed so none of them fight the lime accent.
+ */
+function houseMark(amcName: string): { initials: string; hue: number } {
+  const words = amcName
+    .replace(/(mutual fund|asset management|amc|india|limited|ltd\.?|company|trustee)/gi, ' ')
+    .replace(/[^A-Za-z ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  const initials = (words[0]?.[0] ?? '?') + (words[1]?.[0] ?? '');
+  let h = 0;
+  for (let i = 0; i < amcName.length; i++) h = (h * 31 + amcName.charCodeAt(i)) % 360;
+  return { initials: initials.toUpperCase(), hue: h };
+}
+
+function HouseMark({ amcName }: { amcName: string }) {
+  const { initials, hue } = houseMark(amcName);
+  return (
+    <span
+      aria-hidden
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[13px] font-semibold tracking-tight"
+      style={{
+        backgroundColor: `hsl(${hue} 40% 22%)`,
+        color: `hsl(${hue} 70% 78%)`,
+      }}
+    >
+      {initials}
+    </span>
+  );
+}
+
 export function PlainOverview({
   data,
   alternatives,
@@ -354,38 +487,38 @@ export function PlainOverview({
             </p>
           </div>
         ) : (
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div className="max-w-2xl">
-              <div className="mb-2 flex items-center gap-2" aria-label={`${rating} out of 5`}>
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <span
-                    key={i}
-                    aria-hidden
-                    className={i <= rating ? 'text-primary' : 'text-muted-foreground/30'}
-                  >
-                    ★
-                  </span>
-                ))}
+          <div className="grid gap-8 md:grid-cols-[auto_1fr] md:items-start">
+            {/* The score, at the size its importance deserves. Tabular figures
+                so 99.1 and 48.5 occupy the same width and the eye can compare
+                two funds without re-measuring. */}
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span
+                  className="font-display text-[76px] leading-[0.85] text-foreground"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
+                  {composite === null ? '—' : composite.toFixed(1)}
+                </span>
+                <span className="text-sm text-muted-foreground">/100</span>
               </div>
-              <h2 className="font-display text-[26px] leading-tight text-foreground">
+              <div className="mt-3">
+                <Stars rating={rating} size={20} />
+              </div>
+            </div>
+
+            <div className="max-w-xl">
+              <h2 className="font-display text-[28px] leading-tight text-foreground">
                 {verdict.headline}
               </h2>
-              <p className="mt-2 text-sm text-muted-foreground">{verdict.body}</p>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{verdict.body}</p>
               <p className="mt-3 text-sm text-muted-foreground">
                 Ranked against{' '}
-                <strong className="text-foreground">
-                  {data.categoryStats.universeSize} similar funds
-                </strong>
-                {composite !== null && median !== null ? (
-                  <>
-                    . It scores <strong className="text-foreground">{composite.toFixed(1)}</strong>{' '}
-                    out of 100, where the middle fund in its category scores {median.toFixed(1)}
-                    {topQuartile !== null ? ` and the best quarter start at ${topQuartile.toFixed(1)}` : ''}.
-                  </>
-                ) : (
-                  '.'
-                )}
+                <span className="text-foreground">{data.categoryStats.universeSize} similar funds</span>
+                {' in the same category and plan.'}
               </p>
+              {composite !== null && median !== null && (
+                <CategoryScale score={composite} median={median} topQuartile={topQuartile} />
+              )}
             </div>
           </div>
         )}
@@ -394,7 +527,10 @@ export function PlainOverview({
       {/* ── What's good / what to watch ───────────────────────────────── */}
       {(strengths.length > 0 || weaknesses.length > 0 || relativeWeakest !== null) && (
         <section className="grid gap-6 md:grid-cols-2">
-          <div className="rounded-xl border border-border bg-card p-6">
+          {/* The two cards carry opposite meanings and used to look identical.
+              A single accent rule down the leading edge separates them at a
+              glance without adding a second border, a badge or a tint. */}
+          <div className="rounded-xl border border-border bg-card p-6 border-l-2 border-l-primary">
             <h3 className="font-display text-[18px] text-foreground">What it does well</h3>
             {strengths.length === 0 ? (
               <p className="mt-3 text-sm text-muted-foreground">
@@ -403,16 +539,19 @@ export function PlainOverview({
             ) : (
               <ul className="mt-3 space-y-3">
                 {strengths.map((p) => (
-                  <li key={p.key} className="text-sm">
-                    <span className="font-medium text-foreground">{p.label}</span>
-                    <span className="text-muted-foreground"> — {p.meaning}.</span>
+                  <li key={p.key} className="flex gap-3 text-sm">
+                    <span aria-hidden className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                    <span>
+                      <span className="font-medium text-foreground">{p.label}</span>
+                      <span className="text-muted-foreground"> — {p.meaning}.</span>
+                    </span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-6">
+          <div className="rounded-xl border border-border bg-card p-6 border-l-2 border-l-destructive/70">
             <h3 className="font-display text-[18px] text-foreground">What to watch</h3>
             {weaknesses.length === 0 ? (
               relativeWeakest === null ? (
@@ -432,9 +571,12 @@ export function PlainOverview({
             ) : (
               <ul className="mt-3 space-y-3">
                 {weaknesses.map((p) => (
-                  <li key={p.key} className="text-sm">
-                    <span className="font-medium text-foreground">{p.label}</span>
-                    <span className="text-muted-foreground"> — {p.meaning}.</span>
+                  <li key={p.key} className="flex gap-3 text-sm">
+                    <span aria-hidden className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-destructive/70" />
+                    <span>
+                      <span className="font-medium text-foreground">{p.label}</span>
+                      <span className="text-muted-foreground"> — {p.meaning}.</span>
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -450,9 +592,7 @@ export function PlainOverview({
           <div className="grid gap-4 sm:grid-cols-3">
             {plainMetrics(metrics, horizon).map((m) => (
               <div key={m.label} className="rounded-xl border border-border bg-card p-5">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {m.label}
-                </div>
+                <div className="text-sm text-muted-foreground">{m.label}</div>
                 <div
                   className={`mt-1 font-display text-[26px] ${
                     m.tone === 'good'
@@ -495,57 +635,68 @@ export function PlainOverview({
             recommendation to switch — moving funds can trigger an exit load and a tax bill that
             this page cannot see.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 pr-4 font-medium">Fund</th>
-                  <th className="py-2 pr-4 font-medium">Rating</th>
-                  <th className="py-2 pr-4 font-medium">Score</th>
-                  {anyCostKnown && <th className="py-2 font-medium">Cost / yr</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {alternatives.alternatives.map((a) => (
-                  <tr key={a.schemeCode} className="border-b border-border/50">
-                    <td className="py-3 pr-4">
-                      <a
-                        href={`/mutual-funds/${a.schemeCode}`}
-                        className="font-medium text-foreground underline underline-offset-4"
-                      >
+          {/* Cards, not a table. A table asks the reader to compare four
+              columns; the decision here is "is one of these clearly better,
+              and by how much". So the score gap leads, the house mark gives
+              the row a scannable left edge, and the whole card is the link. */}
+          <ul className="space-y-2">
+            {alternatives.alternatives.map((a) => {
+              const delta = num(a.compositeDelta);
+              return (
+                <li key={a.schemeCode}>
+                  <a
+                    href={`/mutual-funds/${a.schemeCode}`}
+                    className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 transition-colors hover:border-muted-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <HouseMark amcName={a.amcName} />
+
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-foreground">
                         {a.schemeName}
-                      </a>
-                      <div className="text-xs text-muted-foreground">{a.amcName}</div>
-                    </td>
-                    <td className="py-3 pr-4 text-primary">
-                      {a.rating === null ? '—' : '★'.repeat(a.rating)}
-                    </td>
-                    <td className="py-3 pr-4 text-foreground">
-                      {num(a.composite)?.toFixed(1) ?? '—'}
-                      {num(a.compositeDelta) !== null && (
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          (+{num(a.compositeDelta)!.toFixed(1)})
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {a.amcName}
+                      </span>
+                    </span>
+
+                    {a.rating !== null && (
+                      <span className="hidden sm:block">
+                        <Stars rating={a.rating} size={14} />
+                      </span>
+                    )}
+
+                    <span className="w-24 text-right">
+                      <span
+                        className="block font-display text-[22px] leading-none text-foreground"
+                        style={{ fontVariantNumeric: 'tabular-nums' }}
+                      >
+                        {num(a.composite)?.toFixed(1) ?? '—'}
+                      </span>
+                      {delta !== null && (
+                        <span className="mt-1 block text-xs text-primary">
+                          {delta.toFixed(1)} higher
                         </span>
                       )}
-                    </td>
-                    {/* The column appears only when at least one row can fill
-                        it. A column of "not disclosed" for every fund is not
-                        honesty, it is furniture — and it crowds out the numbers
-                        that are known. */}
+                    </span>
+
                     {anyCostKnown && (
-                      <td className="py-3 text-foreground">
+                      <span className="hidden w-28 text-right text-sm md:block">
                         {a.terPct === null ? (
-                          <span className="text-muted-foreground">not disclosed to us</span>
+                          <span className="text-muted-foreground">cost unknown</span>
                         ) : (
-                          `${num(a.terPct)!.toFixed(2)}%`
+                          <>
+                            <span className="text-foreground">{num(a.terPct)!.toFixed(2)}%</span>
+                            <span className="block text-xs text-muted-foreground">a year</span>
+                          </>
                         )}
-                      </td>
+                      </span>
                     )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+
           {alternatives.subjectTerPct !== null ? (
             <p className="mt-3 text-xs text-muted-foreground">
               This fund charges {num(alternatives.subjectTerPct)!.toFixed(2)}% a year.
@@ -577,7 +728,7 @@ export function PlainOverview({
         onClick={onShowDetail}
         className="text-sm font-medium text-primary underline underline-offset-4"
       >
-        Show the full calculations →
+        Show the full calculations
       </button>
     </div>
   );
