@@ -26,6 +26,7 @@
  */
 
 import type { Request, Response } from 'express';
+import fs from 'node:fs';
 import { ok, created, noContent } from '../lib/response.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { runInTransaction } from '../lib/prisma.js';
@@ -68,6 +69,15 @@ import {
   upsertUserFmv,
   deleteUserFmv,
 } from '../services/fmvOverride.service.js';
+import { createTransaction } from '../services/transaction.service.js';
+import { baseTransactionSchema } from './transaction.controller.js';
+import { createImportJob, listImportJobs } from '../services/imports/import.service.js';
+import {
+  createSchema as importCreateBodySchema,
+  isRegulatoryDoc,
+  inferTypeFromFileName,
+} from './imports.controller.js';
+import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 
 /** Resolve the grant named in the URL, or refuse. */
 async function scopeOf(req: Request): Promise<CaScope> {
@@ -96,6 +106,58 @@ async function ensureChartAudited(scope: CaScope, req: Request): Promise<void> {
       after: { codes: created },
     }),
   );
+}
+
+/**
+ * Give the client the one portfolio their books need, if they have none yet.
+ *
+ * A shadow client (`createManagedClient`) is a brand-new `User` row with no
+ * portfolio at all, so the first manual transaction or the first import for
+ * them would fail `assertPortfolio` before it got anywhere near the ledger.
+ * This creates exactly that first container, using the same defaults the
+ * onboarding wizard itself uses for a brand-new account
+ * (`apps/web/src/pages/onboarding/OnboardingWizard.tsx`: name "My Portfolio",
+ * type INVESTMENT; currency is left to the schema default of INR) rather than
+ * inventing new ones.
+ *
+ * The INSERT is guarded by `portfolio_ca_bootstrap_insert` — a policy narrower than the
+ * CA's ordinary grant shape: it admits an INSERT only when the client
+ * currently has ZERO portfolios. A CA can bring a portfolio-less client up to
+ * having one; they can never give an already-provisioned client a second.
+ * That is the same "keeps the books, does not own the account" boundary
+ * `cannot create a portfolio for the client` in ca-access.test.ts asserts —
+ * this does not relax it for any client that boundary already protects.
+ *
+ * Idempotent: found-or-create, so opening the tab or importing again never
+ * spawns a second portfolio (and the policy would refuse it even if this
+ * check were skipped). The find-then-create window is a known, accepted race
+ * — see the migration comment on `portfolio_ca_bootstrap_insert`.
+ */
+async function ensureDefaultPortfolio(scope: CaScope, req: Request) {
+  const existing = await prisma.portfolio.findFirst({
+    where: { userId: scope.subjectUserId },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (existing) return existing;
+
+  return runInTransaction(async (tx) => {
+    const portfolio = await tx.portfolio.create({
+      data: {
+        userId: scope.subjectUserId,
+        name: 'My Portfolio',
+        type: 'INVESTMENT',
+        currency: 'INR',
+      },
+    });
+    await recordCaAudit(tx, auditCtx(scope, req), {
+      action: 'PORTFOLIO_CREATED',
+      resourceType: 'Portfolio',
+      resourceId: portfolio.id,
+      summary: `Created the default portfolio "${portfolio.name}" — the first write to this client's books.`,
+      after: { name: portfolio.name, type: portfolio.type, currency: portfolio.currency },
+    });
+    return portfolio;
+  });
 }
 
 // ─── Chart of accounts ───────────────────────────────────────────────
@@ -317,14 +379,71 @@ function auditCtx(scope: CaScope, req: Request) {
   };
 }
 
-// ─── Transaction corrections ─────────────────────────────────────────
+// ─── Transactions: create + correct ───────────────────────────────────
+//
+// A CA may now do both. `transaction_ca_insert` (see the migration comment
+// for why) sits alongside the pre-existing `transaction_ca_correct` — there
+// is still no DELETE policy for a CA on this table, and none is added here:
+// a CA can add a trade and fix a trade, never erase one.
+
+/**
+ * Reuses the SAME schema (`baseTransactionSchema`) the client's own
+ * `/transactions` route validates with, minus `portfolioId`. The CA
+ * workspace bootstraps exactly one relevant portfolio per client
+ * (`ensureDefaultPortfolio`), so there is nothing for the CA to pick from —
+ * a second, divergent schema is how the two paths would drift apart.
+ */
+const caCreateTransactionSchema = baseTransactionSchema.omit({ portfolioId: true });
+
+/**
+ * Record a transaction directly in the client's books.
+ *
+ * `createTransaction` is the exact service a client's own manual entry
+ * calls — no accounting or FIFO logic is duplicated here. It is not
+ * transactional with the audit entry below (the service does not accept an
+ * external `tx`, and it already performs its own commit plus a fire-and-
+ * forget price refresh), so this follows the same durable-write-then-audit
+ * shape `ensureChartAudited` uses above: the transaction is real and
+ * committed before the audit row is attempted, never the reverse.
+ */
+export async function caCreateTransaction(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  const body = caCreateTransactionSchema.parse(req.body);
+  const portfolio = await ensureDefaultPortfolio(scope, req);
+
+  const row = await createTransaction(scope.subjectUserId, {
+    ...body,
+    portfolioId: portfolio.id,
+  });
+
+  await runInTransaction((tx) =>
+    recordCaAudit(tx, auditCtx(scope, req), {
+      action: 'TRANSACTION_CREATED',
+      resourceType: 'Transaction',
+      resourceId: row.id,
+      summary:
+        `Recorded a ${row.transactionType} of ${row.assetName ?? 'an asset'} ` +
+        `— ${row.quantity} @ ₹${row.price}, net ₹${row.netAmount} — dated ${row.tradeDate}.`,
+      after: {
+        assetName: row.assetName,
+        transactionType: row.transactionType,
+        quantity: row.quantity,
+        price: row.price,
+        netAmount: row.netAmount,
+        tradeDate: row.tradeDate,
+      },
+    }),
+  );
+
+  created(res, row);
+}
 
 /**
  * Correct one of the client's transactions.
  *
- * The RLS grant on `Transaction` is FOR UPDATE only, so this endpoint cannot
- * conjure a trade into existence or make one disappear however it is called —
- * that boundary is Postgres's, not this handler's.
+ * The RLS grant carries a correction policy (FOR UPDATE) as well as the
+ * insert one above, so this endpoint cannot make a trade disappear however
+ * it is called — that boundary is Postgres's, not this handler's.
  *
  * The write and its audit entry share one transaction. The FIFO recompute runs
  * AFTER that commits, which is the pattern `ingestion/projection.ts` already
@@ -512,7 +631,7 @@ export async function caDeleteFmv(req: Request, res: Response) {
   noContent(res);
 }
 
-// ─── The client's transactions, for correcting ───────────────────────
+// ─── The client's transactions, for adding and correcting ────────────
 
 export async function caListTransactions(req: Request, res: Response) {
   const scope = await scopeOf(req);
@@ -543,4 +662,85 @@ export async function caListTransactions(req: Request, res: Response) {
       netAmount: t.netAmount.toString(),
     })),
   );
+}
+
+// ─── Imports: statement / contract-note / CAS uploads, per client ────
+//
+// Wholesale reuse: the same magic-byte probe, regulatory-document guard,
+// request schema, `createImportJob` and parser pipeline the client's own
+// `POST /api/imports` route uses (imports.controller.ts). No new file types
+// and no new parsing live here — only the grant resolution and the audit
+// entry are specific to the CA path.
+//
+// The async parser worker (`jobs/importWorker.ts`) runs the commit phase
+// under `runAsUser(job.userId)` — the CLIENT's own identity, not the CA's —
+// so every transaction the parser produces lands through the ordinary owner
+// RLS policy. That identity switch is not something this handler introduces;
+// it is `createImportJob`'s own pre-existing context bridge (see the
+// migration comment on `importjob_ca_insert`), used unchanged.
+
+export async function caCreateImport(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  if (!req.file) throw new BadRequestError('No file uploaded — field name must be "file"');
+
+  const regulatoryReason = isRegulatoryDoc(req.file.originalname);
+  if (regulatoryReason) {
+    fs.unlink(req.file.path, () => {});
+    throw new BadRequestError(regulatoryReason);
+  }
+
+  const probe = await decryptIfNeeded(req.file.path, {
+    fileName: req.file.originalname,
+    allowedKinds: ['pdf', 'xlsx_ooxml', 'xlsx_encrypted', 'xls', 'csv'],
+  });
+  if (!probe.ok && !probe.requiresPassword && probe.reason === 'junk_type') {
+    fs.unlink(req.file.path, () => {});
+    throw new BadRequestError(probe.detail);
+  }
+
+  const body = importCreateBodySchema.parse(req.body ?? {});
+  const type = body.type ?? inferTypeFromFileName(req.file.originalname);
+  const portfolio = await ensureDefaultPortfolio(scope, req);
+
+  const job = await createImportJob({
+    userId: scope.subjectUserId,
+    portfolioId: portfolio.id,
+    type,
+    fileName: req.file.originalname,
+    filePath: req.file.path,
+    broker: body.broker ?? null,
+    pdfPassword: body.password ?? null,
+  });
+
+  // Not transactional with the job insert for the same reason
+  // caCreateTransaction's audit is not: createImportJob has already
+  // committed (and may have enqueued the parse job) by the time this runs.
+  await runInTransaction((tx) =>
+    recordCaAudit(tx, auditCtx(scope, req), {
+      action: 'IMPORT_JOB_CREATED',
+      resourceType: 'ImportJob',
+      resourceId: job.id,
+      summary: `Uploaded "${job.fileName}" for parsing (${job.type.replace(/_/g, ' ').toLowerCase()}).`,
+      after: { fileName: job.fileName, jobId: job.id, type: job.type, status: job.status },
+    }),
+  );
+
+  created(res, {
+    id: job.id,
+    status: job.status,
+    type: job.type,
+    fileName: job.fileName,
+    createdAt: job.createdAt,
+  });
+}
+
+/**
+ * Reads under the CA's OWN ambient identity (no `runAsUser` bridge here),
+ * which is exactly why `importjob_ca_read` had to be added — `listImportJobs`
+ * filters by `userId: scope.subjectUserId` but the RLS session variable is
+ * still the CA's id, and `importjob_owner` alone would match nothing.
+ */
+export async function caListImports(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  ok(res, await listImportJobs(scope.subjectUserId));
 }

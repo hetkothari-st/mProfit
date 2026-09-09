@@ -18,7 +18,10 @@ const isoDate = z
 
 const decimalLike = z.union([z.number(), z.string()]);
 
-const baseTransactionSchema = z.object({
+// Exported so the CA workspace's own create-transaction route
+// (caAccounting.controller.ts) validates against the exact same shape rather
+// than a hand-copied one that could quietly drift from it.
+export const baseTransactionSchema = z.object({
   portfolioId: z.string().cuid(),
   transactionType: z.nativeEnum(TransactionType),
   assetClass: z.nativeEnum(AssetClass),
