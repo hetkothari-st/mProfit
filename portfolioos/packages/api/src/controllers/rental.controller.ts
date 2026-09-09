@@ -336,8 +336,11 @@ export async function getTenancyStatementHandler(req: Request, res: Response) {
     meta: {
       Property: ledger.propertyName,
       Tenant: ledger.tenantName,
-      'Balance Due': ledger.balanceDue,
-      'Deposit Held': ledger.depositHeld,
+      // Through fmtNum like every table cell below — a raw "380000" in the
+      // meta strip beside a formatted "3,80,000.00" in the table reads as a
+      // different number at a glance.
+      'Balance Due': fmtNum(ledger.balanceDue),
+      'Deposit Held': fmtNum(ledger.depositHeld),
       'Generated On': new Date().toISOString().slice(0, 10),
     },
     columns,
