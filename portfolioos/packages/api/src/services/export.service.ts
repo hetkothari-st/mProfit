@@ -4,6 +4,62 @@ import type { Response } from 'express';
 import { Decimal, toDecimal } from '@portfolioos/shared';
 import { BRAND, drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
 
+
+/**
+ * A statement is a document someone prints, files, or forwards to a tenant —
+ * so it gets ink-on-paper treatment rather than the app's dark brand skin:
+ * white ground, near-black text, hairline rules, and no decorative accent
+ * bars. BRAND stays the default for the analytical reports, which are read on
+ * screen.
+ */
+export interface PdfTheme {
+  pageBg: string;
+  headerBarBg: string;
+  tableHeaderBg: string;
+  ink: string;
+  titleInk: string;
+  accent: string;
+  positive: string;
+  negative: string;
+  muted: string;
+  headerBg: string;
+  rowAlt: string;
+  border: string;
+  white: string;
+  /** Draws the 3px vertical accent bar on cards and section bands. */
+  accentBar: boolean;
+  /** Hairline under the page header, for themes with no dark header block. */
+  headerRule: boolean;
+}
+
+const BRAND_THEME: PdfTheme = {
+  ...BRAND,
+  titleInk: BRAND.white,
+  accentBar: true,
+  headerRule: false,
+};
+
+const STATEMENT_THEME: PdfTheme = {
+  pageBg: '#FFFFFF',
+  headerBarBg: '#FFFFFF',
+  tableHeaderBg: '#EDEDED',
+  ink: '#1A1A1A',
+  titleInk: '#1A1A1A',
+  accent: '#1A1A1A',
+  positive: '#1A1A1A',
+  negative: '#B3261E',
+  muted: '#5C5C5C',
+  headerBg: '#F5F5F5',
+  rowAlt: '#F7F7F7',
+  border: '#C8C8C8',
+  white: '#FFFFFF',
+  accentBar: false,
+  headerRule: true,
+};
+
+const themeFor = (t: ExportPayload['theme']): PdfTheme =>
+  t === 'statement' ? STATEMENT_THEME : BRAND_THEME;
+
 export interface ExportColumn {
   key: string;
   header: string;
@@ -35,6 +91,8 @@ export interface ExportPayload {
   // Optional bar chart of top items by value.
   chartRows?: BarDatum[];
   chartTitle?: string;
+  /** 'statement' switches to the printable light theme. Defaults to brand. */
+  theme?: 'brand' | 'statement';
   // Optional explicit filename (no extension). Falls back to slugified title.
   filenameStem?: string;
   // Additional sections rendered after the main table (e.g. Transactions,
@@ -139,6 +197,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.pdf"`);
 
+    const C = themeFor(payload.theme);
     const doc = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape', bufferPages: true });
     doc.on('end', resolve);
     doc.on('error', reject);
@@ -152,17 +211,18 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     const BOT   = pageH - 40;  // bottom safe y for content
 
     function renderPageHeader(): void {
-      doc.rect(0, 0, doc.page.width, doc.page.height).fill(BRAND.pageBg);
-      doc.rect(0, 0, doc.page.width, 56).fill(BRAND.headerBarBg);
-      doc.font('Helvetica-Bold').fontSize(17).fillColor(BRAND.white)
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill(C.pageBg);
+      doc.rect(0, 0, doc.page.width, 56).fill(C.headerBarBg);
+      if (C.headerRule) doc.rect(0, 55.5, doc.page.width, 0.5).fill(C.border);
+      doc.font('Helvetica-Bold').fontSize(17).fillColor(C.titleInk)
          .text('PortfolioOS', ML, 14, { lineBreak: false });
-      doc.font('Helvetica').fontSize(10).fillColor(BRAND.muted)
+      doc.font('Helvetica').fontSize(10).fillColor(C.muted)
          .text(pdfSafe(payload.title), ML, 36, { lineBreak: false });
       const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
-      doc.font('Helvetica').fontSize(8.5).fillColor(BRAND.muted)
+      doc.font('Helvetica').fontSize(8.5).fillColor(C.muted)
          .text(genStr, ML, 22, { align: 'right', width: pageW, lineBreak: false });
       if (payload.subtitle) {
-        doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+        doc.font('Helvetica').fontSize(8).fillColor(C.muted)
            .text(pdfSafe(payload.subtitle), ML, 38, { align: 'right', width: pageW, lineBreak: false });
       }
     }
@@ -177,7 +237,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       const parts = Object.entries(payload.meta)
         .map(([k, v]) => `${pdfSafe(k)}: ${pdfSafe(String(v))}`);
       const fullStr = parts.join('   ·   ');
-      doc.font('Helvetica').fontSize(8.5).fillColor(BRAND.muted);
+      doc.font('Helvetica').fontSize(8.5).fillColor(C.muted);
       const fitted = fitText(doc, fullStr, pageW);
       doc.text(fitted, ML, cy, { width: pageW, lineBreak: false });
       cy += 16;
@@ -192,13 +252,13 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       const cardH = 44;
       entries.forEach(([k, v], i) => {
         const cx = ML + i * (cardW + gap);
-        doc.rect(cx, cy, cardW, cardH).fill(BRAND.headerBg);
-        doc.rect(cx, cy, 3, cardH).fill(BRAND.accent);
-        doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.muted)
+        doc.rect(cx, cy, cardW, cardH).fill(C.headerBg);
+        if (C.accentBar) doc.rect(cx, cy, 3, cardH).fill(C.accent);
+        doc.font('Helvetica').fontSize(7.5).fillColor(C.muted)
            .text(pdfSafe(k).toUpperCase(), cx + 10, cy + 8, { width: cardW - 14, characterSpacing: 0.5, lineBreak: false });
         const valStr = pdfSafe(String(v));
         const isNeg = valStr.startsWith('-') && (k.toLowerCase().includes('p&l') || k.toLowerCase().includes('gain') || k.toLowerCase().includes('loss'));
-        doc.font('Helvetica-Bold').fontSize(13).fillColor(isNeg ? BRAND.negative : BRAND.ink)
+        doc.font('Helvetica-Bold').fontSize(13).fillColor(isNeg ? C.negative : C.ink)
            .text(valStr, cx + 10, cy + 22, { width: cardW - 16, ellipsis: true, lineBreak: false });
       });
       cy += cardH + 14;
@@ -206,7 +266,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
 
     // ─── CHART (top N items, horizontal bars) ────────────────────────
     if (payload.chartRows && payload.chartRows.length > 0) {
-      cy = drawSectionBand(doc, ML, pageW, cy, payload.chartTitle ?? 'Top items by value');
+      cy = drawSectionBand(doc, ML, pageW, cy, payload.chartTitle ?? 'Top items by value', C);
       const chartH = Math.min(payload.chartRows.length * 18 + 8, 200);
       const bottom = drawHorizontalBarChart(doc, payload.chartRows, {
         x: ML, y: cy, width: pageW, height: chartH,
@@ -222,6 +282,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       rows: payload.rows,
       emptyMessage: 'No records to display.',
       onPageBreak: () => { doc.addPage(); renderPageHeader(); return 72; },
+        C,
     });
     cy += 10;
 
@@ -240,6 +301,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
         rows: section.rows,
         emptyMessage: section.emptyMessage ?? 'None.',
         onPageBreak: () => { doc.addPage(); renderPageHeader(); return 72; },
+        C,
       });
       cy += 10;
     }
@@ -260,7 +322,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       const txt = `PortfolioOS  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`;
       const tw  = doc.widthOfString(txt);
       const tx  = ML + (pageW - tw) / 2;
-      doc.fillColor(BRAND.muted).text(txt, tx, pageH - 22, { lineBreak: false });
+      doc.fillColor(C.muted).text(txt, tx, pageH - 22, { lineBreak: false });
     }
 
     doc.flushPages();
@@ -277,11 +339,12 @@ function drawSectionBand(
   width: number,
   y: number,
   label: string,
+  C: PdfTheme,
 ): number {
   const H = 20;
-  doc.rect(x, y, width, H).fill(BRAND.headerBg);
-  doc.rect(x, y, 3, H).fill(BRAND.accent);
-  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(BRAND.ink)
+  doc.rect(x, y, width, H).fill(C.headerBg);
+  if (C.accentBar) doc.rect(x, y, 3, H).fill(C.accent);
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.ink)
      .text(pdfSafe(label), x + 10, y + 6, { width: width - 18, lineBreak: false });
   return y + H + 4;
 }
@@ -296,15 +359,17 @@ interface RenderTableOpts {
   rows: Array<Record<string, unknown>>;
   emptyMessage: string;
   onPageBreak: () => number;  // returns new cy after adding page + header
+  C: PdfTheme;
 }
 
 function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts): number {
-  let cy = drawSectionBand(doc, o.x, o.width, o.y, o.label);
+  const C = o.C;
+  let cy = drawSectionBand(doc, o.x, o.width, o.y, o.label, C);
   const BOT = o.pageH - 40;
 
   if (o.rows.length === 0) {
-    doc.rect(o.x, cy, o.width, 36).fill(BRAND.rowAlt);
-    doc.font('Helvetica').fontSize(9).fillColor(BRAND.muted)
+    doc.rect(o.x, cy, o.width, 36).fill(C.rowAlt);
+    doc.font('Helvetica').fontSize(9).fillColor(C.muted)
        .text(o.emptyMessage, o.x, cy + 12, { width: o.width, align: 'center', lineBreak: false });
     return cy + 40;
   }
@@ -337,8 +402,8 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
   const drawHeader = (yy: number): void => {
     // Table column header — dark slate background, ink text. Distinct from
     // section header (headerBg) and row background (rowAlt).
-    doc.rect(o.x, yy, o.width, ROW_H).fill(BRAND.tableHeaderBg);
-    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
+    doc.rect(o.x, yy, o.width, ROW_H).fill(C.tableHeaderBg);
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.ink);
     let x = o.x;
     for (let i = 0; i < o.columns.length; i++) {
       const cellW = (colWidths[i] ?? 80) - 8;
@@ -355,12 +420,12 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
   for (let idx = 0; idx < o.rows.length; idx++) {
     if (cy + ROW_H > BOT) {
       cy = o.onPageBreak();
-      cy = drawSectionBand(doc, o.x, o.width, cy, `${o.label} (continued)`);
+      cy = drawSectionBand(doc, o.x, o.width, cy, `${o.label} (continued)`, C);
       drawHeader(cy);
       cy += ROW_H;
     }
 
-    if (idx % 2 === 1) doc.rect(o.x, cy, o.width, ROW_H).fill(BRAND.rowAlt);
+    if (idx % 2 === 1) doc.rect(o.x, cy, o.width, ROW_H).fill(C.rowAlt);
     let x = o.x;
     doc.font('Helvetica').fontSize(8);
     for (let i = 0; i < o.columns.length; i++) {
@@ -373,7 +438,7 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
       // lineBreak:false + ellipsis:true combo is unreliable when text is
       // far wider than the column. doc.widthOfString uses real font metrics.
       const display = fitText(doc, safe, cellW);
-      doc.fillColor(isNeg ? BRAND.negative : BRAND.ink)
+      doc.fillColor(isNeg ? C.negative : C.ink)
          .text(display, x + 4, cy + 5, {
            width: cellW, align, lineBreak: false,
          });
@@ -383,7 +448,7 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
   }
 
   // Thin bottom border
-  doc.rect(o.x, cy, o.width, 0.5).fill(BRAND.border);
+  doc.rect(o.x, cy, o.width, 0.5).fill(C.border);
   return cy;
 }
 

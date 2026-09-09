@@ -39,15 +39,21 @@ const ENTRY_TYPES_BY_DIRECTION: Record<Direction, LedgerEntryType[]> = {
 /**
  * One grid for the header and every row, so the two cannot drift apart.
  *
- * The date column is capped rather than given an equal share — "01 Dec 2026"
- * plus "Rent · 2026-12" needs about 9rem, and letting it take a third of the
- * width pushed the three money columns into the right-hand edge. The trailing
- * 2rem column holds the delete button and is always rendered, even for the
- * receipt rows that have none: when the button shared the balance column,
- * rows that had one sat their balance ~1.5rem left of the rows that didn't.
+ * The three money columns are FIXED width and the date/description column
+ * takes whatever is left. Giving every column an `fr` share looked reasonable
+ * until a wide screen: the date claimed ~370px it had no use for, each amount
+ * sat alone in a ~310px cell, and a 560px void opened between the label and
+ * the first figure. Fixed money columns keep the amounts in one tight,
+ * scannable block against the right edge — a ledger is read by running down
+ * the numbers, not across the row — while long tenant notes get the slack.
+ *
+ * The trailing 2rem column holds the delete button and is always rendered,
+ * even for the receipt rows that have none: when the button shared the balance
+ * column, rows that had one sat their balance ~1.5rem left of those that
+ * didn't.
  */
 const KHATA_GRID =
-  'grid-cols-[minmax(9rem,1.2fr)_minmax(6rem,1fr)_minmax(6rem,1fr)_minmax(7rem,1fr)_2rem]';
+  'grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_8.5rem_2rem]';
 
 function humanizeEntryType(entryType: string): string {
   const lower = entryType.replace(/_/g, ' ').toLowerCase();

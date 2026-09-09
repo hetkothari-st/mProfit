@@ -351,6 +351,9 @@ export async function getTenancyStatementHandler(req: Request, res: Response) {
   ];
 
   await streamPdf(res, {
+    // Ink on paper, not the app's dark skin: this is a document a landlord
+    // prints, files, or forwards to a tenant.
+    theme: 'statement',
     title: `Rent statement — ${ledger.tenantName}`,
     subtitle: `${ledger.propertyName} · ${period}`,
     // Identity in the thin meta strip; the money as metric cards, which is
