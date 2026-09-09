@@ -61,18 +61,17 @@ function leadCopy(leadDays: number, dueDate?: string): string {
   return `Due in ${leadDays} days`;
 }
 
-// Urgency → notification tone. Mirrors the AlertsPage rail/pill language
-// so a rent reminder reads the same as any other alert in the app instead
-// of looking like a plain form row.
+// Urgency → notification tone. Carried by the icon disc and the status pill.
+// There was a coloured rail down the left edge of every row too; it said
+// nothing the other two did not already say, and three urgency signals on one
+// row is decoration rather than information.
 function reminderTone(leadDays: number): {
-  rail: string;
   icon: typeof AlertTriangle;
   iconClass: string;
   pillClass: string;
 } {
   if (leadDays < 0) {
     return {
-      rail: 'bg-negative',
       icon: AlertTriangle,
       iconClass: 'text-negative',
       pillClass: 'border-negative/30 bg-negative/10 text-negative',
@@ -80,14 +79,12 @@ function reminderTone(leadDays: number): {
   }
   if (leadDays <= 3) {
     return {
-      rail: 'bg-accent',
       icon: Clock,
       iconClass: 'text-accent-ink',
       pillClass: 'border-accent/30 bg-accent/10 text-accent-ink',
     };
   }
   return {
-    rail: 'bg-border',
     icon: CalendarClock,
     iconClass: 'text-muted-foreground',
     pillClass: 'border-border bg-muted/40 text-muted-foreground',
@@ -775,9 +772,8 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
         </div>
       )}
 
-      {/* Reminder rows — styled as notifications: urgency rail, tone
-          icon, and a status pill, matching AlertsPage's language so a
-          rent reminder doesn't read like a bare form row. */}
+      {/* Reminder rows — a tone disc and a status pill carry the urgency,
+          matching how alerts read elsewhere in the app. */}
       <div className="divide-y divide-border/60">
         {sortedReminders.map((r) => {
           const isSelected = selected.has(r.id);
@@ -789,13 +785,11 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
             <label
               key={r.id}
               className={cn(
-                'group relative flex items-stretch gap-0 cursor-pointer transition-colors',
+                'group relative flex cursor-pointer transition-colors',
                 isSelected ? 'bg-accent/[0.07]' : 'hover:bg-foreground/[0.02]',
               )}
             >
-              <span aria-hidden="true" className={cn('w-[3px] shrink-0', tone.rail)} />
-
-              <div className="flex flex-1 items-center gap-3 px-3.5 py-3">
+              <div className="flex flex-1 items-center gap-3 px-4 py-3">
                 <input
                   type="checkbox"
                   checked={isSelected}
