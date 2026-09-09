@@ -211,6 +211,46 @@ export const caApi = {
     return unwrap(data);
   },
 
+  /**
+   * Records a new transaction in the client's books. Same field shape the
+   * app's own transaction form sends — no `portfolioId`: the server resolves
+   * (and bootstraps, on a client's very first write) the one portfolio these
+   * books use.
+   */
+  async createTransaction(
+    clientId: string,
+    payload: CaTransactionInput,
+  ): Promise<CaTransactionRow> {
+    const { data } = await api.post<ApiResponse<CaTransactionRow>>(
+      `/api/ca/clients/${clientId}/transactions`,
+      payload,
+    );
+    return unwrap(data);
+  },
+
+  async imports(clientId: string): Promise<CaImportJobRow[]> {
+    const { data } = await api.get<ApiResponse<CaImportJobRow[]>>(
+      `/api/ca/clients/${clientId}/imports`,
+    );
+    return unwrap(data);
+  },
+
+  async uploadImport(
+    clientId: string,
+    { file, broker, password }: { file: File; broker?: string; password?: string },
+  ): Promise<CaImportCreateResponse> {
+    const form = new FormData();
+    form.append('file', file);
+    if (broker) form.append('broker', broker);
+    if (password) form.append('password', password);
+    const { data } = await api.post<ApiResponse<CaImportCreateResponse>>(
+      `/api/ca/clients/${clientId}/imports`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return unwrap(data);
+  },
+
   async fmvOverrides(clientId: string): Promise<CaFmvRow[]> {
     const { data } = await api.get<ApiResponse<CaFmvRow[]>>(`/api/ca/clients/${clientId}/fmv`);
     return unwrap(data);
@@ -247,6 +287,34 @@ export const caApi = {
     return unwrap(data);
   },
 };
+
+// Same enum values `TransactionFormDialog.tsx` (the app's own transaction
+// form) offers, so the CA workspace's "Add transaction" dialog mirrors it
+// rather than inventing a different set of choices.
+export const CA_ASSET_CLASSES = [
+  'EQUITY', 'MUTUAL_FUND', 'ETF',
+  'BOND', 'GOVT_BOND', 'CORPORATE_BOND',
+  'FIXED_DEPOSIT', 'RECURRING_DEPOSIT',
+  'NPS', 'PPF', 'EPF',
+  'PHYSICAL_GOLD', 'GOLD_BOND', 'GOLD_ETF', 'PHYSICAL_SILVER',
+  'CRYPTOCURRENCY', 'REIT', 'INVIT',
+  'PMS', 'AIF', 'ULIP',
+  'FOREIGN_EQUITY',
+  'REAL_ESTATE', 'ART_COLLECTIBLES', 'CASH', 'OTHER',
+] as const;
+
+export const CA_TRANSACTION_TYPES = [
+  'BUY',
+  'SELL',
+  'SIP',
+  'SWITCH_IN',
+  'SWITCH_OUT',
+  'DIVIDEND_PAYOUT',
+  'DIVIDEND_REINVEST',
+  'BONUS',
+  'SPLIT',
+  'REDEMPTION',
+] as const;
 
 export const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'INCOME', 'EXPENSE', 'EQUITY'] as const;
 export const VOUCHER_TYPES = [
@@ -310,6 +378,59 @@ export interface CaTransactionRow {
   price: string;
   netAmount: string;
   narration: string | null;
+}
+
+/**
+ * The fields `baseTransactionSchema` (server) validates, minus
+ * `portfolioId` — mirrors `apps/web/src/pages/transactions/
+ * TransactionFormDialog.tsx`'s own request shape for the fields this
+ * workspace's dialog collects. Every money/quantity field is a decimal
+ * STRING the caller has already validated, never a number.
+ */
+export interface CaTransactionInput {
+  transactionType: string;
+  assetClass: string;
+  stockSymbol?: string;
+  stockName?: string;
+  exchange?: string;
+  schemeCode?: string;
+  schemeName?: string;
+  amcName?: string;
+  assetName?: string;
+  isin?: string;
+  tradeDate: string;
+  quantity: string;
+  price: string;
+  brokerage?: string;
+  stt?: string;
+  stampDuty?: string;
+  exchangeCharges?: string;
+  gst?: string;
+  sebiCharges?: string;
+  otherCharges?: string;
+  broker?: string;
+  narration?: string;
+}
+
+export interface CaImportJobRow {
+  id: string;
+  type: string;
+  status: string;
+  fileName: string;
+  totalRows: number | null;
+  successRows: number | null;
+  failedRows: number | null;
+  createdAt: string;
+  completedAt: string | null;
+  _count?: { transactions: number };
+}
+
+export interface CaImportCreateResponse {
+  id: string;
+  status: string;
+  type: string;
+  fileName: string;
+  createdAt: string;
 }
 
 export interface CaFmvRow {

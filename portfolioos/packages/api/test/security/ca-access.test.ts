@@ -29,6 +29,11 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Request, Response } from 'express';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import {
@@ -46,6 +51,50 @@ let clientId: string;
 /** TestScope exposes only ids, and the accept flow is email-bound. */
 let strangerEmail: string;
 let clientEmail: string;
+
+/**
+ * A minimal Express req/res pair for calling a caAccounting.controller
+ * handler directly. Used only for the assertions that need the CONTROLLER
+ * (the audit entry is written there, not by any lower-level service), never
+ * as a substitute for the RLS-level tests above and below, which drive
+ * Prisma directly so the boundary is proven as a Postgres fact rather than
+ * as "the handler happened to call things in the right order".
+ */
+function fakeCaRequest(
+  callerId: string,
+  clientIdParam: string,
+  body: Record<string, unknown>,
+  file?: { path: string; originalname: string },
+): Request {
+  return {
+    user: { id: callerId },
+    params: { clientId: clientIdParam },
+    body,
+    query: {},
+    file,
+    header: () => undefined,
+    ip: '127.0.0.1',
+  } as unknown as Request;
+}
+
+function fakeResponse(): Response & { statusCode: number; body: unknown } {
+  const res = {
+    statusCode: 200,
+    body: undefined as unknown,
+    status(code: number) {
+      res.statusCode = code;
+      return res;
+    },
+    json(body: unknown) {
+      res.body = body;
+      return res;
+    },
+    end() {
+      return res;
+    },
+  };
+  return res as unknown as Response & { statusCode: number; body: unknown };
+}
 /**
  * A real transaction and a real credential belonging to the client.
  *
@@ -337,10 +386,40 @@ describe('CA access boundary', () => {
     });
   });
 
-  it('lets a CA correct a client transaction but never create one', async () => {
-    // transaction_ca_correct is FOR UPDATE only — the distinction between
-    // correcting a ledger and rewriting it. Both halves asserted, because the
-    // grant working matters as much as the restriction holding.
+  it('lets a CA create and correct a client transaction, and records both', async () => {
+    // `transaction_ca_insert` was added deliberately, relaxing the boundary
+    // this test used to assert the OTHER way ("...but never create one").
+    // The reason: `correctTransactionSchema` already lets a CA rewrite
+    // `tradeDate`, `quantity`, `price`, `assetName`, `isin` and every charge
+    // field on ANY existing transaction — a CA who wanted to fabricate a
+    // trade could already take a ₹1 buy and correct it into 500 shares at
+    // any price on any date. Forbidding INSERT therefore only stopped a CA
+    // adding a row to an EMPTY ledger, which protected almost nothing while
+    // blocking the workspace's actual point: a CA cannot help a client whose
+    // books have nothing in them yet. What still holds, unchanged: there is
+    // no DELETE policy for a CA on this table — a CA can add a trade and fix
+    // a trade, never erase one (see the DELETE assertion at the end, and
+    // `cannot delete a client transaction...` above).
+    const inserted = await ca.runAs(() =>
+      prisma.transaction.create({
+        data: {
+          portfolioId: client.portfolioId,
+          assetClass: 'EQUITY',
+          transactionType: 'BUY',
+          tradeDate: new Date('2025-07-01'),
+          quantity: '10',
+          price: '250',
+          grossAmount: '2500',
+          netAmount: '2500',
+          assetName: 'Created by CA',
+        },
+      }),
+    );
+    // Lands in the CLIENT's portfolio, not the CA's own — the CA never had a
+    // portfolio in this flow, only the grant.
+    expect(inserted.portfolioId).toBe(client.portfolioId);
+    await runAsSystem(() => prisma.transaction.delete({ where: { id: inserted.id } }));
+
     const updated = await ca.runAs(() =>
       prisma.transaction.updateMany({
         where: { id: clientTransactionId },
@@ -355,13 +434,19 @@ describe('CA access boundary', () => {
     expect(persisted.narration).toBe('Corrected by CA');
 
     await expect(
-      ca.runAs(() =>
+      ca.runAs(() => prisma.transaction.delete({ where: { id: clientTransactionId } })),
+    ).rejects.toThrow();
+  });
+
+  it('refuses a transaction insert with no grant, a revoked grant, or an unrelated caller', async () => {
+    const attempt = (asWho: TestScope) =>
+      asWho.runAs(() =>
         prisma.transaction.create({
           data: {
             portfolioId: client.portfolioId,
             assetClass: 'EQUITY',
             transactionType: 'BUY',
-            tradeDate: new Date(),
+            tradeDate: new Date('2025-07-02'),
             quantity: '1',
             price: '1',
             grossAmount: '1',
@@ -369,8 +454,101 @@ describe('CA access boundary', () => {
             assetName: 'Should not exist',
           },
         }),
-      ),
-    ).rejects.toThrow();
+      );
+
+    const before = await runAsSystem(() =>
+      prisma.transaction.count({ where: { portfolioId: client.portfolioId } }),
+    );
+
+    // No grant at all — this is also the "unrelated authenticated user"
+    // case: `stranger` is exactly some other CA's session pointed at a
+    // client id that is not theirs.
+    await expect(attempt(stranger)).rejects.toThrow();
+
+    await runAsSystem(() =>
+      prisma.client.update({ where: { id: clientId }, data: { status: 'REVOKED' } }),
+    );
+    await expect(attempt(ca)).rejects.toThrow();
+    await runAsSystem(() =>
+      prisma.client.update({ where: { id: clientId }, data: { status: 'ACTIVE' } }),
+    );
+
+    const after = await runAsSystem(() =>
+      prisma.transaction.count({ where: { portfolioId: client.portfolioId } }),
+    );
+    expect(after).toBe(before);
+  });
+
+  it('does not let an unrelated user read a transaction the CA created for the client', async () => {
+    const inserted = await ca.runAs(() =>
+      prisma.transaction.create({
+        data: {
+          portfolioId: client.portfolioId,
+          assetClass: 'EQUITY',
+          transactionType: 'BUY',
+          tradeDate: new Date('2025-07-03'),
+          quantity: '5',
+          price: '20',
+          grossAmount: '100',
+          netAmount: '100',
+          assetName: 'Not for the stranger',
+        },
+      }),
+    );
+
+    const seenByStranger = await stranger.runAs(() =>
+      prisma.transaction.findMany({ where: { id: inserted.id } }),
+    );
+    expect(seenByStranger).toEqual([]);
+
+    const seenByOwner = await client.runAs(() =>
+      prisma.transaction.findMany({ where: { id: inserted.id } }),
+    );
+    expect(seenByOwner.map((t) => t.id)).toEqual([inserted.id]);
+
+    await runAsSystem(() => prisma.transaction.delete({ where: { id: inserted.id } }));
+  });
+
+  it('creates a transaction through the CA route handler and records an audit row with the asset and amount', async () => {
+    const { caCreateTransaction } = await import(
+      '../../src/controllers/caAccounting.controller.js'
+    );
+
+    const req = fakeCaRequest(ca.userId, clientId, {
+      transactionType: 'BUY',
+      assetClass: 'EQUITY',
+      assetName: 'Route-created holding',
+      tradeDate: '2025-07-04',
+      quantity: '3',
+      price: '150',
+    });
+    const res = fakeResponse();
+
+    await ca.runAs(() => caCreateTransaction(req, res));
+
+    expect(res.statusCode).toBe(201);
+    const body = res.body as { success: true; data: { id: string; portfolioId: string } };
+    expect(body.success).toBe(true);
+    // Lands in the client's own portfolio, resolved server-side — the CA
+    // never named one.
+    expect(body.data.portfolioId).toBe(client.portfolioId);
+
+    const audit = await runAsSystem(() =>
+      prisma.caAuditLog.findFirst({
+        where: { clientId, action: 'TRANSACTION_CREATED', resourceId: body.data.id },
+      }),
+    );
+    expect(audit).toBeTruthy();
+    expect(audit?.actorUserId).toBe(ca.userId);
+    expect(audit?.subjectUserId).toBe(client.userId);
+    const metadata = audit?.metadata as { after?: Record<string, unknown> } | null;
+    expect(metadata?.after?.assetName).toBe('Route-created holding');
+    expect(metadata?.after?.netAmount).toBe('450');
+
+    await runAsSystem(async () => {
+      await prisma.transaction.delete({ where: { id: body.data.id } });
+      await prisma.caAuditLog.deleteMany({ where: { resourceId: body.data.id } });
+    });
   });
 
   it('rebuilds derived rows under the CA own identity, without impersonation', async () => {
@@ -576,5 +754,209 @@ describe('CA access boundary', () => {
       await prisma.client.delete({ where: { id: managed.id } });
       await prisma.user.delete({ where: { id: managed.userId! } });
     });
+  });
+
+  // ─── Portfolio bootstrap: exactly one, never a second ─────────────────
+
+  it('lets a CA bootstrap the one portfolio a portfolio-less shadow client needs, and never a second', async () => {
+    // `portfolio_ca_bootstrap_insert` is deliberately narrower than the CA's
+    // ordinary grant shape — see the migration comment. This is the positive
+    // half; `cannot create a portfolio for the client` above (unmodified) is
+    // the negative half for a client who already has one.
+    const managed = await ca.runAs(() =>
+      createManagedClient(ca.userId, {
+        name: 'Bootstrap Client',
+        consentBasis: 'ENGAGEMENT_LETTER',
+      }),
+    );
+    const subjectId = managed.userId!;
+
+    const zero = await runAsSystem(() =>
+      prisma.portfolio.count({ where: { userId: subjectId } }),
+    );
+    expect(zero).toBe(0);
+
+    const bootstrapped = await ca.runAs(() =>
+      prisma.portfolio.create({
+        data: { userId: subjectId, name: 'My Portfolio', type: 'INVESTMENT' },
+      }),
+    );
+    expect(bootstrapped.userId).toBe(subjectId);
+
+    // Now provisioned — a second bootstrap attempt for the SAME client is
+    // refused, exactly like a client who had one from the start.
+    await expect(
+      ca.runAs(() =>
+        prisma.portfolio.create({
+          data: { userId: subjectId, name: 'Second one', type: 'INVESTMENT' },
+        }),
+      ),
+    ).rejects.toThrow();
+
+    await runAsSystem(async () => {
+      await prisma.portfolio.deleteMany({ where: { userId: subjectId } });
+      await prisma.caAuditLog.deleteMany({ where: { clientId: managed.id } });
+      await prisma.client.delete({ where: { id: managed.id } });
+      await prisma.user.delete({ where: { id: subjectId } });
+    });
+  });
+
+  it('bootstraps a portfolio and records a transaction for a client who starts with neither', async () => {
+    // The end-to-end path `ensureDefaultPortfolio` + `caCreateTransaction`
+    // exist for: a brand-new shadow client, with no portfolio at all, gets
+    // exactly the one they need and their first trade lands in it.
+    const { caCreateTransaction } = await import(
+      '../../src/controllers/caAccounting.controller.js'
+    );
+
+    const managed = await ca.runAs(() =>
+      createManagedClient(ca.userId, {
+        name: 'Fresh Client',
+        consentBasis: 'ENGAGEMENT_LETTER',
+      }),
+    );
+    const subjectId = managed.userId!;
+
+    const req = fakeCaRequest(ca.userId, managed.id, {
+      transactionType: 'BUY',
+      assetClass: 'EQUITY',
+      assetName: 'First ever holding',
+      tradeDate: '2025-07-05',
+      quantity: '1',
+      price: '10',
+    });
+    const res = fakeResponse();
+
+    await ca.runAs(() => caCreateTransaction(req, res));
+
+    expect(res.statusCode).toBe(201);
+    const body = res.body as { success: true; data: { id: string; portfolioId: string } };
+
+    const portfolio = await runAsSystem(() =>
+      prisma.portfolio.findUnique({ where: { id: body.data.portfolioId } }),
+    );
+    expect(portfolio?.userId).toBe(subjectId);
+    expect(portfolio?.name).toBe('My Portfolio');
+    expect(portfolio?.type).toBe('INVESTMENT');
+
+    const portfolioCount = await runAsSystem(() =>
+      prisma.portfolio.count({ where: { userId: subjectId } }),
+    );
+    expect(portfolioCount).toBe(1);
+
+    const auditActions = await runAsSystem(() =>
+      prisma.caAuditLog.findMany({
+        where: { clientId: managed.id },
+        select: { action: true },
+      }),
+    );
+    expect(auditActions.map((a) => a.action)).toEqual(
+      expect.arrayContaining(['PORTFOLIO_CREATED', 'TRANSACTION_CREATED']),
+    );
+
+    await runAsSystem(async () => {
+      await prisma.capitalGain.deleteMany({ where: { portfolioId: body.data.portfolioId } });
+      await prisma.holdingProjection.deleteMany({ where: { portfolioId: body.data.portfolioId } });
+      await prisma.transaction.deleteMany({ where: { portfolioId: body.data.portfolioId } });
+      await prisma.caAuditLog.deleteMany({ where: { clientId: managed.id } });
+      await prisma.portfolio.delete({ where: { id: body.data.portfolioId } });
+      await prisma.client.delete({ where: { id: managed.id } });
+      await prisma.user.delete({ where: { id: subjectId } });
+    });
+  });
+
+  // ─── ImportJob: the same set of cases as Transaction ──────────────────
+
+  it('lets a CA insert an import job for the client, refuses one with no or revoked grant, and hides it from a stranger', async () => {
+    const attemptInsert = (asWho: TestScope) =>
+      asWho.runAs(() =>
+        prisma.importJob.create({
+          data: {
+            userId: client.userId,
+            portfolioId: client.portfolioId,
+            type: 'GENERIC_CSV',
+            fileName: 'boundary-test.csv',
+            filePath: '/tmp/does-not-need-to-exist.csv',
+          },
+        }),
+      );
+
+    // No grant at all — and the same case as "an unrelated authenticated
+    // user": `stranger` is some other CA's session pointed at a client id
+    // that is not theirs.
+    await expect(attemptInsert(stranger)).rejects.toThrow();
+
+    await runAsSystem(() =>
+      prisma.client.update({ where: { id: clientId }, data: { status: 'REVOKED' } }),
+    );
+    await expect(attemptInsert(ca)).rejects.toThrow();
+    await runAsSystem(() =>
+      prisma.client.update({ where: { id: clientId }, data: { status: 'ACTIVE' } }),
+    );
+
+    const job = await attemptInsert(ca);
+    expect(job.userId).toBe(client.userId);
+
+    const seenByStranger = await stranger.runAs(() =>
+      prisma.importJob.findMany({ where: { id: job.id } }),
+    );
+    expect(seenByStranger).toEqual([]);
+
+    // importjob_ca_read: without it this would also come back empty, because
+    // `caListImports` reads under the CA's OWN ambient identity (no
+    // `runAsUser` bridge), for which `importjob_owner` alone matches nothing.
+    const seenByCa = await ca.runAs(() => prisma.importJob.findMany({ where: { id: job.id } }));
+    expect(seenByCa.map((j) => j.id)).toEqual([job.id]);
+
+    await runAsSystem(() => prisma.importJob.delete({ where: { id: job.id } }));
+  });
+
+  it('creates an import job through the CA route handler and records an audit row with the file name and job id', async () => {
+    const { caCreateImport } = await import('../../src/controllers/caAccounting.controller.js');
+
+    const filePath = path.join(os.tmpdir(), `ca-import-test-${randomUUID()}.csv`);
+    fs.writeFileSync(filePath, 'date,amount\n2025-07-01,100\n');
+
+    const req = fakeCaRequest(ca.userId, clientId, {}, { path: filePath, originalname: 'statement.csv' });
+    const res = fakeResponse();
+
+    try {
+      await ca.runAs(() => caCreateImport(req, res));
+
+      expect(res.statusCode).toBe(201);
+      const body = res.body as {
+        success: true;
+        data: { id: string; fileName: string; status: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.fileName).toBe('statement.csv');
+
+      const job = await runAsSystem(() =>
+        prisma.importJob.findUnique({ where: { id: body.data.id } }),
+      );
+      expect(job?.userId).toBe(client.userId);
+      expect(job?.portfolioId).toBe(client.portfolioId);
+
+      const audit = await runAsSystem(() =>
+        prisma.caAuditLog.findFirst({
+          where: { clientId, action: 'IMPORT_JOB_CREATED', resourceId: body.data.id },
+        }),
+      );
+      expect(audit).toBeTruthy();
+      const metadata = audit?.metadata as { after?: Record<string, unknown> } | null;
+      expect(metadata?.after?.fileName).toBe('statement.csv');
+      expect(metadata?.after?.jobId).toBe(body.data.id);
+
+      await runAsSystem(async () => {
+        await prisma.transaction.updateMany({
+          where: { importJobId: body.data.id },
+          data: { importJobId: null },
+        });
+        await prisma.importJob.delete({ where: { id: body.data.id } });
+        await prisma.caAuditLog.deleteMany({ where: { resourceId: body.data.id } });
+      });
+    } finally {
+      fs.unlink(filePath, () => {});
+    }
   });
 });

@@ -29,14 +29,17 @@ const ImportTypeEnum = z.enum([
   'GENERIC_EXCEL',
 ]);
 
-const createSchema = z.object({
+// Exported so the CA workspace's own upload route (caAccounting.controller.ts,
+// caCreateImport) validates against the exact same shape and reuses the exact
+// same guards, rather than a hand-copied version that could drift from them.
+export const createSchema = z.object({
   portfolioId: z.string().min(1).nullable().optional(),
   type: ImportTypeEnum.optional(),
   broker: z.string().min(1).max(100).optional(),
   password: z.string().min(1).max(200).optional(),
 });
 
-function inferTypeFromFileName(fileName: string): ImportType {
+export function inferTypeFromFileName(fileName: string): ImportType {
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.pdf')) return 'CONTRACT_NOTE_PDF';
   if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) return 'GENERIC_EXCEL';
@@ -52,7 +55,7 @@ const REGULATORY_PATTERNS: RegExp[] = [
   /\bwelcome[-_\s]?kit\b/i,
 ];
 
-function isRegulatoryDoc(fileName: string): string | null {
+export function isRegulatoryDoc(fileName: string): string | null {
   if (/retention[-_\s]?(?:account[-_\s]?)?statement/i.test(fileName)) {
     return 'This is a SEBI-mandated broker retention/compliance report — it contains no transactions or holdings to import. Zerodha sends these automatically; you can ignore them.';
   }

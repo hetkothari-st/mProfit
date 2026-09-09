@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -11,6 +11,8 @@ import {
   Trash2,
   Receipt,
   Landmark,
+  Upload,
+  FileClock,
   RefreshCw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -32,9 +34,11 @@ import { CaActivityFeed } from '@/components/ca/CaActivityFeed';
 import { AccountFormDialog } from '@/components/ca/AccountFormDialog';
 import { VoucherFormDialog } from '@/components/ca/VoucherFormDialog';
 import { CorrectTransactionDialog } from '@/components/ca/CorrectTransactionDialog';
+import { AddTransactionDialog } from '@/components/ca/AddTransactionDialog';
 import { FmvFormDialog } from '@/components/ca/FmvFormDialog';
 import { ClientReportsTab } from '@/components/ca/ClientReportsTab';
 import { ClientDocumentsTab } from '@/components/ca/ClientDocumentsTab';
+import { IMPORT_STATUS_LABELS, type ImportStatus } from '@portfolioos/shared';
 
 /**
  * One client's books, as kept by their CA.
@@ -76,11 +80,13 @@ export function ClientBooksPage() {
     account: CaAccountRow | null;
   }>({ open: false, account: null });
   const [voucherOpen, setVoucherOpen] = useState(false);
+  const [addTxnOpen, setAddTxnOpen] = useState(false);
   const [correcting, setCorrecting] = useState<CaTransactionRow | null>(null);
   const [fmvDialog, setFmvDialog] = useState<{ open: boolean; row: CaFmvRow | null }>({
     open: false,
     row: null,
   });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const removeFmv = useMutation({
     mutationFn: (isin: string) => caApi.deleteFmv(clientId, isin),
@@ -171,6 +177,28 @@ export function ClientBooksPage() {
     queryKey: ['ca', clientId, 'transactions'],
     queryFn: () => caApi.transactions(clientId),
     enabled: tab === 'transactions' && !!clientId,
+  });
+
+  const imports = useQuery({
+    queryKey: ['ca', clientId, 'imports'],
+    queryFn: () => caApi.imports(clientId),
+    enabled: tab === 'transactions' && !!clientId,
+    // An import parses asynchronously — poll while the tab is open so
+    // PENDING/PROCESSING rows resolve to their final status without a
+    // manual refresh.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((j) => j.status === 'PENDING' || j.status === 'PROCESSING')
+        ? 4000
+        : false,
+  });
+
+  const uploadImport = useMutation({
+    mutationFn: (file: File) => caApi.uploadImport(clientId, { file }),
+    onSuccess: () => {
+      toast.success('File uploaded — parsing in the background');
+      qc.invalidateQueries({ queryKey: ['ca', clientId, 'imports'] });
+    },
+    onError: (e) => toast.error(apiErrorMessage(e, 'Upload failed')),
   });
 
   const fmv = useQuery({
@@ -310,40 +338,98 @@ export function ClientBooksPage() {
       )}
 
       {tab === 'transactions' && (
-        <LedgerTable
-          loading={transactions.isLoading}
-          empty={{
-            icon: Receipt,
-            title: 'No transactions',
-            description: 'This client has no recorded trades yet.',
-          }}
-          columns={['Date', 'Asset', 'Type', 'Qty', 'Price', 'Net']}
-          numericFrom={3}
-          rows={(transactions.data ?? []).map((t) => [
-            new Date(t.tradeDate).toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-            }),
-            t.assetName ?? t.isin ?? '—',
-            t.transactionType,
-            t.quantity,
-            t.price,
-            t.netAmount,
-          ])}
-          rowActions={(i) => {
-            const t = (transactions.data ?? [])[i];
-            if (!t) return null;
-            return (
-              <RowButton
-                label={`Correct ${t.assetName ?? 'transaction'}`}
-                onClick={() => setCorrecting(t)}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </RowButton>
-            );
-          }}
-        />
+        <>
+          <div className="mb-3 flex justify-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.csv,.tsv,.xlsx,.xls,.html,.htm"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) uploadImport.mutate(file);
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={uploadImport.isPending}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4" />
+              {uploadImport.isPending ? 'Uploading…' : 'Import file'}
+            </Button>
+            <Button size="sm" onClick={() => setAddTxnOpen(true)}>
+              <Plus className="h-4 w-4" /> Add transaction
+            </Button>
+          </div>
+
+          <LedgerTable
+            loading={transactions.isLoading}
+            empty={{
+              icon: Receipt,
+              title: 'No transactions',
+              description: 'This client has no recorded trades yet.',
+            }}
+            columns={['Date', 'Asset', 'Type', 'Qty', 'Price', 'Net']}
+            numericFrom={3}
+            rows={(transactions.data ?? []).map((t) => [
+              new Date(t.tradeDate).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              }),
+              t.assetName ?? t.isin ?? '—',
+              t.transactionType,
+              t.quantity,
+              t.price,
+              t.netAmount,
+            ])}
+            rowActions={(i) => {
+              const t = (transactions.data ?? [])[i];
+              if (!t) return null;
+              return (
+                <RowButton
+                  label={`Correct ${t.assetName ?? 'transaction'}`}
+                  onClick={() => setCorrecting(t)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </RowButton>
+              );
+            }}
+          />
+
+          {(imports.data ?? []).length > 0 && (
+            <div className="mt-6">
+              <h3 className="mb-2 text-[11px] font-medium uppercase tracking-kerned text-muted-foreground">
+                Recent imports
+              </h3>
+              <LedgerTable
+                loading={imports.isLoading}
+                empty={{
+                  icon: FileClock,
+                  title: 'No imports yet',
+                  description: '',
+                }}
+                columns={['File', 'Type', 'Status', 'Rows', 'Uploaded']}
+                rows={(imports.data ?? []).map((j) => [
+                  j.fileName,
+                  j.type.replace(/_/g, ' '),
+                  IMPORT_STATUS_LABELS[j.status as ImportStatus] ?? j.status,
+                  j.successRows !== null && j.totalRows !== null
+                    ? `${j.successRows} / ${j.totalRows}`
+                    : '—',
+                  new Date(j.createdAt).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  }),
+                ])}
+              />
+            </div>
+          )}
+        </>
       )}
 
       {tab === 'fmv' && (
@@ -407,6 +493,7 @@ export function ClientBooksPage() {
         onOpenChange={(open) => setAccountDialog((d) => ({ ...d, open }))}
       />
       <VoucherFormDialog clientId={clientId} open={voucherOpen} onOpenChange={setVoucherOpen} />
+      <AddTransactionDialog clientId={clientId} open={addTxnOpen} onOpenChange={setAddTxnOpen} />
       <CorrectTransactionDialog
         clientId={clientId}
         transaction={correcting}
