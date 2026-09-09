@@ -60,7 +60,12 @@ export const DARK_THEME: PdfTheme = {
   rowAlt: '#171717',
   border: '#333333',
   white: '#FFFFFF',
-  accentBar: true,
+  // Off in both themes. A 3px accent bar down the edge of every card and
+  // section band said nothing — with eight metric cards and a dozen sections
+  // it stamped the same mark twenty times a report, reading as applied styling
+  // rather than structure. The flag stays so a future document could opt in
+  // deliberately; nothing does today.
+  accentBar: false,
   headerRule: false,
   chartColors: [
     '#E2FE53', '#E0E0E0', '#F0574C', '#3FC6C0',

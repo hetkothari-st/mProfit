@@ -111,7 +111,6 @@ export async function streamCapitalGainsTaxReport(
     function renderIdentityBand(cy: number): number {
       const bandH = 28;
       doc.rect(ML, cy, pageW, bandH).fill(C.headerBg);
-      doc.rect(ML, cy, 3, bandH).fill(C.accent);
 
       const parts: Array<[string, string]> = [
         ['Member', pdfSafe(params.userName ?? 'Investor')],
@@ -184,12 +183,13 @@ export async function streamCapitalGainsTaxReport(
     }
 
     function renderSectionBand(cy: number, label: string): number {
-      const H = 20;
-      doc.rect(ML, cy, pageW, H).fill(C.headerBg);
-      doc.rect(ML, cy, 3, H).fill(C.accent);
+      // A heading over a hairline rather than a filled band with an accent
+      // bar — the same treatment the dashboard report uses, so the two
+      // documents read as one family.
       doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.ink)
-        .text(pdfSafe(label), ML + 10, cy + 6, { width: pageW - 18, lineBreak: false });
-      return cy + H + 4;
+        .text(pdfSafe(label), ML, cy, { width: pageW, lineBreak: false });
+      doc.rect(ML, cy + 14, pageW, 0.6).fill(C.border);
+      return cy + 14 + 8;
     }
 
     function renderTaxBreakdownTable(cy: number): number {
