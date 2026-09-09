@@ -469,7 +469,7 @@ function CategoryScale({
  */
 function houseMark(amcName: string): { initials: string; hue: number } {
   const words = amcName
-    .replace(/(mutual fund|asset management|amc|india|limited|ltd\.?|company|trustee)/gi, ' ')
+    .replace(/\b(mutual fund|asset management|amc|india|limited|ltd\.?|company|trustee)\b/gi, ' ')
     .replace(/[^A-Za-z ]/g, ' ')
     .split(/\s+/)
     .filter(Boolean);
@@ -522,6 +522,34 @@ function HouseMark({ amcName }: { amcName: string }) {
  * is concealed.
  */
 
+/**
+ * The shape of the fund's record, drawn as a distribution.
+ *
+ * The first version of this was a box plot: a grey band from p10 to p90 with a
+ * marker at the median, and no axis. It failed the only test that matters — a
+ * reader could not tell what any position on it meant without reading the
+ * sentence underneath, which made the graphic decoration sitting on top of the
+ * text that was doing the work.
+ *
+ * What replaces it is a histogram built from the quantiles we hold. Between two
+ * quantiles sits a known share of the periods (p10 to p25 holds 15% of them),
+ * so its height is that share divided by its width: periods bunched into a
+ * narrow range make a tall column, periods spread thin make a low one. Nothing
+ * is interpolated or smoothed — the steps are exactly the six facts we have,
+ * and a smooth curve would draw shape we cannot see.
+ *
+ * The parts that make it readable at a glance, in order of how much they carry:
+ *
+ *   - A LABELLED AXIS, shared by all three rows. A position means a return.
+ *   - ZERO, drawn as a real line, with everything left of it in the loss
+ *     colour. "Did this ever lose money, and how often" is answered by looking.
+ *   - The MEDIAN as a labelled line, so the one number most readers want is on
+ *     the chart rather than beneath it.
+ *
+ * Colour is not decoration here: left of zero is losses and right of it is
+ * gains, which is the most important thing on the panel.
+ */
+
 interface RollingStatsLike {
   windowYears: 1 | 3 | 5;
   observations: number;
@@ -535,60 +563,194 @@ interface RollingStatsLike {
   pctNegative: string | null;
 }
 
-function HoldingPeriodBar({
+/** A quantile band: the returns it spans and the share of periods inside it. */
+interface Band {
+  from: number;
+  to: number;
+  mass: number;
+}
+
+/**
+ * The six bands between the quantiles, in order.
+ *
+ * `min` and `max` are dropped when absent rather than guessed at, and the
+ * remaining mass is renormalised so the columns still account for the whole
+ * record.
+ */
+function bandsOf(s: RollingStatsLike): Band[] {
+  const raw: Array<[number | null, number | null, number]> = [
+    [num(s.min), num(s.p10), 0.1],
+    [num(s.p10), num(s.p25), 0.15],
+    [num(s.p25), num(s.median), 0.25],
+    [num(s.median), num(s.p75), 0.25],
+    [num(s.p75), num(s.p90), 0.15],
+    [num(s.p90), num(s.max), 0.1],
+  ];
+  const kept = raw.filter(
+    (b): b is [number, number, number] => b[0] !== null && b[1] !== null && b[1] > b[0],
+  );
+  const total = kept.reduce((sum, b) => sum + b[2], 0);
+  if (total <= 0) return [];
+  return kept.map(([from, to, mass]) => ({ from, to, mass: mass / total }));
+}
+
+/** A round tick step giving six to eight labels across the axis. */
+function tickStep(span: number): number {
+  const rough = span / 7;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+  const multiple = [1, 2, 2.5, 5, 10].find((m) => magnitude * m >= rough) ?? 10;
+  return magnitude * multiple;
+}
+
+function axisTicks(lo: number, hi: number): number[] {
+  const step = tickStep(hi - lo);
+  const out: number[] = [];
+  for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) {
+    // -0 prints as "-0%", and the tick at exactly zero is the one that must not
+    // look wrong.
+    out.push(Math.abs(t) < 1e-9 ? 0 : t);
+  }
+  return out;
+}
+
+const CHART_W = 1000;
+const CHART_H = 100;
+
+function DistributionChart({
   stats,
   lo,
   hi,
-  height = 'h-6',
+  height,
 }: {
   stats: RollingStatsLike;
   lo: number;
   hi: number;
-  height?: string;
+  height: number;
 }) {
-  const at = (v: number) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
-  const p10 = num(stats.p10);
-  const p90 = num(stats.p90);
+  const bands = bandsOf(stats);
   const median = num(stats.median);
-  const min = num(stats.min);
-  const max = num(stats.max);
-  if (p10 === null || p90 === null || median === null) return null;
+  if (bands.length === 0 || median === null) return null;
+
+  const x = (v: number) => ((v - lo) / (hi - lo)) * CHART_W;
+  const peak = Math.max(...bands.map((b) => b.mass / (b.to - b.from)));
+
+  // A stepped outline: across the top of each column, then down to the floor.
+  const points: string[] = [`${x(bands[0]!.from)},${CHART_H}`];
+  for (const b of bands) {
+    const y = CHART_H - (b.mass / (b.to - b.from) / peak) * CHART_H;
+    points.push(`${x(b.from)},${y}`, `${x(b.to)},${y}`);
+  }
+  points.push(`${x(bands[bands.length - 1]!.to)},${CHART_H}`);
+  const shape = points.join(' ');
+
+  const zeroX = x(0);
+  const uid = `${stats.windowYears}-${height}`;
+  const hasLoss = lo < 0 && bands[0]!.from < 0;
 
   return (
-    <div className={`relative ${height}`}>
-      {/* zero line — the difference between making and losing money */}
+    <svg
+      viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+      preserveAspectRatio="none"
+      style={{ height, width: '100%', display: 'block', overflow: 'visible' }}
+      role="img"
+      aria-label={`Distribution of ${stats.windowYears}-year holding periods, typically ${(
+        median * 100
+      ).toFixed(1)} percent a year`}
+    >
+      <defs>
+        {/* Split at zero, so losses and gains are two colours of one shape. */}
+        <clipPath id={`hp-loss-${uid}`}>
+          <rect x={0} y={-40} width={Math.max(0, zeroX)} height={CHART_H + 80} />
+        </clipPath>
+        <clipPath id={`hp-gain-${uid}`}>
+          <rect x={Math.max(0, zeroX)} y={-40} width={CHART_W} height={CHART_H + 80} />
+        </clipPath>
+      </defs>
+
+      {/* The losing half of the chart, tinted whether or not this fund reached
+          into it. Without it the red only appears where a column happens to
+          sit, and the reader cannot see which side of the line they are on. */}
       {lo < 0 && hi > 0 && (
-        <div
-          className="absolute inset-y-0 w-px bg-border"
-          style={{ left: `${at(0)}%` }}
-          aria-hidden
+        <rect
+          x={0}
+          y={0}
+          width={Math.max(0, zeroX)}
+          height={CHART_H}
+          fill="hsl(var(--destructive))"
+          fillOpacity={0.07}
         />
       )}
-      {min !== null && max !== null && (
-        <div
-          className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/30"
-          style={{ left: `${at(min)}%`, width: `${Math.max(0.5, at(max) - at(min))}%` }}
-          aria-hidden
+
+      {/* Gridlines, so a column's position reads as a number, not just a shape. */}
+      {axisTicks(lo, hi).map((t) => (
+        <line
+          key={t}
+          x1={x(t)}
+          x2={x(t)}
+          y1={0}
+          y2={CHART_H}
+          stroke="hsl(var(--border))"
+          strokeWidth={1}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
+
+      {hasLoss && (
+        <polyline
+          points={shape}
+          fill="hsl(var(--destructive))"
+          fillOpacity={0.5}
+          stroke="none"
+          clipPath={`url(#hp-loss-${uid})`}
         />
       )}
-      <div
-        className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-muted-foreground/35"
-        style={{ left: `${at(p10)}%`, width: `${Math.max(1, at(p90) - at(p10))}%` }}
-        aria-hidden
+      <polyline
+        points={shape}
+        fill="hsl(var(--accent))"
+        fillOpacity={0.42}
+        stroke="none"
+        clipPath={`url(#hp-gain-${uid})`}
       />
-      <div
-        className="absolute top-1/2 h-[14px] w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ left: `${at(median)}%`, backgroundColor: median >= 0 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))' }}
-        aria-hidden
+      <polyline
+        points={shape}
+        fill="none"
+        stroke="hsl(var(--accent))"
+        strokeOpacity={0.95}
+        strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
       />
-    </div>
+
+      {/* Zero: the line between making money and losing it. */}
+      {lo < 0 && hi > 0 && (
+        <line
+          x1={zeroX}
+          x2={zeroX}
+          y1={-4}
+          y2={CHART_H}
+          stroke="hsl(var(--foreground))"
+          strokeOpacity={0.5}
+          strokeWidth={1.5}
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+
+      <line
+        x1={x(median)}
+        x2={x(median)}
+        y1={0}
+        y2={CHART_H}
+        stroke="hsl(var(--accent))"
+        strokeWidth={2}
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
   );
 }
 
 /**
- * The axis every bar on the page is drawn against.
+ * The axis every chart on the page is drawn against.
  *
- * One axis for the subject fund AND its alternatives, not one per fund. A bar
+ * One axis for the subject fund AND its alternatives, not one per fund. A chart
  * is only readable against its neighbours, and rescaling each fund to its own
  * extremes would draw a steady fund and a wild one at identical widths — the
  * exact comparison the panel exists to make, silently erased.
@@ -604,14 +766,55 @@ export function holdingPeriodAxis(
 }
 
 /**
+ * Tick labels, in the page's own type rather than inside the SVG.
+ *
+ * The chart's viewBox is stretched horizontally to whatever width the column
+ * happens to be, so text drawn inside it would stretch with it. Positioning the
+ * labels in HTML keeps them the right shape at every width.
+ */
+function AxisLabels({ lo, hi }: { lo: number; hi: number }) {
+  return (
+    <div className="relative h-4">
+      {axisTicks(lo, hi).map((t) => (
+        <span
+          key={t}
+          className="absolute top-0 -translate-x-1/2 text-[11px] text-muted-foreground"
+          style={{ left: `${((t - lo) / (hi - lo)) * 100}%`, fontVariantNumeric: 'tabular-nums' }}
+        >
+          {`${(t * 100).toFixed(0)}%`}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The median's value, printed over its line on the chart. */
+function MedianLabel({ median, lo, hi }: { median: number; lo: number; hi: number }) {
+  const pct = ((median - lo) / (hi - lo)) * 100;
+  return (
+    <div className="relative h-5">
+      <span
+        className="absolute top-0 font-display text-[15px] leading-none"
+        style={{
+          left: `${pct}%`,
+          transform: pct > 88 ? 'translateX(-100%)' : 'translateX(-50%)',
+          color: 'hsl(var(--accent))',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {(median * 100).toFixed(1)}%
+      </span>
+    </div>
+  );
+}
+
+/**
  * The same distribution at the density an alternatives row can carry.
  *
  * Full-size rows under each of three alternatives would be four near-identical
- * blocks down the page, and the reader would stop reading before the third. So
- * the label, the count and the money translation go, and what stays is the bar
- * and the typical figure — which is what the comparison turns on. The axis is
- * the subject fund's, so the bars line up column-wise: a band sitting further
- * right than the fund above it means exactly that.
+ * blocks down the page and the reader would stop at the second. The labels and
+ * the money translation go; the shape, zero and the typical figure stay, drawn
+ * on the subject fund's axis so the charts line up column-wise.
  */
 function HoldingPeriodsCompact({
   rolling,
@@ -627,25 +830,20 @@ function HoldingPeriodsCompact({
 
   return (
     <div className="space-y-1.5">
-      {usable.map((r) => {
-        const median = num(r.median)!;
-        return (
-          <div key={r.windowYears} className="flex items-center gap-3">
-            <span className="w-6 shrink-0 text-[12px] text-muted-foreground">
-              {r.windowYears}y
-            </span>
-            <span className="min-w-0 flex-1">
-              <HoldingPeriodBar stats={r} lo={lo} hi={hi} height="h-4" />
-            </span>
-            <span
-              className="w-14 shrink-0 text-right text-[12px] text-muted-foreground"
-              style={{ fontVariantNumeric: 'tabular-nums' }}
-            >
-              {(median * 100).toFixed(1)}%
-            </span>
-          </div>
-        );
-      })}
+      {usable.map((r) => (
+        <div key={r.windowYears} className="flex items-center gap-3">
+          <span className="w-6 shrink-0 text-[12px] text-muted-foreground">{r.windowYears}y</span>
+          <span className="min-w-0 flex-1">
+            <DistributionChart stats={r} lo={lo} hi={hi} height={28} />
+          </span>
+          <span
+            className="w-14 shrink-0 text-right text-[12px] text-muted-foreground"
+            style={{ fontVariantNumeric: 'tabular-nums' }}
+          >
+            {(num(r.median)! * 100).toFixed(1)}%
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -668,54 +866,90 @@ function HoldingPeriods({
     `₹${(lakhs * Math.pow(1 + ratio, years)).toFixed(2)}L`;
 
   return (
-    <div className="space-y-6">
-      {usable.map((r) => {
-        const median = num(r.median)!;
-        const p10 = num(r.p10);
-        const p90 = num(r.p90);
-        const neg = num(r.pctNegative);
-        return (
-          <div key={r.windowYears}>
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <span className="text-[15px] text-foreground">
-                Held {r.windowYears} year{r.windowYears === 1 ? '' : 's'}
-              </span>
-              <span className="text-[13px] text-muted-foreground">
-                {r.observations.toLocaleString('en-IN')} such periods since launch
-              </span>
-            </div>
+    <div>
+      {/* What the colours mean, said once, above the charts that use them. */}
+      <div className="mb-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-[12px] text-muted-foreground">
+        <span className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className="h-2.5 w-4 rounded-[2px]"
+            style={{ backgroundColor: 'hsl(var(--destructive) / 0.62)' }}
+          />
+          lost money
+        </span>
+        <span className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className="h-2.5 w-4 rounded-[2px]"
+            style={{ backgroundColor: 'hsl(var(--accent) / 0.42)' }}
+          />
+          made money
+        </span>
+        <span className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className="h-3.5 w-[2px]"
+            style={{ backgroundColor: 'hsl(var(--accent))' }}
+          />
+          the typical period
+        </span>
+        <span>Taller means more periods landed there.</span>
+      </div>
 
-            <div className="mt-2">
-              <HoldingPeriodBar stats={r} lo={lo} hi={hi} />
-            </div>
+      <div className="mb-3 border-b border-border pb-1.5">
+        <AxisLabels lo={lo} hi={hi} />
+      </div>
 
-            <div className="mt-1 flex flex-wrap items-baseline gap-x-6 gap-y-1 text-[13px]">
-              <span className="text-muted-foreground">
-                typically{' '}
-                <span
-                  className="font-display text-[17px]"
-                  style={{ color: median >= 0 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))' }}
-                >
-                  {(median * 100).toFixed(1)}%
-                </span>{' '}
-                a year — ₹{lakhs.toFixed(0)}L became {money(median, r.windowYears)}
-              </span>
-              {p10 !== null && p90 !== null && (
-                <span className="text-muted-foreground">
-                  most landed between {(p10 * 100).toFixed(1)}% and {(p90 * 100).toFixed(1)}%
+      <div className="space-y-9">
+        {usable.map((r) => {
+          const median = num(r.median)!;
+          const neg = num(r.pctNegative);
+          const worst = num(r.min);
+          const best = num(r.max);
+          return (
+            <div key={r.windowYears}>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <span className="text-[15px] text-foreground">
+                  Held {r.windowYears} year{r.windowYears === 1 ? '' : 's'}
                 </span>
-              )}
-              {neg !== null && (
-                <span className="text-muted-foreground">
-                  {neg <= 0
-                    ? 'never ended below where it started'
-                    : `ended down in ${(neg * 100).toFixed(neg < 0.01 ? 1 : 0)}% of them`}
+                <span className="text-[13px] text-muted-foreground">
+                  {r.observations.toLocaleString('en-IN')} such periods since launch
                 </span>
-              )}
+              </div>
+
+              <div className="mt-4">
+                <MedianLabel median={median} lo={lo} hi={hi} />
+                <DistributionChart stats={r} lo={lo} hi={hi} height={76} />
+              </div>
+
+              <p className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
+                Typically <span className="text-foreground">{(median * 100).toFixed(1)}% a year</span>
+                {' — '}₹{lakhs.toFixed(0)}L became {money(median, r.windowYears)}.{' '}
+                {neg === null
+                  ? null
+                  : neg <= 0
+                    ? 'None of them ended below where it started.'
+                    : `${(neg * 100).toFixed(neg < 0.01 ? 1 : 0)}% ended below where they started.`}
+                {worst !== null && best !== null && (
+                  <>
+                    {' '}
+                    The worst lost {(Math.abs(worst) * 100).toFixed(0)}% a year, the best made{' '}
+                    {(best * 100).toFixed(0)}%.
+                  </>
+                )}
+              </p>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      {/* One axis under all three, because they share it. */}
+      <div className="mt-3 border-t border-border pt-1.5">
+        <AxisLabels lo={lo} hi={hi} />
+        <p className="mt-3 text-[12px] text-muted-foreground">
+          Return per year, over the whole period held.
+        </p>
+      </div>
     </div>
   );
 }
@@ -954,9 +1188,9 @@ export function PlainOverview({
             What holding it has meant
           </h3>
           <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-            Every completed holding period since launch, not a forecast. The bar shows where most
-            periods landed; the line through it is the typical one. What the fund does next is not
-            something this or any page can know.
+            Every completed holding period since launch, not a forecast. Each chart is the whole
+            record for that length of hold: where the columns are tall is where most periods
+            landed. What the fund does next is not something this or any page can know.
           </p>
           <div className="mt-7">
             <HoldingPeriods rolling={rollingSet} lo={rollingAxis.lo} hi={rollingAxis.hi} />
@@ -1040,9 +1274,9 @@ export function PlainOverview({
           {rollingAxis !== null &&
             alternatives.alternatives.some((a) => a.rolling.length > 0) && (
               <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-                The bars under each fund are its own completed 1, 3 and 5-year holding periods,
-                drawn on the same scale as this fund&rsquo;s above, so they can be read against
-                each other.
+                Each fund&rsquo;s own completed 1, 3 and 5-year holding periods, drawn on the same
+                scale as this fund&rsquo;s above &mdash; so a hump sitting further right is further
+                right.
               </p>
             )}
 
