@@ -431,8 +431,9 @@ export function buildStatementTotals(
 
   let note: string | undefined;
   if (depositIn.greaterThan(0) && depositOut.greaterThan(0)) {
-    note = `Paid includes Rs ${fmtNum(depositIn)} and Charged includes Rs ${fmtNum(depositOut)} ` +
-      'of security deposit movements, held separately and not applied to the rent balance.';
+    note = `Paid includes a Rs ${fmtNum(depositIn)} security deposit, and Charged includes a ` +
+      `Rs ${fmtNum(depositOut)} deposit refund. Deposits are held separately and are not ` +
+      'applied to the rent balance.';
   } else if (depositIn.greaterThan(0)) {
     note = `Paid includes Rs ${fmtNum(depositIn)} of security deposit, which is held separately ` +
       'and is not applied to the rent balance.';

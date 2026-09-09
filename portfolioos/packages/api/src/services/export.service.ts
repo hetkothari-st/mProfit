@@ -277,8 +277,10 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       rows: payload.rows,
       emptyMessage: 'No records to display.',
       onPageBreak: () => { doc.addPage(); renderPageHeader(); return 72; },
-        C,
+      C,
       totals: payload.totals,
+      // 34pt covers the note's two wrapped lines plus its leading gap.
+      reserveBelow: payload.note ? 34 : 0,
     });
     cy += 10;
 
@@ -369,6 +371,8 @@ interface RenderTableOpts {
   emptyMessage: string;
   onPageBreak: () => number;  // returns new cy after adding page + header
   C: PdfTheme;
+  /** Vertical space to keep free below the table, e.g. for a following note. */
+  reserveBelow?: number;
   /** Optional final row — see `ExportSection.totals`. Skipped when there are no rows. */
   totals?: Record<string, unknown>;
 }
@@ -376,7 +380,12 @@ interface RenderTableOpts {
 function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts): number {
   const C = o.C;
   let cy = drawSectionBand(doc, o.x, o.width, o.y, o.label, C);
-  const BOT = o.pageH - 40;
+  // Reserve the note's strip when one follows this table, so the table breaks a
+  // row early rather than filling the page and stranding the note alone on the
+  // next one. A second page carrying nothing but a caveat reads as a printing
+  // accident — and that caveat is exactly what stops a reader concluding the
+  // totals are wrong.
+  const BOT = o.pageH - 40 - (o.reserveBelow ?? 0);
 
   if (o.rows.length === 0) {
     doc.rect(o.x, cy, o.width, 36).fill(C.rowAlt);
