@@ -42,6 +42,7 @@ import {
   type CreatePropertyInput,
   type CollectionRowDTO,
 } from '@/api/rental.api';
+import { invalidateRentalCaches } from '@/api/rentalCache';
 import { RentalRemindersPanel } from './RentalRemindersPanel';
 
 // ── Property type theming ─────────────────────────────────────────────
@@ -202,7 +203,7 @@ function CreatePropertyDialog({
     mutationFn: (input: CreatePropertyInput) =>
       isEdit ? rentalApi.updateProperty(initial!.id, input) : rentalApi.createProperty(input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-properties'] });
+      invalidateRentalCaches(qc);
       onOpenChange(false);
       setForm({ name: '', propertyType: 'RESIDENTIAL' });
     },
@@ -661,7 +662,7 @@ export function RentalListPage() {
     onSuccess: () => {
       toast.success('Property deleted');
       setConfirmDeleteId(null);
-      qc.invalidateQueries({ queryKey: ['rental-properties'] });
+      invalidateRentalCaches(qc);
     },
     onError: () => toast.error('Failed to delete property'),
   });

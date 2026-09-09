@@ -42,6 +42,7 @@ import {
   type MarkReceivedInput,
   type CreateExpenseInput,
 } from '@/api/rental.api';
+import { invalidateRentalCaches } from '@/api/rentalCache';
 import { DocumentVault } from '@/components/documents/DocumentVault';
 
 // ── Status badge ──────────────────────────────────────────────────────
@@ -113,13 +114,7 @@ function MarkReceivedDialog({
     mutationFn: (input: MarkReceivedInput) =>
       rentalApi.markReceived(receipt.id, input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-property', id] });
-      qc.invalidateQueries({ queryKey: ['rental-properties'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
-      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
-      qc.invalidateQueries({ queryKey: ['alerts'] });
-      qc.invalidateQueries({ queryKey: ['alerts-unread'] });
-      qc.invalidateQueries({ queryKey: ['notifications'] });
+      invalidateRentalCaches(qc);
       onOpenChange(false);
     },
   });
@@ -198,13 +193,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
   const [markOpen, setMarkOpen] = useState(false);
 
   const invalidateAll = () => {
-    qc.invalidateQueries({ queryKey: ['rental-property', id] });
-    qc.invalidateQueries({ queryKey: ['rental-properties'] });
-    qc.invalidateQueries({ queryKey: ['dashboard'] });
-    qc.invalidateQueries({ queryKey: ['rental-reminders'] });
-    qc.invalidateQueries({ queryKey: ['alerts'] });
-    qc.invalidateQueries({ queryKey: ['alerts-unread'] });
-    qc.invalidateQueries({ queryKey: ['notifications'] });
+    invalidateRentalCaches(qc);
   };
   const skipMutation = useMutation({
     mutationFn: () => rentalApi.skipReceipt(receipt.id),
@@ -629,7 +618,7 @@ function AddTenancyDialog({
     mutationFn: (input: CreateTenancyInput) =>
       rentalApi.createTenancy(propertyId, input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-property', propertyId] });
+      invalidateRentalCaches(qc);
       onOpenChange(false);
       setForm({ tenantName: '', startDate: '', monthlyRent: '', rentDueDay: 1 });
     },
@@ -816,7 +805,7 @@ function AddExpenseDialog({
     mutationFn: (input: CreateExpenseInput) =>
       rentalApi.addExpense(propertyId, input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-property', propertyId] });
+      invalidateRentalCaches(qc);
       onOpenChange(false);
       setForm({ expenseType: 'MAINTENANCE', amount: '', paidOn: new Date().toISOString().slice(0, 10) });
     },
@@ -969,7 +958,7 @@ export function RentalDetailPage() {
 
   const deleteExpense = useMutation({
     mutationFn: (expenseId: string) => rentalApi.removeExpense(expenseId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rental-property', id] }),
+    onSuccess: () => invalidateRentalCaches(qc),
   });
 
   if (isLoading) {

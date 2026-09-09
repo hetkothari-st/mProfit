@@ -24,6 +24,7 @@ import {
   type LedgerEntryType,
   type CreateLedgerEntryInput,
 } from '@/api/rental.api';
+import { invalidateRentalCaches } from '@/api/rentalCache';
 
 // ── Entry direction ──────────────────────────────────────────────────
 // "You gave" = a charge against the tenant. "You got" = a credit (money in).
@@ -92,8 +93,7 @@ function AddEntryDialog({
     mutationFn: (input: CreateLedgerEntryInput) => rentalApi.createLedgerEntry(tenancyId, input),
     onSuccess: () => {
       toast.success('Entry added');
-      qc.invalidateQueries({ queryKey: ['tenancy-ledger', tenancyId] });
-      qc.invalidateQueries({ queryKey: ['rental-collections'] });
+      invalidateRentalCaches(qc);
       onOpenChange(false);
       resetForm(direction);
     },
@@ -325,8 +325,7 @@ export function TenantKhataPage() {
     onSuccess: () => {
       toast.success('Entry deleted');
       setConfirmDeleteId(null);
-      qc.invalidateQueries({ queryKey: ['tenancy-ledger', tenancyId] });
-      qc.invalidateQueries({ queryKey: ['rental-collections'] });
+      invalidateRentalCaches(qc);
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to delete entry'),
   });
