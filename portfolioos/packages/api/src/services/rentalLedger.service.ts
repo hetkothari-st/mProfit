@@ -307,6 +307,37 @@ async function getEntryOwned(userId: string, entryId: string) {
   return row;
 }
 
+/**
+ * Which portfolio a rental cash movement belongs to.
+ *
+ * A rental property need not be linked to a portfolio, but the money still
+ * has to land somewhere or it never reaches Cash Activity. `markReceiptReceived`
+ * has always fallen back to the user's default portfolio, then to any portfolio
+ * they own. The khata's own write paths did not, so the same rupee recorded
+ * from the khata instead of the property page produced no CashFlow at all on an
+ * unlinked property. One resolver, used by every rental cash write, so the two
+ * screens cannot disagree again.
+ *
+ * Null means the user owns no portfolio at all — then there is genuinely
+ * nowhere to put it, and the ledger entry stands on its own.
+ */
+export async function resolveRentalPortfolioId(
+  userId: string,
+  propertyPortfolioId: string | null,
+): Promise<string | null> {
+  if (propertyPortfolioId) return propertyPortfolioId;
+  const preferred = await prisma.portfolio.findFirst({
+    where: { userId, isDefault: true },
+    select: { id: true },
+  });
+  if (preferred) return preferred.id;
+  const fallback = await prisma.portfolio.findFirst({
+    where: { userId },
+    select: { id: true },
+  });
+  return fallback?.id ?? null;
+}
+
 export async function createLedgerEntry(
   userId: string,
   tenancyId: string,
@@ -325,13 +356,14 @@ export async function createLedgerEntry(
     select: { name: true, portfolioId: true },
   });
   const direction = CASH_FLOW_DIRECTION[entryType];
+  const portfolioId = await resolveRentalPortfolioId(userId, property.portfolioId);
 
   return runInTransaction(async (tx) => {
     let cashFlowId: string | null = null;
-    if (direction && property.portfolioId) {
+    if (direction && portfolioId) {
       const cf = await tx.cashFlow.create({
         data: {
-          portfolioId: property.portfolioId,
+          portfolioId,
           date: entryDate,
           type: direction,
           amount,
@@ -395,11 +427,13 @@ export async function updateLedgerEntry(
   return runInTransaction(async (tx) => {
     if (!previousDirection && nextDirection) {
       // Was not money-moving, now is: create the CashFlow (same shape as
-      // createLedgerEntry), guarded on the property having a portfolio.
-      if (property.portfolioId) {
+      // createLedgerEntry), through the same portfolio resolver so an
+      // unlinked property still lands its cash somewhere.
+      const portfolioId = await resolveRentalPortfolioId(userId, property.portfolioId);
+      if (portfolioId) {
         const cf = await tx.cashFlow.create({
           data: {
-            portfolioId: property.portfolioId,
+            portfolioId,
             date: effectiveEntryDate,
             type: nextDirection,
             amount: effectiveAmount,
