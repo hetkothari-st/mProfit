@@ -170,6 +170,19 @@ export const caApi = {
     await api.delete(`/api/ca/clients/${clientId}/vouchers/${id}`);
   },
 
+  /**
+   * Re-derive vouchers from the client's recorded activity.
+   *
+   * The books tabs already do this when they load, so this is the catch-up
+   * case: the client added transactions while the CA had the page open.
+   */
+  async generateVouchers(clientId: string): Promise<CaGenerateResult> {
+    const { data } = await api.post<ApiResponse<CaGenerateResult>>(
+      `/api/ca/clients/${clientId}/vouchers/generate`,
+    );
+    return unwrap(data);
+  },
+
   async nextVoucherNo(clientId: string, type: string): Promise<string> {
     const { data } = await api.get<ApiResponse<{ voucherNo: string }>>(
       `/api/ca/clients/${clientId}/vouchers/next-no`,
@@ -445,12 +458,30 @@ export interface CaVoucherPage {
   limit: number;
 }
 
+export interface CaGenerateResult {
+  created: number;
+  skipped: number;
+  errors: number;
+  total: number;
+}
+
+/**
+ * One line of a trial balance, exactly as `getTrialBalance` returns it.
+ *
+ * This used to declare `debit`/`credit`, which the server has never sent. The
+ * columns read those two names, got `undefined` for every row, and rendered a
+ * dash — so the tab showed an empty-looking balance even for a client whose
+ * books were fully posted.
+ */
 export interface CaTrialBalanceRow {
   accountId: string;
   code: string;
   name: string;
-  debit: string;
-  credit: string;
+  type: string;
+  openingBalance: string;
+  totalDebit: string;
+  totalCredit: string;
+  closingBalance: string;
 }
 
 /**

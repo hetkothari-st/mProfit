@@ -25,6 +25,7 @@ import {
   caCreateVoucher,
   caUpdateVoucher,
   caDeleteVoucher,
+  caGenerateFromActivity,
   caGetLedger,
   caGetTrialBalance,
   caGetPnL,
@@ -76,6 +77,11 @@ caRouter.get('/clients/:clientId/vouchers/:id', asyncHandler(caGetVoucher));
 caRouter.post('/clients/:clientId/vouchers', asyncHandler(caCreateVoucher));
 caRouter.patch('/clients/:clientId/vouchers/:id', asyncHandler(caUpdateVoucher));
 caRouter.delete('/clients/:clientId/vouchers/:id', asyncHandler(caDeleteVoucher));
+
+// Re-derive vouchers from the client's recorded activity. The books tabs do
+// this on open; this is for catching up without a reload after the client has
+// added something.
+caRouter.post('/clients/:clientId/vouchers/generate', asyncHandler(caGenerateFromActivity));
 
 // A CA may add a transaction and correct one, but never delete one — there
 // is deliberately no DELETE route here and no RLS policy that would satisfy

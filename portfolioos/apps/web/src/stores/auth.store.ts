@@ -38,13 +38,16 @@ export const useAuthStore = create<AuthState>()(
         // lazily to avoid a circular module boundary between the two
         // stores; the store isn't guaranteed to have subscribers at
         // logout time either.
-        try {
-          void import('./familyScope.store').then((m) =>
-            m.useFamilyScopeStore.getState().clear(),
-          );
-        } catch {
-          /* best-effort clear */
-        }
+        // `.catch`, not try/catch: the import is asynchronous, so a rejection
+        // arrives after this block has already returned and the try could
+        // never have caught it. The failure it was meant to absorb was
+        // reaching the console as an unhandled rejection instead.
+        void import('./familyScope.store')
+          .then((m) => m.useFamilyScopeStore.getState().clear())
+          .catch(() => {
+            // Nothing left to clean up here — the session is being torn down
+            // and the scope store is per-tab, so the next sign-in re-reads it.
+          });
         set({
           user: null,
           accessToken: null,

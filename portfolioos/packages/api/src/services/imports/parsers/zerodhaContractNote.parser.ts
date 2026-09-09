@@ -18,9 +18,9 @@ const DATE_RE = /Trade Date[:\s]*([0-9]{1,2}[-/][A-Za-z]{3}[-/][0-9]{4}|[0-9]{4}
 // F&O tradingsymbol patterns. Zerodha contract notes list F&O trades in a
 // separate section labelled "Equity Futures and Options" / "F&O" with
 // tradingsymbol as the leading identifier (no ISIN).
-const FNO_FUT_RE = /^([A-Z][A-Z0-9&\-]+?)(\d{2})([A-Z]{3})FUT$/;
-const FNO_OPT_MO_RE = /^([A-Z][A-Z0-9&\-]+?)(\d{2})([A-Z]{3})(\d+(?:\.\d+)?)(CE|PE)$/;
-const FNO_OPT_WK_RE = /^([A-Z][A-Z0-9&\-]+?)(\d{2})([1-9OND])(\d{2})(\d+(?:\.\d+)?)(CE|PE)$/;
+const FNO_FUT_RE = /^([A-Z][A-Z0-9&-]+?)(\d{2})([A-Z]{3})FUT$/;
+const FNO_OPT_MO_RE = /^([A-Z][A-Z0-9&-]+?)(\d{2})([A-Z]{3})(\d+(?:\.\d+)?)(CE|PE)$/;
+const FNO_OPT_WK_RE = /^([A-Z][A-Z0-9&-]+?)(\d{2})([1-9OND])(\d{2})(\d+(?:\.\d+)?)(CE|PE)$/;
 const MONTH_IDX: Record<string, number> = {
   JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
   JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,

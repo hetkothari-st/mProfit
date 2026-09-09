@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type ExcelJSType from 'exceljs';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 import { ok } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import {
@@ -372,7 +373,7 @@ export async function getHoldingsExport(req: Request, res: Response) {
     wb.created = new Date();
     const C = themeFor(theme);
 
-    function addSheet(ws: ExcelJSType.Worksheet, payload: ExportPayload) {
+    const addSheet = (ws: ExcelJSType.Worksheet, payload: ExportPayload): void => {
       ws.getCell(1, 1).value = payload.title;
       ws.getCell(1, 1).font = { bold: true, size: 13 };
       let row = 2;
@@ -411,7 +412,7 @@ export async function getHoldingsExport(req: Request, res: Response) {
           ws.getCell(row, 2).value = String(v); row++;
         }
       }
-    }
+    };
 
     addSheet(wb.addWorksheet('Holdings'), holdingsPayload);
     addSheet(wb.addWorksheet('Transactions'), transactionsPayload);
@@ -861,7 +862,7 @@ import {
   dematHoldingReport,
   m2mReport,
 } from '../services/specialReports.service.js';
-import { generateVouchersFromActivity } from '../services/accounting.service.js';
+import { projectBooks, caProjectionAudit } from '../services/ca/caProjection.service.js';
 
 /**
  * Trial Balance / P&L / Balance Sheet / Account Ledger all read from
@@ -874,14 +875,17 @@ import { generateVouchersFromActivity } from '../services/accounting.service.js'
  * via the voucherNo seen-set), so the cost is one cheap query when
  * nothing's outstanding.
  */
-async function ensureAccountingProjected(userId: string): Promise<void> {
+async function ensureAccountingProjected(req: Request, userId: string): Promise<void> {
   try {
-    await generateVouchersFromActivity(userId);
-  } catch (e) {
+    // When a CA triggered this, the vouchers it creates land in someone
+    // else's ledger, so the projection goes on that client's audit trail
+    // rather than happening invisibly behind a download.
+    await projectBooks(userId, await caProjectionAudit(req, userId));
+  } catch (err) {
     // Don't block the download — surface the bug via logs and continue
-    // with whatever vouchers already exist.
-    // eslint-disable-next-line no-console
-    console.error('[accounting] auto-project failed', e);
+    // with whatever vouchers already exist. console.error never reached the
+    // pino pipeline, so this failure was invisible in production.
+    logger.error({ err, userId }, 'reports.auto_project_failed');
   }
 }
 
@@ -1022,7 +1026,7 @@ export async function downloadM2M(req: Request, res: Response) {
 export async function downloadTrialBalance(req: Request, res: Response) {
   const asOf = (req.query.asOf as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildTrialBalanceLayout(userId, asOf);
   });
 }
@@ -1032,7 +1036,7 @@ export async function downloadAccountLedger(req: Request, res: Response) {
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildAccountLedgerLayout(userId, { accountId, from, to });
   });
 }
@@ -1041,7 +1045,7 @@ export async function downloadProfitLoss(req: Request, res: Response) {
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildProfitLossLayout(userId, { from, to });
   });
 }
@@ -1049,7 +1053,7 @@ export async function downloadProfitLoss(req: Request, res: Response) {
 export async function downloadBalanceSheet(req: Request, res: Response) {
   const asOf = (req.query.asOf as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildBalanceSheetLayout(userId, asOf);
   });
 }
@@ -1146,7 +1150,7 @@ export async function downloadFinancialLedger(req: Request, res: Response) {
   const to = (req.query.to as string | undefined)?.trim() || undefined;
   const accountId = (req.query.accountId as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildFinancialLedgerLayout(userId, { from, to, accountId });
   });
 }
@@ -1227,7 +1231,7 @@ export async function downloadScriptLedger(req: Request, res: Response) {
 
 export async function downloadChartOfAccounts(req: Request, res: Response) {
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildChartOfAccountsLayout(userId);
   });
 }
@@ -1236,7 +1240,7 @@ export async function downloadFundFlow(req: Request, res: Response) {
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildFundFlowLayout(userId, { from, to });
   });
 }
@@ -1257,7 +1261,7 @@ export async function downloadPortfolioSnapshot(req: Request, res: Response) {
 export async function downloadDayBook(req: Request, res: Response) {
   const date = (req.query.asOf as string | undefined)?.trim() || (req.query.date as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildDayBookLayout(userId, { date });
   });
 }
@@ -1273,7 +1277,7 @@ export async function downloadBankReconciliation(req: Request, res: Response) {
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildBankReconciliationLayout(userId, { from, to });
   });
 }
@@ -1298,7 +1302,7 @@ export async function downloadTallyMasters(req: Request, res: Response) {
   const resolved = await resolveReportSubjects(req);
   const userId = requireSingleSubject(resolved, 'The Tally masters export').userId;
   await runForSubject(resolved.via, userId, async () => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     const { xml, filenameStem } = await buildTallyMastersXml(userId);
     streamTallyXml(res, xml, filenameStem);
   });
@@ -1310,7 +1314,7 @@ export async function downloadTallyVouchers(req: Request, res: Response) {
   const from = (req.query.from as string | undefined)?.trim() || undefined;
   const to = (req.query.to as string | undefined)?.trim() || undefined;
   await runForSubject(resolved.via, userId, async () => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     const { xml, filenameStem } = await buildTallyVouchersXml(userId, { from, to });
     streamTallyXml(res, xml, filenameStem);
   });

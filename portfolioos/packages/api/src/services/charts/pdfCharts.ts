@@ -15,6 +15,7 @@ export function pdfSafe(s: string | number | null | undefined): string {
   if (s == null) return '';
   return String(s)
     .replace(/[\r\n\t\v\f]+/g, ' ')          // newlines/tabs → single space
+    // eslint-disable-next-line no-control-regex -- stripping control characters is the point: PDFKit renders them as boxes or advances the cursor off-page
     .replace(/[\x00-\x1F\x7F]/g, '')   // other control chars → drop
     .replace(/₹/g, 'Rs. ')   // ₹ → Rs.
     .replace(/—/g, '-')      // em dash → hyphen

@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
 import { fmtNum, fmtDate, type ExportPayload, type ExportColumn } from '../export.service.js';
 import type { BarDatum } from '../charts/pdfCharts.js';
 
@@ -228,7 +229,7 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
 
   const additionalSections: NonNullable<ExportPayload['additionalSections']> = [];
   let footerOverride: Record<string, string> | null = null;
-  let metaOverride: Record<string, string> = {
+  const metaOverride: Record<string, string> = {
     Portfolio: portfolioLabel,
     Section: section,
     Holdings: String(holdings.length),
@@ -308,7 +309,9 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
           exist.trades += r.closedTradeCount;
           fySummary.set(r.financialYear, exist);
         });
-      } catch { /* portfolio may have no F&O */ }
+      } catch (err) {
+        logger.warn({ err, portfolioId: pid }, '[holdingsReport] F&O section omitted');
+      }
     }
 
     if (foRows.length > 0) {
@@ -393,7 +396,9 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
             taxableGain:   r.taxableGain.toString(),
             financialYear: r.financialYear,
           }));
-        } catch { /* no CG for this portfolio */ }
+        } catch (err) {
+          logger.warn({ err, portfolioId: pid }, '[holdingsReport] capital-gains rows omitted');
+        }
       }
       if (cgRows.length > 0) {
         additionalSections.push({
@@ -415,7 +420,9 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
           emptyMessage: 'No realised gains.',
         });
       }
-    } catch { /* CG service may fail for non-applicable asset classes */ }
+    } catch (err) {
+      logger.warn({ err }, '[holdingsReport] capital-gains section omitted');
+    }
   }
 
   // ────────────────────────────────────────────────────────────────────

@@ -62,13 +62,22 @@ export async function createTestScope(label: string): Promise<TestScope> {
     },
     async cleanup() {
       await runAsSystem(async () => {
-        // Order: capital gains → holdings → transactions → portfolio → user.
+        // Order: vouchers → capital gains → holdings → transactions →
+        // portfolio → user. Vouchers lead because VoucherEntry points at both
+        // Account and Transaction, so anything that projected a user's books
+        // pins rows the later deletes would otherwise trip over.
+        await prisma.voucherEntry.deleteMany({ where: { voucher: { userId: user.id } } });
+        await prisma.voucher.deleteMany({ where: { userId: user.id } });
+        await prisma.account.deleteMany({ where: { userId: user.id } });
         await prisma.capitalGain.deleteMany({ where: { portfolioId: portfolio.id } });
         await prisma.holdingProjection.deleteMany({ where: { portfolioId: portfolio.id } });
         await prisma.holding.deleteMany({ where: { portfolioId: portfolio.id } });
         await prisma.transaction.deleteMany({ where: { portfolioId: portfolio.id } });
         await prisma.portfolio.delete({ where: { id: portfolio.id } }).catch(() => {});
-        await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+        // Not swallowed. A user that will not delete means this scope left
+        // rows behind, and the next run inherits them — the failure that
+        // hides here is a leaking suite, which is worth stopping for.
+        await prisma.user.delete({ where: { id: user.id } });
         for (const id of stockMasterIds) {
           await prisma.stockMaster.delete({ where: { id } }).catch(() => {});
         }

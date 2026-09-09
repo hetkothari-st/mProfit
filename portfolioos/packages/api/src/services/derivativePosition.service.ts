@@ -198,8 +198,11 @@ export async function recomputeDerivativePosition(
     const liveMap = await getLiveFoPricesBatch([assetKey]);
     const live = liveMap.get(assetKey);
     if (live != null && live > 0) mtmPrice = new Decimal(live);
-  } catch {
-    // live feed best-effort — never block recompute on NSE flakiness
+  } catch (err) {
+    // Never block a recompute on NSE flakiness — the EOD row below is a fine
+    // second choice — but a feed that is always down should be visible rather
+    // than showing up as marks that are silently a day old.
+    logger.debug({ err, assetKey }, '[fno] live quote unavailable, falling back to EOD');
   }
   if (!mtmPrice) {
     const ltp = await getLatestFoContractPrice(assetKey);
