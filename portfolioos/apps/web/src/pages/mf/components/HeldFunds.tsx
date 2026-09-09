@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { AmcLogo } from '@/components/mf/AmcLogo';
 import { Star } from 'lucide-react';
 import type { MfHeldFundDto, MfSchemeScoreDto } from '@portfolioos/shared';
 import { Card, CardContent } from '@/components/ui/card';
@@ -99,20 +100,25 @@ function FundRow({ fund }: { fund: MfHeldFundDto }) {
   return (
     <tr data-scheme={fund.schemeCode} className="align-top">
       <td className="px-4 py-2.5">
-        {/* The scheme code, not a holding id — same param the fund detail
-            route takes, so the two pages agree on what identifies a fund. */}
-        <Link
-          to={`/mutual-funds/${encodeURIComponent(fund.schemeCode)}`}
-          className="font-medium text-foreground hover:text-accent-ink"
-        >
-          {fund.meta.schemeName}
-        </Link>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          {fund.meta.amcName} · {fund.meta.planType} plan
-          {fund.sipActive && ' · SIP active'}
-          {' · held '}
-          {fund.holdingPeriodDays} days
-        </p>
+        <div className="flex items-start gap-2.5">
+          <AmcLogo amcName={fund.meta.amcName} size={28} className="mt-0.5" />
+          <div className="min-w-0">
+            {/* The scheme code, not a holding id — same param the fund detail
+                route takes, so the two pages agree on what identifies a fund. */}
+            <Link
+              to={`/mutual-funds/${encodeURIComponent(fund.schemeCode)}`}
+              className="font-medium text-foreground hover:text-accent-ink"
+            >
+              {fund.meta.schemeName}
+            </Link>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {fund.meta.amcName} · {fund.meta.planType} plan
+              {fund.sipActive && ' · SIP active'}
+              {' · held '}
+              {fund.holdingPeriodDays} days
+            </p>
+          </div>
+        </div>
       </td>
       <td className="px-4 py-2.5">
         <ScoreChip score={fund.score} />

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { AmcLogo } from '@/components/mf/AmcLogo';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
@@ -141,7 +142,16 @@ export function FundDetailPage() {
     <div>
       <PageHeader
         eyebrow="Mutual fund"
-        title={data?.meta.schemeName ?? schemeCode ?? 'Fund'}
+        title={
+          data ? (
+            <span className="flex items-center gap-4">
+              <AmcLogo amcName={data.meta.amcName} size={48} />
+              <span className="min-w-0">{data.meta.schemeName}</span>
+            </span>
+          ) : (
+            (schemeCode ?? 'Fund')
+          )
+        }
         description={
           data
             ? `${data.meta.amcName} · ${data.meta.sebiCategory}${

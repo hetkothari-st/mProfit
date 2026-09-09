@@ -34,6 +34,8 @@
 
 import { useRef, useState } from 'react';
 
+import { AmcLogo } from '@/components/mf/AmcLogo';
+
 import type {
   MfAlternativesDto,
   MfFundAnalyticsDto,
@@ -457,72 +459,6 @@ function CategoryScale({
     </div>
   );
 }
-
-/**
- * A fund house mark, built from its own name.
- *
- * There are no logo assets in this repo and no endpoint that serves them, so a
- * real logo would mean a broken image on every row. Initials in a tinted disc
- * are honest about being a placeholder, stay stable per AMC across renders, and
- * give the list the scannable left edge that a bare table of names does not.
- *
- * The hue is a hash of the name so two houses are rarely the same colour;
- * saturation and lightness are fixed so none of them fight the lime accent.
- */
-function houseMark(amcName: string): { initials: string; hue: number } {
-  const words = amcName
-    .replace(/\b(mutual fund|asset management|amc|india|limited|ltd\.?|company|trustee)\b/gi, ' ')
-    .replace(/[^A-Za-z ]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-  const initials = (words[0]?.[0] ?? '?') + (words[1]?.[0] ?? '');
-  let h = 0;
-  for (let i = 0; i < amcName.length; i++) h = (h * 31 + amcName.charCodeAt(i)) % 360;
-  return { initials: initials.toUpperCase(), hue: h };
-}
-
-function HouseMark({ amcName }: { amcName: string }) {
-  const { initials, hue } = houseMark(amcName);
-  return (
-    <span
-      aria-hidden
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[13px] font-semibold tracking-tight"
-      style={{
-        backgroundColor: `hsl(${hue} 40% 22%)`,
-        color: `hsl(${hue} 70% 78%)`,
-      }}
-    >
-      {initials}
-    </span>
-  );
-}
-
-/**
- * What holding this fund has actually meant, over every period in its record.
- *
- * ---------------------------------------------------------------------------
- * WHY A RANGE OF PAST PERIODS AND NOT A PROJECTION
- * ---------------------------------------------------------------------------
- *
- * The obvious version of this panel is "your probable return over 1, 2 and 5
- * years". It cannot be built honestly. SEBI does not permit indicative-return
- * communications for mutual funds, this page's own disclaimer says no analysis
- * here predicts future returns, and a projected figure is precisely the kind of
- * confident number with nothing behind it that the rating gates exist to keep
- * out — a fund's future return is not a quantity we hold.
- *
- * What we do hold is every completed holding period in the fund's history. For
- * ICICI Prudential Large & Mid Cap that is 1,232 separate one-year periods:
- * the worst lost 3.0%, the median made 17.4%, the best made 88.5%, and 0.5% of
- * them ended below where they started. That answers the question the reader is
- * actually asking — "what might this do for me" — with the fund's own evidence
- * rather than an extrapolation, and it shows the spread, which a single
- * projected number would hide.
- *
- * The band is p10–p90 rather than min–max: one 2020 window should not set the
- * width of the whole picture, and the tails are still drawn as ticks so nothing
- * is concealed.
- */
 
 /**
  * The shape of the fund's record, drawn as a distribution.
@@ -1366,7 +1302,7 @@ export function PlainOverview({
                     href={`/mutual-funds/${a.schemeCode}`}
                     className="group flex items-center gap-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <HouseMark amcName={a.amcName} />
+                    <AmcLogo amcName={a.amcName} />
 
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[15px] text-foreground group-hover:underline group-hover:underline-offset-4">
