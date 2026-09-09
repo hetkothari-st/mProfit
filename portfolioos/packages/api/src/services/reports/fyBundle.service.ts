@@ -30,6 +30,7 @@ import {
   streamExcel,
   type ExportPayload,
 } from '../export.service.js';
+import type { ThemeName } from '../charts/pdfTheme.js';
 import { buildHoldingsStatement } from '../reportBuilder/statement/holdings.js';
 import { buildCapitalGainsStatement } from '../reportBuilder/statement/capitalGains.js';
 import { buildIncomeStatement } from '../reportBuilder/statement/income.js';
@@ -67,7 +68,11 @@ export interface FyBundleResult {
   failed: Array<{ name: string; reason: string }>;
 }
 
-export async function buildFyBundle(userId: string, fy: string): Promise<FyBundleResult> {
+export async function buildFyBundle(
+  userId: string,
+  fy: string,
+  theme?: ThemeName,
+): Promise<FyBundleResult> {
   const { from, to } = financialYearRange(fy);
   // Point-in-time reports take the last day of the year; range reports take
   // both ends. One translation, applied consistently.
@@ -75,7 +80,8 @@ export async function buildFyBundle(userId: string, fy: string): Promise<FyBundl
   const fromDate = new Date(from);
   const toDate = new Date(to);
 
-  const xlsx = (payload: ExportPayload) => renderToBuffer((sink) => streamExcel(sink, payload));
+  const xlsx = (payload: ExportPayload) =>
+    renderToBuffer((sink) => streamExcel(sink, { ...payload, theme }));
 
   const parts: BundlePart[] = [
     {
