@@ -32,6 +32,8 @@
  * visible here.
  */
 
+import { useRef, useState } from 'react';
+
 import type {
   MfAlternativesDto,
   MfFundAnalyticsDto,
@@ -616,29 +618,47 @@ function axisTicks(lo: number, hi: number): number[] {
 const CHART_W = 1000;
 const CHART_H = 100;
 
+/**
+ * The cumulative share of periods at each band edge.
+ *
+ * These are exact, not estimates: a quantile IS a cumulative share. The 25th
+ * percentile is the return a quarter of periods fell below, so the band running
+ * p25 to the median is precisely "the periods ranked 25th to 50th from worst".
+ * The tooltip can say that without qualification, which is why the band and not
+ * the cursor position is what gets described — inside a band we know how many
+ * periods there are but nothing about how they sit within it, and a readout
+ * that moved smoothly with the mouse would be inventing that.
+ */
+const BAND_EDGES = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1] as const;
+
 function DistributionChart({
   stats,
   lo,
   hi,
   height,
+  compact = false,
 }: {
   stats: RollingStatsLike;
   lo: number;
   hi: number;
   height: number;
+  compact?: boolean;
 }) {
+  const [active, setActive] = useState<number | null>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
+
   const bands = bandsOf(stats);
   const median = num(stats.median);
   if (bands.length === 0 || median === null) return null;
 
   const x = (v: number) => ((v - lo) / (hi - lo)) * CHART_W;
   const peak = Math.max(...bands.map((b) => b.mass / (b.to - b.from)));
+  const topOf = (b: Band) => CHART_H - (b.mass / (b.to - b.from) / peak) * CHART_H;
 
   // A stepped outline: across the top of each column, then down to the floor.
   const points: string[] = [`${x(bands[0]!.from)},${CHART_H}`];
   for (const b of bands) {
-    const y = CHART_H - (b.mass / (b.to - b.from) / peak) * CHART_H;
-    points.push(`${x(b.from)},${y}`, `${x(b.to)},${y}`);
+    points.push(`${x(b.from)},${topOf(b)}`, `${x(b.to)},${topOf(b)}`);
   }
   points.push(`${x(bands[bands.length - 1]!.to)},${CHART_H}`);
   const shape = points.join(' ');
@@ -647,103 +667,230 @@ function DistributionChart({
   const uid = `${stats.windowYears}-${height}`;
   const hasLoss = lo < 0 && bands[0]!.from < 0;
 
+  /** The band under a client x-coordinate, or null beyond the data. */
+  const bandAt = (clientX: number): number | null => {
+    const box = ref.current?.getBoundingClientRect();
+    if (box === undefined || box.width === 0) return null;
+    const value = lo + ((clientX - box.left) / box.width) * (hi - lo);
+    const i = bands.findIndex((b) => value >= b.from && value <= b.to);
+    return i === -1 ? null : i;
+  };
+
+  const hovered = active === null ? null : (bands[active] ?? null);
+
+  /**
+   * `min`/`max` may have been dropped, so the edges shift. Reading them off the
+   * end of the list keeps the percentile labels true to what is actually drawn.
+   */
+  const edgeOffset = BAND_EDGES.length - 1 - bands.length;
+  const lowerPct = active === null ? 0 : (BAND_EDGES[active + edgeOffset] ?? 0);
+  const upperPct = active === null ? 0 : (BAND_EDGES[active + edgeOffset + 1] ?? 1);
+
+  const count = hovered === null ? 0 : Math.round(hovered.mass * stats.observations);
+  const grew = (r: number) => Math.pow(1 + r, stats.windowYears);
+
   return (
-    <svg
-      viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-      preserveAspectRatio="none"
-      style={{ height, width: '100%', display: 'block', overflow: 'visible' }}
-      role="img"
-      aria-label={`Distribution of ${stats.windowYears}-year holding periods, typically ${(
-        median * 100
-      ).toFixed(1)} percent a year`}
+    <div
+      className="relative"
+      ref={ref}
+      onPointerMove={(e) => setActive(bandAt(e.clientX))}
+      onPointerLeave={() => setActive(null)}
     >
-      <defs>
-        {/* Split at zero, so losses and gains are two colours of one shape. */}
-        <clipPath id={`hp-loss-${uid}`}>
-          <rect x={0} y={-40} width={Math.max(0, zeroX)} height={CHART_H + 80} />
-        </clipPath>
-        <clipPath id={`hp-gain-${uid}`}>
-          <rect x={Math.max(0, zeroX)} y={-40} width={CHART_W} height={CHART_H + 80} />
-        </clipPath>
-      </defs>
+      <svg
+        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+        preserveAspectRatio="none"
+        style={{
+          height,
+          width: '100%',
+          display: 'block',
+          overflow: 'visible',
+          touchAction: 'pan-y',
+        }}
+        role="img"
+        aria-label={`Distribution of ${stats.windowYears}-year holding periods, typically ${(
+          median * 100
+        ).toFixed(1)} percent a year`}
+      >
+        <defs>
+          {/* Split at zero, so losses and gains are two colours of one shape. */}
+          <clipPath id={`hp-loss-${uid}`}>
+            <rect x={0} y={-40} width={Math.max(0, zeroX)} height={CHART_H + 80} />
+          </clipPath>
+          <clipPath id={`hp-gain-${uid}`}>
+            <rect x={Math.max(0, zeroX)} y={-40} width={CHART_W} height={CHART_H + 80} />
+          </clipPath>
+        </defs>
 
-      {/* The losing half of the chart, tinted whether or not this fund reached
-          into it. Without it the red only appears where a column happens to
-          sit, and the reader cannot see which side of the line they are on. */}
-      {lo < 0 && hi > 0 && (
-        <rect
-          x={0}
-          y={0}
-          width={Math.max(0, zeroX)}
-          height={CHART_H}
-          fill="hsl(var(--destructive))"
-          fillOpacity={0.07}
-        />
-      )}
+        {/* The losing half of the chart, tinted whether or not this fund reached
+            into it. Without it the red only appears where a column happens to
+            sit, and the reader cannot see which side of the line they are on. */}
+        {lo < 0 && hi > 0 && (
+          <rect
+            x={0}
+            y={0}
+            width={Math.max(0, zeroX)}
+            height={CHART_H}
+            fill="hsl(var(--destructive))"
+            fillOpacity={0.07}
+          />
+        )}
 
-      {/* Gridlines, so a column's position reads as a number, not just a shape. */}
-      {axisTicks(lo, hi).map((t) => (
-        <line
-          key={t}
-          x1={x(t)}
-          x2={x(t)}
-          y1={0}
-          y2={CHART_H}
-          stroke="hsl(var(--border))"
-          strokeWidth={1}
-          vectorEffect="non-scaling-stroke"
-        />
-      ))}
+        {/* Gridlines, so a column's position reads as a number, not just a shape. */}
+        {axisTicks(lo, hi).map((t) => (
+          <line
+            key={t}
+            x1={x(t)}
+            x2={x(t)}
+            y1={0}
+            y2={CHART_H}
+            stroke="hsl(var(--border))"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
 
-      {hasLoss && (
+        {hasLoss && (
+          <polyline
+            points={shape}
+            fill="hsl(var(--destructive))"
+            fillOpacity={0.5}
+            stroke="none"
+            clipPath={`url(#hp-loss-${uid})`}
+          />
+        )}
         <polyline
           points={shape}
-          fill="hsl(var(--destructive))"
-          fillOpacity={0.5}
+          fill="hsl(var(--foreground))"
+          fillOpacity={0.14}
           stroke="none"
-          clipPath={`url(#hp-loss-${uid})`}
+          clipPath={`url(#hp-gain-${uid})`}
         />
-      )}
-      <polyline
-        points={shape}
-        fill="hsl(var(--foreground))"
-        fillOpacity={0.14}
-        stroke="none"
-        clipPath={`url(#hp-gain-${uid})`}
-      />
-      <polyline
-        points={shape}
-        fill="none"
-        stroke="hsl(var(--foreground))"
-        strokeOpacity={0.8}
-        strokeWidth={1.5}
-        vectorEffect="non-scaling-stroke"
-      />
 
-      {/* Zero: the line between making money and losing it. */}
-      {lo < 0 && hi > 0 && (
-        <line
-          x1={zeroX}
-          x2={zeroX}
-          y1={-4}
-          y2={CHART_H}
-          stroke="hsl(var(--muted-foreground))"
-          strokeOpacity={0.9}
+        {/* The hovered column, lit rather than outlined: an outline at this
+            width would sit on top of the neighbouring columns' edges. */}
+        {hovered !== null && (
+          <rect
+            x={x(hovered.from)}
+            y={topOf(hovered)}
+            width={Math.max(0, x(hovered.to) - x(hovered.from))}
+            height={CHART_H - topOf(hovered)}
+            fill="hsl(var(--foreground))"
+            fillOpacity={0.22}
+            pointerEvents="none"
+          />
+        )}
+
+        <polyline
+          points={shape}
+          fill="none"
+          stroke="hsl(var(--foreground))"
+          strokeOpacity={0.8}
           strokeWidth={1.5}
           vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
         />
-      )}
 
-      <line
-        x1={x(median)}
-        x2={x(median)}
-        y1={0}
-        y2={CHART_H}
-        stroke="hsl(var(--foreground))"
-        strokeWidth={2.5}
-        vectorEffect="non-scaling-stroke"
+        {/* Zero: the line between making money and losing it. */}
+        {lo < 0 && hi > 0 && (
+          <line
+            x1={zeroX}
+            x2={zeroX}
+            y1={-4}
+            y2={CHART_H}
+            stroke="hsl(var(--muted-foreground))"
+            strokeOpacity={0.9}
+            strokeWidth={1.5}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />
+        )}
+
+        <line
+          x1={x(median)}
+          x2={x(median)}
+          y1={0}
+          y2={CHART_H}
+          stroke="hsl(var(--foreground))"
+          strokeWidth={2.5}
+          vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
+        />
+      </svg>
+
+      {/* Keyboard access to the same readout. The bands are discrete, so arrow
+          keys step between them — there is no continuous value to scrub. */}
+      <div
+        tabIndex={0}
+        role="slider"
+        aria-label={`Explore the ${stats.windowYears}-year holding periods`}
+        aria-valuemin={1}
+        aria-valuemax={bands.length}
+        aria-valuenow={(active ?? 0) + 1}
+        aria-valuetext={
+          hovered === null
+            ? 'no band selected'
+            : `${(hovered.from * 100).toFixed(1)} to ${(hovered.to * 100).toFixed(
+                1,
+              )} percent a year, ${count} periods`
+        }
+        className="absolute inset-0 cursor-crosshair rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onFocus={() => setActive((a) => a ?? Math.floor(bands.length / 2))}
+        onBlur={() => setActive(null)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActive((a) => Math.min(bands.length - 1, (a ?? -1) + 1));
+          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActive((a) => Math.max(0, (a ?? bands.length) - 1));
+          } else if (e.key === 'Escape') {
+            setActive(null);
+          }
+        }}
       />
-    </svg>
+
+      {hovered !== null && (
+        <div
+          className="pointer-events-none absolute z-20 w-max max-w-[15rem] rounded-md border border-border bg-card px-3 py-2 shadow-lg"
+          style={(() => {
+            // Centred on the column, except at the ends, where centring would
+            // push it off the page. The outermost bands are the widest — a
+            // 10% tail can span half the axis — so this fires often.
+            const centre = (x(hovered.from) + x(hovered.to)) / 2 / CHART_W;
+            const anchor = centre < 0.18 ? 'left' : centre > 0.82 ? 'right' : 'centre';
+            return {
+              left: anchor === 'right' ? undefined : `${anchor === 'left' ? 0 : centre * 100}%`,
+              right: anchor === 'right' ? 0 : undefined,
+              bottom: `${height - topOf(hovered) + 10}px`,
+              transform: anchor === 'centre' ? 'translateX(-50%)' : undefined,
+            };
+          })()}
+        >
+          <div
+            className="text-[13px] text-foreground"
+            style={{ fontVariantNumeric: 'tabular-nums' }}
+          >
+            {(hovered.from * 100).toFixed(1)}% to {(hovered.to * 100).toFixed(1)}% a year
+          </div>
+          <div className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+            {count.toLocaleString('en-IN')} period{count === 1 ? '' : 's'} —{' '}
+            {(hovered.mass * 100).toFixed(0)}% of the record
+          </div>
+          {!compact && (
+            <>
+              <div className="mt-1.5 text-[12px] leading-snug text-muted-foreground">
+                ₹1L became ₹{grew(hovered.from).toFixed(2)}L to ₹{grew(hovered.to).toFixed(2)}L
+              </div>
+              <div className="mt-1.5 border-t border-border pt-1.5 text-[11px] leading-snug text-muted-foreground">
+                The {(lowerPct * 100).toFixed(0)}th to {(upperPct * 100).toFixed(0)}th percentile —
+                worse than {((1 - upperPct) * 100).toFixed(0)}% of periods, better than{' '}
+                {(lowerPct * 100).toFixed(0)}%.
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -834,7 +981,7 @@ function HoldingPeriodsCompact({
         <div key={r.windowYears} className="flex items-center gap-3">
           <span className="w-6 shrink-0 text-[12px] text-muted-foreground">{r.windowYears}y</span>
           <span className="min-w-0 flex-1">
-            <DistributionChart stats={r} lo={lo} hi={hi} height={28} />
+            <DistributionChart stats={r} lo={lo} hi={hi} height={28} compact />
           </span>
           <span
             className="w-14 shrink-0 text-right text-[12px] text-muted-foreground"
