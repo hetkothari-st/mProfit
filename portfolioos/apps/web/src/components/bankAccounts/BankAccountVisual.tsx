@@ -339,7 +339,10 @@ export function BankAccountVisual({
       </div>
 
       {/* ===== STYLOBATE / STEPS ===== */}
-      <div className="relative">
+      {/* Steps are wider than 100%; `mx-auto` can't centre an over-wide block,
+          so the excess spilled only to the right and into the next tile.
+          Clip them flush with the facade on both sides. */}
+      <div className="relative overflow-hidden">
         {[
           { w: '100%', shade: 'bg-black/25' },
           { w: '104%', shade: 'bg-black/35' },
