@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -32,6 +32,10 @@ import {
   type CreateCardInput,
 } from '@/api/creditCards.api';
 import { CreditCardVisual } from '@/components/creditCards/CreditCardVisual';
+import { SuggestInput, type SuggestOption } from '@/components/common/SuggestInput';
+import { INDIAN_BANKS } from '@/data/indianBanks';
+import { CARD_ISSUERS, type CatalogCard } from '@/data/creditCardCatalog';
+import { cardProductsFor } from '@/lib/creditCardDesign';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -181,6 +185,11 @@ function CardCard({
           </div>
         </div>
 
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Limit</span>
+          <span className="tabular-nums money-digits">{formatINR(card.creditLimit)}</span>
+        </div>
+
         {nextDue && (
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Next due</span>
@@ -220,6 +229,22 @@ function CardCard({
 }
 
 // ── Create / Edit dialog ──────────────────────────────────────────────
+
+const ISSUER_OPTIONS: SuggestOption[] = [
+  ...CARD_ISSUERS.map((i) => ({ value: i.name, keywords: i.aliases })),
+  ...INDIAN_BANKS.map((b) => ({ value: b.name, keywords: b.keywords })),
+];
+
+/** Generic variants, for cards the catalog doesn't list — drawn in that tier's finish. */
+const TIER_NAMES = ['Classic', 'Gold', 'Platinum', 'Titanium', 'Signature', 'World', 'Infinite', 'Black', 'Metal'];
+
+const NETWORKS: Array<[string, string]> = [
+  ['VISA', 'Visa'],
+  ['MASTERCARD', 'Mastercard'],
+  ['RUPAY', 'RuPay'],
+  ['AMEX', 'American Express'],
+  ['DINERS', 'Diners Club'],
+];
 
 function CreateCardDialog({
   open,
@@ -267,6 +292,46 @@ function CreateCardDialog({
     }
   }, [open, initial]);
 
+  // The issuer's cards from the catalog, then generic tiers. With no issuer
+  // yet, every card is offered with its issuer so the values stay distinct.
+  const productChoices = useMemo(() => {
+    const hasIssuer = form.issuerBank.trim().length > 0;
+    const byValue = new Map<string, CatalogCard>();
+    const options: SuggestOption[] = cardProductsFor(form.issuerBank).map((c) => {
+      const value = hasIssuer ? c.product : `${c.product} (${c.issuer})`;
+      byValue.set(value, c);
+      return { value, keywords: c.aliases };
+    });
+    for (const t of TIER_NAMES) {
+      if (!byValue.has(t)) options.push({ value: t, hint: 'Any bank' });
+    }
+    return { options, byValue };
+  }, [form.issuerBank]);
+
+  /** A picked catalog card sets its exact name, and its issuer and usual network if blank. */
+  function pickProduct(option: SuggestOption) {
+    const c = productChoices.byValue.get(option.value);
+    if (!c) return;
+    setForm((f) => ({
+      ...f,
+      cardName: c.product,
+      issuerBank: f.issuerBank.trim() ? f.issuerBank : c.issuer,
+      network: f.network || c.network,
+    }));
+  }
+
+  const preview: CreditCardDTO = {
+    ...form,
+    id: 'preview',
+    userId: '',
+    portfolioId: null,
+    cardName: form.cardName.trim() || 'Card name',
+    last4: /^\d{4}$/.test(form.last4) ? form.last4 : '••••',
+    outstandingBalance: '0',
+    statements: [],
+    createdAt: '',
+  } as CreditCardDTO;
+
   const mutation = useMutation({
     mutationFn: (input: CreateCardInput) =>
       isEdit ? creditCardsApi.update(initial!.id, input) : creditCardsApi.create(input),
@@ -313,19 +378,39 @@ function CreateCardDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {(form.issuerBank.trim() || form.cardName.trim()) && (
+            <div className="mx-auto w-full max-w-[18rem]" aria-hidden>
+              <CreditCardVisual card={preview} />
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Issuer bank *</Label>
-              <Input placeholder="HDFC, ICICI, Axis…" value={form.issuerBank}
-                onChange={(e) => set('issuerBank', e.target.value)}
-                className={errors['issuerBank'] ? 'border-negative' : ''} />
+              <Label htmlFor="cc-issuer">Issuer bank *</Label>
+              <SuggestInput
+                id="cc-issuer"
+                placeholder="Search HDFC, SBI, Amex…"
+                value={form.issuerBank}
+                onValueChange={(v) => set('issuerBank', v)}
+                options={ISSUER_OPTIONS}
+                autoComplete="off"
+                className={errors['issuerBank'] ? 'border-negative' : ''}
+              />
               {errors['issuerBank'] && <p className="text-xs text-negative mt-1">{errors['issuerBank']}</p>}
             </div>
             <div>
-              <Label>Card name *</Label>
-              <Input placeholder="Regalia, Millennia…" value={form.cardName}
-                onChange={(e) => set('cardName', e.target.value)}
-                className={errors['cardName'] ? 'border-negative' : ''} />
+              <Label htmlFor="cc-name">Card *</Label>
+              <SuggestInput
+                id="cc-name"
+                placeholder="Regalia Gold, Platinum…"
+                value={form.cardName}
+                onValueChange={(v) => set('cardName', v)}
+                options={productChoices.options}
+                onPick={pickProduct}
+                maxResults={10}
+                autoComplete="off"
+                className={errors['cardName'] ? 'border-negative' : ''}
+              />
               {errors['cardName'] && <p className="text-xs text-negative mt-1">{errors['cardName']}</p>}
             </div>
           </div>
@@ -346,8 +431,8 @@ function CreateCardDialog({
                 onChange={(e) => set('network', e.target.value || null)}
               >
                 <option value="">— select —</option>
-                {['VISA', 'MASTERCARD', 'AMEX', 'RUPAY'].map((n) => (
-                  <option key={n} value={n}>{n.charAt(0) + n.slice(1).toLowerCase()}</option>
+                {NETWORKS.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
                 ))}
               </select>
             </div>

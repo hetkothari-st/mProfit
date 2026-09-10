@@ -1,183 +1,425 @@
-import { formatINR } from '@portfolioos/shared';
+/**
+ * A credit card drawn as the real card: the product's own colourway and finish
+ * (see data/creditCardCatalog), the issuer's logo printed in one ink the way
+ * banks print it on plastic and metal, the EMV chip, the network's mark, and
+ * the holder's name.
+ *
+ * Every measurement is in `cqw` (a percentage of the card's own width), so the
+ * card scales like a physical object — the same proportions in a list tile and
+ * on the detail page. Vertical cards (Swiggy, Tata Neu, Scapia…) stand upright.
+ */
+import { useId, useState, type CSSProperties, type ReactNode } from 'react';
 import type { CreditCardDTO } from '@/api/creditCards.api';
+import type { CardDesign, CardNetwork, CardPattern, CardTier } from '@/data/creditCardCatalog';
+import { bankBrandFor } from '@/lib/bankBrand';
+import { resolveCardDesign } from '@/lib/creditCardDesign';
+import { useAuthStore } from '@/stores/auth.store';
 
-interface PaletteVars {
-  /** Tailwind classes applied to the outer card div: gradient + base text color. */
-  surface: string;
-  /** Primary text color (issuer, holder name, last4). */
-  primary: string;
-  /** Slightly muted text (card number masked dots, limit). */
-  secondary: string;
-  /** Heavily muted text (small labels). */
-  tertiary: string;
-  /** Network logo color override (used by NetworkLogo to flip white→dark). */
-  logoTint: 'light' | 'dark';
-  /** Inner shine + corner blob colors — keeps depth on light backgrounds. */
-  shineFrom: string;
-  shineTo: string;
-  blob1: string;
-  blob2: string;
+const INK = {
+  light: { text: '#f7f7f5', muted: 'rgba(255,255,255,0.66)', shadow: '0 1px 1px rgba(0,0,0,0.45)' },
+  dark: { text: '#1d1b19', muted: 'rgba(29,27,25,0.62)', shadow: '0 1px 0 rgba(255,255,255,0.45)' },
+} as const;
+
+/** Tiers whose product names are set in the display serif, as premium cards are. */
+const SERIF_TIERS = new Set<CardTier>(['metal', 'infinite', 'black', 'world', 'signature']);
+
+/** Short names for issuers whose mark is an emblem rather than a wordmark. */
+const ISSUER_SHORT: Record<string, string> = {
+  'State Bank of India': 'SBI Card',
+  'Bank of Baroda': 'BOBCARD',
+  'Axis Bank': 'AXIS BANK',
+  'AU Small Finance Bank': 'AU Bank',
+  'Yes Bank': 'YES BANK',
+  'Standard Chartered Bank': 'Standard Chartered',
+  'Kotak Mahindra Bank': 'kotak',
+};
+
+// ── Surface ───────────────────────────────────────────────────────────────────
+
+const FINISH: Record<CardDesign['finish'], CSSProperties[]> = {
+  metal: [
+    // Brushed grain, then a band of light across it.
+    { background: 'repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 1px, rgba(0,0,0,0.04) 1px 2px, transparent 2px 3px)' },
+    { background: 'linear-gradient(112deg, transparent 28%, rgba(255,255,255,0.22) 44%, transparent 58%)' },
+  ],
+  glossy: [
+    { background: 'radial-gradient(120% 85% at 8% 0%, rgba(255,255,255,0.30), transparent 55%)' },
+  ],
+  matte: [
+    { background: 'linear-gradient(180deg, rgba(255,255,255,0.07), transparent 38%)' },
+  ],
+  pearl: [
+    {
+      background:
+        'linear-gradient(118deg, rgba(255,205,250,0.26), rgba(185,240,255,0.16) 38%, rgba(255,242,195,0.22) 68%, transparent)',
+      mixBlendMode: 'soft-light',
+    },
+    { background: 'radial-gradient(110% 80% at 12% 0%, rgba(255,255,255,0.22), transparent 55%)' },
+  ],
+};
+
+function Pattern({ kind, color, vertical, uid }: { kind: CardPattern; color: string; vertical: boolean; uid: string }) {
+  if (kind === 'none') return null;
+  const W = vertical ? 63 : 100;
+  const H = vertical ? 100 : 63;
+  let body: ReactNode = null;
+  switch (kind) {
+    case 'waves':
+      body = Array.from({ length: 7 }, (_, i) => {
+        const y = H * 0.5 + i * 5;
+        return <path key={i} d={`M-5 ${y} Q ${W * 0.25} ${y - 9} ${W * 0.5} ${y} T ${W + 5} ${y}`} />;
+      });
+      break;
+    case 'lines':
+      body = Array.from({ length: Math.ceil((W + H) / 1.6) }, (_, i) => {
+        const x = -H + i * 1.6;
+        return <path key={i} d={`M${x} 0 L${x + H} ${H}`} strokeWidth={0.18} />;
+      });
+      break;
+    case 'circles':
+      body = Array.from({ length: 11 }, (_, i) => <circle key={i} cx={W * 0.88} cy={H * 0.92} r={8 + i * 7} />);
+      break;
+    case 'topo':
+      body = Array.from({ length: 9 }, (_, i) => (
+        <ellipse
+          key={i}
+          cx={W * 0.78}
+          cy={H * 0.28}
+          rx={6 + i * 6.5}
+          ry={4 + i * 4.4}
+          transform={`rotate(${-18 + i * 3} ${W * 0.78} ${H * 0.28})`}
+        />
+      ));
+      break;
+    case 'mountains':
+      body = (
+        <g stroke="none" fill={color}>
+          <path d={`M0 ${H} L0 ${H * 0.72} L${W * 0.22} ${H * 0.5} L${W * 0.4} ${H * 0.66} L${W * 0.62} ${H * 0.42} L${W} ${H * 0.7} L${W} ${H} Z`} opacity={0.55} />
+          <path d={`M0 ${H} L0 ${H * 0.86} L${W * 0.3} ${H * 0.68} L${W * 0.55} ${H * 0.82} L${W * 0.8} ${H * 0.62} L${W} ${H * 0.78} L${W} ${H} Z`} />
+        </g>
+      );
+      break;
+    case 'hex':
+    case 'dots':
+      body = (
+        <>
+          <defs>
+            {kind === 'hex' ? (
+              <pattern id={`${uid}-p`} width={6} height={10.39} patternUnits="userSpaceOnUse">
+                <path d="M3 0 L6 1.73 L6 5.2 L3 6.93 L0 5.2 L0 1.73 Z M3 6.93 L3 10.39" strokeWidth={0.2} />
+              </pattern>
+            ) : (
+              <pattern id={`${uid}-p`} width={2.6} height={2.6} patternUnits="userSpaceOnUse">
+                <circle cx={1.3} cy={1.3} r={0.42} fill={color} stroke="none" />
+              </pattern>
+            )}
+          </defs>
+          <rect width={W} height={H} fill={`url(#${uid}-p)`} stroke="none" />
+        </>
+      );
+      break;
+    case 'shapes':
+      body = (
+        <g stroke="none" fill={color}>
+          <circle cx={W * 0.95} cy={H * 0.05} r={H * 0.55} />
+          <circle cx={W * 0.72} cy={H * 1.05} r={H * 0.42} />
+          <circle cx={W * 0.08} cy={H * 0.98} r={H * 0.22} />
+        </g>
+      );
+      break;
+  }
+  return (
+    <svg
+      aria-hidden
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="xMidYMid slice"
+      fill="none"
+      stroke={color}
+      strokeWidth={0.3}
+    >
+      {body}
+    </svg>
+  );
 }
 
-const PALETTES: Record<string, PaletteVars> = {
-  VISA: {
-    surface: 'bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 text-white',
-    primary: 'text-white',
-    secondary: 'text-white/95',
-    tertiary: 'text-white/50',
-    logoTint: 'light',
-    shineFrom: 'from-white/0',
-    shineTo: 'to-white/15',
-    blob1: 'bg-white/5',
-    blob2: 'bg-black/15',
-  },
-  MASTERCARD: {
-    surface: 'bg-gradient-to-br from-rose-700 via-red-800 to-orange-900 text-white',
-    primary: 'text-white',
-    secondary: 'text-white/95',
-    tertiary: 'text-white/50',
-    logoTint: 'light',
-    shineFrom: 'from-white/0',
-    shineTo: 'to-white/15',
-    blob1: 'bg-white/5',
-    blob2: 'bg-black/15',
-  },
-  AMEX: {
-    surface: 'bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-600 text-stone-900',
-    primary: 'text-stone-900',
-    secondary: 'text-stone-900/90',
-    tertiary: 'text-stone-700/70',
-    logoTint: 'dark',
-    shineFrom: 'from-white/0',
-    shineTo: 'to-white/40',
-    blob1: 'bg-white/30',
-    blob2: 'bg-amber-900/15',
-  },
-  RUPAY: {
-    surface: 'bg-gradient-to-br from-orange-500 via-orange-700 to-amber-950 text-white',
-    primary: 'text-white',
-    secondary: 'text-white/95',
-    tertiary: 'text-white/50',
-    logoTint: 'light',
-    shineFrom: 'from-white/0',
-    shineTo: 'to-white/15',
-    blob1: 'bg-white/5',
-    blob2: 'bg-black/15',
-  },
-};
+// ── Hardware ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_PALETTE: PaletteVars = {
-  surface: 'bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950 text-white',
-  primary: 'text-white',
-  secondary: 'text-white/95',
-  tertiary: 'text-white/50',
-  logoTint: 'light',
-  shineFrom: 'from-white/0',
-  shineTo: 'to-white/15',
-  blob1: 'bg-white/5',
-  blob2: 'bg-black/15',
-};
+function Chip({ tone, vertical }: { tone: 'gold' | 'silver'; vertical: boolean }) {
+  const [a, b, c] = tone === 'gold' ? ['#f6e3a1', '#d4ad57', '#a8802f'] : ['#f2f4f6', '#c3c8cf', '#8c939c'];
+  const id = useId().replace(/:/g, '');
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 50 38"
+      style={{ width: vertical ? '17cqw' : '12.5cqw', transform: vertical ? 'rotate(90deg)' : undefined }}
+    >
+      <defs>
+        <linearGradient id={`${id}-g`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={a} />
+          <stop offset="0.5" stopColor={b} />
+          <stop offset="1" stopColor={c} />
+        </linearGradient>
+      </defs>
+      <rect x="0.5" y="0.5" width="49" height="37" rx="6" fill={`url(#${id}-g)`} stroke="rgba(0,0,0,0.25)" />
+      <g fill="none" stroke="rgba(60,40,10,0.45)" strokeWidth="1">
+        <path d="M0 13 H16 M0 25 H16 M34 13 H50 M34 25 H50" />
+        <path d="M16 6 H34 V32 H16 Z" />
+        <path d="M25 0 V6 M25 32 V38 M16 19 H34" />
+      </g>
+    </svg>
+  );
+}
 
-function NetworkLogo({ network, tint }: { network: string | null; tint: 'light' | 'dark' }) {
+function Contactless({ color, width }: { color: string; width: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" style={{ width }} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round">
+      <path d="M8.5 7.5a6 6 0 0 1 0 9" opacity={0.9} />
+      <path d="M12 5a9.5 9.5 0 0 1 0 14" opacity={0.9} />
+      <path d="M15.5 2.5a13 13 0 0 1 0 19" opacity={0.9} />
+      <path d="M5 10a2.5 2.5 0 0 1 0 4" opacity={0.9} />
+    </svg>
+  );
+}
+
+function NetworkMark({ network, ink, width }: { network: CardNetwork | null; ink: 'light' | 'dark'; width: string }) {
+  const uid = useId().replace(/:/g, '');
   if (!network) return null;
-  const txt = tint === 'light' ? 'text-white' : 'text-stone-900';
+  const color = ink === 'light' ? '#ffffff' : '#1a1f71';
   switch (network) {
     case 'VISA':
       return (
-        <span className={`font-extrabold italic ${txt} text-2xl tracking-tight drop-shadow-sm`}>
-          VISA
+        <span
+          role="img"
+          aria-label="Visa"
+          className="font-black italic leading-none tracking-tight"
+          style={{ fontSize: `calc(${width} * 0.42)`, color, fontFamily: 'Arial Black, Arial, sans-serif' }}
+        >
+          <span aria-hidden>VISA</span>
         </span>
       );
     case 'MASTERCARD':
       return (
-        <div className="flex items-center -space-x-3">
-          <span className="h-7 w-7 rounded-full bg-red-500/90" />
-          <span className="h-7 w-7 rounded-full bg-amber-400/90 mix-blend-screen" />
-        </div>
+        <svg role="img" aria-label="Mastercard" viewBox="0 0 38 24" style={{ width }}>
+          <defs>
+            <clipPath id={`${uid}-mc`}>
+              <circle cx="12" cy="12" r="11" />
+            </clipPath>
+          </defs>
+          <circle cx="12" cy="12" r="11" fill="#eb001b" />
+          <circle cx="26" cy="12" r="11" fill="#f79e1b" />
+          <circle cx="26" cy="12" r="11" fill="#ff5f00" clipPath={`url(#${uid}-mc)`} />
+        </svg>
       );
-    case 'AMEX': {
-      // Real Amex Gold uses navy/black wordmark on gold. Keep that.
-      const border = tint === 'light' ? 'border-white/40' : 'border-stone-900/50';
+    case 'AMEX':
       return (
-        <span className={`font-bold ${txt} text-[11px] uppercase tracking-[0.18em] px-2 py-0.5 border ${border} rounded`}>
-          American Express
-        </span>
+        <svg role="img" aria-label="American Express" viewBox="0 0 40 40" style={{ width: `calc(${width} * 0.8)` }}>
+          <rect width="40" height="40" rx="3" fill="#016fd0" />
+          <g fill="#fff" fontFamily="Arial Narrow, Arial, sans-serif" fontWeight="900" textAnchor="middle">
+            <text x="20" y="18.5" fontSize="8" textLength="34" lengthAdjust="spacingAndGlyphs">AMERICAN</text>
+            <text x="20" y="28" fontSize="8" textLength="30" lengthAdjust="spacingAndGlyphs">EXPRESS</text>
+          </g>
+        </svg>
       );
-    }
     case 'RUPAY':
       return (
-        <span className={`font-bold italic ${txt} text-xl tracking-tight drop-shadow-sm`}>
-          Ru<span className="text-orange-300">Pay</span>
-        </span>
+        <svg role="img" aria-label="RuPay" viewBox="0 0 64 20" style={{ width }}>
+          <text x="0" y="16" fontSize="17" fontWeight="900" fontStyle="italic" fontFamily="Arial, sans-serif" fill={color} textLength="46" lengthAdjust="spacingAndGlyphs">
+            RuPay
+          </text>
+          <path d="M53 3 L63 10 L51 17 Z" fill="#f47920" />
+          <path d="M50 3 L57 10 L48 17 Z" fill="#1b9e4b" />
+        </svg>
       );
-    default:
-      return null;
+    case 'DINERS':
+      return (
+        <svg role="img" aria-label="Diners Club" viewBox="0 0 30 24" style={{ width: `calc(${width} * 0.8)` }}>
+          <circle cx="15" cy="12" r="11.5" fill="#0079be" />
+          <path d="M13 5.5 A7 7 0 0 0 13 18.5 Z M17 5.5 A7 7 0 0 1 17 18.5 Z" fill="#fff" />
+        </svg>
+      );
   }
 }
 
-function CardChip() {
+/**
+ * The issuer's logo in a single ink. The SVG filter keeps the mark's shape and
+ * drops its white ground: alpha falls with brightness, so white plates vanish
+ * and coloured ink turns into white foil (or dark print on a light card).
+ */
+function IssuerMark({
+  issuer,
+  ink,
+  height,
+  maxWidth,
+  filterId,
+}: {
+  issuer: string;
+  ink: 'light' | 'dark';
+  height: string;
+  maxWidth: string;
+  filterId: string;
+}) {
+  const brand = bankBrandFor(issuer);
+  const [failed, setFailed] = useState(false);
+  const color = INK[ink].text;
+
+  if (issuer === 'American Express') {
+    return (
+      <span className="font-display font-semibold uppercase leading-none" style={{ fontSize: `calc(${height} * 0.5)`, letterSpacing: '0.16em', color }}>
+        American Express
+      </span>
+    );
+  }
+  const name = ISSUER_SHORT[issuer] ?? brand?.name ?? issuer;
+  const wordmarkOnly = brand?.logo && !failed && brand.aspect >= 1.8;
   return (
-    <div className="h-9 w-12 rounded-md bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-600 relative overflow-hidden shadow-inner ring-1 ring-amber-800/30">
-      <div className="absolute inset-0 grid grid-cols-2 grid-rows-3 gap-px p-0.5 opacity-50">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-amber-700/40 rounded-sm" />
-        ))}
-      </div>
-    </div>
+    <span className="flex min-w-0 items-center" style={{ gap: `calc(${height} * 0.3)` }}>
+      {brand?.logo && !failed && (
+        <img
+          src={brand.logo}
+          alt={`${brand.name} logo`}
+          className="shrink-0 object-contain object-left"
+          style={{ height, maxWidth, filter: `url(#${filterId})` }}
+          onError={() => setFailed(true)}
+        />
+      )}
+      {!wordmarkOnly && (
+        <span className="truncate font-bold leading-none" style={{ fontSize: `calc(${height} * 0.55)`, color }}>
+          {name}
+        </span>
+      )}
+    </span>
   );
 }
 
-export function CreditCardVisual({ card, size = 'md' }: { card: CreditCardDTO; size?: 'md' | 'lg' }) {
-  const palette: PaletteVars = (card.network ? PALETTES[card.network] : undefined) ?? DEFAULT_PALETTE;
-  const dim = card.status !== 'ACTIVE' ? 'grayscale opacity-70' : '';
-  const numberSize = size === 'lg' ? 'text-lg sm:text-xl md:text-2xl' : 'text-sm sm:text-base md:text-lg';
-  const padding = size === 'lg' ? 'p-4 sm:p-6' : 'p-3 sm:p-4 md:p-5';
+function InkFilter({ id, ink }: { id: string; ink: 'light' | 'dark' }) {
+  // RGB → the ink colour; alpha → 1.7 × (alpha − luminance), clamped.
+  const v = ink === 'light' ? 1 : 0.11;
+  const k = 1.7;
+  const matrix = [
+    `0 0 0 0 ${v}`,
+    `0 0 0 0 ${v}`,
+    `0 0 0 0 ${v}`,
+    `${-0.2126 * k} ${-0.7152 * k} ${-0.0722 * k} ${k} 0`,
+  ].join(' ');
+  return (
+    <svg aria-hidden width="0" height="0" className="absolute">
+      <filter id={id} colorInterpolationFilters="sRGB">
+        <feColorMatrix type="matrix" values={matrix} />
+      </filter>
+    </svg>
+  );
+}
 
-  // Masked dots use slightly different opacity per palette so they stay visible
-  // on both dark and light surfaces.
-  const dotClass = palette.logoTint === 'dark' ? 'text-stone-900/40' : 'text-white/40';
+// ── Card ──────────────────────────────────────────────────────────────────────
+
+/** Masked groups before the last four: Amex numbers are 15 digits in 4-6-5. */
+function maskedGroups(network: CardNetwork | null): { groups: string[]; lead: string } {
+  return network === 'AMEX' ? { groups: ['••••', '••••••'], lead: '•' } : { groups: ['••••', '••••', '••••'], lead: '' };
+}
+
+export function CreditCardVisual({ card, size = 'md' }: { card: CreditCardDTO; size?: 'md' | 'lg' }) {
+  const holder = useAuthStore((s) => s.user?.name ?? '');
+  const uid = useId().replace(/:/g, '');
+  const r = resolveCardDesign(card);
+  const { design } = r;
+  const vertical = design.orientation === 'vertical';
+  const ink = INK[design.ink];
+  const productColor = design.accent ?? ink.text;
+  const filterId = `${uid}-ink`;
+  const { groups, lead } = maskedGroups(r.network);
+
+  const product = (
+    <span
+      className={`${SERIF_TIERS.has(r.tier) ? 'font-display font-medium' : 'font-semibold'} block truncate leading-tight`}
+      style={{ color: productColor, fontSize: vertical ? '8.6cqw' : '4.1cqw', letterSpacing: '0.03em', textShadow: ink.shadow }}
+    >
+      {r.product}
+    </span>
+  );
+  const holderName = holder && (
+    <span
+      className="block truncate font-medium uppercase leading-none"
+      style={{ color: ink.text, fontSize: vertical ? '5.8cqw' : '3.3cqw', letterSpacing: '0.12em', textShadow: ink.shadow }}
+    >
+      {holder.toUpperCase()}
+    </span>
+  );
+  const number = (
+    <span
+      className="flex items-baseline font-mono leading-none"
+      style={{ color: ink.text, fontSize: vertical ? '7.2cqw' : '5cqw', gap: '0.55em', letterSpacing: '0.12em', textShadow: ink.shadow }}
+    >
+      {!vertical && groups.map((g, i) => <span key={i} style={{ color: ink.muted }}>{g}</span>)}
+      <span className="flex">
+        {vertical ? <span style={{ color: ink.muted, marginRight: '0.4em' }}>••••</span> : lead && <span style={{ color: ink.muted }}>{lead}</span>}
+        <span>{card.last4}</span>
+      </span>
+    </span>
+  );
 
   return (
-    <div
-      className={`relative w-full aspect-[1.586/1] rounded-xl ${palette.surface} ${dim} shadow-lg overflow-hidden`}
-    >
-      <div className={`absolute inset-0 bg-gradient-to-tr ${palette.shineFrom} via-white/5 ${palette.shineTo} pointer-events-none`} />
-      <div className={`absolute -top-12 -right-12 h-40 w-40 rounded-full ${palette.blob1} blur-2xl pointer-events-none`} />
-      <div className={`absolute -bottom-16 -left-10 h-44 w-44 rounded-full ${palette.blob2} blur-2xl pointer-events-none`} />
+    <div className="relative flex aspect-[1.586/1] w-full items-center justify-center">
+      <div
+        data-testid="credit-card-face"
+        data-card={r.designKey}
+        data-finish={design.finish}
+        data-orientation={design.orientation}
+        className={`relative h-full overflow-hidden ${vertical ? 'aspect-[1/1.586]' : 'w-full'} ${
+          card.status !== 'ACTIVE' ? 'opacity-70 grayscale' : ''
+        }`}
+        style={{
+          containerType: 'inline-size',
+          // A card's corner is the same radius on both sides, so as percentages
+          // of an 85.6 × 54 mm card it differs per axis (and swaps upright).
+          borderRadius: vertical ? '7.1% / 4.5%' : '4.5% / 7.1%',
+          background: design.background,
+          boxShadow: `inset 0 0 0 1px rgba(255,255,255,${design.ink === 'light' ? 0.1 : 0.45}), 0 ${
+            size === 'lg' ? '18px 40px' : '12px 28px'
+          } -14px rgba(0,0,0,0.65)`,
+        }}
+      >
+        <InkFilter id={filterId} ink={design.ink} />
+        <Pattern kind={design.pattern} color={design.patternColor ?? 'rgba(255,255,255,0.12)'} vertical={vertical} uid={uid} />
+        {FINISH[design.finish].map((style, i) => (
+          <div key={i} aria-hidden className="pointer-events-none absolute inset-0" style={style} />
+        ))}
 
-      <div className={`relative h-full ${padding} flex flex-col justify-between`}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className={`text-[10px] uppercase tracking-[0.2em] ${palette.tertiary}`}>Card issuer</p>
-            <p className={`font-semibold text-sm sm:text-base truncate drop-shadow ${palette.primary}`}>{card.issuerBank}</p>
+        {vertical ? (
+          <div className="relative flex h-full flex-col" style={{ padding: '8cqw 7.5cqw' }}>
+            <div className="flex items-start justify-between" style={{ gap: '4cqw' }}>
+              <IssuerMark issuer={r.issuer} ink={design.ink} height="11cqw" maxWidth="66cqw" filterId={filterId} />
+              <Contactless color={ink.text} width="8cqw" />
+            </div>
+            <div style={{ marginTop: '12cqw', marginLeft: '-2cqw' }}>
+              <Chip tone={design.chip} vertical />
+            </div>
+            <div className="mt-auto" style={{ marginBottom: '6cqw' }}>{product}</div>
+            <div className="flex items-end justify-between" style={{ gap: '4cqw' }}>
+              <div className="flex min-w-0 flex-col" style={{ gap: '3cqw' }}>
+                {number}
+                {holderName}
+              </div>
+              <NetworkMark network={r.network} ink={design.ink} width="24cqw" />
+            </div>
           </div>
-          <div className="shrink-0">
-            <NetworkLogo network={card.network} tint={palette.logoTint} />
+        ) : (
+          <div className="relative flex h-full flex-col" style={{ padding: '5.5cqw 6cqw' }}>
+            <div className="flex items-start justify-between" style={{ gap: '4cqw' }}>
+              <IssuerMark issuer={r.issuer} ink={design.ink} height="6.6cqw" maxWidth="38cqw" filterId={filterId} />
+              <div className="min-w-0 max-w-[45%] text-right">{product}</div>
+            </div>
+            <div className="flex items-center" style={{ marginTop: '8cqw', gap: '3cqw' }}>
+              <Chip tone={design.chip} vertical={false} />
+              <Contactless color={ink.text} width="5.2cqw" />
+            </div>
+            <div style={{ marginTop: '5.5cqw' }}>{number}</div>
+            <div className="mt-auto flex items-end justify-between" style={{ gap: '4cqw' }}>
+              <div className="min-w-0">{holderName}</div>
+              <NetworkMark network={r.network} ink={design.ink} width="14cqw" />
+            </div>
           </div>
-        </div>
-
-        <div className="flex items-center gap-3 -mt-1">
-          <CardChip />
-          <span className={`text-[10px] uppercase tracking-[0.2em] ${palette.tertiary}`}>{card.cardName}</span>
-        </div>
-
-        <div className={`font-mono ${numberSize} tracking-[0.18em] sm:tracking-[0.22em] ${palette.secondary} drop-shadow`}>
-          <span className={dotClass}>●●●●</span>
-          <span className={`mx-1.5 sm:mx-2 ${dotClass}`}>●●●●</span>
-          <span className={`mx-1.5 sm:mx-2 ${dotClass}`}>●●●●</span>
-          <span className={palette.primary}>{card.last4}</span>
-        </div>
-
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className={`text-[9px] uppercase tracking-[0.2em] ${palette.tertiary}`}>Card holder</p>
-            <p className={`text-xs sm:text-sm font-medium uppercase tracking-wide truncate ${palette.primary}`}>{card.cardName}</p>
-          </div>
-          <div className="text-right">
-            <p className={`text-[9px] uppercase tracking-[0.2em] ${palette.tertiary}`}>Limit</p>
-            <p className={`text-xs sm:text-sm font-semibold tabular-nums ${palette.primary}`}>{formatINR(card.creditLimit)}</p>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
