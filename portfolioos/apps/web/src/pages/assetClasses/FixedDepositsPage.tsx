@@ -121,23 +121,52 @@ function formatShortDate(iso: string | null | undefined): string {
 //
 // Each card reads like the receipt a bank hands you for a deposit: a header
 // printed in the issuing bank's colours — its logo, the rate, fine security
-// linework — over a plain body that answers one question: what does this money
-// become, and when.
+// linework — over a plain body: what the money becomes, how far along it is,
+// and the terms you'd look up on the receipt (principal, tenure, EMI, next due).
 
 const FD_FALLBACK = '#15803d'; // green, for issuers outside the bank list
 const RD_FALLBACK = '#4f46e5'; // indigo
 
 const PAYOUT_TEXT: Record<string, string> = {
-  MONTHLY: 'interest paid monthly',
-  QUARTERLY: 'interest paid quarterly',
-  HALF_YEARLY: 'interest paid half-yearly',
-  ANNUAL: 'interest paid yearly',
-  AT_MATURITY: 'interest paid at maturity',
+  MONTHLY: 'Interest paid monthly',
+  QUARTERLY: 'Interest paid quarterly',
+  HALF_YEARLY: 'Interest paid half-yearly',
+  ANNUAL: 'Interest paid yearly',
+  AT_MATURITY: 'Interest paid at maturity',
 };
 
-function sentence(parts: Array<string | null | undefined>, empty: string): string {
-  const s = parts.filter(Boolean).join(', ');
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : empty;
+const PAYOUT_STEP_MONTHS: Record<string, number> = {
+  MONTHLY: 1,
+  QUARTERLY: 3,
+  HALF_YEARLY: 6,
+  ANNUAL: 12,
+};
+
+function addMonthsIso(iso: string, months: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * The next periodic interest credit on or after today, counted from the
+ * opening date in payout-frequency steps and capped at maturity. Null when
+ * interest is only paid at maturity (or the dates aren't known).
+ */
+function nextPayoutDate(openDate: string | null, maturity: string | null, freq: string | null): string | null {
+  const step = freq ? PAYOUT_STEP_MONTHS[freq] : undefined;
+  if (!openDate || !maturity || !step) return null;
+  const today = todayIso();
+  for (let n = 1; n <= 1200; n++) {
+    const due = addMonthsIso(openDate, n * step);
+    if (due >= maturity) return maturity;
+    if (due >= today) return due;
+  }
+  return maturity;
 }
 
 /** Header colours and a theme-readable accent for a deposit's issuer. */
@@ -292,11 +321,24 @@ function MaturityTrack({
   );
 }
 
-function Figure({ label, children }: { label: string; children: React.ReactNode }) {
+function Figure({
+  label,
+  hint,
+  className,
+  children,
+}: {
+  label: string;
+  /** Tooltip for the value, e.g. why it's highlighted. */
+  hint?: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-0.5 truncate text-[15px] tabular-nums text-foreground">{children}</p>
+      <p title={hint} className={`mt-0.5 truncate text-[15px] tabular-nums ${className ?? 'text-foreground'}`}>
+        {children}
+      </p>
     </div>
   );
 }
@@ -319,6 +361,21 @@ function InterestSoFar({ holding }: { holding: FDHolding }) {
         </span>
       )}
     </span>
+  );
+}
+
+/** "At maturity" + the value in the bank's accent — the number the card leads with. */
+function MaturityValue({ value, accent }: { value: Decimal | null; accent: string }) {
+  return (
+    <div>
+      <p className="text-sm text-muted-foreground">At maturity</p>
+      <p
+        className="money-digits font-display text-[30px] leading-tight tabular-nums"
+        style={value ? { color: accent } : undefined}
+      >
+        {value ? formatINR(value.toString()) : '—'}
+      </p>
+    </div>
   );
 }
 
@@ -382,6 +439,7 @@ function FDCard({
   const serial = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
   const matValue = fdMaturityValue(holding.totalCost, rate, tenureMonths, freq);
   const matured = maturity ? daysUntil(maturity) < 0 : false;
+  const payout = matured ? null : nextPayoutDate(openDate, maturity, freq);
 
   return (
     <DepositCardShell label={`${issuer || 'Deposit'} fixed deposit`} matured={matured} onClick={onClick}>
@@ -391,36 +449,13 @@ function FDCard({
         kind="Fixed deposit"
         rate={rate}
         holder={holding.portfolioName || null}
-        terms={sentence(
-          [tenureMonths ? `${tenureMonths} months` : null, freq ? PAYOUT_TEXT[freq] : null],
-          'Term not set',
-        )}
+        terms={(freq && PAYOUT_TEXT[freq]) || 'Payout not set'}
         serial={serial}
         matured={matured}
         onEdit={onEdit}
       />
       <CardContent className="space-y-4 px-5 py-4">
-        {matValue ? (
-          <div>
-            <p className="text-sm text-muted-foreground">
-              <span className="money-digits">{formatINR(holding.totalCost)}</span>{' '}
-              {matured ? 'grew to' : 'grows to'}
-            </p>
-            <p
-              className="money-digits font-display text-[30px] leading-tight tabular-nums"
-              style={{ color: accent }}
-            >
-              {formatINR(matValue.toString())}
-            </p>
-          </div>
-        ) : (
-          <div>
-            <p className="text-sm text-muted-foreground">Principal</p>
-            <p className="money-digits font-display text-[30px] leading-tight tabular-nums text-foreground">
-              {formatINR(holding.totalCost)}
-            </p>
-          </div>
-        )}
+        <MaturityValue value={matValue} accent={accent} />
 
         {tenureMonths != null ? (
           <MaturityTrack accent={accent} pct={elapsedPct} opened={openDate} maturity={maturity} />
@@ -430,7 +465,21 @@ function FDCard({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-4 border-t border-border/60 pt-3">
+        <div className="grid grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
+          <Figure label="Principal">
+            <span className="money-digits">{formatINR(holding.totalCost)}</span>
+          </Figure>
+          <Figure label="Tenure">{tenureMonths ? `${tenureMonths} months` : '—'}</Figure>
+          <Figure label="Next payout">
+            {matured
+              ? 'Paid out'
+              : payout
+                ? formatShortDate(payout)
+                : freq === 'AT_MATURITY' && maturity
+                  ? 'At maturity'
+                  : '—'}
+          </Figure>
+          <Figure label="Completed">{tenureMonths != null ? `${Math.round(elapsedPct)}%` : '—'}</Figure>
           <Figure label="Worth today">
             <span className="money-digits">
               {holding.currentValue ? formatINR(holding.currentValue) : '—'}
@@ -471,6 +520,15 @@ function RDCard({
   const serial = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
   const matured = maturity ? daysUntil(maturity) < 0 : false;
 
+  const completedPct = tenureMonths ? Math.min(100, Math.round((installmentsDone / tenureMonths) * 100)) : null;
+  // Installment k (from 0) falls due k months after the first one.
+  const nextEmi =
+    !matured && openDate && tenureMonths && installmentsDone < tenureMonths
+      ? addMonthsIso(openDate, installmentsDone)
+      : null;
+  const emiOverdue = nextEmi != null && nextEmi < todayIso();
+  const principal = monthlyRaw && tenureMonths ? new Decimal(monthlyRaw).times(tenureMonths) : null;
+
   // One stamp per month, up to 24; longer plans show the remainder as a count.
   const dotCount = tenureMonths ?? Math.max(installmentsDone, 12);
   const showDots = Math.min(dotCount, 24);
@@ -484,28 +542,13 @@ function RDCard({
         kind="Recurring deposit"
         rate={rate}
         holder={holding.portfolioName || null}
-        terms={sentence(
-          [tenureMonths ? `${tenureMonths}-month plan` : null, 'interest compounded quarterly'],
-          'Plan not set',
-        )}
+        terms="Interest compounded quarterly"
         serial={serial}
         matured={matured}
         onEdit={onEdit}
       />
       <CardContent className="space-y-4 px-5 py-4">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            <span className="money-digits">{monthlyRaw ? formatINR(monthlyRaw) : '—'}</span> a month
-            {tenureMonths ? ` for ${tenureMonths} months` : ''}
-            {matValue ? (matured ? ' grew to' : ' grows to') : ''}
-          </p>
-          <p
-            className="money-digits font-display text-[30px] leading-tight tabular-nums"
-            style={matValue ? { color: accent } : undefined}
-          >
-            {formatINR(matValue ? matValue.toString() : holding.totalCost)}
-          </p>
-        </div>
+        <MaturityValue value={matValue} accent={accent} />
 
         <div>
           <div className="mb-2 flex items-baseline justify-between text-xs">
@@ -538,15 +581,26 @@ function RDCard({
 
         <MaturityTrack accent={accent} pct={0} opened={openDate} maturity={maturity} showBar={false} />
 
-        <div className="grid grid-cols-3 gap-4 border-t border-border/60 pt-3">
-          <Figure label="Deposited">
-            <span className="money-digits">{formatINR(holding.totalCost)}</span>
+        <div className="grid grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
+          <Figure label="EMI">
+            <span className="money-digits">{monthlyRaw ? formatINR(monthlyRaw) : '—'}</span>
           </Figure>
-          <Figure label="Worth today">
-            <span className="money-digits">
-              {holding.currentValue ? formatINR(holding.currentValue) : '—'}
-            </span>
+          <Figure label="Tenure">{tenureMonths ? `${tenureMonths} months` : '—'}</Figure>
+          <Figure
+            label="Next EMI"
+            hint={emiOverdue ? 'Overdue — record the installment once paid' : undefined}
+            className={emiOverdue ? 'text-warning' : undefined}
+          >
+            {nextEmi
+              ? formatShortDate(nextEmi)
+              : tenureMonths && installmentsDone >= tenureMonths
+                ? 'All paid'
+                : '—'}
           </Figure>
+          <Figure label="Principal">
+            <span className="money-digits">{principal ? formatINR(principal.toString()) : '—'}</span>
+          </Figure>
+          <Figure label="Completed">{completedPct != null ? `${completedPct}%` : '—'}</Figure>
           <Figure label="Interest so far">
             <InterestSoFar holding={holding} />
           </Figure>
