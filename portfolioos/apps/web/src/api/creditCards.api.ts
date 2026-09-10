@@ -22,7 +22,9 @@ export interface CreditCardDTO {
   issuerBank: string;
   cardName: string;
   last4: string;
-  network: string | null; // VISA | MASTERCARD | AMEX | RUPAY
+  /** A full card number is saved (encrypted); fetch it via `revealCardNumber`. */
+  hasCardNumber: boolean;
+  network: string | null; // VISA | MASTERCARD | AMEX | RUPAY | DINERS
   creditLimit: string;
   outstandingBalance: string | null;
   statementDay: number;
@@ -49,6 +51,8 @@ export interface CreateCardInput {
   issuerBank: string;
   cardName: string;
   last4: string;
+  /** Full card number, sent only when typed; stored encrypted. */
+  cardNumber?: string | null;
   network?: string | null;
   creditLimit: string;
   statementDay: number;
@@ -103,6 +107,13 @@ export const creditCardsApi = {
   },
   async remove(id: string): Promise<void> {
     await api.delete(`/api/credit-cards/${id}`);
+  },
+  /** Audited on the server; keep the result in component state only. */
+  async revealCardNumber(id: string): Promise<{ cardNumber: string | null }> {
+    const { data } = await api.post<ApiResponse<{ cardNumber: string | null }>>(
+      `/api/credit-cards/${id}/reveal`,
+    );
+    return unwrap(data);
   },
   async addStatement(cardId: string, input: AddStatementInput): Promise<CreditCardStatementDTO> {
     const { data } = await api.post<ApiResponse<CreditCardStatementDTO>>(

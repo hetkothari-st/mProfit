@@ -453,7 +453,7 @@ export function CreditCardDetailPage() {
 
       {/* Card visual */}
       <div className="mb-4 w-full max-w-md">
-        <CreditCardVisual card={card} size="lg" />
+        <CreditCardVisual card={card} size="lg" revealable />
       </div>
 
       {/* Summary metrics */}

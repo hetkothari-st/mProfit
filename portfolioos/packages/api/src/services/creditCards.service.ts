@@ -3,14 +3,21 @@
  * computed card summary, and alert scanner for upcoming/overdue due dates.
  *
  * Money math uses decimal.js throughout per §3.2.
+ *
+ * Full card number: optional, AES-256-GCM encrypted via
+ * pfCredentials.encryptIdentifier (APP_ENCRYPTION_KEY, §15.1) — the same
+ * scheme as bank account numbers. Every public read/write returns through
+ * `toCreditCardDto`, which drops the ciphertext; plaintext only leaves via
+ * `revealCardNumber`, which audit-logs first. CVV and expiry are never stored.
  */
 
 import { Decimal } from 'decimal.js';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { NotFoundError } from '../lib/errors.js';
+import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { serializeMoney } from '@portfolioos/shared';
+import { encryptIdentifier, decryptIdentifier, last4 as last4Of } from './pfCredentials.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -28,6 +35,8 @@ export interface CreateCardInput {
   issuerBank: string;
   cardName: string;
   last4: string;
+  /** Full card number, plain — encrypted on persist. Overrides `last4`. */
+  cardNumber?: string | null;
   network?: (typeof CARD_NETWORKS)[number] | null;
   creditLimit: string;
   outstandingBalance?: string | null;
@@ -78,10 +87,53 @@ function dateToIso(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+export interface RevealAuditContext {
+  ip?: string | null;
+  userAgent?: string | null;
+}
+
+/** The Luhn checksum every card number carries — catches a mistyped digit. */
+function luhnValid(digits: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = digits.charCodeAt(digits.length - 1 - i) - 48;
+    if (i % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+/** Card numbers run 12–19 digits (Amex 15, most 16); users paste them spaced. */
+function normaliseCardNumber(raw: string): string {
+  const n = raw.replace(/[\s-]/g, '');
+  if (!/^\d{12,19}$/.test(n)) {
+    throw new BadRequestError('Card number must be 12–19 digits');
+  }
+  if (!luhnValid(n)) {
+    throw new BadRequestError("That card number doesn't check out — a digit may be mistyped");
+  }
+  return n;
+}
+
+/**
+ * Drop the ciphertext before a row leaves this service — `cardNumberEnc` must
+ * never be serialized, even encrypted. The client only learns whether a full
+ * number exists.
+ */
+export function toCreditCardDto<T extends { cardNumberEnc: string | null }>(
+  row: T,
+): Omit<T, 'cardNumberEnc'> & { hasCardNumber: boolean } {
+  const { cardNumberEnc, ...rest } = row;
+  return { ...rest, hasCardNumber: cardNumberEnc !== null };
+}
+
 // ── Card CRUD ────────────────────────────────────────────────────────────────
 
 export async function listCards(userId: string) {
-  return prisma.creditCard.findMany({
+  const rows = await prisma.creditCard.findMany({
     where: { userId },
     include: {
       statements: {
@@ -91,6 +143,7 @@ export async function listCards(userId: string) {
     },
     orderBy: { createdAt: 'desc' },
   });
+  return rows.map(toCreditCardDto);
 }
 
 export async function getCard(userId: string, cardId: string) {
@@ -101,16 +154,20 @@ export async function getCard(userId: string, cardId: string) {
     },
   });
   if (!card) throw new NotFoundError(`CreditCard ${cardId} not found`);
-  return card;
+  return toCreditCardDto(card);
 }
 
 export async function createCard(userId: string, input: CreateCardInput) {
-  return prisma.creditCard.create({
+  const cardNumber = input.cardNumber ? normaliseCardNumber(input.cardNumber) : null;
+  const row = await prisma.creditCard.create({
     data: {
       userId,
       issuerBank: input.issuerBank,
       cardName: input.cardName,
-      last4: input.last4,
+      // Last 4 follows the full number when one is given, so the two can't
+      // disagree (statement matching and alerts use last4).
+      last4: cardNumber ? last4Of(cardNumber) : input.last4,
+      cardNumberEnc: cardNumber ? await encryptIdentifier(cardNumber) : null,
       network: input.network ?? null,
       creditLimit: new Prisma.Decimal(input.creditLimit),
       outstandingBalance: input.outstandingBalance
@@ -123,6 +180,7 @@ export async function createCard(userId: string, input: CreateCardInput) {
       status: input.status ?? 'ACTIVE',
     },
   });
+  return toCreditCardDto(row);
 }
 
 export async function updateCard(
@@ -133,7 +191,19 @@ export async function updateCard(
   const existing = await prisma.creditCard.findFirst({ where: { id: cardId, userId } });
   if (!existing) throw new NotFoundError(`CreditCard ${cardId} not found`);
 
-  return prisma.creditCard.update({
+  // Absent → untouched; null/blank → cleared (last4 kept); a number → re-encrypted,
+  // and its last 4 win over a hand-typed last4.
+  let numberData: { cardNumberEnc?: string | null; last4?: string } = {};
+  if (input.cardNumber !== undefined) {
+    if (input.cardNumber === null || input.cardNumber.trim() === '') {
+      numberData = { cardNumberEnc: null };
+    } else {
+      const cardNumber = normaliseCardNumber(input.cardNumber);
+      numberData = { cardNumberEnc: await encryptIdentifier(cardNumber), last4: last4Of(cardNumber) };
+    }
+  }
+
+  const row = await prisma.creditCard.update({
     where: { id: cardId },
     data: {
       ...(input.issuerBank !== undefined && { issuerBank: input.issuerBank }),
@@ -157,14 +227,57 @@ export async function updateCard(
         annualFee: input.annualFee ? new Prisma.Decimal(input.annualFee) : null,
       }),
       ...(input.status !== undefined && { status: input.status }),
+      ...numberData,
     },
   });
+  return toCreditCardDto(row);
 }
 
 export async function deleteCard(userId: string, cardId: string) {
   const existing = await prisma.creditCard.findFirst({ where: { id: cardId, userId } });
   if (!existing) throw new NotFoundError(`CreditCard ${cardId} not found`);
   await prisma.creditCard.delete({ where: { id: cardId } });
+}
+
+/**
+ * Decrypt the full card number for its owner. Writes a `pii_view` AuditLog row
+ * before returning (§3.7 / §15.8); if that write fails, the reveal fails with
+ * it. Returns null when only last4 was ever saved (nothing shown, nothing
+ * audited).
+ */
+export async function revealCardNumber(
+  userId: string,
+  cardId: string,
+  ctx: RevealAuditContext,
+): Promise<string | null> {
+  const row = await prisma.creditCard.findFirst({
+    where: { id: cardId, userId },
+    select: { id: true, cardNumberEnc: true },
+  });
+  if (!row) throw new NotFoundError(`CreditCard ${cardId} not found`);
+  if (!row.cardNumberEnc) return null;
+
+  let cardNumber: string;
+  try {
+    cardNumber = await decryptIdentifier(row.cardNumberEnc);
+  } catch (err) {
+    logger.error({ err: (err as Error).message, cardId }, '[credit-cards] card number decrypt failed');
+    throw new BadRequestError(
+      'Could not decrypt the card number — the encryption key may have changed',
+    );
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action: 'pii_view',
+      resource: `CreditCard:${cardId}`,
+      ip: ctx.ip ?? null,
+      userAgent: ctx.userAgent ?? null,
+      metadata: { field: 'cardNumber' },
+    },
+  });
+  return cardNumber;
 }
 
 // ── Statement management ─────────────────────────────────────────────────────

@@ -8,8 +8,10 @@
  * card scales like a physical object — the same proportions in a list tile and
  * on the detail page. Vertical cards (Swiggy, Tata Neu, Scapia…) stand upright.
  */
-import { useId, useState, type CSSProperties, type ReactNode } from 'react';
-import type { CreditCardDTO } from '@/api/creditCards.api';
+import { useEffect, useId, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { creditCardsApi, type CreditCardDTO } from '@/api/creditCards.api';
 import type { CardDesign, CardNetwork, CardPattern, CardTier } from '@/data/creditCardCatalog';
 import { bankBrandFor } from '@/lib/bankBrand';
 import { resolveCardDesign } from '@/lib/creditCardDesign';
@@ -318,8 +320,56 @@ function maskedGroups(network: CardNetwork | null): { groups: string[]; lead: st
   return network === 'AMEX' ? { groups: ['••••', '••••••'], lead: '•' } : { groups: ['••••', '••••', '••••'], lead: '' };
 }
 
-export function CreditCardVisual({ card, size = 'md' }: { card: CreditCardDTO; size?: 'md' | 'lg' }) {
+/** "4111111111111111" → "4111 1111 1111 1111"; Amex "378282246310005" → "3782 822463 10005". */
+function groupCardNumber(n: string, network: CardNetwork | null): string {
+  if (network === 'AMEX' && n.length === 15) return `${n.slice(0, 4)} ${n.slice(4, 10)} ${n.slice(10)}`;
+  return n.replace(/(.{4})(?=.)/g, '$1 ');
+}
+
+const NOT_SAVED_MSG = 'Only the last 4 digits are saved. Edit the card to add the full number.';
+
+export function CreditCardVisual({
+  card,
+  size = 'md',
+  revealable = false,
+}: {
+  card: CreditCardDTO;
+  size?: 'md' | 'lg';
+  /** Show the eye button that reveals the full number (list tile, detail page). */
+  revealable?: boolean;
+}) {
   const holder = useAuthStore((s) => s.user?.name ?? '');
+  // The full number is fetched on demand from the audited endpoint and held
+  // only here — never in the react-query cache — and re-masked when the card
+  // changes so a stale plaintext never outlives the card it came from.
+  const [fullNumber, setFullNumber] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  useEffect(() => setFullNumber(null), [card.id, card.last4, card.hasCardNumber]);
+
+  async function toggleReveal(e: MouseEvent<HTMLButtonElement>) {
+    // The list page wraps the card in a <Link>; keep this click local.
+    e.preventDefault();
+    e.stopPropagation();
+    if (fullNumber) {
+      setFullNumber(null);
+      return;
+    }
+    if (!card.hasCardNumber) {
+      toast(NOT_SAVED_MSG);
+      return;
+    }
+    setRevealing(true);
+    try {
+      const { cardNumber } = await creditCardsApi.revealCardNumber(card.id);
+      if (cardNumber) setFullNumber(cardNumber);
+      else toast(NOT_SAVED_MSG);
+    } catch {
+      toast.error('Could not reveal the card number. Try again in a minute.');
+    } finally {
+      setRevealing(false);
+    }
+  }
+
   const uid = useId().replace(/:/g, '');
   const r = resolveCardDesign(card);
   const { design } = r;
@@ -345,16 +395,62 @@ export function CreditCardVisual({ card, size = 'md' }: { card: CreditCardDTO; s
       {holder.toUpperCase()}
     </span>
   );
-  const number = (
-    <span
-      className="flex items-baseline font-mono leading-none"
-      style={{ color: ink.text, fontSize: vertical ? '7.2cqw' : '5cqw', gap: '0.55em', letterSpacing: '0.12em', textShadow: ink.shadow }}
+  const revealLabel = fullNumber ? 'Hide card number' : 'Show card number';
+  const iconSize = vertical ? '6.4cqw' : '3.8cqw';
+  const eye = revealable && (
+    <button
+      type="button"
+      onClick={toggleReveal}
+      disabled={revealing}
+      aria-label={revealLabel}
+      aria-pressed={fullNumber !== null}
+      title={revealLabel}
+      className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60"
+      style={{
+        color: ink.text,
+        padding: vertical ? '1.8cqw' : '1.2cqw',
+        background: design.ink === 'light' ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
+      }}
     >
+      {revealing ? (
+        <Loader2 className="animate-spin" style={{ width: iconSize, height: iconSize }} />
+      ) : fullNumber ? (
+        <EyeOff style={{ width: iconSize, height: iconSize }} />
+      ) : (
+        <Eye style={{ width: iconSize, height: iconSize }} />
+      )}
+    </button>
+  );
+  const digits = fullNumber ? (
+    <span className="select-text whitespace-nowrap" style={{ letterSpacing: '0.08em' }}>
+      {groupCardNumber(fullNumber, r.network)}
+    </span>
+  ) : (
+    <>
       {!vertical && groups.map((g, i) => <span key={i} style={{ color: ink.muted }}>{g}</span>)}
       <span className="flex">
         {vertical ? <span style={{ color: ink.muted, marginRight: '0.4em' }}>••••</span> : lead && <span style={{ color: ink.muted }}>{lead}</span>}
         <span>{card.last4}</span>
       </span>
+    </>
+  );
+  const number = (
+    <span className="flex items-center" style={{ gap: vertical ? '3cqw' : '2.5cqw' }}>
+      <span
+        className="flex items-baseline font-mono leading-none"
+        style={{
+          color: ink.text,
+          // A revealed number is longer than the masked one; on an upright
+          // card it has to fit the short side.
+          fontSize: vertical ? (fullNumber ? '5.4cqw' : '7.2cqw') : '5cqw',
+          gap: '0.55em',
+          letterSpacing: '0.12em',
+          textShadow: ink.shadow,
+        }}
+      >
+        {digits}
+      </span>
+      {eye}
     </span>
   );
 

@@ -13,6 +13,8 @@ import {
   markStatementPaid,
   deleteStatement,
   getCardSummary,
+  revealCardNumber,
+  type RevealAuditContext,
 } from '../services/creditCards.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
@@ -24,6 +26,8 @@ const createCardSchema = z.object({
   issuerBank: z.string().min(1).max(200),
   cardName: z.string().min(1).max(200),
   last4: z.string().length(4).regex(/^\d{4}$/, 'Expected 4 digits'),
+  // Checked (length + Luhn) and encrypted in the service.
+  cardNumber: z.string().max(40).nullable().optional(),
   network: z.enum(CARD_NETWORKS).nullable().optional(),
   creditLimit: moneyString,
   outstandingBalance: moneyString.nullable().optional(),
@@ -92,6 +96,18 @@ export async function getCardSummaryHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const summary = await getCardSummary(req.user.id, req.params['id']!);
   ok(res, summary);
+}
+
+function auditContext(req: Request): RevealAuditContext {
+  return { ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null };
+}
+
+export async function revealCardNumberHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const cardNumber = await revealCardNumber(req.user.id, req.params['id']!, auditContext(req));
+  // Plaintext PII: keep it out of browser and proxy caches.
+  res.set('Cache-Control', 'no-store');
+  ok(res, { cardNumber });
 }
 
 export async function addStatementHandler(req: Request, res: Response) {

@@ -36,6 +36,7 @@ import { SuggestInput, type SuggestOption } from '@/components/common/SuggestInp
 import { INDIAN_BANKS } from '@/data/indianBanks';
 import { CARD_ISSUERS, type CatalogCard } from '@/data/creditCardCatalog';
 import { cardProductsFor } from '@/lib/creditCardDesign';
+import { nextCardDue, todayIso } from '@/lib/creditCardDue';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -48,11 +49,6 @@ const STATUS_COLORS: Record<string, string> = {
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function daysUntil(isoDate: string): number {
-  const due = new Date(isoDate).getTime();
-  return Math.ceil((due - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
 function utilizationClass(pct: number): string {
@@ -121,11 +117,9 @@ function CardCard({
   const utilizationPct = limit.isZero() ? 0 : outstanding.div(limit).mul(100).toNumber();
   const isHighUtilization = utilizationPct >= 80;
 
-  const pendingStatements = card.statements
-    .filter((s) => s.status === 'PENDING' || s.status === 'OVERDUE' || s.status === 'PARTIAL')
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const nextDue = pendingStatements[0] ?? null;
-  const nextDueDays = nextDue ? daysUntil(nextDue.dueDate) : null;
+  // A closed or blocked card has nothing coming due unless a statement is still open.
+  const due = nextCardDue(card, todayIso());
+  const showDue = card.status === 'ACTIVE' || due.fromStatement;
 
   return (
     <div className="group relative">
@@ -165,7 +159,7 @@ function CardCard({
 
       {/* The credit-card visual itself */}
       <Link to={`/credit-cards/${card.id}`} className="block hover:-translate-y-0.5 transition-transform">
-        <CreditCardVisual card={card} />
+        <CreditCardVisual card={card} revealable />
       </Link>
 
       {/* Stats panel below */}
@@ -190,21 +184,23 @@ function CardCard({
           <span className="tabular-nums money-digits">{formatINR(card.creditLimit)}</span>
         </div>
 
-        {nextDue && (
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Next due</span>
+        {showDue && (
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-muted-foreground">Payment due</span>
             <div className="flex items-center gap-1.5">
-              <span className="tabular-nums">{formatINR(nextDue.statementAmount)}</span>
-              <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
-                nextDueDays !== null && nextDueDays < 0
-                  ? 'bg-negative/10 text-negative'
-                  : nextDueDays !== null && nextDueDays <= 5
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-muted text-muted-foreground'
-              }`}>
-                {nextDueDays !== null && nextDueDays < 0 ? 'Overdue' :
-                 nextDueDays === 0 ? 'Today' :
-                 nextDueDays !== null ? `${nextDueDays}d` : formatDate(nextDue.dueDate)}
+              {due.amount && <span className="tabular-nums money-digits">{formatINR(due.amount)}</span>}
+              <span className="tabular-nums">{formatDate(due.date)}</span>
+              <span
+                title={due.fromStatement ? 'From the latest statement' : `Due on day ${card.dueDay} of the month`}
+                className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
+                  due.daysLeft < 0
+                    ? 'bg-negative/10 text-negative'
+                    : due.daysLeft <= 5
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {due.daysLeft < 0 ? 'Overdue' : due.daysLeft === 0 ? 'Today' : `${due.daysLeft}d`}
               </span>
             </div>
           </div>
@@ -272,6 +268,8 @@ function CreateCardDialog({
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+  // Kept apart from `form`: it's sent only when typed, never pre-filled.
+  const [cardNumber, setCardNumber] = useState('');
 
   // Re-sync form when dialog opens with a different initial card
   useEffect(() => {
@@ -289,6 +287,7 @@ function CreateCardDialog({
         status: initial?.status ?? 'ACTIVE',
       });
       setErrors({});
+      setCardNumber('');
     }
   }, [open, initial]);
 
@@ -327,6 +326,7 @@ function CreateCardDialog({
     portfolioId: null,
     cardName: form.cardName.trim() || 'Card name',
     last4: /^\d{4}$/.test(form.last4) ? form.last4 : '••••',
+    hasCardNumber: false,
     outstandingBalance: '0',
     statements: [],
     createdAt: '',
@@ -353,6 +353,8 @@ function CreateCardDialog({
     if (!form.cardName.trim()) errs['cardName'] = 'Required';
     if (!form.last4.trim() || form.last4.length !== 4 || !/^\d{4}$/.test(form.last4)) errs['last4'] = 'Must be 4 digits';
     if (!form.creditLimit || isNaN(Number(form.creditLimit))) errs['creditLimit'] = 'Required';
+    const typedNumber = cardNumber.replace(/[\s-]/g, '');
+    if (typedNumber && !/^\d{12,19}$/.test(typedNumber)) errs['cardNumber'] = 'Enter the 12–19 digits on the card';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -367,6 +369,7 @@ function CreateCardDialog({
       interestRate: form.interestRate?.trim() || null,
       annualFee: form.annualFee?.trim() || null,
       network: form.network || null,
+      ...(cardNumber.trim() ? { cardNumber: cardNumber.replace(/[\s-]/g, '') } : {}),
     });
   }
 
@@ -415,10 +418,35 @@ function CreateCardDialog({
             </div>
           </div>
 
+          <div>
+            <Label htmlFor="cc-number">Full card number</Label>
+            <Input
+              id="cc-number"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder={
+                initial?.hasCardNumber ? 'Saved — type a new one to replace it' : 'Optional — lets you reveal it later'
+              }
+              value={cardNumber}
+              onChange={(e) => {
+                setCardNumber(e.target.value);
+                // The last 4 follow the full number so the two can't disagree.
+                const digits = e.target.value.replace(/\D/g, '');
+                if (digits.length >= 4) set('last4', digits.slice(-4));
+              }}
+              className={errors['cardNumber'] ? 'border-negative' : ''}
+            />
+            {errors['cardNumber'] ? (
+              <p className="text-xs text-negative mt-1">{errors['cardNumber']}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">Stored encrypted. CVV and expiry are never asked for.</p>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Last 4 digits *</Label>
-              <Input placeholder="1234" maxLength={4} value={form.last4}
+              <Label htmlFor="cc-last4">Last 4 digits *</Label>
+              <Input id="cc-last4" placeholder="1234" maxLength={4} value={form.last4}
                 onChange={(e) => set('last4', e.target.value)}
                 className={errors['last4'] ? 'border-negative' : ''} />
               {errors['last4'] && <p className="text-xs text-negative mt-1">{errors['last4']}</p>}
@@ -439,8 +467,8 @@ function CreateCardDialog({
           </div>
 
           <div>
-            <Label>Credit limit (₹) *</Label>
-            <Input placeholder="500000" value={form.creditLimit}
+            <Label htmlFor="cc-limit">Credit limit (₹) *</Label>
+            <Input id="cc-limit" placeholder="500000" value={form.creditLimit}
               onChange={(e) => set('creditLimit', e.target.value)}
               className={errors['creditLimit'] ? 'border-negative' : ''} />
             {errors['creditLimit'] && <p className="text-xs text-negative mt-1">{errors['creditLimit']}</p>}

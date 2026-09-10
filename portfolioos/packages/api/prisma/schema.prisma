@@ -2489,6 +2489,10 @@ model CreditCard {
   issuerBank         String
   cardName           String
   last4              String
+  // Full card number — AES-256-GCM via pfCredentials.encryptIdentifier
+  // (APP_ENCRYPTION_KEY). Never serialized; plaintext only via the audited
+  // POST /api/credit-cards/:id/reveal. CVV and expiry are never stored.
+  cardNumberEnc      String?
   network            String?
   creditLimit        Decimal  @db.Decimal(12, 2)
   outstandingBalance Decimal? @db.Decimal(12, 2)
