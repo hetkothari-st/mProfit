@@ -5,7 +5,6 @@ import {
   CalendarClock,
   ChevronDown,
   Landmark,
-  Pencil,
   PiggyBank,
   Plus,
 } from 'lucide-react';
@@ -20,8 +19,8 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { transactionsApi } from '@/api/transactions.api';
 import { FDFormDialog } from './FDFormDialog';
 import { useThemeStore } from '@/stores/theme.store';
-import { BankLogo } from '@/components/bankAccounts/BankLogo';
-import { bankBrandFor, brandAccent, tileSurface, type TileSurface } from '@/lib/bankBrand';
+import { Figure, ProgressBar, ReceiptHeader, ReceiptShell } from '@/components/receipt/Receipt';
+import { useReceiptLook } from '@/components/receipt/useReceiptLook';
 
 type FDHolding = HoldingRow & { portfolioName: string; portfolioId: string };
 
@@ -119,10 +118,9 @@ function formatShortDate(iso: string | null | undefined): string {
 
 // ── Deposit cards ────────────────────────────────────────────────────────────
 //
-// Each card reads like the receipt a bank hands you for a deposit: a header
-// printed in the issuing bank's colours — its logo, the rate, fine security
-// linework — over a plain body: what the money becomes, how far along it is,
-// and the terms you'd look up on the receipt (principal, tenure, EMI, next due).
+// Deposit receipts (components/receipt): the issuing bank's brand on top, then
+// what the money becomes, how far along it is, and the terms you'd look up on
+// the receipt (principal, tenure, EMI, next due).
 
 const FD_FALLBACK = '#15803d'; // green, for issuers outside the bank list
 const RD_FALLBACK = '#4f46e5'; // indigo
@@ -169,116 +167,6 @@ function nextPayoutDate(openDate: string | null, maturity: string | null, freq: 
   return maturity;
 }
 
-/** Header colours and a theme-readable accent for a deposit's issuer. */
-function useDepositLook(issuer: string, fallback: string) {
-  const dark = useThemeStore((s) => s.dark);
-  const brand = bankBrandFor(issuer);
-  const base = brand?.color ?? fallback;
-  return {
-    panel: tileSurface(base, brand?.color ? brand.accent : null),
-    accent: brandAccent(base, dark),
-  };
-}
-
-// Phase-shifted waves, like the guilloché printed on FD receipts and cheques.
-// Computed once; drawn in white at low opacity over the brand colour.
-const GUILLOCHE = Array.from({ length: 9 }, (_, i) => {
-  let d = '';
-  for (let x = 0; x <= 400; x += 5) {
-    const t = (x / 400) * Math.PI;
-    const y = 60 + Math.sin(t * 4 + i * 0.55) * (16 + i * 3) + Math.sin(t * 11 + i) * 3;
-    d += `${x === 0 ? 'M' : 'L'}${x} ${y.toFixed(1)}`;
-  }
-  return d;
-});
-
-function Guilloche() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 400 120"
-      preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.14]"
-    >
-      {GUILLOCHE.map((d, i) => (
-        <path key={i} d={d} fill="none" stroke="white" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
-      ))}
-    </svg>
-  );
-}
-
-function ReceiptHeader({
-  issuer,
-  panel,
-  kind,
-  rate,
-  holder,
-  terms,
-  serial,
-  matured,
-  onEdit,
-}: {
-  issuer: string;
-  panel: TileSurface;
-  kind: string;
-  rate: string | null;
-  holder: string | null;
-  terms: string;
-  serial: string;
-  matured: boolean;
-  onEdit: (e: React.MouseEvent) => void;
-}) {
-  return (
-    <div
-      className="relative overflow-hidden px-5 pb-3 pt-4 text-white"
-      style={{
-        backgroundImage: `linear-gradient(135deg, ${panel.from} 0%, ${panel.via} 60%, ${panel.to} 100%)`,
-      }}
-    >
-      <Guilloche />
-      <div className="relative flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <BankLogo bankName={issuer} size={30} maxWidth={140} className="shadow-md" />
-          <h3 className="mt-3 truncate font-display text-[26px] leading-none">{issuer || 'Deposit'}</h3>
-          {holder && <p className="mt-2 truncate text-sm text-white/85">{holder}</p>}
-          <p className="mt-0.5 text-[13px] text-white/65">{terms}</p>
-        </div>
-        {rate && (
-          <div className="shrink-0 text-right">
-            <p className="font-display text-[40px] leading-none tabular-nums">
-              {rate}
-              <span className="text-2xl">%</span>
-            </p>
-            <p className="mt-1 text-xs text-white/70">a year</p>
-          </div>
-        )}
-      </div>
-      <div className="relative mt-4 flex items-center justify-between gap-3 text-[11px] text-white/55">
-        <span className="tabular-nums">
-          {kind} no. {serial}
-        </span>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onEdit(e);
-          }}
-          aria-label="Edit deposit"
-          className="-m-1 rounded p-1 text-white/60 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      {matured && (
-        <div className="pointer-events-none absolute bottom-8 right-5 -rotate-12 rounded-sm border-2 border-white/70 px-2 py-0.5 font-display text-sm text-white/85">
-          Matured
-        </div>
-      )}
-    </div>
-  );
-}
-
 function MaturityTrack({
   accent,
   pct,
@@ -296,17 +184,7 @@ function MaturityTrack({
   const soon = days != null && days >= 0 && days <= 30;
   return (
     <div>
-      {showBar && (
-        <div className="relative mb-2 h-1.5 rounded-full bg-muted">
-          <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${pct}%`, background: accent }} />
-          {pct > 0 && pct < 100 && (
-            <span
-              className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-[3px] ring-card"
-              style={{ left: `${pct}%`, background: accent }}
-            />
-          )}
-        </div>
-      )}
+      {showBar && <ProgressBar accent={accent} pct={pct} className="mb-2" />}
       <div className="flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
         <span>{opened ? `Opened ${formatShortDate(opened)}` : 'Opening date not set'}</span>
         <span className={soon ? 'text-warning' : undefined}>
@@ -317,28 +195,6 @@ function MaturityTrack({
               : `Matures ${formatShortDate(maturity)}, ${days === 0 ? 'today' : `in ${days} days`}`}
         </span>
       </div>
-    </div>
-  );
-}
-
-function Figure({
-  label,
-  hint,
-  className,
-  children,
-}: {
-  label: string;
-  /** Tooltip for the value, e.g. why it's highlighted. */
-  hint?: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p title={hint} className={`mt-0.5 truncate text-[15px] tabular-nums ${className ?? 'text-foreground'}`}>
-        {children}
-      </p>
     </div>
   );
 }
@@ -379,36 +235,6 @@ function MaturityValue({ value, accent }: { value: Decimal | null; accent: strin
   );
 }
 
-/** The whole card is a link to the deposit; Enter opens it too. */
-function DepositCardShell({
-  label,
-  matured,
-  onClick,
-  children,
-}: {
-  label: string;
-  matured: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      role="link"
-      tabIndex={0}
-      aria-label={label}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && e.target === e.currentTarget) onClick();
-      }}
-      className={`group cursor-pointer rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${matured ? 'opacity-70' : ''}`}
-    >
-      <Card className="overflow-hidden p-0 transition-shadow duration-300 group-hover:shadow-elev-lg">
-        {children}
-      </Card>
-    </div>
-  );
-}
-
 function FDCard({
   holding,
   primaryTxn,
@@ -421,7 +247,7 @@ function FDCard({
   onEdit: (e: React.MouseEvent) => void;
 }) {
   const issuer = holding.assetName ?? '';
-  const { panel, accent } = useDepositLook(issuer, FD_FALLBACK);
+  const { panel, accent } = useReceiptLook(issuer, FD_FALLBACK);
   const rate = primaryTxn?.interestRate || null;
   const freq = primaryTxn?.interestFrequency ?? null;
   const maturity = primaryTxn?.maturityDate ?? null;
@@ -442,16 +268,17 @@ function FDCard({
   const payout = matured ? null : nextPayoutDate(openDate, maturity, freq);
 
   return (
-    <DepositCardShell label={`${issuer || 'Deposit'} fixed deposit`} matured={matured} onClick={onClick}>
+    <ReceiptShell label={`${issuer || 'Deposit'} fixed deposit`} dimmed={matured} onClick={onClick}>
       <ReceiptHeader
-        issuer={issuer}
+        institution={issuer}
+        title={issuer || 'Deposit'}
         panel={panel}
-        kind="Fixed deposit"
+        reference={`Fixed deposit no. ${serial}`}
         rate={rate}
         holder={holding.portfolioName || null}
         terms={(freq && PAYOUT_TEXT[freq]) || 'Payout not set'}
-        serial={serial}
-        matured={matured}
+        stamp={matured ? 'Matured' : null}
+        editLabel="Edit deposit"
         onEdit={onEdit}
       />
       <CardContent className="space-y-4 px-5 py-4">
@@ -490,7 +317,7 @@ function FDCard({
           </Figure>
         </div>
       </CardContent>
-    </DepositCardShell>
+    </ReceiptShell>
   );
 }
 
@@ -508,7 +335,7 @@ function RDCard({
   onEdit: (e: React.MouseEvent) => void;
 }) {
   const issuer = holding.assetName ?? '';
-  const { panel, accent } = useDepositLook(issuer, RD_FALLBACK);
+  const { panel, accent } = useReceiptLook(issuer, RD_FALLBACK);
   const rate = primaryTxn?.interestRate || null;
   const maturity = primaryTxn?.maturityDate ?? null;
   const openDate = primaryTxn?.tradeDate ?? null;
@@ -535,16 +362,17 @@ function RDCard({
   const overflow = dotCount > 24;
 
   return (
-    <DepositCardShell label={`${issuer || 'Deposit'} recurring deposit`} matured={matured} onClick={onClick}>
+    <ReceiptShell label={`${issuer || 'Deposit'} recurring deposit`} dimmed={matured} onClick={onClick}>
       <ReceiptHeader
-        issuer={issuer}
+        institution={issuer}
+        title={issuer || 'Deposit'}
         panel={panel}
-        kind="Recurring deposit"
+        reference={`Recurring deposit no. ${serial}`}
         rate={rate}
         holder={holding.portfolioName || null}
         terms="Interest compounded quarterly"
-        serial={serial}
-        matured={matured}
+        stamp={matured ? 'Matured' : null}
+        editLabel="Edit deposit"
         onEdit={onEdit}
       />
       <CardContent className="space-y-4 px-5 py-4">
@@ -606,7 +434,7 @@ function RDCard({
           </Figure>
         </div>
       </CardContent>
-    </DepositCardShell>
+    </ReceiptShell>
   );
 }
 

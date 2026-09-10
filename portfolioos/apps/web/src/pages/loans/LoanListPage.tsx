@@ -1,22 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  Landmark,
-  Plus,
-  ArrowUpRight,
-  AlertTriangle,
-  Loader2,
-  Trash2,
-  Pencil,
-  Calculator,
-  Calendar,
-  Home,
-  Car,
-  GraduationCap,
   Briefcase,
+  Calculator,
+  Car,
   Coins,
+  GraduationCap,
+  Home,
+  Landmark,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
@@ -37,6 +34,9 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
+import { Figure, ReceiptShell } from '@/components/receipt/Receipt';
+import { BankLogo } from '@/components/bankAccounts/BankLogo';
+import { useReceiptLook } from '@/components/receipt/useReceiptLook';
 import {
   loansApi,
   type LoanDTO,
@@ -56,46 +56,6 @@ const LOAN_TYPE_LABELS: Record<string, string> = {
   OTHER: 'Other',
 };
 
-interface LoanTypeStyle {
-  icon: LucideIcon;
-  /** Engraved-tone label color, drawn from theme. */
-  accent: 'brass' | 'forest' | 'oxblood' | 'plum' | 'teal' | 'ink';
-}
-
-const LOAN_TYPE_STYLES: Record<string, LoanTypeStyle> = {
-  HOME:      { icon: Home,          accent: 'ink' },
-  CAR:       { icon: Car,           accent: 'oxblood' },
-  PERSONAL:  { icon: Wallet,        accent: 'brass' },
-  EDUCATION: { icon: GraduationCap, accent: 'plum' },
-  BUSINESS:  { icon: Briefcase,     accent: 'forest' },
-  GOLD:      { icon: Coins,         accent: 'brass' },
-  LAS:       { icon: TrendingUp,    accent: 'teal' },
-  OTHER:     { icon: Landmark,      accent: 'ink' },
-};
-
-function getLoanStyle(type: string): LoanTypeStyle {
-  return LOAN_TYPE_STYLES[type] ?? LOAN_TYPE_STYLES.OTHER!;
-}
-
-function accentColor(a: LoanTypeStyle['accent']): string {
-  switch (a) {
-    case 'brass':   return 'hsl(var(--accent))';
-    case 'forest':  return 'hsl(var(--positive))';
-    case 'oxblood': return 'hsl(var(--negative))';
-    case 'plum':    return 'hsl(260 28% 38%)';
-    case 'teal':    return 'hsl(195 40% 32%)';
-    case 'ink':
-    default:        return 'hsl(var(--primary))';
-  }
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  ACTIVE: 'text-positive',
-  CLOSED: 'text-muted-foreground',
-  FORECLOSED: 'text-muted-foreground',
-  DEFAULT: 'text-negative',
-};
-
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -106,19 +66,10 @@ function daysUntil(isoDate: string): number {
   return Math.ceil((due - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
-function emiCountdownBadge(nextEmiDate: string | null | undefined) {
-  if (!nextEmiDate) return null;
-  const days = daysUntil(nextEmiDate);
-  let cls = 'bg-muted text-muted-foreground';
-  let label = `in ${days}d`;
-  if (days < 0) { cls = 'bg-negative/10 text-negative'; label = 'Overdue'; }
-  else if (days === 0) { cls = 'bg-negative/10 text-negative'; label = 'Today'; }
-  else if (days <= 7) { cls = 'bg-amber-100 text-amber-700'; label = `in ${days}d`; }
-  return (
-    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${cls}`}>
-      EMI {label}
-    </span>
-  );
+function addMonthsIso(iso: string, months: number): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 10);
 }
 
 // ── Summary strip ─────────────────────────────────────────────────────
@@ -154,44 +105,50 @@ function SummaryStrip({ loans }: { loans: LoanDTO[] }) {
 }
 
 // ── Loan card ─────────────────────────────────────────────────────────
+//
+// An EMI coupon: a loan is repaid slip by slip, so the card is a slip with a
+// tear-off stub. The stub is printed in the lender's brand (logo, loan type,
+// rate, a watermark of what the loan bought); a perforated edge with notches
+// separates it from the body, which tracks the payoff — outstanding, a
+// segmented bar that fills as EMIs are paid, and the terms.
 
-// ── Amortization ring (SVG) ───────────────────────────────────────────
+const LOAN_FALLBACK = '#475569'; // slate, for lenders outside the bank list
+const PAYOFF_SEGMENTS = 40;
 
-function AmortizationRing({
-  pct, color, emiCount, tenure,
-}: { pct: number; color: string; emiCount: number; tenure: number }) {
-  const size = 96;
-  const stroke = 6;
-  const radius = (size - stroke) / 2;
-  const circ = 2 * Math.PI * radius;
-  const dash = (Math.min(100, Math.max(0, pct)) / 100) * circ;
+const LOAN_TYPE_ICONS: Record<string, LucideIcon> = {
+  HOME: Home,
+  CAR: Car,
+  PERSONAL: Wallet,
+  EDUCATION: GraduationCap,
+  BUSINESS: Briefcase,
+  GOLD: Coins,
+  LAS: TrendingUp,
+  OTHER: Landmark,
+};
 
+function PayoffBar({ pct, accent }: { pct: number; accent: string }) {
+  const p = Math.min(100, Math.max(0, pct));
+  const filled = Math.round((p / 100) * PAYOFF_SEGMENTS);
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke="hsl(var(--border))" strokeWidth={stroke}
+    <div
+      role="img"
+      aria-label={`${Math.round(p)}% repaid`}
+      title={`${Math.round(p)}% repaid`}
+      className="flex gap-[3px]"
+    >
+      {Array.from({ length: PAYOFF_SEGMENTS }, (_, i) => (
+        <span
+          key={i}
+          className={`h-2.5 flex-1 rounded-[2px] ${i < filled ? '' : 'bg-muted'}`}
+          style={i < filled ? { background: accent } : undefined}
         />
-        <circle
-          cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={`${dash} ${circ}`}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.22, 0.61, 0.36, 1)' }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="font-display text-2xl leading-none tracking-tight" style={{ color }}>
-          {pct.toFixed(0)}%
-        </span>
-        <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground mt-0.5 font-mono">
-          {emiCount}/{tenure}
-        </span>
-      </div>
+      ))}
     </div>
   );
 }
+
+const STUB_BUTTON =
+  '-m-1 rounded p-1 text-white/65 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60';
 
 function LoanCard({
   loan,
@@ -204,161 +161,185 @@ function LoanCard({
   onDelete: () => void;
   isDeleting: boolean;
 }) {
+  const navigate = useNavigate();
+  const { panel, accent } = useReceiptLook(loan.lenderName, LOAN_FALLBACK);
+  const active = loan.status === 'ACTIVE';
+
+  // Outstanding balance, next due date, EMIs left and amounts paid come from
+  // the server's amortization (prepayments included), not re-derived here.
+  const { data: summary } = useQuery({
+    queryKey: ['loans', loan.id, 'summary'],
+    queryFn: () => loansApi.getSummary(loan.id),
+    enabled: active,
+  });
+
   const emiCount = loan.payments.filter((p) => p.paymentType === 'EMI').length;
-  const tenure = loan.tenureMonths || 1;
-  const progressPct = Math.min(100, Math.max(0, (emiCount / tenure) * 100));
+  const tenure = loan.tenureMonths;
+  // A prepayment that reduces tenure shortens the plan; count against that.
+  const plan = summary ? emiCount + summary.remainingEmiCount : tenure;
+  const progress = active ? (plan > 0 ? Math.min(100, (emiCount / plan) * 100) : 0) : 100;
+  const emisLeft = summary ? summary.remainingEmiCount : Math.max(0, tenure - emiCount);
 
-  const nextEmiDateStr: string | null = (() => {
-    if (loan.status !== 'ACTIVE') return null;
-    try {
-      const base = new Date(loan.firstEmiDate);
-      base.setMonth(base.getMonth() + emiCount);
-      return base.toISOString().slice(0, 10);
-    } catch {
-      return null;
-    }
-  })();
+  const firstEmi = loan.firstEmiDate.slice(0, 10);
+  const nextEmi = !active
+    ? null
+    : summary
+      ? (summary.nextEmiDate?.slice(0, 10) ?? null)
+      : emiCount < tenure
+        ? addMonthsIso(firstEmi, emiCount)
+        : null;
+  const lastEmi = summary?.effectiveEndDate?.slice(0, 10) ?? (tenure > 0 ? addMonthsIso(firstEmi, tenure - 1) : null);
+  const dueIn = nextEmi ? daysUntil(nextEmi) : null;
+  const paidSoFar = summary
+    ? new Decimal(summary.totalPrincipalPaid).plus(summary.totalInterestPaid)
+    : null;
 
-  const style = getLoanStyle(loan.loanType);
-  const TypeIcon = style.icon;
   const typeLabel = LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType;
-  const ringColor = accentColor(style.accent);
+  const TypeIcon = LOAN_TYPE_ICONS[loan.loanType] ?? Landmark;
+  const stamp = loan.status === 'DEFAULT' ? 'Default' : active ? null : 'Closed';
+  const rate = loan.interestRate ? new Decimal(loan.interestRate).toString() : null;
+  const owner = [
+    loan.borrowerName,
+    loan.accountNumber ? `a/c ending ${loan.accountNumber.slice(-4)}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
-  // Bond serial — pseudo-certificate marker.
-  const serial = loan.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
-  const isClosed = loan.status === 'CLOSED' || loan.status === 'FORECLOSED';
-  const isDefault = loan.status === 'DEFAULT';
-
-  const stop = (e: React.MouseEvent) => {
+  // The card is a link; its buttons must not also open it.
+  const act = (fn: () => void) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    fn();
   };
 
   return (
-    <Link
-      to={`/loans/${loan.id}`}
-      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg"
+    <ReceiptShell
+      label={`${loan.lenderName} ${typeLabel.toLowerCase()} loan`}
+      onClick={() => navigate(`/loans/${loan.id}`)}
     >
-      <Card
-        className={`overflow-hidden p-0 cursor-pointer transition-all duration-300 paper relative
-          group-hover:shadow-elev-lg group-hover:-translate-y-0.5
-          ${isClosed ? 'opacity-70' : ''}`}
-        style={{ borderTop: `3px solid ${ringColor}` }}
-      >
-        {/* Engraved bond header */}
-        <div className="relative px-5 pt-3 pb-2 border-b border-border/70">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.22em] font-medium">
-            <span className="flex items-center gap-1.5" style={{ color: ringColor }}>
-              <TypeIcon className="h-3 w-3" strokeWidth={1.8} />
-              {typeLabel} loan
-            </span>
-            <span className="font-mono normal-case tracking-normal text-muted-foreground">
-              № {serial}
-            </span>
+      <div className="flex flex-col sm:flex-row">
+        {/* Stub */}
+        <div
+          className="relative flex flex-col justify-between gap-5 overflow-hidden p-5 text-white sm:w-[38%] sm:shrink-0"
+          style={{
+            backgroundImage: `linear-gradient(160deg, ${panel.from} 0%, ${panel.via} 55%, ${panel.to} 100%)`,
+          }}
+        >
+          <TypeIcon
+            aria-hidden
+            strokeWidth={1.1}
+            className="pointer-events-none absolute -bottom-5 -right-5 h-32 w-32 text-white/[0.09]"
+          />
+          <div className="relative space-y-3">
+            <BankLogo bankName={loan.lenderName} size={28} maxWidth={130} className="shadow-md" />
+            <div>
+              <h3 className="break-words font-display text-[22px] leading-tight">{loan.lenderName}</h3>
+              <p className="mt-1 text-[13px] text-white/75">{typeLabel} loan</p>
+            </div>
           </div>
-          {/* Lender + borrower */}
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h3 className="font-sans font-semibold text-[28px] leading-[1.1] tracking-[-0.02em] text-foreground truncate">
-                {loan.lenderName}
-              </h3>
-              <div className="flex items-center gap-1.5 mt-2.5 text-base text-muted-foreground">
-                {loan.accountNumber && (
-                  <>
-                    <span className="font-mono tabular-nums">●●●● {loan.accountNumber.slice(-4)}</span>
-                    <span className="text-accent/60">·</span>
-                  </>
-                )}
-                <span className="font-display-italic truncate">{loan.borrowerName}</span>
+          <div className="relative flex items-end justify-between gap-2">
+            {rate ? (
+              <div>
+                <p className="font-display text-[34px] leading-none tabular-nums">
+                  {rate}
+                  <span className="text-xl">%</span>
+                </p>
+                <p className="mt-1 text-xs text-white/70">interest a year</p>
               </div>
-            </div>
-            <div className="flex items-center gap-0.5 shrink-0 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                onClick={(e) => { stop(e); onEdit(); }} title="Edit">
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={act(onEdit)} aria-label="Edit loan" className={STUB_BUTTON}>
                 <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button variant="ghost" size="sm"
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                onClick={(e) => { stop(e); onDelete(); }} disabled={isDeleting} title="Delete">
+              </button>
+              <button
+                type="button"
+                onClick={act(onDelete)}
+                disabled={isDeleting}
+                aria-label="Delete loan"
+                className={STUB_BUTTON}
+              >
                 {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-              </Button>
+              </button>
             </div>
           </div>
+          {stamp && (
+            <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rotate-12 rounded-sm border-2 border-white/75 px-2 py-0.5 font-display text-sm text-white/90">
+              {stamp}
+            </div>
+          )}
         </div>
 
-        {/* Body — ring + ledger grid */}
-        <CardContent className="p-5 relative">
-          <div className="grid grid-cols-[auto_1fr] gap-5 items-center">
-            <AmortizationRing
-              pct={progressPct} color={ringColor}
-              emiCount={emiCount} tenure={tenure}
-            />
+        {/* Perforation: dashed tear line with a notch bitten out at each edge */}
+        <div aria-hidden className="relative hidden sm:block">
+          <div className="absolute inset-y-3 left-0 border-l-2 border-dashed border-border" />
+          <span className="absolute -left-2.5 -top-2.5 h-5 w-5 rounded-full bg-background" />
+          <span className="absolute -bottom-2.5 -left-2.5 h-5 w-5 rounded-full bg-background" />
+        </div>
+
+        {/* Body */}
+        <div className="min-w-0 flex-1 space-y-4 p-5">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
-                Principal
+              <p className="text-sm text-muted-foreground">{active ? 'Outstanding' : 'Loan amount'}</p>
+              <p className="money-digits truncate font-display text-[28px] leading-tight tabular-nums text-foreground">
+                {active ? (summary ? formatINR(summary.outstandingBalance) : '—') : formatINR(loan.principalAmount)}
               </p>
-              <p className="numeric-display-lg money-digits text-2xl mt-0.5">
-                {formatINR(loan.principalAmount)}
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="font-display text-[28px] leading-tight tabular-nums" style={{ color: accent }}>
+                {Math.round(progress)}%
               </p>
-              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">EMI</p>
-                  <p className="font-medium tabular-nums">{formatINR(loan.emiAmount)}</p>
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">Rate</p>
-                  <p className="font-medium tabular-nums">{loan.interestRate}%</p>
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">Tenure</p>
-                  <p className="font-medium tabular-nums">{loan.tenureMonths}m</p>
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">Status</p>
-                  <p className={`font-medium capitalize ${STATUS_COLORS[loan.status] ?? ''}`}>
-                    {loan.status.toLowerCase()}
-                  </p>
-                </div>
-              </div>
+              <p className="text-xs text-muted-foreground">repaid</p>
             </div>
           </div>
 
-          {/* Footer rule + next EMI / status */}
-          <div className="mt-4 pt-3 border-t border-dashed border-border/70 flex items-center justify-between text-xs">
-            {nextEmiDateStr ? (
-              <>
-                <span className="text-muted-foreground flex items-center gap-1.5">
-                  <Calendar className="h-3 w-3" />
-                  <span className="font-display-italic">Next EMI</span>
-                  <span className="tabular-nums text-foreground">{formatDate(nextEmiDateStr)}</span>
-                </span>
-                {emiCountdownBadge(nextEmiDateStr)}
-              </>
-            ) : (
-              <span className="text-muted-foreground font-display-italic">
-                {isClosed ? 'Loan closed' : isDefault ? 'In default' : '—'}
-              </span>
-            )}
-            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-accent transition-colors ml-auto" />
+          <div>
+            <PayoffBar pct={progress} accent={accent} />
+            <div className="mt-2 flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
+              <span>First EMI {formatDate(firstEmi)}</span>
+              {lastEmi && <span>Last EMI {formatDate(lastEmi)}</span>}
+            </div>
           </div>
 
-          {/* DEFAULT stamp overlay */}
-          {isDefault && (
-            <div className="absolute top-3 right-3 -rotate-6 border-2 border-negative px-2 py-0.5 rounded-sm font-display text-xs tracking-[0.18em] text-negative pointer-events-none flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" />
-              DEFAULT
-            </div>
-          )}
-          {isClosed && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="font-display text-3xl tracking-[0.25em] text-muted-foreground/50 -rotate-12 border-4 border-muted-foreground/40 px-3 py-1 rounded-sm">
-                CLOSED
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </Link>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <Figure label="Principal">
+              <span className="money-digits">{formatINR(loan.principalAmount)}</span>
+            </Figure>
+            <Figure label="Tenure">{tenure ? `${tenure} months` : '—'}</Figure>
+            <Figure label="EMI">
+              <span className="money-digits">{formatINR(loan.emiAmount)}</span>
+            </Figure>
+            <Figure
+              label="Next EMI"
+              hint={
+                dueIn == null
+                  ? undefined
+                  : dueIn < 0
+                    ? 'Overdue — record the payment once made'
+                    : dueIn === 0
+                      ? 'Due today'
+                      : dueIn <= 7
+                        ? `Due in ${dueIn} days`
+                        : undefined
+              }
+              className={dueIn != null && dueIn <= 7 ? (dueIn < 0 ? 'text-negative' : 'text-warning') : undefined}
+            >
+              {nextEmi ? formatDate(nextEmi) : active ? '—' : 'None'}
+            </Figure>
+            <Figure label="EMIs left">{active ? emisLeft : 0}</Figure>
+            <Figure label="Paid so far">
+              <span className="money-digits">{paidSoFar ? formatINR(paidSoFar.toString()) : '—'}</span>
+            </Figure>
+          </div>
+
+          <p className="truncate border-t border-dashed border-border/70 pt-3 text-xs text-muted-foreground">
+            {owner}
+          </p>
+        </div>
+      </div>
+    </ReceiptShell>
   );
 }
 
@@ -699,7 +680,7 @@ export function LoanListPage() {
       {!isLoading && list.length > 0 && <SummaryStrip loans={list} />}
 
       {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <Card key={i} className="h-44 animate-pulse bg-muted/60" />
           ))}
@@ -720,7 +701,7 @@ export function LoanListPage() {
       )}
 
       {!isLoading && active.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {active.map((loan) =>
             confirmDeleteId === loan.id ? (
               <Card key={loan.id} className="border-destructive">
@@ -755,7 +736,7 @@ export function LoanListPage() {
       {!isLoading && inactive.length > 0 && (
         <>
           <h2 className="text-sm font-medium text-muted-foreground mt-8 mb-3">Closed / Foreclosed</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 opacity-60">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-60">
             {inactive.map((loan) =>
               confirmDeleteId === loan.id ? (
                 <Card key={loan.id} className="border-destructive">
