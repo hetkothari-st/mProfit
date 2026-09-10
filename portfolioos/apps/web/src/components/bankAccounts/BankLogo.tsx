@@ -5,6 +5,11 @@
  * scripts/fetch-bank-logos.py for why they're self-hosted). A bank without a
  * file — or whose file fails to load after a deploy — renders initials on its
  * brand colour instead: obviously a placeholder, never a broken image.
+ *
+ * The white plate takes the mark's own shape: square for an icon, wide for a
+ * wordmark like "HDFC BANK". Squeezing a 5:1 wordmark into a square leaves it a
+ * few pixels tall — unreadable, which is why `size` is the plate's height and
+ * its width follows the mark's recorded aspect ratio.
  */
 import { useEffect, useState } from 'react';
 import { bankBrandFor, tileSurface } from '@/lib/bankBrand';
@@ -22,35 +27,39 @@ function bankInitials(name: string): string {
 export function BankLogo({
   bankName,
   size = 40,
+  maxWidth,
   className,
 }: {
   /** Any label naming the bank: "HDFC Bank", "SBI", "HDFC FD 2025". */
   bankName: string;
-  /** Rendered square, in px. Files are ≤128px, so anything up to that is crisp. */
+  /** Plate height in px; width follows the mark's shape. */
   size?: number;
+  /** Cap for wide wordmarks (default 5× the height). */
+  maxWidth?: number;
   className?: string;
 }) {
   const brand = bankBrandFor(bankName);
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [brand?.logo]);
 
-  const box = `${className ?? ''} flex shrink-0 items-center justify-center overflow-hidden rounded-lg`;
-
   if (brand?.logo && !failed) {
+    const pad = Math.round(size * 0.15);
+    const natural = Math.round((size - 2 * pad) * brand.aspect + 2 * pad);
+    const width = Math.max(size, Math.min(natural, maxWidth ?? size * 5));
     return (
-      // White chip: most marks are drawn for paper, and several are dark ink
+      // White plate: most marks are drawn for paper, and several are dark ink
       // with no light variant, which would vanish on a coloured tile.
       <span
-        className={`${box} bg-white ring-1 ring-black/5`}
-        style={{ width: size, height: size, padding: Math.round(size * 0.12) }}
+        className={`${className ?? ''} inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-white ring-1 ring-black/5`}
+        style={{ width, height: size, padding: pad }}
       >
         <img
           src={brand.logo}
           alt={`${brand.name} logo`}
           loading="lazy"
           decoding="async"
-          // `contain`, never `cover`: wordmarks and roundels of every aspect
-          // ratio; cropping one to a square is how a logo stops looking like itself.
+          // `contain`, never `cover`: cropping a mark to fit is how a logo stops
+          // looking like itself.
           className="h-full w-full object-contain"
           onError={() => setFailed(true)}
         />
@@ -61,7 +70,7 @@ export function BankLogo({
   return (
     <span
       aria-hidden
-      className={`${box} font-semibold tracking-tight text-white`}
+      className={`${className ?? ''} flex shrink-0 items-center justify-center overflow-hidden rounded-lg font-semibold tracking-tight text-white`}
       style={{
         width: size,
         height: size,

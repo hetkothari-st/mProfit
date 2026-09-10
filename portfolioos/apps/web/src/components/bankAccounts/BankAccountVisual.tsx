@@ -18,12 +18,17 @@ const TONE = {
 // Slate facade for a bank with no known brand colour.
 const NEUTRAL = { from: '#475569', via: '#1e293b', to: '#020617', glow: '#94a3b8' };
 
-/** The facade's gradient stops, from the bank's measured brand colour. */
-function facadeColours(bankName: string) {
+// A mark this much wider than tall is a wordmark that already spells the
+// bank's name, so the name board shows the logo alone.
+const WORDMARK_ASPECT = 2.2;
+
+/** The facade's colours and name-board treatment, from the bank's brand. */
+function facade(bankName: string) {
   const brand = bankBrandFor(bankName);
-  if (!brand?.color) return { slug: 'neutral', ...NEUTRAL };
+  const wordmark = !!brand?.logo && brand.aspect >= WORDMARK_ASPECT;
+  if (!brand?.color) return { slug: brand?.slug ?? 'neutral', wordmark, ...NEUTRAL };
   const s = tileSurface(brand.color, brand.accent);
-  return { slug: brand.slug, from: s.from, via: s.via, to: s.to, glow: s.glow };
+  return { slug: brand.slug, wordmark, from: s.from, via: s.via, to: s.to, glow: s.glow };
 }
 
 function bankInitials(name: string): string {
@@ -64,25 +69,26 @@ export function BankAccountVisual({
   account: BankAccountDTO;
   size?: 'md' | 'lg';
 }) {
-  const colours = facadeColours(account.bankName);
+  const look = facade(account.bankName);
   const hideSensitive = usePrivacyStore((s) => s.hideSensitive);
   const dim = account.status !== 'ACTIVE' ? 'grayscale opacity-75' : '';
 
   const surface: CSSProperties = {
-    backgroundImage: `linear-gradient(135deg, ${colours.from} 0%, ${colours.via} 55%, ${colours.to} 100%)`,
+    backgroundImage: `linear-gradient(135deg, ${look.from} 0%, ${look.via} 55%, ${look.to} 100%)`,
   };
 
   const nameSize = size === 'lg' ? 'text-[15px] sm:text-lg' : 'text-[12px] sm:text-sm';
   const balanceSize = size === 'lg' ? 'text-2xl sm:text-4xl' : 'text-xl sm:text-2xl';
   const acctSize = size === 'lg' ? 'text-sm sm:text-base' : 'text-xs sm:text-sm';
-  const logoSize = size === 'lg' ? 30 : 24;
+  const logoHeight = size === 'lg' ? 40 : 32;
+  const logoMaxWidth = size === 'lg' ? 240 : 180;
   const columnCount = size === 'lg' ? 8 : 6;
 
   return (
     <div
       className={`relative w-full ${dim} drop-shadow-[0_12px_24px_rgba(0,0,0,0.28)] select-none`}
       aria-label={`${account.bankName} bank account`}
-      data-brand={colours.slug}
+      data-brand={look.slug}
     >
       {/* ===== PEDIMENT (triangular roof) ===== */}
       <div className="relative mx-auto" style={{ width: '94%' }}>
@@ -106,10 +112,16 @@ export function BankAccountVisual({
       {/* ===== ENTABLATURE / NAME BOARD ===== */}
       <div className="relative -mt-px border-y border-white/20 text-white" style={surface}>
         <div className="absolute inset-0 bg-black/25" />
-        <div className="relative flex items-center justify-center gap-2 px-3 py-1.5 sm:py-2">
-          <BankLogo bankName={account.bankName} size={logoSize} className="shadow-sm" />
+        <div className="relative flex items-center justify-center gap-2.5 px-3 py-2 sm:py-2.5">
+          <BankLogo
+            bankName={account.bankName}
+            size={logoHeight}
+            maxWidth={logoMaxWidth}
+            className="shadow-md"
+          />
+          {/* A wordmark already spells the name; keep it for screen readers only. */}
           <span
-            className={`truncate font-semibold uppercase tracking-[0.2em] ${TONE.primary} ${nameSize} drop-shadow`}
+            className={`truncate font-semibold uppercase tracking-[0.2em] ${TONE.primary} ${nameSize} drop-shadow ${look.wordmark ? 'sr-only' : ''}`}
             title={account.bankName}
           >
             {account.bankName}
@@ -122,7 +134,7 @@ export function BankAccountVisual({
         {/* the mark's second colour, as a soft glow behind the columns */}
         <div
           className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full opacity-35 blur-2xl"
-          style={{ background: colours.glow }}
+          style={{ background: look.glow }}
         />
         {/* diagonal stone highlight */}
         <div className="absolute inset-0 bg-gradient-to-tr from-black/20 via-white/5 to-white/12 pointer-events-none" />

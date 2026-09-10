@@ -302,7 +302,7 @@ export function FDFormDialog({
             <div className="space-y-1">
               <Label htmlFor="fd-issuer">Bank / Issuer <span className="text-destructive">*</span></Label>
               <div className="flex items-center gap-2">
-                <BankLogo bankName={watch('assetName') ?? ''} size={36} />
+                <BankLogo bankName={watch('assetName') ?? ''} size={36} maxWidth={112} />
                 <div className="min-w-0 flex-1">
                   {/* Picking from the list keeps the name matching the bank's
                       logo and colour on the deposit card; any issuer can still

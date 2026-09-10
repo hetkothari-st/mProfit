@@ -311,7 +311,7 @@ function FDCard({
           <div className="mt-2 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2.5">
-                <BankLogo bankName={holding.assetName ?? ''} size={34} />
+                <BankLogo bankName={holding.assetName ?? ''} size={32} maxWidth={132} />
                 <h3 className="min-w-0 font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
                   {holding.assetName ?? '—'}
                 </h3>
@@ -491,7 +491,7 @@ function RDCard({
           <div className="mt-2 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2.5">
-                <BankLogo bankName={holding.assetName ?? ''} size={34} />
+                <BankLogo bankName={holding.assetName ?? ''} size={32} maxWidth={132} />
                 <h3 className="min-w-0 font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
                   {holding.assetName ?? '—'}
                 </h3>

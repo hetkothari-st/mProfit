@@ -16,6 +16,8 @@ export interface BankBrand {
   logo: string | null;
   color: string | null;
   accent: string | null;
+  /** Width / height of the trimmed mark — wordmarks run 3–8, icons ~1. */
+  aspect: number;
 }
 
 // ── Matching ────────────────────────────────────────────────────────────────
@@ -68,6 +70,7 @@ export function bankBrandFor(label: string | null | undefined): BankBrand | null
     logo: asset?.logo ?? null,
     color: asset?.color ?? null,
     accent: asset?.accent ?? null,
+    aspect: asset?.aspect ?? 1,
   };
 }
 

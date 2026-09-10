@@ -39,6 +39,8 @@ describe('bankBrandFor', () => {
     expect(brand?.name).toBe('HDFC Bank');
     expect(brand?.logo).toMatch(/^\/banks\/hdfc-bank\.(png|svg)$/);
     expect(brand?.color).toMatch(/^#[0-9a-f]{6}$/);
+    // HDFC's mark is a "HDFC BANK" wordmark — recorded wide, not squared.
+    expect(brand?.aspect).toBeGreaterThan(2);
   });
 
   it('returns null for a bank it does not know', () => {

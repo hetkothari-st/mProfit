@@ -2,8 +2,8 @@
 """Fetch each Indian bank's own logo, normalise it, and derive its brand colour.
 
 Writes:
-  apps/web/public/banks/<slug>.(png|svg)       raster: 128px, transparent, aspect kept
-  apps/web/src/data/bankBrands.generated.ts    slug -> { logo, color, accent }
+  apps/web/public/banks/<slug>.(png|svg)       raster: ≤384×128, trimmed, aspect kept
+  apps/web/src/data/bankBrands.generated.ts    slug -> { logo, color, accent, aspect }
 
 Usage:
   python scripts/fetch-bank-logos.py [--sheet out.png] [--only slug,slug]
@@ -39,6 +39,14 @@ with 200 + HTML). The largest genuine raster wins by shorter side; an SVG is
 kept only when no raster reaches 96px. Every result was reviewed by eye on the
 contact sheet; REJECT_ANY / REJECT_URLS record what that review threw out.
 
+WHY THE SHAPE IS KEPT
+---------------------
+Marks come as square icons and as wide wordmarks ("HDFC BANK", 5:1). Padding a
+wordmark into a square leaves a thin strip in a sea of transparency, which then
+renders a few pixels tall. So margins are trimmed (transparent, or white on
+opaque images), the mark keeps its own aspect ratio, and the manifest records
+that ratio so the UI can size a plate to fit it.
+
 WHY THE COLOUR IS MEASURED, NOT TYPED
 -------------------------------------
 Tile colours come from the logo's own pixels: the dominant saturated hue
@@ -64,14 +72,14 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 try:
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageChops, ImageDraw
 except ImportError:
     sys.exit('needs Pillow:  pip install Pillow')
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGO_DIR = ROOT / 'apps/web/public/banks'
 MANIFEST = ROOT / 'apps/web/src/data/bankBrands.generated.ts'
-SIZE = 128
+MAX_W, MAX_H = 384, 128
 UA = (
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
     '(KHTML, like Gecko) Chrome/126.0 Safari/537.36'
@@ -152,7 +160,7 @@ COLOR_OVERRIDES: dict[str, tuple[str, str | None]] = {
 # Header images that say "logo" but aren't the bank's mark. Substring match on
 # the lower-cased URL, applied to every bank:
 #   dicgc, digc    — the deposit-insurance badge every Indian bank site shows
-#   white          — reversed-out marks for dark headers; invisible on our white chip
+#   white          — reversed-out marks for dark headers; invisible on our white plate
 #   chat/, chatbot — chatbot avatars
 #   dummy          — CMS placeholders
 #   publive, /news — article images on media CDNs
@@ -314,17 +322,32 @@ def fetch_best(slug: str, domain: str) -> dict:
 # ── normalising + colour ──────────────────────────────────────────────────────
 
 def trim(im: Image.Image) -> Image.Image:
-    """Crop fully transparent margins so small marks don't float in padding."""
-    box = im.getchannel('A').getbbox()
+    """Crop empty margins: transparent ones, or white ones on an opaque image."""
+    alpha = im.getchannel('A')
+    if alpha.getextrema()[0] < 255:
+        box = alpha.getbbox()
+    else:
+        # Fully opaque (JPEGs, flattened PNGs): crop the near-white surround.
+        diff = ImageChops.difference(im.convert('RGB'), Image.new('RGB', im.size, (255, 255, 255)))
+        box = diff.convert('L').point(lambda v: 255 if v > 24 else 0).getbbox()
     return im.crop(box) if box else im
 
 
-def fit_square(im: Image.Image) -> Image.Image:
+def fit(im: Image.Image) -> Image.Image:
+    """Trimmed, and scaled down (never up) to fit MAX_W×MAX_H — aspect kept."""
     im = trim(im)
-    im.thumbnail((SIZE, SIZE), Image.LANCZOS)
-    canvas = Image.new('RGBA', (SIZE, SIZE), (0, 0, 0, 0))
-    canvas.paste(im, ((SIZE - im.width) // 2, (SIZE - im.height) // 2), im)
-    return canvas
+    im.thumbnail((MAX_W, MAX_H), Image.LANCZOS)
+    return im
+
+
+def svg_aspect(svg: bytes) -> float:
+    """Width/height from the viewBox (or width/height attributes)."""
+    m = re.search(rb'viewBox\s*=\s*["\']\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)', svg)
+    if not m:
+        m = re.search(rb'<svg[^>]*\swidth\s*=\s*["\']([\d.]+)[^>]*\sheight\s*=\s*["\']([\d.]+)', svg)
+    if m and float(m.group(2)) > 0:
+        return round(float(m.group(1)) / float(m.group(2)), 3)
+    return 1.0
 
 
 def hexof(rgb: tuple[float, float, float]) -> str:
@@ -377,26 +400,31 @@ def process(result: dict) -> dict:
     if result['kind'] is None:
         # No usable image — an override still gives the tile its colour.
         color, accent = override if override else (None, None)
-        return {**result, 'file': None, 'color': color, 'accent': accent}
+        return {**result, 'file': None, 'color': color, 'accent': accent, 'aspect': 1.0}
     for old in LOGO_DIR.glob(f'{slug}.*'):
         old.unlink()
     if result['kind'] == 'png':
-        img = fit_square(result['image'])
+        img = fit(result['image'])
         path = LOGO_DIR / f'{slug}.png'
         img.save(path, 'PNG', optimize=True)
         color, accent = brand_colours(raster_pixels(img))
+        aspect = round(img.width / img.height, 3)
     else:
         path = LOGO_DIR / f'{slug}.svg'
         path.write_bytes(result['svg'])
         color, accent = brand_colours(svg_pixels(result['svg']))
+        aspect = svg_aspect(result['svg'])
     if override:
         color, accent = override
-    return {**result, 'file': path.name, 'color': color, 'accent': accent}
+    return {**result, 'file': path.name, 'color': color, 'accent': accent, 'aspect': aspect}
 
 
 # ── outputs ───────────────────────────────────────────────────────────────────
 
-ENTRY_RE = re.compile(r"^  '([a-z0-9-]+)': \{ logo: (null|'[^']*'), color: (null|'[^']*'), accent: (null|'[^']*') \},$")
+ENTRY_RE = re.compile(
+    r"^  '([a-z0-9-]+)': \{ logo: (null|'[^']*'), color: (null|'[^']*'), "
+    r"accent: (null|'[^']*'), aspect: ([\d.]+) \},$"
+)
 
 
 def read_manifest() -> dict[str, dict]:
@@ -411,7 +439,8 @@ def read_manifest() -> dict[str, dict]:
             logo = val(m.group(2))
             rows[m.group(1)] = {
                 'slug': m.group(1), 'file': logo.rsplit('/', 1)[-1] if logo else None,
-                'color': val(m.group(3)), 'accent': val(m.group(4)), 'side': 0, 'src': '(kept)',
+                'color': val(m.group(3)), 'accent': val(m.group(4)),
+                'aspect': float(m.group(5)), 'side': 0, 'src': '(kept)',
             }
     return rows
 
@@ -427,6 +456,8 @@ def write_manifest(rows: list[dict]) -> None:
         " * Logos are each bank's own image, fetched from its own domain and",
         ' * committed rather than hot-linked. Colours are measured from the logo',
         ' * pixels (dominant saturated hue + a second distinct hue when present).',
+        ' * `aspect` is the trimmed mark\'s width / height, so the UI can size a',
+        ' * plate to a wordmark instead of shrinking it into a square.',
         ' * A bank missing here renders initials and a neutral tile — a guessed',
         ' * logo or colour would be worse.',
         ' */',
@@ -434,6 +465,7 @@ def write_manifest(rows: list[dict]) -> None:
         '  logo: string | null;',
         '  color: string | null;',
         '  accent: string | null;',
+        '  aspect: number;',
         '}',
         '',
         'export const BANK_BRAND_ASSETS: Readonly<Record<string, BankBrandAsset>> = {',
@@ -444,7 +476,8 @@ def write_manifest(rows: list[dict]) -> None:
         logo = f"'/banks/{r['file']}'" if r['file'] else 'null'
         color = f"'{r['color']}'" if r['color'] else 'null'
         accent = f"'{r['accent']}'" if r['accent'] else 'null'
-        lines.append(f"  '{r['slug']}': {{ logo: {logo}, color: {color}, accent: {accent} }},")
+        aspect = f"{r.get('aspect', 1.0):g}"
+        lines.append(f"  '{r['slug']}': {{ logo: {logo}, color: {color}, accent: {accent}, aspect: {aspect} }},")
     lines += ['};', '']
     MANIFEST.write_text('\n'.join(lines), encoding='utf-8', newline='\n')
 
@@ -459,13 +492,14 @@ def contact_sheet(rows: list[dict], out: Path) -> None:
         draw.rectangle([x + 4, y + 4, x + cw - 4, y + ch - 4], fill=(255, 255, 255))
         if r['file'] and r['file'].endswith('.png'):
             logo = Image.open(LOGO_DIR / r['file']).convert('RGBA')
-            sheet.paste(logo, (x + (cw - SIZE) // 2, y + 10), logo)
+            logo.thumbnail((cw - 20, 120))
+            sheet.paste(logo, (x + (cw - logo.width) // 2, y + 10 + (120 - logo.height) // 2), logo)
         else:
             draw.text((x + 60, y + 60), 'SVG' if r['file'] else 'MISSING', fill=(200, 0, 0))
         for j, c in enumerate((r['color'], r['accent'])):
             if c:
                 draw.rectangle([x + 10 + j * 40, y + 142, x + 44 + j * 40, y + 160], fill=c)
-        draw.text((x + 96, y + 145), f"{r['side']}px", fill=(90, 90, 90))
+        draw.text((x + 96, y + 145), f"{r['side']}px  {r.get('aspect', 1):g}:1", fill=(90, 90, 90))
         draw.text((x + 10, y + 166), r['slug'][:30], fill=(0, 0, 0))
     sheet.save(out)
 
@@ -490,7 +524,8 @@ def main() -> None:
 
     for r in sorted(fresh.values(), key=lambda r: r['slug']):
         status = 'ok  ' if r['file'] else ('COL ' if r['color'] else 'MISS')
-        print(f"  {status} {r['slug']:<28} {r['side']:>4}px  {r['color'] or '-':<8} {r['accent'] or '-':<8} {r['src'][:70]}")
+        print(f"  {status} {r['slug']:<28} {r['side']:>4}px {r.get('aspect', 1):>6g}:1  "
+              f"{r['color'] or '-':<8} {r['accent'] or '-':<8} {r['src'][:60]}")
     print(f"\n{sum(1 for r in rows if r['file'])}/{len(BANKS)} banks have a logo, "
           f"{sum(1 for r in rows if r['color'])}/{len(BANKS)} a colour")
 
