@@ -34,6 +34,7 @@ const account: BankAccountDTO = {
   customerId: 'CIF1',
   ifsc: 'HDFC0001234',
   branch: 'Andheri East',
+  branchAddress: null,
   nickname: null,
   jointHolders: [],
   nomineeName: null,

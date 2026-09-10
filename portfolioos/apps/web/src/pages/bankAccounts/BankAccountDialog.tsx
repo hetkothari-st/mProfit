@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -19,6 +19,7 @@ import {
 
 const ACCOUNT_TYPES = ['SAVINGS', 'CURRENT', 'SALARY', 'NRE', 'NRO', 'OD'] as const;
 const STATUSES = ['ACTIVE', 'DORMANT', 'CLOSED'] as const;
+const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 function emptyForm(): CreateBankAccountInput {
   return {
@@ -29,6 +30,7 @@ function emptyForm(): CreateBankAccountInput {
     customerId: null,
     ifsc: null,
     branch: null,
+    branchAddress: null,
     nickname: null,
     jointHolders: [],
     nomineeName: null,
@@ -51,6 +53,7 @@ function fromAccount(a: BankAccountDTO): CreateBankAccountInput {
     portfolioId: a.portfolioId,
     ifsc: a.ifsc,
     branch: a.branch,
+    branchAddress: a.branchAddress,
     nickname: a.nickname,
     jointHolders: a.jointHolders,
     nomineeName: a.nomineeName,
@@ -70,6 +73,8 @@ function normaliseAccountNumber(v: string): string {
   return v.replace(/[\s-]/g, '');
 }
 
+type IfscLookupState = 'idle' | 'loading' | 'not_found' | 'failed';
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -85,6 +90,8 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
   // Kept outside `form`: the saved number is never sent to the client, so on
   // edit this starts empty and an empty value means "keep what's stored".
   const [accountNumber, setAccountNumber] = useState('');
+  const [ifscLookup, setIfscLookup] = useState<IfscLookupState>('idle');
+  const lastLookedUp = useRef<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -93,6 +100,8 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
       setJointHoldersText((next.jointHolders ?? []).join(', '));
       setAccountNumber('');
       setErrors({});
+      setIfscLookup('idle');
+      lastLookedUp.current = null;
     }
   }, [open, initial]);
 
@@ -119,6 +128,33 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
     if (digits.length >= 4) set('last4', digits.slice(-4));
   }
 
+  /**
+   * On leaving the IFSC field, pull branch name + address from the IFSC. A new
+   * account only fills empty fields; editing an account to a different IFSC
+   * replaces them, since the old branch no longer applies.
+   */
+  async function autofillFromIfsc() {
+    const code = (form.ifsc ?? '').trim().toUpperCase();
+    if (!IFSC_RE.test(code) || code === lastLookedUp.current) return;
+    lastLookedUp.current = code;
+    const replace = !!initial && code !== (initial.ifsc ?? '').toUpperCase();
+
+    setIfscLookup('loading');
+    try {
+      const info = await bankAccountsApi.lookupIfsc(code);
+      setForm((f) => ({
+        ...f,
+        ifsc: code,
+        branch: (replace || !f.branch ? info.branch : f.branch) ?? f.branch,
+        branchAddress: (replace || !f.branchAddress ? info.address : f.branchAddress) ?? f.branchAddress,
+      }));
+      setIfscLookup('idle');
+    } catch (err) {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      setIfscLookup(status === 404 ? 'not_found' : 'failed');
+    }
+  }
+
   const hasFullNumber = normaliseAccountNumber(accountNumber) !== '';
 
   function validate(): boolean {
@@ -128,6 +164,8 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
     if (!form.last4 || !/^\d{4}$/.test(form.last4)) errs['last4'] = 'Must be 4 digits';
     if (hasFullNumber && !/^\d{6,18}$/.test(normaliseAccountNumber(accountNumber)))
       errs['accountNumber'] = 'Must be 6–18 digits';
+    if (form.ifsc?.trim() && !IFSC_RE.test(form.ifsc.trim().toUpperCase()))
+      errs['ifsc'] = '11 characters, e.g. HDFC0001234';
     if (!form.customerId?.trim()) errs['customerId'] = 'Required';
     if (form.debitCardLast4 && !/^\d{4}$/.test(form.debitCardLast4))
       errs['debitCardLast4'] = 'Must be 4 digits';
@@ -152,8 +190,9 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
       accountHolder: form.accountHolder.trim(),
       jointHolders,
       customerId: form.customerId?.trim() || null,
-      ifsc: form.ifsc?.trim() || null,
+      ifsc: form.ifsc?.trim().toUpperCase() || null,
       branch: form.branch?.trim() || null,
+      branchAddress: form.branchAddress?.trim() || null,
       nickname: form.nickname?.trim() || null,
       nomineeName: form.nomineeName?.trim() || null,
       nomineeRelation: form.nomineeRelation?.trim() || null,
@@ -255,9 +294,27 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
               <Label>IFSC</Label>
               <Input
                 placeholder="HDFC0001234"
+                maxLength={11}
+                autoCapitalize="characters"
                 value={form.ifsc ?? ''}
-                onChange={(e) => set('ifsc', e.target.value || null)}
+                onChange={(e) => {
+                  set('ifsc', e.target.value.toUpperCase() || null);
+                  setIfscLookup('idle');
+                }}
+                onBlur={() => void autofillFromIfsc()}
+                className={errors['ifsc'] ? 'border-negative' : ''}
               />
+              {errors['ifsc'] ? (
+                <p className="text-xs text-negative mt-1">{errors['ifsc']}</p>
+              ) : ifscLookup === 'loading' ? (
+                <p className="text-xs text-muted-foreground mt-1">Looking up branch…</p>
+              ) : ifscLookup === 'not_found' ? (
+                <p className="text-xs text-amber-600 mt-1">IFSC not found — check the code.</p>
+              ) : ifscLookup === 'failed' ? (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Couldn't look up the branch. Fill it in below.
+                </p>
+              ) : null}
             </div>
             <div>
               <Label>Branch</Label>
@@ -267,6 +324,15 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
                 onChange={(e) => set('branch', e.target.value || null)}
               />
             </div>
+          </div>
+
+          <div>
+            <Label>Branch address</Label>
+            <Input
+              placeholder="Filled from the IFSC — edit if needed"
+              value={form.branchAddress ?? ''}
+              onChange={(e) => set('branchAddress', e.target.value || null)}
+            />
           </div>
 
           <div>

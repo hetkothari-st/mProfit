@@ -29,6 +29,7 @@ export interface BankAccountDTO {
   customerId: string | null;
   ifsc: string | null;
   branch: string | null;
+  branchAddress: string | null;
   nickname: string | null;
   jointHolders: string[];
   nomineeName: string | null;
@@ -57,6 +58,15 @@ export interface BankAccountCashFlowDTO {
   currency: string | null;
 }
 
+export interface IfscDetailsDTO {
+  ifsc: string;
+  bank: string | null;
+  branch: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+}
+
 export interface CreateBankAccountInput {
   bankName: string;
   accountType: BankAccountType;
@@ -68,6 +78,7 @@ export interface CreateBankAccountInput {
   portfolioId?: string | null;
   ifsc?: string | null;
   branch?: string | null;
+  branchAddress?: string | null;
   nickname?: string | null;
   jointHolders?: string[];
   nomineeName?: string | null;
@@ -114,6 +125,19 @@ export const bankAccountsApi = {
   async revealAccountNumber(id: string): Promise<{ accountNumber: string | null }> {
     const { data } = await api.post<ApiResponse<{ accountNumber: string | null }>>(
       `/api/bank-accounts/${id}/reveal`,
+    );
+    return unwrap(data);
+  },
+  /** Ready-to-send bank details text (includes the full number). Audited server-side. */
+  async shareDetails(id: string): Promise<{ text: string }> {
+    const { data } = await api.post<ApiResponse<{ text: string }>>(
+      `/api/bank-accounts/${id}/share`,
+    );
+    return unwrap(data);
+  },
+  async lookupIfsc(code: string): Promise<IfscDetailsDTO> {
+    const { data } = await api.get<ApiResponse<IfscDetailsDTO>>(
+      `/api/bank-accounts/ifsc/${encodeURIComponent(code)}`,
     );
     return unwrap(data);
   },

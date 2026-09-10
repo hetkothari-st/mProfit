@@ -2549,6 +2549,7 @@ model BankAccount {
   customerId    String? // bank-issued customer identification number (CIF / CustID)
   ifsc          String?
   branch        String?
+  branchAddress String? // auto-filled from IFSC (ifscLookup.service), user-editable
   nickname      String? // user-given label e.g. "Primary salary"
 
   // Full account number — AES-256-GCM via pfCredentials.encryptIdentifier

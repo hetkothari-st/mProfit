@@ -28,6 +28,7 @@ function makeAccount(overrides: Partial<BankAccountDTO> = {}): BankAccountDTO {
     customerId: 'CIF1',
     ifsc: null,
     branch: null,
+    branchAddress: null,
     nickname: null,
     jointHolders: [],
     nomineeName: null,

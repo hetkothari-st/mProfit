@@ -17,6 +17,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { bankAccountsApi, type BankAccountDTO } from '@/api/bankAccounts.api';
 import { BankAccountVisual } from '@/components/bankAccounts/BankAccountVisual';
+import { ShareBankDetailsButton } from '@/components/bankAccounts/ShareBankDetailsButton';
 import { BankAccountDialog } from './BankAccountDialog';
 
 const STATUS_TONE: Record<string, string> = {
@@ -168,6 +169,8 @@ function AccountTile({
           </div>
         )}
       </div>
+
+      <ShareBankDetailsButton account={account} className="mt-3 w-full" />
     </div>
   );
 }

@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import { bankAccountsApi } from '@/api/bankAccounts.api';
 import { BankAccountVisual } from '@/components/bankAccounts/BankAccountVisual';
 import { AccountNumberReveal } from '@/components/bankAccounts/AccountNumberReveal';
+import { ShareBankDetailsButton } from '@/components/bankAccounts/ShareBankDetailsButton';
 import { BankAccountDialog } from './BankAccountDialog';
 import { usePrivacyStore } from '@/stores/privacy.store';
 
@@ -193,13 +194,14 @@ export function BankAccountDetailPage() {
         {/* Hero: passbook visual + quick actions */}
         <div className="space-y-3">
           <BankAccountVisual account={account} size="lg" />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
             <Button variant="outline" size="sm" onClick={() => setSnapshotOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> Record balance
             </Button>
+            <ShareBankDetailsButton account={account} />
           </div>
         </div>
 
@@ -260,6 +262,7 @@ export function BankAccountDetailPage() {
                 <DetailRow label="Customer ID" value={account.customerId} />
                 <DetailRow label="IFSC" value={account.ifsc} />
                 <DetailRow label="Branch" value={account.branch} />
+                <DetailRow label="Branch address" value={account.branchAddress} />
                 <DetailRow label="Status" value={account.status} />
               </CardContent>
             </Card>
