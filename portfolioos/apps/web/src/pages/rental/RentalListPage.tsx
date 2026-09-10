@@ -17,6 +17,7 @@ import {
   MapPin,
   CheckCircle2,
   MessageCircle,
+  Camera,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
@@ -44,6 +45,11 @@ import {
 } from '@/api/rental.api';
 import { invalidateRentalCaches } from '@/api/rentalCache';
 import { RentalRemindersPanel } from './RentalRemindersPanel';
+import { propertyPhotosApi, type PhotoCover } from '@/api/propertyMedia.api';
+import { PropertyCover } from '@/components/property/PropertyCover';
+import { PropertiesMap } from '@/components/property/PropertiesMap';
+import { ViewToggle } from '@/components/property/ViewToggle';
+import { useListView } from '@/components/property/useListView';
 
 // ── Property type theming ─────────────────────────────────────────────
 
@@ -322,11 +328,13 @@ function CreatePropertyDialog({
 
 function PropertyCard({
   property,
+  cover,
   onEdit,
   onDelete,
   isDeleting,
 }: {
   property: RentalPropertyDTO;
+  cover?: PhotoCover;
   onEdit: () => void;
   onDelete: () => void;
   isDeleting: boolean;
@@ -364,6 +372,22 @@ function PropertyCard({
     >
       <Card className="overflow-hidden p-0 cursor-pointer transition-all duration-300 paper relative
         group-hover:shadow-elev-lg group-hover:-translate-y-0.5">
+
+        {/* The property's cover photo, when it has one */}
+        {cover && (
+          <div className="relative h-44 overflow-hidden">
+            <PropertyCover
+              photoId={cover.coverPhotoId}
+              className="h-full w-full transition-transform duration-700 ease-out group-hover:scale-[1.03]"
+            />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/45 to-transparent" />
+            {cover.count > 1 && (
+              <span className="absolute bottom-2.5 right-3 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+                <Camera className="h-3 w-3" /> {cover.count}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* TICKET STUB — type label band */}
         <div
@@ -656,6 +680,11 @@ export function RentalListPage() {
     queryKey: ['rental-properties'],
     queryFn: () => rentalApi.listProperties(),
   });
+  const { data: covers } = useQuery({
+    queryKey: ['property-photo-covers', 'RENTAL_PROPERTY'],
+    queryFn: () => propertyPhotosApi.covers('RENTAL_PROPERTY'),
+  });
+  const [view, setView] = useListView('rental');
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => rentalApi.deleteProperty(id),
@@ -721,6 +750,29 @@ export function RentalListPage() {
           )}
 
           {!isLoading && list.length > 0 && (
+            <div className="mb-4 flex justify-end">
+              <ViewToggle value={view} onChange={setView} />
+            </div>
+          )}
+
+          {!isLoading && list.length > 0 && view === 'map' && (
+            <PropertiesMap
+              ownerType="RENTAL_PROPERTY"
+              covers={covers}
+              items={list.map((p) => {
+                const tenancy = p.tenancies?.find((t) => t.isActive);
+                return {
+                  id: p.id,
+                  name: p.name,
+                  subtitle: p.address,
+                  meta: tenancy ? `${formatINR(tenancy.monthlyRent)}/mo` : 'Vacant',
+                  href: `/rental/${p.id}`,
+                };
+              })}
+            />
+          )}
+
+          {!isLoading && list.length > 0 && view === 'grid' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {list.map((p) => (
                 <div key={p.id}>
@@ -739,6 +791,7 @@ export function RentalListPage() {
                   ) : (
                     <PropertyCard
                       property={p}
+                      cover={covers?.[p.id]}
                       onEdit={() => { setEditProperty(p); setCreateOpen(true); }}
                       onDelete={() => setConfirmDeleteId(p.id)}
                       isDeleting={deleteMutation.isPending && confirmDeleteId === p.id}

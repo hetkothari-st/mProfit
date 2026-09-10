@@ -20,6 +20,7 @@ import {
   Users,
   Calendar,
   Receipt,
+  MapPin,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -44,6 +45,8 @@ import {
 } from '@/api/rental.api';
 import { invalidateRentalCaches } from '@/api/rentalCache';
 import { DocumentVault } from '@/components/documents/DocumentVault';
+import { PropertyGallery } from '@/components/property/PropertyGallery';
+import { PropertyLocationCard } from '@/components/property/PropertyLocationCard';
 
 // ── Status badge ──────────────────────────────────────────────────────
 
@@ -1019,6 +1022,9 @@ export function RentalDetailPage() {
         }
       />
 
+      {/* Catalogue */}
+      <PropertyGallery ownerType="RENTAL_PROPERTY" ownerId={property.id} propertyName={property.name} />
+
       {/* P&L */}
       <section>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
@@ -1117,6 +1123,18 @@ export function RentalDetailPage() {
             </CardContent>
           )}
         </Card>
+      </section>
+
+      {/* Where it is */}
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+          <MapPin className="h-4 w-4" /> Location
+        </h2>
+        <PropertyLocationCard
+          ownerType="RENTAL_PROPERTY"
+          ownerId={property.id}
+          addressLines={property.address ? [property.address] : []}
+        />
       </section>
 
       {/* Documents */}

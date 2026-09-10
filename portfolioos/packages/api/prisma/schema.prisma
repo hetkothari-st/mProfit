@@ -96,6 +96,7 @@ model User {
   // Distinct from RentalProperty (which models the tenancy/receipts side);
   // see §Property docs.
   ownedProperties OwnedProperty[]
+  propertyPhotos  PropertyPhoto[]
 
   // Phase 5-PF — EPF / PPF auto-fetch accounts (§6 EPF/PPF spec).
   pfAccounts      ProvidentFundAccount[]
@@ -1746,10 +1747,19 @@ model RentalProperty {
   paymentInstructions String?   @db.Text
   createdAt           DateTime  @default(now())
 
+  // Map pin — see services/propertyLocation.service. Looked up once per
+  // address (OpenStreetMap Nominatim) or placed by hand ("manual").
+  latitude        Float?
+  longitude       Float?
+  locationSource  String? // geocoded | approximate | manual
+  geocodedAddress String? // the address the pin was looked up from
+  geocodedAt      DateTime?
+
   tenancies       Tenancy[]
   expenses        PropertyExpense[]
   loans           Loan[]
   ownedProperties OwnedProperty[]
+  photos          PropertyPhoto[]
 }
 
 model Tenancy {
@@ -2699,12 +2709,49 @@ model OwnedProperty {
   notes    String?
   isActive Boolean @default(true)
 
+  // Map pin — see services/propertyLocation.service.
+  latitude        Float?
+  longitude       Float?
+  locationSource  String? // geocoded | approximate | manual
+  geocodedAddress String?
+  geocodedAt      DateTime?
+
+  photos PropertyPhoto[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId, status])
   @@index([userId, propertyTaxDueMonth])
   @@index([userId, expectedPossessionDate])
+}
+
+// Photos of a property (Real Estate or Rentals), stored in the database — no
+// file storage. The browser uploads a ~1600px image and a ~480px thumbnail;
+// services/propertyPhotos.service verifies both are real images and caps size
+// and count. Exactly one owner (CHECK constraint in the migration).
+model PropertyPhoto {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ownedPropertyId  String?
+  ownedProperty    OwnedProperty?  @relation(fields: [ownedPropertyId], references: [id], onDelete: Cascade)
+  rentalPropertyId String?
+  rentalProperty   RentalProperty? @relation(fields: [rentalPropertyId], references: [id], onDelete: Cascade)
+
+  mimeType      String
+  data          Bytes
+  thumbMimeType String
+  thumb         Bytes
+  width         Int
+  height        Int
+  sizeBytes     Int
+  caption       String?
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@index([userId, ownedPropertyId, sortOrder])
+  @@index([userId, rentalPropertyId, sortOrder])
 }
 
 // ─── §6 PROVIDENT FUND AUTO-FETCH ──────────────────────────────────────────

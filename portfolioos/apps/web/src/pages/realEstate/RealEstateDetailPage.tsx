@@ -41,6 +41,8 @@ import { apiErrorMessage } from '@/api/client';
 import { PropertyFormDialog } from './PropertyFormDialog';
 import { MarkSoldDialog } from './MarkSoldDialog';
 import { CapitalGainPanel } from './CapitalGainPanel';
+import { PropertyGallery } from '@/components/property/PropertyGallery';
+import { PropertyLocationCard } from '@/components/property/PropertyLocationCard';
 
 function daysSince(iso: string): number {
   return Math.round((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
@@ -214,6 +216,11 @@ export function RealEstateDetailPage() {
         </Card>
       )}
 
+      {/* Catalogue */}
+      <div className="mb-6">
+        <PropertyGallery ownerType="OWNED_PROPERTY" ownerId={property.id} propertyName={property.name} />
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <Card>
@@ -266,18 +273,16 @@ export function RealEstateDetailPage() {
           </Section>
         )}
 
-        {/* Identity */}
-        <Section title="Address">
-          <Card>
-            <CardContent className="p-5 space-y-2">
-              {property.address && <p className="text-sm">{property.address}</p>}
-              <p className="text-sm text-muted-foreground">
-                {[property.city, property.state, property.pincode, property.country]
-                  .filter(Boolean)
-                  .join(', ') || '—'}
-              </p>
-            </CardContent>
-          </Card>
+        {/* Where it is */}
+        <Section title="Location">
+          <PropertyLocationCard
+            ownerType="OWNED_PROPERTY"
+            ownerId={property.id}
+            addressLines={[
+              property.address,
+              [property.city, property.state, property.pincode].filter(Boolean).join(', '),
+            ].filter((line): line is string => !!line)}
+          />
         </Section>
 
         {/* Specs */}

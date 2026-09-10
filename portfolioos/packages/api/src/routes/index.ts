@@ -32,6 +32,7 @@ import { loansRouter } from './loans.routes.js';
 import { creditCardsRouter } from './creditCards.routes.js';
 import { bankAccountsRouter } from './bankAccounts.routes.js';
 import { realEstateRouter } from './realEstate.routes.js';
+import { propertyPhotosRouter, propertyLocationRouter } from './propertyMedia.routes.js';
 import { pfRouter } from './pf.routes.js';
 import { forexRouter } from './forex.routes.js';
 import { taxRouter } from './tax.routes.js';
@@ -85,6 +86,8 @@ export function registerRoutes(app: Express): void {
   app.use('/api/credit-cards', creditCardsRouter);
   app.use('/api/bank-accounts', bankAccountsRouter);
   app.use('/api/real-estate', realEstateRouter);
+  app.use('/api/property-photos', propertyPhotosRouter);
+  app.use('/api/property-location', propertyLocationRouter);
   app.use('/api/epfppf', pfRouter);
   app.use('/api/forex', forexRouter);
   app.use('/api/tax', taxRouter);

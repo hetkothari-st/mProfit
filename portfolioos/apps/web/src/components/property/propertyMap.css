@@ -1,0 +1,77 @@
+/* Leaflet map styling for property maps — themed pins and a darker map in dark mode. */
+
+.pos-map .leaflet-container {
+  font: inherit;
+  background: hsl(var(--muted));
+}
+
+/* OpenStreetMap tiles are drawn for light backgrounds; in dark mode turn them
+   into a dim night map rather than a glaring white panel. */
+.dark .pos-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.86) saturate(0.5);
+}
+
+.pos-map .leaflet-bar a {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+.pos-map .leaflet-bar a:hover {
+  background: hsl(var(--muted));
+}
+.pos-map .leaflet-control-attribution {
+  background: hsl(var(--card) / 0.8);
+  color: hsl(var(--muted-foreground));
+  font-size: 10px;
+}
+.pos-map .leaflet-control-attribution a {
+  color: hsl(var(--foreground));
+}
+
+.pos-pin-wrap {
+  background: none;
+  border: 0;
+}
+.pos-pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+.pos-pin-label {
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 6px 18px -6px rgb(0 0 0 / 0.5);
+  transition: background 150ms, color 150ms;
+}
+.pos-pin-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: hsl(var(--accent));
+  border: 3px solid hsl(var(--card));
+  box-shadow: 0 0 0 6px hsl(var(--accent) / 0.25);
+}
+.pos-pin.is-selected .pos-pin-label,
+.pos-pin:hover .pos-pin-label {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  border-color: transparent;
+}
+/* An approximate pin marks an area, not a door: show a wider halo. */
+.pos-pin.is-approx .pos-pin-dot {
+  box-shadow: 0 0 0 18px hsl(var(--accent) / 0.15);
+}
