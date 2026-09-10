@@ -90,6 +90,49 @@ describe('SuggestInput', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
+  describe('after a pick', () => {
+    const ALL = BANKS.map((b) => b.value);
+
+    function pickHdfc() {
+      fireEvent.change(input(), { target: { value: 'hd' } });
+      fireEvent.click(screen.getByRole('option', { name: 'HDFC Bank' }));
+    }
+
+    it('reopens with every option when the field is clicked again', () => {
+      render(<Harness />);
+      pickHdfc();
+      fireEvent.click(input());
+      expect(optionTexts()).toEqual(ALL);
+      // The current choice is the highlighted one.
+      expect(screen.getByRole('option', { name: 'HDFC Bank' }).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('shows every option when focused again', () => {
+      render(<Harness />);
+      pickHdfc();
+      fireEvent.blur(input());
+      fireEvent.focus(input());
+      expect(optionTexts()).toEqual(ALL);
+    });
+
+    it('filters again once the user types', () => {
+      render(<Harness />);
+      pickHdfc();
+      fireEvent.click(input());
+      fireEvent.change(input(), { target: { value: 'kot' } });
+      expect(optionTexts()).toEqual(['Kotak Mahindra Bank']);
+    });
+  });
+
+  it('opens and closes the list from its chevron', () => {
+    render(<Harness />);
+    const toggle = screen.getByRole('button', { name: 'Show options' });
+    fireEvent.click(toggle);
+    expect(optionTexts()).toEqual(BANKS.map((b) => b.value));
+    fireEvent.click(toggle);
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
   it('keeps free text that matches nothing', () => {
     render(<Harness />);
     fireEvent.change(input(), { target: { value: 'My Co-op Bank Ltd' } });

@@ -2,10 +2,12 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type InputHTMLAttributes,
   type KeyboardEvent,
 } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 
@@ -59,12 +61,36 @@ export function SuggestInput({
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  // Whether the list is narrowed to what's typed. Off after a pick and when
+  // the field is opened again, so a chosen value still shows every option
+  // (like a dropdown) until the user starts typing.
+  const [filtering, setFiltering] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const results = useMemo(() => rank(options, value, maxResults), [options, value, maxResults]);
-  // Nothing to suggest once the value already is the only match.
+  const results = useMemo(
+    () => (filtering ? rank(options, value, maxResults) : options),
+    [filtering, options, value, maxResults],
+  );
+  // While typing, nothing to suggest once the value already is the only match.
   const exactOnly =
-    results.length === 1 && results[0]!.value.toLowerCase() === value.trim().toLowerCase();
+    filtering &&
+    results.length === 1 &&
+    results[0]!.value.toLowerCase() === value.trim().toLowerCase();
   const showList = open && results.length > 0 && !exactOnly;
+
+  /** Open the whole list with the current choice highlighted. */
+  function openAll() {
+    setFiltering(false);
+    setOpen(true);
+    const current = value.trim().toLowerCase();
+    setActive(current ? options.findIndex((o) => o.value.toLowerCase() === current) : -1);
+  }
+
+  useEffect(() => {
+    if (showList && active >= 0) {
+      document.getElementById(`${listId}-${active}`)?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [showList, active, listId]);
 
   // Radix dialogs close on an Escape keydown caught at the document in the
   // capture phase, before React sees it. While the list is open, intercept
@@ -84,6 +110,7 @@ export function SuggestInput({
   function pick(option: SuggestOption) {
     onValueChange(option.value);
     onPick?.(option);
+    setFiltering(false);
     setOpen(false);
     setActive(-1);
   }
@@ -108,6 +135,7 @@ export function SuggestInput({
     <div className="relative">
       <Input
         {...inputProps}
+        ref={inputRef}
         value={value}
         role="combobox"
         aria-autocomplete="list"
@@ -115,15 +143,21 @@ export function SuggestInput({
         aria-controls={listId}
         aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
         autoComplete="off"
-        className={className}
+        className={cn('pr-8', className)}
         onChange={(e) => {
           onValueChange(e.target.value);
+          setFiltering(true);
           setOpen(true);
           setActive(-1);
         }}
         onFocus={(e) => {
-          setOpen(true);
+          openAll();
           onFocus?.(e);
+        }}
+        // Focus stays in the field after a pick, so a second click fires no
+        // focus event — reopen on click too.
+        onClick={() => {
+          if (!open) openAll();
         }}
         onBlur={(e) => {
           setOpen(false);
@@ -132,6 +166,25 @@ export function SuggestInput({
         }}
         onKeyDown={handleKeyDown}
       />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Show options"
+        className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-muted-foreground hover:text-foreground"
+        // Keep focus in the field so its blur doesn't race the toggle.
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          if (showList) {
+            setOpen(false);
+            setActive(-1);
+          } else {
+            openAll();
+            inputRef.current?.focus();
+          }
+        }}
+      >
+        <ChevronDown className={cn('h-4 w-4 transition-transform', showList && 'rotate-180')} />
+      </button>
       {showList && (
         <ul
           id={listId}
