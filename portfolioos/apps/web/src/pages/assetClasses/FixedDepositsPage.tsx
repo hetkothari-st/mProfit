@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
+  BellRing,
   CalendarClock,
   ChevronDown,
   Landmark,
@@ -21,6 +22,15 @@ import { FDFormDialog } from './FDFormDialog';
 import { useThemeStore } from '@/stores/theme.store';
 import { Figure, ProgressBar, ReceiptHeader, ReceiptShell } from '@/components/receipt/Receipt';
 import { useReceiptLook } from '@/components/receipt/useReceiptLook';
+import { BankLogo } from '@/components/bankAccounts/BankLogo';
+import {
+  addMonthsIso,
+  compareReminders,
+  depositReminders,
+  todayIso,
+  type DepositReminder,
+  type ReminderTone,
+} from '@/lib/depositReminders';
 
 type FDHolding = HoldingRow & { portfolioName: string; portfolioId: string };
 
@@ -120,7 +130,8 @@ function formatShortDate(iso: string | null | undefined): string {
 //
 // Deposit receipts (components/receipt): the issuing bank's brand on top, then
 // what the money becomes, how far along it is, and the terms you'd look up on
-// the receipt (principal, tenure, EMI, next due).
+// the receipt (principal, tenure, EMI, next due). Anything due soon shows as a
+// reminder strip on the card and in the "Coming up" list above the cards.
 
 const FD_FALLBACK = '#15803d'; // green, for issuers outside the bank list
 const RD_FALLBACK = '#4f46e5'; // indigo
@@ -140,16 +151,6 @@ const PAYOUT_STEP_MONTHS: Record<string, number> = {
   ANNUAL: 12,
 };
 
-function addMonthsIso(iso: string, months: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() + months);
-  return d.toISOString().slice(0, 10);
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 /**
  * The next periodic interest credit on or after today, counted from the
  * opening date in payout-frequency steps and capped at maturity. Null when
@@ -166,6 +167,80 @@ function nextPayoutDate(openDate: string | null, maturity: string | null, freq: 
   }
   return maturity;
 }
+
+// ── Reminders ────────────────────────────────────────────────────────────────
+
+const REMINDER_STRIP: Record<ReminderTone, string> = {
+  overdue: 'bg-negative/10 text-negative',
+  urgent: 'bg-warning/10 text-warning',
+  soon: 'bg-muted text-foreground/80',
+};
+
+const REMINDER_TEXT: Record<ReminderTone, string> = {
+  overdue: 'text-negative',
+  urgent: 'text-warning',
+  soon: 'text-muted-foreground',
+};
+
+/** The most pressing reminder for a deposit, as a strip at the top of its card. */
+function ReminderNote({ reminder }: { reminder: DepositReminder | undefined }) {
+  if (!reminder) return null;
+  return (
+    <div
+      role="status"
+      className={`flex items-center gap-2 rounded-md px-3 py-2 text-[13px] ${REMINDER_STRIP[reminder.tone]}`}
+    >
+      <BellRing className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{reminder.text}</span>
+      <span className="shrink-0 tabular-nums opacity-80">{formatShortDate(reminder.date)}</span>
+    </div>
+  );
+}
+
+interface ReminderItem {
+  holding: FDHolding;
+  kindLabel: 'FD' | 'RD';
+  reminder: DepositReminder;
+  /** Installment amount, or what the deposit pays out at maturity. */
+  amount: string | null;
+}
+
+/** Everything due soon across FDs and RDs, most pressing first. */
+function DepositRemindersPanel({ items, onOpen }: { items: ReminderItem[]; onOpen: (h: FDHolding) => void }) {
+  if (items.length === 0) return null;
+  return (
+    <section aria-labelledby="deposit-reminders" className="mb-6">
+      <h2 id="deposit-reminders" className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+        <BellRing className="h-4 w-4 text-warning" />
+        Coming up
+      </h2>
+      <Card className="divide-y divide-border/60 overflow-hidden p-0">
+        {items.map(({ holding, kindLabel, reminder, amount }) => (
+          <button
+            key={`${holding.id}:${reminder.kind}`}
+            type="button"
+            onClick={() => onOpen(holding)}
+            className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/60 focus-visible:outline-none"
+          >
+            <BankLogo bankName={holding.assetName ?? ''} size={26} maxWidth={90} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-foreground">{`${holding.assetName || 'Deposit'} ${kindLabel}`}</p>
+              <p className={`text-xs ${REMINDER_TEXT[reminder.tone]}`}>{reminder.text}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-sm tabular-nums text-foreground">{formatShortDate(reminder.date)}</p>
+              {amount && (
+                <p className="money-digits text-xs tabular-nums text-muted-foreground">{formatINR(amount)}</p>
+              )}
+            </div>
+          </button>
+        ))}
+      </Card>
+    </section>
+  );
+}
+
+// ── Cards ────────────────────────────────────────────────────────────────────
 
 function MaturityTrack({
   accent,
@@ -266,6 +341,7 @@ function FDCard({
   const matValue = fdMaturityValue(holding.totalCost, rate, tenureMonths, freq);
   const matured = maturity ? daysUntil(maturity) < 0 : false;
   const payout = matured ? null : nextPayoutDate(openDate, maturity, freq);
+  const [reminder] = depositReminders({ kind: 'FD', openDate, maturity, installmentsPaid: 0, today: todayIso() });
 
   return (
     <ReceiptShell label={`${issuer || 'Deposit'} fixed deposit`} dimmed={matured} onClick={onClick}>
@@ -282,6 +358,7 @@ function FDCard({
         onEdit={onEdit}
       />
       <CardContent className="space-y-4 px-5 py-4">
+        <ReminderNote reminder={reminder} />
         <MaturityValue value={matValue} accent={accent} />
 
         {tenureMonths != null ? (
@@ -355,6 +432,13 @@ function RDCard({
       : null;
   const emiOverdue = nextEmi != null && nextEmi < todayIso();
   const principal = monthlyRaw && tenureMonths ? new Decimal(monthlyRaw).times(tenureMonths) : null;
+  const [reminder] = depositReminders({
+    kind: 'RD',
+    openDate,
+    maturity,
+    installmentsPaid: installmentsDone,
+    today: todayIso(),
+  });
 
   // One stamp per month, up to 24; longer plans show the remainder as a count.
   const dotCount = tenureMonths ?? Math.max(installmentsDone, 12);
@@ -376,6 +460,7 @@ function RDCard({
         onEdit={onEdit}
       />
       <CardContent className="space-y-4 px-5 py-4">
+        <ReminderNote reminder={reminder} />
         <MaturityValue value={matValue} accent={accent} />
 
         <div>
@@ -417,7 +502,7 @@ function RDCard({
           <Figure
             label="Next EMI"
             hint={emiOverdue ? 'Overdue — record the installment once paid' : undefined}
-            className={emiOverdue ? 'text-warning' : undefined}
+            className={emiOverdue ? 'text-negative' : undefined}
           >
             {nextEmi
               ? formatShortDate(nextEmi)
@@ -545,6 +630,36 @@ export function FixedDepositsPage() {
     ? null
     : totalPnL.div(totalInvested).times(100).toNumber();
 
+  // Everything due soon across FDs and RDs, most pressing first.
+  const today = todayIso();
+  const reminderItems: ReminderItem[] = [
+    ...fdHoldings.map((h) => ({ h, kindLabel: 'FD' as const })),
+    ...rdHoldings.map((h) => ({ h, kindLabel: 'RD' as const })),
+  ]
+    .flatMap(({ h, kindLabel }) => {
+      const primary = primaryTxnFor(h);
+      const openDate = primary?.tradeDate ?? null;
+      const maturity = primary?.maturityDate ?? null;
+      const tenure = openDate && maturity ? monthsBetween(openDate, maturity) : null;
+      const maturityValue =
+        kindLabel === 'FD'
+          ? fdMaturityValue(h.totalCost, primary?.interestRate, tenure, primary?.interestFrequency)
+          : rdMaturityValue(primary?.price, primary?.interestRate, tenure);
+      return depositReminders({
+        kind: kindLabel,
+        openDate,
+        maturity,
+        installmentsPaid: kindLabel === 'RD' ? depositTxnsFor(h).length : 0,
+        today,
+      }).map((reminder) => ({
+        holding: h,
+        kindLabel,
+        reminder,
+        amount: reminder.kind === 'installment' ? (primary?.price ?? null) : (maturityValue?.toString() ?? null),
+      }));
+    })
+    .sort((x, y) => compareReminders(x.reminder, y.reminder));
+
   function openAdd(ac: AssetClass) {
     setActiveFormAssetClass(ac);
     setEditTxn(null);
@@ -619,6 +734,13 @@ export function FixedDepositsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {!isLoading && (
+        <DepositRemindersPanel
+          items={reminderItems}
+          onOpen={(h) => navigate(`/fds/${h.id}`, { state: { holding: h } })}
+        />
       )}
 
       {isLoading && (

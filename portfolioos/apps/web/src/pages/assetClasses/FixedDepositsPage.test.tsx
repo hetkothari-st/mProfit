@@ -171,3 +171,39 @@ describe('RD card', () => {
     expect(within(card).getByText('6.9')).toBeTruthy();
   });
 });
+
+describe('Reminders', () => {
+  it('lists an overdue RD installment under "Coming up" and on its card', async () => {
+    renderPage();
+    const panel = await screen.findByRole('region', { name: 'Coming up' });
+    expect(within(panel).getByText('ICICI Bank RD')).toBeTruthy();
+    expect(within(panel).getByText('Installment overdue by 5 days')).toBeTruthy();
+    const card = await findRd();
+    expect(within(card).getByRole('status').textContent).toMatch(/Installment overdue by 5 days/);
+  });
+
+  it('reminds about an FD maturing within 30 days', async () => {
+    const soon = { ...FD_TXN, maturityDate: '2026-09-25' } as TransactionDTO;
+    api.transactions.mockImplementation(async (params?: { assetClass?: string }) => {
+      const items = [soon, ...RD_TXNS].filter((t) => !params?.assetClass || t.assetClass === params.assetClass);
+      return { items, total: items.length, page: 1, pageSize: 500 };
+    });
+    renderPage();
+    const card = await findFd();
+    expect(within(card).getByRole('status').textContent).toMatch(/Matures in 15 days/);
+    const panel = await screen.findByRole('region', { name: 'Coming up' });
+    expect(within(panel).getByText('Kotak FD')).toBeTruthy();
+  });
+
+  it('shows nothing when no deposit needs attention', async () => {
+    api.holdings.mockResolvedValue([FD_HOLDING]);
+    api.transactions.mockImplementation(async (params?: { assetClass?: string }) => {
+      const items = [FD_TXN].filter((t) => !params?.assetClass || t.assetClass === params.assetClass);
+      return { items, total: items.length, page: 1, pageSize: 500 };
+    });
+    renderPage();
+    const card = await findFd();
+    expect(within(card).queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Coming up' })).toBeNull();
+  });
+});
