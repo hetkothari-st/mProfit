@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
+import { piiLimiter } from '../middleware/rateLimit.js';
 import {
   listAccountsHandler,
   getAccountHandler,
   createAccountHandler,
   updateAccountHandler,
   deleteAccountHandler,
+  revealAccountNumberHandler,
   addSnapshotHandler,
   deleteSnapshotHandler,
   listAccountCashFlowsHandler,
@@ -26,6 +28,9 @@ bankAccountsRouter.post('/', asyncHandler(createAccountHandler));
 bankAccountsRouter.get('/:id', asyncHandler(getAccountHandler));
 bankAccountsRouter.patch('/:id', asyncHandler(updateAccountHandler));
 bankAccountsRouter.delete('/:id', asyncHandler(deleteAccountHandler));
+
+// Full account number — audit-logged (pii_view) and rate-limited per user.
+bankAccountsRouter.post('/:id/reveal', piiLimiter, asyncHandler(revealAccountNumberHandler));
 
 // Snapshot create + per-account cash flows
 bankAccountsRouter.post('/:id/snapshots', asyncHandler(addSnapshotHandler));

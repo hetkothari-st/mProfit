@@ -2540,7 +2540,8 @@ model BankAccount {
   portfolioId String?
   portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
 
-  // Core identity — last 4 digits only; no full-PAN/account-no storage.
+  // Core identity. `last4` drives display and auto-attribution; the optional
+  // full number lives encrypted in `accountNumberEnc` below.
   bankName      String // "HDFC Bank"
   accountType   String // SAVINGS | CURRENT | SALARY | NRE | NRO | OD
   accountHolder String
@@ -2549,6 +2550,11 @@ model BankAccount {
   ifsc          String?
   branch        String?
   nickname      String? // user-given label e.g. "Primary salary"
+
+  // Full account number — AES-256-GCM via pfCredentials.encryptIdentifier
+  // (APP_ENCRYPTION_KEY). Never serialized; plaintext only via the audited
+  // POST /api/bank-accounts/:id/reveal.
+  accountNumberEnc String?
 
   // Joint holder / nominee
   jointHolders    String[] @default([])

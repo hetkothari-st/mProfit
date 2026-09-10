@@ -24,6 +24,8 @@ export interface BankAccountDTO {
   accountType: BankAccountType;
   accountHolder: string;
   last4: string;
+  /** A full account number is saved (encrypted); fetch it via `revealAccountNumber`. */
+  hasAccountNumber: boolean;
   customerId: string | null;
   ifsc: string | null;
   branch: string | null;
@@ -60,6 +62,8 @@ export interface CreateBankAccountInput {
   accountType: BankAccountType;
   accountHolder: string;
   last4: string;
+  /** Full account number. Write-only: stored encrypted, never returned by list/get. */
+  accountNumber?: string | null;
   customerId?: string | null;
   portfolioId?: string | null;
   ifsc?: string | null;
@@ -105,6 +109,13 @@ export const bankAccountsApi = {
   },
   async remove(id: string): Promise<void> {
     await api.delete(`/api/bank-accounts/${id}`);
+  },
+  /** Audited + rate-limited server-side. Deliberately not cached in react-query. */
+  async revealAccountNumber(id: string): Promise<{ accountNumber: string | null }> {
+    const { data } = await api.post<ApiResponse<{ accountNumber: string | null }>>(
+      `/api/bank-accounts/${id}/reveal`,
+    );
+    return unwrap(data);
   },
   async addSnapshot(id: string, input: AddSnapshotInput): Promise<BankBalanceSnapshotDTO> {
     const { data } = await api.post<ApiResponse<BankBalanceSnapshotDTO>>(

@@ -5,12 +5,18 @@
  * account based on `accountLast4`.
  *
  * Money math uses decimal.js / Prisma.Decimal throughout per §3.2.
+ *
+ * Full account number: optional, AES-256-GCM encrypted via
+ * pfCredentials.encryptIdentifier (APP_ENCRYPTION_KEY, §15.1). Every public
+ * read/write returns through `toBankAccountDto`, which drops the ciphertext;
+ * plaintext only leaves via `revealAccountNumber`, which audit-logs first.
  */
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { NotFoundError } from '../lib/errors.js';
+import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
+import { encryptIdentifier, decryptIdentifier, last4 as last4Of } from './pfCredentials.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,6 +43,8 @@ export interface CreateBankAccountInput {
   accountType: BankAccountType;
   accountHolder: string;
   last4: string;
+  /** Full account number, plain — encrypted on persist. Overrides `last4`. */
+  accountNumber?: string | null;
   customerId?: string | null;
   portfolioId?: string | null;
   ifsc?: string | null;
@@ -63,6 +71,11 @@ export interface AddSnapshotInput {
   note?: string | null;
 }
 
+export interface RevealAuditContext {
+  ip?: string | null;
+  userAgent?: string | null;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function toDate(s: string): Date {
@@ -74,16 +87,41 @@ function decimal(s: string | null | undefined): Prisma.Decimal | null {
   return new Prisma.Decimal(s);
 }
 
+/**
+ * Users paste account numbers with spaces or hyphens. Indian account numbers
+ * run 9–18 digits; the floor is 6 to admit older co-operative-bank formats.
+ */
+function normaliseAccountNumber(raw: string): string {
+  const n = raw.replace(/[\s-]/g, '');
+  if (!/^\d{6,18}$/.test(n)) {
+    throw new BadRequestError('Account number must be 6–18 digits');
+  }
+  return n;
+}
+
+/**
+ * Drop the ciphertext before a row leaves this service — `accountNumberEnc`
+ * must never be serialized, even encrypted. The client only learns whether a
+ * full number exists.
+ */
+export function toBankAccountDto<T extends { accountNumberEnc: string | null }>(
+  row: T,
+): Omit<T, 'accountNumberEnc'> & { hasAccountNumber: boolean } {
+  const { accountNumberEnc, ...rest } = row;
+  return { ...rest, hasAccountNumber: accountNumberEnc !== null };
+}
+
 // ── Account CRUD ─────────────────────────────────────────────────────────────
 
 export async function listAccounts(userId: string) {
-  return prisma.bankAccount.findMany({
+  const rows = await prisma.bankAccount.findMany({
     where: { userId },
     include: {
       snapshots: { orderBy: { asOfDate: 'desc' }, take: 1 },
     },
     orderBy: [{ status: 'asc' }, { bankName: 'asc' }, { createdAt: 'desc' }],
   });
+  return rows.map(toBankAccountDto);
 }
 
 export async function getAccount(userId: string, accountId: string) {
@@ -94,17 +132,21 @@ export async function getAccount(userId: string, accountId: string) {
     },
   });
   if (!account) throw new NotFoundError(`BankAccount ${accountId} not found`);
-  return account;
+  return toBankAccountDto(account);
 }
 
 export async function createAccount(userId: string, input: CreateBankAccountInput) {
-  return prisma.bankAccount.create({
+  const accountNumber = input.accountNumber ? normaliseAccountNumber(input.accountNumber) : null;
+  const row = await prisma.bankAccount.create({
     data: {
       userId,
       bankName: input.bankName.trim(),
       accountType: input.accountType,
       accountHolder: input.accountHolder.trim(),
-      last4: input.last4.trim(),
+      // Last 4 follows the full number when one is given, so the two can't
+      // disagree (auto-attribution matches on last4).
+      last4: accountNumber ? last4Of(accountNumber) : input.last4.trim(),
+      accountNumberEnc: accountNumber ? await encryptIdentifier(accountNumber) : null,
       customerId: input.customerId?.trim() || null,
       portfolioId: input.portfolioId ?? null,
       ifsc: input.ifsc?.trim() || null,
@@ -123,6 +165,7 @@ export async function createAccount(userId: string, input: CreateBankAccountInpu
       closedOn: input.closedOn ? toDate(input.closedOn) : null,
     },
   });
+  return toBankAccountDto(row);
 }
 
 export async function updateAccount(
@@ -142,6 +185,16 @@ export async function updateAccount(
   if (input.accountType !== undefined) data.accountType = input.accountType;
   if (input.accountHolder !== undefined) data.accountHolder = input.accountHolder.trim();
   if (input.last4 !== undefined) data.last4 = input.last4.trim();
+  // After `last4` so a new full number wins over a hand-typed last4.
+  if (input.accountNumber !== undefined) {
+    if (input.accountNumber === null || input.accountNumber.trim() === '') {
+      data.accountNumberEnc = null;
+    } else {
+      const accountNumber = normaliseAccountNumber(input.accountNumber);
+      data.accountNumberEnc = await encryptIdentifier(accountNumber);
+      data.last4 = last4Of(accountNumber);
+    }
+  }
   if (input.customerId !== undefined) data.customerId = input.customerId?.trim() || null;
   if (input.portfolioId !== undefined)
     data.portfolio = input.portfolioId
@@ -169,7 +222,7 @@ export async function updateAccount(
   if (input.closedOn !== undefined)
     data.closedOn = input.closedOn ? toDate(input.closedOn) : null;
 
-  return prisma.bankAccount.update({ where: { id: accountId }, data });
+  return toBankAccountDto(await prisma.bankAccount.update({ where: { id: accountId }, data }));
 }
 
 export async function deleteAccount(userId: string, accountId: string) {
@@ -179,6 +232,50 @@ export async function deleteAccount(userId: string, accountId: string) {
   });
   if (!existing) throw new NotFoundError(`BankAccount ${accountId} not found`);
   await prisma.bankAccount.delete({ where: { id: accountId } });
+}
+
+/**
+ * Decrypt the full account number for its owner — the only path by which the
+ * plaintext leaves the server. Writes a `pii_view` AuditLog row before
+ * returning (§3.7 / §15.8); if that write fails, the reveal fails with it.
+ * Returns null when only last4 was ever saved (nothing shown, nothing audited).
+ */
+export async function revealAccountNumber(
+  userId: string,
+  accountId: string,
+  ctx: RevealAuditContext,
+): Promise<string | null> {
+  const row = await prisma.bankAccount.findFirst({
+    where: { id: accountId, userId },
+    select: { id: true, accountNumberEnc: true },
+  });
+  if (!row) throw new NotFoundError(`BankAccount ${accountId} not found`);
+  if (!row.accountNumberEnc) return null;
+
+  let accountNumber: string;
+  try {
+    accountNumber = await decryptIdentifier(row.accountNumberEnc);
+  } catch (err) {
+    logger.error(
+      { err: (err as Error).message, accountId },
+      '[bankAccounts] account number decrypt failed',
+    );
+    throw new BadRequestError(
+      'Could not decrypt the account number — the encryption key may have changed',
+    );
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action: 'pii_view',
+      resource: `BankAccount:${accountId}`,
+      ip: ctx.ip ?? null,
+      userAgent: ctx.userAgent ?? null,
+      metadata: { field: 'accountNumber' },
+    },
+  });
+  return accountNumber;
 }
 
 // ── Snapshots ────────────────────────────────────────────────────────────────

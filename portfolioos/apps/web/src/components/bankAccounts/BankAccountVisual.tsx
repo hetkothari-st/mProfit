@@ -1,6 +1,7 @@
 import { formatINR } from '@portfolioos/shared';
 import type { BankAccountDTO } from '@/api/bankAccounts.api';
 import { usePrivacyStore } from '@/stores/privacy.store';
+import { AccountNumberReveal } from '@/components/bankAccounts/AccountNumberReveal';
 
 interface PaletteVars {
   surface: string;
@@ -306,12 +307,8 @@ export function BankAccountVisual({
               )}
             </div>
 
-            {/* account number */}
-            <div className={`font-mono ${acctSize} tracking-[0.16em] ${palette.secondary}`}>
-              <span className={palette.dot}>●●●●</span>
-              <span className={`mx-1.5 ${palette.dot}`}>●●●●</span>
-              <span className={palette.primary}>{account.last4}</span>
-            </div>
+            {/* account number — masked by default; eye reveals the full number */}
+            <AccountNumberReveal account={account} sizeClass={acctSize} tone={palette} />
 
             {/* balance */}
             <div>

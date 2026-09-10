@@ -65,6 +65,11 @@ function fromAccount(a: BankAccountDTO): CreateBankAccountInput {
   };
 }
 
+/** Mirrors the server's normalisation: users paste numbers with spaces/hyphens. */
+function normaliseAccountNumber(v: string): string {
+  return v.replace(/[\s-]/g, '');
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -77,12 +82,16 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
   const [form, setForm] = useState<CreateBankAccountInput>(emptyForm());
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [jointHoldersText, setJointHoldersText] = useState('');
+  // Kept outside `form`: the saved number is never sent to the client, so on
+  // edit this starts empty and an empty value means "keep what's stored".
+  const [accountNumber, setAccountNumber] = useState('');
 
   useEffect(() => {
     if (open) {
       const next = initial ? fromAccount(initial) : emptyForm();
       setForm(next);
       setJointHoldersText((next.jointHolders ?? []).join(', '));
+      setAccountNumber('');
       setErrors({});
     }
   }, [open, initial]);
@@ -103,11 +112,22 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  function onAccountNumberChange(v: string) {
+    setAccountNumber(v);
+    // Last 4 always follows the full number so the two can't disagree.
+    const digits = v.replace(/\D/g, '');
+    if (digits.length >= 4) set('last4', digits.slice(-4));
+  }
+
+  const hasFullNumber = normaliseAccountNumber(accountNumber) !== '';
+
   function validate(): boolean {
     const errs: Record<string, string> = {};
     if (!form.bankName.trim()) errs['bankName'] = 'Required';
     if (!form.accountHolder.trim()) errs['accountHolder'] = 'Required';
     if (!form.last4 || !/^\d{4}$/.test(form.last4)) errs['last4'] = 'Must be 4 digits';
+    if (hasFullNumber && !/^\d{6,18}$/.test(normaliseAccountNumber(accountNumber)))
+      errs['accountNumber'] = 'Must be 6–18 digits';
     if (!form.customerId?.trim()) errs['customerId'] = 'Required';
     if (form.debitCardLast4 && !/^\d{4}$/.test(form.debitCardLast4))
       errs['debitCardLast4'] = 'Must be 4 digits';
@@ -127,6 +147,7 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
       .filter(Boolean);
     mutation.mutate({
       ...form,
+      ...(hasFullNumber ? { accountNumber: normaliseAccountNumber(accountNumber) } : {}),
       bankName: form.bankName.trim(),
       accountHolder: form.accountHolder.trim(),
       jointHolders,
@@ -199,10 +220,34 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
                 maxLength={4}
                 value={form.last4}
                 onChange={(e) => set('last4', e.target.value)}
-                className={errors['last4'] ? 'border-negative' : ''}
+                readOnly={hasFullNumber}
+                title={hasFullNumber ? 'Taken from the full account number' : undefined}
+                className={`${errors['last4'] ? 'border-negative' : ''} ${hasFullNumber ? 'bg-muted/50' : ''}`}
               />
               {errors['last4'] && <p className="text-xs text-negative mt-1">{errors['last4']}</p>}
             </div>
+          </div>
+
+          <div>
+            <Label>Full account number (optional)</Label>
+            <Input
+              placeholder={
+                initial?.hasAccountNumber ? 'Saved — type a new one to replace it' : '50100123456789'
+              }
+              inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
+              value={accountNumber}
+              onChange={(e) => onAccountNumberChange(e.target.value)}
+              className={errors['accountNumber'] ? 'border-negative' : ''}
+            />
+            {errors['accountNumber'] ? (
+              <p className="text-xs text-negative mt-1">{errors['accountNumber']}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                Stored encrypted. Cards show only the last 4 digits until you tap the eye.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

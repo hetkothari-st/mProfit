@@ -9,6 +9,7 @@ import {
   createAccount,
   updateAccount,
   deleteAccount,
+  revealAccountNumber,
   addSnapshot,
   deleteSnapshot,
   listAccountCashFlows,
@@ -24,6 +25,9 @@ const createSchema = z.object({
   accountType: z.enum(BANK_ACCOUNT_TYPES),
   accountHolder: z.string().min(1).max(200),
   last4: last4Digits,
+  // Digit/length rules live in the service (normaliseAccountNumber) so they
+  // hold for every caller; this only bounds the payload.
+  accountNumber: z.string().max(40).nullable().optional(),
   customerId: z.string().max(64).nullable().optional(),
   portfolioId: z.string().nullable().optional(),
   ifsc: z.string().max(20).nullable().optional(),
@@ -83,6 +87,17 @@ export async function deleteAccountHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   await deleteAccount(req.user.id, req.params['id']!);
   res.status(204).end();
+}
+
+export async function revealAccountNumberHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const accountNumber = await revealAccountNumber(req.user.id, req.params['id']!, {
+    ip: req.ip ?? null,
+    userAgent: req.get('user-agent') ?? null,
+  });
+  // Plaintext PII: keep it out of browser and proxy caches.
+  res.set('Cache-Control', 'no-store');
+  ok(res, { accountNumber });
 }
 
 export async function addSnapshotHandler(req: Request, res: Response) {
