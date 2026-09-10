@@ -2,15 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
-  ArrowUpRight,
   CalendarClock,
   ChevronDown,
-  Clock,
   Landmark,
   Pencil,
   PiggyBank,
   Plus,
-  ShieldCheck,
 } from 'lucide-react';
 import { Decimal, formatINR } from '@portfolioos/shared';
 import type { AssetClass, HoldingRow, TransactionDTO } from '@portfolioos/shared';
@@ -24,17 +21,9 @@ import { transactionsApi } from '@/api/transactions.api';
 import { FDFormDialog } from './FDFormDialog';
 import { useThemeStore } from '@/stores/theme.store';
 import { BankLogo } from '@/components/bankAccounts/BankLogo';
-import { useBankAccent } from '@/components/bankAccounts/useBankAccent';
+import { bankBrandFor, brandAccent, tileSurface, type TileSurface } from '@/lib/bankBrand';
 
 type FDHolding = HoldingRow & { portfolioName: string; portfolioId: string };
-
-const FREQ_LABELS: Record<string, string> = {
-  MONTHLY: 'Monthly',
-  QUARTERLY: 'Quarterly',
-  HALF_YEARLY: 'Half-yearly',
-  ANNUAL: 'Annual',
-  AT_MATURITY: 'At maturity',
-};
 
 const FD_ACCENT = 'hsl(var(--positive))';
 // RD used `hsl(var(--accent))` before, which in dark mode is a lime
@@ -128,125 +117,237 @@ function formatShortDate(iso: string | null | undefined): string {
   }
 }
 
-function MaturityBadge({ date }: { date: string }) {
-  const d = daysUntil(date);
-  if (d < 0) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider bg-muted text-muted-foreground">
-        <Clock className="h-3 w-3" /> Matured
-      </span>
-    );
+// ── Deposit cards ────────────────────────────────────────────────────────────
+//
+// Each card reads like the receipt a bank hands you for a deposit: a header
+// printed in the issuing bank's colours — its logo, the rate, fine security
+// linework — over a plain body that answers one question: what does this money
+// become, and when.
+
+const FD_FALLBACK = '#15803d'; // green, for issuers outside the bank list
+const RD_FALLBACK = '#4f46e5'; // indigo
+
+const PAYOUT_TEXT: Record<string, string> = {
+  MONTHLY: 'interest paid monthly',
+  QUARTERLY: 'interest paid quarterly',
+  HALF_YEARLY: 'interest paid half-yearly',
+  ANNUAL: 'interest paid yearly',
+  AT_MATURITY: 'interest paid at maturity',
+};
+
+function sentence(parts: Array<string | null | undefined>, empty: string): string {
+  const s = parts.filter(Boolean).join(', ');
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : empty;
+}
+
+/** Header colours and a theme-readable accent for a deposit's issuer. */
+function useDepositLook(issuer: string, fallback: string) {
+  const dark = useThemeStore((s) => s.dark);
+  const brand = bankBrandFor(issuer);
+  const base = brand?.color ?? fallback;
+  return {
+    panel: tileSurface(base, brand?.color ? brand.accent : null),
+    accent: brandAccent(base, dark),
+  };
+}
+
+// Phase-shifted waves, like the guilloché printed on FD receipts and cheques.
+// Computed once; drawn in white at low opacity over the brand colour.
+const GUILLOCHE = Array.from({ length: 9 }, (_, i) => {
+  let d = '';
+  for (let x = 0; x <= 400; x += 5) {
+    const t = (x / 400) * Math.PI;
+    const y = 60 + Math.sin(t * 4 + i * 0.55) * (16 + i * 3) + Math.sin(t * 11 + i) * 3;
+    d += `${x === 0 ? 'M' : 'L'}${x} ${y.toFixed(1)}`;
   }
-  const cls =
-    d <= 30
-      ? 'bg-negative/10 text-negative'
-      : d <= 90
-        ? 'bg-warning/15 text-warning'
-        : 'bg-positive/10 text-positive';
+  return d;
+});
+
+function Guilloche() {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>
-      <Clock className="h-3 w-3" /> in {d}d
-    </span>
+    <svg
+      aria-hidden
+      viewBox="0 0 400 120"
+      preserveAspectRatio="none"
+      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.14]"
+    >
+      {GUILLOCHE.map((d, i) => (
+        <path key={i} d={d} fill="none" stroke="white" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+      ))}
+    </svg>
   );
 }
 
-function ProgressRing({
-  pct,
-  color,
-  topLabel,
-  bottomLabel,
+function ReceiptHeader({
+  issuer,
+  panel,
+  kind,
+  rate,
+  holder,
+  terms,
+  serial,
+  matured,
+  onEdit,
 }: {
-  pct: number;
-  color: string;
-  topLabel: string;
-  bottomLabel: string;
+  issuer: string;
+  panel: TileSurface;
+  kind: string;
+  rate: string | null;
+  holder: string | null;
+  terms: string;
+  serial: string;
+  matured: boolean;
+  onEdit: (e: React.MouseEvent) => void;
 }) {
-  const size = 96;
-  const stroke = 6;
-  const radius = (size - stroke) / 2;
-  const circ = 2 * Math.PI * radius;
-  const safe = Math.min(100, Math.max(0, pct));
-  const dash = (safe / 100) * circ;
   return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="hsl(var(--border))"
-          strokeWidth={stroke}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth={stroke}
-          strokeDasharray={`${dash} ${circ}`}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.22, 0.61, 0.36, 1)' }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span
-          className="font-display text-2xl leading-none tracking-tight"
-          style={{ color }}
-        >
-          {topLabel}
+    <div
+      className="relative overflow-hidden px-5 pb-3 pt-4 text-white"
+      style={{
+        backgroundImage: `linear-gradient(135deg, ${panel.from} 0%, ${panel.via} 60%, ${panel.to} 100%)`,
+      }}
+    >
+      <Guilloche />
+      <div className="relative flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <BankLogo bankName={issuer} size={30} maxWidth={140} className="shadow-md" />
+          <h3 className="mt-3 truncate font-display text-[26px] leading-none">{issuer || 'Deposit'}</h3>
+          {holder && <p className="mt-2 truncate text-sm text-white/85">{holder}</p>}
+          <p className="mt-0.5 text-[13px] text-white/65">{terms}</p>
+        </div>
+        {rate && (
+          <div className="shrink-0 text-right">
+            <p className="font-display text-[40px] leading-none tabular-nums">
+              {rate}
+              <span className="text-2xl">%</span>
+            </p>
+            <p className="mt-1 text-xs text-white/70">a year</p>
+          </div>
+        )}
+      </div>
+      <div className="relative mt-4 flex items-center justify-between gap-3 text-[11px] text-white/55">
+        <span className="tabular-nums">
+          {kind} no. {serial}
         </span>
-        <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground mt-0.5 font-mono">
-          {bottomLabel}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onEdit(e);
+          }}
+          aria-label="Edit deposit"
+          className="-m-1 rounded p-1 text-white/60 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {matured && (
+        <div className="pointer-events-none absolute bottom-8 right-5 -rotate-12 rounded-sm border-2 border-white/70 px-2 py-0.5 font-display text-sm text-white/85">
+          Matured
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MaturityTrack({
+  accent,
+  pct,
+  opened,
+  maturity,
+  showBar = true,
+}: {
+  accent: string;
+  pct: number;
+  opened: string | null;
+  maturity: string | null;
+  showBar?: boolean;
+}) {
+  const days = maturity ? daysUntil(maturity) : null;
+  const soon = days != null && days >= 0 && days <= 30;
+  return (
+    <div>
+      {showBar && (
+        <div className="relative mb-2 h-1.5 rounded-full bg-muted">
+          <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${pct}%`, background: accent }} />
+          {pct > 0 && pct < 100 && (
+            <span
+              className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-[3px] ring-card"
+              style={{ left: `${pct}%`, background: accent }}
+            />
+          )}
+        </div>
+      )}
+      <div className="flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
+        <span>{opened ? `Opened ${formatShortDate(opened)}` : 'Opening date not set'}</span>
+        <span className={soon ? 'text-warning' : undefined}>
+          {maturity == null || days == null
+            ? 'Maturity date not set'
+            : days < 0
+              ? `Matured ${formatShortDate(maturity)}`
+              : `Matures ${formatShortDate(maturity)}, ${days === 0 ? 'today' : `in ${days} days`}`}
         </span>
       </div>
     </div>
   );
 }
 
-function PnLDisplay({ holding }: { holding: FDHolding }) {
-  if (!holding.currentValue) return <span className="text-muted-foreground">—</span>;
-  const pnl = new Decimal(holding.currentValue).minus(holding.totalCost);
-  const pct = new Decimal(holding.totalCost).isZero()
-    ? null
-    : pnl.div(holding.totalCost).times(100).toNumber();
-  const pos = pnl.gte(0);
+function Figure({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <span className={pos ? 'text-positive' : 'text-negative'}>
-      {pos ? '+' : ''}{formatINR(pnl.toString())}
-      {pct != null && (
-        <span className="ml-1 text-[11px] opacity-80">
-          ({pos ? '+' : ''}{pct.toFixed(2)}%)
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-0.5 truncate text-[15px] tabular-nums text-foreground">{children}</p>
+    </div>
+  );
+}
+
+function InterestSoFar({ holding }: { holding: FDHolding }) {
+  if (!holding.currentValue) return <span className="text-muted-foreground">—</span>;
+  const earned = new Decimal(holding.currentValue).minus(holding.totalCost);
+  const pct = new Decimal(holding.totalCost).isZero() ? null : earned.div(holding.totalCost).times(100);
+  const up = earned.gte(0);
+  return (
+    <span className={up ? 'text-positive' : 'text-negative'}>
+      <span className="money-digits">
+        {up ? '+' : ''}
+        {formatINR(earned.toString())}
+      </span>
+      {pct && (
+        <span className="ml-1 text-xs opacity-75">
+          {up ? '+' : ''}
+          {pct.toFixed(2)}%
         </span>
       )}
-      {/* Interest accrual, not a market move — label it so the % isn't misread. */}
-      <span className="ml-1 text-[9px] uppercase tracking-wide text-muted-foreground/70">accrued</span>
     </span>
   );
 }
 
-function StatBlock({
+/** The whole card is a link to the deposit; Enter opens it too. */
+function DepositCardShell({
   label,
-  value,
-  accent = false,
+  matured,
+  onClick,
+  children,
 }: {
   label: string;
-  value: React.ReactNode;
-  accent?: boolean;
+  matured: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
-    <div>
-      <p className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground font-mono mb-0.5">
-        {label}
-      </p>
-      <p
-        className={`numeric-display text-[15px] truncate ${
-          accent ? 'text-positive' : 'text-foreground'
-        }`}
-      >
-        {value}
-      </p>
+    <div
+      role="link"
+      tabIndex={0}
+      aria-label={label}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && e.target === e.currentTarget) onClick();
+      }}
+      className={`group cursor-pointer rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${matured ? 'opacity-70' : ''}`}
+    >
+      <Card className="overflow-hidden p-0 transition-shadow duration-300 group-hover:shadow-elev-lg">
+        {children}
+      </Card>
     </div>
   );
 }
@@ -262,7 +363,9 @@ function FDCard({
   onClick: () => void;
   onEdit: (e: React.MouseEvent) => void;
 }) {
-  const rate = primaryTxn?.interestRate ?? null;
+  const issuer = holding.assetName ?? '';
+  const { panel, accent } = useDepositLook(issuer, FD_FALLBACK);
+  const rate = primaryTxn?.interestRate || null;
   const freq = primaryTxn?.interestFrequency ?? null;
   const maturity = primaryTxn?.maturityDate ?? null;
   const openDate = primaryTxn?.tradeDate ?? null;
@@ -272,158 +375,73 @@ function FDCard({
     ? (() => {
         const start = new Date(`${openDate}T00:00:00Z`).getTime();
         const end = new Date(`${maturity}T00:00:00Z`).getTime();
-        const now = Date.now();
-        return Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100));
+        return Math.min(100, Math.max(0, ((Date.now() - start) / (end - start)) * 100));
       })()
     : 0;
 
-  const certNo = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
+  const serial = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
   const matValue = fdMaturityValue(holding.totalCost, rate, tenureMonths, freq);
-  const isMatured = maturity ? daysUntil(maturity) < 0 : false;
-  // The issuing bank's own colour when it's a known bank; FD green otherwise.
-  const accent = useBankAccent(holding.assetName, FD_ACCENT);
-
-  const stop = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
+  const matured = maturity ? daysUntil(maturity) < 0 : false;
 
   return (
-    <div
-      onClick={onClick}
-      className={`block group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg ${isMatured ? 'opacity-70' : ''}`}
-    >
-      <Card
-        className="overflow-hidden p-0 paper relative transition-all duration-300 group-hover:shadow-elev-lg group-hover:-translate-y-0.5"
-        style={{ borderTop: `3px solid ${accent}` }}
-      >
-        {/* Engraved certificate header */}
-        <div className="relative px-5 pt-3 pb-2 border-b border-border/70">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.22em] font-medium">
-            <span className="flex items-center gap-1.5" style={{ color: accent }}>
-              <ShieldCheck className="h-3 w-3" strokeWidth={1.8} />
-              Term Deposit
-            </span>
-            <span className="font-mono normal-case tracking-normal text-muted-foreground">
-              № {certNo}
-            </span>
-          </div>
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2.5">
-                <BankLogo bankName={holding.assetName ?? ''} size={32} maxWidth={132} />
-                <h3 className="min-w-0 font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
-                  {holding.assetName ?? '—'}
-                </h3>
-              </div>
-              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
-                <span className="tabular-nums">
-                  {tenureMonths ? `${tenureMonths}-month term` : 'Term —'}
-                </span>
-                {freq && (
-                  <>
-                    <span className="text-accent/40">·</span>
-                    <span>{FREQ_LABELS[freq] ?? freq} payout</span>
-                  </>
-                )}
-                {holding.portfolioName && (
-                  <>
-                    <span className="text-accent/40">·</span>
-                    <span className="font-display-italic truncate">{holding.portfolioName}</span>
-                  </>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={(e) => { stop(e); onEdit(e); }}
-              aria-label="Edit deposit"
-              className="shrink-0 p-1 rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 transition-colors opacity-0 group-hover:opacity-100"
+    <DepositCardShell label={`${issuer || 'Deposit'} fixed deposit`} matured={matured} onClick={onClick}>
+      <ReceiptHeader
+        issuer={issuer}
+        panel={panel}
+        kind="Fixed deposit"
+        rate={rate}
+        holder={holding.portfolioName || null}
+        terms={sentence(
+          [tenureMonths ? `${tenureMonths} months` : null, freq ? PAYOUT_TEXT[freq] : null],
+          'Term not set',
+        )}
+        serial={serial}
+        matured={matured}
+        onEdit={onEdit}
+      />
+      <CardContent className="space-y-4 px-5 py-4">
+        {matValue ? (
+          <div>
+            <p className="text-sm text-muted-foreground">
+              <span className="money-digits">{formatINR(holding.totalCost)}</span>{' '}
+              {matured ? 'grew to' : 'grows to'}
+            </p>
+            <p
+              className="money-digits font-display text-[30px] leading-tight tabular-nums"
+              style={{ color: accent }}
             >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
+              {formatINR(matValue.toString())}
+            </p>
           </div>
+        ) : (
+          <div>
+            <p className="text-sm text-muted-foreground">Principal</p>
+            <p className="money-digits font-display text-[30px] leading-tight tabular-nums text-foreground">
+              {formatINR(holding.totalCost)}
+            </p>
+          </div>
+        )}
+
+        {tenureMonths != null ? (
+          <MaturityTrack accent={accent} pct={elapsedPct} opened={openDate} maturity={maturity} />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Add a rate and maturity date to see what this deposit becomes.
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-4 border-t border-border/60 pt-3">
+          <Figure label="Worth today">
+            <span className="money-digits">
+              {holding.currentValue ? formatINR(holding.currentValue) : '—'}
+            </span>
+          </Figure>
+          <Figure label="Interest so far">
+            <InterestSoFar holding={holding} />
+          </Figure>
         </div>
-
-        {/* Body — ring + ledger grid */}
-        <CardContent className="p-5 relative">
-          <div className="grid grid-cols-[auto_1fr] gap-5 items-center">
-            <ProgressRing
-              pct={elapsedPct}
-              color={accent}
-              topLabel={rate != null && rate !== '' ? `${rate}%` : '—'}
-              bottomLabel="p.a."
-            />
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
-                Principal
-              </p>
-              <p className="numeric-display-lg money-digits text-xl sm:text-2xl mt-0.5 break-words">
-                {formatINR(holding.totalCost)}
-              </p>
-              <div className="mt-2.5 grid grid-cols-3 gap-x-3">
-                <StatBlock
-                  label="Current"
-                  value={holding.currentValue ? formatINR(holding.currentValue) : '—'}
-                />
-                <StatBlock
-                  label="Maturity"
-                  value={matValue ? formatINR(matValue.toString()) : '—'}
-                  accent
-                />
-                <StatBlock
-                  label="Earned"
-                  value={<PnLDisplay holding={holding} />}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Timeline */}
-          {tenureMonths != null && (
-            <div className="mt-4">
-              <div className="relative h-[3px] rounded-full bg-border/70 overflow-hidden">
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full transition-all"
-                  style={{ width: `${elapsedPct}%`, background: accent }}
-                />
-              </div>
-              <div className="mt-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.18em] font-mono text-muted-foreground">
-                <span>{formatShortDate(openDate)}</span>
-                <span className="text-foreground/70 tabular-nums">
-                  {Math.round(elapsedPct)}% elapsed
-                </span>
-                <span>{formatShortDate(maturity)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Footer */}
-          <div className="mt-4 pt-3 border-t border-dashed border-border/70 flex items-center justify-between text-xs">
-            {maturity ? (
-              <>
-                <span className="text-muted-foreground flex items-center gap-1.5">
-                  <CalendarClock className="h-3 w-3" />
-                  <span className="font-display-italic">Matures</span>
-                  <span className="tabular-nums text-foreground">{formatShortDate(maturity)}</span>
-                </span>
-                <MaturityBadge date={maturity} />
-              </>
-            ) : (
-              <span className="text-muted-foreground font-display-italic">Maturity date not set</span>
-            )}
-            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-accent transition-colors ml-auto" />
-          </div>
-
-          {/* Matured stamp */}
-          {isMatured && (
-            <div className="absolute top-3 right-3 -rotate-6 border-2 border-muted-foreground/50 px-2 py-0.5 rounded-sm font-display text-xs tracking-[0.18em] text-muted-foreground/70 pointer-events-none">
-              MATURED
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      </CardContent>
+    </DepositCardShell>
   );
 }
 
@@ -440,185 +458,101 @@ function RDCard({
   onClick: () => void;
   onEdit: (e: React.MouseEvent) => void;
 }) {
-  // The issuing bank's own colour when it's a known bank; RD indigo otherwise.
-  const RD_ACCENT = useBankAccent(holding.assetName, useRdAccent());
-  const rate = primaryTxn?.interestRate ?? null;
+  const issuer = holding.assetName ?? '';
+  const { panel, accent } = useDepositLook(issuer, RD_FALLBACK);
+  const rate = primaryTxn?.interestRate || null;
   const maturity = primaryTxn?.maturityDate ?? null;
   const openDate = primaryTxn?.tradeDate ?? null;
   const monthlyRaw = primaryTxn?.price ?? null;
-  const monthlyAmt = monthlyRaw ? formatINR(monthlyRaw) : '—';
 
   const tenureMonths = openDate && maturity ? monthsBetween(openDate, maturity) : null;
   const installmentsDone = allDepositTxns.length;
-  const progressPct = tenureMonths && tenureMonths > 0
-    ? Math.min(100, (installmentsDone / tenureMonths) * 100)
-    : 0;
-
   const matValue = rdMaturityValue(monthlyRaw, rate, tenureMonths);
-  const certNo = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
-  const isMatured = maturity ? daysUntil(maturity) < 0 : false;
+  const serial = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
+  const matured = maturity ? daysUntil(maturity) < 0 : false;
 
-  // Compact installment row — up to 24 dots, summarised if longer
+  // One stamp per month, up to 24; longer plans show the remainder as a count.
   const dotCount = tenureMonths ?? Math.max(installmentsDone, 12);
   const showDots = Math.min(dotCount, 24);
   const overflow = dotCount > 24;
 
-  const stop = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
   return (
-    <div
-      onClick={onClick}
-      className={`block group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg ${isMatured ? 'opacity-70' : ''}`}
-    >
-      <Card
-        className="overflow-hidden p-0 paper relative transition-all duration-300 group-hover:shadow-elev-lg group-hover:-translate-y-0.5"
-        style={{ borderTop: `3px solid ${RD_ACCENT}` }}
-      >
-        {/* Passbook header */}
-        <div className="relative px-5 pt-3 pb-2 border-b border-border/70">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.22em] font-medium">
-            <span className="flex items-center gap-1.5" style={{ color: RD_ACCENT }}>
-              <CalendarClock className="h-3 w-3" strokeWidth={1.8} />
-              Recurring Deposit
-            </span>
-            <span className="font-mono normal-case tracking-normal text-muted-foreground">
-              № {certNo}
+    <DepositCardShell label={`${issuer || 'Deposit'} recurring deposit`} matured={matured} onClick={onClick}>
+      <ReceiptHeader
+        issuer={issuer}
+        panel={panel}
+        kind="Recurring deposit"
+        rate={rate}
+        holder={holding.portfolioName || null}
+        terms={sentence(
+          [tenureMonths ? `${tenureMonths}-month plan` : null, 'interest compounded quarterly'],
+          'Plan not set',
+        )}
+        serial={serial}
+        matured={matured}
+        onEdit={onEdit}
+      />
+      <CardContent className="space-y-4 px-5 py-4">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            <span className="money-digits">{monthlyRaw ? formatINR(monthlyRaw) : '—'}</span> a month
+            {tenureMonths ? ` for ${tenureMonths} months` : ''}
+            {matValue ? (matured ? ' grew to' : ' grows to') : ''}
+          </p>
+          <p
+            className="money-digits font-display text-[30px] leading-tight tabular-nums"
+            style={matValue ? { color: accent } : undefined}
+          >
+            {formatINR(matValue ? matValue.toString() : holding.totalCost)}
+          </p>
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-baseline justify-between text-xs">
+            <span className="text-muted-foreground">Installments paid</span>
+            <span className="tabular-nums text-muted-foreground">
+              <span className="font-semibold" style={{ color: accent }}>
+                {installmentsDone}
+              </span>{' '}
+              of {tenureMonths ?? '—'}
             </span>
           </div>
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2.5">
-                <BankLogo bankName={holding.assetName ?? ''} size={32} maxWidth={132} />
-                <h3 className="min-w-0 font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
-                  {holding.assetName ?? '—'}
-                </h3>
-              </div>
-              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
-                <span className="text-foreground/80 font-medium tabular-nums">{monthlyAmt}</span>
-                <span className="text-muted-foreground/60">/month</span>
-                {tenureMonths && (
-                  <>
-                    <span className="text-accent/40">·</span>
-                    <span className="tabular-nums">{tenureMonths}-month tenure</span>
-                  </>
-                )}
-                {holding.portfolioName && (
-                  <>
-                    <span className="text-accent/40">·</span>
-                    <span className="font-display-italic truncate">{holding.portfolioName}</span>
-                  </>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={(e) => { stop(e); onEdit(e); }}
-              aria-label="Edit deposit"
-              className="shrink-0 p-1 rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 transition-colors opacity-0 group-hover:opacity-100"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
+          <div className="flex flex-wrap items-center gap-1">
+            {Array.from({ length: showDots }, (_, i) => i < installmentsDone).map((paid, i) => (
+              <span
+                key={i}
+                title={`Month ${i + 1}: ${paid ? 'paid' : 'due'}`}
+                className={
+                  paid
+                    ? 'h-3 w-3 rounded-[3px]'
+                    : 'h-3 w-3 rounded-[3px] border border-dashed border-border bg-muted/30'
+                }
+                style={paid ? { background: accent } : undefined}
+              />
+            ))}
+            {overflow && (
+              <span className="ml-1 text-xs tabular-nums text-muted-foreground">+{dotCount - 24}</span>
+            )}
           </div>
         </div>
 
-        <CardContent className="p-5 relative">
-          <div className="grid grid-cols-[auto_1fr] gap-5 items-center">
-            <ProgressRing
-              pct={progressPct}
-              color={RD_ACCENT}
-              topLabel={rate != null && rate !== '' ? `${rate}%` : '—'}
-              bottomLabel="p.a."
-            />
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
-                Deposited
-              </p>
-              <p className="numeric-display-lg money-digits text-xl sm:text-2xl mt-0.5 break-words">
-                {formatINR(holding.totalCost)}
-              </p>
-              <div className="mt-2.5 grid grid-cols-3 gap-x-3">
-                <StatBlock
-                  label="Current"
-                  value={holding.currentValue ? formatINR(holding.currentValue) : '—'}
-                />
-                <StatBlock
-                  label="Maturity"
-                  value={matValue ? formatINR(matValue.toString()) : '—'}
-                  accent
-                />
-                <StatBlock
-                  label="Earned"
-                  value={<PnLDisplay holding={holding} />}
-                />
-              </div>
-            </div>
-          </div>
+        <MaturityTrack accent={accent} pct={0} opened={openDate} maturity={maturity} showBar={false} />
 
-          {/* Installment stamps */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground font-mono">
-                Installments stamped
-              </p>
-              <p className="font-mono text-[10px] tabular-nums">
-                <span className="font-semibold" style={{ color: RD_ACCENT }}>{installmentsDone}</span>
-                <span className="text-muted-foreground/60"> / {tenureMonths ?? '—'}</span>
-                <span className="ml-1.5 text-muted-foreground">({Math.round(progressPct)}%)</span>
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-[3px] items-center">
-              {Array.from({ length: showDots }, (_, i) => i < installmentsDone).map((paid, i) => (
-                <span
-                  key={i}
-                  title={`Month ${i + 1}${paid ? ' — paid' : ' — pending'}`}
-                  className={
-                    paid
-                      ? 'h-[10px] w-[10px] rounded-[2px] ring-1 ring-inset shadow-[inset_0_0_0_2px_hsl(var(--card))]'
-                      : 'h-[10px] w-[10px] rounded-[2px] border border-dashed border-border bg-muted/30'
-                  }
-                  style={
-                    paid
-                      ? { background: RD_ACCENT, boxShadow: `inset 0 0 0 2px hsl(var(--card))`, '--tw-ring-color': RD_ACCENT } as React.CSSProperties
-                      : undefined
-                  }
-                />
-              ))}
-              {overflow && (
-                <span className="ml-1 font-mono text-[10px] text-muted-foreground tabular-nums">
-                  +{dotCount - 24}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="mt-4 pt-3 border-t border-dashed border-border/70 flex items-center justify-between text-xs">
-            {maturity ? (
-              <>
-                <span className="text-muted-foreground flex items-center gap-1.5">
-                  <CalendarClock className="h-3 w-3" />
-                  <span className="font-display-italic">Matures</span>
-                  <span className="tabular-nums text-foreground">{formatShortDate(maturity)}</span>
-                </span>
-                <MaturityBadge date={maturity} />
-              </>
-            ) : (
-              <span className="text-muted-foreground font-display-italic">Maturity date not set</span>
-            )}
-            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-accent transition-colors ml-auto" />
-          </div>
-
-          {isMatured && (
-            <div className="absolute top-3 right-3 -rotate-6 border-2 border-muted-foreground/50 px-2 py-0.5 rounded-sm font-display text-xs tracking-[0.18em] text-muted-foreground/70 pointer-events-none">
-              MATURED
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        <div className="grid grid-cols-3 gap-4 border-t border-border/60 pt-3">
+          <Figure label="Deposited">
+            <span className="money-digits">{formatINR(holding.totalCost)}</span>
+          </Figure>
+          <Figure label="Worth today">
+            <span className="money-digits">
+              {holding.currentValue ? formatINR(holding.currentValue) : '—'}
+            </span>
+          </Figure>
+          <Figure label="Interest so far">
+            <InterestSoFar holding={holding} />
+          </Figure>
+        </div>
+      </CardContent>
+    </DepositCardShell>
   );
 }
 
