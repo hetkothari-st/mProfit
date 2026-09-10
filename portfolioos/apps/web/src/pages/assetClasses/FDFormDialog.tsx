@@ -16,7 +16,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
+import { SuggestInput, type SuggestOption } from '@/components/common/SuggestInput';
+import { BankLogo } from '@/components/bankAccounts/BankLogo';
+import { INDIAN_BANKS } from '@/data/indianBanks';
 import type { AssetClass, TransactionDTO } from '@portfolioos/shared';
+
+const BANK_OPTIONS: SuggestOption[] = INDIAN_BANKS.map((b) => ({
+  value: b.name,
+  hint: b.ifscPrefix,
+  keywords: b.keywords,
+}));
 
 const n = (v: unknown) => (v === '' || v == null ? undefined : v);
 const moneyReq = z.preprocess(n, z.coerce.number().nonnegative());
@@ -291,8 +300,24 @@ export function FDFormDialog({
           {/* Bank / account info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label>Bank / Issuer <span className="text-destructive">*</span></Label>
-              <Input {...register('assetName')} placeholder="e.g. HDFC Bank" />
+              <Label htmlFor="fd-issuer">Bank / Issuer <span className="text-destructive">*</span></Label>
+              <div className="flex items-center gap-2">
+                <BankLogo bankName={watch('assetName') ?? ''} size={36} />
+                <div className="min-w-0 flex-1">
+                  {/* Picking from the list keeps the name matching the bank's
+                      logo and colour on the deposit card; any issuer can still
+                      be typed (NBFCs, corporate FDs). */}
+                  <SuggestInput
+                    id="fd-issuer"
+                    placeholder="Search HDFC, SBI… or type any issuer"
+                    value={watch('assetName') ?? ''}
+                    onValueChange={(v) =>
+                      setValue('assetName', v, { shouldDirty: true, shouldValidate: !!errors.assetName })
+                    }
+                    options={BANK_OPTIONS}
+                  />
+                </div>
+              </div>
               {errors.assetName && <p className="text-xs text-destructive">{errors.assetName.message}</p>}
             </div>
             <div className="space-y-1">

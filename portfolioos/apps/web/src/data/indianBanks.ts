@@ -79,6 +79,18 @@ export const INDIAN_BANKS: IndianBank[] = [
   { name: 'NKGSB Co-operative Bank', ifscPrefix: 'NKGS' },
 ];
 
+/**
+ * Stable key for a bank's logo/colour assets. Must match the slugs in
+ * scripts/fetch-bank-logos.py: "Jammu & Kashmir Bank" → "jammu-and-kashmir-bank".
+ */
+export function bankSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 const BY_PREFIX = new Map(INDIAN_BANKS.map((b) => [b.ifscPrefix, b]));
 
 /** The bank an IFSC belongs to, from its first four characters. */

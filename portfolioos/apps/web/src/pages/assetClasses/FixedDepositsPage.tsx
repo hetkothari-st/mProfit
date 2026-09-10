@@ -23,6 +23,8 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { transactionsApi } from '@/api/transactions.api';
 import { FDFormDialog } from './FDFormDialog';
 import { useThemeStore } from '@/stores/theme.store';
+import { BankLogo } from '@/components/bankAccounts/BankLogo';
+import { useBankAccent } from '@/components/bankAccounts/useBankAccent';
 
 type FDHolding = HoldingRow & { portfolioName: string; portfolioId: string };
 
@@ -278,6 +280,8 @@ function FDCard({
   const certNo = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
   const matValue = fdMaturityValue(holding.totalCost, rate, tenureMonths, freq);
   const isMatured = maturity ? daysUntil(maturity) < 0 : false;
+  // The issuing bank's own colour when it's a known bank; FD green otherwise.
+  const accent = useBankAccent(holding.assetName, FD_ACCENT);
 
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -291,12 +295,12 @@ function FDCard({
     >
       <Card
         className="overflow-hidden p-0 paper relative transition-all duration-300 group-hover:shadow-elev-lg group-hover:-translate-y-0.5"
-        style={{ borderTop: `3px solid ${FD_ACCENT}` }}
+        style={{ borderTop: `3px solid ${accent}` }}
       >
         {/* Engraved certificate header */}
         <div className="relative px-5 pt-3 pb-2 border-b border-border/70">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.22em] font-medium">
-            <span className="flex items-center gap-1.5" style={{ color: FD_ACCENT }}>
+            <span className="flex items-center gap-1.5" style={{ color: accent }}>
               <ShieldCheck className="h-3 w-3" strokeWidth={1.8} />
               Term Deposit
             </span>
@@ -306,9 +310,12 @@ function FDCard({
           </div>
           <div className="mt-2 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h3 className="font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
-                {holding.assetName ?? '—'}
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <BankLogo bankName={holding.assetName ?? ''} size={34} />
+                <h3 className="min-w-0 font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
+                  {holding.assetName ?? '—'}
+                </h3>
+              </div>
               <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
                 <span className="tabular-nums">
                   {tenureMonths ? `${tenureMonths}-month term` : 'Term —'}
@@ -343,7 +350,7 @@ function FDCard({
           <div className="grid grid-cols-[auto_1fr] gap-5 items-center">
             <ProgressRing
               pct={elapsedPct}
-              color={FD_ACCENT}
+              color={accent}
               topLabel={rate != null && rate !== '' ? `${rate}%` : '—'}
               bottomLabel="p.a."
             />
@@ -378,7 +385,7 @@ function FDCard({
               <div className="relative h-[3px] rounded-full bg-border/70 overflow-hidden">
                 <div
                   className="absolute inset-y-0 left-0 rounded-full transition-all"
-                  style={{ width: `${elapsedPct}%`, background: FD_ACCENT }}
+                  style={{ width: `${elapsedPct}%`, background: accent }}
                 />
               </div>
               <div className="mt-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.18em] font-mono text-muted-foreground">
@@ -433,7 +440,8 @@ function RDCard({
   onClick: () => void;
   onEdit: (e: React.MouseEvent) => void;
 }) {
-  const RD_ACCENT = useRdAccent();
+  // The issuing bank's own colour when it's a known bank; RD indigo otherwise.
+  const RD_ACCENT = useBankAccent(holding.assetName, useRdAccent());
   const rate = primaryTxn?.interestRate ?? null;
   const maturity = primaryTxn?.maturityDate ?? null;
   const openDate = primaryTxn?.tradeDate ?? null;
@@ -482,9 +490,12 @@ function RDCard({
           </div>
           <div className="mt-2 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h3 className="font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
-                {holding.assetName ?? '—'}
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <BankLogo bankName={holding.assetName ?? ''} size={34} />
+                <h3 className="min-w-0 font-display text-[28px] leading-[1.1] tracking-[-0.01em] text-foreground truncate">
+                  {holding.assetName ?? '—'}
+                </h3>
+              </div>
               <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
                 <span className="text-foreground/80 font-medium tabular-nums">{monthlyAmt}</span>
                 <span className="text-muted-foreground/60">/month</span>
