@@ -11,10 +11,18 @@ function groupDigits(n: string): string {
   return n.replace(/(.{4})(?=.)/g, '$1 ');
 }
 
+// Button hover/focus treatment for the surface it sits on: the bank tile is a
+// dark gradient, the detail page's info cards are the regular card surface.
+const BUTTON_TONE = {
+  onDark: 'hover:bg-white/15 focus-visible:ring-white/60',
+  onLight: 'hover:bg-muted focus-visible:ring-ring',
+} as const;
+
 interface Props {
   account: BankAccountDTO;
   sizeClass: string;
   tone: { primary: string; secondary: string; dot: string };
+  variant?: keyof typeof BUTTON_TONE;
 }
 
 /**
@@ -22,7 +30,7 @@ interface Props {
  * the full number is fetched on demand from the audited reveal endpoint and
  * held only in component state — never in the react-query cache.
  */
-export function AccountNumberReveal({ account, sizeClass, tone }: Props) {
+export function AccountNumberReveal({ account, sizeClass, tone, variant = 'onDark' }: Props) {
   const [fullNumber, setFullNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -79,7 +87,7 @@ export function AccountNumberReveal({ account, sizeClass, tone }: Props) {
         aria-label={label}
         aria-pressed={fullNumber !== null}
         title={label}
-        className={`-m-1 shrink-0 rounded p-1 ${tone.secondary} hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:opacity-60`}
+        className={`-m-1 shrink-0 rounded p-1 ${tone.secondary} ${BUTTON_TONE[variant]} focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60`}
       >
         {loading ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

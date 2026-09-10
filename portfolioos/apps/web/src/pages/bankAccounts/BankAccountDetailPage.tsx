@@ -26,6 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { bankAccountsApi } from '@/api/bankAccounts.api';
 import { BankAccountVisual } from '@/components/bankAccounts/BankAccountVisual';
+import { AccountNumberReveal } from '@/components/bankAccounts/AccountNumberReveal';
 import { BankAccountDialog } from './BankAccountDialog';
 import { usePrivacyStore } from '@/stores/privacy.store';
 
@@ -241,6 +242,21 @@ export function BankAccountDetailPage() {
                 </p>
                 <DetailRow label="Bank" value={account.bankName} />
                 <DetailRow label="Type" value={account.accountType} />
+                <DetailRow
+                  label="Account number"
+                  value={
+                    <AccountNumberReveal
+                      account={account}
+                      sizeClass="text-sm"
+                      tone={{
+                        primary: 'text-foreground',
+                        secondary: 'text-muted-foreground',
+                        dot: 'text-muted-foreground/60',
+                      }}
+                      variant="onLight"
+                    />
+                  }
+                />
                 <DetailRow label="Customer ID" value={account.customerId} />
                 <DetailRow label="IFSC" value={account.ifsc} />
                 <DetailRow label="Branch" value={account.branch} />
