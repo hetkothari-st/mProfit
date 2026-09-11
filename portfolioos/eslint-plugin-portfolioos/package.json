@@ -3,5 +3,5 @@
   "version": "0.1.0",
   "private": true,
   "main": "index.cjs",
-  "description": "Custom ESLint rules enforcing PortfolioOS §3 architectural invariants."
+  "description": "Custom ESLint rules enforcing EveryPaisa §3 architectural invariants."
 }

@@ -1,5 +1,5 @@
 /**
- * Project Finvu mutual fund data into PortfolioOS holdings.
+ * Project Finvu mutual fund data into EveryPaisa holdings.
  *
  * Pipeline:
  *   1. Resolve a target portfolio for the user (caller picks; falls back

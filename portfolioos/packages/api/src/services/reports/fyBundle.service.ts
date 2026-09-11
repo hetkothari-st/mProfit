@@ -144,7 +144,7 @@ export async function buildFyBundle(
   zip.file(
     'manifest.txt',
     [
-      `PortfolioOS — financial year ${fy}`,
+      `EveryPaisa — financial year ${fy}`,
       `Period: ${from} to ${to}`,
       `Generated: ${new Date().toISOString()}`,
       '',

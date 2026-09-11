@@ -77,7 +77,7 @@ export interface ExportPayload {
 export async function streamExcel(res: Response, payload: ExportPayload): Promise<void> {
   const C = themeFor(payload.theme);
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'PortfolioOS';
+  wb.creator = 'EveryPaisa';
   wb.created = new Date();
   const ws = wb.addWorksheet(payload.title.slice(0, 31));
 
@@ -210,7 +210,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       doc.rect(0, 0, doc.page.width, 56).fill(C.headerBarBg);
       if (C.headerRule) doc.rect(0, 55.5, doc.page.width, 0.5).fill(C.border);
       doc.font('Helvetica-Bold').fontSize(17).fillColor(C.titleInk)
-         .text('PortfolioOS', ML, 14, { lineBreak: false });
+         .text('EveryPaisa', ML, 14, { lineBreak: false });
       doc.font('Helvetica').fontSize(10).fillColor(C.muted)
          .text(pdfSafe(payload.title), ML, 36, { lineBreak: false });
       const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
@@ -330,7 +330,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     doc.font('Helvetica').fontSize(7);
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(range.start + i);
-      const txt = `PortfolioOS  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`;
+      const txt = `EveryPaisa  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`;
       const tw  = doc.widthOfString(txt);
       const tx  = ML + (pageW - tw) / 2;
       doc.fillColor(C.muted).text(txt, tx, pageH - 22, { lineBreak: false });

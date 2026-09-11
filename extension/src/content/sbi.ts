@@ -32,14 +32,14 @@ function showDetectionBanner(): void {
     box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     max-width: 320px;
   `;
-  banner.textContent = 'PortfolioOS: SBI portal detected. Auto-sync coming soon (Plan E).';
+  banner.textContent = 'EveryPaisa: SBI portal detected. Auto-sync coming soon (Plan E).';
   document.body.appendChild(banner);
 
   setTimeout(() => banner.remove(), 8000);
 }
 
 // Log detection for debugging
-console.log('[PortfolioOS] SBI content script loaded — placeholder mode');
+console.log('[EveryPaisa] SBI content script loaded — placeholder mode');
 showDetectionBanner();
 
 export {};

@@ -1,6 +1,6 @@
 {
-  "name": "PortfolioOS",
-  "short_name": "PortfolioOS",
+  "name": "EveryPaisa",
+  "short_name": "EveryPaisa",
   "description": "Multi-asset portfolio management for Indian investors",
   "start_url": "/",
   "display": "standalone",

@@ -737,7 +737,7 @@ export function RentalListPage() {
             <EmptyState
               icon={Building2}
               title="No rental properties yet"
-              description="Add a property, set up a tenancy, and let PortfolioOS track rent receipts automatically."
+              description="Add a property, set up a tenancy, and let EveryPaisa track rent receipts automatically."
               action={
                 <Button onClick={() => setCreateOpen(true)}>
                   <Plus className="h-4 w-4" /> Add your first property

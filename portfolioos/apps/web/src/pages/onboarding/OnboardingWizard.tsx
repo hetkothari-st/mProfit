@@ -71,7 +71,7 @@ export function OnboardingWizard({ onComplete }: Props) {
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
           <div className="h-10 w-10 rounded-md bg-primary grid place-items-center text-primary-foreground font-bold text-lg">P</div>
-          <span className="text-xl font-semibold tracking-tight text-primary">PortfolioOS</span>
+          <span className="text-xl font-semibold tracking-tight text-primary">EveryPaisa</span>
         </div>
 
         {/* Step indicator */}
@@ -131,7 +131,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[1].title}</h2>
               <p className="text-muted-foreground mb-6">{STEPS[1].subtitle}</p>
               <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 mb-6">
-                PortfolioOS connects to Gmail with read-only access to import transaction alerts from your bank, broker, and insurer emails.
+                EveryPaisa connects to Gmail with read-only access to import transaction alerts from your bank, broker, and insurer emails.
                 Your emails are never stored — only the extracted transaction data is saved.
               </p>
               <div className="flex gap-3">
@@ -150,7 +150,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[2].title}</h2>
               <p className="text-muted-foreground mb-6">{STEPS[2].subtitle}</p>
               <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 mb-6">
-                After connecting Gmail, PortfolioOS will scan your inbox to discover financial email senders — HDFC alerts, Zerodha trade confirmations, LIC premium notices, and more.
+                After connecting Gmail, EveryPaisa will scan your inbox to discover financial email senders — HDFC alerts, Zerodha trade confirmations, LIC premium notices, and more.
               </p>
               <div className="flex gap-3">
                 <Button onClick={() => { navigate('/ingestion/senders'); onComplete(); }} className="flex-1">

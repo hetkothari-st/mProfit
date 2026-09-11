@@ -43,7 +43,7 @@ export async function fetchCoinGeckoPrices(coinIds: string[]): Promise<CoinGecko
       method: 'GET',
       headers: {
         accept: 'application/json',
-        'user-agent': 'PortfolioOS/0.2',
+        'user-agent': 'EveryPaisa/0.2',
       },
     });
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -128,7 +128,7 @@ export async function backfillCryptoHistory(
   try {
     const res = await request(url, {
       method: 'GET',
-      headers: { accept: 'application/json', 'user-agent': 'PortfolioOS/0.2' },
+      headers: { accept: 'application/json', 'user-agent': 'EveryPaisa/0.2' },
     });
     if (res.statusCode < 200 || res.statusCode >= 300) {
       logger.warn({ coinGeckoId, status: res.statusCode }, '[crypto] history fetch non-2xx');
@@ -251,7 +251,7 @@ async function fetchLiveCryptoPricesUncached(): Promise<LiveCryptoPriceRow[]> {
   try {
     const res = await request(url, {
       method: 'GET',
-      headers: { accept: 'application/json', 'user-agent': 'PortfolioOS/0.2' },
+      headers: { accept: 'application/json', 'user-agent': 'EveryPaisa/0.2' },
     });
     if (res.statusCode >= 200 && res.statusCode < 300) {
       live = (await res.body.json()) as typeof live;

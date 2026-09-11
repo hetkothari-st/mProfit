@@ -3,7 +3,7 @@
  *
  * One row per holding, grouped into asset-class subsections with subtotals,
  * followed by a portfolio-level grand total in the footer cards. Uses the
- * shared streamPdf/streamExcel renderer so PortfolioOS branding stays
+ * shared streamPdf/streamExcel renderer so EveryPaisa branding stays
  * consistent with the rest of the reports module.
  *
  * Industry-standard column ordering for an Indian portfolio statement:

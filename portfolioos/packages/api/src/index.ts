@@ -90,7 +90,7 @@ Sentry.setupExpressErrorHandler(app);
 app.use(errorHandler);
 
 const server = app.listen(env.PORT, '::', () => {
-  logger.info(`PortfolioOS API listening on http://localhost:${env.PORT}`);
+  logger.info(`EveryPaisa API listening on http://localhost:${env.PORT}`);
   startPriceJobs();
   startImportWorker();
   registerGmailScanWorker();

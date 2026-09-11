@@ -1,5 +1,5 @@
 /**
- * api.ts — Fetch wrapper for PortfolioOS extension API calls.
+ * api.ts — Fetch wrapper for EveryPaisa extension API calls.
  *
  * All network calls go through this module. Extension code (content scripts,
  * popup) sends messages to the background service worker which is the only

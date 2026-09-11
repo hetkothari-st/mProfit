@@ -30,7 +30,7 @@ describe('searchPlace', () => {
     expect(u.searchParams.get('format')).toBe('jsonv2');
     expect(u.searchParams.get('limit')).toBe('1');
     expect(u.searchParams.get('countrycodes')).toBe('in');
-    expect((init as RequestInit).headers).toMatchObject({ 'User-Agent': expect.stringMatching(/PortfolioOS/) });
+    expect((init as RequestInit).headers).toMatchObject({ 'User-Agent': expect.stringMatching(/EveryPaisa/) });
   });
 
   it('returns null when nothing matches', async () => {

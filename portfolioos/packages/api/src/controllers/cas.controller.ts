@@ -106,7 +106,7 @@ export async function buildCasRequest(req: Request, res: Response) {
     nextSteps: [
       'Open the portal URL and submit the form with the details shown',
       'You will receive a password-protected PDF at your registered email',
-      'If an IMAP mailbox is configured, PortfolioOS will auto-import the PDF',
+      'If an IMAP mailbox is configured, EveryPaisa will auto-import the PDF',
       'Otherwise, upload the PDF via Imports → CAS PDF and provide the PDF password',
     ],
   });

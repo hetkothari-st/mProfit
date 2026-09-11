@@ -57,7 +57,7 @@ function showBanner(text: string, isError = false): void {
     box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     max-width: 300px;
   `;
-  banner.textContent = `PortfolioOS: ${text}`;
+  banner.textContent = `EveryPaisa: ${text}`;
   document.body.appendChild(banner);
 
   setTimeout(() => banner.remove(), 6000);

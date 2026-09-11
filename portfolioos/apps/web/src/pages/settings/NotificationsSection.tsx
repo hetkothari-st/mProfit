@@ -124,7 +124,7 @@ export function NotificationsSection() {
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Sign in with your Google account to allow PortfolioOS to send rent
+              Sign in with your Google account to allow EveryPaisa to send rent
               reminders on your behalf. No password is ever stored — Google
               grants and revokes access via your account settings.
             </p>

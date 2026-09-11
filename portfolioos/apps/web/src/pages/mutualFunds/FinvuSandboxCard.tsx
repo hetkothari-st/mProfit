@@ -252,7 +252,7 @@ export function FinvuSandboxCard() {
           <div className="flex items-start gap-2 text-xs">
             <Download className="h-4 w-4 mt-0.5 text-accent shrink-0" />
             <div>
-              <div className="font-medium text-foreground">Import into PortfolioOS</div>
+              <div className="font-medium text-foreground">Import into EveryPaisa</div>
               <div className="text-muted-foreground">
                 Projects every Finvu MF holding + statement row into the selected portfolio
                 as real transactions. Idempotent — re-running skips already-imported rows

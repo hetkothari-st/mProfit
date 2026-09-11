@@ -128,7 +128,7 @@ export function PricingPage() {
         key: intent.keyId,
         amount: intent.amount,
         currency: intent.currency,
-        name: 'PortfolioOS',
+        name: 'EveryPaisa',
         description: `${tier} plan — ${cycle === 'ANNUAL' ? 'annual' : 'monthly'}`,
         order_id: intent.orderId,
         prefill: { name: user?.name, email: user?.email },

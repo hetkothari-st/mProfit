@@ -1,4 +1,4 @@
-# PortfolioOS
+# EveryPaisa
 
 > Full-stack, multi-asset portfolio management & accounting platform for Indian investors, HNIs, family offices, advisors, CAs, and traders. A modern MProfit replica with enhancements.
 

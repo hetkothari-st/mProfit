@@ -1,4 +1,4 @@
-# PortfolioOS Extension — Release Runbook
+# EveryPaisa Extension — Release Runbook
 
 ## Pre-release checklist
 - [ ] All content scripts have real DOM selectors (Track 1 inputs delivered)

@@ -245,7 +245,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     summary: `Missed a life or health premium? You have ${GRACE_OTHER} days to pay — ${GRACE_MONTHLY} if you pay monthly.`,
     body: [
       'A grace period is extra time to pay a premium after its due date. It doesn’t apply to single-premium policies.',
-      'Your policy document gives the exact terms, and PortfolioOS counts the days down on each policy you record. For other kinds of cover, such as motor, check your policy and renew before it expires.',
+      'Your policy document gives the exact terms, and EveryPaisa counts the days down on each policy you record. For other kinds of cover, such as motor, check your policy and renew before it expires.',
     ],
     rules: [
       rule(
@@ -264,7 +264,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       ),
     ],
     whatYouCanDo: [
-      'Record your premiums in PortfolioOS so it reminds you before the due date and while you’re in grace.',
+      'Record your premiums in EveryPaisa so it reminds you before the due date and while you’re in grace.',
       'Pay the insurer directly — its website, app or branch — and keep the receipt.',
       'Missed the grace period on a life policy? See “Reviving a lapsed life policy”.',
     ],
@@ -298,7 +298,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       rule('The proposal form asks for your nominee’s contact and bank details.', PPI_2024('page 9')),
     ],
     whatYouCanDo: [
-      'Check every policy in PortfolioOS has a nominee — the assistant can list the ones that don’t.',
+      'Check every policy in EveryPaisa has a nominee — the assistant can list the ones that don’t.',
       'After a marriage, birth, divorce or death in the family, update your nominees with each insurer.',
       'Tell your nominees which policies name them and where the documents are.',
       'Keep the insurer’s acknowledgement of each change.',
@@ -363,7 +363,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       'Find the revival period in your policy document or Customer Information Sheet.',
       'Ask the insurer for the revival amount — premiums due plus interest — and whether it needs a medical.',
       'Answer health questions fully: a revived policy can be questioned for three years from the revival.',
-      'Once revived, record the payments in PortfolioOS so reminders pick up again.',
+      'Once revived, record the payments in EveryPaisa so reminders pick up again.',
     ],
     keywords: ['lapse', 'lapsed', 'revive', 'revival', 'reinstate', 'restart policy', 'missed premiums', 'policy stopped'],
     related: ['grace-period', 'moratorium'],
@@ -454,7 +454,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     summary: 'How long an insurer has to settle a claim — and what you’re owed when it’s late.',
     body: [
       'IRDAI sets deadlines for each kind of claim. The clock usually starts when you report the claim, so report it early and keep proof of the date.',
-      'PortfolioOS’s claims tracker works these dates out for each claim you log.',
+      'EveryPaisa’s claims tracker works these dates out for each claim you log.',
     ],
     rules: [
       CLAIM_GUIDES.LIFE_DEATH.rights[0]!,
@@ -467,7 +467,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     ],
     whatYouCanDo: [
       'Report the claim as soon as you can, and note the claim number and the date.',
-      'Log the claim in PortfolioOS — it tracks the deadline and tells you when it’s time to complain.',
+      'Log the claim in EveryPaisa — it tracks the deadline and tells you when it’s time to complain.',
       'Past the deadline? Write to the insurer’s grievance cell and ask for the interest you’re owed.',
     ],
     keywords: ['claim time', 'claim deadline', 'how long', 'claim delay', 'delayed claim', 'late claim', 'settlement time', 'turnaround', 'claim interest', 'death claim', 'maturity', 'surveyor', 'survey', 'settle'],
@@ -527,7 +527,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       ),
     ],
     whatYouCanDo: [
-      'Keep all your health policies — including your employer’s — recorded in PortfolioOS.',
+      'Keep all your health policies — including your employer’s — recorded in EveryPaisa.',
       'Choose the policy to claim under first, for example the one with the better room-rent or co-pay terms.',
       'If the bill is bigger than that policy’s cover, give that insurer your other policies’ details.',
     ],
@@ -593,7 +593,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       'Write to the insurer’s grievance cell, or register on Bima Bharosa, with your policy and claim numbers, what went wrong and what you want. Keep the reference number.',
       `No reply in ${ESCALATION.grievanceReplyDays} days, or a reply you don’t accept? Follow it up on Bima Bharosa, or call ${ESCALATION.bimaBharosa.phones[0]}.`,
       'Turned down, or no answer after a month? File with the Insurance Ombudsman at cioins.co.in — within a year of the insurer’s rejection, for claims up to ₹50 lakh.',
-      'Log the complaint against the claim in PortfolioOS so it tracks the dates for you.',
+      'Log the complaint against the claim in EveryPaisa so it tracks the dates for you.',
     ],
     keywords: ['complaint', 'complain', 'grievance', 'ombudsman', 'bima bharosa', 'escalate', 'rejected', 'claim rejected', 'repudiated', 'short paid', 'not paid', 'irdai', '155255'],
     related: ['claim-time-limits', 'mis-selling'],

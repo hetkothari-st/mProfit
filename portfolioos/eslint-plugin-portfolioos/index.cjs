@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * PortfolioOS custom ESLint rules. Enforces §3.10 (no silent catch) and
+ * EveryPaisa custom ESLint rules. Enforces §3.10 (no silent catch) and
  * §3.2 (money is Decimal, never Number).
  *
  * Two rules:

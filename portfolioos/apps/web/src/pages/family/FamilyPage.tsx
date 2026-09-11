@@ -750,7 +750,7 @@ function InviteDialog({
         key: outcome.keyId,
         amount: outcome.amount,
         currency: outcome.currency,
-        name: 'PortfolioOS',
+        name: 'EveryPaisa',
         description: 'Extra family seat',
         order_id: outcome.orderId,
       });

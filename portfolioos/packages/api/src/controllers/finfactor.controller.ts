@@ -5,7 +5,7 @@
  * The body is parsed with Zod for safety, then forwarded verbatim to
  * Finfactor; the response is returned as-is so the UI can show the raw
  * sandbox JSON. Auth is delegated to the route's authenticate middleware
- * — the *user* is authenticated against PortfolioOS, but the upstream
+ * — the *user* is authenticated against EveryPaisa, but the upstream
  * call uses the FIU channel token from env (FINFACTOR_API_TOKEN).
  */
 

@@ -19,7 +19,7 @@
  */
 
 /** The name the client sees in the app. */
-export const ASSISTANT_BRAND = 'PortfolioOS';
+export const ASSISTANT_BRAND = 'EveryPaisa';
 
 /**
  * Shown once, at the end of any answer that makes a recommendation. A draft

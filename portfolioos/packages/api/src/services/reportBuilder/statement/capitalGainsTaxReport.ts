@@ -95,7 +95,7 @@ export async function streamCapitalGainsTaxReport(
       // titleInk, not `white` — the light theme's header bar is the same
       // colour as the page, so literal white text would be invisible.
       doc.font('Helvetica-Bold').fontSize(17).fillColor(C.titleInk)
-        .text('PortfolioOS', ML, 14, { lineBreak: false });
+        .text('EveryPaisa', ML, 14, { lineBreak: false });
       doc.font('Helvetica').fontSize(10).fillColor(C.muted)
         .text(subtitle, ML, 36, { lineBreak: false });
       const genStr = `Generated: ${new Date().toLocaleDateString('en-IN', {
@@ -511,7 +511,7 @@ export async function streamCapitalGainsTaxReport(
         cy = 40;
       }
       const disclaimerText =
-        'DISCLAIMER: This report is generated from transaction data in PortfolioOS and uses ' +
+        'DISCLAIMER: This report is generated from transaction data in EveryPaisa and uses ' +
         'statutory rates under Finance Act 2024. Estimates exclude surcharge, health & education ' +
         'cess (4%), Sec. 80C/80D deductions, brought-forward losses, and FMV grandfathering where ' +
         'the 31-Jan-2018 FMV has not been entered. Tax on F&O and intraday assumes the 30% top ' +
@@ -633,7 +633,7 @@ export async function streamCapitalGainsTaxReport(
     doc.font('Helvetica').fontSize(7);
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(range.start + i);
-      const txt = `PortfolioOS Capital Gains Tax Report  ·  FY ${params.fy}  ·  Page ${i + 1} of ${range.count}`;
+      const txt = `EveryPaisa Capital Gains Tax Report  ·  FY ${params.fy}  ·  Page ${i + 1} of ${range.count}`;
       const tw = doc.widthOfString(txt);
       const tx = ML + (pageW - tw) / 2;
       doc.fillColor(C.muted).text(txt, tx, pageH - 22, { lineBreak: false });

@@ -301,7 +301,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     // colour as the page (no dark block to sit on), so literal white text
     // here would be invisible.
     doc.font('Helvetica-Bold').fontSize(16).fillColor(C.titleInk)
-       .text('PortfolioOS', ML, 14, { lineBreak: false });
+       .text('EveryPaisa', ML, 14, { lineBreak: false });
     doc.font('Helvetica').fontSize(9.5).fillColor(C.muted)
        .text('Comprehensive Portfolio Report', ML, 36, { lineBreak: false });
     doc.font('Helvetica').fontSize(8).fillColor(C.muted)
@@ -790,7 +790,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   doc.font('Helvetica').fontSize(7);
   for (let i = 0; i < range.count; i++) {
     doc.switchToPage(range.start + i);
-    const txt = pdfSafe(`PortfolioOS  ·  Comprehensive Report  ·  Page ${i + 1} of ${range.count}`);
+    const txt = pdfSafe(`EveryPaisa  ·  Comprehensive Report  ·  Page ${i + 1} of ${range.count}`);
     const tw  = doc.widthOfString(txt);
     const tx  = ML + (W - tw) / 2;
     doc.fillColor(C.muted).text(txt, tx, pageH - 22, { lineBreak: false });
@@ -967,12 +967,12 @@ export async function streamDashboardExcel(res: Response, params: DashboardRepor
   });
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'PortfolioOS';
+  wb.creator = 'EveryPaisa';
   wb.created = new Date();
 
   // Summary sheet
   const ws = wb.addWorksheet('Summary');
-  ws.getCell('A1').value = 'PortfolioOS — Comprehensive Portfolio Report';
+  ws.getCell('A1').value = 'EveryPaisa — Comprehensive Portfolio Report';
   ws.getCell('A1').font = { bold: true, size: 14 };
   ws.getCell('A2').value = `Portfolio: ${portfolioIdFilter ? (portfolios.find(p => p.id === portfolioIdFilter)?.name ?? '') : 'All Portfolios'}`;
   ws.getCell('A3').value = `Generated: ${new Date().toISOString().slice(0, 10)}`;

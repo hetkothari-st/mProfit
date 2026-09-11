@@ -59,7 +59,7 @@ finfactorRouter.post('/consent/:handle/revoke', asyncHandler(postConsentRevoke))
 finfactorRouter.post('/consent/:handle/approve-demo', asyncHandler(postConsentApproveDemo));
 finfactorRouter.post('/consent/decrypt-ecres', asyncHandler(postDecryptEcres));
 
-// Sync — project Finvu MF data into PortfolioOS holdings.
+// Sync — project Finvu MF data into EveryPaisa holdings.
 finfactorRouter.post('/sync/mf', asyncHandler(postSyncMutualFunds));
 
 // Insurance — life + general.

@@ -1,4 +1,4 @@
-# PortfolioOS — Full Context Document
+# EveryPaisa — Full Context Document
 
 > Single-file orientation for an LLM or a new engineer. Read this before touching
 > anything. It describes what the system is, how it is put together, which
@@ -12,7 +12,7 @@
 
 ## 1. What this is
 
-**PortfolioOS** (product name *mProfit*) is a full-stack, multi-asset portfolio
+**EveryPaisa** is a full-stack, multi-asset portfolio
 management and accounting platform for Indian investors — retail, HNI, family
 offices, advisors, CAs and traders. It is positioned as a modern replacement for
 the legacy mProfit desktop product, with additions the desktop app never had

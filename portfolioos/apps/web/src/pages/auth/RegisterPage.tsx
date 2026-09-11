@@ -47,7 +47,7 @@ export function RegisterPage() {
     mutationFn: authApi.register,
     onSuccess: (data) => {
       setSession(data.user, data.tokens);
-      toast.success('Account created. Welcome to PortfolioOS!');
+      toast.success('Account created. Welcome to EveryPaisa!');
       navigate('/dashboard', { replace: true });
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Registration failed')),

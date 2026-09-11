@@ -139,7 +139,7 @@ export function EmergencySheetPage() {
               To claim, contact the insurer with the policyholder's name and the policy number, and keep the policy
               document, ID proof and bank details of the nominee ready.
             </p>
-            <p>Full policy numbers are in the policy documents and on each policy's page in PortfolioOS.</p>
+            <p>Full policy numbers are in the policy documents and on each policy's page in EveryPaisa.</p>
           </footer>
         </Card>
       )}

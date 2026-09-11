@@ -90,7 +90,7 @@ export function GoogleSignInButton({ text = 'continue_with' }: GoogleSignInButto
       setSession(data.user, data.tokens);
       toast.success(
         data.isNew
-          ? `Welcome to PortfolioOS, ${data.user.name.split(' ')[0]}!`
+          ? `Welcome to EveryPaisa, ${data.user.name.split(' ')[0]}!`
           : `Welcome back, ${data.user.name.split(' ')[0]}!`,
       );
       navigate('/dashboard', { replace: true });

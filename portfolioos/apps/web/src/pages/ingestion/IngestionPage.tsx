@@ -355,7 +355,7 @@ function ConnectStep({
           <EmptyState
             icon={Chrome}
             title="No Gmail connected yet"
-            description="PortfolioOS scans Gmail for financial emails (read-only) and turns them into transactions. Connect once — we never scan anything except the senders you explicitly allow."
+            description="EveryPaisa scans Gmail for financial emails (read-only) and turns them into transactions. Connect once — we never scan anything except the senders you explicitly allow."
             action={
               <Button onClick={() => connectMut.mutate()} disabled={connectMut.isPending}>
                 {connectMut.isPending ? (

@@ -369,7 +369,7 @@ export async function getHoldingsExport(req: Request, res: Response) {
     // Multi-sheet workbook
     const ExcelJS = (await import('exceljs')).default;
     const wb = new ExcelJS.Workbook();
-    wb.creator = 'PortfolioOS';
+    wb.creator = 'EveryPaisa';
     wb.created = new Date();
     const C = themeFor(theme);
 
@@ -758,7 +758,7 @@ async function emit(
 // ─── Statement-style reports (Indian portfolio reporting conventions) ───────
 //
 // Four reports — Holdings, Capital Gains, Income, Ledger — rendered through
-// the shared streamPdf/streamExcel pipeline so PortfolioOS branding stays
+// the shared streamPdf/streamExcel pipeline so EveryPaisa branding stays
 // consistent. Each accepts comma-separated portfolioIds (empty = all owned
 // portfolios for the user); ownership is verified before any data load.
 

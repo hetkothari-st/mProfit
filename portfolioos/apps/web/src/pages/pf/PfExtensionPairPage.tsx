@@ -1,7 +1,7 @@
 /**
  * PfExtensionPairPage.tsx
  *
- * Web UI for pairing the PortfolioOS browser extension to the user's account.
+ * Web UI for pairing the EveryPaisa browser extension to the user's account.
  * Flow:
  *   1. User clicks "Generate code" → POST /epfppf/extension/pair-init
  *   2. Page shows the 8-char code + 5-min countdown
@@ -164,7 +164,7 @@ export function PfExtensionPairPage() {
         <div>
           <h1 className="text-xl font-semibold">Browser Extension</h1>
           <p className="text-sm text-muted-foreground">
-            Connect the PortfolioOS browser extension to auto-fetch your EPF and PPF data.
+            Connect the EveryPaisa browser extension to auto-fetch your EPF and PPF data.
           </p>
         </div>
       </div>
@@ -183,7 +183,7 @@ export function PfExtensionPairPage() {
           ) : code && !codeExpired ? (
             <>
               <p className="text-sm text-muted-foreground">
-                Open the PortfolioOS extension popup, click <strong>Pair</strong>, and enter this
+                Open the EveryPaisa extension popup, click <strong>Pair</strong>, and enter this
                 code:
               </p>
               {/* Big monospace code display */}
@@ -223,7 +223,7 @@ export function PfExtensionPairPage() {
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                1. Install the PortfolioOS browser extension from the Chrome Web Store.
+                1. Install the EveryPaisa browser extension from the Chrome Web Store.
                 <br />
                 2. Click <strong>Generate code</strong> below.
                 <br />

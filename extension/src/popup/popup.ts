@@ -1,5 +1,5 @@
 /**
- * popup.ts — Popup UI logic for PortfolioOS extension.
+ * popup.ts — Popup UI logic for EveryPaisa extension.
  *
  * Uses chrome.runtime.sendMessage to talk to the background service worker
  * rather than calling extApi directly — ensures all API calls and token

@@ -54,7 +54,7 @@ export async function fetchAmfiNavText(): Promise<string> {
     method: 'GET',
     maxRedirections: 5,
     headers: {
-      'user-agent': 'Mozilla/5.0 (compatible; PortfolioOS/0.3)',
+      'user-agent': 'Mozilla/5.0 (compatible; EveryPaisa/0.3)',
       accept: 'text/plain,*/*',
     },
   });
@@ -219,7 +219,7 @@ export async function backfillMfNavHistory(
   try {
     const res = await request(`https://api.mfapi.in/mf/${encodeURIComponent(schemeCode)}`, {
       method: 'GET',
-      headers: { accept: 'application/json', 'user-agent': 'PortfolioOS/0.2' },
+      headers: { accept: 'application/json', 'user-agent': 'EveryPaisa/0.2' },
     });
     if (res.statusCode < 200 || res.statusCode >= 300) {
       logger.warn({ schemeCode, status: res.statusCode }, '[amfi] history fetch non-2xx');

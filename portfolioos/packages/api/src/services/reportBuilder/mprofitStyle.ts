@@ -507,7 +507,7 @@ export function streamMprofitPdf(res: Response, layout: MprofitLayout): Promise<
 export async function streamMprofitExcel(res: Response, layout: MprofitLayout): Promise<void> {
   const PAL = paletteFor(layout.theme ?? 'dark');
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'PortfolioOS';
+  wb.creator = 'EveryPaisa';
   wb.created = new Date();
   const ws = wb.addWorksheet(layout.reportTitle.slice(0, 31));
 

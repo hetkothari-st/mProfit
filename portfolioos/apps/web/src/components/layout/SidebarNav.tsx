@@ -70,16 +70,15 @@ export function SidebarNav({
               className="relative h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm shrink-0"
             >
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 4v16" />
-                <path d="M5 4h8a4.5 4.5 0 0 1 0 9H5" />
-                <path d="M14 13l4 7" />
+                <path d="M17 4H6v16h11" />
+                <path d="M6 12h9" />
               </svg>
               <span className="absolute -inset-px rounded-md ring-1 ring-inset ring-foreground/10" />
             </div>
             <div className="leading-none min-w-0">
               <div className="flex items-baseline gap-[1px] -mt-0.5">
-                <span className="font-brand text-[22px] leading-none text-sidebar-foreground">Portfolio</span>
-                <span className="font-brand text-[22px] leading-none text-accent">OS</span>
+                <span className="font-brand text-[22px] leading-none text-sidebar-foreground">Every</span>
+                <span className="font-brand text-[22px] leading-none text-accent">Paisa</span>
               </div>
               <div className="mt-1.5 text-[9.5px] font-medium uppercase tracking-kerned text-sidebar-foreground/45">
                 Wealth · Ledger
@@ -97,9 +96,8 @@ export function SidebarNav({
             className="h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm focus-ring transition-opacity hover:opacity-90"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 4v16" />
-              <path d="M5 4h8a4.5 4.5 0 0 1 0 9H5" />
-              <path d="M14 13l4 7" />
+              <path d="M17 4H6v16h11" />
+              <path d="M6 12h9" />
             </svg>
           </Link>
           {renderToggle}

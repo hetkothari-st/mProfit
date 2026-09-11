@@ -16,7 +16,7 @@ const EnvSchema = z.object({
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_FROM: z.string().default('PortfolioOS <no-reply@portfolioos.in>'),
+  SMTP_FROM: z.string().default('EveryPaisa <no-reply@portfolioos.in>'),
   // Secure flag: true (port 465 with TLS) vs false (587 with STARTTLS).
   SMTP_SECURE: z.enum(['true', 'false']).default('false'),
 

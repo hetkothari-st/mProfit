@@ -18,7 +18,7 @@ export interface Place {
 }
 
 function userAgent(): string {
-  return process.env.NOMINATIM_USER_AGENT || 'PortfolioOS/1.0 (property map pins)';
+  return process.env.NOMINATIM_USER_AGENT || 'EveryPaisa/1.0 (property map pins)';
 }
 
 function minIntervalMs(): number {

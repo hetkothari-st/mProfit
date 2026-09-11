@@ -19,7 +19,7 @@ import { SuggestedQuestions } from './SuggestedQuestions';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
- * PortfolioOS Assistant panel — designed as a financial planner agent,
+ * EveryPaisa Assistant panel — designed as a financial planner agent,
  * not a chatbot, but with the multi-session mechanics every other AI
  * chat product has: many independent chat threads per user, switchable,
  * deletable, a "new chat" that starts fresh without losing the others.
@@ -151,7 +151,7 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
     <>
       <aside
         role="dialog"
-        aria-label="PortfolioOS Assistant"
+        aria-label="EveryPaisa Assistant"
         className="fixed inset-0 sm:inset-auto sm:bottom-24 sm:right-6 z-40 w-full sm:w-[420px] md:w-[460px] h-full sm:h-[min(680px,calc(100vh-7.5rem))] bg-background border border-border sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200"
       >
         <AgentHeader
