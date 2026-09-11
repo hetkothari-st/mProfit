@@ -589,3 +589,29 @@
     border-top: 1px solid hsl(var(--border) / 0.6);
   }
 }
+
+/* Printing a sheet (the family insurance sheet): only `.print-sheet` prints,
+   black on white whatever the theme, with the app's chrome hidden. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible;
+  }
+  .print-sheet {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  .print-sheet * {
+    color: #000 !important;
+    border-color: #bbb !important;
+  }
+}

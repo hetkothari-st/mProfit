@@ -110,7 +110,10 @@ export async function getVehicle(userId: string, id: string) {
     where: { id },
     include: {
       challans: { orderBy: { offenceDate: 'desc' } },
-      insurancePolicies: true,
+      // Only what the vehicle page needs — never the policy number itself.
+      insurancePolicies: {
+        select: { id: true, insurer: true, type: true, planName: true, policyNumberLast4: true, nextPremiumDue: true, status: true },
+      },
     },
   });
   if (!row) throw new NotFoundError('Vehicle not found');
@@ -323,7 +326,10 @@ export async function refreshVehicle(
     data,
     include: {
       challans: { orderBy: { offenceDate: 'desc' } },
-      insurancePolicies: true,
+      // Only what the vehicle page needs — never the policy number itself.
+      insurancePolicies: {
+        select: { id: true, insurer: true, type: true, planName: true, policyNumberLast4: true, nextPremiumDue: true, status: true },
+      },
     },
   });
 
@@ -351,7 +357,10 @@ export async function refreshVehiclePhoto(userId: string, id: string) {
     data: { photoUrl: photo.url, photoSource: photo.source },
     include: {
       challans: { orderBy: { offenceDate: 'desc' } },
-      insurancePolicies: true,
+      // Only what the vehicle page needs — never the policy number itself.
+      insurancePolicies: {
+        select: { id: true, insurer: true, type: true, planName: true, policyNumberLast4: true, nextPremiumDue: true, status: true },
+      },
     },
   });
   return { vehicle: updated, photo };

@@ -23,7 +23,8 @@ const GUILLOCHE = Array.from({ length: 9 }, (_, i) => {
   return d;
 });
 
-function Guilloche() {
+/** Security linework over a brand-coloured header; the parent must be `relative`. */
+export function Guilloche() {
   return (
     <svg
       aria-hidden

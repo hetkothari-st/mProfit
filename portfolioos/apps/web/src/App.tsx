@@ -43,6 +43,7 @@ import { RentalDetailPage } from './pages/rental/RentalDetailPage';
 import { TenantKhataPage } from './pages/rental/TenantKhataPage';
 import { InsuranceListPage } from './pages/insurance/InsuranceListPage';
 import { InsuranceDetailPage } from './pages/insurance/InsuranceDetailPage';
+import { EmergencySheetPage } from './pages/insurance/EmergencySheetPage';
 import { LoanListPage } from './pages/loans/LoanListPage';
 import { LoanDetailPage } from './pages/loans/LoanDetailPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
@@ -146,6 +147,7 @@ export function App() {
         <Route path="/rental/tenancies/:tenancyId" element={<TenantKhataPage />} />
         <Route path="/rental/:id" element={<RentalDetailPage />} />
         <Route path="/insurance" element={<InsuranceListPage />} />
+        <Route path="/insurance/emergency-sheet" element={<EmergencySheetPage />} />
         <Route path="/insurance/:id" element={<InsuranceDetailPage />} />
         <Route path="/loans" element={<LoanListPage />} />
         <Route path="/loans/:id" element={<LoanDetailPage />} />

@@ -59,7 +59,15 @@ export interface VehicleDTO {
   createdAt: string;
   updatedAt: string;
   challans?: ChallanDTO[];
-  insurancePolicies?: Array<{ id: string; insurer: string; policyNumber: string }>;
+  insurancePolicies?: Array<{
+    id: string;
+    insurer: string;
+    type: string;
+    planName: string | null;
+    policyNumberLast4: string | null;
+    nextPremiumDue: string | null;
+    status: string;
+  }>;
 }
 
 export interface CreateVehicleInput {

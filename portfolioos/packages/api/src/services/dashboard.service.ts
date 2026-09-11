@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { serializeMoney, financialYearFromDate, toDecimal } from '@portfolioos/shared';
+import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@portfolioos/shared';
 import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
 import { computeCardSummary } from './creditCards.service.js';
 import { getEffectiveScope, type EffectiveScope } from './familyScope.service.js';
@@ -33,17 +33,6 @@ const ZERO = new Decimal(0);
 function d(v: { toString(): string } | null | undefined): Decimal {
   if (v == null) return ZERO;
   return new Decimal(v.toString());
-}
-
-function premiumToAnnual(amount: Decimal, frequency: string): Decimal {
-  switch (frequency) {
-    case 'MONTHLY': return amount.times(12);
-    case 'QUARTERLY': return amount.times(4);
-    case 'HALF_YEARLY': return amount.times(2);
-    case 'ANNUAL': return amount;
-    case 'SINGLE': return ZERO;
-    default: return amount;
-  }
 }
 
 function fyStart(): Date {

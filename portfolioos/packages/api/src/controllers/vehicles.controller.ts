@@ -234,12 +234,12 @@ export async function carInfoVerify(req: Request, res: Response) {
       vehicle = await prisma.vehicle.update({
         where: { id: existing.id },
         data: patch,
-        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: true },
+        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: { select: { id: true, insurer: true, type: true, planName: true, policyNumberLast4: true, nextPremiumDue: true, status: true } } },
       });
     } else {
       vehicle = await prisma.vehicle.create({
         data: { userId, registrationNo: cleanRegNo, ...data_ },
-        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: true },
+        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: { select: { id: true, insurer: true, type: true, planName: true, policyNumberLast4: true, nextPremiumDue: true, status: true } } },
       });
     }
 

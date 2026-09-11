@@ -1,10 +1,5 @@
-import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
-
-function unwrap<T>(r: ApiResponse<T>): T {
-  if (!r.success) throw new Error(r.error);
-  return r.data;
-}
+import { api, unwrap } from './client';
+import type { ApiResponse, NextPremiumDue } from '@portfolioos/shared';
 
 // ── DTOs ─────────────────────────────────────────────────────────────
 
@@ -31,29 +26,26 @@ export interface InsuranceClaimDTO {
   documents: unknown;
 }
 
-export interface InsurancePolicyDTO {
-  id: string;
-  userId: string;
-  portfolioId: string | null;
-  insurer: string;
-  policyNumber: string;
-  type: string;
-  planName: string | null;
-  policyHolder: string;
-  nominees: unknown;
-  sumAssured: string;
-  premiumAmount: string;
-  premiumFrequency: string;
-  startDate: string;
-  maturityDate: string | null;
-  nextPremiumDue: string | null;
-  vehicleId: string | null;
-  vehicle?: { id: string; registrationNo: string; make: string | null; model: string | null } | null;
-  healthCoverDetails: HealthCoverDetails | null;
-  status: string;
-  createdAt: string;
-  premiumHistory?: PremiumPaymentDTO[];
-  claims?: InsuranceClaimDTO[];
+export interface Nominee {
+  name: string;
+  relation: string;
+  /** Percent of the payout; when any nominee has one, they total 100. */
+  sharePercent?: number | null;
+  isMinor?: boolean;
+  /** Receives the money for a minor nominee. */
+  appointeeName?: string | null;
+  appointeeRelation?: string | null;
+}
+
+export interface PolicyContacts {
+  helpline?: string | null;
+  claimEmail?: string | null;
+  claimUrl?: string | null;
+  tpaName?: string | null;
+  tpaHelpline?: string | null;
+  agentName?: string | null;
+  agentPhone?: string | null;
+  agentEmail?: string | null;
 }
 
 export interface HealthCoverDetails {
@@ -64,6 +56,42 @@ export interface HealthCoverDetails {
   preExistingWait?: number | null;
 }
 
+export interface InsurancePolicyDTO {
+  id: string;
+  userId: string;
+  portfolioId: string | null;
+  insurer: string;
+  /** The policy number is never sent in full; reveal it via `revealPolicyNumber`. */
+  policyNumberLast4: string | null;
+  hasPolicyNumber: boolean;
+  type: string;
+  planName: string | null;
+  policyHolder: string;
+  nominees: Nominee[] | null;
+  contacts: PolicyContacts | null;
+  sumAssured: string;
+  premiumAmount: string;
+  premiumFrequency: string;
+  startDate: string;
+  maturityDate: string | null;
+  nextPremiumDue: string | null;
+  /** Premiums due before this date aren't tracked (treated as settled). */
+  premiumsTrackedFrom: string | null;
+  /** Grace period the user set; null = the usual one for this kind of policy. */
+  gracePeriodDays: number | null;
+  /** Grace period in effect (the user's, or the usual one). */
+  graceDays: number;
+  /** Where the next premium stands, worked out by the server. */
+  premiumDue: NextPremiumDue;
+  vehicleId: string | null;
+  vehicle?: { id: string; registrationNo: string; make: string | null; model: string | null } | null;
+  healthCoverDetails: HealthCoverDetails | null;
+  status: string;
+  createdAt: string;
+  premiumHistory?: PremiumPaymentDTO[];
+  claims?: InsuranceClaimDTO[];
+}
+
 // ── Input types ───────────────────────────────────────────────────────
 
 export interface CreatePolicyInput {
@@ -72,19 +100,22 @@ export interface CreatePolicyInput {
   type: string;
   planName?: string | null;
   policyHolder: string;
-  nominees?: unknown;
+  nominees?: Nominee[] | null;
+  contacts?: PolicyContacts | null;
   sumAssured: string;
   premiumAmount: string;
   premiumFrequency: string;
   startDate: string;
   maturityDate?: string | null;
   nextPremiumDue?: string | null;
+  gracePeriodDays?: number | null;
   vehicleId?: string | null;
   portfolioId?: string | null;
   healthCoverDetails?: HealthCoverDetails | null;
   status?: string;
 }
 
+/** Leave `policyNumber` out to keep the saved one. */
 export type UpdatePolicyInput = Partial<CreatePolicyInput>;
 
 export interface AddPremiumInput {
@@ -137,6 +168,13 @@ export const insuranceApi = {
   },
   async deletePolicy(id: string): Promise<void> {
     await api.delete(`/api/insurance/policies/${id}`);
+  },
+  /** The full policy number. Audit-logged and rate-limited on the server. */
+  async revealPolicyNumber(id: string): Promise<{ policyNumber: string | null }> {
+    const { data } = await api.post<ApiResponse<{ policyNumber: string | null }>>(
+      `/api/insurance/policies/${id}/reveal`,
+    );
+    return unwrap(data);
   },
   async addPremium(policyId: string, input: AddPremiumInput): Promise<PremiumPaymentDTO> {
     const { data } = await api.post<ApiResponse<PremiumPaymentDTO>>(

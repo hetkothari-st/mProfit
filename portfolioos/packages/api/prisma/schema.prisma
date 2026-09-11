@@ -1912,7 +1912,15 @@ model InsurancePolicy {
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   portfolioId        String?
   insurer            String
-  policyNumber       String
+  // Legacy plaintext — no longer written or read. Kept until every row is
+  // encrypted into policyNumberEnc, then dropped in a later migration.
+  policyNumber       String?
+  // AES-256-GCM via pfCredentials.encryptIdentifier; never serialized.
+  policyNumberEnc    String?
+  // HMAC fingerprint of the normalised number, for duplicate checks and
+  // premium-email matching without decrypting anything.
+  policyNumberHash   String?
+  policyNumberLast4  String?
   type               String
   planName           String?
   policyHolder       String
@@ -1926,6 +1934,12 @@ model InsurancePolicy {
   vehicleId          String?
   vehicle            Vehicle?  @relation("VehicleInsurance", fields: [vehicleId], references: [id])
   healthCoverDetails Json?
+  // Helpline, claim email, TPA, agent — shape in insurance.service (PolicyContacts).
+  contacts            Json?
+  // Days to pay a missed premium; null = the IRDAI default for the type.
+  gracePeriodDays     Int?
+  // Premiums due before this date aren't tracked here (treated as settled).
+  premiumsTrackedFrom DateTime? @db.Date
   status             String    @default("ACTIVE")
   createdAt          DateTime  @default(now())
 
@@ -1934,6 +1948,7 @@ model InsurancePolicy {
   ownedProperties OwnedProperty[]
 
   @@unique([userId, insurer, policyNumber])
+  @@unique([userId, insurer, policyNumberHash])
   @@index([userId, nextPremiumDue])
 }
 

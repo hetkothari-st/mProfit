@@ -23,6 +23,7 @@ import {
   type AttentionUrgency,
   type AttentionItem,
   type FamilyAttention,
+  premiumToAnnual,
 } from '@portfolioos/shared';
 import { runAsUser } from '../../lib/requestContext.js';
 import {
@@ -146,27 +147,6 @@ function d(v: { toString(): string } | null | undefined): Decimal {
 
 function daysUntil(date: Date, from: Date = new Date()): number {
   return Math.ceil((date.getTime() - from.getTime()) / 86_400_000);
-}
-
-/**
- * Annualised premium for a stored frequency token.
- *
- * NOTE: dashboard.service has a byte-identical private `premiumToAnnual`. It
- * is not exported, and this module must not modify that file, so the switch is
- * repeated here. Worth hoisting into a shared insuranceMath module — see the
- * hand-off notes.
- */
-function premiumToAnnual(amount: Decimal, frequency: string): Decimal {
-  switch (frequency) {
-    case 'MONTHLY': return amount.times(12);
-    case 'QUARTERLY': return amount.times(4);
-    case 'HALF_YEARLY': return amount.times(2);
-    case 'ANNUAL': return amount;
-    // A single-premium policy has no recurring outgo; counting it as an annual
-    // cost would overstate the household's premium burden every year.
-    case 'SINGLE': return ZERO;
-    default: return amount;
-  }
 }
 
 // ── Member resolution ────────────────────────────────────────────────────

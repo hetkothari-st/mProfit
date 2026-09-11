@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
+import { piiLimiter } from '../middleware/rateLimit.js';
 import {
+  revealPolicyNumberHandler,
   listPoliciesHandler,
   getPolicyHandler,
   createPolicyHandler,
@@ -24,6 +26,9 @@ insuranceRouter.post('/policies', asyncHandler(createPolicyHandler));
 insuranceRouter.get('/policies/:id', asyncHandler(getPolicyHandler));
 insuranceRouter.patch('/policies/:id', asyncHandler(updatePolicyHandler));
 insuranceRouter.delete('/policies/:id', asyncHandler(deletePolicyHandler));
+
+// Full policy number — decrypted, audited, and rate-limited like other PII (§15.7).
+insuranceRouter.post('/policies/:id/reveal', piiLimiter, asyncHandler(revealPolicyNumberHandler));
 
 // Premium payments (scoped under policy)
 insuranceRouter.post('/policies/:id/premiums', asyncHandler(addPremiumHandler));

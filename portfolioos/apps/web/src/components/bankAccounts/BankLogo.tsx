@@ -12,7 +12,7 @@
  * its width follows the mark's recorded aspect ratio.
  */
 import { useEffect, useState } from 'react';
-import { bankBrandFor, tileSurface } from '@/lib/bankBrand';
+import { bankBrandFor, tileSurface, type BankBrand } from '@/lib/bankBrand';
 
 /** "HDFC Bank" → "HD", "Nowhere Co-op Bank" → "NC". */
 function bankInitials(name: string): string {
@@ -24,21 +24,27 @@ function bankInitials(name: string): string {
   return (words[0] ?? name).slice(0, 2).toUpperCase() || '₹';
 }
 
-export function BankLogo({
-  bankName,
+/**
+ * Any brand's mark on its plate — banks here, insurers in InsurerLogo. Falls
+ * back to `initials` on the brand colour (or `fallbackColor`).
+ */
+export function BrandLogo({
+  brand,
+  initials,
+  fallbackColor = 'hsl(215 16% 35%)',
   size = 40,
   maxWidth,
   className,
 }: {
-  /** Any label naming the bank: "HDFC Bank", "SBI", "HDFC FD 2025". */
-  bankName: string;
+  brand: BankBrand | null;
+  initials: string;
+  fallbackColor?: string;
   /** Plate height in px; width follows the mark's shape. */
   size?: number;
   /** Cap for wide wordmarks (default 5× the height). */
   maxWidth?: number;
   className?: string;
 }) {
-  const brand = bankBrandFor(bankName);
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [brand?.logo]);
 
@@ -75,10 +81,36 @@ export function BankLogo({
         width: size,
         height: size,
         fontSize: Math.max(10, Math.round(size * 0.34)),
-        background: brand?.color ? tileSurface(brand.color, brand.accent).via : 'hsl(215 16% 35%)',
+        background: brand?.color ? tileSurface(brand.color, brand.accent).via : fallbackColor,
       }}
     >
-      {bankInitials(brand?.name ?? bankName)}
+      {initials}
     </span>
+  );
+}
+
+export function BankLogo({
+  bankName,
+  size = 40,
+  maxWidth,
+  className,
+}: {
+  /** Any label naming the bank: "HDFC Bank", "SBI", "HDFC FD 2025". */
+  bankName: string;
+  /** Plate height in px; width follows the mark's shape. */
+  size?: number;
+  /** Cap for wide wordmarks (default 5× the height). */
+  maxWidth?: number;
+  className?: string;
+}) {
+  const brand = bankBrandFor(bankName);
+  return (
+    <BrandLogo
+      brand={brand}
+      initials={bankInitials(brand?.name ?? bankName)}
+      size={size}
+      maxWidth={maxWidth}
+      className={className}
+    />
   );
 }
