@@ -172,7 +172,8 @@ describe('policy numbers', () => {
   });
 
   it('never returns a not-yet-converted plain number, and converts it when revealed', async () => {
-    db.insurancePolicy.findMany.mockResolvedValue([row({ policyNumber: 'LEG-5555', policyNumberLast4: null })]);
+    // `claims: []` — the list query includes them; phase 2 adds progress to each.
+    db.insurancePolicy.findMany.mockResolvedValue([row({ policyNumber: 'LEG-5555', policyNumberLast4: null, claims: [] })]);
     const [dto] = await listPolicies('u1');
     expect(dto).toMatchObject({ policyNumberLast4: '5555', hasPolicyNumber: true });
     expect(JSON.stringify(dto)).not.toContain('LEG-5555');

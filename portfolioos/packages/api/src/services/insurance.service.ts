@@ -21,7 +21,7 @@
  *      AND amount is within ±5% of InsurancePolicy.premiumAmount
  */
 
-import { Prisma } from '@prisma/client';
+import { Prisma, type InsuranceClaim } from '@prisma/client';
 import {
   Decimal,
   addDaysIso,
@@ -33,6 +33,10 @@ import {
   nextPremiumDue,
   premiumDueOn,
   PREMIUM_FREQUENCY_MONTHS,
+  CLAIM_GUIDES,
+  claimProgress,
+  isClaimKind,
+  type ClaimGuide,
   type NextPremiumDue,
 } from '@portfolioos/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
@@ -158,6 +162,12 @@ export interface AddPremiumInput {
   canonicalEventId?: string | null;
 }
 
+/** One line in the user's own log of a claim: a call, a letter, a visit. */
+export interface ClaimLogEntry {
+  on: string;
+  note: string;
+}
+
 export interface AddClaimInput {
   claimNumber?: string | null;
   claimDate: string;
@@ -167,6 +177,18 @@ export interface AddClaimInput {
   settledAmount?: string | null;
   settledOn?: string | null;
   documents?: unknown;
+  /** Claims guide it follows (shared CLAIM_KINDS). */
+  kind?: string | null;
+  documentsCompletedOn?: string | null;
+  surveyorAllocatedOn?: string | null;
+  /** Guide document ids ticked off. */
+  checklist?: Record<string, boolean> | null;
+  timeline?: ClaimLogEntry[] | null;
+  rejectionReason?: string | null;
+  grievanceFiledOn?: string | null;
+  grievanceRef?: string | null;
+  ombudsmanFiledOn?: string | null;
+  ombudsmanRef?: string | null;
 }
 
 export type UpdateClaimInput = Partial<AddClaimInput>;
@@ -375,7 +397,7 @@ export async function listPolicies(userId: string) {
     },
     orderBy: { createdAt: 'desc' },
   });
-  return rows.map(toPolicyDto);
+  return rows.map((r) => ({ ...toPolicyDto(r), claims: r.claims.map(toClaimDto) }));
 }
 
 export async function getPolicy(userId: string, policyId: string) {
@@ -388,7 +410,7 @@ export async function getPolicy(userId: string, policyId: string) {
     },
   });
   if (!policy) throw new NotFoundError(`InsurancePolicy ${policyId} not found`);
-  return toPolicyDto(policy);
+  return { ...toPolicyDto(policy), claims: policy.claims.map(toClaimDto) };
 }
 
 const DUPLICATE_POLICY = 'You already have this policy saved for this insurer';
@@ -673,11 +695,122 @@ export async function removePremiumPayment(userId: string, paymentId: string) {
 
 // ── Claims ───────────────────────────────────────────────────────────
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_LOG_ENTRIES = 200;
+
+const optDate = (v: string | null | undefined) => (v ? toDate(v) : null);
+
+function isRealDay(v: string): boolean {
+  if (!ISO_DAY.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+/** A claim as the API returns it: money as strings, plus where it stands. */
+export function toClaimDto(row: InsuranceClaim) {
+  return {
+    ...row,
+    claimedAmount: row.claimedAmount.toString(),
+    settledAmount: row.settledAmount?.toString() ?? null,
+    progress: claimProgress(
+      {
+        kind: row.kind,
+        status: row.status,
+        claimDate: isoOf(row.claimDate)!,
+        documentsCompletedOn: isoOf(row.documentsCompletedOn),
+        surveyorAllocatedOn: isoOf(row.surveyorAllocatedOn),
+        claimedAmount: row.claimedAmount.toString(),
+        settledAmount: row.settledAmount?.toString() ?? null,
+        grievanceFiledOn: isoOf(row.grievanceFiledOn),
+        ombudsmanFiledOn: isoOf(row.ombudsmanFiledOn),
+      },
+      todayIso(),
+    ),
+  };
+}
+
+/** The claim's values once the change is applied, for cross-field checks. */
+interface ClaimContext {
+  policyType: string;
+  kind: string | null;
+  claimDate: string;
+  grievanceFiledOn: string | null;
+  ombudsmanFiledOn: string | null;
+}
+
+/**
+ * Checks the tracker fields: the guide fits the policy, ticked documents are
+ * on its checklist, log entries are dated, and escalation isn't dated before
+ * the claim. Returns the cleaned checklist / log when they were given.
+ */
+function checkClaimTracker(input: UpdateClaimInput, ctx: ClaimContext) {
+  let guide: ClaimGuide | null = null;
+  if (ctx.kind != null) {
+    if (!isClaimKind(ctx.kind)) throw new BadRequestError('Pick a claim type from the list');
+    guide = CLAIM_GUIDES[ctx.kind];
+    if (!guide.appliesTo.includes(ctx.policyType)) {
+      throw new BadRequestError(
+        `A “${guide.title}” claim doesn’t apply to a ${TYPE_LABELS[ctx.policyType] ?? ctx.policyType} policy`,
+      );
+    }
+  }
+
+  let checklist: Record<string, true> | null | undefined;
+  if (input.checklist !== undefined) {
+    if (input.checklist === null) {
+      checklist = null;
+    } else {
+      if (!guide) throw new BadRequestError('Pick the claim type before ticking off documents');
+      const known = new Set(guide.documents.map((d) => d.id));
+      checklist = {};
+      for (const [id, done] of Object.entries(input.checklist)) {
+        if (!known.has(id)) throw new BadRequestError(`"${id}" isn't on the ${guide.title} checklist`);
+        if (done === true) checklist[id] = true;
+      }
+    }
+  }
+
+  let timeline: ClaimLogEntry[] | null | undefined;
+  if (input.timeline !== undefined) {
+    if (input.timeline === null) {
+      timeline = null;
+    } else {
+      if (input.timeline.length > MAX_LOG_ENTRIES) {
+        throw new BadRequestError(`A claim can keep up to ${MAX_LOG_ENTRIES} notes`);
+      }
+      timeline = input.timeline.map((e) => {
+        if (!isRealDay(e.on)) throw new BadRequestError('Each note needs a date');
+        const note = cleanText(e.note, 500);
+        if (!note) throw new BadRequestError('A note can’t be empty');
+        return { on: e.on, note };
+      });
+    }
+  }
+
+  if (ctx.grievanceFiledOn && ctx.grievanceFiledOn < ctx.claimDate) {
+    throw new BadRequestError("The complaint can't be dated before the claim");
+  }
+  if (ctx.ombudsmanFiledOn && ctx.ombudsmanFiledOn < ctx.claimDate) {
+    throw new BadRequestError("The Ombudsman complaint can't be dated before the claim");
+  }
+  return { checklist, timeline };
+}
+
+const jsonOrNull = (v: unknown) => (v == null ? Prisma.JsonNull : (v as Prisma.InputJsonValue));
+
 export async function addClaim(userId: string, policyId: string, input: AddClaimInput) {
   const policy = await prisma.insurancePolicy.findFirst({ where: { id: policyId, userId } });
   if (!policy) throw new NotFoundError(`InsurancePolicy ${policyId} not found`);
 
-  return prisma.insuranceClaim.create({
+  const { checklist, timeline } = checkClaimTracker(input, {
+    policyType: policy.type,
+    kind: input.kind ?? null,
+    claimDate: input.claimDate,
+    grievanceFiledOn: input.grievanceFiledOn ?? null,
+    ombudsmanFiledOn: input.ombudsmanFiledOn ?? null,
+  });
+
+  const row = await prisma.insuranceClaim.create({
     data: {
       policyId,
       claimNumber: input.claimNumber ?? null,
@@ -686,10 +819,21 @@ export async function addClaim(userId: string, policyId: string, input: AddClaim
       claimedAmount: new Prisma.Decimal(input.claimedAmount),
       status: input.status,
       settledAmount: input.settledAmount ? new Prisma.Decimal(input.settledAmount) : null,
-      settledOn: input.settledOn ? toDate(input.settledOn) : null,
-      documents: (input.documents as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+      settledOn: optDate(input.settledOn),
+      documents: jsonOrNull(input.documents),
+      kind: input.kind ?? null,
+      documentsCompletedOn: optDate(input.documentsCompletedOn),
+      surveyorAllocatedOn: optDate(input.surveyorAllocatedOn),
+      checklist: jsonOrNull(checklist),
+      timeline: jsonOrNull(timeline),
+      rejectionReason: cleanText(input.rejectionReason, 1000),
+      grievanceFiledOn: optDate(input.grievanceFiledOn),
+      grievanceRef: cleanText(input.grievanceRef, 100),
+      ombudsmanFiledOn: optDate(input.ombudsmanFiledOn),
+      ombudsmanRef: cleanText(input.ombudsmanRef, 100),
     },
   });
+  return toClaimDto(row);
 }
 
 export async function updateClaim(
@@ -699,13 +843,37 @@ export async function updateClaim(
 ) {
   const claim = await prisma.insuranceClaim.findFirst({
     where: { id: claimId },
-    include: { policy: { select: { userId: true } } },
+    include: { policy: { select: { userId: true, type: true } } },
   });
   if (!claim || claim.policy.userId !== userId) throw new NotFoundError(`InsuranceClaim ${claimId} not found`);
 
-  return prisma.insuranceClaim.update({
+  const pick = (v: string | null | undefined, existing: Date | null) =>
+    v !== undefined ? (v ?? null) : isoOf(existing);
+  const kind = input.kind !== undefined ? input.kind : claim.kind;
+  const tracker = checkClaimTracker(input, {
+    policyType: claim.policy.type,
+    kind,
+    claimDate: pick(input.claimDate, claim.claimDate)!,
+    grievanceFiledOn: pick(input.grievanceFiledOn, claim.grievanceFiledOn),
+    ombudsmanFiledOn: pick(input.ombudsmanFiledOn, claim.ombudsmanFiledOn),
+  });
+  // Ticked documents belong to a guide; a different guide starts a fresh list.
+  const checklist =
+    tracker.checklist !== undefined ? tracker.checklist : kind !== claim.kind ? null : undefined;
+
+  const row = await prisma.insuranceClaim.update({
     where: { id: claimId },
     data: {
+      ...(input.kind !== undefined && { kind: input.kind }),
+      ...(input.documentsCompletedOn !== undefined && { documentsCompletedOn: optDate(input.documentsCompletedOn) }),
+      ...(input.surveyorAllocatedOn !== undefined && { surveyorAllocatedOn: optDate(input.surveyorAllocatedOn) }),
+      ...(checklist !== undefined && { checklist: jsonOrNull(checklist) }),
+      ...(tracker.timeline !== undefined && { timeline: jsonOrNull(tracker.timeline) }),
+      ...(input.rejectionReason !== undefined && { rejectionReason: cleanText(input.rejectionReason, 1000) }),
+      ...(input.grievanceFiledOn !== undefined && { grievanceFiledOn: optDate(input.grievanceFiledOn) }),
+      ...(input.grievanceRef !== undefined && { grievanceRef: cleanText(input.grievanceRef, 100) }),
+      ...(input.ombudsmanFiledOn !== undefined && { ombudsmanFiledOn: optDate(input.ombudsmanFiledOn) }),
+      ...(input.ombudsmanRef !== undefined && { ombudsmanRef: cleanText(input.ombudsmanRef, 100) }),
       ...(input.claimNumber !== undefined && { claimNumber: input.claimNumber }),
       ...(input.claimDate !== undefined && { claimDate: toDate(input.claimDate) }),
       ...(input.claimType !== undefined && { claimType: input.claimType }),
@@ -719,11 +887,10 @@ export async function updateClaim(
       ...(input.settledOn !== undefined && {
         settledOn: input.settledOn ? toDate(input.settledOn) : null,
       }),
-      ...(input.documents !== undefined && {
-        documents: (input.documents as Prisma.InputJsonValue) ?? Prisma.JsonNull,
-      }),
+      ...(input.documents !== undefined && { documents: jsonOrNull(input.documents) }),
     },
   });
+  return toClaimDto(row);
 }
 
 export async function removeClaim(userId: string, claimId: string) {
@@ -986,5 +1153,51 @@ export async function generateRenewalAlerts(userId?: string): Promise<number> {
     created++;
   }
 
+  return created;
+}
+
+// ── Claim follow-up reminders ─────────────────────────────────────────
+
+const CLAIM_ALERT_TITLE: Record<'FILE_GRIEVANCE' | 'GO_TO_OMBUDSMAN', string> = {
+  FILE_GRIEVANCE: 'time to raise a complaint',
+  GO_TO_OMBUDSMAN: 'you can take it to the Insurance Ombudsman',
+};
+
+/**
+ * One reminder per claim when it's time to escalate: a complaint once the
+ * insurer is past IRDAI's time limit (or has rejected / short-paid it), then
+ * the Ombudsman once the complaint has gone 30 days. Run by the daily alert
+ * scan (alerts.service runAllAlertScans).
+ */
+export async function generateClaimAlerts(userId?: string): Promise<number> {
+  const rows = await prisma.insuranceClaim.findMany({
+    where: { ombudsmanFiledOn: null, ...(userId ? { policy: { userId } } : {}) },
+    include: { policy: { select: { userId: true, insurer: true, planName: true, type: true } } },
+  });
+
+  let created = 0;
+  for (const row of rows) {
+    const { progress } = toClaimDto(row);
+    const action = progress.next.action;
+    if (action !== 'FILE_GRIEVANCE' && action !== 'GO_TO_OMBUDSMAN') continue;
+
+    const key = `insurance_claim:${row.id}:${action}`;
+    const existing = await prisma.alert.findFirst({
+      where: { userId: row.policy.userId, type: 'INSURANCE_CLAIM', metadata: { path: ['key'], equals: key } },
+    });
+    if (existing) continue;
+
+    await prisma.alert.create({
+      data: {
+        userId: row.policy.userId,
+        type: 'INSURANCE_CLAIM',
+        title: `${row.policy.insurer} — ${row.claimType} claim: ${CLAIM_ALERT_TITLE[action]}`,
+        description: progress.next.reason,
+        triggerDate: new Date(),
+        metadata: { key, claimId: row.id, policyId: row.policyId, action },
+      },
+    });
+    created++;
+  }
   return created;
 }

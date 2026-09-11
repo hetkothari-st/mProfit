@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { insuranceApi, type InsurancePolicyDTO } from '@/api/insurance.api';
+import { insurerContactFor } from '@/lib/insurerContacts';
 import {
   FREQUENCY_LABELS,
   LIFE_POLICY_TYPES,
@@ -41,8 +42,9 @@ function SheetEntry({ p }: { p: InsurancePolicyDTO }) {
         })
         .join('; ')
     : 'None recorded';
+  const dirPhone = c.helpline ? null : (insurerContactFor(p.insurer)?.phones[0] ?? null);
   const claim = [
-    c.helpline && `Helpline ${c.helpline}`,
+    c.helpline ? `Helpline ${c.helpline}` : dirPhone && `Customer care ${dirPhone} (from the insurer’s website)`,
     c.claimEmail,
     c.claimUrl,
     c.tpaName && `TPA ${c.tpaName}${c.tpaHelpline ? `, ${c.tpaHelpline}` : ''}`,

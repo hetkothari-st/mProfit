@@ -1301,6 +1301,7 @@ enum AlertType {
   MF_LOCK_IN_EXPIRY
   SIP_DUE
   INSURANCE_PREMIUM
+  INSURANCE_CLAIM
   DIVIDEND_RECEIVED
   CORPORATE_ACTION
   PRICE_TARGET
@@ -1975,6 +1976,27 @@ model InsuranceClaim {
   status        String
   settledOn     DateTime?       @db.Date
   documents     Json?
+
+  // ── Claim tracker (insurance hub phase 2) ──
+  // Which claims guide this follows (shared CLAIM_GUIDES id), e.g. HEALTH_CASHLESS.
+  kind                 String?
+  // The day the insurer had every document it asked for — IRDAI time limits
+  // for some claims run from here.
+  documentsCompletedOn DateTime? @db.Date
+  // General insurance: when a surveyor was appointed (report due 15 days on).
+  surveyorAllocatedOn  DateTime? @db.Date
+  // Guide document ids the user has ticked off: { "<docId>": true }.
+  checklist            Json?
+  // The user's own log of calls and letters: [{ on: "YYYY-MM-DD", note }].
+  timeline             Json?
+  rejectionReason      String?
+  // Escalation: the insurer's grievance cell, then the Insurance Ombudsman.
+  grievanceFiledOn     DateTime? @db.Date
+  grievanceRef         String?
+  ombudsmanFiledOn     DateTime? @db.Date
+  ombudsmanRef         String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @default(now()) @updatedAt
 }
 
 // ─── §4.9 AUDIT LOG + APP SETTINGS ───────────────────────────────

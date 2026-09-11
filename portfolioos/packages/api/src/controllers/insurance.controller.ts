@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import { CLAIM_KINDS } from '@portfolioos/shared';
 import {
   POLICY_TYPES,
   PREMIUM_FREQUENCIES,
@@ -79,6 +80,8 @@ const addPremiumSchema = z.object({
   canonicalEventId: z.string().nullable().optional(),
 });
 
+// Cross-field rules (the guide fits the policy, checklist ids exist, dates in
+// order) are checked in the service.
 const addClaimSchema = z.object({
   claimNumber: z.string().max(100).nullable().optional(),
   claimDate: isoDate,
@@ -88,6 +91,20 @@ const addClaimSchema = z.object({
   settledAmount: moneyString.nullable().optional(),
   settledOn: isoDate.nullable().optional(),
   documents: z.unknown().optional(),
+  kind: z.enum(CLAIM_KINDS).nullable().optional(),
+  documentsCompletedOn: isoDate.nullable().optional(),
+  surveyorAllocatedOn: isoDate.nullable().optional(),
+  checklist: z.record(z.boolean()).nullable().optional(),
+  timeline: z
+    .array(z.object({ on: z.string().max(10), note: z.string().max(500) }))
+    .max(200)
+    .nullable()
+    .optional(),
+  rejectionReason: text(1000),
+  grievanceFiledOn: isoDate.nullable().optional(),
+  grievanceRef: text(100),
+  ombudsmanFiledOn: isoDate.nullable().optional(),
+  ombudsmanRef: text(100),
 });
 
 const updateClaimSchema = addClaimSchema.partial();

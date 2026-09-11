@@ -1,25 +1,17 @@
-import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Car, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Car, Pencil, Trash2 } from 'lucide-react';
 import { formatINR } from '@portfolioos/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
-import {
-  insuranceApi,
-  type AddClaimInput,
-  type AddPremiumInput,
-  type InsuranceClaimDTO,
-  type InsurancePolicyDTO,
-} from '@/api/insurance.api';
+import { insuranceApi, type AddPremiumInput, type InsurancePolicyDTO } from '@/api/insurance.api';
 import { DocumentVault } from '@/components/documents/DocumentVault';
 import { Figure, Guilloche } from '@/components/receipt/Receipt';
 import { CatalogBrief, inferCatalogId } from '@/components/insurance/InsuranceCatalogPicker';
+import { ClaimsSection } from '@/components/insurance/ClaimsSection';
 import { ContactsCard } from '@/components/insurance/ContactsCard';
 import { InsurerLogo } from '@/components/insurance/InsurerLogo';
 import { NomineesCard } from '@/components/insurance/NomineesCard';
@@ -42,16 +34,6 @@ import {
   premiumDueMeta,
   type DueMeta,
 } from '@/lib/insurance';
-
-const MONEY = /^\d+(\.\d+)?$/;
-
-const CLAIM_STATUS_COLORS: Record<string, string> = {
-  SUBMITTED: 'text-blue-500',
-  UNDER_REVIEW: 'text-amber-500',
-  APPROVED: 'text-positive',
-  REJECTED: 'text-negative',
-  SETTLED: 'text-positive',
-};
 
 // ── Hero: the policy as a certificate ─────────────────────────────────
 
@@ -160,189 +142,14 @@ function HealthCoverPanel({ policy }: { policy: InsurancePolicyDTO }) {
   );
 }
 
-// ── Claims ────────────────────────────────────────────────────────────
-
-const CLAIM_STATUSES: AddClaimInput['status'][] = ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'SETTLED'];
-const EMPTY_CLAIM: AddClaimInput = { claimDate: '', claimType: '', claimedAmount: '', status: 'SUBMITTED' };
-
-function AddClaimDialog({
-  policyId,
-  open,
-  onOpenChange,
-}: {
-  policyId: string;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const qc = useQueryClient();
-  const [form, setForm] = useState<AddClaimInput>(EMPTY_CLAIM);
-  const [errors, setErrors] = useState<Partial<Record<keyof AddClaimInput, string>>>({});
-
-  const mutation = useMutation({
-    mutationFn: (input: AddClaimInput) => insuranceApi.addClaim(policyId, input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['insurance-policy', policyId] });
-      toast.success('Claim added');
-      onOpenChange(false);
-      setForm(EMPTY_CLAIM);
-    },
-  });
-
-  function validate(): boolean {
-    const errs: Partial<Record<keyof AddClaimInput, string>> = {};
-    if (!form.claimDate) errs.claimDate = 'Required';
-    if (!form.claimType.trim()) errs.claimType = 'Required';
-    if (!MONEY.test(form.claimedAmount.trim())) errs.claimedAmount = 'Enter an amount, like 100000';
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Add a claim</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label htmlFor="claim-date">Claim date</Label>
-              <Input
-                id="claim-date"
-                type="date"
-                value={form.claimDate}
-                onChange={(e) => setForm((f) => ({ ...f, claimDate: e.target.value }))}
-                className={errors.claimDate ? 'border-negative' : ''}
-              />
-            </div>
-            <div>
-              <Label htmlFor="claim-status">Status</Label>
-              <select
-                id="claim-status"
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.status}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as AddClaimInput['status'] }))}
-              >
-                {CLAIM_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s.replace('_', ' ').toLowerCase()}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="claim-type">What for</Label>
-            <Input
-              id="claim-type"
-              placeholder="Hospitalisation, accident…"
-              value={form.claimType}
-              onChange={(e) => setForm((f) => ({ ...f, claimType: e.target.value }))}
-              className={errors.claimType ? 'border-negative' : ''}
-            />
-          </div>
-          <div>
-            <Label htmlFor="claim-amount">Amount claimed (₹)</Label>
-            <Input
-              id="claim-amount"
-              inputMode="decimal"
-              placeholder="100000"
-              value={form.claimedAmount}
-              onChange={(e) => setForm((f) => ({ ...f, claimedAmount: e.target.value }))}
-              className={errors.claimedAmount ? 'border-negative' : ''}
-            />
-            {errors.claimedAmount && <p className="mt-1 text-xs text-negative">{errors.claimedAmount}</p>}
-          </div>
-          <div>
-            <Label htmlFor="claim-number">Claim number</Label>
-            <Input
-              id="claim-number"
-              placeholder="Optional"
-              value={form.claimNumber ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, claimNumber: e.target.value || null }))}
-            />
-          </div>
-        </div>
-        {mutation.isError && (
-          <p className="text-sm text-negative">{apiErrorMessage(mutation.error, 'Could not add the claim')}</p>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={() => validate() && mutation.mutate(form)} disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : 'Add claim'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ClaimsCard({ claims, policyId, onAdd }: { claims: InsuranceClaimDTO[]; policyId: string; onAdd: () => void }) {
-  const qc = useQueryClient();
-  const remove = useMutation({
-    mutationFn: (id: string) => insuranceApi.removeClaim(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['insurance-policy', policyId] }),
-    onError: (err) => toast.error(apiErrorMessage(err, 'Could not remove the claim')),
-  });
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <CardTitle className="font-display text-xl">Claims</CardTitle>
-        <Button size="sm" variant="outline" onClick={onAdd}>
-          <Plus className="h-3.5 w-3.5" /> Add
-        </Button>
-      </CardHeader>
-      <CardContent>
-        {claims.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No claims recorded.</p>
-        ) : (
-          <ul className="space-y-2">
-            {claims.map((c) => (
-              <li key={c.id} className="flex items-start justify-between gap-2 rounded-md border px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium">{c.claimType}</span>
-                    <span className={`text-xs font-medium ${CLAIM_STATUS_COLORS[c.status] ?? ''}`}>
-                      {c.status.replace('_', ' ').toLowerCase()}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                    <span>{formatDay(c.claimDate)}</span>
-                    <span>Claimed {formatINR(c.claimedAmount, { fractionDigits: 0 })}</span>
-                    {c.settledAmount && <span>Settled {formatINR(c.settledAmount, { fractionDigits: 0 })}</span>}
-                    {c.claimNumber && <span>#{c.claimNumber}</span>}
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="shrink-0 text-muted-foreground hover:text-negative"
-                  onClick={() => remove.mutate(c.id)}
-                  disabled={remove.isPending}
-                  aria-label={`Remove the ${c.claimType} claim`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 // ── Page ──────────────────────────────────────────────────────────────
 
 export function InsuranceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
   const [record, setRecord] = useState<Partial<AddPremiumInput> | null>(null);
-  const [claimOpen, setClaimOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   const { data: policy, isLoading } = useQuery({
@@ -350,6 +157,13 @@ export function InsuranceDetailPage() {
     queryFn: () => insuranceApi.getPolicy(id!),
     enabled: !!id,
   });
+
+  // "/insurance/:id#claims" (from the open-claims list) lands on the claims.
+  useEffect(() => {
+    if (policy && location.hash === '#claims') {
+      document.getElementById('claims')?.scrollIntoView({ block: 'start' });
+    }
+  }, [policy, location.hash]);
 
   const deleteMutation = useMutation({
     mutationFn: () => insuranceApi.deletePolicy(id!),
@@ -438,11 +252,11 @@ export function InsuranceDetailPage() {
         <ContactsCard policy={policy} />
       </div>
 
+      <ClaimsSection policy={policy} />
+
       {policy.type === 'HEALTH' && <HealthCoverPanel policy={policy} />}
 
       <PremiumScheduleCard policy={policy} onRecord={setRecord} />
-
-      <ClaimsCard claims={policy.claims ?? []} policyId={policy.id} onAdd={() => setClaimOpen(true)} />
 
       <DocumentVault
         ownerType="INSURANCE_POLICY"
@@ -457,7 +271,6 @@ export function InsuranceDetailPage() {
         onOpenChange={(v) => !v && setRecord(null)}
         initial={record}
       />
-      <AddClaimDialog policyId={policy.id} open={claimOpen} onOpenChange={setClaimOpen} />
       <PolicyFormDialog open={editOpen} onOpenChange={setEditOpen} initial={policy} />
     </div>
   );

@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { apiErrorMessage } from '@/api/client';
 import { insuranceApi, type AddPremiumInput, type InsurancePolicyDTO } from '@/api/insurance.api';
 import { ComingUpPanel } from '@/components/insurance/ComingUpPanel';
+import { OpenClaimsPanel } from '@/components/insurance/OpenClaimsPanel';
 import { PolicyCard } from '@/components/insurance/PolicyCard';
 import { PolicyFormDialog } from '@/components/insurance/PolicyFormDialog';
 import { RecordPremiumDialog } from '@/components/insurance/RecordPremiumDialog';
@@ -156,6 +157,7 @@ export function InsuranceListPage() {
             policies={list}
             onRecord={(p) => setRecord({ policyId: p.id, initial: nextPremiumPrefill(p) })}
           />
+          <OpenClaimsPanel policies={list} />
 
           {withoutNominee.length > 0 && (
             <div className="flex gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm">

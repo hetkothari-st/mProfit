@@ -5,7 +5,7 @@ import { generateLoanEmiAlerts } from './loans.service.js';
 import { generateCreditCardAlerts } from './creditCards.service.js';
 import { generateRealEstateAlerts } from './realEstateAlerts.js';
 import { generateDepositReminderAlerts } from './depositReminders.service.js';
-import { generateRenewalAlerts } from './insurance.service.js';
+import { generateClaimAlerts, generateRenewalAlerts } from './insurance.service.js';
 
 const EXPIRY_THRESHOLDS = [30, 15, 7, 1] as const;
 
@@ -341,8 +341,9 @@ export async function runAllAlertScans(userId?: string): Promise<{
   realEstate: number;
   deposit: number;
   insurance: number;
+  insuranceClaims: number;
 }> {
-  const [vehicle, rent, poMaturity, loan, creditCard, realEstate, deposit, insurance] = await Promise.all([
+  const [vehicle, rent, poMaturity, loan, creditCard, realEstate, deposit, insurance, insuranceClaims] = await Promise.all([
     generateVehicleExpiryAlerts(userId),
     generateRentOverdueAlerts(userId),
     generatePoMaturityAlerts(userId),
@@ -351,6 +352,7 @@ export async function runAllAlertScans(userId?: string): Promise<{
     generateRealEstateAlerts(userId),
     generateDepositReminderAlerts(userId),
     generateRenewalAlerts(userId),
+    generateClaimAlerts(userId),
   ]);
-  return { vehicle, rent, poMaturity, loan, creditCard, realEstate, deposit, insurance };
+  return { vehicle, rent, poMaturity, loan, creditCard, realEstate, deposit, insurance, insuranceClaims };
 }

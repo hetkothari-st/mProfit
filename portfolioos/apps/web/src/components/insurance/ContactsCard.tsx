@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
 import { insuranceApi, type InsurancePolicyDTO, type PolicyContacts } from '@/api/insurance.api';
+import { formatDay } from '@/lib/insurance';
+import { insurerContactFor, phoneKind, telHref, whatsappHref, type InsurerContact } from '@/lib/insurerContacts';
 
 type Key = keyof PolicyContacts;
 
@@ -136,11 +138,80 @@ function EditContactsDialog({
   );
 }
 
+const PHONE_NOTE = { 'toll-free': 'toll-free', 'shared-cost': 'charges apply', standard: null } as const;
+
+function Phone({ number }: { number: string }) {
+  const note = PHONE_NOTE[phoneKind(number)];
+  return (
+    <span className="whitespace-nowrap">
+      <a href={telHref(number)} className="text-accent hover:underline">
+        {number}
+      </a>
+      {note && <span className="ml-1 text-xs text-muted-foreground">({note})</span>}
+    </span>
+  );
+}
+
+function DirRow({ term, children }: { term: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[8.5rem_1fr] gap-3">
+      <dt className="text-muted-foreground">{term}</dt>
+      <dd className="min-w-0 space-x-2 break-words">{children}</dd>
+    </div>
+  );
+}
+
+/** What the insurer's own website lists, with where and when it was checked. */
+function InsurerDirectory({ dir }: { dir: InsurerContact & { name: string } }) {
+  const link = (href: string, text: string) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="break-all text-accent hover:underline">
+      {text}
+    </a>
+  );
+  return (
+    <div className="space-y-2.5">
+      <p className="text-xs text-muted-foreground">From {dir.name}’s website</p>
+      <dl className="space-y-2 text-sm">
+        <DirRow term="Customer care">
+          {dir.phones.map((n) => (
+            <Phone key={n} number={n} />
+          ))}
+        </DirRow>
+        {dir.claimsPhones.map((c) => (
+          <DirRow key={c.label} term={c.label}>
+            {c.numbers.map((n) => (
+              <Phone key={n} number={n} />
+            ))}
+          </DirRow>
+        ))}
+        {dir.whatsapp && <DirRow term="WhatsApp">{link(whatsappHref(dir.whatsapp), dir.whatsapp)}</DirRow>}
+        {dir.claimsEmail && <DirRow term="Claims email">{link(`mailto:${dir.claimsEmail}`, dir.claimsEmail)}</DirRow>}
+        {dir.email && <DirRow term="Email">{link(`mailto:${dir.email}`, dir.email)}</DirRow>}
+        {dir.claimUrl && <DirRow term="Claim online">{link(dir.claimUrl, 'Claims page')}</DirRow>}
+        {(dir.grievanceUrl || dir.grievanceEmail) && (
+          <DirRow term="Complaints">
+            {dir.grievanceUrl && link(dir.grievanceUrl, 'Grievance page')}
+            {dir.grievanceEmail && link(`mailto:${dir.grievanceEmail}`, dir.grievanceEmail)}
+          </DirRow>
+        )}
+      </dl>
+      <p className="text-xs text-muted-foreground">
+        Checked on{' '}
+        <a href={dir.source} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+          their site
+        </a>{' '}
+        on {formatDay(dir.checkedOn)}. Numbers change — your policy document has the one for your policy.
+      </p>
+    </div>
+  );
+}
+
 /** The numbers someone needs in the moment they have to claim. */
 export function ContactsCard({ policy }: { policy: InsurancePolicyDTO }) {
   const [open, setOpen] = useState(false);
   const c = policy.contacts ?? {};
   const filled = FIELDS.filter((f) => c[f.key]);
+  const dir = insurerContactFor(policy.insurer);
 
   return (
     <Card>
@@ -154,7 +225,9 @@ export function ContactsCard({ policy }: { policy: InsurancePolicyDTO }) {
       <CardContent>
         {filled.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Add the claim helpline and your agent’s number, so no one has to hunt for them on a bad day.
+            {dir
+              ? 'Add your agent’s number and anything your policy lists for claims.'
+              : 'Add the claim helpline and your agent’s number, so no one has to hunt for them on a bad day.'}
           </p>
         ) : (
           <dl className="space-y-2.5 text-sm">
@@ -167,6 +240,11 @@ export function ContactsCard({ policy }: { policy: InsurancePolicyDTO }) {
               </div>
             ))}
           </dl>
+        )}
+        {dir && (
+          <div className="mt-4 border-t pt-4">
+            <InsurerDirectory dir={dir} />
+          </div>
         )}
       </CardContent>
       <EditContactsDialog policy={policy} open={open} onOpenChange={setOpen} />

@@ -1,5 +1,5 @@
 import { api, unwrap } from './client';
-import type { ApiResponse, NextPremiumDue } from '@portfolioos/shared';
+import type { ApiResponse, ClaimKind, ClaimProgress, NextPremiumDue } from '@portfolioos/shared';
 
 // ── DTOs ─────────────────────────────────────────────────────────────
 
@@ -13,6 +13,12 @@ export interface PremiumPaymentDTO {
   canonicalEventId: string | null;
 }
 
+/** One line in the claim's own log: a call, a letter, a visit. */
+export interface ClaimLogEntry {
+  on: string;
+  note: string;
+}
+
 export interface InsuranceClaimDTO {
   id: string;
   policyId: string;
@@ -24,6 +30,22 @@ export interface InsuranceClaimDTO {
   status: 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'SETTLED';
   settledOn: string | null;
   documents: unknown;
+  /** Claims guide it follows; null for "something else". */
+  kind: ClaimKind | null;
+  documentsCompletedOn: string | null;
+  surveyorAllocatedOn: string | null;
+  /** Guide document ids ticked off. */
+  checklist: Record<string, true> | null;
+  timeline: ClaimLogEntry[] | null;
+  rejectionReason: string | null;
+  grievanceFiledOn: string | null;
+  grievanceRef: string | null;
+  ombudsmanFiledOn: string | null;
+  ombudsmanRef: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Where it stands and what to do next, worked out by the server. */
+  progress: ClaimProgress;
 }
 
 export interface Nominee {
@@ -135,6 +157,16 @@ export interface AddClaimInput {
   settledAmount?: string | null;
   settledOn?: string | null;
   documents?: unknown;
+  kind?: ClaimKind | null;
+  documentsCompletedOn?: string | null;
+  surveyorAllocatedOn?: string | null;
+  checklist?: Record<string, boolean> | null;
+  timeline?: ClaimLogEntry[] | null;
+  rejectionReason?: string | null;
+  grievanceFiledOn?: string | null;
+  grievanceRef?: string | null;
+  ombudsmanFiledOn?: string | null;
+  ombudsmanRef?: string | null;
 }
 
 export type UpdateClaimInput = Partial<AddClaimInput>;
