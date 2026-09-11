@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { formatINR } from '@everypaisa/shared';
 import { LockedFeature } from '@/components/common/LockedFeature';
+import { TallyExportButton } from '@/components/tally/TallyExportButton';
 import {
   accountingApi,
   type AccountNode,
@@ -791,7 +792,12 @@ export function AccountingPage() {
       <PageHeader
         title="Accounting"
         description="Double-entry bookkeeping — chart of accounts, vouchers, ledger, and financial statements"
-        actions={<BookOpenCheck className="h-5 w-5 text-muted-foreground" />}
+        actions={
+          <div className="flex items-center gap-3">
+            <TallyExportButton />
+            <BookOpenCheck className="h-5 w-5 text-muted-foreground" />
+          </div>
+        }
       />
       <LockedFeature requiredTier="PRO_ADVISOR" featureName="Accounting Module">
         <Tabs defaultValue="chart">

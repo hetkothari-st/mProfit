@@ -190,17 +190,6 @@ function isParensNegative(s: string): boolean {
   return s.startsWith('(') && s.endsWith(')');
 }
 
-// ─── Raw-XML streamer (Tally export) ────────────────────────────
-// Tally XML isn't a banded PDF/Excel report — it bypasses MprofitLayout
-// entirely (see services/reportBuilder/tally/). Same two-line
-// header-then-write shape as the PDF/Excel streamers above, just with a
-// plain XML string body instead of a pdfkit/exceljs document.
-export function streamTallyXml(res: Response, xml: string, filenameStem: string): void {
-  res.setHeader('Content-Type', 'text/xml');
-  res.setHeader('Content-Disposition', `attachment; filename="${filenameStem}.xml"`);
-  res.send(xml);
-}
-
 // ─── PDF renderer ────────────────────────────────────────────────
 
 const PDF_FONT = 'Helvetica';

@@ -74,7 +74,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
     }
   }
 
-  async function download(report: ReportDef, format: 'pdf' | 'xlsx' | 'xml') {
+  async function download(report: ReportDef, format: 'pdf' | 'xlsx' | 'xml' | 'zip') {
     setBusy(`${report.key}-${format}`);
     try {
       const params = new URLSearchParams({ format, clientId, theme: currentReportTheme() });
@@ -90,7 +90,8 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `${report.filename}-${fy}.${format}`;
+      // A ZIP spans every year, so it is not named after the selected one.
+      a.download = format === 'zip' ? `${report.filename}.zip` : `${report.filename}-${fy}.${format}`;
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {

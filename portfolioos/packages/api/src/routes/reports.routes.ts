@@ -67,8 +67,7 @@ import {
   downloadBankReconciliation,
   downloadProvidentFund,
   downloadFyBundle,
-  downloadTallyMasters,
-  downloadTallyVouchers,
+  downloadTallyExport,
 } from '../controllers/reports.controller.js';
 
 export const reportsRouter = Router();
@@ -166,5 +165,6 @@ reportsRouter.get('/download/portfolio-snapshot', gateTax, asyncHandler(download
 reportsRouter.get('/download/day-book', gateTax, asyncHandler(downloadDayBook));
 reportsRouter.get('/download/dividend-report', gateTax, asyncHandler(downloadDividendReport));
 reportsRouter.get('/download/bank-reconciliation', gateTax, asyncHandler(downloadBankReconciliation));
-reportsRouter.get('/download/tally-masters', gateAccounting, asyncHandler(downloadTallyMasters));
-reportsRouter.get('/download/tally-vouchers', gateAccounting, asyncHandler(downloadTallyVouchers));
+// Everything, as one ZIP ready for Tally: masters, one transactions file per
+// financial year, holdings at each year end, and an import guide.
+reportsRouter.get('/download/tally-export', gateAccounting, asyncHandler(downloadTallyExport));

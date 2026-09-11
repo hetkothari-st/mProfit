@@ -22,8 +22,6 @@
  * buffers.
  */
 
-import { PassThrough } from 'node:stream';
-import type { Response } from 'express';
 import { financialYearRange } from '@everypaisa/shared';
 import { logger } from '../../lib/logger.js';
 import {
@@ -36,26 +34,12 @@ import { buildCapitalGainsStatement } from '../reportBuilder/statement/capitalGa
 import { buildIncomeStatement } from '../reportBuilder/statement/income.js';
 import { buildLedgerStatement } from '../reportBuilder/statement/ledger.js';
 import { buildProvidentFundStatement } from '../reportBuilder/statement/providentFund.js';
-import {
-  buildTallyMastersXml,
-  buildTallyVouchersXml,
-} from '../reportBuilder/tally/tallyExport.service.js';
-
-/** Collect what a `res`-writing renderer produces. */
-async function renderToBuffer(
-  write: (sink: Response) => Promise<void>,
-): Promise<Buffer> {
-  const sink = new PassThrough();
-  const chunks: Buffer[] = [];
-  sink.on('data', (c: Buffer) => chunks.push(c));
-
-  // The renderers set Content-Type and Content-Disposition, which mean nothing
-  // for a file going into a zip.
-  (sink as unknown as { setHeader: () => void }).setHeader = () => undefined;
-
-  await write(sink as unknown as Response);
-  return Buffer.concat(chunks);
-}
+import { renderToBuffer } from './renderToBuffer.js';
+import type { TallyBook } from '../tally/tallyBook.js';
+import { TallyExportBlockedError } from '../tally/tallyPackage.js';
+import { validateTallyBook } from '../tally/tallyValidate.js';
+import { renderMastersXml, renderVouchersXml } from '../tally/tallyXml.js';
+import { buildUserTallyBook } from '../tally/tallyZip.service.js';
 
 interface BundlePart {
   name: string;
@@ -83,6 +67,16 @@ export async function buildFyBundle(
   const xlsx = (payload: ExportPayload) =>
     renderToBuffer((sink) => streamExcel(sink, { ...payload, theme }));
 
+  // One Tally book for both Tally files. A book that would break a Tally rule
+  // fails both parts, so the bundle says so instead of carrying a bad file.
+  let tallyBookPromise: Promise<TallyBook> | undefined;
+  const tallyBook = () =>
+    (tallyBookPromise ??= buildUserTallyBook(userId).then((book) => {
+      const problems = validateTallyBook(book);
+      if (problems.length > 0) throw new TallyExportBlockedError(problems);
+      return book;
+    }));
+
   const parts: BundlePart[] = [
     {
       name: `holdings-${fy}.xlsx`,
@@ -109,12 +103,12 @@ export async function buildFyBundle(
         xlsx(await buildProvidentFundStatement({ userId, from: fromDate, to: toDate })),
     },
     {
-      name: `tally-masters-${fy}.xml`,
-      produce: async () => (await buildTallyMastersXml(userId)).xml,
+      name: 'Tally - 1 Masters.xml',
+      produce: async () => renderMastersXml(await tallyBook()),
     },
     {
-      name: `tally-vouchers-${fy}.xml`,
-      produce: async () => (await buildTallyVouchersXml(userId, { from, to })).xml,
+      name: `Tally - 2 Transactions FY${fy}.xml`,
+      produce: async () => renderVouchersXml((await tallyBook()).years.find((y) => y.fy === fy)?.vouchers ?? []),
     },
   ];
 

@@ -31,8 +31,7 @@ const ACCOUNTING_REPORT_KEYS = new Set([
   'profit-loss',
   'balance-sheet',
   'chart-of-accounts',
-  'tally-masters',
-  'tally-vouchers',
+  'tally-export',
 ]);
 const FREE_REPORT_KEYS = new Set(['holdings-summary', 'cash-flow']);
 
@@ -52,7 +51,7 @@ export interface ReportDef {
   params: Param[]; // params this report accepts
   filename: string;
   /** Which download buttons render for this card. Defaults to ['pdf', 'xlsx']. */
-  formats?: Array<'pdf' | 'xlsx' | 'xml'>;
+  formats?: Array<'pdf' | 'xlsx' | 'xml' | 'zip'>;
 }
 
 export interface ReportHighlight {
@@ -431,24 +430,14 @@ export const REPORTS: ReportDef[] = [
     filename: 'bank-reconciliation',
   },
   {
-    key: 'tally-masters',
-    title: 'Tally Import — Chart of Accounts (Masters)',
+    key: 'tally-export',
+    title: 'Export to Tally',
     description:
-      'Ledgers and groups, ready to import into Tally via Gateway of Tally → Import Data. Import this before Vouchers so opening balances and custom accounts are in place first.',
-    endpoint: 'tally-masters',
+      'Your complete books as one ZIP for TallyPrime: groups and ledgers (one per bank account, loan, card and holding), vouchers split by financial year, holdings at each year end, and a step-by-step import guide. Checked against Tally’s import rules before it downloads.',
+    endpoint: 'tally-export',
     params: [],
-    filename: 'tally-masters',
-    formats: ['xml'],
-  },
-  {
-    key: 'tally-vouchers',
-    title: 'Tally Import — Vouchers',
-    description:
-      'Purchase, Sales, Payment, Receipt, Contra and Journal vouchers, ready to import into Tally. Self-contained (embeds the ledgers each voucher needs), but import Masters first for complete opening balances. If a same-named ledger already exists in the destination Tally company, Tally applies its own default duplicate-handling (combine/prompt) — built to Tally/TallyPrime’s documented XML import format; do a small trial import in your own Tally company before relying on this for real bookkeeping.',
-    endpoint: 'tally-vouchers',
-    params: ['from', 'to'],
-    filename: 'tally-vouchers',
-    formats: ['xml'],
+    filename: 'tally-export',
+    formats: ['zip'],
   },
 ];
 
@@ -558,7 +547,7 @@ export function TaxMisDownloads({
     return () => clearTimeout(t);
   }, [highlight]);
 
-  async function download(report: ReportDef, format: 'pdf' | 'xlsx' | 'xml') {
+  async function download(report: ReportDef, format: 'pdf' | 'xlsx' | 'xml' | 'zip') {
     if (!accessToken) {
       alert('Not signed in');
       return;
@@ -579,7 +568,9 @@ export function TaxMisDownloads({
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `${report.filename}-${fy}${reportSubject.filenameSuffix}.${format}`;
+      // A ZIP spans every year, so it is not named after the selected one.
+      const stem = format === 'zip' ? report.filename : `${report.filename}-${fy}`;
+      a.download = `${stem}${reportSubject.filenameSuffix}.${format}`;
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {

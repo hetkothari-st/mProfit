@@ -964,10 +964,10 @@ import {
 import {
   streamMprofitPdf,
   streamMprofitExcel,
-  streamTallyXml,
   type MprofitLayout,
 } from '../services/reportBuilder/mprofitStyle.js';
-import { buildTallyMastersXml, buildTallyVouchersXml } from '../services/reportBuilder/tally/tallyExport.service.js';
+import { TallyExportBlockedError } from '../services/tally/tallyPackage.js';
+import { buildTallyZip } from '../services/tally/tallyZip.service.js';
 import {
   resolveReportSubjects,
   buildLayoutForSubjects,
@@ -1282,42 +1282,41 @@ export async function downloadBankReconciliation(req: Request, res: Response) {
   });
 }
 
-// ─── Tally XML export — file download only, no live ODBC/HTTP push ──
-// See services/reportBuilder/tally/. XML-only format: bypasses
-// emitMprofit/MprofitLayout entirely (not a banded report).
+// ─── Tally export — one ZIP, file download only (no live push) ──
+// See services/tally/. Not a banded report: bypasses emitMprofit.
 
 /**
- * Tally exports stream XML rather than going through `emitMprofit`, which is
- * how they escaped the subject rewrite that made the other forty-odd downloads
- * `?subject=`-aware: the transformation matched on the emitter these do not
- * use. Until now Tally could only ever be your own books — backwards for the
- * one artefact most likely to be pulled on someone else's behalf, since it is
- * how a ledger leaves this app and enters accounting software.
+ * "Export to Tally": the whole record as one ZIP — masters, one transactions
+ * file per financial year, holdings at each year end, and an import guide —
+ * built straight from the user's records (services/tally/) and checked
+ * against Tally's import rules before it is sent.
  *
- * `requireSingleSubject` because a Tally company file describes one set of
- * books. A merged one is not a company file for anybody, the same reason a
- * combined Schedule 112A is not a filing.
+ * Subject-aware, and `requireSingleSubject` because a Tally company file
+ * describes one set of books. A merged one is not a company file for anybody,
+ * the same reason a combined Schedule 112A is not a filing.
+ *
+ * A book that would break a Tally rule is refused with the list of problems:
+ * handing over a file Tally will partly reject is exactly what this must not do.
  */
-export async function downloadTallyMasters(req: Request, res: Response) {
+export async function downloadTallyExport(req: Request, res: Response) {
   const resolved = await resolveReportSubjects(req);
-  const userId = requireSingleSubject(resolved, 'The Tally masters export').userId;
-  await runForSubject(resolved.via, userId, async () => {
-    await ensureAccountingProjected(req, userId);
-    const { xml, filenameStem } = await buildTallyMastersXml(userId);
-    streamTallyXml(res, xml, filenameStem);
-  });
-}
+  const subject = requireSingleSubject(resolved, 'The Tally export');
 
-export async function downloadTallyVouchers(req: Request, res: Response) {
-  const resolved = await resolveReportSubjects(req);
-  const userId = requireSingleSubject(resolved, 'The Tally vouchers export').userId;
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await runForSubject(resolved.via, userId, async () => {
-    await ensureAccountingProjected(req, userId);
-    const { xml, filenameStem } = await buildTallyVouchersXml(userId, { from, to });
-    streamTallyXml(res, xml, filenameStem);
-  });
+  let result: Awaited<ReturnType<typeof buildTallyZip>>;
+  try {
+    result = await runForSubject(resolved.via, subject.userId, () => buildTallyZip(subject.userId));
+  } catch (err) {
+    if (err instanceof TallyExportBlockedError) throw new BadRequestError(err.message);
+    throw err;
+  }
+
+  const stem = subject.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${stem || 'everypaisa'}-tally-export.zip"`);
+  // Surfaced in a header too, so a caller can tell there are notes to read
+  // without unzipping the guide.
+  res.setHeader('X-Tally-Notes', String(result.book.issues.length));
+  res.send(result.zip);
 }
 
 /**
