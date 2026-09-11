@@ -3,7 +3,7 @@
  * "coming up" list, the policy page and the emergency sheet all describe a
  * premium the same way.
  */
-import { addMonthsIso, PREMIUM_FREQUENCY_MONTHS } from '@portfolioos/shared';
+import { addMonthsIso, canHaveCriticalIllness, formatINR, PREMIUM_FREQUENCY_MONTHS } from '@portfolioos/shared';
 import type { InsurancePolicyDTO } from '@/api/insurance.api';
 
 export const POLICY_TYPE_LABELS: Record<string, string> = {
@@ -74,6 +74,26 @@ export function policyTypeLabel(type: string): string {
 /** "Star Health — Health" when there's no plan name. */
 export function policyTitle(p: Pick<InsurancePolicyDTO, 'planName' | 'type'>): string {
   return p.planName?.trim() || `${policyTypeLabel(p.type)} policy`;
+}
+
+/**
+ * Whether a policy includes critical illness cover, in words — null for cover
+ * that never includes it (motor, home, travel).
+ */
+export function criticalIllnessMeta(
+  p: Pick<InsurancePolicyDTO, 'type' | 'criticalIllnessCover' | 'criticalIllnessSumAssured'>,
+): { tone: Tone; label: string } | null {
+  if (!canHaveCriticalIllness(p.type)) return null;
+  if (p.criticalIllnessCover === true) {
+    return {
+      tone: 'ok',
+      label: p.criticalIllnessSumAssured
+        ? `${formatINR(p.criticalIllnessSumAssured, { compact: true })} critical illness cover`
+        : 'Critical illness covered',
+    };
+  }
+  if (p.criticalIllnessCover === false) return { tone: 'warn', label: 'No critical illness cover' };
+  return { tone: 'neutral', label: 'Critical illness: not recorded' };
 }
 
 /** "2026-10-01" or a full ISO timestamp → "1 Oct 2026". */

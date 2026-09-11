@@ -53,6 +53,8 @@ function policy(over: Record<string, unknown> = {}) {
     seniorCitizen: null,
     surrenderValue: null,
     surrenderValueAsOf: null,
+    criticalIllnessCover: null,
+    criticalIllnessSumAssured: null,
     status: 'ACTIVE',
     ...over,
   };
@@ -301,5 +303,48 @@ describe('policy tax and surrender fields', () => {
     const dto = toPolicyDto(policy({ surrenderValue: new Prisma.Decimal('180000.50'), surrenderValueAsOf: day('2026-09-01') }));
     expect(dto.surrenderValue).toBe('180000.5');
     expect(toPolicyDto(policy()).surrenderValue).toBeNull();
+  });
+});
+
+describe('critical illness cover', () => {
+  it('records cover and its amount on a life policy', async () => {
+    db.insurancePolicy.findFirst.mockResolvedValue(policy({ type: 'TERM' }));
+    await updatePolicy('u1', 'pol1', { criticalIllnessCover: true, criticalIllnessSumAssured: '1000000' });
+    const data = db.insurancePolicy.update.mock.calls[0]![0].data;
+    expect(data.criticalIllnessCover).toBe(true);
+    expect(data.criticalIllnessSumAssured.toString()).toBe('1000000');
+  });
+
+  it('takes an amount on its own to mean the policy has cover', async () => {
+    db.insurancePolicy.findFirst.mockResolvedValue(policy({ type: 'HEALTH' }));
+    await updatePolicy('u1', 'pol1', { criticalIllnessSumAssured: '500000' });
+    expect(db.insurancePolicy.update.mock.calls[0]![0].data.criticalIllnessCover).toBe(true);
+  });
+
+  it('clears the amount when the policy has no cover', async () => {
+    await updatePolicy('u1', 'pol1', { criticalIllnessCover: false });
+    expect(db.insurancePolicy.update.mock.calls[0]![0].data).toMatchObject({
+      criticalIllnessCover: false,
+      criticalIllnessSumAssured: null,
+    });
+  });
+
+  it('refuses an amount alongside "no cover"', async () => {
+    await expect(
+      updatePolicy('u1', 'pol1', { criticalIllnessCover: false, criticalIllnessSumAssured: '100000' }),
+    ).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it('keeps it off motor, home and travel policies, but lets them clear it', async () => {
+    db.insurancePolicy.findFirst.mockResolvedValue(policy({ type: 'MOTOR' }));
+    await expect(updatePolicy('u1', 'pol1', { criticalIllnessCover: true })).rejects.toBeInstanceOf(BadRequestError);
+    await updatePolicy('u1', 'pol1', { criticalIllnessCover: null, criticalIllnessSumAssured: null });
+    expect(db.insurancePolicy.update).toHaveBeenCalled();
+  });
+
+  it('sends the amount as a string', () => {
+    const dto = toPolicyDto(policy({ criticalIllnessCover: true, criticalIllnessSumAssured: new Prisma.Decimal('1000000') }));
+    expect(dto.criticalIllnessSumAssured).toBe('1000000');
+    expect(toPolicyDto(policy()).criticalIllnessSumAssured).toBeNull();
   });
 });

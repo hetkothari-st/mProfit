@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { FileText, Trash2, Upload as UploadIcon } from 'lucide-react';
-import { defaultGraceDays } from '@portfolioos/shared';
+import { canHaveCriticalIllness, defaultGraceDays } from '@portfolioos/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,9 @@ interface FormState {
   maturityDate: string;
   nextPremiumDue: string;
   gracePeriodDays: string;
+  /** '' = not recorded. */
+  criticalIllness: '' | 'YES' | 'NO';
+  criticalIllnessSumAssured: string;
 }
 
 /** API dates are full ISO timestamps; <input type="date"> wants YYYY-MM-DD. */
@@ -55,6 +58,8 @@ function formFrom(p: InsurancePolicyDTO | null | undefined): FormState {
     maturityDate: day(p?.maturityDate),
     nextPremiumDue: day(p?.nextPremiumDue),
     gracePeriodDays: p?.gracePeriodDays != null ? String(p.gracePeriodDays) : '',
+    criticalIllness: p?.criticalIllnessCover === true ? 'YES' : p?.criticalIllnessCover === false ? 'NO' : '',
+    criticalIllnessSumAssured: p?.criticalIllnessSumAssured ?? '',
   };
 }
 
@@ -136,6 +141,10 @@ export function PolicyFormDialog({
     if (grace && !(/^\d{1,2}$/.test(grace) && Number.parseInt(grace, 10) <= 90)) {
       errs.gracePeriodDays = 'Days, from 0 to 90';
     }
+    const ciSum = form.criticalIllnessSumAssured.trim();
+    if (form.criticalIllness === 'YES' && ciSum && !MONEY.test(ciSum)) {
+      errs.criticalIllnessSumAssured = 'Enter an amount, like 1000000';
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -155,6 +164,11 @@ export function PolicyFormDialog({
       maturityDate: form.maturityDate || null,
       gracePeriodDays: grace ? Number.parseInt(grace, 10) : null,
     };
+    // Motor, home and travel cover never includes critical illness: clear it.
+    const ciApplies = canHaveCriticalIllness(form.type);
+    input.criticalIllnessCover = ciApplies && form.criticalIllness ? form.criticalIllness === 'YES' : null;
+    input.criticalIllnessSumAssured =
+      ciApplies && form.criticalIllness === 'YES' ? form.criticalIllnessSumAssured.trim() || null : null;
     // Blank on edit keeps the saved number.
     if (form.policyNumber.trim()) input.policyNumber = form.policyNumber.trim();
     // The next due date also decides which earlier premiums count as settled,
@@ -316,6 +330,36 @@ export function PolicyFormDialog({
                 <p className="mt-1 text-xs text-muted-foreground">
                   Time to pay a missed premium before the policy lapses. Leave blank for the usual.
                 </p>
+              )}
+            </div>
+          )}
+
+          {canHaveCriticalIllness(form.type) && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="policy-criticalIllness">Critical illness cover</Label>
+                <select
+                  id="policy-criticalIllness"
+                  className={SELECT}
+                  value={form.criticalIllness}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, criticalIllness: e.target.value as FormState['criticalIllness'] }))
+                  }
+                >
+                  <option value="">Not recorded</option>
+                  <option value="YES">Yes — included or added as a rider</option>
+                  <option value="NO">No</option>
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  A lump sum if you’re diagnosed with a listed illness. Your policy schedule says if you have it.
+                </p>
+              </div>
+              {form.criticalIllness === 'YES' && (
+                <div>
+                  <Label htmlFor="policy-criticalIllnessSumAssured">Critical illness cover (₹)</Label>
+                  <Input inputMode="decimal" placeholder="Optional, like 1000000" {...field('criticalIllnessSumAssured')} />
+                  {error('criticalIllnessSumAssured')}
+                </div>
               )}
             </div>
           )}

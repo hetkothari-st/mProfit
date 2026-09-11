@@ -141,6 +141,9 @@ export interface InsurancePolicyDTO {
   /** Savings policies: the surrender value the insurer quoted. */
   surrenderValue?: string | null;
   surrenderValueAsOf?: string | null;
+  /** Includes critical illness cover; null = not recorded. */
+  criticalIllnessCover?: boolean | null;
+  criticalIllnessSumAssured?: string | null;
   status: string;
   createdAt: string;
   premiumHistory?: PremiumPaymentDTO[];
@@ -173,6 +176,9 @@ export interface CreatePolicyInput {
   surrenderValue?: string | null;
   /** Defaults to today on the server when a value is given. */
   surrenderValueAsOf?: string | null;
+  /** Includes critical illness cover; null = not recorded. */
+  criticalIllnessCover?: boolean | null;
+  criticalIllnessSumAssured?: string | null;
 }
 
 /** Leave `policyNumber` out to keep the saved one. */

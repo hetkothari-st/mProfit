@@ -78,6 +78,8 @@ const createPolicySchema = z.object({
   seniorCitizen: z.boolean().nullable().optional(),
   surrenderValue: moneyString.nullable().optional(),
   surrenderValueAsOf: isoDate.nullable().optional(),
+  criticalIllnessCover: z.boolean().nullable().optional(),
+  criticalIllnessSumAssured: moneyString.nullable().optional(),
 });
 
 // On update the number is optional: leave it out to keep the saved one.

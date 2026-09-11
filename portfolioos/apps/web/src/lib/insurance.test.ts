@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { NextPremiumDue } from '@portfolioos/shared';
-import { needsNominee, nextPremiumPrefill, plural, premiumDueMeta, urgencyRank } from './insurance';
+import { criticalIllnessMeta, needsNominee, nextPremiumPrefill, plural, premiumDueMeta, urgencyRank } from './insurance';
 
 const due = (d: Partial<NextPremiumDue>): NextPremiumDue => ({
   dueDate: null,
@@ -93,6 +93,33 @@ describe('nextPremiumPrefill', () => {
         '2026-09-11',
       ),
     ).toEqual({ paidOn: '2026-09-11', amount: '6000', periodFrom: '2026-10-01', periodTo: '2027-01-01' });
+  });
+});
+
+describe('criticalIllnessMeta', () => {
+  it('says how much critical illness cover a policy has', () => {
+    expect(
+      criticalIllnessMeta({ type: 'TERM', criticalIllnessCover: true, criticalIllnessSumAssured: '1000000' }),
+    ).toEqual({ tone: 'ok', label: '₹10 L critical illness cover' });
+    expect(criticalIllnessMeta({ type: 'HEALTH', criticalIllnessCover: true, criticalIllnessSumAssured: null })).toEqual({
+      tone: 'ok',
+      label: 'Critical illness covered',
+    });
+  });
+
+  it('says plainly when there is none, or it isn’t recorded', () => {
+    expect(criticalIllnessMeta({ type: 'TERM', criticalIllnessCover: false, criticalIllnessSumAssured: null })).toEqual({
+      tone: 'warn',
+      label: 'No critical illness cover',
+    });
+    expect(criticalIllnessMeta({ type: 'ENDOWMENT', criticalIllnessCover: null, criticalIllnessSumAssured: null })).toEqual({
+      tone: 'neutral',
+      label: 'Critical illness: not recorded',
+    });
+  });
+
+  it('stays silent for cover that never includes it', () => {
+    expect(criticalIllnessMeta({ type: 'MOTOR', criticalIllnessCover: null, criticalIllnessSumAssured: null })).toBeNull();
   });
 });
 

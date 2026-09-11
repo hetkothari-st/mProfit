@@ -37,6 +37,7 @@ import {
   claimProgress,
   isClaimKind,
   hasSurrenderValue,
+  canHaveCriticalIllness,
   type ClaimGuide,
   type NextPremiumDue,
   type TaxBucket,
@@ -160,6 +161,10 @@ export interface CreatePolicyInput {
   surrenderValue?: string | null;
   /** When it was quoted; defaults to today when a value is given. */
   surrenderValueAsOf?: string | null;
+  /** Life, health and accident policies: includes critical illness cover (null = not recorded). */
+  criticalIllnessCover?: boolean | null;
+  /** How much that cover pays; giving an amount implies the cover. */
+  criticalIllnessSumAssured?: string | null;
 }
 
 export type UpdatePolicyInput = Partial<CreatePolicyInput>;
@@ -324,6 +329,8 @@ function extrasColumns(type: string, input: UpdatePolicyInput) {
     seniorCitizen?: boolean | null;
     surrenderValue?: Prisma.Decimal | null;
     surrenderValueAsOf?: Date | null;
+    criticalIllnessCover?: boolean | null;
+    criticalIllnessSumAssured?: Prisma.Decimal | null;
   } = {};
 
   if ((input.taxBucket || input.seniorCitizen === true) && type !== 'HEALTH') {
@@ -342,6 +349,25 @@ function extrasColumns(type: string, input: UpdatePolicyInput) {
     out.surrenderValueAsOf = input.surrenderValue ? toDate(asOf ?? todayIso()) : null;
   } else if (input.surrenderValueAsOf !== undefined) {
     out.surrenderValueAsOf = asOf ? toDate(asOf) : null;
+  }
+
+  // Critical illness: null always clears it; a yes/no or an amount only on
+  // cover that can include it. An amount means there's cover.
+  const ciSum = input.criticalIllnessSumAssured;
+  if ((input.criticalIllnessCover != null || ciSum) && !canHaveCriticalIllness(type)) {
+    throw new BadRequestError('Only life, health and accident policies include critical illness cover');
+  }
+  if (input.criticalIllnessCover === false && ciSum) {
+    throw new BadRequestError('Leave the critical illness amount empty if the policy has no such cover');
+  }
+  if (ciSum) {
+    out.criticalIllnessCover = true;
+    out.criticalIllnessSumAssured = new Prisma.Decimal(ciSum);
+  } else {
+    if (input.criticalIllnessCover !== undefined) out.criticalIllnessCover = input.criticalIllnessCover;
+    if (ciSum !== undefined || input.criticalIllnessCover === false || input.criticalIllnessCover === null) {
+      out.criticalIllnessSumAssured = null;
+    }
   }
   return out;
 }
@@ -412,7 +438,11 @@ interface StoredPolicyNumber {
  */
 export function toPolicyDto<
   T extends StoredPolicyNumber &
-    Partial<ScheduleFields> & { nextPremiumDue?: Date | null; surrenderValue?: { toString(): string } | null },
+    Partial<ScheduleFields> & {
+      nextPremiumDue?: Date | null;
+      surrenderValue?: { toString(): string } | null;
+      criticalIllnessSumAssured?: { toString(): string } | null;
+    },
 >(row: T) {
   const { policyNumber, policyNumberEnc, policyNumberHash: _hash, ...rest } = row;
   const last4 = row.policyNumberLast4 ?? (policyNumber ? normalizePolicyNumber(policyNumber).slice(-4) : null);
@@ -427,6 +457,7 @@ export function toPolicyDto<
     graceDays,
     premiumDue: premiumDueOn(isoOf(row.nextPremiumDue), { today: todayIso(), graceDays }),
     surrenderValue: row.surrenderValue != null ? row.surrenderValue.toString() : null,
+    criticalIllnessSumAssured: row.criticalIllnessSumAssured != null ? row.criticalIllnessSumAssured.toString() : null,
   };
 }
 

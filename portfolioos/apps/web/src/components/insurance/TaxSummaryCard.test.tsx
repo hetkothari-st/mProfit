@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { buildTaxSummary, type TaxPolicyInput } from '@portfolioos/shared';
@@ -35,7 +35,7 @@ const payments = [
   { policyId: 'h1', paidOn: '2026-07-01', amount: '30000', periodFrom: '2026-07-01', periodTo: '2027-07-01' },
 ];
 
-function renderCard() {
+function renderCard({ expand = true } = {}) {
   api.taxSummary.mockImplementation(async (fy: string) => buildTaxSummary(fy, policies, payments));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -43,9 +43,42 @@ function renderCard() {
       <TaxSummaryCard today="2026-09-11" />
     </QueryClientProvider>,
   );
+  // Starts folded; most tests look inside.
+  if (expand) fireEvent.click(screen.getByRole('button', { name: /tax on your premiums/i }));
 }
 
+describe('TaxSummaryCard folding', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('starts folded, with the year’s total in one line', async () => {
+    renderCard({ expand: false });
+    const toggle = screen.getByRole('button', { name: /tax on your premiums/i });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    // ₹30,000 life (capped at 10% of cover). The health policy doesn't count
+    // until the user says who it covers.
+    expect(await screen.findByText(/You can claim ₹30,000 in FY 2026-27/)).toBeTruthy();
+    expect(screen.queryByText('Only if you choose the old regime.')).toBeNull();
+  });
+
+  it('opens and closes, and remembers which', async () => {
+    renderCard({ expand: false });
+    const toggle = screen.getByRole('button', { name: /tax on your premiums/i });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(await screen.findByText('Only if you choose the old regime.')).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(screen.queryByText('Only if you choose the old regime.')).toBeNull();
+
+    fireEvent.click(toggle);
+    cleanup();
+    renderCard({ expand: false });
+    expect(screen.getByRole('button', { name: /tax on your premiums/i }).getAttribute('aria-expanded')).toBe('true');
+  });
+});
+
 describe('TaxSummaryCard', () => {
+  beforeEach(() => localStorage.clear());
+
   it('says the deductions are for the old regime only, with the source', async () => {
     renderCard();
     expect(await screen.findByText('Only if you choose the old regime.')).toBeTruthy();

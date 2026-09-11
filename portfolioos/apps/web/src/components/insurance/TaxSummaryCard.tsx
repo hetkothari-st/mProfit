@@ -8,7 +8,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { ChevronDown } from 'lucide-react';
 import {
+  Decimal,
   TAX_RULES,
   TAX_RULES_CHECKED_ON,
   formatINR,
@@ -16,7 +18,7 @@ import {
   type HealthLine,
   type TaxBucket,
 } from '@portfolioos/shared';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Figure } from '@/components/receipt/Receipt';
 import { apiErrorMessage } from '@/api/client';
@@ -38,10 +40,32 @@ function yearsUpTo(current: string): string[] {
   return Array.from({ length: YEARS_SHOWN }, (_, i) => taxYearOf(`${start - i}-06-01`));
 }
 
+const OPEN_KEY = 'insurance.taxSummary.open';
+
+function readOpen(): boolean {
+  try {
+    return localStorage.getItem(OPEN_KEY) === '1';
+  } catch {
+    // Storage blocked (private mode, previews): start folded.
+    return false;
+  }
+}
+
+function saveOpen(open: boolean): boolean {
+  try {
+    localStorage.setItem(OPEN_KEY, open ? '1' : '0');
+  } catch {
+    // Storage blocked: it just won't be remembered.
+    return open;
+  }
+  return open;
+}
+
 export function TaxSummaryCard({ today = new Date().toISOString().slice(0, 10) }: { today?: string }) {
   const qc = useQueryClient();
   const current = taxYearOf(today);
   const [fy, setFy] = useState(current);
+  const [open, setOpen] = useState(readOpen);
   const { data, isLoading, isError } = useQuery({
     queryKey: ['insurance-tax-summary', fy],
     queryFn: () => insuranceApi.taxSummary(fy),
@@ -57,17 +81,36 @@ export function TaxSummaryCard({ today = new Date().toISOString().slice(0, 10) }
     onError: (err) => toast.error(apiErrorMessage(err, 'Could not save that')),
   });
 
+  // Folded, the header says what the year comes to; open, which dates it covers.
+  const summary = !data
+    ? isLoading
+      ? 'Working it out…'
+      : ''
+    : open
+      ? `${formatDay(data.from)} – ${formatDay(data.to)}`
+      : !data.covered
+        ? (data.notCoveredReason ?? '')
+        : `You can claim ${inr(new Decimal(data.life.claimable).plus(data.health.claimable).toString())} in FY ${data.fy} — old regime only`;
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
-        <div className="min-w-0">
-          <CardTitle className="font-display text-xl">Tax on your premiums</CardTitle>
-          {data && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {formatDay(data.from)} – {formatDay(data.to)}
-            </p>
-          )}
-        </div>
+      <CardHeader className={`flex flex-row items-start justify-between gap-3 ${open ? 'pb-3' : ''}`}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => saveOpen(!o))}
+          aria-expanded={open}
+          aria-controls="tax-summary-body"
+          className="flex min-w-0 flex-1 items-start gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronDown
+            aria-hidden
+            className={`mt-1.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`}
+          />
+          <span className="min-w-0">
+            <span className="block font-display text-xl leading-tight">Tax on your premiums</span>
+            {summary && <span className="mt-1 block text-xs text-muted-foreground">{summary}</span>}
+          </span>
+        </button>
         <Select
           aria-label="Financial year"
           value={fy}
@@ -81,7 +124,8 @@ export function TaxSummaryCard({ today = new Date().toISOString().slice(0, 10) }
           ))}
         </Select>
       </CardHeader>
-      <CardContent className="space-y-5">
+      {open && (
+      <CardContent id="tax-summary-body" className="space-y-5">
         <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
           <span className="text-foreground">Only if you choose the old regime.</span> The new regime is the default and
           allows none of these deductions. <SourceLink source={TAX_RULES.regime[1]!.source} />
@@ -219,6 +263,7 @@ export function TaxSummaryCard({ today = new Date().toISOString().slice(0, 10) }
           </p>
         </details>
       </CardContent>
+      )}
     </Card>
   );
 }

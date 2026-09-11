@@ -1950,6 +1950,9 @@ model InsurancePolicy {
   // Surrender value as quoted by the insurer, entered by the user.
   surrenderValue      Decimal?  @db.Decimal(14, 2)
   surrenderValueAsOf  DateTime? @db.Date
+  // Critical illness cover (rider or benefit): null = not recorded.
+  criticalIllnessCover      Boolean?
+  criticalIllnessSumAssured Decimal?  @db.Decimal(14, 2)
   status             String    @default("ACTIVE")
   createdAt          DateTime  @default(now())
 

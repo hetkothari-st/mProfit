@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { HELP_GROUPS, filterHelpTopics, helpTopic } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { HelpSearch } from '@/components/insurance/help/HelpSearch';
 import { HelpContents } from '@/components/insurance/help/HelpContents';
@@ -47,6 +49,13 @@ export function HelpLibraryPage() {
         eyebrow="Insurance"
         title="Help and rights"
         description="What the rules say you’re owed when you buy, own and claim on a policy — in plain words, with the official source beside every rule."
+        actions={
+          <Button asChild variant="outline">
+            <Link to="/insurance">
+              <ArrowLeft className="h-4 w-4" /> Policies
+            </Link>
+          </Button>
+        }
       />
 
       <div className="grid gap-8 lg:grid-cols-[15rem_minmax(0,1fr)]">

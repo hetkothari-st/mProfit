@@ -28,6 +28,7 @@ import {
   LIFE_POLICY_TYPES,
   POLICY_STATUS_LABELS,
   TONE_TEXT,
+  criticalIllnessMeta,
   formatDay,
   nextPremiumPrefill,
   plural,
@@ -80,11 +81,21 @@ function PolicyHero({ policy }: { policy: InsurancePolicyDTO }) {
   );
 }
 
-function KeyFacts({ policy, due }: { policy: InsurancePolicyDTO; due: DueMeta }) {
+function KeyFacts({
+  policy,
+  due,
+  ciOptionalInPlan,
+}: {
+  policy: InsurancePolicyDTO;
+  due: DueMeta;
+  /** The catalogue lists critical illness as an add-on for this plan. */
+  ciOptionalInPlan: boolean;
+}) {
   const life = LIFE_POLICY_TYPES.has(policy.type);
+  const ci = criticalIllnessMeta(policy);
   return (
     <Card>
-      <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 px-5 py-4 md:grid-cols-5">
+      <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 px-5 py-4 md:grid-cols-3 xl:grid-cols-6">
         <Figure label="Premium">
           {formatINR(policy.premiumAmount, { fractionDigits: 0 })}{' '}
           <span className="text-xs text-muted-foreground">{FREQUENCY_LABELS[policy.premiumFrequency] ?? ''}</span>
@@ -98,8 +109,33 @@ function KeyFacts({ policy, due }: { policy: InsurancePolicyDTO; due: DueMeta })
         <Figure label="Grace period">
           {policy.premiumFrequency === 'SINGLE' ? '—' : policy.graceDays > 0 ? plural(policy.graceDays, 'day') : 'None'}
         </Figure>
+        {ci && (
+          <Figure
+            label="Critical illness"
+            className={TONE_TEXT[ci.tone]}
+            hint={
+              policy.criticalIllnessCover == null && ciOptionalInPlan
+                ? 'This plan offers critical illness as an add-on — your policy schedule shows whether you took it.'
+                : undefined
+            }
+          >
+            {policy.criticalIllnessCover === true
+              ? policy.criticalIllnessSumAssured
+                ? formatINR(policy.criticalIllnessSumAssured, { compact: true })
+                : 'Covered'
+              : policy.criticalIllnessCover === false
+                ? 'Not covered'
+                : 'Not recorded'}
+          </Figure>
+        )}
+        {ci && policy.criticalIllnessCover == null && ciOptionalInPlan && (
+          <p className="col-span-2 text-xs text-muted-foreground md:col-span-3 xl:col-span-6">
+            This plan offers critical illness cover as an add-on — your policy schedule shows whether you took it. Record
+            it with Edit.
+          </p>
+        )}
         {policy.vehicle && (
-          <div className="col-span-2 min-w-0 md:col-span-5">
+          <div className="col-span-2 min-w-0 md:col-span-3 xl:col-span-6">
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
               <Car className="h-3 w-3" /> Vehicle
             </p>
@@ -245,7 +281,11 @@ export function InsuranceDetailPage() {
         </div>
       )}
 
-      <KeyFacts policy={policy} due={due} />
+      <KeyFacts
+        policy={policy}
+        due={due}
+        ciOptionalInPlan={Boolean(product?.coverageTags.some((t) => /critical illness/i.test(t)))}
+      />
 
       {product && <CatalogBrief product={product} />}
 

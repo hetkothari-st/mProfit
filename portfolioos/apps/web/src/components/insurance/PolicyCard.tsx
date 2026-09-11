@@ -14,6 +14,7 @@ import {
   POLICY_STATUS_LABELS,
   TONE_DOT,
   TONE_TEXT,
+  criticalIllnessMeta,
   needsNominee,
   policyTitle,
   policyTypeLabel,
@@ -40,6 +41,7 @@ export function PolicyCard({
   const navigate = useNavigate();
   const { panel } = useInsurerLook(policy.insurer, policy.type);
   const due = premiumDueMeta(policy);
+  const ci = criticalIllnessMeta(policy);
   const title = policyTitle(policy);
   const active = policy.status === 'ACTIVE';
   const nominees = policy.nominees ?? [];
@@ -126,6 +128,12 @@ export function PolicyCard({
           <span aria-hidden className={`mt-[7px] h-2 w-2 shrink-0 rounded-full ${TONE_DOT[due.tone]}`} />
           <p className={`text-sm ${TONE_TEXT[due.tone]}`}>{due.label}</p>
         </div>
+        {ci && (
+          <div className="flex items-start gap-2">
+            <span aria-hidden className={`mt-[7px] h-2 w-2 shrink-0 rounded-full ${TONE_DOT[ci.tone]}`} />
+            <p className={`text-sm ${TONE_TEXT[ci.tone]}`}>{ci.label}</p>
+          </div>
+        )}
       </div>
     </ReceiptShell>
   );
