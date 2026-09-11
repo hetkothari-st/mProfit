@@ -25,6 +25,7 @@ export enum QueryIntent {
   BENCHMARK_COMPARE = 'benchmark_compare',
   REBALANCE_ADVICE = 'rebalance_advice',
   HOLDING_DETAIL = 'holding_detail',
+  INSURANCE = 'insurance',
   GENERAL = 'general',
 }
 
@@ -267,6 +268,37 @@ const HOLDING_DETAIL_KEYWORDS = [
   'top holding',
 ] as const;
 
+/**
+ * Insurance terms, matched as whole words. Deliberately no bare "cover",
+ * "claim" or "premium" in other senses: "does my fund cover 6 months",
+ * "can I claim 80C" and "trading at a premium" aren't insurance questions.
+ */
+const INSURANCE_TERMS =
+  /\b(insurance|insurer|insurers|insured|polic(?:y|ies)|premiums?|nominees?|nomination|mediclaim|term plan|term cover|ombudsman|grace period|surrender(?:ed|ing)?|lapsed?|lapsing|revive|revival|tpa|cashless|free[ -]look|portability|moratorium|bima bharosa|ulip|endowment|sum assured|sum insured|lic|irdai|unclaimed|mis-?sold|mis-?selling|network hospital|hospitali[sz]ation|life cover|health cover|am i covered|coverage)\b/;
+
+const INSURANCE_CLAIM_PHRASES = [
+  'my claim',
+  'late claim',
+  'claim status',
+  'claim settle',
+  'claim reject',
+  'rejected claim',
+  'file a claim',
+  'raise a claim',
+  'make a claim',
+  'death claim',
+  'maturity claim',
+  'claim form',
+] as const;
+
+/** Phrases that use insurance words in a non-insurance sense. */
+const NOT_INSURANCE = /\b(at a premium|(?:monetary|rbi|repo|fiscal|government|investment) polic(?:y|ies))\b/g;
+
+function isInsuranceQuery(text: string): boolean {
+  const t = text.replace(NOT_INSURANCE, ' ');
+  return INSURANCE_TERMS.test(t) || hasAny(t, INSURANCE_CLAIM_PHRASES);
+}
+
 export function classifyQuery(userMessage: string): ClassifiedQuery {
   const text = (userMessage ?? '').trim().toLowerCase();
   const original = userMessage ?? '';
@@ -298,6 +330,19 @@ export function classifyQuery(userMessage: string): ClassifiedQuery {
     return {
       intent: QueryIntent.TAX_DRAG,
       entity: extractEntityAfterPreposition(text),
+      amount,
+      period,
+      originalQuery: original,
+    };
+  }
+
+  // After WHAT_IF / XIRR / TAX (an 80D or "what if I stop paying" question
+  // stays with them), but before DEBT and the broad intents, whose keywords
+  // ("interest", "loan", "car", "health") insurance questions often contain.
+  if (isInsuranceQuery(text)) {
+    return {
+      intent: QueryIntent.INSURANCE,
+      entity: null,
       amount,
       period,
       originalQuery: original,
