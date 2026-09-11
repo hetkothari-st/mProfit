@@ -16,6 +16,10 @@ interface AssetSectionsState {
   reorder: (activeKey: string, overKey: string) => void;
   toggleVisibility: (key: string) => void;
   saveEdit: () => Promise<void>;
+  /** Add an optional section (bonds, crypto…) to the sidebar and save at once. */
+  addSection: (key: string) => Promise<void>;
+  /** Take an optional section off the sidebar, within an edit. */
+  removeSection: (key: string) => void;
 }
 
 export const useAssetSectionsStore = create<AssetSectionsState>()((set, get) => ({
@@ -61,6 +65,27 @@ export const useAssetSectionsStore = create<AssetSectionsState>()((set, get) => 
       editingSections: get().editingSections.map((s) =>
         s.key === key ? { ...s, visible: !s.visible } : s,
       ),
+    });
+  },
+
+  addSection: async (key) => {
+    const current = get().sections;
+    if (current.some((s) => s.key === key)) return;
+    const next = [...current, { key, visible: true, order: current.length }];
+    set({ sections: next, saveError: null });
+    try {
+      const saved = await userPreferencesApi.update({ assetSections: next });
+      set({ sections: saved.assetSections });
+    } catch (err) {
+      set({ sections: current, saveError: err instanceof Error ? err.message : 'Failed to save' });
+    }
+  },
+
+  removeSection: (key) => {
+    set({
+      editingSections: get()
+        .editingSections.filter((s) => s.key !== key)
+        .map((s, i) => ({ ...s, order: i })),
     });
   },
 

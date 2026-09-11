@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { NavLink } from 'react-router-dom';
-import { Eye, EyeOff, GripVertical } from 'lucide-react';
+import { Eye, EyeOff, GripVertical, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import type { AssetSectionPref } from '@portfolioos/shared';
 
@@ -17,9 +17,11 @@ interface Props {
   isEditing: boolean;
   collapsed: boolean;
   onToggleVisibility: (key: string) => void;
+  /** Only for optional sections (bonds, crypto…): takes it off the sidebar. */
+  onRemove?: (key: string) => void;
 }
 
-export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onToggleVisibility }: Props) {
+export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onToggleVisibility, onRemove }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.to,
     disabled: !isEditing,
@@ -113,6 +115,18 @@ export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onTog
           ) : (
             <EyeOff className="h-3.5 w-3.5" strokeWidth={1.5} />
           )}
+        </button>
+      )}
+
+      {isEditing && !collapsed && onRemove && (
+        <button
+          type="button"
+          className="flex-shrink-0 p-1 text-sidebar-foreground/25 hover:text-red-400 focus:outline-none"
+          aria-label={`Remove ${item.label}`}
+          title={`Remove ${item.label} from the sidebar`}
+          onClick={() => onRemove(item.to)}
+        >
+          <X className="h-3.5 w-3.5" strokeWidth={1.5} />
         </button>
       )}
     </li>

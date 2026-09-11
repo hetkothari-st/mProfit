@@ -1,9 +1,11 @@
-import type { AssetSectionPref, UserPreferences } from '@portfolioos/shared';
+import { OPTIONAL_ASSET_SECTION_KEYS, type AssetSectionPref, type UserPreferences } from '@portfolioos/shared';
 import { prisma } from '../lib/prisma.js';
 
 /**
- * Master list of asset class nav keys — must match NAV_SECTIONS in Sidebar.tsx.
- * New asset sections added here will auto-appear in existing users' sidebars.
+ * Master list of asset class nav keys — must match ASSET_CLASS_ITEMS in
+ * navItems.tsx. New core sections added here auto-appear in existing users'
+ * sidebars; optional ones (OPTIONAL_ASSET_SECTION_KEYS) appear only once the
+ * user adds them.
  */
 const ASSET_SECTION_KEYS: string[] = [
   '/bank-accounts',
@@ -27,30 +29,29 @@ const ASSET_SECTION_KEYS: string[] = [
   '/others',
 ];
 
+const OPTIONAL = new Set<string>(OPTIONAL_ASSET_SECTION_KEYS);
+
 /**
- * Merges saved preferences with the master list of sidebar items.
- * Ensures new items appear as visible+last for users who haven't seen them before.
+ * Version of the saved sections' meaning. 2: optional sections are opt-in.
+ * Preferences saved before that listed every section by default, so an
+ * optional one in them was never chosen — it is dropped once, on read.
  */
-function mergeWithDefaults(saved: AssetSectionPref[] | null): AssetSectionPref[] {
-  const existing = new Map((saved ?? []).map((s) => [s.key, s]));
-  const merged: AssetSectionPref[] = [];
+const ASSET_SECTIONS_VERSION = 2;
 
-  // Add saved items in their saved order.
-  for (const item of saved ?? []) {
-    if (ASSET_SECTION_KEYS.includes(item.key)) {
-      merged.push(item);
-    }
-  }
-
-  // Append any master keys not yet in saved prefs (new items).
-  let nextOrder = merged.length;
+/**
+ * Saved sections in their saved order, then any core section the user has not
+ * seen yet (visible, last). Orders are renumbered to stay 0-based and dense.
+ */
+function mergeWithDefaults(saved: AssetSectionPref[] | null, version: number): AssetSectionPref[] {
+  const kept = (saved ?? []).filter(
+    (s) => ASSET_SECTION_KEYS.includes(s.key) && (version >= ASSET_SECTIONS_VERSION || !OPTIONAL.has(s.key)),
+  );
+  const present = new Set(kept.map((s) => s.key));
+  const merged: AssetSectionPref[] = [...kept];
   for (const key of ASSET_SECTION_KEYS) {
-    if (!existing.has(key)) {
-      merged.push({ key, visible: true, order: nextOrder++ });
-    }
+    if (!present.has(key) && !OPTIONAL.has(key)) merged.push({ key, visible: true, order: 0 });
   }
-
-  return merged;
+  return merged.map((s, i) => ({ key: s.key, visible: s.visible, order: i }));
 }
 
 /**
@@ -62,13 +63,15 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
     select: { preferences: true },
   });
 
-  const raw = user.preferences as { assetSections?: AssetSectionPref[] } | null;
-  const assetSections = mergeWithDefaults(raw?.assetSections ?? null);
+  const raw = user.preferences as { assetSections?: AssetSectionPref[]; assetSectionsVersion?: number } | null;
+  const version = typeof raw?.assetSectionsVersion === 'number' ? raw.assetSectionsVersion : 1;
+  const assetSections = mergeWithDefaults(raw?.assetSections ?? null, version);
   return { assetSections };
 }
 
 /**
- * Update user preferences.
+ * Update user preferences. Stamped with the current version, so an optional
+ * section the user added is kept on the next read.
  */
 export async function updateUserPreferences(
   userId: string,
@@ -76,7 +79,7 @@ export async function updateUserPreferences(
 ): Promise<UserPreferences> {
   await prisma.user.update({
     where: { id: userId },
-    data: { preferences: prefs as object },
+    data: { preferences: { ...prefs, assetSectionsVersion: ASSET_SECTIONS_VERSION } as object },
   });
   return prefs;
 }
