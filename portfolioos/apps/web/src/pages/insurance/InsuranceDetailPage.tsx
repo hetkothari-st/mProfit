@@ -18,6 +18,8 @@ import { NomineesCard } from '@/components/insurance/NomineesCard';
 import { PolicyFormDialog } from '@/components/insurance/PolicyFormDialog';
 import { PolicyNumberReveal } from '@/components/insurance/PolicyNumberReveal';
 import { PremiumScheduleCard } from '@/components/insurance/PremiumScheduleCard';
+import { ImportedPremiumsCard } from '@/components/insurance/ImportedPremiumsCard';
+import { SurrenderValueCard } from '@/components/insurance/SurrenderValueCard';
 import { RecordPremiumDialog } from '@/components/insurance/RecordPremiumDialog';
 import { useInsurerLook } from '@/components/insurance/useInsurerLook';
 import { findCatalogProduct } from '@/data/insuranceCatalog';
@@ -256,7 +258,13 @@ export function InsuranceDetailPage() {
 
       {policy.type === 'HEALTH' && <HealthCoverPanel policy={policy} />}
 
+      {/* Renders nothing when no imported premium needs reviewing. */}
+      <ImportedPremiumsCard policyId={policy.id} />
+
       <PremiumScheduleCard policy={policy} onRecord={setRecord} />
+
+      {/* Renders nothing for policy types without a surrender value. */}
+      <SurrenderValueCard policy={policy} />
 
       <DocumentVault
         ownerType="INSURANCE_POLICY"

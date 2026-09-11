@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { CLAIM_KINDS } from '@portfolioos/shared';
+import { CLAIM_KINDS, TAX_BUCKETS } from '@portfolioos/shared';
 import {
   POLICY_TYPES,
   PREMIUM_FREQUENCIES,
@@ -19,6 +19,12 @@ import {
   removeClaim,
   generateRenewalAlerts,
 } from '../services/insurance.service.js';
+import {
+  dismissImportSuggestion,
+  getTaxSummary,
+  linkImportedPremium,
+  listImportSuggestions,
+} from '../services/insuranceExtras.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 
@@ -67,6 +73,11 @@ const createPolicySchema = z.object({
   portfolioId: z.string().nullable().optional(),
   healthCoverDetails: z.unknown().optional(),
   status: z.enum(POLICY_STATUSES).optional(),
+  // Which policy types these fit is checked in the service.
+  taxBucket: z.enum(TAX_BUCKETS).nullable().optional(),
+  seniorCitizen: z.boolean().nullable().optional(),
+  surrenderValue: moneyString.nullable().optional(),
+  surrenderValueAsOf: isoDate.nullable().optional(),
 });
 
 // On update the number is optional: leave it out to keep the saved one.
@@ -108,6 +119,12 @@ const addClaimSchema = z.object({
 });
 
 const updateClaimSchema = addClaimSchema.partial();
+
+const importedPremiumSchema = z.object({ transactionId: z.string().min(1).max(64) });
+
+const taxSummaryQuery = z.object({
+  fy: z.string().regex(/^\d{4}-\d{2}$/, 'Expected a financial year like 2026-27').optional(),
+});
 
 export async function listPoliciesHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
@@ -186,6 +203,32 @@ export async function removeClaimHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   await removeClaim(req.user.id, req.params['claimId']!);
   ok(res, null);
+}
+
+export async function listImportSuggestionsHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  ok(res, await listImportSuggestions(req.user.id, req.params['id']!));
+}
+
+export async function linkImportedPremiumHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const { transactionId } = importedPremiumSchema.parse(req.body);
+  const payment = await linkImportedPremium(req.user.id, req.params['id']!, transactionId);
+  res.status(201);
+  ok(res, payment);
+}
+
+export async function dismissImportSuggestionHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const { transactionId } = importedPremiumSchema.parse(req.body);
+  await dismissImportSuggestion(req.user.id, req.params['id']!, transactionId);
+  ok(res, null);
+}
+
+export async function taxSummaryHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const { fy } = taxSummaryQuery.parse(req.query);
+  ok(res, await getTaxSummary(req.user.id, fy));
 }
 
 export async function triggerRenewalAlertsHandler(req: Request, res: Response) {
