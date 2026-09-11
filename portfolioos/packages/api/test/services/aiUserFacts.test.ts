@@ -107,6 +107,17 @@ describe('serializeUserFacts', () => {
     expect(text).toMatch(/Household view/);
   });
 
+  it('names the largest holdings, so the adviser never asks what is in a bucket', () => {
+    const h = (assetName: string, value: string, bucket: string) =>
+      ({ assetName, bucket, currentValue: d(value), assetClass: 'X' }) as unknown as AdvisorFacts['holdings'][number];
+    const text = serializeUserFacts({
+      ...base,
+      advisor: facts({ holdings: [h('Small fund', '98000', 'DEBT'), h('Bitcoin', '6370000', 'OTHER_ALT')] }),
+    });
+    expect(text).toMatch(/Largest holdings:[\s\S]*Bitcoin: 65% of investments \(Other\)/);
+    expect(text.indexOf('Bitcoin')).toBeLessThan(text.indexOf('Small fund'));
+  });
+
   it('copes with no advisor facts at all', () => {
     const text = serializeUserFacts({ ...base, advisor: null });
     expect(text).toContain('Allocation vs target: not on file');

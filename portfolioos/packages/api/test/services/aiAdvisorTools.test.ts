@@ -83,6 +83,7 @@ describe('advisor tools', () => {
         'get_holdings',
         'get_insurance_overview',
         'get_tax_harvest_candidates',
+        'plan_passive_income',
         'search_knowledge',
       ].sort(),
     );
@@ -138,6 +139,45 @@ describe('advisor tools', () => {
 
   it('refuses a tool it does not know', async () => {
     expect((await runAdvisorTool('delete_everything', {}, ctx)).ok).toBe(false);
+  });
+
+  it('sizes a passive-income goal: corpus today, and the SIP for each horizon and return', async () => {
+    const out = await runAdvisorTool(
+      'plan_passive_income',
+      { monthlyIncome: '50000', yearsToStart: [10], annualReturnPct: [12], withdrawalRatePct: 4, inflationPct: 6 },
+      ctx,
+    );
+    expect(out.ok).toBe(true);
+    const r = out.result as {
+      corpusIfStartingNow: string;
+      scenarios: Array<{ yearsToStart: number; monthlyIncomeThen: string; corpusNeeded: string; sipByReturn: Array<{ annualReturnPct: number; monthlySip: string }> }>;
+    };
+    // ₹50,000 a month at a 4% withdrawal rate: ₹6 L a year / 4% = ₹1.5 Cr.
+    expect(r.corpusIfStartingNow).toBe('15000000');
+    const s = r.scenarios[0]!;
+    expect(s.yearsToStart).toBe(10);
+    // 6% inflation for 10 years: about ₹89,500 a month then, so about ₹2.69 Cr.
+    expect(Number.parseFloat(s.monthlyIncomeThen)).toBeGreaterThan(89000);
+    expect(Number.parseFloat(s.monthlyIncomeThen)).toBeLessThan(90000);
+    expect(Number.parseFloat(s.corpusNeeded)).toBeGreaterThan(26_000_000);
+    expect(Number.parseFloat(s.corpusNeeded)).toBeLessThan(27_500_000);
+    // ₹2.69 Cr in 10 years at 12% a year: roughly ₹1.17 L a month.
+    const sip = Number.parseFloat(s.sipByReturn[0]!.monthlySip);
+    expect(sip).toBeGreaterThan(110_000);
+    expect(sip).toBeLessThan(125_000);
+  });
+
+  it('counts money already saved towards the corpus, and refuses a nonsense income', async () => {
+    const withSavings = await runAdvisorTool(
+      'plan_passive_income',
+      { monthlyIncome: '50000', yearsToStart: [10], annualReturnPct: [12], currentCorpus: '2000000' },
+      ctx,
+    );
+    const without = await runAdvisorTool('plan_passive_income', { monthlyIncome: '50000', yearsToStart: [10], annualReturnPct: [12] }, ctx);
+    const sipOf = (o: typeof without) =>
+      Number.parseFloat((o.result as { scenarios: Array<{ sipByReturn: Array<{ monthlySip: string }> }> }).scenarios[0]!.sipByReturn[0]!.monthlySip);
+    expect(sipOf(withSavings)).toBeLessThan(sipOf(without));
+    expect((await runAdvisorTool('plan_passive_income', { monthlyIncome: '0' }, ctx)).ok).toBe(false);
   });
 
   it('searches the knowledge library', async () => {

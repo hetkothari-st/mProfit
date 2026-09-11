@@ -24,6 +24,7 @@ import { classifyQuery } from '../ai/queryClassifier.js';
 import { buildContext } from '../ai/contextBuilder.js';
 import { loadAdvisorContext } from '../ai/userFacts.js';
 import { searchKnowledge } from '../ai/knowledge/search.js';
+import { CardStreamFilter } from '../ai/cardStream.js';
 import {
   streamAssistantResponse,
   parseResponseForCard,
@@ -270,6 +271,8 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     };
 
     let fullResponse = '';
+    // The card arrives as its own event; its raw JSON never streams as text.
+    const cardFilter = new CardStreamFilter();
     try {
       for await (const chunk of streamAssistantResponse(
         userId,
@@ -313,8 +316,11 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
         },
       )) {
         fullResponse += chunk;
-        send({ type: 'token', content: chunk });
+        const visible = cardFilter.push(chunk);
+        if (visible) send({ type: 'token', content: visible });
       }
+      const rest = cardFilter.flush();
+      if (rest) send({ type: 'token', content: rest });
       send({ type: 'done' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'stream_error';

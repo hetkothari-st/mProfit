@@ -81,6 +81,19 @@ function allocationLines(a: AdvisorFacts): string[] {
   return [a.modelPortfolio.targets.length > 0 ? 'Allocation vs target:' : 'Allocation (no target allocation on file):', ...lines];
 }
 
+/** The five largest holdings by value, so the adviser can name what fills a bucket. */
+function holdingLines(a: AdvisorFacts): string[] {
+  if (a.holdings.length === 0 || a.totalPortfolioValue.lessThanOrEqualTo(0)) return [];
+  const top = [...a.holdings].sort((x, y) => y.currentValue.comparedTo(x.currentValue)).slice(0, 5);
+  return [
+    'Largest holdings:',
+    ...top.map((h) => {
+      const share = h.currentValue.dividedBy(a.totalPortfolioValue).times(100).toDecimalPlaces(0).toString();
+      return `- ${h.assetName}: ${share}% of investments (${BUCKET_LABELS[h.bucket] ?? h.bucket})`;
+    }),
+  ];
+}
+
 function goalLines(a: AdvisorFacts): string[] {
   if (a.goals.length === 0) return ['Goals: none on file'];
   return [
@@ -132,6 +145,7 @@ export function serializeUserFacts(input: UserFactsInput): string {
     lines.push(`Income-tax slab: ${known(r.taxSlabPct) ? `${r.taxSlabPct}%` : NOT_ON_FILE}`);
     lines.push(`Investments: ${inr(a.totalPortfolioValue)}`);
     lines.push(...allocationLines(a));
+    lines.push(...holdingLines(a));
     lines.push(liquidityLine(a));
     lines.push(...goalLines(a));
     const approved = Object.values(a.approvedProducts).reduce((s, list) => s + list.length, 0);

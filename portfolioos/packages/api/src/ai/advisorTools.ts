@@ -108,6 +108,22 @@ export const ADVISOR_TOOLS: Anthropic.Tool[] = [
     input_schema: obj({ question: { type: 'string', description: 'The insurance question, to pick help topics.' } }),
   },
   {
+    name: 'plan_passive_income',
+    description:
+      'Sizes a monthly passive-income goal: the corpus that can pay it at a withdrawal rate (after inflation to the start date), and the monthly SIP that builds that corpus for each horizon and assumed return. Use for "how do I get ₹X a month" or retirement-income questions. Defaults: 10, 15 and 20 years; 10% and 12% returns; 4% withdrawal; 6% inflation.',
+    input_schema: obj(
+      {
+        monthlyIncome: { type: 'string', description: "Monthly income wanted, in today's rupees, digits only." },
+        yearsToStart: { type: 'array', items: { type: 'number' }, description: 'Years until the income should start.' },
+        annualReturnPct: { type: 'array', items: { type: 'number' }, description: 'Assumed yearly returns while building.' },
+        withdrawalRatePct: { type: 'number', description: 'Share of the corpus drawn each year (default 4).' },
+        inflationPct: { type: 'number', description: 'Yearly inflation (default 6).' },
+        currentCorpus: { type: 'string', description: 'Rupees already set aside for this goal.' },
+      },
+      ['monthlyIncome'],
+    ),
+  },
+  {
     name: 'search_knowledge',
     description:
       'Search the adviser library: principles from The Intelligent Investor, The Little Book of Common Sense Investing, A Random Walk Down Wall Street, The Psychology of Money and Let’s Talk Money, plus the planning framework.',
@@ -292,6 +308,48 @@ const EXECUTORS: Record<string, Executor> = {
       period: null,
       originalQuery: question,
     });
+  },
+
+  async plan_passive_income(input) {
+    const monthly = decimalFrom(input['monthlyIncome']);
+    if (!monthly || monthly.lessThanOrEqualTo(0)) throw new Error("Give the monthly income wanted, in today's rupees.");
+    const numbers = (v: unknown, fallback: number[], min: number, max: number): number[] => {
+      const list = Array.isArray(v) ? v : typeof v === 'number' ? [v] : fallback;
+      const clean = list.filter((x): x is number => typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max);
+      return (clean.length > 0 ? clean : fallback).slice(0, 4);
+    };
+    const horizons = numbers(input['yearsToStart'], [10, 15, 20], 1, 40);
+    const returns = numbers(input['annualReturnPct'], [10, 12], 0, 20);
+    const withdrawal = numbers(input['withdrawalRatePct'], [4], 2, 10)[0]!;
+    const inflation = numbers(input['inflationPct'], [6], 0, 15)[0]!;
+    const current = decimalFrom(input['currentCorpus']) ?? new Decimal(0);
+
+    const rupees = (x: Decimal) => x.toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toString();
+    const corpusFor = (income: Decimal) => income.times(12).dividedBy(new Decimal(withdrawal).dividedBy(100));
+    return {
+      assumptions: {
+        withdrawalRatePct: withdrawal,
+        inflationPct: inflation,
+        note: 'Returns, inflation and the withdrawal rate are assumptions, not promises. The corpus is what can pay the income at that withdrawal rate; the SIP builds it by the start date.',
+      },
+      monthlyIncomeToday: rupees(monthly),
+      corpusIfStartingNow: rupees(corpusFor(monthly)),
+      currentCorpus: rupees(current),
+      scenarios: horizons.map((years) => {
+        const incomeThen = monthly.times(new Decimal(1).plus(new Decimal(inflation).dividedBy(100)).pow(years));
+        const corpus = corpusFor(incomeThen);
+        return {
+          yearsToStart: years,
+          monthlyIncomeThen: rupees(incomeThen),
+          corpusNeeded: rupees(corpus),
+          sipByReturn: returns.map((r) => {
+            const grown = current.times(new Decimal(1).plus(new Decimal(r).dividedBy(1200)).pow(Math.round(years * 12)));
+            const sip = requiredMonthlySip(corpus.minus(grown), years, r);
+            return { annualReturnPct: r, monthlySip: sip ? sip.toDecimalPlaces(0, Decimal.ROUND_UP).toString() : '0' };
+          }),
+        };
+      }),
+    };
   },
 
   async search_knowledge(input) {
