@@ -1,5 +1,14 @@
 import { api, unwrap } from './client';
-import type { ApiResponse, ClaimKind, ClaimProgress, NextPremiumDue } from '@portfolioos/shared';
+import type {
+  ApiResponse,
+  ClaimKind,
+  ClaimProgress,
+  NextPremiumDue,
+  TaxBucket,
+  TaxSummary,
+} from '@portfolioos/shared';
+
+export type { TaxBucket, TaxSummary };
 
 // ── DTOs ─────────────────────────────────────────────────────────────
 
@@ -11,6 +20,22 @@ export interface PremiumPaymentDTO {
   periodFrom: string;
   periodTo: string;
   canonicalEventId: string | null;
+  /** The imported statement premium (Transaction) it was linked from. */
+  sourceTransactionId?: string | null;
+}
+
+/** A premium from an imported insurance statement that may be this policy's. */
+export interface ImportSuggestionDTO {
+  transactionId: string;
+  paidOn: string;
+  amount: string;
+  insurer: string | null;
+  /** Last 4 of the policy number on the statement, if it had one. */
+  policyNumberLast4: string | null;
+  matchedBy: 'POLICY_NUMBER' | 'INSURER_AMOUNT';
+  /** The premium it would be recorded against. */
+  periodFrom: string;
+  periodTo: string;
 }
 
 /** One line in the claim's own log: a call, a letter, a visit. */
@@ -108,6 +133,14 @@ export interface InsurancePolicyDTO {
   vehicleId: string | null;
   vehicle?: { id: string; registrationNo: string; make: string | null; model: string | null } | null;
   healthCoverDetails: HealthCoverDetails | null;
+  // Phase 5 fields — always sent by the server; optional so older fixtures still type.
+  /** Health policies: who the cover is for (section 126 deduction). */
+  taxBucket?: TaxBucket | null;
+  /** Health policies: the insured is a senior citizen. */
+  seniorCitizen?: boolean | null;
+  /** Savings policies: the surrender value the insurer quoted. */
+  surrenderValue?: string | null;
+  surrenderValueAsOf?: string | null;
   status: string;
   createdAt: string;
   premiumHistory?: PremiumPaymentDTO[];
@@ -135,6 +168,11 @@ export interface CreatePolicyInput {
   portfolioId?: string | null;
   healthCoverDetails?: HealthCoverDetails | null;
   status?: string;
+  taxBucket?: TaxBucket | null;
+  seniorCitizen?: boolean | null;
+  surrenderValue?: string | null;
+  /** Defaults to today on the server when a value is given. */
+  surrenderValueAsOf?: string | null;
 }
 
 /** Leave `policyNumber` out to keep the saved one. */
@@ -234,6 +272,31 @@ export const insuranceApi = {
   },
   async removeClaim(claimId: string): Promise<void> {
     await api.delete(`/api/insurance/claims/${claimId}`);
+  },
+  async importSuggestions(policyId: string): Promise<ImportSuggestionDTO[]> {
+    const { data } = await api.get<ApiResponse<ImportSuggestionDTO[]>>(
+      `/api/insurance/policies/${policyId}/import-suggestions`,
+    );
+    return unwrap(data);
+  },
+  /** Records the imported premium as paid on this policy. */
+  async linkImportedPremium(policyId: string, transactionId: string): Promise<PremiumPaymentDTO> {
+    const { data } = await api.post<ApiResponse<PremiumPaymentDTO>>(
+      `/api/insurance/policies/${policyId}/import-suggestions/link`,
+      { transactionId },
+    );
+    return unwrap(data);
+  },
+  /** "Not this policy" — it won't be suggested for this policy again. */
+  async dismissImportSuggestion(policyId: string, transactionId: string): Promise<void> {
+    await api.post(`/api/insurance/policies/${policyId}/import-suggestions/dismiss`, { transactionId });
+  },
+  /** `fy` like "2026-27"; the current financial year when left out. */
+  async taxSummary(fy?: string): Promise<TaxSummary> {
+    const { data } = await api.get<ApiResponse<TaxSummary>>('/api/insurance/tax-summary', {
+      params: fy ? { fy } : undefined,
+    });
+    return unwrap(data);
   },
   async triggerRenewalAlerts(): Promise<{ created: number }> {
     const { data } = await api.post<ApiResponse<{ created: number }>>(

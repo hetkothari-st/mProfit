@@ -15,6 +15,10 @@ import {
   updateClaimHandler,
   removeClaimHandler,
   triggerRenewalAlertsHandler,
+  listImportSuggestionsHandler,
+  linkImportedPremiumHandler,
+  dismissImportSuggestionHandler,
+  taxSummaryHandler,
 } from '../controllers/insurance.controller.js';
 
 export const insuranceRouter = Router();
@@ -38,6 +42,14 @@ insuranceRouter.delete('/premiums/:paymentId', asyncHandler(removePremiumHandler
 insuranceRouter.post('/policies/:id/claims', asyncHandler(addClaimHandler));
 insuranceRouter.patch('/claims/:claimId', asyncHandler(updateClaimHandler));
 insuranceRouter.delete('/claims/:claimId', asyncHandler(removeClaimHandler));
+
+// Premiums imported from insurance statements: suggested per policy, linked or dismissed.
+insuranceRouter.get('/policies/:id/import-suggestions', asyncHandler(listImportSuggestionsHandler));
+insuranceRouter.post('/policies/:id/import-suggestions/link', asyncHandler(linkImportedPremiumHandler));
+insuranceRouter.post('/policies/:id/import-suggestions/dismiss', asyncHandler(dismissImportSuggestionHandler));
+
+// What the year's recorded premiums are worth at tax time (?fy=2026-27).
+insuranceRouter.get('/tax-summary', asyncHandler(taxSummaryHandler));
 
 // Manual trigger for renewal alerts (useful for testing §9.4)
 insuranceRouter.post('/alerts/trigger', asyncHandler(triggerRenewalAlertsHandler));

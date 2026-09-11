@@ -61,6 +61,7 @@ model User {
   vehicles            Vehicle[]
   rentalProperties    RentalProperty[]
   insurancePolicies   InsurancePolicy[]
+  insuranceImportDismissals InsuranceImportDismissal[]
   auditLogs           AuditLog[]
   healthScoreSnapshot HealthScoreSnapshot?
 
@@ -1941,12 +1942,21 @@ model InsurancePolicy {
   gracePeriodDays     Int?
   // Premiums due before this date aren't tracked here (treated as settled).
   premiumsTrackedFrom DateTime? @db.Date
+  // Health premiums under section 126 (Income-tax Act, 2025): who the cover
+  // is for — SELF_FAMILY (you, spouse, dependent children) or PARENTS — and
+  // whether the insured is a senior citizen (raises the limit).
+  taxBucket           String?
+  seniorCitizen       Boolean?
+  // Surrender value as quoted by the insurer, entered by the user.
+  surrenderValue      Decimal?  @db.Decimal(14, 2)
+  surrenderValueAsOf  DateTime? @db.Date
   status             String    @default("ACTIVE")
   createdAt          DateTime  @default(now())
 
-  premiumHistory  PremiumPayment[]
-  claims          InsuranceClaim[]
-  ownedProperties OwnedProperty[]
+  premiumHistory   PremiumPayment[]
+  claims           InsuranceClaim[]
+  ownedProperties  OwnedProperty[]
+  importDismissals InsuranceImportDismissal[]
 
   @@unique([userId, insurer, policyNumber])
   @@unique([userId, insurer, policyNumberHash])
@@ -1962,6 +1972,24 @@ model PremiumPayment {
   periodFrom       DateTime        @db.Date
   periodTo         DateTime        @db.Date
   canonicalEventId String?
+  // The imported Transaction (insurance statement) this payment came from —
+  // unique, so a statement premium is linked at most once.
+  sourceTransactionId String? @unique
+}
+
+// An imported premium the user said is "not this policy", so it isn't
+// suggested for it again.
+model InsuranceImportDismissal {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  policyId      String
+  policy        InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  transactionId String
+  createdAt     DateTime        @default(now())
+
+  @@unique([policyId, transactionId])
+  @@index([userId])
 }
 
 model InsuranceClaim {

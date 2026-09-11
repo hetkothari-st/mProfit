@@ -10,6 +10,7 @@ import { hashBytes, positionalHash } from '../sourceHash.js';
 import { getImportQueue } from '../../lib/queue.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
+import { hookAutoLinkImportedPremium } from '../insuranceExtras.service.js';
 
 export interface CreateImportJobInput {
   userId: string;
@@ -331,6 +332,12 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
           data: { importJobId },
         });
         success++;
+        if (created.assetClass === 'INSURANCE') {
+          // Fire-and-forget, never throws: links the premium to a policy
+          // only on an exact policy-number match; the rest are suggested
+          // on the policy page.
+          void hookAutoLinkImportedPremium(job.userId, created.id);
+        }
       }
     } catch (err) {
       failed++;

@@ -36,8 +36,10 @@ import {
   CLAIM_GUIDES,
   claimProgress,
   isClaimKind,
+  hasSurrenderValue,
   type ClaimGuide,
   type NextPremiumDue,
+  type TaxBucket,
 } from '@portfolioos/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
@@ -150,6 +152,14 @@ export interface CreatePolicyInput {
   portfolioId?: string | null;
   healthCoverDetails?: unknown;
   status?: (typeof POLICY_STATUSES)[number];
+  /** Health policies: who the cover is for, for the section 126 deduction. */
+  taxBucket?: TaxBucket | null;
+  /** Health policies: the insured is a senior citizen (raises the limit). */
+  seniorCitizen?: boolean | null;
+  /** Savings policies: the surrender value the insurer quoted. */
+  surrenderValue?: string | null;
+  /** When it was quoted; defaults to today when a value is given. */
+  surrenderValueAsOf?: string | null;
 }
 
 export type UpdatePolicyInput = Partial<CreatePolicyInput>;
@@ -217,7 +227,7 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 /** Upper-case letters and digits only — "pol 123/45" and "POL-12345" are the same policy. */
-function normalizePolicyNumber(raw: string): string {
+export function normalizePolicyNumber(raw: string): string {
   return raw.normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
@@ -303,6 +313,39 @@ function validateContacts(input: PolicyContacts | null | undefined): PolicyConta
   return Object.keys(out).length > 0 ? out : null;
 }
 
+/**
+ * The tax and surrender fields as columns, checked against the policy type:
+ * the health-deduction fields belong to health policies, and a surrender
+ * value to savings policies. A quote without a date is dated today.
+ */
+function extrasColumns(type: string, input: UpdatePolicyInput) {
+  const out: {
+    taxBucket?: string | null;
+    seniorCitizen?: boolean | null;
+    surrenderValue?: Prisma.Decimal | null;
+    surrenderValueAsOf?: Date | null;
+  } = {};
+
+  if ((input.taxBucket || input.seniorCitizen === true) && type !== 'HEALTH') {
+    throw new BadRequestError('Only a health policy counts towards the health-insurance deduction');
+  }
+  if (input.taxBucket !== undefined) out.taxBucket = input.taxBucket;
+  if (input.seniorCitizen !== undefined) out.seniorCitizen = input.seniorCitizen;
+
+  if (input.surrenderValue && !hasSurrenderValue(type)) {
+    throw new BadRequestError('Only whole life, endowment and ULIP policies have a surrender value');
+  }
+  const asOf = input.surrenderValueAsOf ?? null;
+  if (asOf && asOf > todayIso()) throw new BadRequestError("The surrender quote can't be dated in the future");
+  if (input.surrenderValue !== undefined) {
+    out.surrenderValue = input.surrenderValue ? new Prisma.Decimal(input.surrenderValue) : null;
+    out.surrenderValueAsOf = input.surrenderValue ? toDate(asOf ?? todayIso()) : null;
+  } else if (input.surrenderValueAsOf !== undefined) {
+    out.surrenderValueAsOf = asOf ? toDate(asOf) : null;
+  }
+  return out;
+}
+
 // ── Premium schedule ─────────────────────────────────────────────────
 
 interface ScheduleFields {
@@ -342,7 +385,7 @@ function nextDueFor(p: ScheduleFields, payments: StoredPayment[]): NextPremiumDu
 }
 
 /** Re-store `nextPremiumDue` after anything that can move it. */
-async function restoreNextPremiumDue(
+export async function restoreNextPremiumDue(
   db: Prisma.TransactionClient,
   policy: ScheduleFields & { id: string },
 ): Promise<void> {
@@ -367,9 +410,10 @@ interface StoredPolicyNumber {
  * What a policy looks like outside this service: no policy number (not even
  * encrypted) — just its last 4 — plus where the next premium stands.
  */
-export function toPolicyDto<T extends StoredPolicyNumber & Partial<ScheduleFields> & { nextPremiumDue?: Date | null }>(
-  row: T,
-) {
+export function toPolicyDto<
+  T extends StoredPolicyNumber &
+    Partial<ScheduleFields> & { nextPremiumDue?: Date | null; surrenderValue?: { toString(): string } | null },
+>(row: T) {
   const { policyNumber, policyNumberEnc, policyNumberHash: _hash, ...rest } = row;
   const last4 = row.policyNumberLast4 ?? (policyNumber ? normalizePolicyNumber(policyNumber).slice(-4) : null);
   const graceDays =
@@ -382,6 +426,7 @@ export function toPolicyDto<T extends StoredPolicyNumber & Partial<ScheduleField
     hasPolicyNumber: Boolean(policyNumberEnc || policyNumber),
     graceDays,
     premiumDue: premiumDueOn(isoOf(row.nextPremiumDue), { today: todayIso(), graceDays }),
+    surrenderValue: row.surrenderValue != null ? row.surrenderValue.toString() : null,
   };
 }
 
@@ -454,6 +499,7 @@ export async function createPolicy(userId: string, input: CreatePolicyInput) {
         portfolioId: input.portfolioId ?? null,
         healthCoverDetails: (input.healthCoverDetails as Prisma.InputJsonValue) ?? Prisma.JsonNull,
         status: input.status ?? 'ACTIVE',
+        ...extrasColumns(input.type, input),
       },
     });
     return toPolicyDto(row);
@@ -537,6 +583,7 @@ export async function updatePolicy(
           healthCoverDetails: (input.healthCoverDetails as Prisma.InputJsonValue) ?? Prisma.JsonNull,
         }),
         ...(input.status !== undefined && { status: input.status }),
+        ...extrasColumns(input.type ?? existing.type, input),
       },
     });
     return toPolicyDto(row);
