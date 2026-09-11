@@ -34,7 +34,10 @@ const USD_PER_MTOK_CACHE_WRITE = USD_PER_MTOK_INPUT.times('1.25');
 const FX_USD_INR_DEFAULT = new Decimal('90');
 
 const MAX_TOOL_ROUNDS = 3;
-const MAX_OUTPUT_TOKENS = 1024;
+// A ceiling, not a spend: output is billed as used. Answers are kept short
+// by the prompt; the headroom is so a tool round plus the answer never runs
+// the budget dry and leaves the client with nothing.
+const MAX_OUTPUT_TOKENS = 2048;
 
 let anthropicClient: Anthropic | null = null;
 
@@ -82,6 +85,24 @@ export interface HistoryMessage {
   content: string;
 }
 
+/**
+ * History the API will accept and the model can follow: empty turns dropped
+ * (an earlier failed reply is saved empty), starting with the client, and
+ * consecutive turns from the same side merged so roles alternate.
+ */
+export function sanitizeHistory(history: HistoryMessage[]): HistoryMessage[] {
+  const out: HistoryMessage[] = [];
+  for (const m of history) {
+    const content = m.content.trim();
+    if (!content) continue;
+    if (out.length === 0 && m.role !== 'user') continue;
+    const last = out[out.length - 1];
+    if (last && last.role === m.role) last.content = `${last.content}\n\n${content}`;
+    else out.push({ role: m.role, content });
+  }
+  return out;
+}
+
 // ─── The tool loop ───────────────────────────────────────────────
 
 interface RawUsage {
@@ -115,6 +136,16 @@ export interface AdvisorTurnResult {
   fullText: string;
   toolsUsed: string[];
   usage: TurnUsage;
+  /** Why the last call stopped — kept for the advice record and for logs. */
+  stopReason: string | null;
+}
+
+/** What the client sees when a turn produced no text, instead of silence. */
+function emptyTurnMessage(stopReason: string | null): string {
+  if (stopReason === 'refusal') {
+    return "I can't help with that one. Ask me about your plan, your goals or your portfolio instead.";
+  }
+  return "I couldn't finish that answer. Please ask again, or break it into a smaller question.";
 }
 
 interface ToolUseBlock {
@@ -155,6 +186,9 @@ export async function* runAdvisorTurn(p: AdvisorTurnParams): AsyncGenerator<stri
       system: p.system,
       tools: p.tools,
       messages,
+      // Explicitly off: the figures come from facts and tools, and thinking
+      // tokens would eat the output budget and cost.
+      thinking: { type: 'disabled' as const },
       ...(capped ? { tool_choice: { type: 'none' as const } } : {}),
     });
 
@@ -178,7 +212,13 @@ export async function* runAdvisorTurn(p: AdvisorTurnParams): AsyncGenerator<stri
 
     const calls = final.content.filter(isToolUse);
     if (capped || final.stop_reason !== 'tool_use' || calls.length === 0) {
-      return { fullText, toolsUsed: [...toolsUsed], usage };
+      if (!fullText.trim()) {
+        logger.warn({ stopReason: final.stop_reason, round, usage }, '[ai.assistant] turn ended with no text');
+        const fallback = emptyTurnMessage(final.stop_reason);
+        fullText = fallback;
+        yield fallback;
+      }
+      return { fullText, toolsUsed: [...toolsUsed], usage, stopReason: final.stop_reason };
     }
 
     messages.push({ role: 'assistant', content: final.content as Anthropic.ContentBlockParam[] });
@@ -257,8 +297,10 @@ export async function* streamAssistantResponse(
   const model = await readAssistantModel();
   const fx = await readFx();
 
-  const messages: Anthropic.MessageParam[] = history.slice(-10).map((m) => ({ role: m.role, content: m.content }));
-  messages.push({ role: 'user', content: buildUserTurn(userMessage, context, advisor) });
+  const messages: Anthropic.MessageParam[] = sanitizeHistory([
+    ...history.slice(-10),
+    { role: 'user', content: buildUserTurn(userMessage, context, advisor) },
+  ]);
 
   const knowledgeIds = advisor.knowledge.map((h) => h.entry.id);
   const toolCtx = { userId, facts: advisor.facts, financialYear: advisor.financialYear };

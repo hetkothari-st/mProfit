@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runAdvisorTurn, type TurnClient } from '../../src/ai/claudeClient.js';
+import { runAdvisorTurn, sanitizeHistory, type TurnClient } from '../../src/ai/claudeClient.js';
 
 // The adviser's turn: stream text as it comes; when the model asks for tools,
 // run them and continue — at most `maxRounds` times, then answer without tools.
 
 type Block = { type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: unknown };
 
-function fakeStream(blocks: Block[], stop: 'end_turn' | 'tool_use') {
+function fakeStream(blocks: Block[], stop: string) {
   const events = blocks
     .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
     .map((b) => ({ type: 'content_block_delta', delta: { type: 'text_delta', text: b.text } }));
@@ -91,5 +91,62 @@ describe('runAdvisorTurn', () => {
     const final = c.calls[2] as { tool_choice?: { type: string } };
     expect(final.tool_choice).toEqual({ type: 'none' });
     expect(result.fullText).toBe('Here is what I can say.');
+  });
+});
+
+// A turn that produced no visible text used to reach the client as a silent
+// "done" — shown as "(no response)" — and was saved as an empty row that then
+// sat in the history of every later turn.
+describe('runAdvisorTurn — never a silent answer', () => {
+  it('turns extended thinking off, so the output budget goes to the answer', async () => {
+    const c = client([fakeStream([{ type: 'text', text: 'ok' }], 'end_turn')]);
+    await collect(runAdvisorTurn({ ...base, client: c, messages: [{ role: 'user', content: 'q' }], maxRounds: 3, execTool: vi.fn() }));
+    expect((c.calls[0] as { thinking?: unknown }).thinking).toEqual({ type: 'disabled' });
+  });
+
+  it('says it could not finish, instead of going silent, when the budget runs out', async () => {
+    const c = client([fakeStream([], 'max_tokens')]);
+    const { chunks, result } = await collect(
+      runAdvisorTurn({ ...base, client: c, messages: [{ role: 'user', content: 'q' }], maxRounds: 3, execTool: vi.fn() }),
+    );
+    expect(chunks.join('')).toMatch(/couldn.t finish/i);
+    expect(result.fullText).toMatch(/couldn.t finish/i);
+    expect(result.stopReason).toBe('max_tokens');
+  });
+
+  it('declines plainly when the model refuses', async () => {
+    const c = client([fakeStream([], 'refusal')]);
+    const { result } = await collect(
+      runAdvisorTurn({ ...base, client: c, messages: [{ role: 'user', content: 'q' }], maxRounds: 3, execTool: vi.fn() }),
+    );
+    expect(result.fullText).toMatch(/can.t help with that/i);
+    expect(result.stopReason).toBe('refusal');
+  });
+});
+
+describe('sanitizeHistory', () => {
+  it('drops empty turns and merges what is left so roles alternate', () => {
+    expect(
+      sanitizeHistory([
+        { role: 'user', content: 'a' },
+        { role: 'assistant', content: '' },
+        { role: 'user', content: 'b' },
+        { role: 'assistant', content: '   ' },
+        { role: 'user', content: 'c' },
+        { role: 'assistant', content: 'd' },
+      ]),
+    ).toEqual([
+      { role: 'user', content: 'a\n\nb\n\nc' },
+      { role: 'assistant', content: 'd' },
+    ]);
+  });
+
+  it('starts with a user turn', () => {
+    expect(
+      sanitizeHistory([
+        { role: 'assistant', content: 'x' },
+        { role: 'user', content: 'y' },
+      ]),
+    ).toEqual([{ role: 'user', content: 'y' }]);
   });
 });
