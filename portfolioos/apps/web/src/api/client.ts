@@ -1,5 +1,5 @@
 import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { getApiBaseUrl } from './baseUrl';

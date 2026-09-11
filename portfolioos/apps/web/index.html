@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <script>
       try {
-        var t = JSON.parse(localStorage.getItem('portfolioos.theme') || '{}');
+        var t = JSON.parse(localStorage.getItem('everypaisa.theme') || localStorage.getItem('portfolioos.theme') || '{}');
         var dark = t.state ? t.state.dark !== false : true;
         if (dark) document.documentElement.classList.add('dark');
       } catch (e) {

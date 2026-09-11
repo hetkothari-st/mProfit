@@ -10,7 +10,7 @@ import type {
   PortfolioGroupListItem,
   PortfolioSummary,
   UpdatePortfolioGroupRequest,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);

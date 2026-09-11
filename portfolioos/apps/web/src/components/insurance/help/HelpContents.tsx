@@ -1,4 +1,4 @@
-import type { HelpGroup, HelpTopic } from '@portfolioos/shared';
+import type { HelpGroup, HelpTopic } from '@everypaisa/shared';
 
 /** The topics, by group, as anchor links — the page's table of contents. */
 export function HelpContents({ groups }: { groups: Array<{ group: HelpGroup; topics: HelpTopic[] }> }) {

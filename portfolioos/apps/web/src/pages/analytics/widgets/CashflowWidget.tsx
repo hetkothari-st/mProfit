@@ -1,6 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, ReferenceLine } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { formatINR, toDecimal } from '@portfolioos/shared';
+import { formatINR, toDecimal } from '@everypaisa/shared';
 import type { CashflowMonth } from '@/api/analytics.api';
 import { POS_COLOR, NEG_COLOR, shortInr } from '../chartColors';
 

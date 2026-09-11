@@ -17,7 +17,7 @@ import {
   taxYearOf,
   type HealthLine,
   type TaxBucket,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Figure } from '@/components/receipt/Receipt';

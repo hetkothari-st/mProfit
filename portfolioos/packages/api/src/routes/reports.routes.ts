@@ -76,7 +76,7 @@ export const reportsRouter = Router();
 reportsRouter.use(authenticate);
 
 // Free tier gets basic reports only (holdings summary, XIRR, cash flow —
-// see PLAN_LIMITS / FEATURE_MIN_TIER in @portfolioos/shared). Everything
+// see PLAN_LIMITS / FEATURE_MIN_TIER in @everypaisa/shared). Everything
 // else in this file's /download catalog requires TAX_REPORT_CATALOG
 // (Plus) or ACCOUNTING_MODULE (Pro/Advisor) for the accounting-specific
 // exports. The non-download endpoints above (/summary, /xirr, /statement/*,

@@ -62,7 +62,7 @@ pnpm dev
 
 ### Demo credentials
 
-- Email: `demo@portfolioos.in`
+- Email: `demo@everypaisa.in`
 - Password: `Demo@1234`
 
 ## Scripts

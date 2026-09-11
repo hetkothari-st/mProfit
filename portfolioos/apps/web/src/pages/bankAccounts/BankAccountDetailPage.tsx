@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Decimal, formatINR } from '@portfolioos/shared';
+import { Decimal, formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {

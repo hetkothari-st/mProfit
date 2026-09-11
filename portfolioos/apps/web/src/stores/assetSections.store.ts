@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AssetSectionPref } from '@portfolioos/shared';
+import type { AssetSectionPref } from '@everypaisa/shared';
 import { userPreferencesApi } from '@/api/userPreferences.api';
 
 interface AssetSectionsState {

@@ -372,7 +372,7 @@ extension/
     └── auth.ts             # bearer token paired with web session
 ```
 
-Pairing: install extension → open popup → click "Pair with PortfolioOS" → opens web pairing page → web generates short-lived code → user pastes in extension → exchanges for long-lived bearer (stored in `chrome.storage.local`, encrypted by browser profile).
+Pairing: install extension → open popup → click "Pair with EveryPaisa" → opens web pairing page → web generates short-lived code → user pastes in extension → exchanges for long-lived bearer (stored in `chrome.storage.local`, encrypted by browser profile).
 
 Per-host content script waits for user's normal login to succeed (DOM heuristic: passbook menu visible) → pulls passbook PDF / scrapes table → sends `RawScrapePayload`. Extension never asks user to re-login.
 

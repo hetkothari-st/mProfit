@@ -19,7 +19,7 @@
  */
 
 import { Prisma, type RentReceipt } from '@prisma/client';
-import { similarityRatio } from '@portfolioos/shared';
+import { similarityRatio } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import {
   BadRequestError,

@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import type { BankAccountDTO } from '@/api/bankAccounts.api';
 import { usePrivacyStore } from '@/stores/privacy.store';
 import { AccountNumberReveal } from '@/components/bankAccounts/AccountNumberReveal';

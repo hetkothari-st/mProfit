@@ -12,14 +12,14 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
-import type { HoldingRow } from '@portfolioos/shared';
+import type { HoldingRow } from '@everypaisa/shared';
 import {
   formatINR,
   formatPercent,
   formatQuantity,
   ASSET_CLASS_LABELS,
   toDecimal,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 // Money arrives as a branded string (§3.2); `> 0` / `< 0` would lex-compare.
 // Route through Decimal so the sign is evaluated on the actual number.

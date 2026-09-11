@@ -6,7 +6,7 @@
 
 ## 0. PROJECT OVERVIEW
 
-Build **PortfolioOS** — a full-stack SaaS web application for Indian investors, HNIs, Family Offices, Financial Advisors, Chartered Accountants, and Traders. The platform must:
+Build **EveryPaisa** — a full-stack SaaS web application for Indian investors, HNIs, Family Offices, Financial Advisors, Chartered Accountants, and Traders. The platform must:
 
 - Track investments across all Indian asset classes (Stocks, Mutual Funds, F&O, Bonds, FDs, NPS, AIF, PMS, REITs, InvITs, Gold, ULIPs, Insurance, PPF, EPF, Real Estate, Crypto, Art, and more)
 - Import trade data from 700+ brokers and financial institutions
@@ -1454,7 +1454,7 @@ Use **Vitest** for both frontend and backend tests.
 ## 17. SAMPLE DATA SEED
 
 Create `packages/api/prisma/seed.ts` with:
-- 1 demo investor user (email: `demo@portfolioos.in`, password: `Demo@1234`)
+- 1 demo investor user (email: `demo@everypaisa.in`, password: `Demo@1234`)
 - 3 portfolios (Long Term, Trading, F&O)
 - 20 stock holdings across both exchanges
 - 10 mutual fund holdings

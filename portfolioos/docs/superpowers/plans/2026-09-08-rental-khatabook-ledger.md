@@ -26,7 +26,7 @@
 - `OVERDUE_GRACE_DAYS = 7` — the existing constant at `packages/api/src/services/rental.service.ts:884`. The derived status must reproduce it exactly.
 - Running a migration against the dev database is a **G2 review gate** (CLAUDE.md §16): stop, show the parity output, wait for the user. Production is **G3**.
 - API tests need a live Postgres — `DATABASE_URL` must point at a dev/test DB. Pure-math tests do not.
-- Run backend tests with `pnpm --filter @portfolioos/api exec vitest run <path>` from `portfolioos/`.
+- Run backend tests with `pnpm --filter @everypaisa/api exec vitest run <path>` from `portfolioos/`.
 
 ---
 
@@ -257,7 +257,7 @@ describe('invariant: RentLedgerEntry RLS isolation', () => {
 - [ ] **Step 4: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/invariants/rental-ledger-rls.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/invariants/rental-ledger-rls.test.ts
 ```
 
 Expected: FAIL — `prisma.rentLedgerEntry` is undefined, because the client has not been regenerated.
@@ -269,14 +269,14 @@ Expected: FAIL — `prisma.rentLedgerEntry` is undefined, because the client has
 After approval:
 
 ```bash
-pnpm --filter @portfolioos/api exec prisma migrate dev --name rental_ledger
-pnpm --filter @portfolioos/api exec prisma generate
+pnpm --filter @everypaisa/api exec prisma migrate dev --name rental_ledger
+pnpm --filter @everypaisa/api exec prisma generate
 ```
 
 - [ ] **Step 6: Run the test to verify it passes**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/invariants/rental-ledger-rls.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/invariants/rental-ledger-rls.test.ts
 ```
 
 Expected: PASS, both cases.
@@ -487,7 +487,7 @@ describe('deriveReceiptStatus', () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run src/services/rentalLedgerMath.test.ts
+pnpm --filter @everypaisa/api exec vitest run src/services/rentalLedgerMath.test.ts
 ```
 
 Expected: FAIL — `Cannot find module './rentalLedgerMath.js'`.
@@ -652,7 +652,7 @@ export function deriveReceiptStatus(args: {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run src/services/rentalLedgerMath.test.ts
+pnpm --filter @everypaisa/api exec vitest run src/services/rentalLedgerMath.test.ts
 ```
 
 Expected: PASS, 17 tests.
@@ -833,7 +833,7 @@ describe('invariant: tenancy ledger recompute', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/invariants/rental-ledger-recompute.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/invariants/rental-ledger-recompute.test.ts
 ```
 
 Expected: FAIL — `Cannot find module '../../src/services/rentalLedger.service.js'`.
@@ -1030,7 +1030,7 @@ export async function recomputeTenancy(tenancyId: string): Promise<LedgerSummary
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/invariants/rental-ledger-recompute.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/invariants/rental-ledger-recompute.test.ts
 ```
 
 Expected: PASS, 5 tests.
@@ -1154,7 +1154,7 @@ describe('backfillRentalLedger parity', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/scripts/backfillRentalLedger.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/scripts/backfillRentalLedger.test.ts
 ```
 
 Expected: FAIL — `Cannot find module '../../scripts/backfillRentalLedger.js'`.
@@ -1172,7 +1172,7 @@ Create `packages/api/scripts/backfillRentalLedger.ts`:
  * Idempotent — each generated entry carries a deterministic `sourceHash`
  * (CLAUDE.md §3.3), so a second run inserts nothing.
  *
- * Run: pnpm --filter @portfolioos/api exec tsx scripts/backfillRentalLedger.ts
+ * Run: pnpm --filter @everypaisa/api exec tsx scripts/backfillRentalLedger.ts
  */
 
 import { createHash } from 'node:crypto';
@@ -1290,7 +1290,7 @@ if (process.argv[1]?.endsWith('backfillRentalLedger.ts')) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/scripts/backfillRentalLedger.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/scripts/backfillRentalLedger.test.ts
 ```
 
 Expected: PASS, 3 tests.
@@ -1300,7 +1300,7 @@ Expected: PASS, 3 tests.
 **STOP.** Show the user the dry-run output first:
 
 ```bash
-pnpm --filter @portfolioos/api exec tsx scripts/backfillRentalLedger.ts --dry-run
+pnpm --filter @everypaisa/api exec tsx scripts/backfillRentalLedger.ts --dry-run
 ```
 
 Then, on approval, run it for real and show the report. `drift` must be `[]`. If it is not, stop and report — do not proceed to Task 5.
@@ -1408,7 +1408,7 @@ describe('regression: a receipt accepts more than one payment', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/regressions/rental-second-payment.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/regressions/rental-second-payment.test.ts
 ```
 
 Expected: FAIL — the second `markReceiptReceived` returns early and the receipt stays at `20000`.
@@ -1493,7 +1493,7 @@ import {
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/regressions/rental-second-payment.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/regressions/rental-second-payment.test.ts
 ```
 
 Expected: PASS.
@@ -1741,7 +1741,7 @@ Expected: only reads and the `generateReceiptsForTenancy` seeding write remain. 
 - [ ] **Step 12: Run the whole rental test surface**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/invariants/rental-ledger-recompute.test.ts test/invariants/rental-ledger-rls.test.ts test/regressions/rental-second-payment.test.ts test/scripts/backfillRentalLedger.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/invariants/rental-ledger-recompute.test.ts test/invariants/rental-ledger-rls.test.ts test/regressions/rental-second-payment.test.ts test/scripts/backfillRentalLedger.test.ts
 ```
 
 Expected: all PASS.
@@ -1901,7 +1901,7 @@ describe('rental ledger entries', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/services/rentalLedgerEntries.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/services/rentalLedgerEntries.test.ts
 ```
 
 Expected: FAIL — `createLedgerEntry is not a function`.
@@ -1916,7 +1916,7 @@ Append to `packages/api/src/services/rentalLedger.service.ts`:
 
 ```ts
 import { BadRequestError, NotFoundError, ForbiddenError } from '../lib/errors.js';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { getTenancyOwned } from './rental.service.js';
 
 const CASH_FLOW_DIRECTION: Partial<Record<LedgerEntryType, 'INFLOW' | 'OUTFLOW'>> = {
@@ -2251,12 +2251,12 @@ export async function buildReminderMessage(
 }
 ```
 
-> `formatINR` is exported from `@portfolioos/shared` and is already used on the web side (`RentalListPage.tsx:20`). If its signature there takes a `Decimal` rather than a string, adapt the one call above; do not add a second formatter.
+> `formatINR` is exported from `@everypaisa/shared` and is already used on the web side (`RentalListPage.tsx:20`). If its signature there takes a `Decimal` rather than a string, adapt the one call above; do not add a second formatter.
 
 - [ ] **Step 5: Run the test to verify it passes**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/services/rentalLedgerEntries.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/services/rentalLedgerEntries.test.ts
 ```
 
 Expected: PASS, 6 tests.
@@ -2320,7 +2320,7 @@ describe('rental ledger routes', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/services/rentalLedgerRoutes.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/services/rentalLedgerRoutes.test.ts
 ```
 
 Expected: FAIL — the ledger paths are missing.
@@ -2441,7 +2441,7 @@ rentalRouter.delete('/entries/:entryId', asyncHandler(deleteLedgerEntryHandler))
 - [ ] **Step 5: Run the test to verify it passes**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run test/services/rentalLedgerRoutes.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/services/rentalLedgerRoutes.test.ts
 ```
 
 Expected: PASS.
@@ -2449,7 +2449,7 @@ Expected: PASS.
 - [ ] **Step 6: Typecheck the API package**
 
 ```bash
-pnpm --filter @portfolioos/api run typecheck
+pnpm --filter @everypaisa/api run typecheck
 ```
 
 Expected: no errors.
@@ -2605,7 +2605,7 @@ Also add `isSkipped: boolean;` to `RentReceiptDTO` so the UI can tell a skipped 
 - [ ] **Step 3: Typecheck the web package**
 
 ```bash
-pnpm --filter @portfolioos/web run typecheck
+pnpm --filter @everypaisa/web run typecheck
 ```
 
 Expected: no errors.
@@ -2631,7 +2631,7 @@ Message: `feat(web): rental khata ledger API client`
 - Consumes: `rentalApi.getTenancyLedger`, `createLedgerEntry`, `deleteLedgerEntry`, `getReminderLink`, `statementUrl` from Task 8.
 - Produces: `export function TenantKhataPage(): JSX.Element`, mounted at `/rental/tenancies/:tenancyId`.
 
-Follow the conventions already in `RentalListPage.tsx`: `useQuery`/`useMutation` from `@tanstack/react-query`, `toast` from `react-hot-toast`, `Decimal` and `formatINR` from `@portfolioos/shared`, `PageHeader`, `Button`, `Card`/`CardContent`, `Dialog*`, `Label`, `Input`, `Select`, `EmptyState`, and `lucide-react` icons. Theme colors come from CSS vars (`hsl(var(--positive))`, `hsl(var(--destructive))`) — no hard-coded hex.
+Follow the conventions already in `RentalListPage.tsx`: `useQuery`/`useMutation` from `@tanstack/react-query`, `toast` from `react-hot-toast`, `Decimal` and `formatINR` from `@everypaisa/shared`, `PageHeader`, `Button`, `Card`/`CardContent`, `Dialog*`, `Label`, `Input`, `Select`, `EmptyState`, and `lucide-react` icons. Theme colors come from CSS vars (`hsl(var(--positive))`, `hsl(var(--destructive))`) — no hard-coded hex.
 
 - [ ] **Step 1: Create the page**
 
@@ -2654,7 +2654,7 @@ Create `apps/web/src/pages/rental/TenantKhataPage.tsx` with:
 - Loading state: three `Card`s with `h-20 animate-pulse bg-muted/60`, matching `RentalListPage`.
 - Empty state: `EmptyState` with the `Receipt` icon, title `No entries yet`, description `Record a payment or a charge to start this tenant's khata.`
 
-All money math uses `Decimal` from `@portfolioos/shared` — never `parseFloat`.
+All money math uses `Decimal` from `@everypaisa/shared` — never `parseFloat`.
 
 - [ ] **Step 2: Register the route**
 
@@ -2673,8 +2673,8 @@ and add the route **above** `<Route path="/rental/:id" ... />`:
 - [ ] **Step 3: Typecheck and lint**
 
 ```bash
-pnpm --filter @portfolioos/web run typecheck
-pnpm --filter @portfolioos/web run lint
+pnpm --filter @everypaisa/web run typecheck
+pnpm --filter @everypaisa/web run lint
 ```
 
 Expected: no errors.
@@ -2737,8 +2737,8 @@ In `RentalDetailPage.tsx`, wrap each tenancy card's header in a `Link` to `/rent
 - [ ] **Step 3: Typecheck and lint**
 
 ```bash
-pnpm --filter @portfolioos/web run typecheck
-pnpm --filter @portfolioos/web run lint
+pnpm --filter @everypaisa/web run typecheck
+pnpm --filter @everypaisa/web run lint
 ```
 
 Expected: no errors.

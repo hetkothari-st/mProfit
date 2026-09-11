@@ -37,7 +37,7 @@
 
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import type { AssetClass, Exchange, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';

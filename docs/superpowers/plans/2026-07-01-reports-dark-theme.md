@@ -98,10 +98,10 @@ Replace with:
 
 - [ ] **Step 4: Typecheck and build**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck 2>&1 | tail -30`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck 2>&1 | tail -30`
 Expected: no new errors (this file has no other consumers whose types would break from a value-only change plus 3 new optional-shaped keys on a `const` object).
 
-Also run: `cd portfolioos && pnpm --filter @portfolioos/api run build 2>&1 | tail -30`
+Also run: `cd portfolioos && pnpm --filter @everypaisa/api run build 2>&1 | tail -30`
 Expected: build succeeds.
 
 - [ ] **Step 5: Commit**
@@ -129,7 +129,7 @@ Find (inside `streamPdf`, the `renderPageHeader` function):
     function renderPageHeader(): void {
       doc.rect(0, 0, doc.page.width, 56).fill(BRAND.ink);
       doc.font('Helvetica-Bold').fontSize(17).fillColor(BRAND.white)
-         .text('PortfolioOS', ML, 14, { lineBreak: false });
+         .text('EveryPaisa', ML, 14, { lineBreak: false });
       doc.font('Helvetica').fontSize(10).fillColor('#94AECB')
          .text(pdfSafe(payload.title), ML, 36, { lineBreak: false });
       const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
@@ -148,7 +148,7 @@ Replace with:
       doc.rect(0, 0, doc.page.width, doc.page.height).fill(BRAND.pageBg);
       doc.rect(0, 0, doc.page.width, 56).fill(BRAND.headerBarBg);
       doc.font('Helvetica-Bold').fontSize(17).fillColor(BRAND.white)
-         .text('PortfolioOS', ML, 14, { lineBreak: false });
+         .text('EveryPaisa', ML, 14, { lineBreak: false });
       doc.font('Helvetica').fontSize(10).fillColor(BRAND.muted)
          .text(pdfSafe(payload.title), ML, 36, { lineBreak: false });
       const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
@@ -197,7 +197,7 @@ Replace with:
 
 - [ ] **Step 4: Typecheck and build**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck 2>&1 | tail -30 && pnpm --filter @portfolioos/api run build 2>&1 | tail -30`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck 2>&1 | tail -30 && pnpm --filter @everypaisa/api run build 2>&1 | tail -30`
 Expected: both succeed.
 
 - [ ] **Step 5: Verify no leftover hardcoded literals in this file**
@@ -233,7 +233,7 @@ Find (the `renderHeader` function inside `streamDashboardPdf`):
   function renderHeader(): void {
     doc.rect(0, 0, doc.page.width, 56).fill(BRAND.ink);
     doc.font('Helvetica-Bold').fontSize(16).fillColor(BRAND.white)
-       .text('PortfolioOS', ML, 14, { lineBreak: false });
+       .text('EveryPaisa', ML, 14, { lineBreak: false });
     doc.font('Helvetica').fontSize(9.5).fillColor('#94AECB')
        .text('Comprehensive Portfolio Report', ML, 36, { lineBreak: false });
     doc.font('Helvetica').fontSize(8).fillColor('#94AECB')
@@ -247,7 +247,7 @@ Replace with:
     doc.rect(0, 0, doc.page.width, doc.page.height).fill(BRAND.pageBg);
     doc.rect(0, 0, doc.page.width, 56).fill(BRAND.headerBarBg);
     doc.font('Helvetica-Bold').fontSize(16).fillColor(BRAND.white)
-       .text('PortfolioOS', ML, 14, { lineBreak: false });
+       .text('EveryPaisa', ML, 14, { lineBreak: false });
     doc.font('Helvetica').fontSize(9.5).fillColor(BRAND.muted)
        .text('Comprehensive Portfolio Report', ML, 36, { lineBreak: false });
     doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
@@ -271,7 +271,7 @@ Replace with:
 
 - [ ] **Step 3: Typecheck and build**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck 2>&1 | tail -30 && pnpm --filter @portfolioos/api run build 2>&1 | tail -30`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck 2>&1 | tail -30 && pnpm --filter @everypaisa/api run build 2>&1 | tail -30`
 Expected: both succeed.
 
 - [ ] **Step 4: Verify no leftover hardcoded literals in this file**
@@ -419,7 +419,7 @@ Replace with:
 
 - [ ] **Step 5: Typecheck and build**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck 2>&1 | tail -30 && pnpm --filter @portfolioos/api run build 2>&1 | tail -30`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck 2>&1 | tail -30 && pnpm --filter @everypaisa/api run build 2>&1 | tail -30`
 Expected: both succeed.
 
 - [ ] **Step 6: Verify no leftover light-palette hex values**
@@ -462,7 +462,7 @@ Replace with:
 
 - [ ] **Step 2: Typecheck and build**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck 2>&1 | tail -30 && pnpm --filter @portfolioos/api run build 2>&1 | tail -30`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck 2>&1 | tail -30 && pnpm --filter @everypaisa/api run build 2>&1 | tail -30`
 Expected: both succeed.
 
 - [ ] **Step 3: Commit**
@@ -482,7 +482,7 @@ git commit -m "feat(reports): dark-theme opening-balance row highlight in specia
 
 - [ ] **Step 1: Start the API server**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run dev` (or the project's documented dev-server command — check `packages/api/package.json`'s `scripts.dev` if this differs).
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run dev` (or the project's documented dev-server command — check `packages/api/package.json`'s `scripts.dev` if this differs).
 Expected: server starts with no errors, listening on its configured port (check `packages/api/src/config/env.ts` or `.env` for the port, commonly `3001` or `3020` per this codebase's existing proxy config).
 
 - [ ] **Step 2: Authenticate and hit one endpoint from each of the 3 pipelines**

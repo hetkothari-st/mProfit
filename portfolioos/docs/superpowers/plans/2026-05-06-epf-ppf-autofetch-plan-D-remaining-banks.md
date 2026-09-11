@@ -230,7 +230,7 @@ Modify `apps/web/src/pages/assetClasses/PPFNpsFormDialog.tsx` (already has SBI a
 
 ### D8. Final verification + tag
 
-- [ ] `pnpm --filter @portfolioos/api typecheck && pnpm --filter @portfolioos/api build && pnpm --filter web typecheck` — all green
+- [ ] `pnpm --filter @everypaisa/api typecheck && pnpm --filter @everypaisa/api build && pnpm --filter web typecheck` — all green
 - [ ] `git tag pf-plan-d-remaining-banks`
 
 ---

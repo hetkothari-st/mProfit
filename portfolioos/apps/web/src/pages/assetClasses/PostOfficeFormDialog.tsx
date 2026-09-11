@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
-import type { AssetClass, TransactionType } from '@portfolioos/shared';
+import type { AssetClass, TransactionType } from '@everypaisa/shared';
 import type { FormDialogProps } from './FDFormDialog';
 import { SCHEMES, SCHEME_ORDER, assetClassToScheme, schemeForAssetClass, type SchemeType } from '@/lib/poSchemes';
 

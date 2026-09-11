@@ -281,7 +281,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
 
   // ─── Now render PDF ─────────────────────────────────────────────────────────
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', 'attachment; filename="portfolioos-dashboard-report.pdf"');
+  res.setHeader('Content-Disposition', 'attachment; filename="everypaisa-dashboard-report.pdf"');
 
   const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'portrait', bufferPages: true });
   doc.pipe(res);
@@ -1044,7 +1044,7 @@ export async function streamDashboardExcel(res: Response, params: DashboardRepor
   wt.getColumn(4).width = 40;
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename="portfolioos-dashboard-report.xlsx"');
+  res.setHeader('Content-Disposition', 'attachment; filename="everypaisa-dashboard-report.xlsx"');
   await wb.xlsx.write(res);
   res.end();
 }

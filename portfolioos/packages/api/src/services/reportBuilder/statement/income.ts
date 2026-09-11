@@ -136,7 +136,7 @@ export async function buildIncomeStatement(
     rows: dividends.rows,
     mainSectionLabel: dividends.title,
     additionalSections: [interest, maturity],
-    filenameStem: `portfolioos-income-statement-${fyLabel.replace(/[^a-z0-9-]+/gi, '_')}`,
+    filenameStem: `everypaisa-income-statement-${fyLabel.replace(/[^a-z0-9-]+/gi, '_')}`,
   };
 }
 

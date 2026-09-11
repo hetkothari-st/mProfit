@@ -87,7 +87,7 @@
  *     `kind: 'OVERDUE_CATCHUP'` in `drift`; everything else is `'MONEY'`.
  *     The exit code still goes non-zero on ANY drift — the operator decides.
  *
- * Run:      pnpm --filter @portfolioos/api exec tsx scripts/backfillRentalLedger.ts
+ * Run:      pnpm --filter @everypaisa/api exec tsx scripts/backfillRentalLedger.ts
  * Dry run:  ... scripts/backfillRentalLedger.ts --dry-run
  */
 

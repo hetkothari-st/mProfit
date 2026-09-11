@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { parse } from 'csv-parse/sync';
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 import type { Parser, ParserContext, ParserResult, ParsedTransaction } from './types.js';
 import type { AssetClass, Exchange, TransactionType } from '@prisma/client';
 import { logger } from '../../../lib/logger.js';

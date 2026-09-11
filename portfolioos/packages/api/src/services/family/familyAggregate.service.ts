@@ -24,7 +24,7 @@ import {
   type AttentionItem,
   type FamilyAttention,
   premiumToAnnual,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { runAsUser } from '../../lib/requestContext.js';
 import {
   getEffectiveScope,
@@ -105,7 +105,7 @@ import { isPriceStale } from '../priceStaleness.js';
 
 /**
  * The closed sets a family goal's `category` / `priority` / `status` can take.
- * Declared once in `@portfolioos/shared` and reached here through
+ * Declared once in `@everypaisa/shared` and reached here through
  * goals.service, so a client can map every token to a label exhaustively
  * instead of falling back to a raw enum name.
  */
@@ -113,7 +113,7 @@ export { GOAL_CATEGORIES, GOAL_PRIORITIES, GOAL_STATUSES };
 export type { GoalCategory, GoalPriority, GoalStatus };
 
 /**
- * The response contract lives in `@portfolioos/shared`
+ * The response contract lives in `@everypaisa/shared`
  * (types/familyDashboard.ts) so this service and the web client are typed by
  * ONE declaration of every field name — a rename here that the client has not
  * followed becomes a compile error instead of an `undefined` on the page.

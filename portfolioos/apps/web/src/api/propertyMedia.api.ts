@@ -1,5 +1,5 @@
 import { api, unwrap } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 import type { PreparedImage } from '@/lib/imageResize';
 
 export type PropertyOwnerType = 'OWNED_PROPERTY' | 'RENTAL_PROPERTY';

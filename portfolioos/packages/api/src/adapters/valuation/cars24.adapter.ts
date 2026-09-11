@@ -99,7 +99,7 @@ async function fetchCars24Median(input: ValuationQueryInput): Promise<Decimal | 
           try {
             const d = new Decimal(v);
             if (d.gt(MIN) && d.lt(MAX)) prices.push(d);
-            // eslint-disable-next-line portfolioos/no-silent-catch -- Decimal's throw IS the numeric test on a scraped field; most candidate keys are not prices
+            // eslint-disable-next-line everypaisa/no-silent-catch -- Decimal's throw IS the numeric test on a scraped field; most candidate keys are not prices
           } catch { /* not a number — not a price */ }
         } else if (typeof v === 'string') {
           // Strip Indian currency formatting: "₹12,34,567" → "1234567"
@@ -108,7 +108,7 @@ async function fetchCars24Median(input: ValuationQueryInput): Promise<Decimal | 
             try {
               const d = new Decimal(cleaned);
               if (d.gt(MIN) && d.lt(MAX)) prices.push(d);
-              // eslint-disable-next-line portfolioos/no-silent-catch -- as above, for the string form after currency formatting is stripped
+              // eslint-disable-next-line everypaisa/no-silent-catch -- as above, for the string form after currency formatting is stripped
             } catch { /* not a number — not a price */ }
           }
         }

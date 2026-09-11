@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { gmail_v1 } from 'googleapis';
-import { Decimal as SharedDecimal } from '@portfolioos/shared';
+import { Decimal as SharedDecimal } from '@everypaisa/shared';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';

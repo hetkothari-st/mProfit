@@ -1,6 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { formatINR, toDecimal, ASSET_CLASS_LABELS } from '@portfolioos/shared';
+import { formatINR, toDecimal, ASSET_CLASS_LABELS } from '@everypaisa/shared';
 import type {
   CgByFyRow,
   IncomeMonthRow,

@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse, AssetSearchHit, LiveQuote } from '@portfolioos/shared';
+import type { ApiResponse, AssetSearchHit, LiveQuote } from '@everypaisa/shared';
 
 function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);

@@ -38,11 +38,11 @@ const UAN_SELECTOR = '.uan_no, .uanno, [data-uan]'; // multiple fallbacks
 // ---------------------------------------------------------------------------
 
 function showBanner(text: string, isError = false): void {
-  const existing = document.getElementById('portfolioos-banner');
+  const existing = document.getElementById('everypaisa-banner');
   if (existing) existing.remove();
 
   const banner = document.createElement('div');
-  banner.id = 'portfolioos-banner';
+  banner.id = 'everypaisa-banner';
   banner.style.cssText = `
     position: fixed;
     bottom: 16px;

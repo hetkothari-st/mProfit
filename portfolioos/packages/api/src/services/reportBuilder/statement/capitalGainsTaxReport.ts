@@ -66,7 +66,7 @@ export async function streamCapitalGainsTaxReport(
     .slice(0, 10);
 
   // ─── PHASE 1 — open PDFKit (landscape A4, single continuous doc) ──
-  const filename = `portfolioos-capital-gains-tax-${params.fy}.pdf`;
+  const filename = `everypaisa-capital-gains-tax-${params.fy}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 

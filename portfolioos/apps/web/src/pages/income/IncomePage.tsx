@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { incomeApi, type IncomeDTO } from '@/api/income.api';
 import { INCOME_TYPE_LABEL } from './incomeTypeMeta';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR, toDecimal } from '@portfolioos/shared';
+import { formatINR, toDecimal } from '@everypaisa/shared';
 import { IncomeDialog } from './IncomeDialog';
 
 export function IncomePage() {

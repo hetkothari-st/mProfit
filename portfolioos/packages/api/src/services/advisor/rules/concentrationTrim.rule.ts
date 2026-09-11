@@ -20,7 +20,7 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import {
   CATEGORY_BASE_PRIORITY,
   CONCENTRATION_CAP_PCT,

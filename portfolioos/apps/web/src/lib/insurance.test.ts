@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { NextPremiumDue } from '@portfolioos/shared';
+import type { NextPremiumDue } from '@everypaisa/shared';
 import { criticalIllnessMeta, needsNominee, nextPremiumPrefill, plural, premiumDueMeta, urgencyRank } from './insurance';
 
 const due = (d: Partial<NextPremiumDue>): NextPremiumDue => ({

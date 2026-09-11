@@ -1,4 +1,4 @@
-# PortfolioOS v2 — AUDIT REPORT
+# EveryPaisa v2 — AUDIT REPORT
 
 **Generated:** 2026-04-21
 **Auditor:** Claude Code (Opus 4.7)
@@ -34,8 +34,8 @@ D:\het-desktop\mProfit\
 
 | Package | Purpose | Build OK | Typecheck OK | Tests |
 |---|---|---|---|---|
-| `@portfolioos/shared` | Shared Zod schemas / DTOs / labels | ✅ | ✅ | no test script |
-| `@portfolioos/api` | Backend (Express + Prisma) | ❌ | ❌ | no test files |
+| `@everypaisa/shared` | Shared Zod schemas / DTOs / labels | ✅ | ✅ | no test script |
+| `@everypaisa/api` | Backend (Express + Prisma) | ❌ | ❌ | no test files |
 | `apps/web` (unnamed workspace) | Frontend (Vite SPA) | ✅ | ✅ | no test files |
 
 ### Prisma schema — every model (`packages/api/prisma/schema.prisma`, 759 lines)
@@ -95,7 +95,7 @@ All additive so far; none of the v2 tables (`CanonicalEvent`, `MonitoredSender`,
 | Command | Exit | Notable output |
 |---|---|---|
 | `pnpm install --frozen-lockfile` | 0 | "Already up to date" (1.4s). |
-| `pnpm --filter @portfolioos/api exec prisma generate` | 0 | Generated client v5.22.0. |
+| `pnpm --filter @everypaisa/api exec prisma generate` | 0 | Generated client v5.22.0. |
 | `pnpm -r run build` | **FAIL** | `packages/api/tsconfig.build.json(5,5): TS5069: Option 'declarationMap' cannot be specified without specifying option 'declaration' or option 'composite'`. `apps/web` and `packages/shared` build OK. |
 | `pnpm -r run typecheck` | **FAIL** | `packages/api`: `TS6059: File '…/prisma/seed.ts' is not under 'rootDir' '…/src'`. `apps/web` and `packages/shared` typecheck OK. |
 | `pnpm -r run lint` | **FAIL** | `'eslint' is not recognized as an internal or external command` in both `packages/api` and `apps/web` — eslint is not installed as a dev dependency. |

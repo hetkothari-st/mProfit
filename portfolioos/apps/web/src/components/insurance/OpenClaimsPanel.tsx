@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { Card } from '@/components/ui/card';
 import type { InsuranceClaimDTO, InsurancePolicyDTO } from '@/api/insurance.api';
 import { InsurerLogo } from './InsurerLogo';

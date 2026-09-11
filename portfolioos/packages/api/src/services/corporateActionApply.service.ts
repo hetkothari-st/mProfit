@@ -1,4 +1,4 @@
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { recomputeForAsset } from './holdingsProjection.js';

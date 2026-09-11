@@ -46,7 +46,7 @@ import {
   Decimal,
   toDecimal,
   valuationMethodFor,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 const PERIOD_OPTIONS = [
   { label: '1M', days: 30 },

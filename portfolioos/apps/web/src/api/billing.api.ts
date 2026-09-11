@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse, AuthTokens, AuthUser, PlanTierValue } from '@portfolioos/shared';
+import type { ApiResponse, AuthTokens, AuthUser, PlanTierValue } from '@everypaisa/shared';
 
 function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);

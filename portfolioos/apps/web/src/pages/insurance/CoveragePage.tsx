@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
-import { Decimal, computeCoverage, type CoverageAssumptions, type NextStep } from '@portfolioos/shared';
+import { Decimal, computeCoverage, type CoverageAssumptions, type NextStep } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';

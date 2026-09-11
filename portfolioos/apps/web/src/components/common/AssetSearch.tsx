@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Search, Loader2 } from 'lucide-react';
 import { assetsApi } from '@/api/assets.api';
 import { Input } from '@/components/ui/input';
-import type { AssetSearchHit } from '@portfolioos/shared';
+import type { AssetSearchHit } from '@everypaisa/shared';
 
 interface Props {
   kind?: 'all' | 'stock' | 'mf';

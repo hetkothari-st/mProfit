@@ -1,5 +1,5 @@
 import { ExternalLink } from 'lucide-react';
-import type { OfficialSource } from '@portfolioos/shared';
+import type { OfficialSource } from '@everypaisa/shared';
 
 function shortName(url: string): string {
   if (url.includes('cioins.co.in')) return 'Ombudsman council';

@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:15
-    container_name: portfolioos-postgres
+    container_name: everypaisa-postgres
     environment:
       POSTGRES_DB: portfolioos
       POSTGRES_USER: postgres
@@ -18,7 +18,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: portfolioos-redis
+    container_name: everypaisa-redis
     ports:
       - "6379:6379"
     volumes:
@@ -35,7 +35,7 @@ services:
   # Note: first boot pulls a ~2GB image, then ~30s warmup.
   onlyoffice:
     image: onlyoffice/documentserver:latest
-    container_name: portfolioos-onlyoffice
+    container_name: everypaisa-onlyoffice
     ports:
       - "8083:80"
     environment:
@@ -59,7 +59,7 @@ services:
     build:
       context: .
       dockerfile: packages/api/Dockerfile
-    container_name: portfolioos-api
+    container_name: everypaisa-api
     ports:
       - "3001:3001"
     environment:
@@ -81,7 +81,7 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    container_name: portfolioos-web
+    container_name: everypaisa-web
     ports:
       - "3000:3000"
     environment:

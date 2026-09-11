@@ -108,7 +108,7 @@ describe('streamCapitalGainsTaxReport smoke test', () => {
 
     const pdf = Buffer.concat(chunks);
     expect(headers['Content-Type']).toBe('application/pdf');
-    expect(headers['Content-Disposition']).toContain('portfolioos-capital-gains-tax-2024-25.pdf');
+    expect(headers['Content-Disposition']).toContain('everypaisa-capital-gains-tax-2024-25.pdf');
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
     expect(pdf.length).toBeGreaterThan(1000);
 

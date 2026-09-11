@@ -132,7 +132,7 @@ export async function deleteImportJob(userId: string, id: string) {
   // Best-effort delete of the uploaded file. The job and its transactions
   // are already gone from the DB; a stale file on disk is a cleanup gap,
   // not a correctness bug.
-  // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort cleanup
+  // eslint-disable-next-line everypaisa/no-silent-catch -- best-effort cleanup
   try { await unlink(job.filePath); } catch { /* ignore */ }
 }
 

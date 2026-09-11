@@ -10,7 +10,7 @@
  * Use for ingesting Kaggle datasets, OEM dumps, OBV-style CSV exports.
  *
  * Run:
- *   pnpm --filter @portfolioos/api exec tsx scripts/import-catalog-csv.ts <path-to-csv>
+ *   pnpm --filter @everypaisa/api exec tsx scripts/import-catalog-csv.ts <path-to-csv>
  */
 
 import { readFileSync } from 'node:fs';

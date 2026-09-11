@@ -6,11 +6,11 @@ FROM base AS deps
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
-# pnpm-workspace.yaml declares `eslint-plugin-portfolioos` as a workspace
+# pnpm-workspace.yaml declares `eslint-plugin-everypaisa` as a workspace
 # project, so its package.json must exist at install time even though the
 # web build never uses the lint rules — without it `pnpm install` fails
 # with ERR_PNPM_WORKSPACE_PKG_NOT_FOUND.
-COPY eslint-plugin-portfolioos/package.json eslint-plugin-portfolioos/
+COPY eslint-plugin-everypaisa/package.json eslint-plugin-everypaisa/
 RUN pnpm install --frozen-lockfile || pnpm install
 
 FROM base AS build
@@ -22,8 +22,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY . .
-RUN pnpm --filter @portfolioos/shared build
-RUN pnpm --filter @portfolioos/web build
+RUN pnpm --filter @everypaisa/shared build
+RUN pnpm --filter @everypaisa/web build
 
 FROM nginx:alpine AS runtime
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html

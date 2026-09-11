@@ -1,5 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import type { ImportJobDTO } from '@portfolioos/shared';
+import type { ImportJobDTO } from '@everypaisa/shared';
 
 interface Props {
   job: ImportJobDTO | null;

@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/cn';
-import { formatINR, toDecimal } from '@portfolioos/shared';
+import { formatINR, toDecimal } from '@everypaisa/shared';
 import {
   caApi,
   type CaAccountRow,
@@ -38,7 +38,7 @@ import { AddTransactionDialog } from '@/components/ca/AddTransactionDialog';
 import { FmvFormDialog } from '@/components/ca/FmvFormDialog';
 import { ClientReportsTab } from '@/components/ca/ClientReportsTab';
 import { ClientDocumentsTab } from '@/components/ca/ClientDocumentsTab';
-import { IMPORT_STATUS_LABELS, type ImportStatus } from '@portfolioos/shared';
+import { IMPORT_STATUS_LABELS, type ImportStatus } from '@everypaisa/shared';
 
 /**
  * One client's books, as kept by their CA.

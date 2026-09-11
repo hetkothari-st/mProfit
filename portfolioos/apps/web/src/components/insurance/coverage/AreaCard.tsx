@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Decimal, type AreaCheck, type NextStep } from '@portfolioos/shared';
+import { Decimal, type AreaCheck, type NextStep } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { TONE_DOT, TONE_TEXT } from '@/lib/insurance';

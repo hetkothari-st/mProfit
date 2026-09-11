@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { HoldingRow, TransactionDTO } from '@portfolioos/shared';
+import type { HoldingRow, TransactionDTO } from '@everypaisa/shared';
 import { FixedDepositsPage } from './FixedDepositsPage';
 
 const api = vi.hoisted(() => ({

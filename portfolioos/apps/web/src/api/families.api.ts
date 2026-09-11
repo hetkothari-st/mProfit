@@ -1,5 +1,5 @@
 import { api, unwrap } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 export type FamilyRole = 'OWNER' | 'CONTRIBUTOR' | 'VIEWER';
 export type FamilyMemberStatus = 'PENDING' | 'ACTIVE' | 'REVOKED';

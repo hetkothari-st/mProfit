@@ -26,7 +26,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: portfolioos_test
+          POSTGRES_DB: everypaisa_test
         ports:
           - 5432:5432
         options: >-
@@ -49,8 +49,8 @@ jobs:
       # dev/prod split from §5.1 task 11. In CI we use the same postgres
       # role for both; the RLS-isolation invariant test creates the
       # dedicated `portfolioos_app` role itself.
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/portfolioos_test?schema=public
-      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/portfolioos_test?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/everypaisa_test?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/everypaisa_test?schema=public
       REDIS_URL: redis://localhost:6379
       NODE_ENV: test
       # Match local defaults so tests that read env don't bail out.
@@ -77,10 +77,10 @@ jobs:
       # Prisma client must be generated before typecheck (the API package
       # imports generated types).
       - name: Generate Prisma client
-        run: pnpm --filter @portfolioos/api exec prisma generate
+        run: pnpm --filter @everypaisa/api exec prisma generate
 
       - name: Apply migrations
-        run: pnpm --filter @portfolioos/api exec prisma migrate deploy
+        run: pnpm --filter @everypaisa/api exec prisma migrate deploy
 
       - name: Lint
         run: pnpm -r run lint

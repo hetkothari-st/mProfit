@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ESCALATION, formatINR } from '@portfolioos/shared';
+import { ESCALATION, formatINR } from '@everypaisa/shared';
 import { insurerContactFor } from '@/lib/insurerContacts';
 import { SourceLink } from './SourceLink';
 

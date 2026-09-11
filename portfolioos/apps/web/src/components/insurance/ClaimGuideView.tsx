@@ -1,4 +1,4 @@
-import { SOURCES_CHECKED_ON, type ClaimGuide } from '@portfolioos/shared';
+import { SOURCES_CHECKED_ON, type ClaimGuide } from '@everypaisa/shared';
 import { formatDay } from '@/lib/insurance';
 import { SourceLink } from './SourceLink';
 

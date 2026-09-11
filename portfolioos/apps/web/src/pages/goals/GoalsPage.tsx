@@ -18,7 +18,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { goalsApi, type GoalDTO, type GoalCategory, type GoalPriority } from '@/api/goals.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { GoalDialog } from './GoalDialog';
 

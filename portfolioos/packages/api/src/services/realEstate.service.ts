@@ -27,7 +27,7 @@ import type {
   PropertyCapitalGainDTO,
   RefreshValueInput,
   UpdateOwnedPropertyInput,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

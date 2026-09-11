@@ -1,4 +1,4 @@
-import type { AreaCheck } from '@portfolioos/shared';
+import type { AreaCheck } from '@everypaisa/shared';
 import { Card } from '@/components/ui/card';
 import { TONE_DOT, TONE_TEXT } from '@/lib/insurance';
 import { verdictLabel, verdictTone } from './verdict';

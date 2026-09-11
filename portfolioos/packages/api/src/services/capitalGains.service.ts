@@ -7,7 +7,7 @@ import type {
   Transaction,
   TransactionType,
 } from '@prisma/client';
-import { CII_BY_FY } from '@portfolioos/shared';
+import { CII_BY_FY } from '@everypaisa/shared';
 import { prisma } from '../lib/prisma.js';
 import { getFmvForUser } from './fmvOverride.service.js';
 
@@ -18,7 +18,7 @@ import { getFmvForUser } from './fmvOverride.service.js';
 //
 // This used to be a second, hand-maintained copy of the CII table that lived
 // only here and silently drifted out of sync with the "YYYY-YY"-keyed
-// `CII_BY_FY` table in `@portfolioos/shared` (used by `propertyCapitalGain.ts`
+// `CII_BY_FY` table in `@everypaisa/shared` (used by `propertyCapitalGain.ts`
 // for `OwnedProperty` sales) — this copy stopped at FY2024-25 while the
 // shared one already carries a documented FY2025-26 estimate. Derive from the
 // shared table instead so there is exactly one place to update when CBDT

@@ -21,8 +21,8 @@ import {
   totalCostBasisOf,
   PROPERTY_TYPE_LABELS,
   PROPERTY_STATUS_LABELS,
-} from '@portfolioos/shared';
-import type { OwnedPropertyDTO } from '@portfolioos/shared';
+} from '@everypaisa/shared';
+import type { OwnedPropertyDTO } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';

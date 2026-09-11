@@ -270,7 +270,7 @@ export async function decryptIfNeeded(
     } finally {
       if (tempPath) {
         const { unlink } = await import('node:fs/promises');
-        // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort cleanup
+        // eslint-disable-next-line everypaisa/no-silent-catch -- best-effort cleanup
         try { await unlink(tempPath); } catch { /* ignore */ }
       }
     }

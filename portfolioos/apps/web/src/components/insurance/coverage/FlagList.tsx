@@ -1,4 +1,4 @@
-import type { CoverageFlag, NextStep } from '@portfolioos/shared';
+import type { CoverageFlag, NextStep } from '@everypaisa/shared';
 import { TONE_DOT } from '@/lib/insurance';
 import { NextStepButton } from './AreaCard';
 

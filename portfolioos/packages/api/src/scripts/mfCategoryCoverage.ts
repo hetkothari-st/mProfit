@@ -19,7 +19,7 @@ import { prisma } from '../lib/prisma.js';
  *      surface as `needsReview` on their CapitalGain rows.
  *
  * Not wired into any cron — run on demand:
- *   pnpm --filter @portfolioos/api run mf-category:coverage
+ *   pnpm --filter @everypaisa/api run mf-category:coverage
  */
 async function main() {
   const totalFunds = await prisma.mutualFundMaster.count();

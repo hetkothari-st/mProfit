@@ -1,4 +1,4 @@
-# PortfolioOS — Master Roadmap (Sections 1a → 5e)
+# EveryPaisa — Master Roadmap (Sections 1a → 5e)
 
 > **Scope note:** This roadmap spans many independent subsystems (~multi-month). Per the writing-plans skill, it is a **phased master plan**. Each section expands into its own detailed bite-sized plan when reached. Section 1 is already expanded — see `2026-05-29-section-1-valuation-correctness.md`.
 
@@ -7,7 +7,7 @@
 **Guiding principle (calibrated after code review):** The codebase is far more mature than the live UI implies. Most "bugs" are **display/labeling + edge-guard** issues, not missing engines. Work is **trust, accuracy, onboarding** — not raw features. Verify before building; never re-implement what exists.
 
 **Test/run commands:**
-- `pnpm --filter @portfolioos/api test` / `pnpm --filter @portfolioos/shared test` / `pnpm --filter @portfolioos/web test` (Vitest)
+- `pnpm --filter @everypaisa/api test` / `pnpm --filter @everypaisa/shared test` / `pnpm --filter @everypaisa/web test` (Vitest)
 - `pnpm typecheck` · `pnpm lint` · `pnpm build`
 - `pnpm docker:up` (Postgres + Redis) → `pnpm db:migrate` → `pnpm db:seed` for DB-touching tests
 - Dev: `pnpm dev:api` (3001) + `pnpm dev:web` (3030)

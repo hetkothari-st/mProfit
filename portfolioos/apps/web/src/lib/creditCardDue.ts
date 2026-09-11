@@ -6,7 +6,7 @@
  * estimate: the next time that day comes round, clamped to short months
  * (a "31st" card falls due on 28 Feb).
  */
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 
 export interface CardDue {
   /** YYYY-MM-DD */

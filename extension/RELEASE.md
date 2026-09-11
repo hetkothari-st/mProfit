@@ -19,7 +19,7 @@ This produces `dist/` with manifest, scripts, popup, icons.
 ## Chrome Web Store
 1. Sign up at https://chrome.google.com/webstore/devconsole/ ($5 one-time fee).
 2. Click "Add new item".
-3. Zip the `dist/` folder: `cd extension && zip -r portfolioos-extension.zip dist`.
+3. Zip the `dist/` folder: `cd extension && zip -r everypaisa-extension.zip dist`.
 4. Upload the zip.
 5. Fill listing fields from `STORE_LISTING.md`.
 6. Upload icons + screenshots.

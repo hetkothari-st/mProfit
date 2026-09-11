@@ -1,5 +1,5 @@
 import { CheckCircle2, Loader2, Siren } from 'lucide-react';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';

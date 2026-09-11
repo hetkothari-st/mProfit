@@ -12,7 +12,7 @@
  * load.
  */
 import { Decimal } from 'decimal.js';
-import { formatINR, taxYearOf } from '@portfolioos/shared';
+import { formatINR, taxYearOf } from '@everypaisa/shared';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { userDataVersion } from '../lib/userDataVersion.js';

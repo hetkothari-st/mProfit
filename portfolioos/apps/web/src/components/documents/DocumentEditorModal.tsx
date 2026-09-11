@@ -3,7 +3,7 @@ import { DocumentEditor } from '@onlyoffice/document-editor-react';
 import { Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { documentsApi } from '@/api/documents.api';
-import type { OnlyOfficeConfigResponse } from '@portfolioos/shared';
+import type { OnlyOfficeConfigResponse } from '@everypaisa/shared';
 
 interface Props {
   documentId: string | null;

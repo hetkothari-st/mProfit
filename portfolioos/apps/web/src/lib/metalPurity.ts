@@ -6,7 +6,7 @@
  * gold by karat / 24, silver by its grade — so the price the top bar shows
  * for 22K is the price a 22K holding is valued at.
  */
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 
 export type Metal = 'GOLD' | 'SILVER';
 

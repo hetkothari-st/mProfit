@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   Bitcoin, Plus, Loader2, TrendingUp, TrendingDown, Sparkles, Pencil, ArrowUpRight,
 } from 'lucide-react';
-import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@portfolioos/shared';
+import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';

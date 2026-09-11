@@ -76,7 +76,7 @@ Run after the forex feature is deployed and migrations
 - [ ] INR-only transactions still load and behave unchanged.
 - [ ] Existing EQUITY transactions show `currency=null` in API responses (backward compat).
 - [ ] Existing reports (xlsx, pdf) still export without errors.
-- [ ] Phase 4.5 invariant tests still pass (`pnpm --filter @portfolioos/api exec vitest run`).
+- [ ] Phase 4.5 invariant tests still pass (`pnpm --filter @everypaisa/api exec vitest run`).
 
 ## Security
 

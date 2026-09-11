@@ -21,7 +21,7 @@ import {
   salvageValue,
   clunkerValue,
   type ValuationQuoteResult,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { runValuationChain } from '../../adapters/valuation/chain.js';

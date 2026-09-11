@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { sumDecimal } from '@portfolioos/shared';
+import { sumDecimal } from '@everypaisa/shared';
 import { ok, noContent } from '../lib/response.js';
 import { BadRequestError } from '../lib/errors.js';
 import {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { AssetClass } from '@portfolioos/shared';
+import type { AssetClass } from '@everypaisa/shared';
 import {
   SCHEMES, SCHEME_ORDER, PO_ASSET_CLASSES, assetClassToScheme, schemeForAssetClass,
   type PoFamily,

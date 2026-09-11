@@ -14,7 +14,7 @@ import { Loader2, Scale } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { useThemeStore } from '@/stores/theme.store';
 import { bucketLabel, type AllocationResponse } from '@/api/advisor.api';
 

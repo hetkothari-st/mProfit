@@ -22,7 +22,7 @@ import {
   financialYearFromDate,
   serializeMoney,
   type PropertyCapitalGainDTO,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 const LTCG_MONTHS_THRESHOLD = 24;
 

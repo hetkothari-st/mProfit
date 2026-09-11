@@ -63,7 +63,7 @@ import {
 } from '../schemas/accounting.schema.js';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { toDecimal, serializeMoney, type Decimal } from '@portfolioos/shared';
+import { toDecimal, serializeMoney, type Decimal } from '@everypaisa/shared';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
 import {
   listUserFmvOverrides,

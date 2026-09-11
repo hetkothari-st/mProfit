@@ -26,7 +26,7 @@ import {
   type HealthPolicyFact,
   type PropertyFact,
   type VehicleFact,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { activeMonthlyIncomeTotal } from './income.service.js';
 import { getEmergencyFundInputs } from './healthScore.service.js';
 import { getDashboardNetWorth } from './dashboard.service.js';

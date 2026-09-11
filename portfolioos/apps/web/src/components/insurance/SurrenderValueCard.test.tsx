@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { premiumDueOn } from '@portfolioos/shared';
+import { premiumDueOn } from '@everypaisa/shared';
 import type { InsurancePolicyDTO } from '@/api/insurance.api';
 import { SurrenderValueCard } from './SurrenderValueCard';
 

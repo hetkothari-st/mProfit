@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { buildTaxSummary, type TaxPolicyInput } from '@portfolioos/shared';
+import { buildTaxSummary, type TaxPolicyInput } from '@everypaisa/shared';
 import { TaxSummaryCard } from './TaxSummaryCard';
 
 const api = vi.hoisted(() => ({ taxSummary: vi.fn(), updatePolicy: vi.fn() }));

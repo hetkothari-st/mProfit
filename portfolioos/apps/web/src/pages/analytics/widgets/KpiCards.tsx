@@ -1,6 +1,6 @@
 import { TrendingUp, Wallet, LineChart as LineChartIcon, Percent, ArrowDownToLine, Receipt } from 'lucide-react';
 import { MetricCard } from '@/components/portfolio/MetricCard';
-import { formatINR, formatPercent, toDecimal } from '@portfolioos/shared';
+import { formatINR, formatPercent, toDecimal } from '@everypaisa/shared';
 import type { KpiBlock } from '@/api/analytics.api';
 
 function pct(v: number | null, digits = 2): string {

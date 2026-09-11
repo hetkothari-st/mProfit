@@ -25,7 +25,7 @@ import {
   taxYearOf,
   type PremiumPaymentLike,
   type TaxSummary,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { runAsUser } from '../lib/requestContext.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';

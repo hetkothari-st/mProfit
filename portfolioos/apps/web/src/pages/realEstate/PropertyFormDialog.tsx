@@ -22,7 +22,7 @@ import type {
   PropertyStatus,
   OwnershipType,
   MaintenanceFrequency,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 const PROPERTY_TYPES: { value: PropertyType; label: string }[] = [
   { value: 'APARTMENT', label: 'Apartment / Flat' },

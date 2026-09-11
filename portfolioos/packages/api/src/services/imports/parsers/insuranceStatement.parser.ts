@@ -6,7 +6,7 @@ import { readPdfText, isPdfPasswordError, getUserPdfPasswords } from '../../../l
 import { checkLlmGate, recordSpend } from '../../../ingestion/llm/client.js';
 import { checkBudget } from '../../../ingestion/llm/budget.js';
 import { redactForLlm } from '../../../ingestion/pii.js';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import type { Parser, ParserContext, ParserResult } from './types.js';
 
 const ADAPTER_ID = 'insurance.statement.pdf';

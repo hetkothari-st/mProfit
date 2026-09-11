@@ -23,7 +23,7 @@
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import JSZip from 'jszip';
-import { financialYearRange } from '@portfolioos/shared';
+import { financialYearRange } from '@everypaisa/shared';
 import { buildFyBundle } from '../../src/services/reports/fyBundle.service.js';
 
 let scope: TestScope;

@@ -12,7 +12,7 @@ import {
   Target,
   Wallet,
 } from 'lucide-react';
-import { formatINR, formatQuantity } from '@portfolioos/shared';
+import { formatINR, formatQuantity } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

@@ -10,7 +10,7 @@ import { Decimal } from 'decimal.js';
 import type { IncomeType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
-import { serializeMoney } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
 import { computeUserFoPnl } from './foPnl.service.js';
 
 export const INCOME_TYPES = [

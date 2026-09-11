@@ -9,8 +9,8 @@ import { gmailScanApi } from '@/api/gmailScan.api';
 import { apiErrorMessage } from '@/api/client';
 import { InboxImportRow } from '@/components/upload/InboxImportRow';
 import { InboxImportPreviewSheet } from '@/components/upload/InboxImportPreviewSheet';
-import type { GmailDocStatus } from '@portfolioos/shared';
-import { GmailDocStatus as STATUS, INBOX_DOC_TYPES } from '@portfolioos/shared';
+import type { GmailDocStatus } from '@everypaisa/shared';
+import { GmailDocStatus as STATUS, INBOX_DOC_TYPES } from '@everypaisa/shared';
 
 const STATUS_OPTIONS: Array<{ value: GmailDocStatus | 'ALL'; label: string }> = [
   { value: 'ALL', label: 'All' },

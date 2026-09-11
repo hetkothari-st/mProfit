@@ -8,7 +8,7 @@ import type {
   ResetPasswordRequest,
   UpdateProfileRequest,
   ApiResponse,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 export interface AuthResult {
   user: AuthUser;

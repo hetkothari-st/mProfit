@@ -58,13 +58,13 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
 
   function sectionFilename(): string {
     const who = reportSubject.filenameSuffix;
-    if (isDashboard) return `portfolioos-dashboard-report${who}.${format}`;
-    if (isSection)   return `portfolioos-${type}-report${who}.${format}`;
+    if (isDashboard) return `everypaisa-dashboard-report${who}.${format}`;
+    if (isSection)   return `everypaisa-${type}-report${who}.${format}`;
     if (assetClasses && assetClasses.length > 0) {
       const slug = assetClasses.map(c => c.toLowerCase().replace(/_/g, '-')).join('_');
-      return `portfolioos-${slug}-report${who}.${format}`;
+      return `everypaisa-${slug}-report${who}.${format}`;
     }
-    return `portfolioos-holdings-report${who}.${format}`;
+    return `everypaisa-holdings-report${who}.${format}`;
   }
 
   function handleDownload() {

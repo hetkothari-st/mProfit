@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { PLAN_TIER_ORDER, planPriceFor } from '@portfolioos/shared';
+import { PLAN_TIER_ORDER, planPriceFor } from '@everypaisa/shared';
 import { authenticate, requireRole } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { ok } from '../lib/response.js';

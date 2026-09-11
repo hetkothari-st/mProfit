@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { CLAIM_KINDS, TAX_BUCKETS } from '@portfolioos/shared';
+import { CLAIM_KINDS, TAX_BUCKETS } from '@everypaisa/shared';
 import {
   POLICY_TYPES,
   PREMIUM_FREQUENCIES,

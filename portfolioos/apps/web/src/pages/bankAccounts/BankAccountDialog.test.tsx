@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { AuthUser } from '@portfolioos/shared';
+import type { AuthUser } from '@everypaisa/shared';
 import type { BankAccountDTO } from '@/api/bankAccounts.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { BankAccountDialog } from './BankAccountDialog';

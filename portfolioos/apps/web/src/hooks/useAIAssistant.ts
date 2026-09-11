@@ -161,7 +161,7 @@ export function useAIAssistant(active: boolean) {
     try {
       const q = await aiAssistantApi.suggested();
       setState((s) => ({ ...s, suggestedQuestions: q }));
-      // eslint-disable-next-line portfolioos/no-silent-catch -- prompt chips are a convenience; keeping the previous set is a better outcome than an error banner over a working chat
+      // eslint-disable-next-line everypaisa/no-silent-catch -- prompt chips are a convenience; keeping the previous set is a better outcome than an error banner over a working chat
     } catch {
       /* keep the questions already on screen */
     }
@@ -171,7 +171,7 @@ export function useAIAssistant(active: boolean) {
     try {
       const q = await aiAssistantApi.quota();
       setState((s) => ({ ...s, quota: q }));
-      // eslint-disable-next-line portfolioos/no-silent-catch -- the quota display is advisory; the server enforces it on every send, so a stale number cannot let anything through
+      // eslint-disable-next-line everypaisa/no-silent-catch -- the quota display is advisory; the server enforces it on every send, so a stale number cannot let anything through
     } catch {
       /* keep the last known quota */
     }
@@ -184,7 +184,7 @@ export function useAIAssistant(active: boolean) {
     try {
       const sessions = await aiAssistantApi.listSessions();
       setState((s) => ({ ...s, sessions }));
-      // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort title/order sync after a send; a failure here just means the sidebar title updates on the next refresh instead of immediately, not worth a user-facing error
+      // eslint-disable-next-line everypaisa/no-silent-catch -- best-effort title/order sync after a send; a failure here just means the sidebar title updates on the next refresh instead of immediately, not worth a user-facing error
     } catch {
       /* ignore */
     }

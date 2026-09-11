@@ -8,7 +8,7 @@
  *   - no-silent-catch  — catches must handle the error meaningfully
  *   - no-money-coercion — ban Number()/parseFloat on values that may be money
  *
- * Registered as `portfolioos/<rule-name>` once the root `.eslintrc.cjs` lists
+ * Registered as `everypaisa/<rule-name>` once the root `.eslintrc.cjs` lists
  * this package under `plugins`.
  */
 
@@ -142,14 +142,14 @@ const noMoneyCoercion = {
     type: 'problem',
     docs: {
       description:
-        'Ban JS-number coercion patterns that silently corrupt money (§3.2). `parseFloat` is always wrong for money; `Number(x)` is usually wrong. Use `toDecimal()` from @portfolioos/shared.',
+        'Ban JS-number coercion patterns that silently corrupt money (§3.2). `parseFloat` is always wrong for money; `Number(x)` is usually wrong. Use `toDecimal()` from @everypaisa/shared.',
     },
     schema: [],
     messages: {
       parseFloat:
-        '`parseFloat` silently loses decimal precision — use `toDecimal()` from @portfolioos/shared for money, `Number.parseFloat` (explicit) for genuinely non-monetary floats.',
+        '`parseFloat` silently loses decimal precision — use `toDecimal()` from @everypaisa/shared for money, `Number.parseFloat` (explicit) for genuinely non-monetary floats.',
       numberCall:
-        '`Number(x)` can silently lose precision on money strings — use `toDecimal()` for money, `Number.parseInt` / `Number.parseFloat` (explicit) for non-monetary values. Add `// eslint-disable-next-line portfolioos/no-money-coercion -- <reason>` if intentional.',
+        '`Number(x)` can silently lose precision on money strings — use `toDecimal()` for money, `Number.parseInt` / `Number.parseFloat` (explicit) for non-monetary values. Add `// eslint-disable-next-line everypaisa/no-money-coercion -- <reason>` if intentional.',
     },
   },
   create(context) {

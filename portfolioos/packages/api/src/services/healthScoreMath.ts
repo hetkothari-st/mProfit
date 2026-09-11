@@ -1,5 +1,5 @@
 import { Decimal } from 'decimal.js';
-import { LIFE_COVER_INCOME_MULTIPLE, requiredLifeCover } from '@portfolioos/shared';
+import { LIFE_COVER_INCOME_MULTIPLE, requiredLifeCover } from '@everypaisa/shared';
 import { ageBasedEquityGuidelinePct } from './riskProfileMath.js';
 
 /**
@@ -103,7 +103,7 @@ export function isLifePolicyType(type: string): boolean {
 
 /**
  * The rule-of-thumb life cover an earner should carry: ten times annual
- * income. The maths lives in @portfolioos/shared (insurance/coverage) so the
+ * income. The maths lives in @everypaisa/shared (insurance/coverage) so the
  * web's coverage check recomputes with the same multiple; re-exported here
  * so the health score and family protection keep importing it from this file.
  */

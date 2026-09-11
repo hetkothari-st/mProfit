@@ -20,7 +20,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { formatINR, toDecimal, Decimal } from '@portfolioos/shared';
+import { formatINR, toDecimal, Decimal } from '@everypaisa/shared';
 import { foApi, brokerApi, type FoPosition, type FoTrade, type BrokerStatus } from '@/api/fo.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';

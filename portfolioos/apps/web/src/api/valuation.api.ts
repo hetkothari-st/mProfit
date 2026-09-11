@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse, ValuationQuoteResult } from '@portfolioos/shared';
+import type { ApiResponse, ValuationQuoteResult } from '@everypaisa/shared';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);

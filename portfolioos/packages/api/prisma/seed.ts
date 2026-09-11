@@ -12,7 +12,7 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  const email = 'demo@portfolioos.in';
+  const email = 'demo@everypaisa.in';
   const passwordHash = await bcrypt.hash('Demo@1234', 12);
 
   const user = await prisma.user.upsert({

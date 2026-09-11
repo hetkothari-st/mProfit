@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js';
 import { ageBasedEquityGuidelinePct } from './riskProfileMath.js';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { prisma } from '../lib/prisma.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
 import { listGoals } from './goals.service.js';

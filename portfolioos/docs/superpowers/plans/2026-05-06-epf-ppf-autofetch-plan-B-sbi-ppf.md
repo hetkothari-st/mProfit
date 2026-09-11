@@ -174,8 +174,8 @@ export function parseSbiPpfPassbook(input: ParseInput): ParseResult<PfCanonicalE
 
 ```bash
 cd "C:/Users/ST269/Desktop/mProfit - Copy/portfolioos"
-pnpm --filter @portfolioos/api exec vitest run test/adapters/pf/sbi.parse.test.ts -u
-pnpm --filter @portfolioos/api exec vitest run test/adapters/pf/sbi.parse.test.ts
+pnpm --filter @everypaisa/api exec vitest run test/adapters/pf/sbi.parse.test.ts -u
+pnpm --filter @everypaisa/api exec vitest run test/adapters/pf/sbi.parse.test.ts
 ```
 
 - [ ] **Step 1.6: Commit**
@@ -338,7 +338,7 @@ In `src/adapters/pf/chain.ts` (or wherever the EPFO adapter is auto-imported), e
 
 ```bash
 cd "C:/Users/ST269/Desktop/mProfit - Copy/portfolioos"
-pnpm --filter @portfolioos/api typecheck
+pnpm --filter @everypaisa/api typecheck
 ```
 
 - [ ] **Step 2.4: Commit**
@@ -393,9 +393,9 @@ git commit -m "feat(pf): PPF add-account form with SBI auto-fetch hook"
 
 ```bash
 cd "C:/Users/ST269/Desktop/mProfit - Copy/portfolioos"
-pnpm --filter @portfolioos/shared build
-pnpm --filter @portfolioos/api typecheck
-pnpm --filter @portfolioos/api build
+pnpm --filter @everypaisa/shared build
+pnpm --filter @everypaisa/api typecheck
+pnpm --filter @everypaisa/api build
 pnpm --filter web typecheck
 pnpm --filter web build
 ```

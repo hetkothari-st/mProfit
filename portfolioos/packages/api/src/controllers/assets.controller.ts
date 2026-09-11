@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { Exchange } from '@prisma/client';
-import { serializeMoney, type Money } from '@portfolioos/shared';
+import { serializeMoney, type Money } from '@everypaisa/shared';
 import {
   searchAssets,
   searchStocks,

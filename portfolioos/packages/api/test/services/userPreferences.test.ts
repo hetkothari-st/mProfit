@@ -10,7 +10,7 @@ vi.mock('../../src/lib/prisma.js', () => ({
   prisma: { user: { findUniqueOrThrow: db.findUniqueOrThrow, update: db.update } },
 }));
 
-import { OPTIONAL_ASSET_SECTION_KEYS } from '@portfolioos/shared';
+import { OPTIONAL_ASSET_SECTION_KEYS } from '@everypaisa/shared';
 import { getUserPreferences, updateUserPreferences } from '../../src/services/userPreferences.service.js';
 
 const OPTIONAL = ['/bonds', '/crypto', '/forex', '/post-office', '/nps'];

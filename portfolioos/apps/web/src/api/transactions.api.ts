@@ -6,7 +6,7 @@ import type {
   TransactionDTO,
   TransactionListResponse,
   UpdateTransactionRequest,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);

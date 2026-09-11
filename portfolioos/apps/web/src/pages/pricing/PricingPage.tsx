@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Sparkles, FlaskConical } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatPaiseAsRupees, planPriceFor, type BillingCycle, type PlanTierValue } from '@portfolioos/shared';
+import { formatPaiseAsRupees, planPriceFor, type BillingCycle, type PlanTierValue } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ interface TierDef {
 
 // Feature copy is pulled directly from the tier descriptions in the
 // pricing-tiers-gating task, not reinvented. Prices come from
-// @portfolioos/shared's PLAN_PRICING (also what Razorpay actually
+// @everypaisa/shared's PLAN_PRICING (also what Razorpay actually
 // charges) — never hardcoded here.
 const TIERS: TierDef[] = [
   {

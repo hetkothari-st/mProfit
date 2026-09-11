@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { HoldingRow } from '@portfolioos/shared';
+import type { HoldingRow } from '@everypaisa/shared';
 import { NpsPage } from './NpsPage';
 
 // Keep API calls from hitting the network during the smoke test.

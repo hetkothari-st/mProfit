@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { FileDown, Loader2, Receipt } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 import { taxApi } from '@/api/tax.api';
 import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';

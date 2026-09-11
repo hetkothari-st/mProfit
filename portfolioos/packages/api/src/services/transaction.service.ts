@@ -1,5 +1,5 @@
 import { Decimal } from 'decimal.js';
-import type { Money, Quantity } from '@portfolioos/shared';
+import type { Money, Quantity } from '@everypaisa/shared';
 import type { AssetClass, Exchange, Prisma, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';

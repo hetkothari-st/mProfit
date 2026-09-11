@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { HELP_GROUPS, HELP_TOPICS } from '@portfolioos/shared';
+import { HELP_GROUPS, HELP_TOPICS } from '@everypaisa/shared';
 import { HelpLibraryPage } from './HelpLibraryPage';
 
 const OFFICIAL = /^https:\/\/(irdai\.gov\.in|bimabharosa\.irdai\.gov\.in|www\.cioins\.co\.in)\//;

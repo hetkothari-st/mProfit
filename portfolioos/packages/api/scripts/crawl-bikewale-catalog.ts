@@ -2,7 +2,7 @@
  * CLI wrapper around `crawlBikewaleCatalog` (src/services/catalog/).
  *
  * Run:
- *   pnpm --filter @portfolioos/api exec tsx scripts/crawl-bikewale-catalog.ts
+ *   pnpm --filter @everypaisa/api exec tsx scripts/crawl-bikewale-catalog.ts
  *
  * Flags: --brand=bajaj  --resume  --dry  --limit=N
  */

@@ -3,7 +3,7 @@
  * "coming up" list, the policy page and the emergency sheet all describe a
  * premium the same way.
  */
-import { addMonthsIso, canHaveCriticalIllness, formatINR, PREMIUM_FREQUENCY_MONTHS } from '@portfolioos/shared';
+import { addMonthsIso, canHaveCriticalIllness, formatINR, PREMIUM_FREQUENCY_MONTHS } from '@everypaisa/shared';
 import type { InsurancePolicyDTO } from '@/api/insurance.api';
 
 export const POLICY_TYPE_LABELS: Record<string, string> = {

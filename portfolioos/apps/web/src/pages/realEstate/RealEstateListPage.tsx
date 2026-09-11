@@ -30,8 +30,8 @@ import {
   totalCostBasisOf,
   PROPERTY_TYPE_LABELS,
   PROPERTY_STATUS_LABELS,
-} from '@portfolioos/shared';
-import type { OwnedPropertyDTO, PropertyType } from '@portfolioos/shared';
+} from '@everypaisa/shared';
+import type { OwnedPropertyDTO, PropertyType } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';

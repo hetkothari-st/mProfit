@@ -9,8 +9,8 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { TransactionFormDialog } from './TransactionFormDialog';
-import type { TransactionDTO } from '@portfolioos/shared';
-import { formatINR, formatQuantity } from '@portfolioos/shared';
+import type { TransactionDTO } from '@everypaisa/shared';
+import { formatINR, formatQuantity } from '@everypaisa/shared';
 
 export function TransactionsPage() {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('');

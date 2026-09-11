@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { FileText, Trash2, Upload as UploadIcon } from 'lucide-react';
-import { canHaveCriticalIllness, defaultGraceDays } from '@portfolioos/shared';
+import { canHaveCriticalIllness, defaultGraceDays } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';

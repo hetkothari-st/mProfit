@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
-import { CLAIM_GUIDES } from '@portfolioos/shared';
+import { CLAIM_GUIDES } from '@everypaisa/shared';
 import { ClaimGuideView } from './ClaimGuideView';
 
 afterEach(() => cleanup());

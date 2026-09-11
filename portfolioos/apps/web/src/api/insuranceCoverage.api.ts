@@ -1,5 +1,5 @@
 import { api, unwrap } from './client';
-import type { ApiResponse, CoverageResponse } from '@portfolioos/shared';
+import type { ApiResponse, CoverageResponse } from '@everypaisa/shared';
 
 /**
  * The coverage check's figures and seeded assumptions. Verdicts are worked

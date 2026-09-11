@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AuthUser, AuthTokens } from '@portfolioos/shared';
+import type { AuthUser, AuthTokens } from '@everypaisa/shared';
 
 interface AuthState {
   user: AuthUser | null;
@@ -58,7 +58,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: () => Boolean(get().accessToken && get().user),
     }),
     {
-      name: 'portfolioos.auth',
+      name: 'everypaisa.auth',
       onRehydrateStorage: () => (state) => {
         if (state) state.hydrated = true;
       },

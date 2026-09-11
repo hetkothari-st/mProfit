@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { claimProgress } from '@portfolioos/shared';
+import { claimProgress } from '@everypaisa/shared';
 import type { InsuranceClaimDTO } from '@/api/insurance.api';
 import { ClaimTracker } from './ClaimTracker';
 

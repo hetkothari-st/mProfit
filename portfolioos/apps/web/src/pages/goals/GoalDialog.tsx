@@ -23,7 +23,7 @@ import {
   type GoalStatus,
 } from '@/api/goals.api';
 import { apiErrorMessage } from '@/api/client';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 interface PortfolioOption {
   id: string;

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { NextStep, VehicleCheck, VehicleState } from '@portfolioos/shared';
+import type { NextStep, VehicleCheck, VehicleState } from '@everypaisa/shared';
 import { SourceLink } from '@/components/insurance/SourceLink';
 import { TONE_DOT, TONE_TEXT, formatDay, type Tone } from '@/lib/insurance';
 import { AreaCard, NextStepButton } from './AreaCard';

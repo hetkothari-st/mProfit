@@ -130,7 +130,7 @@ export function LoginPage() {
         <GoogleSignInButton text="signin_with" />
 
         <p className="text-xs text-center text-muted-foreground pt-2">
-          Demo credentials: <span className="font-mono">demo@portfolioos.in</span> /{' '}
+          Demo credentials: <span className="font-mono">demo@everypaisa.in</span> /{' '}
           <span className="font-mono">Demo@1234</span>
         </p>
       </form>

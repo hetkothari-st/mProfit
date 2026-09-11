@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ListChecks, Loader2, Plus, Trash2 } from 'lucide-react';
-import type { AssetSearchHit } from '@portfolioos/shared';
+import type { AssetSearchHit } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';

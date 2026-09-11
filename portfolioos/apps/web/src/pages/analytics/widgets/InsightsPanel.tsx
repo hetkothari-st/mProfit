@@ -4,7 +4,7 @@ import { Sparkles, Loader2, RefreshCw, AlertTriangle, Info, AlertOctagon, Shield
 import toast from 'react-hot-toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 import { analyticsApi } from '@/api/analytics.api';
 import type {
   Period,

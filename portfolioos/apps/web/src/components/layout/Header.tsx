@@ -18,7 +18,7 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
   const { hideSensitive, toggleHideSensitive } = usePrivacyStore();
 
   const handleLogout = async () => {
-    // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort revoke
+    // eslint-disable-next-line everypaisa/no-silent-catch -- best-effort revoke
     try { await authApi.logout(refreshToken); } catch { /* ignore */ }
     clearSession();
     navigate('/login', { replace: true });

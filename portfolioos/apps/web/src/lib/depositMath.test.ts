@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import {
   accruedValue, monthsBetween, addMonthsIso, shortMonth, formatDate, daysUntil,
   normalizeText, INR_COMPACT,

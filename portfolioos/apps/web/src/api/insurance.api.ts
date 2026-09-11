@@ -6,7 +6,7 @@ import type {
   NextPremiumDue,
   TaxBucket,
   TaxSummary,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 export type { TaxBucket, TaxSummary };
 

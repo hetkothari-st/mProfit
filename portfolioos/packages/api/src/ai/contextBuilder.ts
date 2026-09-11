@@ -36,7 +36,7 @@ import {
   type EffectiveScope,
 } from '../services/familyScope.service.js';
 import { listPolicies } from '../services/insurance.service.js';
-import { Decimal, HELP_TOPICS, matchHelpTopics } from '@portfolioos/shared';
+import { Decimal, HELP_TOPICS, matchHelpTopics } from '@everypaisa/shared';
 import { QueryIntent, type ClassifiedQuery } from './queryClassifier.js';
 
 export interface AssistantContext {

@@ -1,4 +1,4 @@
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { TONE_DOT, type Tone } from '@/lib/insurance';
 import { inr } from './verdict';
 

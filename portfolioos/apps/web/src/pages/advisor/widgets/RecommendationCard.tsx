@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { apiErrorMessage } from '@/api/client';
 import {
   advisorApi,

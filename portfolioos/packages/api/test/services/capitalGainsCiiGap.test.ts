@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import { AssetClass, type Transaction } from '@prisma/client';
-import { CII_BY_FY } from '@portfolioos/shared';
+import { CII_BY_FY } from '@everypaisa/shared';
 import {
   computeFIFOGains,
   qualifiesForIndexation,

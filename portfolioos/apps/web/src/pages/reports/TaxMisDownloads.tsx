@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, FileDown, FileText, Sparkles, ArrowRight } from 'lucide-react';
-import { meetsMinTier, type PlanTierValue } from '@portfolioos/shared';
+import { meetsMinTier, type PlanTierValue } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';

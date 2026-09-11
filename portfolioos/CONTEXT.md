@@ -38,7 +38,7 @@ Recharts, React Hook Form + Zod, axios, date-fns.
 over PostgreSQL 15 (Neon in production), Redis 7 + Bull (queues), JWT + bcrypt,
 Zod, pino, decimal.js, Playwright (portal automation), Sentry.
 
-**Shared** — `@portfolioos/shared`: types, money primitives, formatters, finance
+**Shared** — `@everypaisa/shared`: types, money primitives, formatters, finance
 math, entitlements. Imported by both sides. **This is the contract layer.**
 
 **Infra** — pnpm workspaces monorepo, Docker Compose locally, Railway in
@@ -67,7 +67,7 @@ portfolioos/
 │   ├── src/services/            Business logic (162 files)
 │   └── test/                    85 test files
 ├── packages/shared/             Types, money, entitlements, finance math
-├── eslint-plugin-portfolioos/   Two custom lint rules (see §12)
+├── eslint-plugin-everypaisa/   Two custom lint rules (see §12)
 └── pnpm-workspace.yaml
 ```
 
@@ -462,7 +462,7 @@ Transaction CRUD → `recomputeForTransaction` → FIFO replay → `HoldingProje
 `services/capitalGains.service.ts` implements Indian CG law: STCG/LTCG
 classification by asset class and holding period, indexation via CII, §112A
 grandfathering. **CII is derived from the single shared table `CII_BY_FY` in
-`@portfolioos/shared`** — there used to be a second hand-maintained copy here
+`@everypaisa/shared`** — there used to be a second hand-maintained copy here
 that silently drifted. Two ingestion paths can produce indexation-eligible rows
 (`OwnedProperty` sales via `propertyCapitalGain.ts`, and plain `Transaction` rows
 with `assetClass: REAL_ESTATE` via the FIFO engine) and they must share one CII
@@ -724,7 +724,7 @@ ever weakened.
 detail), `navItems.tsx`. Collapsed rail uses monogram tiles.
 
 **API layer** — one `*.api.ts` module per domain, all over the shared axios
-instance in `api/client.ts`. Types are imported from `@portfolioos/shared`, never
+instance in `api/client.ts`. Types are imported from `@everypaisa/shared`, never
 redeclared locally.
 
 **Money on the frontend** — `<Money>` component and `formatINR`; `moneyToNumber`
@@ -737,19 +737,19 @@ only for chart geometry, never for arithmetic that will be displayed.
 > UI assumed a bare profile object while the API returned `{profile, history}`,
 > plus wholesale field-name drift. **After generating or heavily editing a page,
 > reconcile every field it reads against the actual type in
-> `@portfolioos/shared`.** Typecheck alone did not catch it because the client
+> `@everypaisa/shared`.** Typecheck alone did not catch it because the client
 > had locally-declared shapes.
 
 ---
 
 ## 12. Quality gates
 
-**Custom ESLint rules** (`eslint-plugin-portfolioos/index.cjs`):
+**Custom ESLint rules** (`eslint-plugin-everypaisa/index.cjs`):
 
-- `portfolioos/no-silent-catch` — bans `catch (e) {}` and console-only catches.
+- `everypaisa/no-silent-catch` — bans `catch (e) {}` and console-only catches.
   Every catch must rethrow, return a typed failure, call `logger.*`, write to the
   DLQ, or forward to `next(err)`.
-- `portfolioos/no-money-coercion` — bans `parseFloat` (always wrong for money)
+- `everypaisa/no-money-coercion` — bans `parseFloat` (always wrong for money)
   and `Number(x)` (usually wrong). Use `toDecimal()`. Explicit
   `Number.parseInt`/`Number.parseFloat` are allowed for genuinely non-monetary
   values.

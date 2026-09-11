@@ -103,7 +103,7 @@ export async function getRisk(req: Request, res: Response): Promise<void> {
   const portfolioMonthly = monthlyFromDaily(
     // Risk metrics are statistical estimates, not accounting — Number is
     // intentional here (mirrors xirr.service.ts solver-boundary cast).
-    // eslint-disable-next-line portfolioos/no-money-coercion -- statistical computation, see analytics.risk.ts
+    // eslint-disable-next-line everypaisa/no-money-coercion -- statistical computation, see analytics.risk.ts
     valueLine.map((p) => ({ date: p.date, value: Number(p.value) })),
   );
   const benchmarkMonthly = niftyMonthly.map((p) => ({ date: p.date.slice(0, 7), value: p.close }));

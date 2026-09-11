@@ -22,7 +22,7 @@ import {
   type CorporateActionRow,
 } from '@/api/corporateActions.api';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 
 const TYPE_LABELS: Record<CorporateActionType, string> = {
   DIVIDEND: 'Dividend', BONUS: 'Bonus', SPLIT: 'Split',

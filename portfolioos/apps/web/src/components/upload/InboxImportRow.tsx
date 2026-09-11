@@ -1,7 +1,7 @@
 import { CheckCircle2, XCircle, Loader2, AlertTriangle, Eye, FileText, FileSpreadsheet, FileImage } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { GmailDiscoveredDocDTO } from '@portfolioos/shared';
-import { GMAIL_DOC_STATUS_LABELS } from '@portfolioos/shared';
+import type { GmailDiscoveredDocDTO } from '@everypaisa/shared';
+import { GMAIL_DOC_STATUS_LABELS } from '@everypaisa/shared';
 
 const STATUS_CLASSES: Record<string, string> = {
   CLASSIFYING: 'bg-blue-500/10 text-blue-600',

@@ -36,7 +36,7 @@ export function PrivacyPage() {
       <h2>Data retention</h2>
       <p>You can delete your EveryPaisa account at any time from the web app. Account deletion permanently removes all extension-sourced data within 30 days.</p>
       <h2>Contact</h2>
-      <p>Questions? Email: privacy@portfolio-os.in (replace with real email when registered)</p>
+      <p>Questions? Email: privacy@everypaisa.in (replace with real email when registered)</p>
       <h2>Changes</h2>
       <p>We will update this policy as needed. The "Effective" date at the top reflects the current version.</p>
     </div>

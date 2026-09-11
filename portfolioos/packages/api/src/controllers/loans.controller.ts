@@ -19,7 +19,7 @@ import {
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { Decimal } from 'decimal.js';
-import { serializeMoney } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.string().regex(/^\d+(\.\d+)?$/, 'Expected positive decimal string');

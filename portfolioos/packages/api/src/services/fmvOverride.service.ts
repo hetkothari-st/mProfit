@@ -1,4 +1,4 @@
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 import type { AssetClass, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError } from '../lib/errors.js';

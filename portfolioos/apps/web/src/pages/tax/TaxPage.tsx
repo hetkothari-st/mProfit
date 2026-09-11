@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/auth.store';
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 import {
   taxApi,
   type TaxGainsReport,

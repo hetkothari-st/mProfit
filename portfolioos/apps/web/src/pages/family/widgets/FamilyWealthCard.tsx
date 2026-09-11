@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { Loader2, Users, Wallet } from 'lucide-react';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
 import { AutoFitText } from '@/components/ui/AutoFitText';

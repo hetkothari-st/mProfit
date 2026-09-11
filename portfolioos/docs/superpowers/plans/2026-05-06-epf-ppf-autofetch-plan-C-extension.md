@@ -152,7 +152,7 @@ Commit: `feat(pf): web pairing page for browser extension`
 ```json
 {
   "manifest_version": 3,
-  "name": "PortfolioOS Auto-Fetch",
+  "name": "EveryPaisa Auto-Fetch",
   "version": "0.1.0",
   "description": "Auto-fetch EPF and PPF data from Indian government and bank portals.",
   "permissions": ["storage"],
@@ -351,7 +351,7 @@ Commit: `feat(extension): service worker + message router`
 - Detects passbook download trigger: e.g. listen for click on `button#downloadPdf`, or polls for the presence of a downloaded PDF link.
 - When passbook is loaded, walks the table DOM and emits structured rows: `Array<{ date, type, amount, balance, raw }>`.
 - Posts to background worker: `chrome.runtime.sendMessage({ kind: 'submit-payload', accountId: <looked up>, payload: { adapterId: 'pf.epfo.ext.v1', adapterVersion: '1.0.0', capturedAt: new Date().toISOString(), members: [{ memberId: <DOM extract>, structuredRows }] } })`.
-- Surfaces a small floating banner ("PortfolioOS: synced N entries").
+- Surfaces a small floating banner ("EveryPaisa: synced N entries").
 
 Note: the content script needs an `accountId` to attach the payload to. Approach: when the user pairs, the popup fetches their PF accounts and stores the active one's ID in `chrome.storage.local`. Or: the content script posts without `accountId` and the server looks up by `(userId, institution, identifierLast4)`.
 
@@ -361,7 +361,7 @@ Commit: `feat(extension): EPFO content script — DOM scrape + sync`
 
 ## Task C7: SBI content script (mock-only)
 
-Same shape as EPFO but stubbed: when SBI portal loads, log "PortfolioOS extension detected SBI" and show a banner. Real DOM scraping deferred to Plan E. The content script ships as a placeholder so the matchers + bundle entry exist.
+Same shape as EPFO but stubbed: when SBI portal loads, log "EveryPaisa extension detected SBI" and show a banner. Real DOM scraping deferred to Plan E. The content script ships as a placeholder so the matchers + bundle entry exist.
 
 Commit: `feat(extension): SBI content script placeholder`
 
@@ -378,7 +378,7 @@ Commit: `feat(extension): SBI content script placeholder`
   </head>
   <body>
     <div id="root">
-      <h1>PortfolioOS</h1>
+      <h1>EveryPaisa</h1>
       <div id="status">Loading...</div>
       <form id="pair-form" hidden>
         <label>Pairing code
@@ -451,8 +451,8 @@ Commit: `feat(extension): popup UI — pair + status + revoke`
 
 ```bash
 cd "C:/Users/ST269/Desktop/mProfit - Copy/portfolioos"
-pnpm --filter @portfolioos/api typecheck
-pnpm --filter @portfolioos/api build
+pnpm --filter @everypaisa/api typecheck
+pnpm --filter @everypaisa/api build
 pnpm --filter web typecheck
 
 cd ../extension   # outside the pnpm workspace

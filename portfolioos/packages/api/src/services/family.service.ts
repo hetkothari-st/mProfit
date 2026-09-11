@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { AssetClass, FamilyRole } from '@prisma/client';
-import { toDecimal, serializeMoney } from '@portfolioos/shared';
+import { toDecimal, serializeMoney } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { runAsUser } from '../lib/requestContext.js';
 import {

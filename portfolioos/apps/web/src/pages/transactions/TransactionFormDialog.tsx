@@ -32,7 +32,7 @@ import {
   Decimal,
   toDecimal,
   formatINR,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 // Money/Quantity fields hydrate from Money-string DTOs (§3.2). z.coerce.number
 // alone types its input as `number`, which would force a `Number()` cast on

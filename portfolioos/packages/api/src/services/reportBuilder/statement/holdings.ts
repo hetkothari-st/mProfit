@@ -165,6 +165,6 @@ export async function buildHoldingsStatement(
     rows: mainRows,
     mainSectionLabel: 'Portfolio Holdings — grouped by asset class',
     additionalSections,
-    filenameStem: `portfolioos-holdings-statement-${asOfLabel.replace(/[\s,]+/g, '_')}`,
+    filenameStem: `everypaisa-holdings-statement-${asOfLabel.replace(/[\s,]+/g, '_')}`,
   };
 }

@@ -1,4 +1,4 @@
-import { Decimal, formatINR } from '@portfolioos/shared';
+import { Decimal, formatINR } from '@everypaisa/shared';
 
 export interface CryptoNarrationMeta {
   exchange: string;

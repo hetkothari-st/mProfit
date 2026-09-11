@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 export type ListView = 'grid' | 'map';
 
-const storageKey = (page: string) => `portfolioos.listView.${page}`;
+const storageKey = (page: string) => `everypaisa.listView.${page}`;
 
 function readView(page: string): ListView {
   try {

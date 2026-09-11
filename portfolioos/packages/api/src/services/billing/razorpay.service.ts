@@ -56,7 +56,7 @@ export async function createOrder(input: {
     // order.amount echoes back the integer paise value we sent — already
     // the smallest currency unit (no fractional/decimal precision at
     // stake), just typed as `number | string` by the SDK.
-    // eslint-disable-next-line portfolioos/no-money-coercion -- integer paise, not a decimal amount
+    // eslint-disable-next-line everypaisa/no-money-coercion -- integer paise, not a decimal amount
     amount: Number(order.amount),
     currency: order.currency,
   };

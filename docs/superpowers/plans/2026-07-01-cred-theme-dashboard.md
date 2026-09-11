@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reskin PortfolioOS to a CRED.club-style dark theme (near-black canvas, signature lime accent, Fraunces display serif, pill buttons) via the app's existing CSS-token system, validated on the Dashboard page, with the light/dark toggle removed (dark-only).
+**Goal:** Reskin EveryPaisa to a CRED.club-style dark theme (near-black canvas, signature lime accent, Fraunces display serif, pill buttons) via the app's existing CSS-token system, validated on the Dashboard page, with the light/dark toggle removed (dark-only).
 
 **Architecture:** The app's entire look runs through Tailwind semantic classes backed by CSS custom properties defined once in `src/styles/globals.css` (`--background`, `--card`, `--accent`, etc.) and consumed via `tailwind.config.ts`. Editing those property values repaints every page that uses the semantic classes — no per-component rewiring needed for the base palette. Component-level work is limited to: (a) the two known hardcoded-color hotspots on the Dashboard (`PIE_COLORS`/`ASSET_CLASS_COLORS`/urgency helpers), (b) `Button`/`MetricCard` shape tweaks that aren't expressible as a token, and (c) removing the theme-toggle store and its two call sites.
 

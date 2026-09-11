@@ -1,4 +1,4 @@
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 import type { Transaction, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';

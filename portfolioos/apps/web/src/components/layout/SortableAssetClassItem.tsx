@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { NavLink } from 'react-router-dom';
 import { Eye, EyeOff, GripVertical, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import type { AssetSectionPref } from '@portfolioos/shared';
+import type { AssetSectionPref } from '@everypaisa/shared';
 
 interface NavItem {
   label: string;

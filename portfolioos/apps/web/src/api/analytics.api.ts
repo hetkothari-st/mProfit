@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 export type Period = '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y' | 'All';
 

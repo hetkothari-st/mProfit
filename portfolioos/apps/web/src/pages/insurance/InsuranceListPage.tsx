@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AlertTriangle, BookOpen, ClipboardList, Loader2, Plus, Shield, ShieldCheck } from 'lucide-react';
-import { Decimal, formatINR, premiumToAnnual } from '@portfolioos/shared';
+import { Decimal, formatINR, premiumToAnnual } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';

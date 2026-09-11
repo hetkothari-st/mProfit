@@ -1,5 +1,5 @@
 import { api, unwrap } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 export type BankAccountType = 'SAVINGS' | 'CURRENT' | 'SALARY' | 'NRE' | 'NRO' | 'OD';
 export type BankAccountStatus = 'ACTIVE' | 'DORMANT' | 'CLOSED';

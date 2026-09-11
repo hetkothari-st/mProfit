@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { defaultAssumptions, type CoverageFacts, type CoverageResponse } from '@portfolioos/shared';
+import { defaultAssumptions, type CoverageFacts, type CoverageResponse } from '@everypaisa/shared';
 import { CoveragePage } from './CoveragePage';
 
 const api = vi.hoisted(() => ({ get: vi.fn() }));

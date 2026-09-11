@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Pencil, TrendingUp, TrendingDown, Sparkles, ExternalLink, Wallet, Network,
 } from 'lucide-react';
-import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@portfolioos/shared';
+import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { transactionsApi } from '@/api/transactions.api';

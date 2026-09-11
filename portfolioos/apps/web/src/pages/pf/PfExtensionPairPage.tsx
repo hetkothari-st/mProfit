@@ -88,7 +88,7 @@ export function PfExtensionPairPage() {
           toast.success('Extension connected!');
         }
       }
-      // eslint-disable-next-line portfolioos/no-silent-catch -- this is one tick of a poll that keeps running; interrupting a user who is mid-pairing over a single failed request would be worse than waiting for the next one
+      // eslint-disable-next-line everypaisa/no-silent-catch -- this is one tick of a poll that keeps running; interrupting a user who is mid-pairing over a single failed request would be worse than waiting for the next one
     } catch {
       /* the next poll retries */
     }

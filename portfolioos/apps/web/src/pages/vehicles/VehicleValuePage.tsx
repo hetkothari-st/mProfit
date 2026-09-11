@@ -14,7 +14,7 @@ import {
   type SliderState,
   type SliderStop,
   type ValuationQuoteResult,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { Decimal } from 'decimal.js';
 
 import { PageHeader } from '@/components/layout/PageHeader';

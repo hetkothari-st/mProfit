@@ -24,7 +24,7 @@
 
 import { PassThrough } from 'node:stream';
 import type { Response } from 'express';
-import { financialYearRange } from '@portfolioos/shared';
+import { financialYearRange } from '@everypaisa/shared';
 import { logger } from '../../lib/logger.js';
 import {
   streamExcel,

@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 import { drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
 import { themeFor, hexToArgb, type PdfTheme, type ThemeName } from './charts/pdfTheme.js';
 

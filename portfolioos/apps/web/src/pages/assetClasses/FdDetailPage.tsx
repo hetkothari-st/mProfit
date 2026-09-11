@@ -10,7 +10,7 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
-import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@portfolioos/shared';
+import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

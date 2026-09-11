@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
 import { redactForLlm } from '../ingestion/pii.js';

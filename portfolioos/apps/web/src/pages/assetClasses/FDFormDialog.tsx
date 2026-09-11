@@ -19,7 +19,7 @@ import { apiErrorMessage } from '@/api/client';
 import { SuggestInput, type SuggestOption } from '@/components/common/SuggestInput';
 import { BankLogo } from '@/components/bankAccounts/BankLogo';
 import { INDIAN_BANKS } from '@/data/indianBanks';
-import type { AssetClass, TransactionDTO } from '@portfolioos/shared';
+import type { AssetClass, TransactionDTO } from '@everypaisa/shared';
 
 const BANK_OPTIONS: SuggestOption[] = INDIAN_BANKS.map((b) => ({
   value: b.name,

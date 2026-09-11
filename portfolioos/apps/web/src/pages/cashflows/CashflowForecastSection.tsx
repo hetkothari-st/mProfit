@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { formatINR, toDecimal } from '@portfolioos/shared';
+import { formatINR, toDecimal } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cashflowsApi, type ForecastEvent } from '@/api/cashflows.api';
 
@@ -186,7 +186,7 @@ function Tile({
 function formatMonthLabel(key: string): string {
   // key = YYYY-MM
   const [y, m] = key.split('-');
-  // eslint-disable-next-line portfolioos/no-money-coercion -- YYYY-MM split; not money
+  // eslint-disable-next-line everypaisa/no-money-coercion -- YYYY-MM split; not money
   const date = new Date(Number.parseInt(y ?? '0', 10), Number.parseInt(m ?? '1', 10) - 1, 1);
   return date.toLocaleDateString('en-IN', { month: 'short' });
 }

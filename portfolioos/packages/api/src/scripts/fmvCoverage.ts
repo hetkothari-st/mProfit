@@ -7,7 +7,7 @@ import { listGrandfatheringRows } from '../services/fmvOverride.service.js';
  * grandfathering-eligible LTCG rows have a resolved 31-Jan-2018 FMV vs. still
  * need manual user input. Guards against the seed silently losing coverage
  * again as new listings/transactions show up. Not wired into any cron —
- * run on demand: `pnpm --filter @portfolioos/api run fmv:coverage [userId]`.
+ * run on demand: `pnpm --filter @everypaisa/api run fmv:coverage [userId]`.
  */
 async function main() {
   const onlyUserId = process.argv[2];

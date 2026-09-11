@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { CoverageFacts, HomeCheck, NextStep } from '@portfolioos/shared';
+import type { CoverageFacts, HomeCheck, NextStep } from '@everypaisa/shared';
 import { AreaCard } from './AreaCard';
 
 /** Home cover — optional, so it's a gentle note rather than a gap. */

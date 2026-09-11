@@ -12,8 +12,8 @@ import { PortfolioGroupFormDialog } from './PortfolioGroupFormDialog';
 import { portfoliosApi, type PortfolioListItem } from '@/api/portfolios.api';
 import { portfolioGroupsApi } from '@/api/portfolioGroups.api';
 import { useAuthStore } from '@/stores/auth.store';
-import { formatINR, PLAN_LIMITS, type PlanTierValue } from '@portfolioos/shared';
-import type { PortfolioGroupListItem } from '@portfolioos/shared';
+import { formatINR, PLAN_LIMITS, type PlanTierValue } from '@everypaisa/shared';
+import type { PortfolioGroupListItem } from '@everypaisa/shared';
 
 export function PortfolioListPage() {
   const [dialogOpen, setDialogOpen] = useState(false);

@@ -6,7 +6,7 @@
 
 ## Goal
 
-Make the PortfolioOS web app usable on phones and tablets **without changing the
+Make the EveryPaisa web app usable on phones and tablets **without changing the
 existing desktop experience in any way**.
 
 ## Iron Rule (non-negotiable)
@@ -129,7 +129,7 @@ runtime path.
     obscured by bar, key tables render as cards.
 - **Regression guard:** confirm `md:hidden` / media-query gating by toggling DOM
   width; no desktop snapshot/visual change.
-- `pnpm --filter @portfolioos/web typecheck` and `lint` green.
+- `pnpm --filter @everypaisa/web typecheck` and `lint` green.
 
 ## Non-goals
 

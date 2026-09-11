@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { documentsApi } from '@/api/documents.api';
 import { apiErrorMessage } from '@/api/client';
 import { DocumentEditorModal } from './DocumentEditorModal';
-import type { DocumentDTO, DocumentOwnerType } from '@portfolioos/shared';
+import type { DocumentDTO, DocumentOwnerType } from '@everypaisa/shared';
 
 interface Props {
   ownerType: DocumentOwnerType;

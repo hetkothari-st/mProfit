@@ -1,5 +1,5 @@
 import { api, unwrap } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 import { getApiBaseUrl } from './baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';

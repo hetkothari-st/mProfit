@@ -18,8 +18,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@portfolioos/shared';
-import type { TransactionDTO } from '@portfolioos/shared';
+import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@everypaisa/shared';
+import type { TransactionDTO } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { transactionsApi } from '@/api/transactions.api';
 import { assetsApi } from '@/api/assets.api';

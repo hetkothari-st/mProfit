@@ -11,7 +11,7 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { useEffect, useCallback, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { OPTIONAL_ASSET_SECTION_KEYS } from '@portfolioos/shared';
+import { OPTIONAL_ASSET_SECTION_KEYS } from '@everypaisa/shared';
 import { cn } from '@/lib/cn';
 import { useAssetSectionsStore } from '@/stores/assetSections.store';
 import { useAuthStore } from '@/stores/auth.store';

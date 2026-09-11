@@ -13,12 +13,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
-import type { TransactionDTO } from '@portfolioos/shared';
+import type { TransactionDTO } from '@everypaisa/shared';
 import type { FormDialogProps } from './FDFormDialog';
 
 const n = (v: unknown) => (v === '' || v == null ? undefined : v);

@@ -33,11 +33,11 @@ import { apiErrorMessage } from '@/api/client';
 import type {
   IngestionFailureDTO,
   IngestionResolveAction,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import {
   INGESTION_RESOLVE_ACTIONS,
   INGESTION_RESOLVE_ACTION_LABELS,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 type Filter = 'unresolved' | 'resolved' | 'all';
 

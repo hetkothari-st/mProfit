@@ -178,7 +178,7 @@ async function expandCarInfoSections(page: any): Promise<void> {
   })()`);
   try {
     await page.waitForLoadState('networkidle', { timeout: 4000 });
-    // eslint-disable-next-line portfolioos/no-silent-catch -- the timeout is the point: this is "give the page up to 4s to settle", and a page that never goes idle is the normal case on a site with polling
+    // eslint-disable-next-line everypaisa/no-silent-catch -- the timeout is the point: this is "give the page up to 4s to settle", and a page that never goes idle is the normal case on a site with polling
   } catch { /* four seconds was the budget */ }
 }
 
@@ -685,7 +685,7 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
           logger.info({ regNo, source: 'json_parse_capture', fields: Object.keys(rec).filter(k => (rec as any)[k]) }, '[carinfo-pw] parsed from JSON.parse capture');
           break;
         }
-      // eslint-disable-next-line portfolioos/no-silent-catch -- every captured JSON.parse argument is a candidate; the ones that are not vehicle payloads are meant to fall through to strategy (2)
+      // eslint-disable-next-line everypaisa/no-silent-catch -- every captured JSON.parse argument is a candidate; the ones that are not vehicle payloads are meant to fall through to strategy (2)
       } catch { /* not a vehicle payload */ }
     }
 
@@ -701,7 +701,7 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
             logger.info({ regNo, source: 'cryptojs_capture' }, '[carinfo-pw] parsed from CryptoJS capture');
             break;
           }
-        // eslint-disable-next-line portfolioos/no-silent-catch -- as above: candidate blobs, falling through to the next strategy is the design
+        // eslint-disable-next-line everypaisa/no-silent-catch -- as above: candidate blobs, falling through to the next strategy is the design
         } catch { /* not a vehicle payload */ }
       }
     }
@@ -720,7 +720,7 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
               break;
             }
           }
-        // eslint-disable-next-line portfolioos/no-silent-catch -- as above, over captured API responses
+        // eslint-disable-next-line everypaisa/no-silent-catch -- as above, over captured API responses
         } catch { /* not a vehicle payload */ }
       }
     }

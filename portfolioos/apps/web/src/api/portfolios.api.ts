@@ -9,7 +9,7 @@ import type {
   AssetAllocationSlice,
   HistoricalValuationPoint,
   CashFlowEntry,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 export interface PortfolioListItem extends Portfolio {
   holdingCount: number;

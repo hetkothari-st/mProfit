@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, Coins, Calendar, Package, ImageIcon, ImageOff, Pencil } from 'lucide-react';
-import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@portfolioos/shared';
-import type { TransactionDTO } from '@portfolioos/shared';
+import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@everypaisa/shared';
+import type { TransactionDTO } from '@everypaisa/shared';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

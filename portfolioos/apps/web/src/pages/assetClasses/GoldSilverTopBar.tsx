@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { assetsApi } from '@/api/assets.api';
 import { pricePerGram, puritiesFor, type Metal } from '@/lib/metalPurity';
 
@@ -35,8 +35,8 @@ function freshnessLabel(secs: number): string {
 // ── Purity choice, remembered per viewer ─────────────────────────────────────
 
 const STORAGE_KEY: Record<Metal, string> = {
-  GOLD: 'portfolioos.goldTicker.karat',
-  SILVER: 'portfolioos.goldTicker.silverPurity',
+  GOLD: 'everypaisa.goldTicker.karat',
+  SILVER: 'everypaisa.goldTicker.silverPurity',
 };
 
 function readPurity(metal: Metal): string {

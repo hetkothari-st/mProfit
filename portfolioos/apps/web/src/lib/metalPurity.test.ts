@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { GOLD_KARATS, SILVER_PURITIES, pricePerGram } from './metalPurity';
 
 describe('metal purities', () => {

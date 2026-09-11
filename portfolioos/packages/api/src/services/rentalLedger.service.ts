@@ -10,7 +10,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { BadRequestError, NotFoundError, ForbiddenError } from '../lib/errors.js';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import {
   allocateCredits,
   deriveReceiptStatus,

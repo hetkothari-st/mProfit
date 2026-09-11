@@ -1,5 +1,5 @@
 import { Link as LinkIcon } from 'lucide-react';
-import { helpTopic, type HelpTopic } from '@portfolioos/shared';
+import { helpTopic, type HelpTopic } from '@everypaisa/shared';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDay } from '@/lib/insurance';
 import { SourceLink } from '../SourceLink';

@@ -196,7 +196,7 @@ export async function buildCapitalGainsStatement(
     rows: main?.rows ?? [],
     mainSectionLabel: main?.title ?? 'Capital Gains',
     additionalSections: rest,
-    filenameStem: `portfolioos-${params.kind}-statement-${fyLabel.replace(/[^a-z0-9-]+/gi, '_')}`,
+    filenameStem: `everypaisa-${params.kind}-statement-${fyLabel.replace(/[^a-z0-9-]+/gi, '_')}`,
   };
 }
 

@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ChevronDown, Loader2, Pencil, Trash2 } from 'lucide-react';
-import { CLAIM_GUIDES, formatINR, type ClaimGuide } from '@portfolioos/shared';
+import { CLAIM_GUIDES, formatINR, type ClaimGuide } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';

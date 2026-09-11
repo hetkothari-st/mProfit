@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { guidesForPolicyType, type ClaimKind } from '@portfolioos/shared';
+import { guidesForPolicyType, type ClaimKind } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { InsurancePolicyDTO } from '@/api/insurance.api';

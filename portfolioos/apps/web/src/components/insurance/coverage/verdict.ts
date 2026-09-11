@@ -1,4 +1,4 @@
-import { formatINR, type AreaCheck, type CoverageVerdict } from '@portfolioos/shared';
+import { formatINR, type AreaCheck, type CoverageVerdict } from '@everypaisa/shared';
 import type { Tone } from '@/lib/insurance';
 
 export const VERDICT_LABELS: Record<CoverageVerdict, string> = {

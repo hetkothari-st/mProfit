@@ -13,8 +13,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@portfolioos/shared": ["../../packages/shared/src/index.ts"],
-      "@portfolioos/shared/*": ["../../packages/shared/src/*"]
+      "@everypaisa/shared": ["../../packages/shared/src/index.ts"],
+      "@everypaisa/shared/*": ["../../packages/shared/src/*"]
     }
   },
   "include": ["src", "vite.config.ts"]

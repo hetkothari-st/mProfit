@@ -19,7 +19,7 @@ import { asyncHandler } from '../middleware/validate.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { env } from '../config/env.js';
-import { taxYearOf } from '@portfolioos/shared';
+import { taxYearOf } from '@everypaisa/shared';
 import { classifyQuery } from '../ai/queryClassifier.js';
 import { buildContext } from '../ai/contextBuilder.js';
 import { loadAdvisorContext } from '../ai/userFacts.js';

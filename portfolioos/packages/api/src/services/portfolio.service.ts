@@ -7,7 +7,7 @@ import {
   serializeQuantity,
   type Money,
   type Quantity,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import type { Transaction } from '@prisma/client';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';

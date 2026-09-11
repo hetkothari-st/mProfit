@@ -1,6 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { formatINR, formatPercent, ASSET_CLASS_LABELS } from '@portfolioos/shared';
+import { formatINR, formatPercent, ASSET_CLASS_LABELS } from '@everypaisa/shared';
 import type { HoldingRankRow, ConcentrationRow, AssetClassXirrRow } from '@/api/analytics.api';
 import { POS_COLOR, NEG_COLOR } from '../chartColors';
 

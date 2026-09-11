@@ -29,6 +29,6 @@ export const useFamilyScopeStore = create<FamilyScopeState>()(
         set({ viewingAsFamilyId: id, viewingAsFamilyName: name ?? null }),
       clear: () => set({ viewingAsFamilyId: null, viewingAsFamilyName: null }),
     }),
-    { name: 'portfolioos.familyScope' },
+    { name: 'everypaisa.familyScope' },
   ),
 );

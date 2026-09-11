@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@portfolioos/shared';
+import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@everypaisa/shared';
 import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
 import { computeCardSummary } from './creditCards.service.js';
 import { getEffectiveScope, type EffectiveScope } from './familyScope.service.js';

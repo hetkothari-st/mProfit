@@ -291,8 +291,8 @@ Expected: migration applied; `@prisma/client` regenerated; no errors.
 
 ```bash
 cd portfolioos
-pnpm --filter @portfolioos/api build
-pnpm --filter @portfolioos/api typecheck
+pnpm --filter @everypaisa/api build
+pnpm --filter @everypaisa/api typecheck
 ```
 
 Expected: both green.
@@ -858,7 +858,7 @@ export async function runPfChain(ctx: ScrapeContext): Promise<RunPfChainOutcome>
 - [ ] **Step 5.3: Verify build**
 
 ```bash
-pnpm --filter @portfolioos/api typecheck
+pnpm --filter @everypaisa/api typecheck
 ```
 
 Expected: green.
@@ -1358,7 +1358,7 @@ export async function solveCaptcha(opts: CaptchaSolveOpts): Promise<SolveResult>
 - [ ] **Step 9.3: Verify build**
 
 ```bash
-pnpm --filter @portfolioos/api typecheck
+pnpm --filter @everypaisa/api typecheck
 ```
 
 - [ ] **Step 9.4: Commit**
@@ -1534,8 +1534,8 @@ registerPfAdapter(epfoAdapter);
 - [ ] **Step 10.4: Verify build**
 
 ```bash
-pnpm --filter @portfolioos/api typecheck
-pnpm --filter @portfolioos/api build
+pnpm --filter @everypaisa/api typecheck
+pnpm --filter @everypaisa/api build
 ```
 
 Expected: green.
@@ -1878,8 +1878,8 @@ startPfFetchWorker();
 - [ ] **Step 12.3: Verify build**
 
 ```bash
-pnpm --filter @portfolioos/api typecheck
-pnpm --filter @portfolioos/api build
+pnpm --filter @everypaisa/api typecheck
+pnpm --filter @everypaisa/api build
 ```
 
 Note: if `recomputeForAsset` signature differs, adjust call site to match `holdingsProjection.ts`.
@@ -2059,8 +2059,8 @@ app.use('/epfppf', pfRouter);
 - [ ] **Step 13.4: Verify build**
 
 ```bash
-pnpm --filter @portfolioos/api typecheck
-pnpm --filter @portfolioos/api build
+pnpm --filter @everypaisa/api typecheck
+pnpm --filter @everypaisa/api build
 ```
 
 - [ ] **Step 13.5: Commit**
@@ -2546,7 +2546,7 @@ pnpm add multer @types/multer
 - [ ] **Step 18.5: Verify build**
 
 ```bash
-pnpm --filter @portfolioos/api typecheck && pnpm --filter web build
+pnpm --filter @everypaisa/api typecheck && pnpm --filter web build
 ```
 
 - [ ] **Step 18.6: Commit**

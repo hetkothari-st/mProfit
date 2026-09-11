@@ -171,6 +171,6 @@ export async function buildLedgerStatement(
     columns: COLUMNS,
     rows,
     mainSectionLabel: 'Transactions & Cash Movements (chronological)',
-    filenameStem: `portfolioos-ledger-${fromLabel.replace(/[\s,]+/g, '_')}_to_${toLabel.replace(/[\s,]+/g, '_')}`,
+    filenameStem: `everypaisa-ledger-${fromLabel.replace(/[\s,]+/g, '_')}_to_${toLabel.replace(/[\s,]+/g, '_')}`,
   };
 }

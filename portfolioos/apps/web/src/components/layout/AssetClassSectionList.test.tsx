@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import type { AssetSectionPref } from '@portfolioos/shared';
+import type { AssetSectionPref } from '@everypaisa/shared';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn() }));
 vi.mock('@/api/userPreferences.api', () => ({ userPreferencesApi: api }));

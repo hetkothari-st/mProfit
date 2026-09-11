@@ -6,7 +6,7 @@ import {
   type HealthCheck,
   type NextStep,
   type ParentsAnswer,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { Link } from 'react-router-dom';
 import { AreaCard } from './AreaCard';
 import { FlagList } from './FlagList';

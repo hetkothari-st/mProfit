@@ -1,4 +1,4 @@
-import { FEATURE_MIN_TIER, hasFeature, type FeatureFlag, type PlanTierValue } from '@portfolioos/shared';
+import { FEATURE_MIN_TIER, hasFeature, type FeatureFlag, type PlanTierValue } from '@everypaisa/shared';
 import { useAuthStore } from '@/stores/auth.store';
 
 export interface EntitlementResult {
@@ -8,7 +8,7 @@ export interface EntitlementResult {
 
 /**
  * Reads the current user's plan from auth state and checks it against
- * the single source of truth in `@portfolioos/shared`'s `FEATURE_MIN_TIER`.
+ * the single source of truth in `@everypaisa/shared`'s `FEATURE_MIN_TIER`.
  * Gated purely on `plan`, mirroring the backend `requireFeature` — no
  * ADMIN bypass, so switching plan on an admin account actually changes
  * what's locked (needed to QA tier gating without a second account).

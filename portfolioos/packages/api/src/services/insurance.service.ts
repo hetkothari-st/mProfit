@@ -11,7 +11,7 @@
  * values are encrypted on startup (`backfillPolicyNumberEncryption`).
  *
  * "Next premium due" comes from the shared premium schedule
- * (@portfolioos/shared buildPremiumSchedule) — the same code the web app uses
+ * (@everypaisa/shared buildPremiumSchedule) — the same code the web app uses
  * — and is re-stored after every change that can move it, so reminders and
  * the screen agree.
  *
@@ -41,7 +41,7 @@ import {
   type ClaimGuide,
   type NextPremiumDue,
   type TaxBucket,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';

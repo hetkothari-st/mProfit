@@ -20,7 +20,7 @@ import {
   type GoalCategory,
   type GoalPriority,
   type GoalStatus,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import {
   progressPct as calcProgressPct,
   inflationAdjustedTarget as calcInflationTarget,
@@ -32,7 +32,7 @@ import type { Prisma } from '@prisma/client';
 /**
  * The closed sets a goal's `category` / `priority` / `status` can take.
  *
- * Defined once in `@portfolioos/shared` (types/familyDashboard.ts) so the API,
+ * Defined once in `@everypaisa/shared` (types/familyDashboard.ts) so the API,
  * the family dashboard aggregate and the web client cannot drift apart on the
  * token list, and re-exported here because every existing importer reaches for
  * them through goals.service.

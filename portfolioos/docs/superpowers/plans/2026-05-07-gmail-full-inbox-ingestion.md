@@ -217,7 +217,7 @@ In the `ImportJob` model, add:
 
 - [ ] **Step 3: Generate the Prisma client**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api exec prisma generate`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api exec prisma generate`
 Expected: "Generated Prisma Client".
 
 - [ ] **Step 4: Commit**
@@ -354,7 +354,7 @@ ALTER TABLE "ImportJob"
 
 - [ ] **Step 2: Apply the migration**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api exec prisma migrate deploy`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api exec prisma migrate deploy`
 Expected: "Applying migration `20260507120000_gmail_full_inbox_pipeline`" then "All migrations have been successfully applied."
 
 - [ ] **Step 3: Commit**
@@ -507,7 +507,7 @@ export * from './types/gmailIngestion.js';
 
 - [ ] **Step 3: Build the shared package**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/shared run build`
+Run: `cd portfolioos && pnpm --filter @everypaisa/shared run build`
 Expected: clean exit.
 
 - [ ] **Step 4: Commit**
@@ -561,7 +561,7 @@ export function getGmailScanQueue(): Queue {
 
 - [ ] **Step 3: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck`
 Expected: clean.
 
 - [ ] **Step 4: Commit**
@@ -725,7 +725,7 @@ Expected: at least one match. If absent, add a thin export wrapping the existing
 
 - [ ] **Step 3: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck`
 Expected: clean.
 
 - [ ] **Step 4: Commit**
@@ -802,7 +802,7 @@ describe('classifyAttachmentWithLlm', () => {
 
 - [ ] **Step 2: Run the test, verify failure**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api exec vitest run test/lib/gmailClassifier.test.ts`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api exec vitest run test/lib/gmailClassifier.test.ts`
 Expected: FAIL with "Cannot find module '../../src/lib/gmailClassifier.js'".
 
 - [ ] **Step 3: Commit the failing test**
@@ -992,12 +992,12 @@ ${redactForLlm(input.first4kbText)}`;
 
 - [ ] **Step 2: Run the test, verify pass**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api exec vitest run test/lib/gmailClassifier.test.ts`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api exec vitest run test/lib/gmailClassifier.test.ts`
 Expected: PASS.
 
 - [ ] **Step 3: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck`
 Expected: clean. (If `recordSpend` / `checkBudget` exports differ, follow the existing `parseEmailWithLlm` import paths in `packages/api/src/ingestion/llm/client.ts` and copy the same imports.)
 
 - [ ] **Step 4: Commit**
@@ -1101,7 +1101,7 @@ export async function resumeScanJob(userId: string, id: string) {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -1173,7 +1173,7 @@ export async function listDistinctSenders(userId: string): Promise<string[]> {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -1394,7 +1394,7 @@ export async function sweepAutoApprovals(userId: string, scanJobId: string) {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck`
 Expected: clean. If `createImportJob` doesn't accept `contentHash` / `gmailMessageId` parameters yet, see Task 12 — the existing signature already accepts `contentHash` per `import.service.ts`.
 
 - [ ] **Step 3: Commit**
@@ -1476,7 +1476,7 @@ In `import.service.ts::processImportJob`, find every `prisma.importJob.update(..
 
 - [ ] **Step 4: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck`
 Expected: clean.
 
 - [ ] **Step 5: Commit**
@@ -1607,7 +1607,7 @@ describe('runScanJob', () => {
 
 - [ ] **Step 2: Run, verify failure**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api exec vitest run test/jobs/gmailScanWorker.test.ts`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api exec vitest run test/jobs/gmailScanWorker.test.ts`
 Expected: FAIL with "Cannot find module '.../gmailScanWorker.js'".
 
 - [ ] **Step 3: Commit failing test**
@@ -1910,7 +1910,7 @@ export function registerGmailScanWorker(): void {
 
 - [ ] **Step 2: Run the test, verify pass**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api exec vitest run test/jobs/gmailScanWorker.test.ts`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api exec vitest run test/jobs/gmailScanWorker.test.ts`
 Expected: PASS.
 
 - [ ] **Step 3: Commit**
@@ -1939,7 +1939,7 @@ registerGmailScanWorker();
 
 - [ ] **Step 2: Typecheck + lint**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -2155,7 +2155,7 @@ export async function deleteAutoApproveRule(req: Request, res: Response) {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run typecheck`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -2239,7 +2239,7 @@ app.use('/api/gmail', gmailScanRouter);
 
 - [ ] **Step 3: Smoke test**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api run dev` and in another terminal:
+Run: `cd portfolioos && pnpm --filter @everypaisa/api run dev` and in another terminal:
 ```bash
 curl -sS -X GET http://localhost:3001/api/gmail/scan-jobs -H "Authorization: Bearer <token>"
 ```
@@ -2274,7 +2274,7 @@ import type {
   BulkApproveInput,
   BulkRejectInput,
   GmailDocStatus,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);
@@ -2367,7 +2367,7 @@ export const gmailScanApi = {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/web run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/web run typecheck`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -2457,7 +2457,7 @@ import { Loader2, Inbox } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { gmailScanApi } from '@/api/gmailScan.api';
-import type { GmailScanJobDTO } from '@portfolioos/shared';
+import type { GmailScanJobDTO } from '@everypaisa/shared';
 
 const NON_TERMINAL = ['PENDING', 'LISTING', 'DOWNLOADING', 'CLASSIFYING'] as const;
 
@@ -2560,7 +2560,7 @@ In the JSX `return`, place at the top of the dashboard grid:
 
 - [ ] **Step 3: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/web run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/web run typecheck`
 Expected: clean. (If `mailboxesApi` doesn't exist, see step 1's fallback.)
 
 - [ ] **Step 4: Commit**
@@ -2696,7 +2696,7 @@ New:
 
 - [ ] **Step 4: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/web run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/web run typecheck`
 Expected: clean.
 
 - [ ] **Step 5: Commit**
@@ -2786,8 +2786,8 @@ Create:
 ```tsx
 import { CheckCircle2, XCircle, Loader2, AlertTriangle, Eye, FileText, FileSpreadsheet, FileImage } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { GmailDiscoveredDocDTO } from '@portfolioos/shared';
-import { GMAIL_DOC_STATUS_LABELS } from '@portfolioos/shared';
+import type { GmailDiscoveredDocDTO } from '@everypaisa/shared';
+import { GMAIL_DOC_STATUS_LABELS } from '@everypaisa/shared';
 
 const STATUS_CLASSES: Record<string, string> = {
   CLASSIFYING: 'bg-blue-500/10 text-blue-600',
@@ -2934,8 +2934,8 @@ import { gmailScanApi } from '@/api/gmailScan.api';
 import { apiErrorMessage } from '@/api/client';
 import { InboxImportRow } from '@/components/upload/InboxImportRow';
 import { InboxImportPreviewSheet } from '@/components/upload/InboxImportPreviewSheet';
-import type { GmailDocStatus } from '@portfolioos/shared';
-import { GmailDocStatus as STATUS, INBOX_DOC_TYPES } from '@portfolioos/shared';
+import type { GmailDocStatus } from '@everypaisa/shared';
+import { GmailDocStatus as STATUS, INBOX_DOC_TYPES } from '@everypaisa/shared';
 
 const STATUS_OPTIONS: Array<{ value: GmailDocStatus | 'ALL'; label: string }> = [
   { value: 'ALL', label: 'All' },
@@ -3137,7 +3137,7 @@ export function InboxImportsTab() {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/web run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/web run typecheck`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -3209,7 +3209,7 @@ Add tab buttons before the existing reports content:
 
 - [ ] **Step 2: Typecheck**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/web run typecheck`
+Run: `cd portfolioos && pnpm --filter @everypaisa/web run typecheck`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -3307,7 +3307,7 @@ Expected: clean. Failing tests block this task — fix before push.
 
 - [ ] **Step 3: Apply migration to Neon (production DB)**
 
-Run: `cd portfolioos && pnpm --filter @portfolioos/api exec prisma migrate deploy`
+Run: `cd portfolioos && pnpm --filter @everypaisa/api exec prisma migrate deploy`
 Expected: `Applying migration `20260507120000_gmail_full_inbox_pipeline`` then `All migrations have been successfully applied.`
 
 - [ ] **Step 4: Push**
@@ -3323,7 +3323,7 @@ Railway will rebuild + redeploy.
 After the new deploy is live (uptime <60s):
 ```bash
 curl -sS https://mprofit-production.up.railway.app/health
-curl -sS -X POST https://mprofit-production.up.railway.app/api/auth/login -H "Content-Type: application/json" -d '{"email":"demo@portfolioos.in","password":"Demo@1234"}'
+curl -sS -X POST https://mprofit-production.up.railway.app/api/auth/login -H "Content-Type: application/json" -d '{"email":"demo@everypaisa.in","password":"Demo@1234"}'
 # extract accessToken, then:
 curl -sS https://mprofit-production.up.railway.app/api/gmail/scan-jobs -H "Authorization: Bearer <token>"
 ```

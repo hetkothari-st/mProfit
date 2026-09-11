@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { PortfolioType } from '@prisma/client';
-import type { PlanTierValue } from '@portfolioos/shared';
+import type { PlanTierValue } from '@everypaisa/shared';
 import {
   createPortfolio,
   deletePortfolio,

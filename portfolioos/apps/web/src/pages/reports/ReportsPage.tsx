@@ -21,7 +21,7 @@ import { useReportSubject } from '@/components/reports/useReportSubject';
 import { useAuthStore } from '@/stores/auth.store';
 import { InboxImportsTab } from './InboxImportsTab';
 import { TaxMisDownloads, REPORTS as TAX_MIS_REPORTS, type ReportHighlight } from './TaxMisDownloads';
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 
 type Tab =
   | 'summary'
@@ -1076,7 +1076,7 @@ function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsV
                 size="sm"
                 disabled={busy === c.key}
                 onClick={() =>
-                  fetchAndSave(c.buildUrl('pdf'), `portfolioos-${c.key}-${fy}.pdf`, c.key)
+                  fetchAndSave(c.buildUrl('pdf'), `everypaisa-${c.key}-${fy}.pdf`, c.key)
                 }
               >
                 {busy === c.key ? (
@@ -1091,7 +1091,7 @@ function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsV
                 size="sm"
                 disabled={busy === c.key}
                 onClick={() =>
-                  fetchAndSave(c.buildUrl('xlsx'), `portfolioos-${c.key}-${fy}.xlsx`, c.key)
+                  fetchAndSave(c.buildUrl('xlsx'), `everypaisa-${c.key}-${fy}.xlsx`, c.key)
                 }
               >
                 {busy === c.key ? (

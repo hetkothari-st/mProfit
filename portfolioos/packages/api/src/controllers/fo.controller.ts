@@ -11,7 +11,7 @@ import {
 } from '../services/derivativePosition.service.js';
 import { syncFnoBroker } from '../services/foBrokerSync.service.js';
 import { getOptionChainSnapshot } from '../priceFeeds/nseOptionChain.service.js';
-import { blackScholes, impliedVolatility, timeToExpiryYears, DEFAULT_INDIAN_RISK_FREE_RATE } from '@portfolioos/shared';
+import { blackScholes, impliedVolatility, timeToExpiryYears, DEFAULT_INDIAN_RISK_FREE_RATE } from '@everypaisa/shared';
 
 async function assertPortfolio(userId: string, portfolioId: string) {
   const p = await prisma.portfolio.findUnique({ where: { id: portfolioId } });

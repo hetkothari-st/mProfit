@@ -14,7 +14,7 @@ import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
-import { UserRole } from '@portfolioos/shared';
+import { UserRole } from '@everypaisa/shared';
 
 const schema = z
   .object({

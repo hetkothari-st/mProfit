@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { ImportJobDTO, ImportStatus } from '@portfolioos/shared';
-import { IMPORT_STATUS_LABELS } from '@portfolioos/shared';
+import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';
+import { IMPORT_STATUS_LABELS } from '@everypaisa/shared';
 import { ImportErrorDialog } from '@/pages/imports/ImportErrorDialog';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -26,8 +26,8 @@ import { MfOverlapCard } from '@/pages/mutualFunds/MfOverlapCard';
 import { FinvuSandboxCard } from '@/pages/mutualFunds/FinvuSandboxCard';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
 import { useUploadWithPasswordRetry } from '@/hooks/useUploadWithPasswordRetry';
-import { formatINR, formatPercent, Decimal, toDecimal } from '@portfolioos/shared';
-import type { HoldingRow, TransactionDTO } from '@portfolioos/shared';
+import { formatINR, formatPercent, Decimal, toDecimal } from '@everypaisa/shared';
+import type { HoldingRow, TransactionDTO } from '@everypaisa/shared';
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   BUY: 'Buy', SELL: 'Sell / Redeem', DIVIDEND: 'Dividend',

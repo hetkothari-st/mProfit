@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { ChevronDown, Landmark, Plus, ArrowUpRight } from 'lucide-react';
-import { Decimal, formatINR, type AssetClass, type HoldingRow } from '@portfolioos/shared';
+import { Decimal, formatINR, type AssetClass, type HoldingRow } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';

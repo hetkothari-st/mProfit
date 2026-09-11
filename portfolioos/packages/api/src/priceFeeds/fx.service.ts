@@ -149,7 +149,7 @@ async function fetchRbiReferenceRates(): Promise<Map<string, Decimal>> {
     const res = await request(RBI_REFERENCE_RATE_URL, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; portfolioos/1.0)',
+        'User-Agent': 'Mozilla/5.0 (compatible; EveryPaisa/1.0)',
         Accept: 'text/html,application/xhtml+xml',
       },
       bodyTimeout: 10_000,

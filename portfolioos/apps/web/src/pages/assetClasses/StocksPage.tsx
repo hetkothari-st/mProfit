@@ -31,8 +31,8 @@ import {
   toDecimal,
   serializeMoney,
   serializeQuantity,
-} from '@portfolioos/shared';
-import type { HoldingRow, Money, Quantity, TransactionDTO } from '@portfolioos/shared';
+} from '@everypaisa/shared';
+import type { HoldingRow, Money, Quantity, TransactionDTO } from '@everypaisa/shared';
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   BUY: 'Buy',

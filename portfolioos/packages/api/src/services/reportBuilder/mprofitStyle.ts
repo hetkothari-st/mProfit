@@ -21,7 +21,7 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { pdfSafe } from '../charts/pdfCharts.js';
 import { DARK_THEME, LIGHT_THEME, hexToArgb, type ThemeName } from '../charts/pdfTheme.js';
 

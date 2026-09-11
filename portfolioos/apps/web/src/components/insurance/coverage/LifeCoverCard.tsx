@@ -1,4 +1,4 @@
-import { RULES_OF_THUMB, type CoverageAssumptions, type CoverageFacts, type LifeCheck, type NextStep } from '@portfolioos/shared';
+import { RULES_OF_THUMB, type CoverageAssumptions, type CoverageFacts, type LifeCheck, type NextStep } from '@everypaisa/shared';
 import { Figure } from '@/components/receipt/Receipt';
 import { plural } from '@/lib/insurance';
 import { AreaCard } from './AreaCard';

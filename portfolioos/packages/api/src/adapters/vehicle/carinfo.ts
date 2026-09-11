@@ -148,7 +148,7 @@ export function extractNextData(html: string): Record<string, unknown> | null {
     try {
       const nd = JSON.parse(m[1]!) as NextData;
       if (nd.props?.pageProps) return nd.props.pageProps;
-      // eslint-disable-next-line portfolioos/no-silent-catch -- the page-router tag is one of two shapes tried; not being valid JSON is the signal to try the app-router path below
+      // eslint-disable-next-line everypaisa/no-silent-catch -- the page-router tag is one of two shapes tried; not being valid JSON is the signal to try the app-router path below
     } catch { /* try the app-router shape */ }
   }
 
@@ -158,7 +158,7 @@ export function extractNextData(html: string): Record<string, unknown> | null {
     try {
       const obj = JSON.parse(block[1]!) as Record<string, unknown>;
       if (obj['rcData'] || obj['vehicleData'] || obj['owner_name'] || obj['maker_desc']) return obj;
-      // eslint-disable-next-line portfolioos/no-silent-catch -- every <script> block on the page is a candidate; almost none of them parse, which is what this loop is for
+      // eslint-disable-next-line everypaisa/no-silent-catch -- every <script> block on the page is a candidate; almost none of them parse, which is what this loop is for
     } catch { /* not the block we want */ }
   }
 

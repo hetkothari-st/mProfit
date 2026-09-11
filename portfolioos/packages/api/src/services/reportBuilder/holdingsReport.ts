@@ -40,9 +40,9 @@ function sectionLabel(classes: AssetClass[] | undefined): string {
 }
 
 function filenameStem(classes: AssetClass[] | undefined): string {
-  if (!classes || classes.length === 0) return 'portfolioos-all-holdings';
-  if (classes.length === 1) return `portfolioos-${classes[0]!.toLowerCase().replace(/_/g, '-')}`;
-  return `portfolioos-${classes.map(c => c.toLowerCase().replace(/_/g, '-')).join('_')}`;
+  if (!classes || classes.length === 0) return 'everypaisa-all-holdings';
+  if (classes.length === 1) return `everypaisa-${classes[0]!.toLowerCase().replace(/_/g, '-')}`;
+  return `everypaisa-${classes.map(c => c.toLowerCase().replace(/_/g, '-')).join('_')}`;
 }
 
 // ─── Holdings sheet payload ──────────────────────────────────────────────────

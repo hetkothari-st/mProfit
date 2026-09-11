@@ -1,4 +1,4 @@
-import { OPTIONAL_ASSET_SECTION_KEYS, type AssetSectionPref, type UserPreferences } from '@portfolioos/shared';
+import { OPTIONAL_ASSET_SECTION_KEYS, type AssetSectionPref, type UserPreferences } from '@everypaisa/shared';
 import { prisma } from '../lib/prisma.js';
 
 /**

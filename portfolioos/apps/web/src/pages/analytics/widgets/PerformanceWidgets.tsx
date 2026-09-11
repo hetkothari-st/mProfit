@@ -2,7 +2,7 @@ import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { formatINR, toDecimal } from '@portfolioos/shared';
+import { formatINR, toDecimal } from '@everypaisa/shared';
 import type { ValuationPoint, CostValueDriftPoint, BenchmarkPoint } from '@/api/analytics.api';
 import { shortInr } from '../chartColors';
 

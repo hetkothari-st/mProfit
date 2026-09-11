@@ -9,7 +9,7 @@ import type {
   FamilyProtection,
   FamilyWealth,
   GoalCategory,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 /**
  * Family dashboard contract — the read-only household view behind
@@ -17,7 +17,7 @@ import type {
  * the Family → Overview tab: wealth, goals, protection, attention.
  *
  * THE RESPONSE TYPES ARE NOT DECLARED HERE. `FamilyWealth`, `FamilyGoals`,
- * `FamilyProtection` and `FamilyAttention` come from `@portfolioos/shared`,
+ * `FamilyProtection` and `FamilyAttention` come from `@everypaisa/shared`,
  * which is the same declaration `familyAggregate.service.ts` types its return
  * values with. Restating them locally is what let this page and the server
  * disagree about every field name while both typechecked; with one
@@ -66,7 +66,7 @@ export type {
   MemberLiabilities,
   UpcomingRenewal,
   VisibilitySummary,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 // ─── Client ──────────────────────────────────────────────────────────────────
 

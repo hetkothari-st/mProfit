@@ -13,7 +13,7 @@ import {
   formatQuantity,
   ASSET_CLASS_LABELS,
   toDecimal,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 function signClass(m: string | null | undefined): 'up' | 'down' | 'flat' {
   if (m == null || m === '') return 'flat';

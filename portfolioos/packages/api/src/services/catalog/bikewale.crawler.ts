@@ -176,7 +176,7 @@ function parseModelDisplayName(html: string, fallback: string): string {
           for (const v of Object.values(x)) if (v && typeof v === 'object') stack.push(v);
         }
       }
-      // eslint-disable-next-line portfolioos/no-silent-catch -- walking candidate JSON-LD blocks; a block that does not parse simply is not the Product one, and the caller's `fallback` is the answer
+      // eslint-disable-next-line everypaisa/no-silent-catch -- walking candidate JSON-LD blocks; a block that does not parse simply is not the Product one, and the caller's `fallback` is the answer
     } catch { /* not a JSON-LD Product block */ }
   }
   return fallback;

@@ -53,7 +53,7 @@ export async function seedFmv(prisma: PrismaClient): Promise<SeedFmvResult> {
   return { totalRows: seedData.length, stockRows: stockRows.length, mfRows: mfRows.length };
 }
 
-// Still runnable standalone: `pnpm --filter @portfolioos/api run seed:fmv`.
+// Still runnable standalone: `pnpm --filter @everypaisa/api run seed:fmv`.
 // Uses the direct (superuser) URL so it bypasses RLS, same pattern as
 // prisma/seed.ts — SystemFmvSeed has no userId column to filter on.
 async function runStandalone() {

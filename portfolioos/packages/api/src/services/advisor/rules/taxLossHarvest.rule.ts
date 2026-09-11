@@ -13,7 +13,7 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { bucketForAssetClass } from '../assetBuckets.js';
 import { CATEGORY_BASE_PRIORITY, MIN_HARVEST_LOSS_INR } from '../constants.js';
 import { unitsFor } from '../allocationMath.js';

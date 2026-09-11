@@ -13,11 +13,11 @@
  */
 
 function showDetectionBanner(): void {
-  const existing = document.getElementById('portfolioos-sbi-banner');
+  const existing = document.getElementById('everypaisa-sbi-banner');
   if (existing) return;
 
   const banner = document.createElement('div');
-  banner.id = 'portfolioos-sbi-banner';
+  banner.id = 'everypaisa-sbi-banner';
   banner.style.cssText = `
     position: fixed;
     bottom: 16px;

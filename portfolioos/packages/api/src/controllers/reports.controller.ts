@@ -1364,7 +1364,7 @@ export async function downloadFyBundle(req: Request, res: Response) {
 
   const stem = subject.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${stem || 'portfolioos'}-FY${fy}.zip"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${stem || 'everypaisa'}-FY${fy}.zip"`);
   // Surfaced in headers too, so a caller scripting this can tell a complete
   // bundle from a partial one without unzipping it.
   res.setHeader('X-Bundle-Included', String(result.included.length));

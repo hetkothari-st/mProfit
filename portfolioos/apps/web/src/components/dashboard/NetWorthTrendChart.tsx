@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { intelligenceApi, type NetWorthHistoryPeriod } from '@/api/intelligence.api';
-import { formatINR, toDecimal } from '@portfolioos/shared';
+import { formatINR, toDecimal } from '@everypaisa/shared';
 
 const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
   { label: '1M', value: '1M' },

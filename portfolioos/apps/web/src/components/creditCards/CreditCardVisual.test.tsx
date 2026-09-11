@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, Link } from 'react-router-dom';
-import type { AuthUser } from '@portfolioos/shared';
+import type { AuthUser } from '@everypaisa/shared';
 import type { CreditCardDTO } from '@/api/creditCards.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { CreditCardVisual } from './CreditCardVisual';
