@@ -159,7 +159,7 @@ describe('readPhoto / deletePhoto / makeCover', () => {
 });
 
 describe('listCovers', () => {
-  it("gives each property its first photo and count, and a linked rental the owned property's", async () => {
+  it("gives each property its photos in order, and a linked rental the owned property's", async () => {
     db.rentalProperty.findMany.mockResolvedValue([{ id: 'rp1' }, { id: 'rp2' }]);
     db.ownedProperty.findMany.mockResolvedValue([{ id: 'op9', rentalPropertyId: 'rp2' }]);
     db.propertyPhoto.findMany.mockResolvedValue([
@@ -168,9 +168,10 @@ describe('listCovers', () => {
       { id: 'c', rentalPropertyId: null, ownedPropertyId: 'op9' },
     ]);
     const covers = await listCovers('u1', 'RENTAL_PROPERTY');
+    // Every photo id (not just the cover) so cards can show a slideshow.
     expect(covers).toEqual({
-      rp1: { coverPhotoId: 'a', count: 2 },
-      rp2: { coverPhotoId: 'c', count: 1 },
+      rp1: { coverPhotoId: 'a', count: 2, photoIds: ['a', 'b'] },
+      rp2: { coverPhotoId: 'c', count: 1, photoIds: ['c'] },
     });
     const q = db.propertyPhoto.findMany.mock.calls[0]![0];
     expect(q.where).toEqual({ userId: 'u1' });

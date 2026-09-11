@@ -213,11 +213,18 @@ export async function makeCover(userId: string, photoId: string): Promise<PhotoM
 const ownerKey = (p: { ownedPropertyId: string | null; rentalPropertyId: string | null }) =>
   p.ownedPropertyId ? `O:${p.ownedPropertyId}` : `R:${p.rentalPropertyId}`;
 
-/** Each property's cover photo and photo count, for the list pages. */
+export interface PropertyCovers {
+  coverPhotoId: string;
+  count: number;
+  /** Every photo in gallery order — the list cards show them as a slideshow. */
+  photoIds: string[];
+}
+
+/** Each property's photos (ids only, cover first), for the list pages. */
 export async function listCovers(
   userId: string,
   type: PropertyOwnerType,
-): Promise<Record<string, { coverPhotoId: string; count: number }>> {
+): Promise<Record<string, PropertyCovers>> {
   // Which photo owners feed each property's gallery.
   const keysByProperty = new Map<string, string[]>();
   if (type === 'RENTAL_PROPERTY') {
@@ -249,11 +256,12 @@ export async function listCovers(
     select: { id: true, ownedPropertyId: true, rentalPropertyId: true },
     orderBy: ORDER,
   });
-  const covers: Record<string, { coverPhotoId: string; count: number }> = {};
+  const covers: Record<string, PropertyCovers> = {};
   for (const p of photos) {
     for (const propertyId of propertiesByKey.get(ownerKey(p)) ?? []) {
-      const c = (covers[propertyId] ??= { coverPhotoId: p.id, count: 0 });
+      const c = (covers[propertyId] ??= { coverPhotoId: p.id, count: 0, photoIds: [] });
       c.count += 1;
+      c.photoIds.push(p.id);
     }
   }
   return covers;

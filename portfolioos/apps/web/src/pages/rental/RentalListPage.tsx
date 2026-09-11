@@ -46,7 +46,7 @@ import {
 import { invalidateRentalCaches } from '@/api/rentalCache';
 import { RentalRemindersPanel } from './RentalRemindersPanel';
 import { propertyPhotosApi, type PhotoCover } from '@/api/propertyMedia.api';
-import { PropertyCover } from '@/components/property/PropertyCover';
+import { PropertySlideshow } from '@/components/property/PropertySlideshow';
 import { PropertiesMap } from '@/components/property/PropertiesMap';
 import { ViewToggle } from '@/components/property/ViewToggle';
 import { useListView } from '@/components/property/useListView';
@@ -376,13 +376,10 @@ function PropertyCard({
         {/* The property's cover photo, when it has one */}
         {cover && (
           <div className="relative h-44 overflow-hidden">
-            <PropertyCover
-              photoId={cover.coverPhotoId}
-              className="h-full w-full transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-            />
+            <PropertySlideshow photoIds={cover.photoIds} className="h-full w-full" />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/45 to-transparent" />
             {cover.count > 1 && (
-              <span className="absolute bottom-2.5 right-3 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+              <span className="pointer-events-none absolute bottom-2.5 right-3 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
                 <Camera className="h-3 w-3" /> {cover.count}
               </span>
             )}

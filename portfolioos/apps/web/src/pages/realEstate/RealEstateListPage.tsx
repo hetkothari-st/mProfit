@@ -41,7 +41,7 @@ import { realEstateApi } from '@/api/realEstate.api';
 import { apiErrorMessage } from '@/api/client';
 import { PropertyFormDialog } from './PropertyFormDialog';
 import { propertyPhotosApi, type PhotoCover } from '@/api/propertyMedia.api';
-import { PropertyCover } from '@/components/property/PropertyCover';
+import { PropertySlideshow } from '@/components/property/PropertySlideshow';
 import { PropertiesMap } from '@/components/property/PropertiesMap';
 import { ViewToggle } from '@/components/property/ViewToggle';
 import { useListView } from '@/components/property/useListView';
@@ -592,27 +592,25 @@ function PropertyBanner({ property, isSold, cover }: PropertyBannerProps) {
       {/* The property's cover photo when it has one; otherwise its type's scene */}
       <div className="absolute inset-0">
         {cover ? (
-          <PropertyCover
-            photoId={cover.coverPhotoId}
-            className="h-full w-full transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-          />
+          <PropertySlideshow photoIds={cover.photoIds} className="h-full w-full" />
         ) : (
           <PropertyScene type={property.propertyType} />
         )}
       </div>
 
       {/* Top + bottom haze — keeps overlay text readable */}
-      <div className="absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-card/85 via-card/40 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-card/85 via-card/40 to-transparent" />
+      {/* Overlays let clicks through to the slideshow's arrows and dots below. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-card/85 via-card/40 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-card/85 via-card/40 to-transparent" />
 
       {/* Brass corner brackets */}
-      <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-accent/70" />
-      <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-accent/70" />
-      <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-accent/70" />
-      <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-accent/70" />
+      <div className="pointer-events-none absolute top-2 left-2 w-3 h-3 border-t border-l border-accent/70" />
+      <div className="pointer-events-none absolute top-2 right-2 w-3 h-3 border-t border-r border-accent/70" />
+      <div className="pointer-events-none absolute bottom-2 left-2 w-3 h-3 border-b border-l border-accent/70" />
+      <div className="pointer-events-none absolute bottom-2 right-2 w-3 h-3 border-b border-r border-accent/70" />
 
       {/* Top: type label + serial */}
-      <div className="absolute top-2.5 left-5 right-5 flex items-center justify-between">
+      <div className="pointer-events-none absolute top-2.5 left-5 right-5 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] font-semibold text-foreground">
           <TypeIcon className="h-3 w-3" strokeWidth={2} />
           {typeLabel}
@@ -624,7 +622,7 @@ function PropertyBanner({ property, isSold, cover }: PropertyBannerProps) {
 
       {/* Bottom: city stamp */}
       {locationLabel && (
-        <div className="absolute bottom-2.5 left-5 right-5 flex items-center">
+        <div className="pointer-events-none absolute bottom-2.5 left-5 right-5 flex items-center">
           <span className="flex items-center gap-1 text-[10px] uppercase tracking-[0.18em] font-semibold text-foreground">
             <MapPin className="h-3 w-3 text-accent" />
             <span className="truncate max-w-[14rem]">{locationLabel}</span>
@@ -633,7 +631,7 @@ function PropertyBanner({ property, isSold, cover }: PropertyBannerProps) {
       )}
 
       {cover && cover.count > 1 && (
-        <span className="absolute bottom-2.5 right-5 flex items-center gap-1 rounded-full bg-card/85 px-2 py-0.5 text-[10px] font-semibold text-foreground backdrop-blur">
+        <span className="pointer-events-none absolute bottom-2.5 right-5 flex items-center gap-1 rounded-full bg-card/85 px-2 py-0.5 text-[10px] font-semibold text-foreground backdrop-blur">
           <Camera className="h-3 w-3" /> {cover.count}
         </span>
       )}

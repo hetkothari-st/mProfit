@@ -16,10 +16,11 @@ export interface PropertyPhotoDTO {
   createdAt: string;
 }
 
-/** A property's first photo and how many it has — for list cards. */
+/** A property's photos for list cards: the cover, the count, and every id in order. */
 export interface PhotoCover {
   coverPhotoId: string;
   count: number;
+  photoIds: string[];
 }
 
 export type LocationSource = 'geocoded' | 'approximate' | 'manual';
