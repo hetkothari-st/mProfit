@@ -243,6 +243,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     // the library passages that fit this question — both in-process.
     const advisorCtx = await loadAdvisorContext(userId, {
       familyId,
+      readableUserIds: context.scope.readableUserIds,
       profile: context.userProfile as unknown as Record<string, unknown>,
     });
     const knowledge = searchKnowledge(message, { limit: 3 });

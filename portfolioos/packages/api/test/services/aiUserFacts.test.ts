@@ -118,6 +118,48 @@ describe('serializeUserFacts', () => {
     expect(text.indexOf('Bitcoin')).toBeLessThan(text.indexOf('Small fund'));
   });
 
+  it('lays out the whole balance sheet: banks, asset classes, property, vehicles, loans, cards, alerts', () => {
+    const text = serializeUserFacts({
+      ...base,
+      advisor: facts(),
+      balanceSheet: {
+        bankBalance: '340000',
+        bankAccounts: 2,
+        byAssetClass: [
+          { label: 'Crypto', value: '6370000', pct: 65.2 },
+          { label: 'Fixed Deposit', value: '500000', pct: 5.1 },
+        ],
+        ownedPropertyValue: '8500000',
+        rentalValue: null,
+        monthlyRent: null,
+        rentOverdue: 0,
+        vehicleValue: '900000',
+        pendingChallans: 1,
+        loanOutstanding: '2500000',
+        monthlyEmi: '45000',
+        loans: 2,
+        overdueEmis: [{ lender: 'HDFC Bank', daysOverdue: 72 }],
+        cardOutstanding: '34000',
+        cards: 1,
+        alerts: ['HDFC Bank EMI overdue', 'LIC TERM premium due'],
+      },
+    });
+    expect(text).toContain('Bank balances: ₹3.4 L across 2 accounts');
+    expect(text).toMatch(/By asset class:[\s\S]*- Crypto: ₹63.7 L \(65%\)[\s\S]*- Fixed Deposit: ₹5 L \(5%\)/);
+    expect(text).toContain('Owned property: ₹85 L');
+    expect(text).toContain('Vehicles: ₹9 L; 1 pending challan');
+    expect(text).toContain('Loans: ₹25 L outstanding across 2; EMIs ₹45,000 a month; overdue: HDFC Bank 72 days');
+    expect(text).toContain('Credit cards: ₹34 K outstanding across 1');
+    expect(text).toContain('Alerts: HDFC Bank EMI overdue; LIC TERM premium due');
+    expect(text).not.toMatch(/Rental property/);
+  });
+
+  it('says so when the balance sheet could not be read, rather than showing zeros', () => {
+    const text = serializeUserFacts({ ...base, advisor: facts(), balanceSheet: null });
+    expect(text).toContain('Balance sheet: not available right now');
+    expect(text).not.toMatch(/Loans: ₹0/);
+  });
+
   it('copes with no advisor facts at all', () => {
     const text = serializeUserFacts({ ...base, advisor: null });
     expect(text).toContain('Allocation vs target: not on file');

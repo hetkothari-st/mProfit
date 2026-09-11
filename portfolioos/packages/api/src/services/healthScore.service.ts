@@ -91,12 +91,37 @@ async function estimateMonthlyInvestment(userId: string): Promise<Decimal> {
  */
 const EMERGENCY_FUND_MONTHS = 6;
 
+/**
+ * Money reachable within days: open bank accounts (never an overdraft), plus
+ * cash, FDs, RDs and post-office deposits held as investments.
+ *
+ * A bank statement import mirrors an account as a CASH holding, so when stored
+ * bank balances exist they replace CASH holdings rather than adding to them —
+ * the balance on the account is the more direct and more current figure.
+ */
+async function liquidParts(userId: string): Promise<{ total: Decimal; bankBalances: Decimal }> {
+  const [rows, accounts] = await Promise.all([
+    prisma.holdingProjection.findMany({
+      where: { portfolio: { userId }, assetClass: { in: Array.from(LIQUID_CLASSES) as never } },
+      select: { assetClass: true, currentValue: true, totalCost: true },
+    }),
+    prisma.bankAccount.findMany({
+      where: { userId, status: 'ACTIVE', accountType: { not: 'OD' } },
+      select: { currentBalance: true },
+    }),
+  ]);
+  const valueOf = (h: (typeof rows)[number]) => (h.currentValue !== null ? d(h.currentValue) : d(h.totalCost));
+  const cashHoldings = rows.filter((h) => h.assetClass === 'CASH').reduce((s, h) => s.plus(valueOf(h)), ZERO);
+  const deposits = rows.filter((h) => h.assetClass !== 'CASH').reduce((s, h) => s.plus(valueOf(h)), ZERO);
+  const bankBalances = accounts.reduce((s, a) => s.plus(d(a.currentBalance)), ZERO);
+  return {
+    total: deposits.plus(bankBalances.greaterThan(0) ? bankBalances : cashHoldings),
+    bankBalances,
+  };
+}
+
 async function liquidAssetsTotal(userId: string): Promise<Decimal> {
-  const rows = await prisma.holdingProjection.findMany({
-    where: { portfolio: { userId }, assetClass: { in: Array.from(LIQUID_CLASSES) as never } },
-    select: { currentValue: true, totalCost: true },
-  });
-  return rows.reduce((s, h) => s.plus(h.currentValue !== null ? d(h.currentValue) : d(h.totalCost)), ZERO);
+  return (await liquidParts(userId)).total;
 }
 
 /**
@@ -110,6 +135,8 @@ async function liquidAssetsTotal(userId: string): Promise<Decimal> {
  */
 export interface EmergencyFundInputs {
   liquidAssets: Decimal;
+  /** The open bank accounts' part of liquidAssets (zero when none are on file). */
+  bankBalances: Decimal;
   /** Three-month rolling average of debit events. Zero when we have no
    *  spending signal at all — callers must decide what that means for them. */
   monthlyExpenses: Decimal;
@@ -126,13 +153,15 @@ export function emergencyFundTargetFor(monthlyExpenses: Decimal): Decimal {
 }
 
 export async function getEmergencyFundInputs(userId: string): Promise<EmergencyFundInputs> {
-  const [liquidAssets, monthlyExpenses] = await Promise.all([
-    liquidAssetsTotal(userId),
+  const [liquid, monthlyExpenses] = await Promise.all([
+    liquidParts(userId),
     estimateMonthlyExpenses(userId),
   ]);
+  const liquidAssets = liquid.total;
   const target = emergencyFundTargetFor(monthlyExpenses);
   return {
     liquidAssets,
+    bankBalances: liquid.bankBalances,
     monthlyExpenses,
     target,
     surplus: liquidAssets.minus(target),

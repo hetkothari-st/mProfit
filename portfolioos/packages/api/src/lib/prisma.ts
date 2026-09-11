@@ -6,6 +6,7 @@ import {
   isInTransaction,
   runWithTransactionFlag,
 } from './requestContext.js';
+import { markUserDataChanged, shouldMarkUserData } from './userDataVersion.js';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: ExtendedPrismaClient | undefined;
@@ -199,6 +200,16 @@ const extended = basePrisma.$extends({
       if (!model || !USER_SCOPED_MODELS.has(model)) {
         return query(args);
       }
+      const result = await runUserScoped();
+      // Anything cached about this user's finances (the AI adviser's facts)
+      // must see the write on its next read. A write with no known user — a
+      // background job under system context — counts as a change for everyone.
+      if (shouldMarkUserData(model, operation)) {
+        markUserDataChanged(isSystemContext() ? null : (getCurrentUserId() ?? null));
+      }
+      return result;
+
+      async function runUserScoped() {
       // Already inside runInTransaction: `set_config` has been issued on THAT
       // transaction and, being transaction-local, applies to this query too.
       // Opening another transaction here would put the write on a different
@@ -236,11 +247,12 @@ const extended = basePrisma.$extends({
           // typed generically — cast to `any` locally for the reflective
           // invocation.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const delegate = (tx as any)[modelToDelegate(model)];
+          const delegate = (tx as any)[modelToDelegate(model!)];
           return delegate[operation](args);
         },
         { maxWait: 15_000, timeout: 30_000 },
       );
+      }
     },
   },
 });

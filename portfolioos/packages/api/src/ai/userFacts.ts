@@ -14,6 +14,10 @@
 import { Decimal } from 'decimal.js';
 import { formatINR, taxYearOf } from '@portfolioos/shared';
 import { logger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
+import { userDataVersion } from '../lib/userDataVersion.js';
+import { getDashboardNetWorthForScope } from '../services/dashboard.service.js';
+import { computeSummary } from '../services/realEstate.service.js';
 import { buildAdvisorFacts } from '../services/advisor/advisorFacts.builder.js';
 import { listRecommendations } from '../services/advisor/advisorRecommendations.service.js';
 import { computeHealthScore } from '../services/healthScore.service.js';
@@ -44,6 +48,26 @@ export interface InsuranceFacts {
   criticalIllnessCover?: string | null;
 }
 
+/** Everything outside the investment portfolio, from the dashboard's own totals. */
+export interface BalanceSheetFacts {
+  bankBalance: string | null;
+  bankAccounts: number;
+  byAssetClass: Array<{ label: string; value: string; pct: number }>;
+  ownedPropertyValue: string | null;
+  rentalValue: string | null;
+  monthlyRent: string | null;
+  rentOverdue: number;
+  vehicleValue: string | null;
+  pendingChallans: number;
+  loanOutstanding: string;
+  monthlyEmi: string;
+  loans: number;
+  overdueEmis: Array<{ lender: string; daysOverdue: number }>;
+  cardOutstanding: string;
+  cards: number;
+  alerts: string[];
+}
+
 export interface UserFactsInput {
   advisor: AdvisorFacts | null;
   /** From the assistant context's user profile (numbers, possibly null). */
@@ -52,6 +76,8 @@ export interface UserFactsInput {
   healthScore: { overallScore: number; grade: string } | null;
   openRecommendations: number | null;
   monthlyIncome?: string | null;
+  /** Omitted: not shown. Null: it could not be read — said so, never zeros. */
+  balanceSheet?: BalanceSheetFacts | null;
   viewingAsFamily: boolean;
   today: string;
   financialYear: string;
@@ -118,6 +144,43 @@ function liquidityLine(a: AdvisorFacts): string {
   );
 }
 
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function balanceSheetLines(b: BalanceSheetFacts | null): string[] {
+  if (!b) return ['Balance sheet: not available right now'];
+  const out: string[] = [];
+  out.push(
+    b.bankAccounts > 0
+      ? `Bank balances: ${b.bankBalance !== null ? inr(b.bankBalance) : NOT_ON_FILE} across ${plural(b.bankAccounts, 'account', 'accounts')} (counted in the emergency fund)`
+      : 'Bank balances: no bank accounts on file',
+  );
+  if (b.byAssetClass.length > 0) {
+    out.push('By asset class:', ...b.byAssetClass.slice(0, 10).map((c) => `- ${c.label}: ${inr(c.value)} (${Math.round(c.pct)}%)`));
+  }
+  if (b.ownedPropertyValue !== null) out.push(`Owned property: ${inr(b.ownedPropertyValue)}`);
+  if (b.rentalValue !== null) {
+    const rent = b.monthlyRent ? `, rent ${formatINR(b.monthlyRent, { fractionDigits: 0 })} a month` : '';
+    const overdue = b.rentOverdue > 0 ? `; ${plural(b.rentOverdue, 'rent receipt', 'rent receipts')} overdue` : '';
+    out.push(`Rental property: ${inr(b.rentalValue)}${rent}${overdue}`);
+  }
+  if (b.vehicleValue !== null) {
+    out.push(`Vehicles: ${inr(b.vehicleValue)}${b.pendingChallans > 0 ? `; ${plural(b.pendingChallans, 'pending challan', 'pending challans')}` : ''}`);
+  }
+  if (b.loans > 0) {
+    const overdue = b.overdueEmis.length > 0 ? `; overdue: ${b.overdueEmis.map((e) => `${e.lender} ${e.daysOverdue} days`).join(', ')}` : '';
+    out.push(
+      `Loans: ${inr(b.loanOutstanding)} outstanding across ${b.loans}; EMIs ${formatINR(b.monthlyEmi, { fractionDigits: 0 })} a month${overdue}`,
+    );
+  } else {
+    out.push('Loans: none on file');
+  }
+  out.push(b.cards > 0 ? `Credit cards: ${inr(b.cardOutstanding)} outstanding across ${b.cards}` : 'Credit cards: none on file');
+  if (b.alerts.length > 0) out.push(`Alerts: ${b.alerts.join('; ')}`);
+  return out;
+}
+
 /** The facts block — plain lines the model can quote back. */
 export function serializeUserFacts(input: UserFactsInput): string {
   const { advisor: a, profile: p } = input;
@@ -136,6 +199,7 @@ export function serializeUserFacts(input: UserFactsInput): string {
   lines.push(`Loans and other liabilities: ${money(p['totalLiabilities'])}`);
   lines.push(`Monthly income: ${known(input.monthlyIncome) ? inr(input.monthlyIncome) : NOT_ON_FILE}`);
   lines.push(`Portfolio return (XIRR): ${typeof p['portfolioXirr'] === 'number' ? `${p['portfolioXirr']}% a year` : NOT_ON_FILE}`);
+  if (input.balanceSheet !== undefined) lines.push(...balanceSheetLines(input.balanceSheet));
 
   if (a) {
     const r = a.riskProfile;
@@ -213,25 +277,64 @@ export interface AdvisorContext {
   facts: AdvisorFacts | null;
 }
 
-const cache = new Map<string, { at: number; value: AdvisorContext }>();
+async function balanceSheetFacts(userId: string, familyId: string | null): Promise<BalanceSheetFacts> {
+  const [nw, owned, accounts] = await Promise.all([
+    getDashboardNetWorthForScope(userId, { familyId: familyId ?? undefined }),
+    safe('owned property', () => computeSummary(userId)),
+    prisma.bankAccount.findMany({
+      where: { userId, status: 'ACTIVE', accountType: { not: 'OD' } },
+      select: { currentBalance: true },
+    }),
+  ]);
+  const withBalance = accounts.filter((a) => a.currentBalance !== null);
+  const bankBalance = withBalance.reduce((s, a) => s.plus(new Decimal(a.currentBalance!.toString())), new Decimal(0));
+  return {
+    bankBalance: withBalance.length > 0 ? bankBalance.toString() : null,
+    bankAccounts: accounts.length,
+    byAssetClass: nw.allocationBreakdown.map((c) => ({ label: c.label, value: c.value, pct: c.percent })),
+    ownedPropertyValue: owned && owned.activeProperties > 0 ? owned.totalCurrentValue : null,
+    rentalValue: nw.realEstate.count > 0 ? nw.realEstate.totalValue : null,
+    monthlyRent: nw.realEstate.count > 0 ? nw.realEstate.monthlyRent : null,
+    rentOverdue: nw.realEstate.overdueCount,
+    vehicleValue: nw.vehicles.count > 0 ? nw.vehicles.totalValue : null,
+    pendingChallans: nw.vehicles.pendingChallans,
+    loanOutstanding: nw.liabilities.totalOutstanding,
+    monthlyEmi: nw.liabilities.monthlyEmiTotal,
+    loans: nw.liabilities.loanCount,
+    overdueEmis: nw.liabilities.overdueEmis.map((e) => ({ lender: e.lenderName, daysOverdue: e.daysOverdue })),
+    cardOutstanding: nw.liabilities.totalCreditCardOutstanding,
+    cards: nw.liabilities.creditCardCount,
+    alerts: nw.alerts.slice(0, 6).map((a) => (a.description ? `${a.title} (${a.description})` : a.title)),
+  };
+}
 
-/** Build (or reuse, for a few minutes) the client's facts. */
+// Keyed to the data version of every user in view (userDataVersion.ts): a
+// write to any of their financial data rebuilds the facts on the next
+// message. The time limit only catches what a write hook cannot see — price
+// moves, and writes handled by another instance.
+const cache = new Map<string, { at: number; version: string; value: AdvisorContext }>();
+
+/** Build (or reuse, until the user's data changes) the client's facts. */
 export async function loadAdvisorContext(
   userId: string,
-  opts: { familyId: string | null; profile: Record<string, unknown> },
+  opts: { familyId: string | null; readableUserIds: readonly string[]; profile: Record<string, unknown> },
 ): Promise<AdvisorContext> {
   const viewingAsFamily = opts.familyId !== null;
   const key = `${userId}:${opts.familyId ?? 'personal'}`;
+  // Read the version before building, so a write that lands mid-build still
+  // invalidates what this call caches.
+  const version = userDataVersion(opts.readableUserIds.length > 0 ? opts.readableUserIds : [userId]);
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
+  if (hit && hit.version === version && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
 
   const now = new Date();
-  const [advisor, insurance, health, recs, income] = await Promise.all([
+  const [advisor, insurance, health, recs, income, balanceSheet] = await Promise.all([
     safe('advisor facts', () => buildAdvisorFacts(userId, now)),
     safe('insurance', () => insuranceFacts(userId)),
     safe('health score', () => computeHealthScore(userId)),
     safe('recommendations', () => listRecommendations(userId, { status: 'OPEN' })),
     safe('income', () => activeMonthlyIncomeTotal(userId)),
+    safe('balance sheet', () => balanceSheetFacts(userId, opts.familyId)),
   ]);
 
   const value: AdvisorContext = {
@@ -243,12 +346,13 @@ export async function loadAdvisorContext(
       healthScore: health ? { overallScore: health.overallScore, grade: health.grade } : null,
       openRecommendations: recs ? recs.length : null,
       monthlyIncome: income && income.greaterThan(0) ? income.toString() : null,
+      balanceSheet,
       viewingAsFamily,
       today: now.toISOString().slice(0, 10),
       financialYear: taxYearOf(now.toISOString().slice(0, 10)),
     }),
   };
-  cache.set(key, { at: Date.now(), value });
+  cache.set(key, { at: Date.now(), version, value });
   if (cache.size > 500) {
     for (const [k, v] of cache) if (Date.now() - v.at >= CACHE_TTL_MS) cache.delete(k);
   }
