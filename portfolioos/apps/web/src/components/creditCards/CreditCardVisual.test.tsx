@@ -133,6 +133,43 @@ describe('CreditCardVisual', () => {
     });
   });
 
+  describe("issuer's own face", () => {
+    const scapia = (over: Partial<CreditCardDTO> = {}) =>
+      makeCard({ issuerBank: 'Federal Bank', cardName: 'Scapia', network: 'RUPAY', last4: '6459', ...over });
+
+    it('shows the face as printed, with nothing drawn over it', () => {
+      render(<CreditCardVisual card={scapia()} />);
+      expect(face().getAttribute('data-art')).toBe('/cards/federal-scapia--rupay.webp');
+      expect(face().getAttribute('data-orientation')).toBe('vertical');
+      expect(screen.getByRole('img', { name: 'Federal Bank Scapia card' })).toBeTruthy();
+      // The face already carries the bank, product and network; none is redrawn.
+      expect(screen.queryByRole('img', { name: 'RuPay' })).toBeNull();
+      expect(screen.queryByText('Scapia')).toBeNull();
+    });
+
+    it('keeps the holder and last 4 beside an upright face', () => {
+      render(<CreditCardVisual card={scapia()} />);
+      expect(screen.getByText('•••• 6459')).toBeTruthy();
+      expect(screen.getByText('Het Kothari')).toBeTruthy();
+      expect(face().textContent).not.toContain('6459');
+    });
+
+    it('reveals the full number from beside the face', async () => {
+      reveal.mockResolvedValue({ cardNumber: '6522111122226459' });
+      render(<CreditCardVisual card={scapia()} revealable />);
+      fireEvent.click(screen.getByRole('button', { name: 'Show card number' }));
+      expect(await screen.findByText('6522 1111 2222 6459')).toBeTruthy();
+    });
+
+    it('falls back to the drawn card when the image fails to load', () => {
+      render(<CreditCardVisual card={scapia()} />);
+      fireEvent.error(screen.getByRole('img', { name: 'Federal Bank Scapia card' }));
+      expect(face().getAttribute('data-art')).toBeNull();
+      expect(face().getAttribute('data-card')).toBe('federal-scapia');
+      expect(screen.getByRole('img', { name: 'RuPay' })).toBeTruthy();
+    });
+  });
+
   it('gives an unlisted card its tier finish', () => {
     render(<CreditCardVisual card={makeCard({ issuerBank: 'Canara Bank', cardName: 'Platinum', network: 'RUPAY' })} />);
     expect(face().getAttribute('data-card')).toBe('tier:platinum');

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CARD_ART } from '@/data/cardArt.generated';
 import { CARD_CATALOG } from '@/data/creditCardCatalog';
 import { cardProductsFor, resolveCardDesign, resolveCardIssuer } from './creditCardDesign';
 
@@ -72,6 +73,39 @@ describe('resolveCardDesign', () => {
     expect(r.catalogId).toBeNull();
     expect(r.design.background).toMatch(/linear-gradient/);
     expect(r.issuer).toBe('Punjab National Bank');
+  });
+});
+
+describe('card art', () => {
+  it("shows the issuer's face printed with the saved network", () => {
+    expect(resolveCardDesign({ issuerBank: 'Federal Bank', cardName: 'Scapia', network: 'RUPAY' }).art?.src)
+      .toBe('/cards/federal-scapia--rupay.webp');
+    expect(resolveCardDesign({ issuerBank: 'Federal Bank', cardName: 'Scapia', network: 'VISA' }).art?.src)
+      .toBe('/cards/federal-scapia--visa.webp');
+  });
+
+  it("uses the product's usual network when none is saved", () => {
+    expect(resolveCardDesign({ issuerBank: 'Federal', cardName: 'Scapia', network: null }).art?.src)
+      .toBe('/cards/federal-scapia--visa.webp');
+  });
+
+  it('never shows a face printed with another network', () => {
+    expect(resolveCardDesign({ issuerBank: 'Federal Bank', cardName: 'Scapia', network: 'MASTERCARD' }).art).toBeNull();
+  });
+
+  it('has no art for cards without a face on file or outside the catalog', () => {
+    expect(resolveCardDesign({ issuerBank: 'HDFC Bank', cardName: 'Regalia Gold', network: 'VISA' }).art).toBeNull();
+    expect(resolveCardDesign({ issuerBank: 'Canara Bank', cardName: 'Platinum', network: 'RUPAY' }).art).toBeNull();
+  });
+
+  it('keys every face to a catalog card and a network it names', () => {
+    const ids = new Set(CARD_CATALOG.map((c) => c.id));
+    for (const [id, faces] of Object.entries(CARD_ART)) {
+      expect(ids.has(id)).toBe(true);
+      for (const [network, face] of Object.entries(faces)) {
+        expect(face?.src).toBe(`/cards/${id}--${network.toLowerCase()}.webp`);
+      }
+    }
   });
 });
 

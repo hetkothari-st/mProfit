@@ -14,6 +14,7 @@ import {
   type CardTier,
   type CatalogCard,
 } from '@/data/creditCardCatalog';
+import { CARD_ART, type CardArt } from '@/data/cardArt.generated';
 import { bankBrandFor, brandAccent, resolveBank, tileSurface } from '@/lib/bankBrand';
 
 export interface ResolvedCard {
@@ -28,6 +29,18 @@ export interface ResolvedCard {
   tier: CardTier;
   network: CardNetwork | null;
   design: CardDesign;
+  /** The issuer's own card face, when one is on file for this card and network. */
+  art: CardArt | null;
+}
+
+/**
+ * The official face for a catalog card, on the network the user saved. A face
+ * prints its network's mark, so a face for another network is never shown —
+ * a Visa mark on a RuPay card would be wrong in the one detail users check.
+ * With no saved network, the product's usual network stands in.
+ */
+export function cardArtFor(catalogId: string, network: CardNetwork | null, usual: CardNetwork): CardArt | null {
+  return CARD_ART[catalogId]?.[network ?? usual] ?? null;
 }
 
 /** Lower-case words separated by single spaces, padded for whole-word search. */
@@ -158,14 +171,16 @@ export function resolveCardDesign(card: {
   const issuer = resolveCardIssuer(card.issuerBank);
   const hit = matchCatalog(issuer, card.cardName);
   if (hit) {
+    const saved = asNetwork(card.network);
     return {
       catalogId: hit.id,
       designKey: hit.id,
       issuer,
       product: hit.product,
       tier: hit.tier,
-      network: asNetwork(card.network) ?? hit.network,
+      network: saved ?? hit.network,
       design: hit.design,
+      art: cardArtFor(hit.id, saved, hit.network),
     };
   }
   const tier = tierFromName(card.cardName);
@@ -179,5 +194,6 @@ export function resolveCardDesign(card: {
     tier,
     network: asNetwork(card.network) ?? (issuer === 'American Express' ? 'AMEX' : null),
     design: tierDesign(tier, color, brand?.accent ?? null),
+    art: null,
   };
 }
