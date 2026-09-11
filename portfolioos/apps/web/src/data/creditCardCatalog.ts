@@ -5,8 +5,10 @@
  * ships on.
  *
  * These are renditions in code of each card's published design — close to the
- * real card, not a copy of the issuer's artwork (no card images are used).
- * Colours are approximate. Cards not listed here are still drawn in their
+ * real card, not a copy of the issuer's artwork. Colours are approximate. Where
+ * the issuer's own face image is on file (data/cardArt.generated, fetched by
+ * scripts/fetch-card-art.py) that image is shown instead, and the rendition
+ * here is its fallback. Cards not listed here are still drawn in their
  * tier's finish ("Platinum", "Signature", "Metal"…) in the issuer's brand
  * colours — see lib/creditCardDesign.
  *

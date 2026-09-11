@@ -12,6 +12,7 @@ import { useEffect, useId, useState, type CSSProperties, type MouseEvent, type R
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { creditCardsApi, type CreditCardDTO } from '@/api/creditCards.api';
+import type { CardArt } from '@/data/cardArt.generated';
 import type { CardDesign, CardNetwork, CardPattern, CardTier } from '@/data/creditCardCatalog';
 import { bankBrandFor } from '@/lib/bankBrand';
 import { resolveCardDesign } from '@/lib/creditCardDesign';
@@ -328,6 +329,124 @@ function groupCardNumber(n: string, network: CardNetwork | null): string {
 
 const NOT_SAVED_MSG = 'Only the last 4 digits are saved. Edit the card to add the full number.';
 
+/** Card-corner radius as percentages of an 85.6 × 54 mm card; swaps when upright. */
+const cornerRadius = (vertical: boolean) => (vertical ? '7.1% / 4.5%' : '4.5% / 7.1%');
+const cardShadow = (size: 'md' | 'lg') => `0 ${size === 'lg' ? '18px 40px' : '12px 28px'} -14px rgba(0,0,0,0.65)`;
+
+function RevealButton({
+  onClick,
+  revealing,
+  revealed,
+  label,
+  tone,
+}: {
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
+  revealing: boolean;
+  revealed: boolean;
+  label: string;
+  /** `page`: sits on the page beside the card; `onDark`: sits on the card face. */
+  tone: 'page' | 'onDark';
+}) {
+  const icon = { width: '1em', height: '1em' };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={revealing}
+      aria-label={label}
+      aria-pressed={revealed}
+      title={label}
+      className={`shrink-0 rounded-full p-[0.35em] focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60 ${
+        tone === 'page'
+          ? 'text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring'
+          : 'bg-white/15 text-white hover:bg-white/25 focus-visible:ring-white/70'
+      }`}
+    >
+      {revealing ? <Loader2 className="animate-spin" style={icon} /> : revealed ? <EyeOff style={icon} /> : <Eye style={icon} />}
+    </button>
+  );
+}
+
+/**
+ * A card with the issuer's own face on file: the face is shown as printed —
+ * nothing is drawn over its artwork, logos or chip. The holder and number sit
+ * beside an upright card (in the space the landscape slot leaves either side)
+ * or in a small frosted plate at the foot of a landscape one, where cards
+ * print them.
+ */
+function ArtCard({
+  art,
+  alt,
+  designKey,
+  inactive,
+  size,
+  holder,
+  digits,
+  eye,
+  onError,
+}: {
+  art: CardArt;
+  alt: string;
+  designKey: string;
+  inactive: boolean;
+  size: 'md' | 'lg';
+  holder: string;
+  digits: string;
+  eye: ReactNode;
+  onError: () => void;
+}) {
+  const { vertical } = art;
+  const face = (
+    <div
+      data-testid="credit-card-face"
+      data-card={designKey}
+      data-art={art.src}
+      data-orientation={vertical ? 'vertical' : 'horizontal'}
+      className={`relative h-full shrink-0 overflow-hidden ${vertical ? 'aspect-[1/1.586]' : 'w-full'} ${
+        inactive ? 'opacity-70 grayscale' : ''
+      }`}
+      style={{ containerType: 'inline-size', borderRadius: cornerRadius(vertical), boxShadow: cardShadow(size) }}
+    >
+      <img
+        src={art.src}
+        alt={alt}
+        draggable={false}
+        onError={onError}
+        className="absolute inset-0 h-full w-full select-none object-cover"
+      />
+      {!vertical && (
+        <div
+          className="absolute flex max-w-[70%] items-center rounded-full text-white backdrop-blur-sm"
+          style={{ left: '4.5cqw', bottom: '4.5cqw', gap: '1.6cqw', padding: '1cqw 1.4cqw 1cqw 3cqw', background: 'rgba(0,0,0,0.45)', fontSize: '3.4cqw' }}
+        >
+          <span className="truncate font-mono tracking-[0.1em]">{digits}</span>
+          {eye}
+        </div>
+      )}
+    </div>
+  );
+
+  if (!vertical) {
+    return <div className="relative flex aspect-[1.586/1] w-full items-center justify-center">{face}</div>;
+  }
+  return (
+    <div className="relative flex aspect-[1.586/1] w-full items-center justify-center" style={{ containerType: 'inline-size', gap: '5cqw' }}>
+      {face}
+      <div className="flex min-w-0 max-w-[45%] flex-col" style={{ gap: '2cqw' }}>
+        <span className="flex items-center font-mono tabular-nums tracking-[0.1em] text-foreground" style={{ fontSize: '4.6cqw', gap: '1cqw' }}>
+          <span className="select-text truncate">{digits}</span>
+          {eye}
+        </span>
+        {holder && (
+          <span className="truncate font-medium uppercase tracking-[0.12em] text-muted-foreground" style={{ fontSize: '3.4cqw' }}>
+            {holder}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function CreditCardVisual({
   card,
   size = 'md',
@@ -345,6 +464,9 @@ export function CreditCardVisual({
   const [fullNumber, setFullNumber] = useState<string | null>(null);
   const [revealing, setRevealing] = useState(false);
   useEffect(() => setFullNumber(null), [card.id, card.last4, card.hasCardNumber]);
+  // A face image that fails to load falls back to the drawn card.
+  const [artFailed, setArtFailed] = useState(false);
+  useEffect(() => setArtFailed(false), [card.id, card.issuerBank, card.cardName, card.network]);
 
   async function toggleReveal(e: MouseEvent<HTMLButtonElement>) {
     // The list page wraps the card in a <Link>; keep this click local.
@@ -454,6 +576,33 @@ export function CreditCardVisual({
     </span>
   );
 
+  const art = artFailed ? null : r.art;
+  if (art) {
+    return (
+      <ArtCard
+        art={art}
+        alt={`${r.issuer} ${r.product} card`}
+        designKey={r.designKey}
+        inactive={card.status !== 'ACTIVE'}
+        size={size}
+        holder={holder}
+        digits={fullNumber ? groupCardNumber(fullNumber, r.network) : `•••• ${card.last4}`}
+        eye={
+          revealable && (
+            <RevealButton
+              onClick={toggleReveal}
+              revealing={revealing}
+              revealed={fullNumber !== null}
+              label={revealLabel}
+              tone={art.vertical ? 'page' : 'onDark'}
+            />
+          )
+        }
+        onError={() => setArtFailed(true)}
+      />
+    );
+  }
+
   return (
     <div className="relative flex aspect-[1.586/1] w-full items-center justify-center">
       <div
@@ -468,11 +617,9 @@ export function CreditCardVisual({
           containerType: 'inline-size',
           // A card's corner is the same radius on both sides, so as percentages
           // of an 85.6 × 54 mm card it differs per axis (and swaps upright).
-          borderRadius: vertical ? '7.1% / 4.5%' : '4.5% / 7.1%',
+          borderRadius: cornerRadius(vertical),
           background: design.background,
-          boxShadow: `inset 0 0 0 1px rgba(255,255,255,${design.ink === 'light' ? 0.1 : 0.45}), 0 ${
-            size === 'lg' ? '18px 40px' : '12px 28px'
-          } -14px rgba(0,0,0,0.65)`,
+          boxShadow: `inset 0 0 0 1px rgba(255,255,255,${design.ink === 'light' ? 0.1 : 0.45}), ${cardShadow(size)}`,
         }}
       >
         <InkFilter id={filterId} ink={design.ink} />
