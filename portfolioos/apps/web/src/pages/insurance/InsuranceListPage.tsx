@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlertTriangle, ClipboardList, Loader2, Plus, Shield } from 'lucide-react';
+import { AlertTriangle, BookOpen, ClipboardList, Loader2, Plus, Shield } from 'lucide-react';
 import { Decimal, formatINR, premiumToAnnual } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
@@ -121,6 +121,11 @@ export function InsuranceListPage() {
                 </Link>
               </Button>
             )}
+            <Button asChild variant="outline">
+              <Link to="/insurance/help">
+                <BookOpen className="h-4 w-4" /> Help and rights
+              </Link>
+            </Button>
             <DownloadReportButton type="insurance" />
             <Button onClick={() => setFormOpen(true)}>
               <Plus className="h-4 w-4" /> Add policy
