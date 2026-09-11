@@ -33,3 +33,44 @@ describe('MessageBubble links', () => {
     expect(screen.getByText('click')).toBeTruthy();
   });
 });
+
+// The adviser shows scenarios as Markdown tables. They used to be joined into
+// one paragraph of pipes and dashes.
+describe('MessageBubble tables', () => {
+  const answer = [
+    'Scenarios:',
+    '',
+    '| Starts in | Corpus needed | SIP at **12% p.a.** |',
+    '|---|---:|---:|',
+    '| 10 years | ₹2.69 cr | ₹1,16,775 |',
+    '| 15 years | ₹3.59 cr | ₹71,958 |',
+    '',
+    'Next step: start the SIP.',
+  ].join('\n');
+
+  it('renders a Markdown table as a real table, header first', () => {
+    renderAssistant(answer);
+    const table = screen.getByRole('table');
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+      'Starts in',
+      'Corpus needed',
+      'SIP at 12% p.a.',
+    ]);
+    expect(screen.getAllByRole('row')).toHaveLength(3);
+    expect(screen.getAllByRole('cell').map((c) => c.textContent)).toEqual([
+      '10 years',
+      '₹2.69 cr',
+      '₹1,16,775',
+      '15 years',
+      '₹3.59 cr',
+      '₹71,958',
+    ]);
+    expect(table.textContent).not.toContain('---');
+    expect(screen.getByText(/Next step: start the SIP\./)).toBeTruthy();
+  });
+
+  it('leaves a line with a pipe in it as ordinary text', () => {
+    renderAssistant('Choose A | B depending on your horizon.');
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+});
