@@ -22,6 +22,8 @@ export interface PdfTheme {
   tableHeaderBg: string;
   ink: string;
   titleInk: string;
+  /** The logo's "Paisa" sage, tuned for contrast on `headerBarBg`. */
+  brandSage: string;
   accent: string;
   /** Text colour to use when painted on top of an `accent`-filled band. */
   onAccent: string;
@@ -51,6 +53,7 @@ export const DARK_THEME: PdfTheme = {
   tableHeaderBg: '#232323',
   ink: '#F0F0F0',
   titleInk: '#FFFFFF',
+  brandSage: '#9CA89B',
   accent: '#E2FE53',
   onAccent: '#0D0D0D',
   positive: '#A1E444',
@@ -86,6 +89,7 @@ export const LIGHT_THEME: PdfTheme = {
   tableHeaderBg: '#EDEDED',
   ink: '#1A1A1A',
   titleInk: '#1A1A1A',
+  brandSage: '#56695B',
   accent: '#1A1A1A',
   onAccent: '#FFFFFF',
   positive: '#1A1A1A',

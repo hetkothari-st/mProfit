@@ -4,6 +4,7 @@ import type { Response } from 'express';
 import { Decimal, toDecimal } from '@everypaisa/shared';
 import { drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
 import { themeFor, hexToArgb, type PdfTheme, type ThemeName } from './charts/pdfTheme.js';
+import { drawBrandLockup } from './charts/pdfBrand.js';
 
 export type { PdfTheme, ThemeName } from './charts/pdfTheme.js';
 
@@ -209,10 +210,9 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       doc.rect(0, 0, doc.page.width, doc.page.height).fill(C.pageBg);
       doc.rect(0, 0, doc.page.width, 56).fill(C.headerBarBg);
       if (C.headerRule) doc.rect(0, 55.5, doc.page.width, 0.5).fill(C.border);
-      doc.font('Helvetica-Bold').fontSize(17).fillColor(C.titleInk)
-         .text('EveryPaisa', ML, 14, { lineBreak: false });
+      const brandX = drawBrandLockup(doc, C, ML, 12, 17);
       doc.font('Helvetica').fontSize(10).fillColor(C.muted)
-         .text(pdfSafe(payload.title), ML, 36, { lineBreak: false });
+         .text(pdfSafe(payload.title), brandX, 32, { lineBreak: false });
       const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
       doc.font('Helvetica').fontSize(8.5).fillColor(C.muted)
          .text(genStr, ML, 22, { align: 'right', width: pageW, lineBreak: false });

@@ -44,6 +44,7 @@
     --positive: 100 65% 30%;              /* darker green, distinct hue from accent */
     --negative: 4 75% 45%;
     --warning: 35 85% 38%;
+    --brand-sage: 135 10% 36%;            /* logo "Paisa" sage, deepened to read on white */
 
     --sidebar: 0 0% 97%;
     --sidebar-foreground: 0 0% 10%;
@@ -100,6 +101,7 @@
     --positive: 85 75% 58%;               /* greener-lime, on-brand for gains */
     --negative: 4 85% 62%;
     --warning: 40 90% 60%;
+    --brand-sage: 115 7% 63%;             /* logo "Paisa" sage, as drawn (#9CA89B) */
 
     /* Sidebar — same near-black family, no separate warm tint */
     --sidebar: 0 0% 6%;

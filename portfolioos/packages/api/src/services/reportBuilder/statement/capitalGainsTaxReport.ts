@@ -16,6 +16,7 @@ import { Decimal } from 'decimal.js';
 import type { Response } from 'express';
 import { pdfSafe } from '../../charts/pdfCharts.js';
 import { themeFor, type ThemeName } from '../../charts/pdfTheme.js';
+import { drawBrandLockup } from '../../charts/pdfBrand.js';
 import { fmtNum } from '../../export.service.js';
 import { buildTaxSummary, taxHarvestReport } from '../../tax.service.js';
 import { buildCapitalGainsStatement } from './capitalGains.js';
@@ -94,10 +95,9 @@ export async function streamCapitalGainsTaxReport(
       doc.rect(0, 0, doc.page.width, 56).fill(C.headerBarBg);
       // titleInk, not `white` — the light theme's header bar is the same
       // colour as the page, so literal white text would be invisible.
-      doc.font('Helvetica-Bold').fontSize(17).fillColor(C.titleInk)
-        .text('EveryPaisa', ML, 14, { lineBreak: false });
+      const brandX = drawBrandLockup(doc, C, ML, 12, 17);
       doc.font('Helvetica').fontSize(10).fillColor(C.muted)
-        .text(subtitle, ML, 36, { lineBreak: false });
+        .text(subtitle, brandX, 32, { lineBreak: false });
       const genStr = `Generated: ${new Date().toLocaleDateString('en-IN', {
         year: 'numeric', month: 'short', day: 'numeric',
       })}`;

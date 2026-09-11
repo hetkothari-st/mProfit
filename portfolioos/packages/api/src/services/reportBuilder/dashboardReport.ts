@@ -44,6 +44,7 @@ import {
   type LineDatum,
 } from '../charts/pdfCharts.js';
 import { themeFor, type ThemeName, type PdfTheme } from '../charts/pdfTheme.js';
+import { drawBrandLockup } from '../charts/pdfBrand.js';
 
 export type DashboardScope = 'single' | 'all';
 
@@ -300,10 +301,9 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     // titleInk, not `white` — the light theme's header bar is the same
     // colour as the page (no dark block to sit on), so literal white text
     // here would be invisible.
-    doc.font('Helvetica-Bold').fontSize(16).fillColor(C.titleInk)
-       .text('EveryPaisa', ML, 14, { lineBreak: false });
+    const brandX = drawBrandLockup(doc, C, ML, 12, 16);
     doc.font('Helvetica').fontSize(9.5).fillColor(C.muted)
-       .text('Comprehensive Portfolio Report', ML, 36, { lineBreak: false });
+       .text('Comprehensive Portfolio Report', brandX, 32, { lineBreak: false });
     doc.font('Helvetica').fontSize(8).fillColor(C.muted)
        .text(pdfSafe(`${portfolioLabel}  ·  ${todayStr}`), ML, 24, { width: W, align: 'right', lineBreak: false });
   }

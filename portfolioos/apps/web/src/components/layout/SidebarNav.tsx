@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { BrandMark, BrandWordmark } from '@/components/brand/BrandLogo';
 import { BudgetGauge } from './BudgetGauge';
 import { UpgradeSidebarCard } from './UpgradeSidebarCard';
 import { AssetClassSectionList } from './AssetClassSectionList';
@@ -63,23 +64,11 @@ export function SidebarNav({
             to="/dashboard"
             aria-label="Go to dashboard"
             title="Dashboard"
-            className="flex items-center gap-3 min-w-0 rounded-md focus-ring transition-opacity hover:opacity-90"
+            className="flex items-center gap-3.5 min-w-0 rounded-md focus-ring transition-opacity hover:opacity-90"
           >
-            <div
-              aria-hidden="true"
-              className="relative h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm shrink-0"
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 4H6v16h11" />
-                <path d="M6 12h9" />
-              </svg>
-              <span className="absolute -inset-px rounded-md ring-1 ring-inset ring-foreground/10" />
-            </div>
+            <BrandMark />
             <div className="leading-none min-w-0">
-              <div className="flex items-baseline gap-[1px] -mt-0.5">
-                <span className="font-brand text-[22px] leading-none text-sidebar-foreground">Every</span>
-                <span className="font-brand text-[22px] leading-none text-accent">Paisa</span>
-              </div>
+              <BrandWordmark className="-mt-0.5" everyClassName="text-sidebar-foreground" />
               <div className="mt-1.5 text-[9.5px] font-medium uppercase tracking-kerned text-sidebar-foreground/45">
                 Wealth · Ledger
               </div>
@@ -93,12 +82,9 @@ export function SidebarNav({
             to="/dashboard"
             aria-label="Go to dashboard"
             title="Dashboard"
-            className="h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm focus-ring transition-opacity hover:opacity-90"
+            className="rounded-md focus-ring transition-opacity hover:opacity-90"
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 4H6v16h11" />
-              <path d="M6 12h9" />
-            </svg>
+            <BrandMark />
           </Link>
           {renderToggle}
         </div>

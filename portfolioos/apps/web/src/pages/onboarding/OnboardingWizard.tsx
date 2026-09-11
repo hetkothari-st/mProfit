@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { cn } from '@/lib/cn';
+import { BrandMark, BrandWordmark } from '@/components/brand/BrandLogo';
 
 const STEPS = [
   { id: 'portfolio', icon: Briefcase, title: 'Create your portfolio', subtitle: 'A portfolio groups your investments together.' },
@@ -69,9 +70,9 @@ export function OnboardingWizard({ onComplete }: Props) {
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-2xl">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="h-10 w-10 rounded-md bg-primary grid place-items-center text-primary-foreground font-bold text-lg">P</div>
-          <span className="text-xl font-semibold tracking-tight text-primary">EveryPaisa</span>
+        <div className="flex items-center justify-center gap-4 mb-8">
+          <BrandMark />
+          <BrandWordmark />
         </div>
 
         {/* Step indicator */}
