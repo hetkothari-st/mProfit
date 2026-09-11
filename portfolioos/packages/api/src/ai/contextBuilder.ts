@@ -35,6 +35,8 @@ import {
   getEffectiveScope,
   type EffectiveScope,
 } from '../services/familyScope.service.js';
+import { listPolicies } from '../services/insurance.service.js';
+import { Decimal, HELP_TOPICS, matchHelpTopics } from '@portfolioos/shared';
 import { QueryIntent, type ClassifiedQuery } from './queryClassifier.js';
 
 export interface AssistantContext {
@@ -549,6 +551,129 @@ async function buildHoldingDetailData(
   };
 }
 
+// ─── Insurance ───────────────────────────────────────────────────────
+
+/** Where the Help and rights library lives in the web app. */
+export const HELP_LIBRARY_PATH = '/insurance/help';
+
+/** Policy types that pay out on death, where a missing nominee matters. */
+const NOMINEE_EXPECTED = new Set(['TERM', 'WHOLE_LIFE', 'ULIP', 'ENDOWMENT', 'HEALTH', 'PERSONAL_ACCIDENT']);
+
+const isoDay = (d: Date | string | null | undefined): string | null =>
+  d ? (d instanceof Date ? d.toISOString() : d).slice(0, 10) : null;
+
+/**
+ * The user's policies, open claims and nominee gaps, plus the help-library
+ * topics that match the question (each rule with its source), so the
+ * assistant can answer and cite.
+ *
+ * No policy numbers (not even the last 4), claim or complaint reference
+ * numbers, vehicle registrations or free-text notes leave here — only the
+ * fields picked below.
+ */
+export async function buildInsuranceData(
+  callerId: string,
+  query: ClassifiedQuery,
+): Promise<Record<string, unknown>> {
+  let policies: Awaited<ReturnType<typeof listPolicies>> = [];
+  let policiesUnavailable = false;
+  try {
+    policies = await listPolicies(callerId);
+  } catch (err) {
+    logger.warn({ err }, '[ai.context] insurance policies fetch failed');
+    policiesUnavailable = true;
+  }
+
+  const nomineeCount = (n: unknown) => (Array.isArray(n) ? n.length : 0);
+
+  const policyRows = policies.map((p) => ({
+    insurer: p.insurer,
+    type: p.type,
+    plan: p.planName ?? null,
+    cover: p.sumAssured.toString(),
+    premium: p.premiumAmount.toString(),
+    premiumFrequency: p.premiumFrequency,
+    status: p.status,
+    startDate: isoDay(p.startDate),
+    maturityDate: isoDay(p.maturityDate),
+    premiumDue: p.premiumDue,
+    graceDays: p.graceDays,
+    nomineeCount: nomineeCount(p.nominees),
+  }));
+
+  const openClaims = policies.flatMap((p) =>
+    p.claims
+      .filter((c) => c.progress.stage !== 'SETTLED')
+      .map((c) => ({
+        insurer: p.insurer,
+        policyType: p.type,
+        claimType: c.claimType,
+        guide: c.kind ?? null,
+        claimDate: isoDay(c.claimDate),
+        status: c.status,
+        claimedAmount: c.claimedAmount,
+        settledAmount: c.settledAmount,
+        stage: c.progress.stage,
+        decisionDueOn: c.progress.decisionDueOn,
+        latestDueOn: c.progress.latestDueOn,
+        overdueDays: c.progress.overdueDays,
+        withinOmbudsmanLimit: c.progress.withinOmbudsmanLimit,
+        nextAction: c.progress.next.action,
+        nextStep: c.progress.next.reason,
+      })),
+  );
+
+  const active = policies.filter((p) => p.status === 'ACTIVE');
+  const nomineeGaps = active
+    .filter((p) => NOMINEE_EXPECTED.has(p.type) && nomineeCount(p.nominees) === 0)
+    .map((p) => ({ insurer: p.insurer, type: p.type, plan: p.planName ?? null }));
+
+  const premiumsNeedingAttention = active
+    .filter((p) => p.premiumDue.state === 'IN_GRACE' || p.premiumDue.state === 'LAPSE_RISK')
+    .map((p) => ({ insurer: p.insurer, type: p.type, plan: p.planName ?? null, ...p.premiumDue }));
+
+  const coverByType: Record<string, string> = {};
+  for (const p of active) {
+    coverByType[p.type] = new Decimal(coverByType[p.type] ?? 0).plus(p.sumAssured.toString()).toString();
+  }
+
+  const matched = matchHelpTopics(query.originalQuery, 3);
+  const matchedIds = new Set(matched.map((t) => t.id));
+
+  return {
+    policiesUnavailable,
+    policyCount: policies.length,
+    activePolicyCount: active.length,
+    activeCoverByType: coverByType,
+    policies: policyRows,
+    premiumsNeedingAttention,
+    openClaims,
+    nomineeGaps,
+    helpTopics: matched.map((t) => ({
+      id: t.id,
+      title: t.title,
+      summary: t.summary,
+      rules: t.rules.map((r) => ({
+        text: r.text,
+        source: r.source.where ? `${r.source.label}, ${r.source.where}` : r.source.label,
+        url: r.source.url,
+      })),
+      whatYouCanDo: t.whatYouCanDo,
+      link: `${HELP_LIBRARY_PATH}#${t.id}`,
+      checkedOn: t.checkedOn,
+    })),
+    otherHelpTopics: HELP_TOPICS.filter((t) => !matchedIds.has(t.id)).map((t) => ({
+      id: t.id,
+      title: t.title,
+      link: `${HELP_LIBRARY_PATH}#${t.id}`,
+    })),
+    guidance:
+      'State insurance rules only from helpTopics (or a claim’s nextStep), citing the source. ' +
+      'Otherwise tell the user to check their policy document or ask the insurer. ' +
+      'Never recommend specific insurance products, and never ask for or repeat policy numbers.',
+  };
+}
+
 // ─── General (fallback comprehensive summary) ────────────────────────
 
 async function buildGeneralData(
@@ -639,6 +764,9 @@ export async function buildContext(
         break;
       case QueryIntent.HOLDING_DETAIL:
         relevantData = await buildHoldingDetailData(callerId, query);
+        break;
+      case QueryIntent.INSURANCE:
+        relevantData = await buildInsuranceData(callerId, query);
         break;
       case QueryIntent.GENERAL:
       default:
