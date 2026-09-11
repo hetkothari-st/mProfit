@@ -3,6 +3,7 @@
  * for reminders — so this table and the "next due" everywhere else agree.
  */
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AlertTriangle, CheckCircle2, Clock, Plus, Trash2 } from 'lucide-react';
@@ -91,7 +92,10 @@ export function PremiumScheduleCard({
                 </a>
                 ; your policy document has the exact figure)
               </>
-            )}
+            )}{' '}
+            <Link to="/insurance/help#grace-period" className="underline hover:text-foreground">
+              What the grace period means
+            </Link>
           </p>
         )}
 

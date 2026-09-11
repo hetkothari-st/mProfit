@@ -26,6 +26,8 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+# ...but not the insurance coverage-check components, which share the name.
+!apps/web/src/components/insurance/coverage/
 .nyc_output/
 
 # Prisma

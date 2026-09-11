@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlertTriangle, BookOpen, ClipboardList, Loader2, Plus, Shield } from 'lucide-react';
+import { AlertTriangle, BookOpen, ClipboardList, Loader2, Plus, Shield, ShieldCheck } from 'lucide-react';
 import { Decimal, formatINR, premiumToAnnual } from '@portfolioos/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
@@ -114,6 +114,11 @@ export function InsuranceListPage() {
         description="Your policies, what's due, and who to call when you need to claim."
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link to="/insurance/coverage">
+                <ShieldCheck className="h-4 w-4" /> Coverage check
+              </Link>
+            </Button>
             {list.length > 0 && (
               <Button asChild variant="outline">
                 <Link to="/insurance/emergency-sheet">

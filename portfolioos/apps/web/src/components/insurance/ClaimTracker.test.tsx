@@ -2,6 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { claimProgress } from '@portfolioos/shared';
 import type { InsuranceClaimDTO } from '@/api/insurance.api';
 import { ClaimTracker } from './ClaimTracker';
@@ -47,7 +48,9 @@ function renderTracker(claim: InsuranceClaimDTO) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <ClaimTracker claim={claim} />
+      <MemoryRouter>
+        <ClaimTracker claim={claim} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

@@ -14,17 +14,44 @@ import { useAuthStore } from '@/stores/auth.store';
  *   - Bullet lists (consecutive `- ` lines → single <ul>)
  *   - Numbered lists (consecutive `1. ` lines → single <ol>)
  *   - Bold via **text**
+ *   - Links via [text](/in-app/path) or [text](https://…) — anything else
+ *     (javascript:, protocol-relative //…) stays plain text
  *   - Auto-highlights for numeric tokens (percentages, ₹ amounts,
  *     "p.a.") so the reader can scan without hunting for the numbers.
  */
 
 // ─── Inline pass ─────────────────────────────────────────────────────
 
-type InlineNode = { kind: 'text' | 'bold' | 'num'; text: string };
+type InlineNode =
+  | { kind: 'text' | 'bold' | 'num'; text: string }
+  | { kind: 'link'; text: string; href: string; internal: boolean };
 
 const NUM_RE = /(₹\s?[\d,]+(?:\.\d+)?\s*(?:lakh|crore|cr|k)?|-?\d+(?:\.\d+)?\s*%(?:\s*p\.?a\.?)?)/gi;
+const LINK_RE = /\[([^\]\n]+)\]\(([^)\s]+)\)/g;
+
+/** Only in-app paths and https links are followed; the rest render as their label. */
+function safeLink(href: string): { href: string; internal: boolean } | null {
+  if (href.startsWith('/') && !href.startsWith('//')) return { href, internal: true };
+  if (/^https:\/\/[^\s]+$/i.test(href)) return { href, internal: false };
+  return null;
+}
 
 function tokenizeInline(text: string): InlineNode[] {
+  const out: InlineNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  LINK_RE.lastIndex = 0;
+  while ((m = LINK_RE.exec(text)) !== null) {
+    if (m.index > last) out.push(...tokenizeBoldAndNumbers(text.slice(last, m.index)));
+    const link = safeLink(m[2]!);
+    out.push(link ? { kind: 'link', text: m[1]!, ...link } : { kind: 'text', text: m[1]! });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(...tokenizeBoldAndNumbers(text.slice(last)));
+  return out;
+}
+
+function tokenizeBoldAndNumbers(text: string): InlineNode[] {
   // First split on **bold**; then within each non-bold segment run the
   // number highlighter. Order matters because auto-highlighting inside
   // bold would double-tint the token.
@@ -57,6 +84,18 @@ function pushWithNumbers(out: InlineNode[], chunk: string): void {
 
 function renderInline(text: string, keyBase = 0): JSX.Element[] {
   return tokenizeInline(text).map((n, i) => {
+    if (n.kind === 'link') {
+      const cls = 'text-accent underline underline-offset-2 hover:text-foreground';
+      return n.internal ? (
+        <Link key={`${keyBase}-l-${i}`} to={n.href} className={cls}>
+          {n.text}
+        </Link>
+      ) : (
+        <a key={`${keyBase}-l-${i}`} href={n.href} target="_blank" rel="noopener noreferrer" className={cls}>
+          {n.text}
+        </a>
+      );
+    }
     if (n.kind === 'bold') {
       return (
         <strong

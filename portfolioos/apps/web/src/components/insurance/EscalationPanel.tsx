@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { ESCALATION, formatINR } from '@portfolioos/shared';
 import { insurerContactFor } from '@/lib/insurerContacts';
 import { SourceLink } from './SourceLink';
@@ -106,6 +107,9 @@ export function EscalationPanel({ current, insurer }: { current: Step | null; in
           </li>
         ))}
       </ul>
+      <Link to="/insurance/help#complaints" className="inline-block text-xs text-accent hover:underline">
+        Your complaint rights, in full
+      </Link>
     </div>
   );
 }

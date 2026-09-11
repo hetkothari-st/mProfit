@@ -5,6 +5,8 @@ function shortName(url: string): string {
   if (url.includes('cioins.co.in')) return 'Ombudsman council';
   if (url.includes('bimabharosa')) return 'Bima Bharosa';
   if (url.includes('irdai.gov.in')) return 'IRDAI';
+  if (url.includes('indiacode.nic.in')) return 'India Code';
+  if (url.includes('incometax.gov.in')) return 'Income Tax Department';
   return 'Source';
 }
 

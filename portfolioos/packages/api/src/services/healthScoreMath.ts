@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import { LIFE_COVER_INCOME_MULTIPLE, requiredLifeCover } from '@portfolioos/shared';
 import { ageBasedEquityGuidelinePct } from './riskProfileMath.js';
 
 /**
@@ -102,15 +103,11 @@ export function isLifePolicyType(type: string): boolean {
 
 /**
  * The rule-of-thumb life cover an earner should carry: ten times annual
- * income. Exported so every surface that shows a "cover gap" derives it from
- * the same multiple as `insuranceScore` below — the number used to be written
- * out as `annualIncome.times(10)` in three places.
+ * income. The maths lives in @portfolioos/shared (insurance/coverage) so the
+ * web's coverage check recomputes with the same multiple; re-exported here
+ * so the health score and family protection keep importing it from this file.
  */
-export const LIFE_COVER_INCOME_MULTIPLE = 10;
-
-export function requiredLifeCover(annualIncome: Decimal): Decimal {
-  return annualIncome.times(LIFE_COVER_INCOME_MULTIPLE);
-}
+export { LIFE_COVER_INCOME_MULTIPLE, requiredLifeCover };
 
 /** Sum-assured (life-type policies only) ÷ 10x annual income. 50 if no policies at all. */
 export function insuranceScore(

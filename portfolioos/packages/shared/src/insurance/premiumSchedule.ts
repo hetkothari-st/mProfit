@@ -31,12 +31,13 @@ export const DUE_SOON_DAYS = 30;
  */
 export const GRACE_PERIOD_BASIS = {
   summary:
-    'Life and health policies give 30 days to pay a missed premium (15 days if you pay monthly). ' +
-    'Motor, travel, home and accident policies have no grace period — cover ends on the due date.',
-  asOf: '2024-06',
+    'Policies paid in instalments give 30 days to pay a missed premium (15 days if you pay monthly), ' +
+    'and cover continues meanwhile. For other policies we don’t assume any grace — renew before the due date.',
+  asOf: '2026-09-11',
   source: {
-    label: 'IRDAI master circulars on life and health insurance products (2024)',
-    url: 'https://irdai.gov.in',
+    label: "IRDAI Master Circular on Protection of Policyholders' Interests, 2024",
+    url: 'https://irdai.gov.in/document-detail?documentId=5625747',
+    where: 'pages 13–14 (life); health: IRDAI Master Circular on Health Insurance Business 2024, para 8',
   },
 } as const;
 

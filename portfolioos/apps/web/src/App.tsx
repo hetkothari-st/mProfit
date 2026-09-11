@@ -45,6 +45,7 @@ import { InsuranceListPage } from './pages/insurance/InsuranceListPage';
 import { InsuranceDetailPage } from './pages/insurance/InsuranceDetailPage';
 import { EmergencySheetPage } from './pages/insurance/EmergencySheetPage';
 import { HelpLibraryPage } from './pages/insurance/HelpLibraryPage';
+import { CoveragePage } from './pages/insurance/CoveragePage';
 import { LoanListPage } from './pages/loans/LoanListPage';
 import { LoanDetailPage } from './pages/loans/LoanDetailPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
@@ -150,6 +151,7 @@ export function App() {
         <Route path="/insurance" element={<InsuranceListPage />} />
         <Route path="/insurance/emergency-sheet" element={<EmergencySheetPage />} />
         <Route path="/insurance/help" element={<HelpLibraryPage />} />
+        <Route path="/insurance/coverage" element={<CoveragePage />} />
         <Route path="/insurance/:id" element={<InsuranceDetailPage />} />
         <Route path="/loans" element={<LoanListPage />} />
         <Route path="/loans/:id" element={<LoanDetailPage />} />

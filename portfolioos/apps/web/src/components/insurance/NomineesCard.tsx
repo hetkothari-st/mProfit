@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Pencil, Plus, Trash2 } from 'lucide-react';
@@ -228,7 +229,10 @@ export function NomineesCard({ policy }: { policy: InsurancePolicyDTO }) {
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
               <p className="text-muted-foreground">
                 No nominee recorded. Without a nominee registered with the insurer, your family may need a
-                succession or legal-heir certificate before a claim is paid.
+                succession or legal-heir certificate before a claim is paid.{' '}
+                <Link to="/insurance/help#nomination" className="text-accent hover:underline">
+                  How nomination works
+                </Link>
               </p>
             </div>
           ) : (
