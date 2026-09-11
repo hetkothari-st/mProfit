@@ -35,12 +35,14 @@ export interface ResolvedCard {
 
 /**
  * The official face for a catalog card, on the network the user saved. A face
- * prints its network's mark, so a face for another network is never shown —
- * a Visa mark on a RuPay card would be wrong in the one detail users check.
- * With no saved network, the product's usual network stands in.
+ * that prints a network mark is never shown for another network — a Visa mark
+ * on a RuPay card would be wrong in the one detail users check. A face with no
+ * mark (`ANY`) fits every network. With no saved network, the product's usual
+ * network stands in.
  */
 export function cardArtFor(catalogId: string, network: CardNetwork | null, usual: CardNetwork): CardArt | null {
-  return CARD_ART[catalogId]?.[network ?? usual] ?? null;
+  const faces = CARD_ART[catalogId];
+  return faces?.[network ?? usual] ?? faces?.ANY ?? null;
 }
 
 /** Lower-case words separated by single spaces, padded for whole-word search. */

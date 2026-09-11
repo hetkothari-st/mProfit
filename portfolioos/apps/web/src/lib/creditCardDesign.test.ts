@@ -93,8 +93,16 @@ describe('card art', () => {
     expect(resolveCardDesign({ issuerBank: 'Federal Bank', cardName: 'Scapia', network: 'MASTERCARD' }).art).toBeNull();
   });
 
+  it('fits a face with no network mark to any network', () => {
+    // SBI publishes its faces without the network mark.
+    for (const network of ['VISA', 'MASTERCARD', 'RUPAY', null] as const) {
+      expect(resolveCardDesign({ issuerBank: 'SBI Card', cardName: 'SimplyCLICK', network }).art?.src)
+        .toBe('/cards/sbi-simplyclick--any.webp');
+    }
+  });
+
   it('has no art for cards without a face on file or outside the catalog', () => {
-    expect(resolveCardDesign({ issuerBank: 'HDFC Bank', cardName: 'Regalia Gold', network: 'VISA' }).art).toBeNull();
+    expect(resolveCardDesign({ issuerBank: 'HDFC Bank', cardName: 'Pixel Play', network: 'RUPAY' }).art).toBeNull();
     expect(resolveCardDesign({ issuerBank: 'Canara Bank', cardName: 'Platinum', network: 'RUPAY' }).art).toBeNull();
   });
 
@@ -103,6 +111,7 @@ describe('card art', () => {
     for (const [id, faces] of Object.entries(CARD_ART)) {
       expect(ids.has(id)).toBe(true);
       for (const [network, face] of Object.entries(faces)) {
+        expect(['VISA', 'MASTERCARD', 'AMEX', 'RUPAY', 'DINERS', 'ANY']).toContain(network);
         expect(face?.src).toBe(`/cards/${id}--${network.toLowerCase()}.webp`);
       }
     }

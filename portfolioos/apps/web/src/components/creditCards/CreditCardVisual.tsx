@@ -415,11 +415,14 @@ function ArtCard({
         className="absolute inset-0 h-full w-full select-none object-cover"
       />
       {!vertical && (
+        // Sits where cards print the holder — and over the sample name some
+        // issuers' marketing faces carry.
         <div
-          className="absolute flex max-w-[70%] items-center rounded-full text-white backdrop-blur-sm"
-          style={{ left: '4.5cqw', bottom: '4.5cqw', gap: '1.6cqw', padding: '1cqw 1.4cqw 1cqw 3cqw', background: 'rgba(0,0,0,0.45)', fontSize: '3.4cqw' }}
+          className="absolute flex max-w-[78%] items-center rounded-full text-white backdrop-blur-md"
+          style={{ left: '4cqw', bottom: '4cqw', gap: '2cqw', padding: '1cqw 1.4cqw 1cqw 3cqw', background: 'rgba(0,0,0,0.62)', fontSize: '3.4cqw' }}
         >
-          <span className="truncate font-mono tracking-[0.1em]">{digits}</span>
+          {holder && <span className="truncate font-medium uppercase tracking-[0.1em]">{holder}</span>}
+          <span className="shrink-0 font-mono tracking-[0.1em]">{digits}</span>
           {eye}
         </div>
       )}

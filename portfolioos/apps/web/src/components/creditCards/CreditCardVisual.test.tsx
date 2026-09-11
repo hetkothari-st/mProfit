@@ -9,6 +9,13 @@ import { CreditCardVisual } from './CreditCardVisual';
 
 const reveal = vi.hoisted(() => vi.fn());
 vi.mock('@/api/creditCards.api', () => ({ creditCardsApi: { revealCardNumber: reveal } }));
+// Pin the face inventory so the drawn-card tests don't change as faces are added.
+vi.mock('@/data/cardArt.generated', () => ({
+  CARD_ART: {
+    'federal-scapia': { RUPAY: { src: '/cards/federal-scapia--rupay.webp', vertical: true } },
+    'sbi-prime': { ANY: { src: '/cards/sbi-prime--any.webp', vertical: false } },
+  },
+}));
 
 beforeEach(() => {
   useAuthStore.setState({ user: { id: 'u1', name: 'Het Kothari' } as AuthUser });
@@ -159,6 +166,14 @@ describe('CreditCardVisual', () => {
       render(<CreditCardVisual card={scapia()} revealable />);
       fireEvent.click(screen.getByRole('button', { name: 'Show card number' }));
       expect(await screen.findByText('6522 1111 2222 6459')).toBeTruthy();
+    });
+
+    it('puts the holder and last 4 on a plate over a landscape face', () => {
+      render(<CreditCardVisual card={makeCard({ issuerBank: 'SBI Card', cardName: 'Prime', network: 'VISA', last4: '4321' })} />);
+      expect(face().getAttribute('data-art')).toBe('/cards/sbi-prime--any.webp');
+      expect(face().getAttribute('data-orientation')).toBe('horizontal');
+      expect(face().textContent).toContain('•••• 4321');
+      expect(face().textContent).toContain('Het Kothari');
     });
 
     it('falls back to the drawn card when the image fails to load', () => {
