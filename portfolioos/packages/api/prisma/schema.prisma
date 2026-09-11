@@ -3477,9 +3477,9 @@ model SystemFmvSeed {
 //
 // The system acts as the investor's adviser: deterministic TypeScript rules
 // compute every number (trigger, trade size, priority); an optional LLM layer
-// only narrates figures the rules already decided. Prescriptive output lives
-// here and ONLY here — analytics.insights.ts and ai/systemPrompt.ts stay
-// descriptive-only and must not be loosened to match (see advisorSystemPrompt.ts).
+// only narrates figures the rules already decided. analytics.insights.ts stays
+// descriptive-only; the in-app assistant (ai/systemPrompt.ts) advises within
+// its own guard rails (see advisorSystemPrompt.ts, point 3).
 //
 // Everything below is user-owned: each model is listed in USER_SCOPED_MODELS
 // (src/lib/prisma.ts) AND carries an RLS policy in the advisor_engine migration.

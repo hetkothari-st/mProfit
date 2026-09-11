@@ -64,6 +64,10 @@ const EnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ENABLE_LLM_PARSER: z.enum(['true', 'false']).default('false'),
   LLM_MODEL: z.string().default('claude-haiku-4-5-20251001'),
+  // The in-app adviser (AI assistant). Overridable at runtime with the
+  // `llm.assistant_model` AppSetting; the default lives here so no host
+  // variable is needed.
+  LLM_ASSISTANT_MODEL: z.string().default('claude-sonnet-5'),
   // Phase 5-Analytics — separate model knob for the portfolio insights
   // generator. Sonnet by default since narrative quality matters more
   // than per-call cost (insights are user-triggered, cached 24h).

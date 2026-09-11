@@ -19,8 +19,11 @@ import { asyncHandler } from '../middleware/validate.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { env } from '../config/env.js';
+import { taxYearOf } from '@portfolioos/shared';
 import { classifyQuery } from '../ai/queryClassifier.js';
 import { buildContext } from '../ai/contextBuilder.js';
+import { loadAdvisorContext } from '../ai/userFacts.js';
+import { searchKnowledge } from '../ai/knowledge/search.js';
 import {
   streamAssistantResponse,
   parseResponseForCard,
@@ -235,6 +238,13 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     const classified = classifyQuery(message);
     const context = await buildContext(userId, familyId, classified);
     const history: HistoryMessage[] = await getConversationHistory(sessionId, 10);
+    // The adviser's view of the client (cached a few minutes per user) and
+    // the library passages that fit this question — both in-process.
+    const advisorCtx = await loadAdvisorContext(userId, {
+      familyId,
+      profile: context.userProfile as unknown as Record<string, unknown>,
+    });
+    const knowledge = searchKnowledge(message, { limit: 3 });
 
     await saveMessage({
       userId,
@@ -266,15 +276,32 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
         message,
         context,
         history,
+        {
+          factsText: advisorCtx.text,
+          facts: advisorCtx.facts,
+          financialYear: taxYearOf(new Date().toISOString().slice(0, 10)),
+          knowledge,
+        },
         async (result) => {
           const { cleanText, card } = parseResponseForCard(result.fullText);
+          // The advice record: what the adviser saw and relied on, so any
+          // answer can be reconstructed later.
+          const snapshot = {
+            ...context,
+            advisor: {
+              model: result.model,
+              userFacts: advisorCtx.text,
+              toolsUsed: result.toolsUsed,
+              knowledgeIds: result.knowledgeIds,
+            },
+          };
           await saveMessage({
             userId,
             sessionId,
             role: 'assistant',
             content: cleanText,
             queryIntent: classified.intent,
-            contextSnapshot: context as unknown as Record<string, unknown>,
+            contextSnapshot: snapshot as unknown as Record<string, unknown>,
             cardData: card as unknown as Record<string, unknown> | null,
             familyId,
           });
