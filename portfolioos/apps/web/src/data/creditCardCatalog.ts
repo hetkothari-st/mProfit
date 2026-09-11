@@ -110,7 +110,7 @@ export const CARD_CATALOG: CatalogCard[] = [
   { id: 'hdfc-freedom', issuer: 'HDFC Bank', product: 'Freedom', tier: 'classic', network: 'VISA',
     design: d({ background: lg(135, '#f07a24', '#c9420f'), pattern: 'circles', patternColor: W }) },
   { id: 'hdfc-swiggy', issuer: 'HDFC Bank', product: 'Swiggy', aliases: ['swiggy hdfc'], tier: 'platinum', network: 'MASTERCARD',
-    design: d({ background: lg(160, '#ff9a3c', '#fc6d14 55%', '#e4570b'), pattern: 'shapes', patternColor: 'rgba(255,255,255,0.18)', orientation: 'vertical' }) },
+    design: d({ background: lg(160, '#ff9a3c', '#fc6d14 55%', '#e4570b'), pattern: 'shapes', patternColor: 'rgba(255,255,255,0.18)' }) },
   { id: 'hdfc-tata-neu-infinity', issuer: 'HDFC Bank', product: 'Tata Neu Infinity', aliases: ['neu infinity'], tier: 'infinite', network: 'RUPAY',
     design: d({ background: lg(160, '#2a1147', '#5b1f8f 55%', '#8f3fd1'), finish: 'pearl', pattern: 'circles', patternColor: W, orientation: 'vertical' }) },
   { id: 'hdfc-tata-neu-plus', issuer: 'HDFC Bank', product: 'Tata Neu Plus', aliases: ['neu plus'], tier: 'platinum', network: 'RUPAY',
@@ -126,7 +126,7 @@ export const CARD_CATALOG: CatalogCard[] = [
 
   // ── Axis Bank ──────────────────────────────────────────────────────────────
   { id: 'axis-reserve', issuer: 'Axis Bank', product: 'Reserve', aliases: ['axis reserve'], tier: 'metal', network: 'VISA',
-    design: d({ background: BLACK_METAL, finish: 'metal', accent: '#d4b06a' }) },
+    design: d({ background: BLACK_METAL, finish: 'metal', accent: '#d4b06a', orientation: 'vertical' }) },
   { id: 'axis-magnus-burgundy', issuer: 'Axis Bank', product: 'Magnus Burgundy', aliases: ['burgundy'], tier: 'metal', network: 'MASTERCARD',
     design: d({ background: lg(135, '#4a0d1e', '#2a0611 55%', '#150308'), finish: 'metal', accent: '#e0b98a' }) },
   { id: 'axis-magnus', issuer: 'Axis Bank', product: 'Magnus', tier: 'world', network: 'VISA',
@@ -137,7 +137,7 @@ export const CARD_CATALOG: CatalogCard[] = [
     design: d({ background: lg(135, '#2b2f36', '#15181d'), finish: 'metal', pattern: 'lines', patternColor: 'rgba(255,255,255,0.05)', accent: '#c7a26b' }) },
   { id: 'axis-ace', issuer: 'Axis Bank', product: 'ACE', aliases: ['ace'], tier: 'platinum', network: 'VISA',
     design: d({ background: lg(135, '#1f1f24', '#0d0d10'), finish: 'matte', pattern: 'shapes', patternColor: 'rgba(0,200,180,0.22)', accent: '#2fd3bb' }) },
-  { id: 'axis-flipkart', issuer: 'Axis Bank', product: 'Flipkart', aliases: ['flipkart axis'], tier: 'platinum', network: 'VISA',
+  { id: 'axis-flipkart', issuer: 'Axis Bank', product: 'Flipkart', aliases: ['flipkart axis'], tier: 'platinum', network: 'MASTERCARD',
     design: d({ background: lg(135, '#2874f0', '#1a52b8'), pattern: 'shapes', patternColor: 'rgba(255,224,0,0.28)', accent: '#ffe11b' }) },
   { id: 'axis-airtel', issuer: 'Axis Bank', product: 'Airtel', aliases: ['airtel axis'], tier: 'platinum', network: 'MASTERCARD',
     design: d({ background: lg(135, '#e40000', '#8d0000'), pattern: 'waves', patternColor: W }) },
@@ -158,15 +158,15 @@ export const CARD_CATALOG: CatalogCard[] = [
   { id: 'sbi-elite', issuer: 'State Bank of India', product: 'Elite', aliases: ['sbi card elite'], tier: 'signature', network: 'VISA',
     design: d({ background: lg(135, '#1c1c1c', '#050505'), finish: 'matte', pattern: 'lines', patternColor: 'rgba(212,176,106,0.14)', accent: '#d4b06a' }) },
   { id: 'sbi-miles-elite', issuer: 'State Bank of India', product: 'Miles Elite', aliases: ['miles'], tier: 'signature', network: 'VISA',
-    design: d({ background: lg(135, '#0e2d4a', '#07182a'), finish: 'matte', pattern: 'topo', patternColor: W }) },
+    design: d({ background: lg(135, '#0e2d4a', '#07182a'), finish: 'matte', pattern: 'topo', patternColor: W, orientation: 'vertical' }) },
   { id: 'sbi-prime', issuer: 'State Bank of India', product: 'Prime', aliases: ['sbi card prime'], tier: 'signature', network: 'VISA',
     design: d({ background: lg(135, '#0f2a57', '#0a1a38'), pattern: 'waves', patternColor: W, accent: '#9ec2ff' }) },
   { id: 'sbi-cashback', issuer: 'State Bank of India', product: 'Cashback', aliases: ['cashback sbi', 'sbi cashback'], tier: 'platinum', network: 'VISA',
-    design: d({ background: lg(135, '#2e1a6e', '#5a2aa8 55%', '#1d0f4a'), pattern: 'circles', patternColor: W }) },
+    design: d({ background: lg(135, '#2e1a6e', '#5a2aa8 55%', '#1d0f4a'), pattern: 'circles', patternColor: W, orientation: 'vertical' }) },
   { id: 'sbi-simplyclick', issuer: 'State Bank of India', product: 'SimplyCLICK', aliases: ['simply click', 'simplyclick'], tier: 'classic', network: 'VISA',
-    design: d({ background: lg(135, '#00a5b5', '#006f85'), pattern: 'dots', patternColor: W }) },
+    design: d({ background: lg(135, '#00a5b5', '#006f85'), pattern: 'dots', patternColor: W, orientation: 'vertical' }) },
   { id: 'sbi-simplysave', issuer: 'State Bank of India', product: 'SimplySAVE', aliases: ['simply save', 'simplysave'], tier: 'classic', network: 'VISA',
-    design: d({ background: lg(135, '#f28c28', '#c9571a'), pattern: 'dots', patternColor: W }) },
+    design: d({ background: lg(135, '#f28c28', '#c9571a'), pattern: 'dots', patternColor: W, orientation: 'vertical' }) },
   { id: 'sbi-bpcl-octane', issuer: 'State Bank of India', product: 'BPCL Octane', aliases: ['octane'], tier: 'signature', network: 'VISA',
     design: d({ background: lg(135, '#111827', '#0b3b2e'), finish: 'matte', pattern: 'lines', patternColor: 'rgba(255,214,0,0.12)', accent: '#ffd600' }) },
   { id: 'sbi-bpcl', issuer: 'State Bank of India', product: 'BPCL', tier: 'classic', network: 'RUPAY',
@@ -194,7 +194,7 @@ export const CARD_CATALOG: CatalogCard[] = [
   { id: 'icici-makemytrip', issuer: 'ICICI Bank', product: 'MakeMyTrip Signature', aliases: ['makemytrip', 'mmt'], tier: 'signature', network: 'VISA',
     design: d({ background: lg(135, '#e2231a', '#0a2a6a'), pattern: 'shapes', patternColor: W }) },
   { id: 'icici-hpcl', issuer: 'ICICI Bank', product: 'HPCL Super Saver', aliases: ['hpcl'], tier: 'classic', network: 'VISA',
-    design: d({ background: lg(135, '#1a3c8c', '#c8102e'), pattern: 'waves', patternColor: W }) },
+    design: d({ background: lg(135, '#1a3c8c', '#c8102e'), pattern: 'waves', patternColor: W, orientation: 'vertical' }) },
   { id: 'icici-times-black', issuer: 'ICICI Bank', product: 'Times Black', aliases: ['times black'], tier: 'metal', network: 'VISA',
     design: d({ background: BLACK_METAL, finish: 'metal', accent: '#c9ced6' }) },
 
@@ -226,7 +226,7 @@ export const CARD_CATALOG: CatalogCard[] = [
   { id: 'kotak-811', issuer: 'Kotak Mahindra Bank', product: '811 Dream Different', aliases: ['811', 'dream different'], tier: 'classic', network: 'VISA',
     design: d({ background: lg(135, '#101820', '#1c3144'), finish: 'matte', pattern: 'dots', patternColor: 'rgba(237,28,36,0.25)' }) },
   { id: 'kotak-indigo', issuer: 'Kotak Mahindra Bank', product: 'IndiGo', aliases: ['6e rewards', 'indigo'], tier: 'platinum', network: 'MASTERCARD',
-    design: d({ background: lg(135, '#001b94', '#000f55'), pattern: 'lines', patternColor: W }) },
+    design: d({ background: lg(135, '#001b94', '#000f55'), pattern: 'lines', patternColor: W, orientation: 'vertical' }) },
 
   // ── IDFC FIRST Bank ────────────────────────────────────────────────────────
   { id: 'idfc-first-private', issuer: 'IDFC FIRST Bank', product: 'FIRST Private', aliases: ['first private', 'private'], tier: 'metal', network: 'VISA',
@@ -240,7 +240,7 @@ export const CARD_CATALOG: CatalogCard[] = [
   { id: 'idfc-select', issuer: 'IDFC FIRST Bank', product: 'Select', tier: 'signature', network: 'VISA',
     design: d({ background: lg(135, '#7a1a26', '#4a0f17'), finish: 'matte' }) },
   { id: 'idfc-millennia', issuer: 'IDFC FIRST Bank', product: 'Millennia', tier: 'platinum', network: 'VISA',
-    design: d({ background: lg(135, '#9d1d27', '#5e1117'), pattern: 'shapes', patternColor: W }) },
+    design: d({ background: lg(135, '#9d1d27', '#5e1117'), pattern: 'shapes', patternColor: W, orientation: 'vertical' }) },
   { id: 'idfc-classic', issuer: 'IDFC FIRST Bank', product: 'Classic', tier: 'classic', network: 'VISA',
     design: d({ background: lg(135, '#b0202e', '#7a1520'), pattern: 'waves', patternColor: W }) },
   { id: 'idfc-wow', issuer: 'IDFC FIRST Bank', product: 'WOW!', aliases: ['wow'], tier: 'classic', network: 'VISA',
@@ -248,7 +248,7 @@ export const CARD_CATALOG: CatalogCard[] = [
 
   // ── AU Small Finance Bank ──────────────────────────────────────────────────
   { id: 'au-zenith-plus', issuer: 'AU Small Finance Bank', product: 'Zenith+', aliases: ['zenith plus'], tier: 'metal', network: 'VISA',
-    design: d({ background: BLACK_METAL, finish: 'metal', accent: '#f08a3c' }) },
+    design: d({ background: BLACK_METAL, finish: 'metal', accent: '#f08a3c', orientation: 'vertical' }) },
   { id: 'au-zenith', issuer: 'AU Small Finance Bank', product: 'Zenith', tier: 'infinite', network: 'VISA',
     design: d({ background: lg(135, '#1c1c1c', '#3a1e0a'), finish: 'matte', accent: '#f08a3c' }) },
   { id: 'au-vetta', issuer: 'AU Small Finance Bank', product: 'Vetta', tier: 'signature', network: 'VISA',
@@ -270,14 +270,14 @@ export const CARD_CATALOG: CatalogCard[] = [
 
   // ── IndusInd Bank ──────────────────────────────────────────────────────────
   { id: 'indusind-pinnacle', issuer: 'IndusInd Bank', product: 'Pinnacle', tier: 'world', network: 'MASTERCARD',
-    design: d({ background: lg(135, '#2d2d33', '#111114'), finish: 'metal', accent: '#d3b27a' }) },
+    design: d({ background: lg(135, '#2d2d33', '#111114'), finish: 'metal', accent: '#d3b27a', orientation: 'vertical' }) },
   { id: 'indusind-legend', issuer: 'IndusInd Bank', product: 'Legend', tier: 'signature', network: 'VISA',
     design: d({ background: lg(135, '#1a1a1d', '#000000'), finish: 'matte', pattern: 'lines', patternColor: 'rgba(211,178,122,0.12)', accent: '#d3b27a' }) },
   { id: 'indusind-tiger', issuer: 'IndusInd Bank', product: 'Tiger', tier: 'platinum', network: 'VISA',
-    design: d({ background: lg(135, '#f28a1d', '#8c3b0d'), pattern: 'lines', patternColor: 'rgba(0,0,0,0.18)' }) },
-  { id: 'indusind-eazydiner', issuer: 'IndusInd Bank', product: 'EazyDiner', aliases: ['eazy diner'], tier: 'platinum', network: 'MASTERCARD',
+    design: d({ background: lg(135, '#f28a1d', '#8c3b0d'), pattern: 'lines', patternColor: 'rgba(0,0,0,0.18)', orientation: 'vertical' }) },
+  { id: 'indusind-eazydiner', issuer: 'IndusInd Bank', product: 'EazyDiner', aliases: ['eazy diner'], tier: 'platinum', network: 'VISA',
     design: d({ background: lg(135, '#e4212c', '#8f0f16'), pattern: 'dots', patternColor: W }) },
-  { id: 'indusind-celesta', issuer: 'IndusInd Bank', product: 'Celesta', tier: 'infinite', network: 'VISA',
+  { id: 'indusind-celesta', issuer: 'IndusInd Bank', product: 'Celesta', tier: 'infinite', network: 'AMEX',
     design: d({ background: lg(135, '#2a1840', '#120a1d'), finish: 'metal', accent: '#c9a8ff' }) },
 
   // ── RBL Bank ───────────────────────────────────────────────────────────────
@@ -298,9 +298,9 @@ export const CARD_CATALOG: CatalogCard[] = [
 
   // ── HSBC ───────────────────────────────────────────────────────────────────
   { id: 'hsbc-premier', issuer: 'HSBC', product: 'Premier', tier: 'metal', network: 'MASTERCARD',
-    design: d({ background: BLACK_METAL, finish: 'metal', accent: '#db0011' }) },
+    design: d({ background: BLACK_METAL, finish: 'metal', accent: '#db0011', orientation: 'vertical' }) },
   { id: 'hsbc-travelone', issuer: 'HSBC', product: 'TravelOne', aliases: ['travel one'], tier: 'world', network: 'MASTERCARD',
-    design: d({ background: lg(135, '#1d2733', '#0c1117'), finish: 'matte', pattern: 'topo', patternColor: W, accent: '#db0011' }) },
+    design: d({ background: lg(135, '#1d2733', '#0c1117'), finish: 'matte', pattern: 'topo', patternColor: W, accent: '#db0011', orientation: 'vertical' }) },
   { id: 'hsbc-live-plus', issuer: 'HSBC', product: 'Live+', aliases: ['live plus', 'cashback'], tier: 'platinum', network: 'VISA',
     design: d({ background: lg(135, '#db0011', '#8a000b'), pattern: 'shapes', patternColor: W }) },
 
@@ -308,7 +308,7 @@ export const CARD_CATALOG: CatalogCard[] = [
   { id: 'federal-scapia', issuer: 'Federal Bank', product: 'Scapia', tier: 'signature', network: 'VISA',
     design: d({ background: lg(160, '#0d3b2e', '#1f6b4f 55%', '#f2b84b'), finish: 'matte', pattern: 'mountains', patternColor: 'rgba(255,255,255,0.18)', orientation: 'vertical' }) },
   { id: 'federal-celesta', issuer: 'Federal Bank', product: 'Celesta', tier: 'infinite', network: 'VISA',
-    design: d({ background: lg(135, '#0a2f5c', '#051a33'), finish: 'metal', accent: '#f2c14e' }) },
+    design: d({ background: lg(135, '#0a2f5c', '#051a33'), finish: 'metal', accent: '#f2c14e', orientation: 'vertical' }) },
   { id: 'federal-signet', issuer: 'Federal Bank', product: 'Signet', tier: 'signature', network: 'VISA',
     design: d({ background: lg(135, '#0f4c8a', '#0a2f57'), pattern: 'lines', patternColor: W }) },
 
@@ -317,6 +317,6 @@ export const CARD_CATALOG: CatalogCard[] = [
     design: d({ background: lg(160, '#2b2d31', '#0f1012'), finish: 'metal', pattern: 'lines', patternColor: 'rgba(255,255,255,0.05)', orientation: 'vertical' }) },
   { id: 'bob-eterna', issuer: 'Bank of Baroda', product: 'Eterna', tier: 'infinite', network: 'VISA',
     design: d({ background: lg(135, '#2a1308', '#120703'), finish: 'metal', accent: '#f08a3c' }) },
-  { id: 'bob-premier', issuer: 'Bank of Baroda', product: 'Premier', tier: 'platinum', network: 'VISA',
+  { id: 'bob-premier', issuer: 'Bank of Baroda', product: 'Premier', tier: 'platinum', network: 'RUPAY',
     design: d({ background: lg(135, '#ea5e0f', '#a3400a'), pattern: 'waves', patternColor: W }) },
 ];
