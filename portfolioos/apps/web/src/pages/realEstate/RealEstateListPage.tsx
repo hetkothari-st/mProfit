@@ -686,8 +686,8 @@ function PropertyCard({
       to={`/real-estate/${property.id}`}
       className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg"
     >
-      <Card className={`overflow-hidden p-0 cursor-pointer transition-all duration-300 paper relative
-        group-hover:shadow-elev-lg group-hover:-translate-y-0.5
+      <Card className={`card-lift overflow-hidden p-0 cursor-pointer transition-all duration-300 paper relative
+        group-hover:shadow-elev-lg group-hover:-translate-y-1
         ${isSold ? 'opacity-75' : ''}`}>
 
         {/* Type-relevant banner */}

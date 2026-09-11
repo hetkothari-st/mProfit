@@ -285,6 +285,28 @@
   .hairline-b { box-shadow: inset 0 -1px 0 hsl(var(--border)); }
   .hairline-t { box-shadow: inset 0 1px 0 hsl(var(--border)); }
 
+  /* Light-mode card lift for image-led tiles (property cards). A white card on
+     the 98% page with the stock 10% shadow-elev reads as flat paper; this adds
+     a crisp 1px edge, a contact shadow and a soft ambient drop. The paper grain
+     is dropped too — on white it greys the card down to the page's own tone.
+     Dark mode keeps its own .dark .shadow-elev lift below. */
+  html:not(.dark) .card-lift {
+    background-image: none;
+    border-color: hsl(215 16% 84%);
+    box-shadow:
+      0 1px 2px hsl(215 25% 15% / 0.08),
+      0 4px 10px -4px hsl(215 25% 15% / 0.10),
+      0 14px 32px -12px hsl(215 25% 15% / 0.20),
+      0 28px 56px -28px hsl(215 25% 15% / 0.24);
+  }
+  html:not(.dark) .group:hover .card-lift {
+    box-shadow:
+      0 2px 4px hsl(215 25% 15% / 0.09),
+      0 8px 18px -6px hsl(215 25% 15% / 0.14),
+      0 22px 44px -14px hsl(215 25% 15% / 0.26),
+      0 40px 72px -32px hsl(215 25% 15% / 0.30);
+  }
+
   /* Dark-mode card lift — stock shadow-elev disappears on dark surfaces.
      Add a top inset highlight + ambient shadow so cards sit cleanly above bg. */
   .dark .shadow-elev {
