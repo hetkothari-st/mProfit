@@ -17,6 +17,12 @@ import {
   verifyRegistration,
 } from '../services/auth.service.js';
 import { created, noContent, ok } from '../lib/response.js';
+import {
+  DELETION_GRACE_DAYS,
+  getDeletionBlockers,
+  requestAccountDeletion,
+  sendDeletionCode,
+} from '../services/accountDeletion.service.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { readPan } from '../services/piiAtRest.service.js';
@@ -40,6 +46,8 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(1),
+  /** Cancel a scheduled account deletion and sign in. */
+  restore: z.boolean().optional(),
 });
 
 export const refreshSchema = z.object({
@@ -110,7 +118,7 @@ export async function resendRegistrationHandler(req: Request, res: Response) {
 export async function login(req: Request, res: Response) {
   const data = loginSchema.parse(req.body);
   try {
-    const result = await loginUser(data.email, data.password);
+    const result = await loginUser(data.email, data.password, { restore: data.restore });
     await writeAuditLog({
       userId: result.user.id,
       action: 'login',
@@ -206,11 +214,48 @@ export async function patchMe(req: Request, res: Response) {
 
 export const googleSchema = z.object({
   idToken: z.string().min(20),
+  restore: z.boolean().optional(),
 });
 
 export async function google(req: Request, res: Response) {
-  const { idToken } = googleSchema.parse(req.body);
-  const result = await loginOrRegisterWithGoogle(idToken);
+  const { idToken, restore } = googleSchema.parse(req.body);
+  const result = await loginOrRegisterWithGoogle(idToken, { restore });
   if (result.isNew) created(res, result);
   else ok(res, result);
+}
+
+// ── Account deletion ─────────────────────────────────────────────────
+
+export const accountDeletionSchema = z.object({
+  confirmText: z.string(),
+  password: z.string().min(1).optional(),
+  code: z.string().trim().regex(/^d{6}$/, 'Enter the 6-digit code').optional(),
+});
+
+/** What would stop deletion right now (families with other members). */
+export async function deletionStatus(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  ok(res, {
+    blockers: await getDeletionBlockers(req.user.id),
+    graceDays: DELETION_GRACE_DAYS,
+  });
+}
+
+export async function deletionCode(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  ok(res, await sendDeletionCode(req.user.id));
+}
+
+export async function requestDeletion(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const input = accountDeletionSchema.parse(req.body);
+  const result = await requestAccountDeletion(req.user.id, input);
+  await writeAuditLog({
+    userId: req.user.id,
+    action: 'account_deletion_requested',
+    resource: `User:${req.user.id}`,
+    metadata: { scheduledFor: result.scheduledFor, method: input.password ? 'password' : 'email_code' },
+    req,
+  });
+  ok(res, result);
 }

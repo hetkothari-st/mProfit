@@ -28,7 +28,10 @@ export type AuditAction =
   | 'oauth_grant'
   | 'oauth_revoke'
   | 'vehicle_modified'
-  | 'insurance_modified';
+  | 'insurance_modified'
+  | 'account_deletion_requested'
+  | 'account_deletion_cancelled'
+  | 'account_purged';
 
 export interface AuditInput {
   userId?: string | null;

@@ -13,6 +13,7 @@ import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
 import { NotificationsSection } from './NotificationsSection';
+import { DeleteAccountSection } from './DeleteAccountSection';
 
 const schema = z.object({
   name: z.string().min(2).max(100),
@@ -148,6 +149,10 @@ export function SettingsPage() {
 
       <div className="mt-6">
         <NotificationsSection />
+      </div>
+
+      <div className="mt-6">
+        <DeleteAccountSection />
       </div>
     </div>
   );

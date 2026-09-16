@@ -12,6 +12,11 @@ import type {
   ApiResponse,
 } from '@everypaisa/shared';
 
+export interface AccountDeletionStatus {
+  blockers: Array<{ familyId: string; familyName: string; otherMembers: number }>;
+  graceDays: number;
+}
+
 export interface AuthResult {
   user: AuthUser;
   tokens: AuthTokens;
@@ -48,10 +53,10 @@ export const authApi = {
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
-  async loginWithGoogle(idToken: string): Promise<AuthResult & { isNew?: boolean }> {
+  async loginWithGoogle(idToken: string, restore?: boolean): Promise<AuthResult & { isNew?: boolean }> {
     const { data } = await api.post<ApiResponse<AuthResult & { isNew?: boolean }>>(
       '/api/auth/google',
-      { idToken },
+      restore ? { idToken, restore } : { idToken },
     );
     if (!data.success) throw new Error(data.error);
     return data.data;
@@ -94,6 +99,26 @@ export const authApi = {
   },
   async updateProfile(payload: UpdateProfileRequest): Promise<AuthUser> {
     const { data } = await api.patch<ApiResponse<AuthUser>>('/api/auth/me', payload);
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  /** What would block deleting the account right now. */
+  async deletionStatus(): Promise<AccountDeletionStatus> {
+    const { data } = await api.get<ApiResponse<AccountDeletionStatus>>('/api/auth/me/deletion');
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async sendDeletionCode(): Promise<{ sentTo: string }> {
+    const { data } = await api.post<ApiResponse<{ sentTo: string }>>('/api/auth/me/deletion/code');
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async requestDeletion(payload: {
+    confirmText: string;
+    password?: string;
+    code?: string;
+  }): Promise<{ scheduledFor: string }> {
+    const { data } = await api.post<ApiResponse<{ scheduledFor: string }>>('/api/auth/me/deletion', payload);
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
