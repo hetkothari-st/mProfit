@@ -14,6 +14,7 @@ import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { hashPassword, verifyPassword } from './password.service.js';
 import { sendEmail } from './notifications/email.service.js';
+import { renderCodeEmail } from './notifications/codeEmail.template.js';
 import {
   generateRefreshToken,
   refreshTokenExpiry,
@@ -133,20 +134,20 @@ function assertCooldownElapsed(lastSentAt: Date): void {
   }
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-}
-
 async function sendVerificationCode(email: string, name: string, code: string): Promise<void> {
   const result = await sendEmail({
     to: email,
     // Never put the code in the subject: sendEmail logs subjects, and the
     // code is the whole proof of owning the address.
     subject: 'Your EveryPaisa verification code',
-    html: `<p>Hi ${escapeHtml(name)},</p>
-<p>Your EveryPaisa verification code is:</p>
-<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:16px 0">${code}</p>
-<p>It expires in 10 minutes. If you didn't try to create an account, you can ignore this email.</p>`,
+    ...renderCodeEmail({
+      name,
+      heading: 'Verify your email',
+      intro: 'Enter this code on the sign-up page to finish creating your EveryPaisa account:',
+      code,
+      expiresInMinutes: CODE_TTL_MS / 60_000,
+      notYouLine: `You're receiving this because someone signed up for EveryPaisa with ${email}. If that wasn't you, ignore this email — no account is created without this code.`,
+    }),
   });
   if (result.sent) return;
   if (env.NODE_ENV !== 'production') {
@@ -400,10 +401,14 @@ export async function requestPasswordReset(email: string): Promise<{ codeSent: t
     to: email,
     // Code stays out of the subject — sendEmail logs subjects.
     subject: 'Your EveryPaisa password reset code',
-    html: `<p>Hi ${escapeHtml(user.name)},</p>
-<p>Use this code to reset your EveryPaisa password:</p>
-<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:16px 0">${code}</p>
-<p>It expires in 15 minutes. If you didn't ask to reset your password, you can ignore this email — your password stays the same.</p>`,
+    ...renderCodeEmail({
+      name: user.name,
+      heading: 'Reset your password',
+      intro: 'Enter this code on the password reset page, along with your new password:',
+      code,
+      expiresInMinutes: RESET_CODE_TTL_MS / 60_000,
+      notYouLine: `You're receiving this because a password reset was requested for your EveryPaisa account (${email}). If that wasn't you, ignore this email — your password stays the same.`,
+    }),
   });
   if (!result.sent) {
     if (env.NODE_ENV !== 'production') {
