@@ -5,20 +5,18 @@ import {
 } from '../../src/config/env.js';
 
 /**
- * SEC-03 / SEC-04 / SEC-09 — secrets that used to fail OPEN.
+ * SEC-03 / SEC-04 / SEC-09 — secrets that used to degrade silently.
  *
- * Each of these silently degraded to an insecure-but-working state when the
- * variable was missing:
+ * Two tiers, decided against what production actually runs with:
  *
- *   SECRETS_KEY              → lib/secrets.ts fell back to a key hardcoded in
- *                              this repo, which encrypts every broker
- *                              credential, OAuth token and mailbox password.
- *   ONLYOFFICE_JWT_SECRET    → kept a committed placeholder, making document
- *                              download tokens forgeable for any userId.
- *   FINFACTOR_WEBHOOK_SECRET → webhook HMAC verification returned true,
- *                              leaving an unauthenticated write endpoint open.
- *
- * Production must now refuse to boot in each case.
+ *   fatal    — refuse to boot. Starting would expose data that is not already
+ *              exposed: the committed OnlyOffice placeholder (forgeable
+ *              download tokens) and a missing APP_ENCRYPTION_KEY.
+ *   warnings — boot, loudly. SECRETS_KEY was confirmed unset in production, so
+ *              refusing to boot would turn an existing exposure into an outage
+ *              without making anything safer; the rotation job fixes it the
+ *              moment a key is set. FINFACTOR_WEBHOOK_SECRET's handler already
+ *              rejects every call without it.
  */
 
 const GOOD = {
@@ -29,61 +27,74 @@ const GOOD = {
   FINFACTOR_WEBHOOK_SECRET: 'a-real-webhook-secret',
 };
 
-describe('SEC-03/04/09: production secret configuration fails closed', () => {
+describe('production secret configuration', () => {
   it('accepts a fully configured production environment', () => {
-    expect(collectProductionSecretProblems(GOOD)).toEqual([]);
+    expect(collectProductionSecretProblems(GOOD)).toEqual({ fatal: [], warnings: [] });
   });
 
-  it('rejects production with SECRETS_KEY unset', () => {
-    const problems = collectProductionSecretProblems({ ...GOOD, SECRETS_KEY: undefined });
-    expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('SECRETS_KEY');
-  });
-
-  it('rejects production still using the committed OnlyOffice placeholder', () => {
-    const problems = collectProductionSecretProblems({
+  it('refuses to boot on the committed OnlyOffice placeholder', () => {
+    const r = collectProductionSecretProblems({
       ...GOOD,
       ONLYOFFICE_JWT_SECRET: PLACEHOLDER_ONLYOFFICE_SECRET,
     });
-    expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('ONLYOFFICE_JWT_SECRET');
+    expect(r.fatal).toHaveLength(1);
+    expect(r.fatal[0]).toContain('ONLYOFFICE_JWT_SECRET');
   });
 
-  it('rejects production with FINFACTOR_WEBHOOK_SECRET unset', () => {
-    const problems = collectProductionSecretProblems({
+  it('refuses to boot without APP_ENCRYPTION_KEY', () => {
+    const r = collectProductionSecretProblems({ ...GOOD, APP_ENCRYPTION_KEY: undefined });
+    expect(r.fatal).toHaveLength(1);
+    expect(r.fatal[0]).toContain('APP_ENCRYPTION_KEY');
+  });
+
+  it('boots without SECRETS_KEY but warns — production runs this way today', () => {
+    const r = collectProductionSecretProblems({ ...GOOD, SECRETS_KEY: undefined });
+    expect(r.fatal).toEqual([]);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain('SECRETS_KEY');
+  });
+
+  it('boots without FINFACTOR_WEBHOOK_SECRET but warns when live', () => {
+    const r = collectProductionSecretProblems({
       ...GOOD,
       FINFACTOR_WEBHOOK_SECRET: undefined,
+      FINFACTOR_DEMO_MODE: 'false',
     });
-    expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('FINFACTOR_WEBHOOK_SECRET');
+    expect(r.fatal).toEqual([]);
+    expect(r.warnings[0]).toContain('FINFACTOR_WEBHOOK_SECRET');
   });
 
-  it('reports every problem at once rather than stopping at the first', () => {
-    const problems = collectProductionSecretProblems({
+  it('says nothing about the webhook secret in demo mode', () => {
+    const r = collectProductionSecretProblems({
+      ...GOOD,
+      FINFACTOR_WEBHOOK_SECRET: undefined,
+      FINFACTOR_DEMO_MODE: 'true',
+    });
+    expect(r).toEqual({ fatal: [], warnings: [] });
+  });
+
+  it("matches production as observed on 2026-09-16: boots, with one warning", () => {
+    const r = collectProductionSecretProblems({
       NODE_ENV: 'production',
-      APP_ENCRYPTION_KEY: undefined,
+      APP_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
       SECRETS_KEY: undefined,
-      ONLYOFFICE_JWT_SECRET: PLACEHOLDER_ONLYOFFICE_SECRET,
+      ONLYOFFICE_JWT_SECRET: 'not-the-placeholder',
       FINFACTOR_WEBHOOK_SECRET: undefined,
+      FINFACTOR_DEMO_MODE: 'true',
     });
-    expect(problems).toHaveLength(4);
-  });
-
-  it('rejects production with APP_ENCRYPTION_KEY unset now that PAN depends on it', () => {
-    const problems = collectProductionSecretProblems({ ...GOOD, APP_ENCRYPTION_KEY: undefined });
-    expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('APP_ENCRYPTION_KEY');
+    expect(r.fatal).toEqual([]);
+    expect(r.warnings).toHaveLength(1);
   });
 
   it('leaves development and test environments alone', () => {
     for (const NODE_ENV of ['development', 'test']) {
-      const problems = collectProductionSecretProblems({
+      const r = collectProductionSecretProblems({
         NODE_ENV,
         SECRETS_KEY: undefined,
         ONLYOFFICE_JWT_SECRET: PLACEHOLDER_ONLYOFFICE_SECRET,
         FINFACTOR_WEBHOOK_SECRET: undefined,
       });
-      expect(problems, `${NODE_ENV} should not be gated`).toEqual([]);
+      expect(r, NODE_ENV).toEqual({ fatal: [], warnings: [] });
     }
   });
 });

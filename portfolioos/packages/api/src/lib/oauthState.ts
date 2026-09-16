@@ -29,16 +29,27 @@ export type OAuthPurpose = 'gmail' | 'kite';
 const memory = new Map<string, { userId: string; expiresAt: number }>();
 
 let redis: Redis | null = null;
+/**
+ * The Redis client, but only when its connection is actually ready.
+ *
+ * While Redis is connecting or down, callers get null and use the in-memory
+ * store immediately. Queueing instead makes each command wait out a full
+ * reconnect back-off before failing, which turned a Redis blip into Gmail and
+ * Kite connect requests that hung for seconds. consumeOAuthState checks
+ * memory after a Redis miss, so a state issued during a blip still validates
+ * once Redis is back.
+ */
 function client(): Redis | null {
-  if (redis) return redis;
-  try {
-    redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null, enableOfflineQueue: false });
-    redis.on('error', (err: Error) => logger.warn({ err }, 'oauthState.redis.error'));
-    return redis;
-  } catch (err) {
-    logger.warn({ err }, 'oauthState.redis.unavailable — using in-memory store');
-    return null;
+  if (!redis) {
+    try {
+      redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
+      redis.on('error', (err: Error) => logger.warn({ err }, 'oauthState.redis.error'));
+    } catch (err) {
+      logger.warn({ err }, 'oauthState.redis.unavailable — using in-memory store');
+      return null;
+    }
   }
+  return redis.status === 'ready' ? redis : null;
 }
 
 function key(purpose: OAuthPurpose, state: string): string {

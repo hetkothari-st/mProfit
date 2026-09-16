@@ -4,13 +4,12 @@ import { env } from '../config/env.js';
 const ALGO = 'aes-256-gcm';
 
 /**
- * Dev-only key. Production cannot reach it: config/env.ts refuses to boot when
- * SECRETS_KEY is unset with NODE_ENV=production, so by the time anything here
- * runs in production, env.SECRETS_KEY is present.
- *
- * This used to be the fallback for ALL environments, which meant a production
- * deployment that forgot the variable encrypted every broker credential, OAuth
- * token and mailbox password under a key committed to this repository.
+ * Legacy key, committed to this repository. Used only when SECRETS_KEY is
+ * unset — which production was confirmed to be on 2026-09-16 — and warned
+ * about loudly at boot. Every broker credential, OAuth token and mailbox
+ * password written without SECRETS_KEY is encrypted under it, which is why
+ * decryptSecretWithKeyInfo still accepts it for pre-change (v1) payloads and
+ * jobs/secretRotationJobs.ts re-encrypts them once a real key exists.
  */
 const DEV_ONLY_KEY = 'dev-insecure-key-please-override-in-production-32b!';
 
@@ -19,12 +18,10 @@ let warnedAboutDevKey = false;
 function getKey(): Buffer {
   const raw = env.SECRETS_KEY;
   if (!raw) {
-    // Belt and braces — env.ts has already exited the process in production.
-    if (env.NODE_ENV === 'production') {
-      throw new Error(
-        'SECRETS_KEY is not set. Refusing to encrypt or decrypt secrets with a known key.',
-      );
-    }
+    // Production without SECRETS_KEY keeps working on the legacy key — what it
+    // has always done — rather than failing every broker/Gmail/mailbox call.
+    // config/env.ts logs this as a SECURITY warning on every boot, and the
+    // rotation job moves everything onto the real key once one is set.
     if (!warnedAboutDevKey) {
       warnedAboutDevKey = true;
       console.warn(
@@ -49,7 +46,13 @@ export function encryptSecret(plain: string): string {
   const cipher = crypto.createCipheriv(ALGO, getKey(), iv);
   const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return `${VERSION}.${iv.toString('base64')}.${tag.toString('base64')}.${enc.toString('base64')}`;
+  const body = `${iv.toString('base64')}.${tag.toString('base64')}.${enc.toString('base64')}`;
+  // `v2` means "encrypted under a real SECRETS_KEY". Without one, write the
+  // unversioned legacy format instead. Otherwise a secret saved while running
+  // on the legacy key would be tagged v2, v2 never falls back to the legacy
+  // key, and the rotation job skips v2 — so setting SECRETS_KEY later would
+  // strand it as permanently undecryptable.
+  return env.SECRETS_KEY ? `${VERSION}.${body}` : body;
 }
 
 function decryptWith(key: Buffer, ivB64: string, tagB64: string, encB64: string): string {

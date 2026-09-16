@@ -68,7 +68,7 @@ const EnvSchema = z.object({
   // Account Aggregator demo mode: fixtures only, no live Finvu traffic, so no
   // webhook can legitimately arrive and the secret is not required to boot.
   // The webhook handler still rejects every call without the secret.
-  FINFACTOR_DEMO_MODE: z.enum(['true', 'false']).optional(),
+  FINFACTOR_DEMO_MODE: z.string().optional(),
   KITE_API_KEY: z.string().optional(),
   KITE_API_SECRET: z.string().optional(),
   KITE_REDIRECT_URL: z.string().optional(),
@@ -193,6 +193,13 @@ const EnvSchema = z.object({
  * Exported for the regression test; returns the problems rather than throwing
  * so the test can assert on them without spawning a process.
  */
+export interface SecretProblems {
+  /** Refuse to boot: running on would expose data immediately. */
+  fatal: string[];
+  /** Boot, but loudly: a live weakness that production already runs with. */
+  warnings: string[];
+}
+
 export function collectProductionSecretProblems(e: {
   NODE_ENV: string;
   APP_ENCRYPTION_KEY?: string | undefined;
@@ -200,43 +207,47 @@ export function collectProductionSecretProblems(e: {
   ONLYOFFICE_JWT_SECRET: string;
   FINFACTOR_WEBHOOK_SECRET?: string | undefined;
   FINFACTOR_DEMO_MODE?: string | undefined;
-}): string[] {
-  if (e.NODE_ENV !== 'production') return [];
-  const problems: string[] = [];
+}): SecretProblems {
+  const out: SecretProblems = { fatal: [], warnings: [] };
+  if (e.NODE_ENV !== 'production') return out;
 
   if (!e.APP_ENCRYPTION_KEY) {
-    problems.push(
+    out.fatal.push(
       'APP_ENCRYPTION_KEY is not set. PAN, vehicle registration numbers, ' +
         'insurance policy numbers and provident-fund credentials are encrypted ' +
         'with it; without it they cannot be stored securely.',
     );
   }
-
-  if (!e.SECRETS_KEY) {
-    problems.push(
-      'SECRETS_KEY is not set. Broker API keys/secrets/TOTP seeds, Gmail and ' +
-        'broker OAuth tokens, mailbox passwords and saved document passwords ' +
-        'would be encrypted with a key hardcoded in this repository.',
-    );
-  }
   if (e.ONLYOFFICE_JWT_SECRET === PLACEHOLDER_ONLYOFFICE_SECRET) {
-    problems.push(
+    out.fatal.push(
       'ONLYOFFICE_JWT_SECRET is still the committed placeholder. Document ' +
         'download tokens would be forgeable for any user by anyone who has ' +
         'read this repository.',
     );
   }
-  // Only while Account Aggregator is live. In demo mode there is no Finvu
-  // traffic; the handler still fails closed, so requiring the secret to boot
-  // would only turn a paused integration into an outage.
-  if (!e.FINFACTOR_WEBHOOK_SECRET && e.FINFACTOR_DEMO_MODE !== 'true') {
-    problems.push(
-      'FINFACTOR_WEBHOOK_SECRET is not set. The Account Aggregator webhooks ' +
-        'are unauthenticated by design and this HMAC is their only access ' +
-        'control, so consent/data callbacks would accept any forged payload.',
+
+  // A warning, not a boot failure. Production was confirmed (2026-09-16) to
+  // run without SECRETS_KEY, so refusing to boot would turn an existing
+  // exposure into an outage without making anything safer. lib/secrets.ts
+  // keeps using the legacy key until it is set, and the rotation job moves
+  // every stored secret onto the real key on the first start after it is.
+  if (!e.SECRETS_KEY) {
+    out.warnings.push(
+      'SECRETS_KEY is not set. Broker API keys/secrets/TOTP seeds, Gmail and ' +
+        'broker OAuth tokens, mailbox passwords and saved document passwords ' +
+        'are encrypted with a key committed to this repository. Set it: the ' +
+        'next start re-encrypts everything under it automatically.',
     );
   }
-  return problems;
+  // A warning: the webhook handler already rejects every call without the
+  // secret, so a missing value closes the endpoint rather than opening it.
+  if (!e.FINFACTOR_WEBHOOK_SECRET && e.FINFACTOR_DEMO_MODE !== 'true') {
+    out.warnings.push(
+      'FINFACTOR_WEBHOOK_SECRET is not set. Account Aggregator webhooks will ' +
+        'be rejected until it is.',
+    );
+  }
+  return out;
 }
 
 function loadEnv() {
@@ -255,9 +266,10 @@ function loadEnv() {
   // log rather than from a user hitting an error.
   // Fail closed on the secrets that would otherwise degrade silently.
   const secretProblems = collectProductionSecretProblems(parsed.data);
-  if (secretProblems.length > 0) {
+  for (const w of secretProblems.warnings) console.error(`⚠️  SECURITY: ${w}`);
+  if (secretProblems.fatal.length > 0) {
     console.error('❌ Refusing to start: insecure secret configuration in production');
-    for (const p of secretProblems) console.error(`   • ${p}`);
+    for (const p of secretProblems.fatal) console.error(`   • ${p}`);
     process.exit(1);
   }
 

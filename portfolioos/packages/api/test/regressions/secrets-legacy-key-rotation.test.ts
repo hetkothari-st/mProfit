@@ -6,7 +6,7 @@ import {
   encryptSecret,
   isCurrentFormat,
 } from '../../src/lib/secrets.js';
-import { collectProductionSecretProblems } from '../../src/config/env.js';
+import { env } from '../../src/config/env.js';
 
 /**
  * Production ran without SECRETS_KEY (confirmed against the Railway service's
@@ -62,22 +62,25 @@ describe('legacy dev-key ciphertext stays readable after SECRETS_KEY is set', ()
   });
 });
 
-describe('FINFACTOR_WEBHOOK_SECRET is only required while Account Aggregator is live', () => {
-  const base = {
-    NODE_ENV: 'production',
-    APP_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
-    SECRETS_KEY: 'x'.repeat(32),
-    ONLYOFFICE_JWT_SECRET: 'a-real-onlyoffice-secret',
-    FINFACTOR_WEBHOOK_SECRET: undefined,
-  };
+describe('a secret saved before SECRETS_KEY is set survives the key being set', () => {
+  /**
+   * The exact sequence production will go through: deploy without the key,
+   * users keep saving broker/Gmail credentials, then the key is set.
+   */
+  it('writes the legacy format without a key, so rotation can still reach it', () => {
+    const real = env.SECRETS_KEY;
+    try {
+      (env as { SECRETS_KEY?: string }).SECRETS_KEY = undefined;
+      const savedWithoutKey = encryptSecret('saved-before-key');
+      // Must NOT be tagged v2 — v2 never falls back to the legacy key.
+      expect(isCurrentFormat(savedWithoutKey)).toBe(false);
 
-  it('does not block boot in demo mode', () => {
-    expect(collectProductionSecretProblems({ ...base, FINFACTOR_DEMO_MODE: 'true' })).toEqual([]);
-  });
-
-  it('still blocks boot when live', () => {
-    const problems = collectProductionSecretProblems({ ...base, FINFACTOR_DEMO_MODE: 'false' });
-    expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('FINFACTOR_WEBHOOK_SECRET');
+      (env as { SECRETS_KEY?: string }).SECRETS_KEY = real;
+      const r = decryptSecretWithKeyInfo(savedWithoutKey);
+      expect(r.plain).toBe('saved-before-key');
+      expect(r.usedLegacyKey).toBe(true);
+    } finally {
+      (env as { SECRETS_KEY?: string }).SECRETS_KEY = real;
+    }
   });
 });

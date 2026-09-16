@@ -61,6 +61,14 @@ function isOriginAllowed(origin: string): boolean {
   if (/^https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.railway\.app$/i.test(origin)) {
     return true;
   }
+  // The EPFO/SBI browser extension calls this API from its service worker
+  // with a chrome-extension:// origin and no host permission for the API, so
+  // it relies on CORS. Every endpoint authenticates with a Bearer header —
+  // there is no cookie session for a hostile extension to ride — so allowing
+  // the scheme adds no access; refusing it only breaks extension sync.
+  if (/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
+    return true;
+  }
   return false;
 }
 app.use(
