@@ -178,7 +178,24 @@ export async function reprocess(req: Request, res: Response) {
     })
     .parse(req.body ?? {});
 
-  const result = await processImportJob(job.id, password);
+  // Reprocess runs inline rather than through the Bull queue, because the
+  // caller needs the parse result and the post-run status in the response
+  // (the password-persistence rules below depend on it). That means it does
+  // not inherit the queue's 5-minute timeout, so an adversarial or simply
+  // huge PDF could occupy a request worker indefinitely. Bound it explicitly.
+  //
+  // Paired with importLimiter on this route, which caps how often one user
+  // can start such a run.
+  const REPROCESS_TIMEOUT_MS = 5 * 60_000;
+  const result = await Promise.race([
+    processImportJob(job.id, password),
+    new Promise<never>((_resolve, reject) =>
+      setTimeout(
+        () => reject(new BadRequestError('Reprocessing timed out — try a smaller file')),
+        REPROCESS_TIMEOUT_MS,
+      ).unref(),
+    ),
+  ]);
 
   // Persist only when the password actually unlocked the file. The job's
   // post-process status tells us: NEEDS_PASSWORD = still locked → don't

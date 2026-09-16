@@ -16,6 +16,8 @@ import {
   getAmortization,
   computeEmi,
 } from '../services/loans.service.js';
+import { revealLoanAccountNumber } from '../services/loans.service.js';
+import { writeAuditLog } from '../lib/audit.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { Decimal } from 'decimal.js';
@@ -142,4 +144,24 @@ export async function computeEmiHandler(req: Request, res: Response) {
     parseInt(q.months, 10),
   );
   ok(res, { emi: serializeMoney(emi) });
+}
+
+/**
+ * Full loan account number. Separate, rate-limited (piiLimiter) and audited,
+ * matching the bank-account / credit-card / insurance reveal endpoints.
+ */
+export async function revealLoanAccountHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const id = req.params['id']!;
+  const accountNumber = await revealLoanAccountNumber(req.user.id, id);
+  await writeAuditLog({
+    userId: req.user.id,
+    action: 'pii_view',
+    resource: `Loan:${id}`,
+    metadata: { field: 'accountNumber' },
+    req,
+  });
+  // Plaintext PII: keep it out of browser and proxy caches.
+  res.set('Cache-Control', 'no-store');
+  ok(res, { accountNumber });
 }

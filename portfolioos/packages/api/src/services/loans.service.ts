@@ -511,10 +511,45 @@ type LoanWithPayments = Awaited<ReturnType<typeof prisma.loan.findFirst>> & {
   }>;
 };
 
+
+/**
+ * Loan account numbers are returned masked.
+ *
+ * They used to ship in full on every list and detail response while the UI
+ * only ever rendered the last four digits — so the complete number sat in the
+ * network response, the React Query cache and devtools for a value nobody was
+ * displaying. Bank accounts, credit cards and insurance policies in this same
+ * codebase already mask and expose a separate audited reveal endpoint; loans
+ * did not.
+ */
+function maskAccountNumber(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (trimmed.length <= 4) return trimmed;
+  return `${'•'.repeat(Math.max(4, trimmed.length - 4))}${trimmed.slice(-4)}`;
+}
+
+function withMaskedAccount<T extends { accountNumber: string | null }>(loan: T): T {
+  return { ...loan, accountNumber: maskAccountNumber(loan.accountNumber) };
+}
+
+/**
+ * Full loan account number, for the explicit reveal action only. Mirrors
+ * bankAccounts.service: ownership-checked, and the caller audits.
+ */
+export async function revealLoanAccountNumber(userId: string, loanId: string): Promise<string | null> {
+  const loan = await prisma.loan.findFirst({
+    where: { id: loanId, userId },
+    select: { accountNumber: true },
+  });
+  if (!loan) throw new NotFoundError(`Loan ${loanId} not found`);
+  return loan.accountNumber;
+}
+
 // ── Loan CRUD ────────────────────────────────────────────────────────────────
 
 export async function listLoans(userId: string) {
-  return prisma.loan.findMany({
+  const loans = await prisma.loan.findMany({
     where: { userId },
     include: {
       payments: { orderBy: { paidOn: 'desc' }, take: 5 },
@@ -523,6 +558,7 @@ export async function listLoans(userId: string) {
     },
     orderBy: { createdAt: 'desc' },
   });
+  return loans.map(withMaskedAccount);
 }
 
 export async function getLoan(userId: string, loanId: string) {
@@ -535,7 +571,7 @@ export async function getLoan(userId: string, loanId: string) {
     },
   });
   if (!loan) throw new NotFoundError(`Loan ${loanId} not found`);
-  return loan;
+  return withMaskedAccount(loan);
 }
 
 export async function createLoan(userId: string, input: CreateLoanInput) {

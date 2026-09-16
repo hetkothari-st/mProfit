@@ -109,6 +109,19 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'everypaisa.auth',
       storage: createJSONStorage(() => authStorage),
+      /**
+       * Persist only what is needed to resume a session.
+       *
+       * The whole store used to be persisted, which meant the
+       * full user profile — including the PAN the API then returned in
+       * plaintext — sat on disk beside the tokens. The profile is re-fetched
+       * from /me on load, so there is nothing to gain from keeping a copy.
+       */
+      partialize: (state) => ({
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        accessTokenExpiresAt: state.accessTokenExpiresAt,
+      }),
       onRehydrateStorage: () => (state) => {
         if (state) state.hydrated = true;
       },

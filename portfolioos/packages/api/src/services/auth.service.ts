@@ -27,13 +27,31 @@ interface IssueTokensResult {
   accessTokenExpiresAt: Date;
 }
 
+/**
+ * Mask a PAN for display: ABCDE1234F -> XXXXX1234F.
+ *
+ * Keeps the trailing digits+check letter, which is what users recognise their
+ * own PAN by, and drops the identifying prefix.
+ */
+export function maskPan(pan: string | null): string | null {
+  if (!pan) return null;
+  if (pan.length < 5) return 'XXXXX';
+  return `XXXXX${pan.slice(5)}`;
+}
+
 export function toAuthUser(user: User) {
   return {
     id: user.id,
     email: user.email,
     name: user.name,
     phone: user.phone,
-    pan: user.pan,
+    // The full PAN used to ride on every /me response. It then landed in the
+    // frontend's persisted auth store, i.e. in localStorage in plaintext,
+    // alongside the access and refresh tokens. A masked value covers every
+    // display use; the two places that need the real thing call the audited,
+    // rate-limited reveal endpoint.
+    panMasked: maskPan(user.pan),
+    hasPan: Boolean(user.pan),
     dob: user.dob ? user.dob.toISOString().slice(0, 10) : null,
     role: user.role,
     plan: user.plan,
@@ -466,6 +484,16 @@ export async function resetPassword(
       data: { revokedAt: new Date() },
     });
   });
+}
+
+/**
+ * The raw User row, unmasked. Only for the audited reveal path — every other
+ * caller should use getCurrentUser(), which masks.
+ */
+export async function getCurrentUserRecord(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError('User not found');
+  return user;
 }
 
 export async function getCurrentUser(userId: string) {

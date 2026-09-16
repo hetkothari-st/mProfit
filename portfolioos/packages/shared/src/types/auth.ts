@@ -5,7 +5,14 @@ export interface AuthUser {
   email: string;
   name: string;
   phone?: string | null;
-  pan?: string | null;
+  /**
+   * Masked PAN for display (XXXXX1234F). The full value is never part of the
+   * profile payload — it was, and it ended up persisted in localStorage next
+   * to the auth tokens. Fetch the real one from POST /api/auth/pan/reveal,
+   * which is authenticated, rate-limited and audited.
+   */
+  panMasked?: string | null;
+  hasPan?: boolean;
   dob?: string | null;
   role: UserRole;
   plan: PlanTier;

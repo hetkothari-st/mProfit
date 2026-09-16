@@ -12,7 +12,9 @@ import {
   addPaymentHandler,
   deletePaymentHandler,
   computeEmiHandler,
+  revealLoanAccountHandler,
 } from '../controllers/loans.controller.js';
+import { piiLimiter } from '../middleware/rateLimit.js';
 
 export const loansRouter = Router();
 loansRouter.use(authenticate);
@@ -37,3 +39,4 @@ loansRouter.get('/:id/amortization', asyncHandler(getAmortizationHandler));
 
 // Payments (scoped under loan)
 loansRouter.post('/:id/payments', asyncHandler(addPaymentHandler));
+loansRouter.post('/:id/reveal-account', piiLimiter, asyncHandler(revealLoanAccountHandler));
