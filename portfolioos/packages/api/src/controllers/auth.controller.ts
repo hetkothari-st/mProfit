@@ -12,11 +12,14 @@ import {
   resendRegistrationCode,
   resetPassword,
   startRegistration,
+  getCurrentUserRecord,
   updateProfile,
   verifyRegistration,
 } from '../services/auth.service.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
+import { writeAuditLog } from '../lib/audit.js';
+import { readPan } from '../services/piiAtRest.service.js';
 
 export const registerSchema = z.object({
   email: z.string().email().toLowerCase(),
@@ -106,8 +109,22 @@ export async function resendRegistrationHandler(req: Request, res: Response) {
 
 export async function login(req: Request, res: Response) {
   const data = loginSchema.parse(req.body);
-  const result = await loginUser(data.email, data.password);
-  ok(res, result);
+  try {
+    const result = await loginUser(data.email, data.password);
+    await writeAuditLog({
+      userId: result.user.id,
+      action: 'login',
+      resource: `User:${result.user.id}`,
+      req,
+    });
+    ok(res, result);
+  } catch (err) {
+    // A failed sign-in is the single most useful thing to have in an audit
+    // trail, so record it before rethrowing. Email only — never the password,
+    // and no indication of whether the account exists.
+    await writeAuditLog({ action: 'login_failed', metadata: { email: data.email }, req });
+    throw err;
+  }
 }
 
 export async function refresh(req: Request, res: Response) {
@@ -123,6 +140,15 @@ export async function logout(req: Request, res: Response) {
   } else if (refreshToken) {
     await logoutSession(refreshToken);
   }
+  if (req.user) {
+    await writeAuditLog({
+      userId: req.user.id,
+      action: 'logout',
+      resource: `User:${req.user.id}`,
+      metadata: { everywhere: Boolean(everywhere) },
+      req,
+    });
+  }
   noContent(res);
 }
 
@@ -131,6 +157,9 @@ export async function forgotPassword(req: Request, res: Response) {
   // The result is deliberately unused: the response is the same whether or
   // not a code went out, so it can't be used to probe for accounts.
   await requestPasswordReset(email);
+  // Audited on every request, not only when an account matched, so the audit
+  // write adds no behaviour that differs by whether the address exists.
+  await writeAuditLog({ action: 'password_reset_requested', metadata: { email }, req });
   ok(res, { message: 'If an account with that email exists, a reset code has been sent.' });
 }
 
@@ -138,6 +167,28 @@ export async function resetPasswordHandler(req: Request, res: Response) {
   const data = resetPasswordSchema.parse(req.body);
   await resetPassword(data.email, data.code, data.newPassword);
   ok(res, { message: 'Password updated successfully.' });
+}
+
+/**
+ * Return the caller's full PAN.
+ *
+ * Deliberately a separate, POST-only, rate-limited (piiLimiter) and audited
+ * endpoint rather than a field on /me: the profile payload is cached and
+ * persisted by the client, and a government identifier should not be along
+ * for that ride. Every call leaves an AuditLog row, so "when was my PAN last
+ * viewed" has an answer.
+ */
+export async function revealPan(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const user = await getCurrentUserRecord(req.user.id);
+  await writeAuditLog({
+    userId: req.user.id,
+    action: 'pii_view',
+    resource: `User:${req.user.id}`,
+    metadata: { field: 'pan' },
+    req,
+  });
+  ok(res, { pan: await readPan(user) });
 }
 
 export async function me(req: Request, res: Response) {

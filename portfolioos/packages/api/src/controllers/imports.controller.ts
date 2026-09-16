@@ -12,8 +12,11 @@ import {
 } from '../services/imports/import.service.js';
 import { ok, created } from '../lib/response.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
-import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
+import { verifyUploadedFile } from '../lib/uploadSecurity.js';
+import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
+import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
+import { panColumns } from '../services/piiAtRest.service.js';
 
 const ImportTypeEnum = z.enum([
   'CONTRACT_NOTE_PDF',
@@ -72,24 +75,47 @@ export async function upload(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   if (!req.file) throw new BadRequestError('No file uploaded — field name must be "file"');
 
+  // Real content-type check before anything else touches this file —
+  // catches disguised uploads (e.g. a renamed .exe/.txt masquerading as
+  // .pdf) that a plain extension allowlist can't. Encrypted/password-
+  // protected PDFs and XLSX still pass here (their magic bytes are
+  // unaffected by encryption); unlocking happens later in the worker.
+  const claimedExt = path.extname(req.file.originalname).toLowerCase();
+  const verification = await verifyUploadedFile(req.file.path, claimedExt);
+  if (!verification.ok) {
+    fs.unlink(req.file.path, () => {});
+    logger.warn(
+      {
+        userId: req.user.id,
+        fileName: req.file.originalname,
+        claimedExt,
+        detectedKind: verification.detectedKind,
+        detectedMime: verification.detectedMime,
+      },
+      '[imports] rejected upload — content does not match claimed extension',
+    );
+    await writeIngestionFailure({
+      userId: req.user.id,
+      sourceAdapter: 'upload.contentVerification',
+      adapterVersion: '1',
+      sourceRef: req.file.originalname,
+      error: verification.detail ?? 'Content-type mismatch',
+      rawPayload: {
+        claimedExt,
+        detectedKind: verification.detectedKind,
+        detectedMime: verification.detectedMime,
+      },
+    });
+    throw new BadRequestError(
+      verification.detail ?? 'Uploaded file content does not match its extension.',
+    );
+  }
+
   const regulatoryReason = isRegulatoryDoc(req.file.originalname);
   if (regulatoryReason) {
     // Delete the uploaded temp file immediately — nothing to process
     fs.unlink(req.file.path, () => {});
     throw new BadRequestError(regulatoryReason);
-  }
-
-  // Magic-byte sniff before creating an ImportJob — keeps the history
-  // clean of obvious junk (renamed .exe, archives, etc.). Encrypted /
-  // password-protected files pass this check; their unlock happens in
-  // the worker so the user can supply a password mid-flight.
-  const probe = await decryptIfNeeded(req.file.path, {
-    fileName: req.file.originalname,
-    allowedKinds: ['pdf', 'xlsx_ooxml', 'xlsx_encrypted', 'xls', 'csv'],
-  });
-  if (!probe.ok && !probe.requiresPassword && probe.reason === 'junk_type') {
-    fs.unlink(req.file.path, () => {});
-    throw new BadRequestError(probe.detail);
   }
 
   const body = createSchema.parse(req.body ?? {});
@@ -153,7 +179,24 @@ export async function reprocess(req: Request, res: Response) {
     })
     .parse(req.body ?? {});
 
-  const result = await processImportJob(job.id, password);
+  // Reprocess runs inline rather than through the Bull queue, because the
+  // caller needs the parse result and the post-run status in the response
+  // (the password-persistence rules below depend on it). That means it does
+  // not inherit the queue's 5-minute timeout, so an adversarial or simply
+  // huge PDF could occupy a request worker indefinitely. Bound it explicitly.
+  //
+  // Paired with importLimiter on this route, which caps how often one user
+  // can start such a run.
+  const REPROCESS_TIMEOUT_MS = 5 * 60_000;
+  const result = await Promise.race([
+    processImportJob(job.id, password),
+    new Promise<never>((_resolve, reject) =>
+      setTimeout(
+        () => reject(new BadRequestError('Reprocessing timed out — try a smaller file')),
+        REPROCESS_TIMEOUT_MS,
+      ).unref(),
+    ),
+  ]);
 
   // Persist only when the password actually unlocked the file. The job's
   // post-process status tells us: NEEDS_PASSWORD = still locked → don't
@@ -171,12 +214,13 @@ export async function reprocess(req: Request, res: Response) {
       if (isPan) {
         const existing = await prisma.user.findUnique({
           where: { id: req.user.id },
-          select: { pan: true },
+          select: { pan: true, panEnc: true },
         });
-        if (!existing?.pan) {
+        if (!existing?.pan && !existing?.panEnc) {
           await prisma.user.update({
             where: { id: req.user.id },
-            data: { pan: trimmed },
+            // Encrypted columns — never plaintext.
+            data: await panColumns(trimmed),
           });
         }
       } else if (save) {

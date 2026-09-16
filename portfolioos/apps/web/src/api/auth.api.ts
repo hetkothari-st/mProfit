@@ -75,6 +75,18 @@ export const authApi = {
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
+  /**
+   * Fetch the caller's full PAN. Separate from the profile on purpose: the
+   * profile is cached and the full value should not be. Rate-limited and
+   * audited server-side.
+   */
+  async revealPan(): Promise<string | null> {
+    const { data } = await api.post<ApiResponse<{ pan: string | null }>>(
+      '/api/auth/pan/reveal',
+    );
+    if (!data.success) throw new Error(data.error);
+    return data.data.pan;
+  },
   async me(): Promise<AuthUser> {
     const { data } = await api.get<ApiResponse<AuthUser>>('/api/auth/me');
     if (!data.success) throw new Error(data.error);

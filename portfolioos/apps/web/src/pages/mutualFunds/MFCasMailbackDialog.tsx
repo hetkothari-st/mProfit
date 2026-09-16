@@ -91,7 +91,16 @@ export function MFCasMailbackDialog({
     enabled: open,
   });
 
-  const profilePan = (meQuery.data?.pan ?? '').trim().toUpperCase();
+  // The profile no longer carries the full PAN. CAS mailback genuinely needs
+  // it, so fetch it from the audited reveal endpoint while the dialog is open.
+  const panQuery = useQuery({
+    queryKey: ['auth-pan-reveal'],
+    queryFn: () => authApi.revealPan(),
+    enabled: open && Boolean(meQuery.data?.hasPan),
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const profilePan = (panQuery.data ?? '').trim().toUpperCase();
   const hasPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(profilePan);
 
   // Pre-fill PAN field with profile value when known
@@ -104,8 +113,9 @@ export function MFCasMailbackDialog({
     onSuccess: (u) => {
       toast.success('PAN saved to profile');
       queryClient.invalidateQueries({ queryKey: ['auth-me'] });
-      const p = (u.pan ?? '').trim().toUpperCase();
-      setPan(p);
+      // updateProfile echoes the masked profile back; we already know what
+      // was typed, so use that rather than re-reading a masked field.
+      setPan(newPan.trim().toUpperCase());
       setNewPan('');
       setStep({ phase: 'idle' });
     },

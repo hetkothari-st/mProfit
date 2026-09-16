@@ -21,6 +21,7 @@ import {
   zipDocuments,
 } from '../services/document.service.js';
 import { readStream } from '../lib/documentStorage.js';
+import { downloadHeaders, storedMimeFor } from '../lib/documentMime.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
@@ -80,7 +81,11 @@ export async function upload(req: Request, res: Response) {
     ownerId: body.ownerId,
     category: body.category ?? null,
     fileName: req.file.originalname,
-    mimeType: req.file.mimetype,
+    // Derived from the bytes we just probed, never from req.file.mimetype.
+    // The client-supplied value was being stored verbatim and echoed back as
+    // the download Content-Type, which let an uploader pick `text/html` and
+    // get script execution on the SPA origin. See lib/documentMime.ts.
+    mimeType: storedMimeFor(probe.kind, probe.mime),
     buffer: req.file.buffer,
   });
   created(res, doc);
@@ -122,12 +127,10 @@ export async function remove(req: Request, res: Response) {
 
 export async function download(req: Request, res: Response) {
   const doc = await getDocumentForDownload(userId(req), req.params.id!);
-  res.setHeader('Content-Type', doc.mimeType);
+  for (const [k, v] of Object.entries(downloadHeaders(doc.mimeType, doc.fileName))) {
+    res.setHeader(k, v);
+  }
   res.setHeader('Content-Length', String(doc.sizeBytes));
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename="${encodeURIComponent(doc.fileName)}"`,
-  );
   readStream(doc.userId, doc.storageKey).pipe(res);
 }
 

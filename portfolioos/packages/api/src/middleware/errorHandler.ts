@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { AppError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { error as errorResponse } from '../lib/response.js';
+import { env } from '../config/env.js';
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (res.headersSent) return;
@@ -41,10 +42,20 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   }
 
   logger.error({ err }, 'Unhandled error');
+  // Every branch above maps a known error type to a deliberate message. This
+  // one catches everything else, so its message is whatever an unmapped
+  // `throw` happened to say — internal paths, query fragments, third-party
+  // API errors. That is fine to read in a dev console and not fine to hand to
+  // a client, so production gets a fixed string while the detail stays in the
+  // log line above.
   errorResponse(
     res,
     500,
-    err instanceof Error ? err.message : 'Internal server error',
+    env.NODE_ENV === 'production'
+      ? 'Internal server error'
+      : err instanceof Error
+        ? err.message
+        : 'Internal server error',
     'INTERNAL_ERROR',
   );
 };

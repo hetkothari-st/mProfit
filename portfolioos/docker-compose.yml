@@ -63,7 +63,14 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/portfolioos
+      # Runtime connects as portfolioos_app (NOSUPERUSER NOBYPASSRLS), created
+      # by migration 20260421150000_phase_4_5_rls_app_role. This used to be
+      # the `postgres` superuser, which skips every Row-Level Security policy:
+      # RLS was a no-op in this stack and tenant isolation rested entirely on
+      # each query remembering its userId filter. Migrations still need a
+      # superuser, so DIRECT_URL keeps `postgres`.
+      DATABASE_URL: postgresql://portfolioos_app:portfolioos_app_dev@postgres:5432/portfolioos
+      DIRECT_URL: postgresql://postgres:postgres@postgres:5432/portfolioos
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-dev-secret-change-me}
       NODE_ENV: ${NODE_ENV:-development}

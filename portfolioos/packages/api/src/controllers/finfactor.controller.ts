@@ -253,7 +253,21 @@ type WebhookKind = 'consent' | 'data' | 'historical' | 'cohort' | 'subscription'
 function makeWebhookHandler(kind: WebhookKind) {
   return async function (req: Request, res: Response) {
     const signature = pickSignatureHeader(req.headers as Record<string, string | string[] | undefined>);
-    const rawBody = JSON.stringify(req.body ?? {});
+    // Verify against the bytes Finvu actually signed, captured by the
+    // express.json `verify` hook in index.ts. Re-serialising the parsed body
+    // with JSON.stringify is not byte-identical to what was sent — key order,
+    // number formatting and whitespace all differ — so a correctly signed
+    // webhook could fail verification, which is the kind of breakage that
+    // ends with someone "temporarily" unsetting the secret.
+    const captured = (req as Request & { rawBody?: Buffer }).rawBody;
+    if (!captured) {
+      // No raw bytes means we cannot verify what was signed. Refuse rather
+      // than fall back to a re-serialisation that may not match.
+      res.status(401);
+      ok(res, { ok: false, reason: 'raw_body_unavailable' });
+      return;
+    }
+    const rawBody = captured.toString('utf8');
     if (!verifyWebhookSignature(rawBody, signature)) {
       res.status(401);
       ok(res, { ok: false, reason: 'invalid_signature' });

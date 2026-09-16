@@ -23,14 +23,20 @@ export const connectorsApi = {
     const { data } = await api.get<ApiResponse<BrokerAccountDTO[]>>('/api/connectors');
     return unwrap(data);
   },
-  async kiteLoginUrl(): Promise<{ url: string }> {
-    const { data } = await api.get<ApiResponse<{ url: string }>>('/api/connectors/kite/login-url');
+  async kiteLoginUrl(): Promise<{ url: string; state: string }> {
+    const { data } = await api.get<ApiResponse<{ url: string; state: string }>>(
+      '/api/connectors/kite/login-url',
+    );
     return unwrap(data);
   },
-  async kiteCallback(requestToken: string, portfolioId?: string | null): Promise<{ accountId: string; userName: string }> {
+  async kiteCallback(
+    requestToken: string,
+    state: string,
+    portfolioId?: string | null,
+  ): Promise<{ accountId: string; userName: string }> {
     const { data } = await api.post<ApiResponse<{ accountId: string; userName: string }>>(
       '/api/connectors/kite/callback',
-      { requestToken, portfolioId: portfolioId ?? null },
+      { requestToken, state, portfolioId: portfolioId ?? null },
     );
     return unwrap(data);
   },

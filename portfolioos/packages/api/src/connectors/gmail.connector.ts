@@ -9,6 +9,7 @@ import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { encryptSecret, decryptSecret } from '../lib/secrets.js';
 import { createImportJob } from '../services/imports/import.service.js';
+import { issueOAuthState } from '../lib/oauthState.js';
 
 // readonly for inbox ingestion + send for outbound rent reminders.
 // Existing users who connected before send scope landed will need to
@@ -124,8 +125,14 @@ function makeOAuthClient(): OAuth2Client {
   );
 }
 
-export function buildGmailAuthUrl(userId: string): string {
+export async function buildGmailAuthUrl(userId: string): Promise<string> {
   const client = makeOAuthClient();
+  // `state` used to be the plain userId. It was never read back on the
+  // callback, so it proved nothing: an attacker could complete Google consent
+  // with their own account and have a logged-in victim submit the resulting
+  // code, binding the attacker's mailbox to the victim's account. Issue an
+  // unguessable single-use value and verify it in the callback.
+  const state = await issueOAuthState(userId, 'gmail');
   return client.generateAuthUrl({
     access_type: 'offline',
     // 'select_account' forces Google to show the account picker so users with
@@ -133,7 +140,7 @@ export function buildGmailAuthUrl(userId: string): string {
     // 'consent' forces a fresh refresh_token on every connect.
     prompt: 'select_account consent',
     scope: SCOPES,
-    state: userId,
+    state,
     include_granted_scopes: true,
   });
 }

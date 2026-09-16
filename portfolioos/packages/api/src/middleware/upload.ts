@@ -10,11 +10,31 @@ async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
 }
 
+/**
+ * Per-user import storage path — `${UPLOAD_ROOT}/imports/${userId}/${year}-${month}`.
+ * userId comes from a Prisma cuid (alphanumeric) but validated defensively
+ * anyway since it ends up in a filesystem path.
+ */
+export function buildImportUploadDir(userId: string): string {
+  if (!/^[a-zA-Z0-9_-]+$/.test(userId)) {
+    throw new Error('Invalid userId for upload path');
+  }
+  const year = new Date().getUTCFullYear();
+  const month = String(new Date().getUTCMonth() + 1).padStart(2, '0');
+  return join(UPLOAD_ROOT, 'imports', userId, `${year}-${month}`);
+}
+
 const storage = multer.diskStorage({
-  destination: async (_req, _file, cb) => {
-    const year = new Date().getUTCFullYear();
-    const month = String(new Date().getUTCMonth() + 1).padStart(2, '0');
-    const target = join(UPLOAD_ROOT, 'imports', `${year}-${month}`);
+  destination: async (req, _file, cb) => {
+    // authenticate runs before this middleware in imports.routes.ts, so
+    // req.user is already set — but fail loudly rather than falling back
+    // to a shared/unscoped path if it's ever missing.
+    const userId = req.user?.id;
+    if (!userId) {
+      cb(new Error('Cannot store upload: authenticated user missing from request'), '');
+      return;
+    }
+    const target = buildImportUploadDir(userId);
     try {
       await ensureDir(target);
       cb(null, target);

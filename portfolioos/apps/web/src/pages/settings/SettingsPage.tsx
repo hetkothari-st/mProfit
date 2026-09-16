@@ -41,7 +41,9 @@ export function SettingsPage() {
     defaultValues: {
       name: user?.name ?? '',
       phone: user?.phone ?? '',
-      pan: user?.pan ?? '',
+      // Blank rather than the masked value: submitting a masked string would
+      // overwrite the real PAN with Xs. The user reveals or retypes it.
+      pan: '',
       dob: user?.dob ?? '',
     },
   });

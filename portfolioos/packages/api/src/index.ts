@@ -18,6 +18,8 @@ import { startVehicleJobs } from './jobs/vehicleJobs.js';
 import { startCatalogJobs } from './jobs/catalogJobs.js';
 import { startRentalJobs } from './jobs/rentalJobs.js';
 import { startInsuranceJobs } from './jobs/insuranceJobs.js';
+import { startPiiAtRestJobs } from './jobs/piiAtRestJobs.js';
+import { startSecretRotationJobs } from './jobs/secretRotationJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
@@ -31,13 +33,40 @@ initSentry();
 const app = express();
 
 app.disable('x-powered-by');
-app.use(helmet({ contentSecurityPolicy: false }));
+
+// Railway terminates TLS and proxies every request, so the socket's remote
+// address is the edge, not the client. Without this, `req.ip` — which
+// express-rate-limit keys on — is identical for all traffic: one shared
+// bucket, so a single abuser exhausts everyone's login attempts and no
+// attacker is ever isolated. `1` = trust exactly one proxy hop; do not use
+// `true`, which trusts a client-supplied X-Forwarded-For outright and makes
+// the limiter trivially spoofable.
+app.set('trust proxy', 1);
+
+app.use(
+  helmet({
+    // This process serves JSON only (the SPA is a separate nginx origin), so
+    // a CSP here protects nothing the SPA's own CSP does not. Left off
+    // deliberately rather than by omission.
+    contentSecurityPolicy: false,
+    // Six months, and let the edge decide about preload.
+    hsts: { maxAge: 15_552_000, includeSubDomains: true, preload: false },
+  }),
+);
 const corsAllowList = env.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
 function isOriginAllowed(origin: string): boolean {
   if (corsAllowList.includes(origin)) return true;
   // Allow any *.railway.app subdomain (Railway-generated web service URLs).
   // Use a non-greedy host portion that explicitly anchors on `.railway.app`.
   if (/^https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.railway\.app$/i.test(origin)) {
+    return true;
+  }
+  // The EPFO/SBI browser extension calls this API from its service worker
+  // with a chrome-extension:// origin and no host permission for the API, so
+  // it relies on CORS. Every endpoint authenticates with a Bearer header —
+  // there is no cookie session for a hostile extension to ride — so allowing
+  // the scheme adds no access; refusing it only breaks extension sync.
+  if (/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
     return true;
   }
   return false;
@@ -47,16 +76,32 @@ app.use(
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (isOriginAllowed(origin)) return callback(null, true);
-      // Reflect the origin so error responses still carry CORS headers (browsers
-      // mask the real status otherwise). Logged for review; rejected upstream
-      // by application auth/authorization.
-      logger.warn({ origin }, 'cors.origin.unrecognized');
-      return callback(null, true);
+      // Reject. Every branch here used to call `callback(null, true)`, which
+      // made the allow-list above dead code and reflected any origin back
+      // alongside `credentials: true`. Auth is Bearer-header only today so
+      // that was not a live session-theft path, but it left nothing standing
+      // between an arbitrary site and this API the moment any cookie-based
+      // flow is added.
+      logger.warn({ origin }, 'cors.origin.rejected');
+      return callback(null, false);
     },
     credentials: true,
   }),
 );
-app.use(express.json({ limit: '10mb' }));
+app.use(
+  express.json({
+    limit: '10mb',
+    // Keep the exact bytes for routes that authenticate by signing the body.
+    // Scoped by path so we are not holding a second copy of every 10MB
+    // request in memory just for the handful that need it.
+    verify: (req, _res, buf) => {
+      const url = (req as IncomingMessage).url ?? '';
+      if (url.includes('/integrations/finfactor/webhook/')) {
+        (req as IncomingMessage & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      }
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(
   pinoHttp({
@@ -99,6 +144,8 @@ const server = app.listen(env.PORT, '::', () => {
   startCatalogJobs();
   startRentalJobs();
   startInsuranceJobs();
+  startPiiAtRestJobs();
+  startSecretRotationJobs();
   startAlertJobs();
   startNetWorthSnapshotJob();
   startFoExpiryJob();

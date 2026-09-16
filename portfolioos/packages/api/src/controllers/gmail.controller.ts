@@ -11,6 +11,7 @@ import {
   isGmailConfigured,
 } from '../connectors/gmail.connector.js';
 import { discoverFinancialSenders } from '../ingestion/gmail/discovery.js';
+import { consumeOAuthState } from '../lib/oauthState.js';
 
 export async function getGmailConfig(_req: Request, res: Response) {
   ok(res, { configured: isGmailConfigured() });
@@ -18,15 +19,31 @@ export async function getGmailConfig(_req: Request, res: Response) {
 
 export async function getGmailAuthUrl(req: Request, res: Response) {
   const userId = req.user!.id;
-  const url = buildGmailAuthUrl(userId);
+  const url = await buildGmailAuthUrl(userId);
   ok(res, { url });
 }
 
-const CallbackSchema = z.object({ code: z.string().min(1) });
+const CallbackSchema = z.object({
+  code: z.string().min(1),
+  // Required. The auth URL has always carried a `state`, but the callback
+  // never read it, which made it decorative.
+  state: z.string().min(1, 'Missing OAuth state'),
+});
 
 export async function postGmailCallback(req: Request, res: Response) {
   const userId = req.user!.id;
-  const { code } = CallbackSchema.parse(req.body);
+  const { code, state } = CallbackSchema.parse(req.body);
+
+  // Verify this callback belongs to a flow THIS user started. Without it, an
+  // attacker who completes Google consent with their own account can hand the
+  // resulting code to a logged-in victim; the victim's session exchanges it
+  // and the attacker's mailbox becomes the victim's connected mailbox, after
+  // which the poller feeds attacker-authored statements into their books.
+  const stateUserId = await consumeOAuthState(state, 'gmail');
+  if (!stateUserId || stateUserId !== userId) {
+    throw new BadRequestError('Invalid or expired OAuth state — start the connect flow again');
+  }
+
   const r = await exchangeGmailCode(userId, code);
   ok(res, r);
 }

@@ -19,20 +19,24 @@ export function GmailCallbackPage() {
 
     const err = params.get('error');
     const code = params.get('code');
+    // Google echoes back the `state` we sent. The server checks it is one it
+    // issued to THIS user, so a code obtained by someone else cannot be
+    // replayed through the victim's session.
+    const state = params.get('state');
     if (err) {
       toast.error(`Google rejected: ${err}`);
       nav('/mailboxes', { replace: true });
       return;
     }
-    if (!code) {
-      toast.error('No authorization code from Google');
+    if (!code || !state) {
+      toast.error('Incomplete response from Google — please try connecting again');
       nav('/mailboxes', { replace: true });
       return;
     }
     (async () => {
       let success = false;
       try {
-        const r = await gmailApi.callback(code);
+        const r = await gmailApi.callback(code, state);
         toast.success(`Connected ${r.email}`);
         setMsg(`Connected ${r.email}…`);
         await qc.invalidateQueries({ queryKey: ['mailboxes'] });

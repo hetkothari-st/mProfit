@@ -31,6 +31,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors
 import { hashPassword } from '../password.service.js';
 import { recordCaAudit } from './caAudit.service.js';
 import type { Request } from 'express';
+import { panColumns } from '../piiAtRest.service.js';
 
 /** Invitations expire; an indefinitely open grant link is a standing risk. */
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -168,6 +169,7 @@ export async function createManagedClient(
     // policy at all. If one is ever added, this insert breaks — which is the
     // right failure, because it would then need the same hoisting treatment
     // rather than a decoration that never did anything.
+    const shadowPanColumns = await panColumns(input.pan ?? null);
     const shadow = await tx.user.create({
       data: {
         email: shadowEmail,
@@ -176,7 +178,9 @@ export async function createManagedClient(
         isShadowClient: true,
         role: 'INVESTOR',
         plan: 'FREE',
-        pan: input.pan ?? null,
+        // Encrypted columns, never plaintext — the same as every other
+        // User.pan writer. This path was the one that still wrote it raw.
+        ...shadowPanColumns,
         phone: input.phone ?? null,
       },
     });
@@ -186,7 +190,13 @@ export async function createManagedClient(
         advisorId: callerId,
         name,
         email: input.email ?? null,
+        // Dual-write: the CA client list still renders Client.pan, so the
+        // plaintext stays until that view reads the encrypted copy. See
+        // services/piiAtRest.service.ts.
         pan: input.pan ?? null,
+        panEnc: shadowPanColumns.panEnc,
+        panHash: shadowPanColumns.panHash,
+        panLast4: shadowPanColumns.panLast4,
         phone: input.phone ?? null,
         category: input.category ?? null,
         userId: shadow.id,

@@ -20,11 +20,24 @@ import {
   refreshTokenExpiry,
   signAccessToken,
 } from './jwt.service.js';
+import { panColumns } from './piiAtRest.service.js';
 
 interface IssueTokensResult {
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: Date;
+}
+
+/**
+ * Mask a PAN for display: ABCDE1234F -> XXXXX1234F.
+ *
+ * Keeps the trailing digits+check letter, which is what users recognise their
+ * own PAN by, and drops the identifying prefix.
+ */
+export function maskPan(pan: string | null): string | null {
+  if (!pan) return null;
+  if (pan.length < 5) return 'XXXXX';
+  return `XXXXX${pan.slice(5)}`;
 }
 
 export function toAuthUser(user: User) {
@@ -33,7 +46,15 @@ export function toAuthUser(user: User) {
     email: user.email,
     name: user.name,
     phone: user.phone,
-    pan: user.pan,
+    // The full PAN used to ride on every /me response. It then landed in the
+    // frontend's persisted auth store, i.e. in localStorage in plaintext,
+    // alongside the access and refresh tokens. A masked value covers every
+    // display use; the two places that need the real thing call the audited,
+    // rate-limited reveal endpoint.
+    // Mask from panLast4 when the row is encrypted (plaintext may be null),
+    // falling back to the plaintext for rows the backfill has not reached.
+    panMasked: user.panLast4 ? `XXXXX${user.panLast4}` : maskPan(user.pan),
+    hasPan: Boolean(user.panEnc || user.pan),
     dob: user.dob ? user.dob.toISOString().slice(0, 10) : null,
     role: user.role,
     plan: user.plan,
@@ -41,6 +62,20 @@ export function toAuthUser(user: User) {
     isActive: user.isActive,
     createdAt: user.createdAt.toISOString(),
   };
+}
+
+
+/**
+ * Digest a bearer token for storage and lookup.
+ *
+ * Refresh and password-reset tokens used to be stored in plaintext, so a
+ * database dump yielded usable sessions and resets for every user. Only the
+ * digest is stored now; the raw value exists only in the client and in the
+ * reset email. Plain SHA-256 is right for 32 random bytes — there is no
+ * guessable input space for a keyed hash to protect.
+ */
+function digestToken(token: string): string {
+  return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
 }
 
 async function issueTokens(user: User): Promise<IssueTokensResult> {
@@ -53,7 +88,7 @@ async function issueTokens(user: User): Promise<IssueTokensResult> {
   const refreshToken = generateRefreshToken();
   await prisma.refreshToken.create({
     data: {
-      token: refreshToken,
+      tokenHash: digestToken(refreshToken),
       userId: user.id,
       expiresAt: refreshTokenExpiry(),
     },
@@ -306,9 +341,28 @@ function assertNotShadowClient(user: { isShadowClient: boolean }): void {
   }
 }
 
+/**
+ * A real bcrypt hash, compared against when the account does not exist.
+ * Without it an unknown email skipped bcrypt.compare entirely and returned
+ * measurably faster than a wrong password — an account-existence oracle on
+ * the login endpoint.
+ *
+ * Generated at runtime with the same cost factor as real passwords, not
+ * hardcoded: a malformed hash makes bcrypt.compare return immediately, which
+ * would quietly reintroduce exactly the timing gap this exists to close.
+ */
+let dummyPasswordHash: Promise<string> | null = null;
+function getDummyPasswordHash(): Promise<string> {
+  dummyPasswordHash ??= hashPassword(crypto.randomBytes(32).toString('hex'));
+  return dummyPasswordHash;
+}
+
 export async function loginUser(email: string, password: string) {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.isActive) throw new UnauthorizedError('Invalid credentials');
+  if (!user || !user.isActive) {
+    await verifyPassword(password, await getDummyPasswordHash());
+    throw new UnauthorizedError('Invalid credentials');
+  }
   assertNotShadowClient(user);
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) throw new UnauthorizedError('Invalid credentials');
@@ -318,11 +372,21 @@ export async function loginUser(email: string, password: string) {
 
 export async function refreshSession(refreshToken: string) {
   const stored = await prisma.refreshToken.findUnique({
-    where: { token: refreshToken },
+    where: { tokenHash: digestToken(refreshToken) },
     include: { user: true },
   });
-  if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+  if (!stored || stored.expiresAt < new Date()) {
     throw new UnauthorizedError('Invalid or expired refresh token');
+  }
+  if (stored.revokedAt) {
+    // Reuse of a rotated-out token. Refresh tokens are single-use, so a
+    // revoked one arriving again means two parties hold the same chain —
+    // the legitimate client and whoever copied it. Previously this just
+    // errored, and whichever party refreshed first kept a silently rotating
+    // session indefinitely. Revoke every session for the user and make both
+    // sign in again.
+    await logoutAllSessions(stored.userId);
+    throw new UnauthorizedError('Session invalidated — please sign in again');
   }
   if (!stored.user.isActive) throw new UnauthorizedError('Account deactivated');
   assertNotShadowClient(stored.user);
@@ -337,7 +401,7 @@ export async function refreshSession(refreshToken: string) {
 
 export async function logoutSession(refreshToken: string): Promise<void> {
   await prisma.refreshToken.updateMany({
-    where: { token: refreshToken, revokedAt: null },
+    where: { tokenHash: digestToken(refreshToken), revokedAt: null },
     data: { revokedAt: new Date() },
   });
 }
@@ -468,6 +532,16 @@ export async function resetPassword(
   });
 }
 
+/**
+ * The raw User row, unmasked. Only for the audited reveal path — every other
+ * caller should use getCurrentUser(), which masks.
+ */
+export async function getCurrentUserRecord(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError('User not found');
+  return user;
+}
+
 export async function getCurrentUser(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new NotFoundError('User not found');
@@ -543,7 +617,8 @@ export async function updateProfile(
   const data: Record<string, unknown> = {};
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.phone !== undefined) data.phone = patch.phone;
-  if (patch.pan !== undefined) data.pan = patch.pan || null;
+  // Encrypted columns, not plaintext — see services/piiAtRest.service.ts.
+  if (patch.pan !== undefined) Object.assign(data, await panColumns(patch.pan || null));
   if (patch.dob !== undefined) data.dob = patch.dob ? new Date(patch.dob) : null;
   const user = await prisma.user.update({
     where: { id: userId },

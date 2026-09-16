@@ -3,6 +3,30 @@ import { playwrightSessionManager } from '../../lib/playwrightSessions.js';
 import { logger } from '../../lib/logger.js';
 import type { VehicleRecord } from './types.js';
 import { fetchCarInfoRC, findVehicleObject, mapToVehicleRecord, decryptXdataprops, parseWebSections } from './carinfo.js';
+import path from 'node:path';
+import os from 'node:os';
+
+/**
+ * Scraper debug artefacts (page HTML, API captures, error screenshots) contain
+ * real scraped owner PII — names, addresses and mobile numbers.
+ *
+ * They used to be written unconditionally to the API package's working
+ * directory as extraction_*.html / api_capture_*.json, with no TTL and no
+ * cleanup. Thirteen such files were sitting in packages/api at the time this
+ * was found. They are gitignored, but they are inside the Docker build
+ * context and any backup of the working tree.
+ *
+ * Now they are off unless explicitly enabled, and go to a dedicated directory
+ * rather than the package root.
+ */
+const DEBUG_DUMPS_ENABLED = process.env.CARINFO_DEBUG_DUMPS === 'true';
+
+function debugDumpPath(name: string): string {
+  const dir = process.env.CARINFO_DEBUG_DIR ?? path.join(os.tmpdir(), 'carinfo-debug');
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, name);
+}
+
 
 const BASE_URL = 'https://www.carinfo.app/rc-details/';
 
@@ -83,9 +107,13 @@ const VEHICLE_CAPTURE_SCRIPT = `
 })();
 `;
 
-export async function initiateCarInfoScrape(regNo: string, mobileNo: string): Promise<string> {
+export async function initiateCarInfoScrape(
+  regNo: string,
+  mobileNo: string,
+  userId: string,
+): Promise<string> {
   const cleanRegNo = regNo.replace(/\s+/g, '').toUpperCase();
-  const session = await playwrightSessionManager.createSession(cleanRegNo);
+  const session = await playwrightSessionManager.createSession(cleanRegNo, userId);
   const { page } = session;
 
   // Inject vehicle capture script on every page load (including the post-OTP reload)
@@ -188,8 +216,15 @@ async function hasCapturedData(page: any): Promise<boolean> {
     .catch(() => false);
 }
 
-export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<any> {
-  const session = playwrightSessionManager.getSession(sessionId);
+export async function verifyCarInfoOtp(
+  sessionId: string,
+  otp: string,
+  userId: string,
+): Promise<any> {
+  // Ownership is enforced inside getSession: a session started by another
+  // user does not resolve here, so its OTP cannot be completed into a
+  // vehicle row on this caller's account.
+  const session = playwrightSessionManager.getSession(sessionId, userId);
   if (!session) {
     throw new Error('Session expired or not found');
   }
@@ -397,13 +432,13 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
       );
     }
 
-    // Save debug files
-    try {
+    // Save debug files (opt-in only — these contain scraped owner PII)
+    if (DEBUG_DUMPS_ENABLED) try {
       const timestamp = Date.now();
       const html = await page.content();
-      fs.writeFileSync(`extraction_${timestamp}.html`, html);
+      fs.writeFileSync(debugDumpPath(`extraction_${timestamp}.html`), html);
       const bodyTextDebug = await page.evaluate('document.body ? document.body.innerText : ""').catch(() => '');
-      fs.writeFileSync(`extraction_${timestamp}.txt`, String(bodyTextDebug));
+      fs.writeFileSync(debugDumpPath(`extraction_${timestamp}.txt`), String(bodyTextDebug));
       logger.info({ regNo, ts: timestamp }, '[carinfo-pw] saved extraction debug files');
     } catch (err) {
       // Debug artefacts only. Losing them must not fail an extraction that
@@ -615,10 +650,10 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
     const apiResponses = (session as any).apiResponses || [];
     const apiRequests  = (session as any).apiRequests  || [];
 
-    try {
+    if (DEBUG_DUMPS_ENABLED) try {
       const ts = Date.now();
       const allCapture = { requests: apiRequests, responses: apiResponses };
-      fs.writeFileSync(`api_capture_${ts}.json`, JSON.stringify(allCapture, null, 2));
+      fs.writeFileSync(debugDumpPath(`api_capture_${ts}.json`), JSON.stringify(allCapture, null, 2));
       logger.info({ regNo, file: `api_capture_${ts}.json`, reqCount: apiRequests.length, respCount: apiResponses.length }, '[carinfo-pw] saved API capture');
     } catch (err) {
       logger.debug({ err, regNo }, '[carinfo-pw] could not save API capture');
@@ -796,11 +831,11 @@ export async function verifyCarInfoOtp(sessionId: string, otp: string): Promise<
       source: 'carinfo-playwright',
     };
   } catch (error) {
-    try {
+    if (DEBUG_DUMPS_ENABLED) try {
       const timestamp = Date.now();
-      await page.screenshot({ path: `error_${timestamp}.png` });
+      await page.screenshot({ path: debugDumpPath(`error_${timestamp}.png`) });
       const html = await page.content();
-      fs.writeFileSync(`error_${timestamp}.html`, html);
+      fs.writeFileSync(debugDumpPath(`error_${timestamp}.html`), html);
     } catch (err) {
       // Best-effort forensics for the failure being handled below. The
       // original error is what gets rethrown; this one is only noted so a

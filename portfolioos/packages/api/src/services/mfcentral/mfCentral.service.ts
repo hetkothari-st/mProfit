@@ -13,6 +13,7 @@ import {
   MFCentralError,
 } from '../../adapters/mfcentral/mfCentralPlaywright.js';
 import type { ParsedTransaction } from '../imports/parsers/types.js';
+import { readPan } from '../piiAtRest.service.js';
 
 const SOURCE_ADAPTER = 'mfcentral.cas.v1';
 const SOURCE_ADAPTER_VER = '1.0.0';
@@ -171,9 +172,9 @@ export async function submitOtpAndSync(input: SubmitOtpInput): Promise<SubmitOtp
     // getUserPdfPasswords returns all candidates ordered most→least likely.
     const user = await prisma.user.findUnique({
       where: { id: input.userId },
-      select: { pan: true, dob: true },
+      select: { pan: true, panEnc: true, dob: true },
     });
-    const userPan = user?.pan?.trim().toUpperCase() ?? '';
+    const userPan = (await readPan(user)) ?? '';
     if (!userPan) {
       throw new BadRequestError(
         'No PAN saved on user profile — cannot decrypt CAS PDF. Save your PAN in Settings.',
