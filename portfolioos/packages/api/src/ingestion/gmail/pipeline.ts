@@ -484,7 +484,7 @@ async function handleLlmFailure(
  * system prompt) well clear of the auto-commit path while not sending
  * routine, well-formed alerts to review.
  */
-const AUTO_COMMIT_MIN_CONFIDENCE = 0.7;
+const AUTO_COMMIT_MIN_CONFIDENCE = new Prisma.Decimal('0.70');
 
 async function maybeAutoProject(
   outcome: ProcessEmailOutcome,
@@ -507,10 +507,12 @@ async function maybeAutoProject(
         where: { id },
         select: { confidence: true },
       });
-      const confidence = event?.confidence ? Number(event.confidence) : 0;
-      if (confidence < AUTO_COMMIT_MIN_CONFIDENCE) {
+      // Compared as a Decimal: confidence is a Decimal(3,2) column, and the
+      // project bans Number() coercion of Decimal values (§3.2).
+      const confidence = event?.confidence ?? new Prisma.Decimal(0);
+      if (confidence.lessThan(AUTO_COMMIT_MIN_CONFIDENCE)) {
         logger.info(
-          { userId: input.userId, eventId: id, confidence },
+          { userId: input.userId, eventId: id, confidence: confidence.toString() },
           'gmail.pipeline.auto_commit_withheld_low_confidence',
         );
         continue; // stays PENDING_REVIEW

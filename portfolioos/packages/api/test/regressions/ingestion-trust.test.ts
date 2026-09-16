@@ -61,7 +61,9 @@ describe('SEC-18: auto-commit honours extraction confidence', () => {
   it('checks it before confirming an event', () => {
     const idx = pipeline.indexOf('AUTO_COMMIT_MIN_CONFIDENCE');
     expect(idx).toBeGreaterThan(-1);
-    expect(pipeline).toContain('confidence < AUTO_COMMIT_MIN_CONFIDENCE');
+    // Compared as a Decimal — Number() coercion is banned by §3.2.
+    expect(pipeline).toContain('confidence.lessThan(AUTO_COMMIT_MIN_CONFIDENCE)');
+    expect(pipeline).not.toMatch(/Number\(event\??\.confidence\)/);
     // Below threshold must leave the event for a human, not drop it.
     expect(pipeline).toContain('auto_commit_withheld_low_confidence');
   });
