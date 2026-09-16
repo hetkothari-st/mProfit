@@ -132,6 +132,8 @@ export interface TallySources {
     tenant: string;
     kind: 'PAYMENT' | 'DEPOSIT' | 'DEPOSIT_REFUND';
     amount: string;
+    /** "YYYY-MM" the money was for, when the khata pinned it to a month. */
+    forMonth?: string | null;
   }>;
   propertyExpenses: Array<{ id: string; date: string; property: string; description: string; amount: string }>;
   premiums: Array<{ id: string; date: string; policy: string; amount: string }>;
@@ -556,7 +558,10 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
     const who = `${r.property} / ${r.tenant}`;
     if (r.kind === 'PAYMENT') {
       const rent = defineLedger(`rent:${r.property}`, `Rent - ${r.property}`, 'Indirect Incomes');
-      add(r.date, 'Journal', `Rent received - ${who}`, [[fixed('unallocated'), amount], [rent, amount.negated()]]);
+      // Arrears are often cleared in one go: ten months, one day, one amount.
+      // Without the month in the narration those are ten identical vouchers.
+      const forMonth = r.forMonth ? ` for ${r.forMonth}` : '';
+      add(r.date, 'Journal', `Rent received - ${who}${forMonth}`, [[fixed('unallocated'), amount], [rent, amount.negated()]]);
     } else {
       const deposit = defineLedger(
         `deposit:${r.property}:${r.tenant}`,

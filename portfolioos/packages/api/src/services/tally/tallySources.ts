@@ -152,6 +152,7 @@ export interface RentLedgerRow {
   entryType: string;
   amount: Num;
   entryDate: Date;
+  forMonth: string | null;
   property: string;
   tenant: string;
 }
@@ -161,6 +162,7 @@ export interface RentReceiptRow {
   tenancyId: string;
   receivedAmount: Num | null;
   receivedOn: Date | null;
+  forMonth: string | null;
   property: string;
   tenant: string;
 }
@@ -185,13 +187,22 @@ export function rentFromLedger(ledger: RentLedgerRow[], receipts: RentReceiptRow
       tenant: e.tenant,
       kind: e.entryType as 'PAYMENT' | 'DEPOSIT' | 'DEPOSIT_REFUND',
       amount: d(e.amount).toString(),
+      forMonth: e.forMonth,
     });
   }
   for (const r of receipts) {
     if (hasLedgerPayments.has(r.tenancyId) || r.receivedAmount === null || r.receivedOn === null) continue;
     const amount = d(r.receivedAmount);
     if (!amount.greaterThan(0)) continue;
-    out.push({ id: r.id, date: iso(r.receivedOn), property: r.property, tenant: r.tenant, kind: 'PAYMENT', amount: amount.toString() });
+    out.push({
+      id: r.id,
+      date: iso(r.receivedOn),
+      property: r.property,
+      tenant: r.tenant,
+      kind: 'PAYMENT',
+      amount: amount.toString(),
+      forMonth: r.forMonth,
+    });
   }
   return out;
 }
@@ -292,12 +303,12 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
     prisma.rentLedgerEntry.findMany({
       where: { tenancy: { property: { userId } } },
       orderBy: { entryDate: 'asc' },
-      select: { id: true, tenancyId: true, entryType: true, amount: true, entryDate: true, cashFlowId: true, tenancy: tenancyNames },
+      select: { id: true, tenancyId: true, entryType: true, amount: true, entryDate: true, forMonth: true, cashFlowId: true, tenancy: tenancyNames },
     }),
     prisma.rentReceipt.findMany({
       where: { tenancy: { property: { userId } }, receivedAmount: { not: null } },
       orderBy: { receivedOn: 'asc' },
-      select: { id: true, tenancyId: true, receivedAmount: true, receivedOn: true, cashFlowId: true, tenancy: tenancyNames },
+      select: { id: true, tenancyId: true, receivedAmount: true, receivedOn: true, forMonth: true, cashFlowId: true, tenancy: tenancyNames },
     }),
     prisma.propertyExpense.findMany({
       where: { property: { userId } },
@@ -388,6 +399,7 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
         entryType: e.entryType,
         amount: e.amount,
         entryDate: e.entryDate,
+        forMonth: e.forMonth,
         property: e.tenancy.property.name,
         tenant: e.tenancy.tenantName,
       })),
@@ -396,6 +408,7 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
         tenancyId: r.tenancyId,
         receivedAmount: r.receivedAmount,
         receivedOn: r.receivedOn,
+        forMonth: r.forMonth,
         property: r.tenancy.property.name,
         tenant: r.tenancy.tenantName,
       })),

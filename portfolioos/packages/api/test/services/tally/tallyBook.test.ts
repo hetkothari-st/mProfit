@@ -147,8 +147,10 @@ describe('loans, cards, rent, premiums and property expenses', () => {
         { id: 's3', cardId: 'k1', date: '2024-07-05', statementAmount: '12000', paid: null, paidOn: null },
       ],
       rent: [
-        { id: 'r1', date: '2024-05-03', property: 'Andheri Flat', tenant: 'Ravi', kind: 'PAYMENT', amount: '25000' },
+        { id: 'r1', date: '2024-05-03', property: 'Andheri Flat', tenant: 'Ravi', kind: 'PAYMENT', amount: '25000', forMonth: '2024-05' },
         { id: 'r2', date: '2024-04-20', property: 'Andheri Flat', tenant: 'Ravi', kind: 'DEPOSIT', amount: '50000' },
+        // Arrears cleared in one go, on the same day as r1's rent.
+        { id: 'r3', date: '2024-05-03', property: 'Andheri Flat', tenant: 'Ravi', kind: 'PAYMENT', amount: '25000', forMonth: '2024-04' },
       ],
       premiums: [{ id: 'q1', date: '2024-06-15', policy: 'LIC Term', amount: '12000' }],
       propertyExpenses: [{ id: 'e1', date: '2024-08-01', property: 'Andheri Flat', description: 'Society maintenance', amount: '3000' }],
@@ -178,6 +180,14 @@ describe('loans, cards, rent, premiums and property expenses', () => {
 
   it('books rent per property and deposits as owed to the tenant', () => {
     expect(lineOf(find('Rent received'), 'Rent - Andheri Flat')).toBe('-25000');
+    // Two months cleared on one day must not read as the same voucher twice.
+    const rentNarrations = allVouchers(book)
+      .filter((v) => v.narration.startsWith('Rent received'))
+      .map((v) => v.narration);
+    expect(rentNarrations).toEqual([
+      'Rent received - Andheri Flat / Ravi for 2024-05',
+      'Rent received - Andheri Flat / Ravi for 2024-04',
+    ]);
     expect(ledger(book, 'Security Deposit - Ravi (Andheri Flat)')?.parent).toBe('Current Liabilities');
     expect(lineOf(find('Security deposit received'), 'Security Deposit - Ravi (Andheri Flat)')).toBe('-50000');
   });

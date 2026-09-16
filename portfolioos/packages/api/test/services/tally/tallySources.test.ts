@@ -123,20 +123,20 @@ describe('rentFromLedger', () => {
   it('reads money from the rent ledger, and from receipts only where the ledger has no payments', () => {
     const out = rentFromLedger(
       [
-        { id: 'e1', tenancyId: 'ten1', entryType: 'PAYMENT', amount: dec('25000'), entryDate: new Date('2024-05-03'), property: 'Andheri Flat', tenant: 'Ravi' },
-        { id: 'e2', tenancyId: 'ten1', entryType: 'DISCOUNT', amount: dec('500'), entryDate: new Date('2024-05-03'), property: 'Andheri Flat', tenant: 'Ravi' },
-        { id: 'e3', tenancyId: 'ten1', entryType: 'DEPOSIT', amount: dec('50000'), entryDate: new Date('2024-04-01'), property: 'Andheri Flat', tenant: 'Ravi' },
+        { id: 'e1', tenancyId: 'ten1', entryType: 'PAYMENT', amount: dec('25000'), entryDate: new Date('2024-05-03'), forMonth: '2024-05', property: 'Andheri Flat', tenant: 'Ravi' },
+        { id: 'e2', tenancyId: 'ten1', entryType: 'DISCOUNT', amount: dec('500'), entryDate: new Date('2024-05-03'), forMonth: '2024-05', property: 'Andheri Flat', tenant: 'Ravi' },
+        { id: 'e3', tenancyId: 'ten1', entryType: 'DEPOSIT', amount: dec('50000'), entryDate: new Date('2024-04-01'), forMonth: null, property: 'Andheri Flat', tenant: 'Ravi' },
       ],
       [
-        { id: 'r1', tenancyId: 'ten1', receivedAmount: dec('25000'), receivedOn: new Date('2024-05-03'), property: 'Andheri Flat', tenant: 'Ravi' },
-        { id: 'r2', tenancyId: 'ten2', receivedAmount: dec('18000'), receivedOn: new Date('2023-11-05'), property: 'Pune Flat', tenant: 'Asha' },
-        { id: 'r3', tenancyId: 'ten2', receivedAmount: null, receivedOn: null, property: 'Pune Flat', tenant: 'Asha' },
+        { id: 'r1', tenancyId: 'ten1', receivedAmount: dec('25000'), receivedOn: new Date('2024-05-03'), forMonth: '2024-05', property: 'Andheri Flat', tenant: 'Ravi' },
+        { id: 'r2', tenancyId: 'ten2', receivedAmount: dec('18000'), receivedOn: new Date('2023-11-05'), forMonth: '2023-11', property: 'Pune Flat', tenant: 'Asha' },
+        { id: 'r3', tenancyId: 'ten2', receivedAmount: null, receivedOn: null, forMonth: null, property: 'Pune Flat', tenant: 'Asha' },
       ],
     );
     expect(out).toEqual([
-      { id: 'e1', date: '2024-05-03', property: 'Andheri Flat', tenant: 'Ravi', kind: 'PAYMENT', amount: '25000' },
-      { id: 'e3', date: '2024-04-01', property: 'Andheri Flat', tenant: 'Ravi', kind: 'DEPOSIT', amount: '50000' },
-      { id: 'r2', date: '2023-11-05', property: 'Pune Flat', tenant: 'Asha', kind: 'PAYMENT', amount: '18000' },
+      { id: 'e1', date: '2024-05-03', property: 'Andheri Flat', tenant: 'Ravi', kind: 'PAYMENT', amount: '25000', forMonth: '2024-05' },
+      { id: 'e3', date: '2024-04-01', property: 'Andheri Flat', tenant: 'Ravi', kind: 'DEPOSIT', amount: '50000', forMonth: null },
+      { id: 'r2', date: '2023-11-05', property: 'Pune Flat', tenant: 'Asha', kind: 'PAYMENT', amount: '18000', forMonth: '2023-11' },
     ]);
   });
 });
