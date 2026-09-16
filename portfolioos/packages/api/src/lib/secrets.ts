@@ -4,9 +4,9 @@ import { env } from '../config/env.js';
 const ALGO = 'aes-256-gcm';
 
 /**
- * Legacy key, committed to this repository. Used only when SECRETS_KEY is
- * unset — which production was confirmed to be on 2026-09-16 — and warned
- * about loudly at boot. Every broker credential, OAuth token and mailbox
+ * Legacy key, committed to this repository. Production ran on it until
+ * 2026-09-16, when SECRETS_KEY was set and every stored secret was rotated;
+ * production now refuses to boot without SECRETS_KEY. Every broker credential, OAuth token and mailbox
  * password written without SECRETS_KEY is encrypted under it, which is why
  * decryptSecretWithKeyInfo still accepts it for pre-change (v1) payloads and
  * jobs/secretRotationJobs.ts re-encrypts them once a real key exists.
@@ -18,10 +18,9 @@ let warnedAboutDevKey = false;
 function getKey(): Buffer {
   const raw = env.SECRETS_KEY;
   if (!raw) {
-    // Production without SECRETS_KEY keeps working on the legacy key — what it
-    // has always done — rather than failing every broker/Gmail/mailbox call.
-    // config/env.ts logs this as a SECURITY warning on every boot, and the
-    // rotation job moves everything onto the real key once one is set.
+    // Development and test only: config/env.ts refuses to boot production
+    // without SECRETS_KEY. The legacy key is kept here for local setups and so
+    // decryptSecretWithKeyInfo can still read any pre-rotation (v1) value.
     if (!warnedAboutDevKey) {
       warnedAboutDevKey = true;
       console.warn(

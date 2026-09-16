@@ -104,7 +104,8 @@ export function GoogleSignInButton({
           ? `Welcome to EveryPaisa, ${data.user.name.split(' ')[0]}!`
           : `Welcome back, ${data.user.name.split(' ')[0]}!`,
       );
-      navigate('/dashboard', { replace: true });
+      // A brand-new account goes through setup, whatever this browser saw before.
+      navigate(data.isNew ? '/onboarding' : '/dashboard', { replace: true });
     },
     onError: (err, { idToken }) => {
       const scheduledFor = pendingDeletionDate(err);
