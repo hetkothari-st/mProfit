@@ -17,7 +17,6 @@ import {
 } from '../services/auth.service.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
-import { logger } from '../lib/logger.js';
 
 export const registerSchema = z.object({
   email: z.string().email().toLowerCase(),
@@ -54,7 +53,8 @@ export const forgotPasswordSchema = z.object({
 });
 
 export const resetPasswordSchema = z.object({
-  token: z.string().min(10),
+  email: z.string().email().toLowerCase(),
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code'),
   newPassword: z.string().min(8).max(100),
 });
 
@@ -128,16 +128,15 @@ export async function logout(req: Request, res: Response) {
 
 export async function forgotPassword(req: Request, res: Response) {
   const { email } = forgotPasswordSchema.parse(req.body);
-  const result = await requestPasswordReset(email);
-  if (result) {
-    logger.info({ email, token: result.token }, 'Password reset requested');
-  }
-  ok(res, { message: 'If an account with that email exists, a reset link has been sent.' });
+  // The result is deliberately unused: the response is the same whether or
+  // not a code went out, so it can't be used to probe for accounts.
+  await requestPasswordReset(email);
+  ok(res, { message: 'If an account with that email exists, a reset code has been sent.' });
 }
 
 export async function resetPasswordHandler(req: Request, res: Response) {
   const data = resetPasswordSchema.parse(req.body);
-  await resetPassword(data.token, data.newPassword);
+  await resetPassword(data.email, data.code, data.newPassword);
   ok(res, { message: 'Password updated successfully.' });
 }
 

@@ -113,10 +113,14 @@ function hashCode(email: string, code: string): string {
   return crypto.createHmac('sha256', env.JWT_SECRET).update(`${email}:${code}`).digest('hex');
 }
 
-function codeMatches(email: string, code: string, storedHash: string): boolean {
-  const a = Buffer.from(hashCode(email, code), 'hex');
-  const b = Buffer.from(storedHash, 'hex');
+function hexEqual(x: string, y: string): boolean {
+  const a = Buffer.from(x, 'hex');
+  const b = Buffer.from(y, 'hex');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function codeMatches(email: string, code: string, storedHash: string): boolean {
+  return hexEqual(hashCode(email, code), storedHash);
 }
 
 function assertCooldownElapsed(lastSentAt: Date): void {
@@ -342,41 +346,112 @@ export async function logoutAllSessions(userId: string): Promise<void> {
   });
 }
 
-export async function requestPasswordReset(email: string): Promise<{ token: string } | null> {
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) return null;
-  // Silently no-op rather than throw, matching the existing "don't confirm
-  // which addresses exist" posture of returning null for an unknown email.
-  if (user.isShadowClient) return null;
-  const token = crypto.randomBytes(32).toString('hex');
-  await prisma.passwordResetToken.create({
-    data: {
-      token,
-      userId: user.id,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    },
-  });
-  return { token };
+// ── Password reset ────────────────────────────────────────────────────
+// Same shape as signup: email a 6-digit code, then accept it together with
+// the new password. Every outcome a caller can observe is identical whether
+// or not the address has an account — no distinct errors, no skipped delay.
+
+const RESET_CODE_TTL_MS = 15 * 60 * 1000;
+const INVALID_RESET_CODE = 'That code is incorrect or has expired. Check it or request a new one.';
+
+// Prefixed so a reset code can never be confused with a signup code hash.
+function hashResetCode(email: string, code: string): string {
+  return crypto
+    .createHmac('sha256', env.JWT_SECRET)
+    .update(`reset:${email}:${code}`)
+    .digest('hex');
 }
 
-export async function resetPassword(token: string, newPassword: string): Promise<void> {
-  const record = await prisma.passwordResetToken.findUnique({ where: { token } });
-  if (!record || record.usedAt || record.expiresAt < new Date()) {
-    throw new BadRequestError('Invalid or expired reset token');
+/**
+ * Emails a reset code if `email` belongs to an account that can sign in.
+ * Returns null — silently — for unknown addresses, shadow clients,
+ * deactivated accounts, a request inside the resend cooldown, or a send that
+ * failed, so the caller's response never reveals which of those happened.
+ */
+export async function requestPasswordReset(email: string): Promise<{ codeSent: true } | null> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.isActive || user.isShadowClient) return null;
+
+  const latest = await prisma.passwordResetToken.findFirst({
+    where: { userId: user.id },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (latest && Date.now() - latest.createdAt.getTime() < RESEND_COOLDOWN_MS) return null;
+
+  const code = generateCode();
+  await runInTransaction(async (tx) => {
+    // Only the newest code works; an older email in the inbox is dead.
+    await tx.passwordResetToken.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    await tx.passwordResetToken.create({
+      data: {
+        token: hashResetCode(email, code),
+        userId: user.id,
+        expiresAt: new Date(Date.now() + RESET_CODE_TTL_MS),
+      },
+    });
+  });
+
+  const result = await sendEmail({
+    to: email,
+    subject: `${code} is your EveryPaisa password reset code`,
+    html: `<p>Hi ${escapeHtml(user.name)},</p>
+<p>Use this code to reset your EveryPaisa password:</p>
+<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:16px 0">${code}</p>
+<p>It expires in 15 minutes. If you didn't ask to reset your password, you can ignore this email — your password stays the same.</p>`,
+  });
+  if (!result.sent) {
+    if (env.NODE_ENV !== 'production') {
+      logger.warn({ email, code }, '[auth.reset] email not sent — dev reset code');
+    }
+    // In production the send failure is already logged by sendEmail; the
+    // response must still look like success to avoid confirming the account.
+    return null;
   }
+  return { codeSent: true };
+}
+
+export async function resetPassword(
+  email: string,
+  code: string,
+  newPassword: string,
+): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.isActive || user.isShadowClient) {
+    throw new BadRequestError(INVALID_RESET_CODE);
+  }
+  const record = await prisma.passwordResetToken.findFirst({
+    where: { userId: user.id, usedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!record || record.attempts >= MAX_CODE_ATTEMPTS) {
+    throw new BadRequestError(INVALID_RESET_CODE);
+  }
+  if (!hexEqual(hashResetCode(email, code), record.token)) {
+    await prisma.passwordResetToken.update({
+      where: { id: record.id },
+      data: { attempts: { increment: 1 } },
+    });
+    throw new BadRequestError(INVALID_RESET_CODE);
+  }
+
   const passwordHash = await hashPassword(newPassword);
   // Callback form, not the array form. Under the RLS extension each promise in
   // an array-form $transaction is already wrapped in its own transaction, so
   // the batch was not atomic either: a failure could leave the password
   // changed but the reset token still usable and old sessions still live.
   await runInTransaction(async (tx) => {
+    // Claim the code first: of two concurrent submits, only one may win.
+    const claimed = await tx.passwordResetToken.updateMany({
+      where: { id: record.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    if (claimed.count === 0) throw new BadRequestError(INVALID_RESET_CODE);
     await tx.user.update({
       where: { id: record.userId },
       data: { passwordHash },
-    });
-    await tx.passwordResetToken.update({
-      where: { id: record.id },
-      data: { usedAt: new Date() },
     });
     await tx.refreshToken.updateMany({
       where: { userId: record.userId, revokedAt: null },
