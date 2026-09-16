@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -136,6 +137,7 @@ function AddStatementDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Add statement</DialogTitle>
+          <DialogDescription>One month's bill: what was billed, the minimum due and the due date.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
@@ -227,6 +229,7 @@ function MarkPaidDialog({
       <DialogContent className="max-w-xs">
         <DialogHeader>
           <DialogTitle>Mark statement paid</DialogTitle>
+          <DialogDescription>Record what you paid against this statement, and when.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>

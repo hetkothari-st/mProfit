@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -31,6 +32,7 @@ import {
   type CreditCardDTO,
   type CreateCardInput,
 } from '@/api/creditCards.api';
+import { apiErrorMessage } from '@/api/client';
 import { CreditCardVisual } from '@/components/creditCards/CreditCardVisual';
 import { SuggestInput, type SuggestOption } from '@/components/common/SuggestInput';
 import { INDIAN_BANKS } from '@/data/indianBanks';
@@ -234,6 +236,25 @@ const ISSUER_OPTIONS: SuggestOption[] = [
 /** Generic variants, for cards the catalog doesn't list — drawn in that tier's finish. */
 const TIER_NAMES = ['Classic', 'Gold', 'Platinum', 'Titanium', 'Signature', 'World', 'Infinite', 'Black', 'Metal'];
 
+/** "₹5,00,000" -> "500000": the server takes a plain decimal string. */
+function cleanMoney(raw: string | null | undefined): string {
+  return (raw ?? '').replace(/[^\d.]/g, '');
+}
+
+/** The checksum every card number carries (the server runs the same one). */
+function luhnValid(digits: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = digits.charCodeAt(digits.length - 1 - i) - 48;
+    if (i % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
 const NETWORKS: Array<[string, string]> = [
   ['VISA', 'Visa'],
   ['MASTERCARD', 'Mastercard'],
@@ -340,7 +361,14 @@ function CreateCardDialog({
       toast.success(isEdit ? 'Card updated' : 'Card added');
       onOpenChange(false);
     },
-    onError: () => toast.error(isEdit ? 'Failed to update card' : 'Failed to add card'),
+    onError: (err) => {
+      // The server explains exactly what it rejected ("a digit may be
+      // mistyped"). Showing "Failed to add card" instead left the reason
+      // visible only as a 400 in the browser console.
+      const message = apiErrorMessage(err, isEdit ? 'Failed to update card' : 'Failed to add card');
+      if (/card number/i.test(message)) setErrors((e) => ({ ...e, cardNumber: message }));
+      toast.error(message);
+    },
   });
 
   function set<K extends keyof CreateCardInput>(key: K, value: CreateCardInput[K]) {
@@ -352,9 +380,13 @@ function CreateCardDialog({
     if (!form.issuerBank.trim()) errs['issuerBank'] = 'Required';
     if (!form.cardName.trim()) errs['cardName'] = 'Required';
     if (!form.last4.trim() || form.last4.length !== 4 || !/^\d{4}$/.test(form.last4)) errs['last4'] = 'Must be 4 digits';
-    if (!form.creditLimit || isNaN(Number(form.creditLimit))) errs['creditLimit'] = 'Required';
+    if (!cleanMoney(form.creditLimit)) errs['creditLimit'] = 'Required';
+    else if (!/^\d+(\.\d+)?$/.test(cleanMoney(form.creditLimit))) errs['creditLimit'] = 'Enter an amount, e.g. 500000';
     const typedNumber = cardNumber.replace(/[\s-]/g, '');
     if (typedNumber && !/^\d{12,19}$/.test(typedNumber)) errs['cardNumber'] = 'Enter the 12–19 digits on the card';
+    // Same Luhn check the server runs, so a mistyped digit is caught here.
+    else if (typedNumber && !luhnValid(typedNumber))
+      errs['cardNumber'] = "That card number doesn't check out — check for a mistyped digit";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -366,8 +398,9 @@ function CreateCardDialog({
       issuerBank: form.issuerBank.trim(),
       cardName: form.cardName.trim(),
       last4: form.last4.trim(),
-      interestRate: form.interestRate?.trim() || null,
-      annualFee: form.annualFee?.trim() || null,
+      creditLimit: cleanMoney(form.creditLimit),
+      interestRate: cleanMoney(form.interestRate) || null,
+      annualFee: cleanMoney(form.annualFee) || null,
       network: form.network || null,
       ...(cardNumber.trim() ? { cardNumber: cardNumber.replace(/[\s-]/g, '') } : {}),
     });
@@ -378,6 +411,9 @@ function CreateCardDialog({
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit credit card' : 'Add credit card'}</DialogTitle>
+          <DialogDescription>
+            The card's limit and billing days. The full number is optional and stored encrypted.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
