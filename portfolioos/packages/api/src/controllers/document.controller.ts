@@ -21,6 +21,7 @@ import {
   zipDocuments,
 } from '../services/document.service.js';
 import { readStream } from '../lib/documentStorage.js';
+import { downloadHeaders, storedMimeFor } from '../lib/documentMime.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
@@ -36,6 +37,34 @@ import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 
 const ownerTypeSchema = z.nativeEnum(DocumentOwnerType);
+
+/**
+ * Hosts the OnlyOffice save callback is permitted to hand us a URL for.
+ *
+ * Exported so the regression test asserts against the same predicate the
+ * handler uses, rather than a copy that can drift.
+ */
+export function isAllowedDocServerUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  const allowedHosts = new Set(
+    [env.ONLYOFFICE_INTERNAL_URL, env.ONLYOFFICE_PUBLIC_URL]
+      .map((u) => {
+        try {
+          return new URL(u).host;
+        } catch {
+          return null;
+        }
+      })
+      .filter((h): h is string => h !== null),
+  );
+  return allowedHosts.has(url.host);
+}
 
 function userId(req: Request): string {
   if (!req.user) throw new UnauthorizedError();
@@ -80,7 +109,11 @@ export async function upload(req: Request, res: Response) {
     ownerId: body.ownerId,
     category: body.category ?? null,
     fileName: req.file.originalname,
-    mimeType: req.file.mimetype,
+    // Derived from the bytes we just probed, never from req.file.mimetype.
+    // The client-supplied value was being stored verbatim and echoed back as
+    // the download Content-Type, which let an uploader pick `text/html` and
+    // get script execution on the SPA origin. See lib/documentMime.ts.
+    mimeType: storedMimeFor(probe.kind, probe.mime),
     buffer: req.file.buffer,
   });
   created(res, doc);
@@ -122,12 +155,10 @@ export async function remove(req: Request, res: Response) {
 
 export async function download(req: Request, res: Response) {
   const doc = await getDocumentForDownload(userId(req), req.params.id!);
-  res.setHeader('Content-Type', doc.mimeType);
+  for (const [k, v] of Object.entries(downloadHeaders(doc.mimeType, doc.fileName))) {
+    res.setHeader(k, v);
+  }
   res.setHeader('Content-Length', String(doc.sizeBytes));
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename="${encodeURIComponent(doc.fileName)}"`,
-  );
   readStream(doc.userId, doc.storageKey).pipe(res);
 }
 
@@ -225,7 +256,13 @@ export async function onlyofficeDownload(req: Request, res: Response) {
     throw new BadRequestError('token mismatch');
   }
   const doc = await getDocumentForDownload(payload.userId, payload.documentId);
-  res.setHeader('Content-Type', doc.mimeType);
+  // This route is mounted before `authenticate` — the token is the only
+  // credential — so it is the most exposed way to fetch stored bytes. Same
+  // header discipline as the authenticated path: verified type, nosniff, and
+  // anything not inline-safe forced to download rather than render.
+  for (const [k, v] of Object.entries(downloadHeaders(doc.mimeType, doc.fileName))) {
+    res.setHeader(k, v);
+  }
   res.setHeader('Content-Length', String(doc.sizeBytes));
   readStream(doc.userId, doc.storageKey).pipe(res);
 }
@@ -264,8 +301,17 @@ export async function onlyofficeCallback(req: Request, res: Response) {
         });
         body = (decoded as { payload?: CallbackPayload }).payload ?? (decoded as CallbackPayload);
       } catch (err) {
+        // Used to log and carry on with the unverified body. With JWT
+        // enabled, a body that fails verification is a forgery — reject it.
         logger.warn({ err }, '[oo] body token verification failed');
+        return res.status(401).json({ error: 1, message: 'invalid token' });
       }
+    } else {
+      // No inner token at all used to skip this block entirely, so the outer
+      // ?token= (which any user legitimately holds for their own document)
+      // was sufficient to submit an arbitrary body — including a `url` this
+      // server would then fetch. Require the signed body.
+      return res.status(401).json({ error: 1, message: 'missing body token' });
     }
   }
 
@@ -274,6 +320,20 @@ export async function onlyofficeCallback(req: Request, res: Response) {
   }
 
   if (isSaveStatus(body.status) && body.url) {
+    // Only ever fetch from the DocumentServer we configured. `body.url`
+    // reaches this line from a request body, and this process sits inside the
+    // deployment's network, so an unrestricted fetch here is a server-side
+    // request forgery primitive — cloud metadata endpoints, internal admin
+    // ports, anything reachable from the API container. The signed-body check
+    // above should already prevent a forged url; this makes the blast radius
+    // nil even if that check is ever loosened.
+    if (!isAllowedDocServerUrl(body.url)) {
+      logger.warn(
+        { documentId: payload.documentId, url: body.url },
+        '[oo] refusing to fetch save URL outside the configured DocumentServer',
+      );
+      return res.json({ error: 1 });
+    }
     try {
       const fetched = await fetch(body.url, { signal: AbortSignal.timeout(60_000) });
       if (!fetched.ok) {
