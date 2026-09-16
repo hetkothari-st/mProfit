@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { pfApi } from '@/api/pf';
 import { apiErrorMessage } from '@/api/client';
+import type { AuthedEventSource } from '@/lib/authedEventSource';
 
 type Phase =
   | { kind: 'creds' }
@@ -35,7 +36,7 @@ export function PfRefreshDialog({ accountId, onClose, onForgotPassword }: Props)
   const [save, setSave] = useState(false);
   const [inputVal, setInputVal] = useState('');
   const sessionRef = useRef<string | null>(null);
-  const esRef = useRef<EventSource | null>(null);
+  const esRef = useRef<AuthedEventSource | null>(null);
 
   // Clean up EventSource on unmount
   useEffect(() => () => esRef.current?.close(), []);

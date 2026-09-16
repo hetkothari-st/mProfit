@@ -324,9 +324,28 @@ function assertNotShadowClient(user: { isShadowClient: boolean }): void {
   }
 }
 
+/**
+ * A real bcrypt hash, compared against when the account does not exist.
+ * Without it an unknown email skipped bcrypt.compare entirely and returned
+ * measurably faster than a wrong password — an account-existence oracle on
+ * the login endpoint.
+ *
+ * Generated at runtime with the same cost factor as real passwords, not
+ * hardcoded: a malformed hash makes bcrypt.compare return immediately, which
+ * would quietly reintroduce exactly the timing gap this exists to close.
+ */
+let dummyPasswordHash: Promise<string> | null = null;
+function getDummyPasswordHash(): Promise<string> {
+  dummyPasswordHash ??= hashPassword(crypto.randomBytes(32).toString('hex'));
+  return dummyPasswordHash;
+}
+
 export async function loginUser(email: string, password: string) {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.isActive) throw new UnauthorizedError('Invalid credentials');
+  if (!user || !user.isActive) {
+    await verifyPassword(password, await getDummyPasswordHash());
+    throw new UnauthorizedError('Invalid credentials');
+  }
   assertNotShadowClient(user);
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) throw new UnauthorizedError('Invalid credentials');

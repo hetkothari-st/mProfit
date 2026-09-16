@@ -33,7 +33,33 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
   }
 }
 
+/**
+ * Roles a user can pick for themselves on the public signup form.
+ *
+ * These describe who someone says they are, not what they are allowed to do,
+ * so they must never be used as an authorization grant. Today nothing gates
+ * on them — the CA workspace, for example, is gated by the PRO_ADVISOR plan,
+ * not the CA role — but `requireRole('CA')` would be an easy line to write,
+ * and it would silently hand that capability to anyone who ticked the box at
+ * registration. requireRole() refuses them outright so that mistake fails at
+ * startup instead of in production.
+ */
+export const SELF_ASSIGNABLE_ROLES: ReadonlySet<UserRole> = new Set<UserRole>([
+  'INVESTOR',
+  'HNI',
+  'FAMILY_OFFICE',
+  'ADVISOR',
+  'CA',
+]);
+
 export function requireRole(...roles: UserRole[]) {
+  const unsafe = roles.filter((r) => SELF_ASSIGNABLE_ROLES.has(r));
+  if (unsafe.length > 0) {
+    throw new Error(
+      `requireRole(${unsafe.join(', ')}): these roles are self-assignable at signup ` +
+        `and cannot be used for authorization. Gate on a plan or a verified attribute instead.`,
+    );
+  }
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (!req.user) return next(new UnauthorizedError());
     if (!roles.includes(req.user.role)) {

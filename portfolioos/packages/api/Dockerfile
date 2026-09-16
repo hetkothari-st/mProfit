@@ -41,5 +41,10 @@ COPY --from=build /app/packages/api/package.json ./packages/api/package.json
 COPY --from=build /app/packages/shared ./packages/shared
 COPY packages/api/start.sh ./start.sh
 RUN chmod +x ./start.sh
+# Drop root. The node:20-alpine image already ships an unprivileged `node`
+# user; nothing here needs privileged operations, so an application-layer
+# compromise should not land on a root shell.
+RUN chown -R node:node /app
+USER node
 EXPOSE 3001
 CMD ["./start.sh"]
