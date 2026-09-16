@@ -180,22 +180,32 @@ const EnvSchema = z.object({
  * deployment right up until someone exploits it, so production refuses to
  * boot instead.
  *
- * `APP_ENCRYPTION_KEY` is deliberately NOT in this list. Its absence disables
- * one optional feature (provident-fund accounts) and is already loud at boot;
- * the three below have no such containment — they silently weaken auth,
- * document access and webhook trust for the whole deployment.
+ * `APP_ENCRYPTION_KEY` joined this list when PAN and vehicle registration
+ * numbers moved to encrypted storage (migration 20260916100000). It used to
+ * guard only the optional provident-fund feature, so its absence was allowed
+ * to degrade that one feature. Core profile data now depends on it, and the
+ * alternative to refusing to boot would be silently writing PAN in plaintext.
  *
  * Exported for the regression test; returns the problems rather than throwing
  * so the test can assert on them without spawning a process.
  */
 export function collectProductionSecretProblems(e: {
   NODE_ENV: string;
+  APP_ENCRYPTION_KEY?: string | undefined;
   SECRETS_KEY?: string | undefined;
   ONLYOFFICE_JWT_SECRET: string;
   FINFACTOR_WEBHOOK_SECRET?: string | undefined;
 }): string[] {
   if (e.NODE_ENV !== 'production') return [];
   const problems: string[] = [];
+
+  if (!e.APP_ENCRYPTION_KEY) {
+    problems.push(
+      'APP_ENCRYPTION_KEY is not set. PAN, vehicle registration numbers, ' +
+        'insurance policy numbers and provident-fund credentials are encrypted ' +
+        'with it; without it they cannot be stored securely.',
+    );
+  }
 
   if (!e.SECRETS_KEY) {
     problems.push(

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { prisma } from './prisma.js';
 import { logger } from './logger.js';
+import { readPan } from '../services/piiAtRest.service.js';
 
 /**
  * Thin wrapper around pdfjs-dist that tries to read a PDF and, if it's
@@ -90,9 +91,11 @@ export async function getUserPdfPasswords(userId: string | null | undefined): Pr
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { pan: true, dob: true, email: true, phone: true },
+      select: { pan: true, panEnc: true, dob: true, email: true, phone: true },
     });
-    const pan = user?.pan?.trim().toUpperCase() ?? '';
+    // Encrypted-first read: PAN is the most common CAS unlock password, and
+    // this must keep working whether or not a row has been migrated yet.
+    const pan = (await readPan(user)) ?? '';
     const dob = user?.dob ?? null;
     const email = user?.email?.trim().toLowerCase() ?? '';
     const phone = user?.phone?.trim().replace(/\D/g, '') ?? '';

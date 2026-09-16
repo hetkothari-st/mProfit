@@ -19,6 +19,7 @@ import {
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/audit.js';
+import { readPan } from '../services/piiAtRest.service.js';
 
 export const registerSchema = z.object({
   email: z.string().email().toLowerCase(),
@@ -187,7 +188,7 @@ export async function revealPan(req: Request, res: Response) {
     metadata: { field: 'pan' },
     req,
   });
-  ok(res, { pan: user.pan ?? null });
+  ok(res, { pan: await readPan(user) });
 }
 
 export async function me(req: Request, res: Response) {

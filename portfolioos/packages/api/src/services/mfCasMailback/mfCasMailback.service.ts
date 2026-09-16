@@ -12,6 +12,7 @@ import {
   submitKfintechMailback,
   KfintechMailbackError,
 } from '../../adapters/mfMailback/kfintechMailback.js';
+import { readPan } from '../piiAtRest.service.js';
 
 const SOURCE_ADAPTER = 'mfcas.mailback.v1';
 const SOURCE_ADAPTER_VER = '1.0.0';
@@ -162,9 +163,9 @@ export async function submitMailbackJob(input: SubmitInput): Promise<SubmitResul
   if (!pdfPassword) {
     const user = await prisma.user.findUnique({
       where: { id: input.userId },
-      select: { pan: true },
+      select: { pan: true, panEnc: true },
     });
-    pdfPassword = user?.pan?.trim().toUpperCase() ?? '';
+    pdfPassword = (await readPan(user)) ?? '';
   }
   if (!pdfPassword || pdfPassword.length < 4) {
     throw new BadRequestError(

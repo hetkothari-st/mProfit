@@ -22,6 +22,7 @@ import {
   requireSingleSubject,
 } from '../services/reports/reportSubjects.js';
 import { runAsUser } from '../lib/requestContext.js';
+import { readPan } from '../services/piiAtRest.service.js';
 
 /**
  * Whose tax position this request is about.
@@ -122,16 +123,17 @@ export async function downloadCapitalGainsTaxReport(req: Request, res: Response)
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, pan: true },
+    select: { name: true, pan: true, panEnc: true },
   });
 
+  const pan = (await readPan(user)) ?? undefined;
   await runAsUser(userId, () =>
     streamCapitalGainsTaxReport(res, {
       userId,
       portfolioIds,
       fy,
       userName: user?.name ?? undefined,
-      pan: user?.pan ?? undefined,
+      pan,
       theme: parseThemeQuery(req.query.theme),
     }),
   );

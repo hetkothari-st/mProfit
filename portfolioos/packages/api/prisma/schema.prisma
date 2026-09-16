@@ -22,6 +22,11 @@ model User {
   name                  String
   phone                 String?
   pan                   String?
+  /// Encrypted PAN (AES-256-GCM). See migration 20260916100000.
+  panEnc                String?
+  /// Keyed HMAC fingerprint for exact lookups; not reversible.
+  panHash               String?
+  panLast4              String?
   dob                   DateTime?
   // Encrypted JSON array of passwords the user has supplied to unlock
   // PDF/XLSX uploads. Tried automatically on every locked file.
@@ -363,6 +368,9 @@ model Client {
   name      String
   email     String?
   pan       String?
+  panEnc    String?
+  panHash   String?
+  panLast4  String?
   phone     String?
   category  String?
   createdAt DateTime @default(now())
@@ -1585,6 +1593,10 @@ model Vehicle {
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   portfolioId        String?
   registrationNo     String
+  /// Encrypted registration (AES-256-GCM). See migration 20260916100000.
+  registrationNoEnc   String?
+  registrationNoHash  String?
+  registrationNoLast4 String?
   make               String?
   model              String?
   variant            String?
@@ -1627,6 +1639,7 @@ model Vehicle {
   loans             Loan[]
 
   @@unique([userId, registrationNo])
+  @@unique([userId, registrationNoHash])
   @@index([userId, insuranceExpiry])
   @@index([userId, pucExpiry])
 }

@@ -51,17 +51,18 @@ import {
   listAccountsFlat,
 } from '../../accounting.service.js';
 import { computeUserXirr } from '../../xirr.service.js';
+import { readPan } from '../../piiAtRest.service.js';
 
 async function userMember(userId: string): Promise<{ family: string; member: string; pan: string | undefined }> {
   const u = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, email: true, pan: true },
+    select: { name: true, email: true, pan: true, panEnc: true },
   });
   const member = u?.name ?? u?.email ?? 'Member';
   return {
     family: member, // family roll-up not yet implemented (Phase C in memory)
     member,
-    pan: u?.pan ?? undefined,
+    pan: (await readPan(u)) ?? undefined,
   };
 }
 

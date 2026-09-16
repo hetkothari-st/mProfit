@@ -20,6 +20,7 @@ import {
   refreshTokenExpiry,
   signAccessToken,
 } from './jwt.service.js';
+import { panColumns } from './piiAtRest.service.js';
 
 interface IssueTokensResult {
   accessToken: string;
@@ -50,8 +51,10 @@ export function toAuthUser(user: User) {
     // alongside the access and refresh tokens. A masked value covers every
     // display use; the two places that need the real thing call the audited,
     // rate-limited reveal endpoint.
-    panMasked: maskPan(user.pan),
-    hasPan: Boolean(user.pan),
+    // Mask from panLast4 when the row is encrypted (plaintext may be null),
+    // falling back to the plaintext for rows the backfill has not reached.
+    panMasked: user.panLast4 ? `XXXXX${user.panLast4}` : maskPan(user.pan),
+    hasPan: Boolean(user.panEnc || user.pan),
     dob: user.dob ? user.dob.toISOString().slice(0, 10) : null,
     role: user.role,
     plan: user.plan,
@@ -590,7 +593,8 @@ export async function updateProfile(
   const data: Record<string, unknown> = {};
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.phone !== undefined) data.phone = patch.phone;
-  if (patch.pan !== undefined) data.pan = patch.pan || null;
+  // Encrypted columns, not plaintext — see services/piiAtRest.service.ts.
+  if (patch.pan !== undefined) Object.assign(data, await panColumns(patch.pan || null));
   if (patch.dob !== undefined) data.dob = patch.dob ? new Date(patch.dob) : null;
   const user = await prisma.user.update({
     where: { id: userId },

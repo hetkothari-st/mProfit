@@ -26,6 +26,7 @@ import {
 } from '../adapters/vehicle/chain.js';
 import type { VehicleRecord } from '../adapters/vehicle/types.js';
 import { resolveVehiclePhoto } from '../adapters/vehicle/photo.js';
+import { registrationNoColumns } from './piiAtRest.service.js';
 
 // Indian RC pattern: 2-char state + 1-2 digit RTO + 1-3 alpha series +
 // 4-digit number. Covers MH47BT5950, DL01AB1234, KA05MP9999, etc. We
@@ -134,6 +135,8 @@ export async function createVehicle(userId: string, input: CreateVehicleInput) {
     data: {
       userId,
       registrationNo,
+      // Encrypted copy + fingerprint alongside the plate (dual-write).
+      ...(await registrationNoColumns(registrationNo)),
       portfolioId: input.portfolioId ?? null,
       make: input.make ?? null,
       model: input.model ?? null,
@@ -168,6 +171,8 @@ export async function updateVehicle(
   if (patch.registrationNo !== undefined) {
     data.registrationNo = normaliseRegNo(patch.registrationNo);
     data.rtoCode = rtoFromRegNo(data.registrationNo as string) ?? null;
+    // Keep the encrypted copy in step with the plate it mirrors.
+    Object.assign(data, await registrationNoColumns(data.registrationNo as string));
   }
   if (patch.portfolioId !== undefined) data.portfolioId = patch.portfolioId;
   if (patch.make !== undefined) data.make = patch.make;
@@ -415,6 +420,7 @@ export async function applyVahanSms(
     data: {
       userId,
       registrationNo: normalised,
+      ...(await registrationNoColumns(normalised)),
       rtoCode: rtoFromRegNo(normalised) ?? null,
       make: outcome.record.make ?? null,
       model: outcome.record.model ?? null,

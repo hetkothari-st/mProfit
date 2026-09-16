@@ -16,6 +16,7 @@ import { verifyUploadedFile } from '../lib/uploadSecurity.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
+import { panColumns } from '../services/piiAtRest.service.js';
 
 const ImportTypeEnum = z.enum([
   'CONTRACT_NOTE_PDF',
@@ -213,12 +214,13 @@ export async function reprocess(req: Request, res: Response) {
       if (isPan) {
         const existing = await prisma.user.findUnique({
           where: { id: req.user.id },
-          select: { pan: true },
+          select: { pan: true, panEnc: true },
         });
-        if (!existing?.pan) {
+        if (!existing?.pan && !existing?.panEnc) {
           await prisma.user.update({
             where: { id: req.user.id },
-            data: { pan: trimmed },
+            // Encrypted columns — never plaintext.
+            data: await panColumns(trimmed),
           });
         }
       } else if (save) {

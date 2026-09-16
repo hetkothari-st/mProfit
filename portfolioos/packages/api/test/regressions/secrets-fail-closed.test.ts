@@ -23,6 +23,7 @@ import {
 
 const GOOD = {
   NODE_ENV: 'production',
+  APP_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
   SECRETS_KEY: 'x'.repeat(32),
   ONLYOFFICE_JWT_SECRET: 'a-real-onlyoffice-secret',
   FINFACTOR_WEBHOOK_SECRET: 'a-real-webhook-secret',
@@ -60,11 +61,18 @@ describe('SEC-03/04/09: production secret configuration fails closed', () => {
   it('reports every problem at once rather than stopping at the first', () => {
     const problems = collectProductionSecretProblems({
       NODE_ENV: 'production',
+      APP_ENCRYPTION_KEY: undefined,
       SECRETS_KEY: undefined,
       ONLYOFFICE_JWT_SECRET: PLACEHOLDER_ONLYOFFICE_SECRET,
       FINFACTOR_WEBHOOK_SECRET: undefined,
     });
-    expect(problems).toHaveLength(3);
+    expect(problems).toHaveLength(4);
+  });
+
+  it('rejects production with APP_ENCRYPTION_KEY unset now that PAN depends on it', () => {
+    const problems = collectProductionSecretProblems({ ...GOOD, APP_ENCRYPTION_KEY: undefined });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('APP_ENCRYPTION_KEY');
   });
 
   it('leaves development and test environments alone', () => {
