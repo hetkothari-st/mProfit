@@ -43,6 +43,7 @@ import { Prisma, type AssetClass, type CanonicalEvent, type TransactionType } fr
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
+import { findDuplicateTransaction } from '../services/duplicateMatch.js';
 import { computeAssetKey } from '../services/assetKey.js';
 import { hookAutoMatchRentalCredit } from '../services/rental.service.js';
 import { hookAutoMatchPremiumPayment } from '../services/insurance.service.js';
@@ -111,6 +112,39 @@ function txTypeFor(eventType: CanonicalEvent['eventType']): TransactionType {
   return eventType === 'BUY' ? 'BUY' : 'SELL';
 }
 
+/**
+ * An email confirming a trade that a contract note or CAS already put on the
+ * books is the same money twice — different source, different sourceHash, one
+ * event. We link the event to the row that already exists instead of writing a
+ * second one.
+ */
+async function linkToExistingTransaction(
+  event: CanonicalEvent,
+  portfolioId: string,
+  match: {
+    portfolioId: string;
+    assetKey: string;
+    transactionType: TransactionType;
+    tradeDate: Date;
+    quantity: string;
+    price: string;
+  },
+): Promise<ProjectionOutcome | null> {
+  const twin = await findDuplicateTransaction(match);
+  if (!twin) return null;
+  await runInTransaction(async (tx) => {
+    await tx.canonicalEvent.update({
+      where: { id: event.id },
+      data: { status: 'PROJECTED', projectedTransactionId: twin.id, portfolioId },
+    });
+  });
+  logger.info(
+    { eventId: event.id, transactionId: twin.id },
+    'projection.skipped_duplicate_transaction',
+  );
+  return { kind: 'projected_no_op', eventId: event.id, reason: 'duplicate_of_existing_transaction' };
+}
+
 async function projectBuySell(event: CanonicalEvent): Promise<ProjectionOutcome> {
   if (!event.amount || !event.quantity) {
     return {
@@ -140,6 +174,16 @@ async function projectBuySell(event: CanonicalEvent): Promise<ProjectionOutcome>
   const qty = event.quantity;
   const amount = event.amount;
   const price = event.price ?? new Prisma.Decimal(amount.toString()).div(qty.toString());
+
+  const alreadyOnBooks = await linkToExistingTransaction(event, portfolio.portfolioId, {
+    portfolioId: portfolio.portfolioId,
+    assetKey,
+    transactionType: txTypeFor(event.eventType),
+    tradeDate: event.eventDate,
+    quantity: qty.toString(),
+    price: price.toString(),
+  });
+  if (alreadyOnBooks) return alreadyOnBooks;
 
   const result = await runInTransaction(async (tx) => {
     const created = await tx.transaction.create({
@@ -344,6 +388,16 @@ async function projectFnoTrade(event: CanonicalEvent): Promise<ProjectionOutcome
     foStrikePrice: strikeStr ?? null,
     foExpiryDate: expiryStr,
   });
+
+  const alreadyOnBooks = await linkToExistingTransaction(event, portfolio.portfolioId, {
+    portfolioId: portfolio.portfolioId,
+    assetKey,
+    transactionType: sideRaw === 'BUY' ? 'BUY' : 'SELL',
+    tradeDate: event.eventDate,
+    quantity: event.quantity!.toString(),
+    price: event.price!.toString(),
+  });
+  if (alreadyOnBooks) return alreadyOnBooks;
 
   const result = await runInTransaction(async (tx) => {
     const created = await tx.transaction.create({

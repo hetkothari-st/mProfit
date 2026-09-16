@@ -22,6 +22,7 @@ import { Prisma, type RentReceipt } from '@prisma/client';
 import { similarityRatio } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import {
+  AppError,
   BadRequestError,
   ForbiddenError,
   NotFoundError,
@@ -104,6 +105,11 @@ export interface MarkReceivedInput {
   receivedAmount: string;
   receivedOn: string;
   notes?: string | null;
+  /**
+   * Set only after the user has seen the matching payment we already hold and
+   * confirmed a second one really came in that day.
+   */
+  allowDuplicate?: boolean;
 }
 
 export interface CreateExpenseInput {
@@ -670,6 +676,30 @@ export async function markReceiptReceived(
     throw new BadRequestError('receivedAmount must be positive');
   }
   const receivedOn = parseIsoDate(input.receivedOn);
+
+  // Every call adds a payment to the khata, which is right for part-payments
+  // and wrong for a button pressed twice. The same amount, against the same
+  // month, on the same day is the second case until the user says otherwise.
+  if (!input.allowDuplicate) {
+    const twin = await prisma.rentLedgerEntry.findFirst({
+      where: {
+        tenancyId: existing.tenancyId,
+        entryType: 'PAYMENT',
+        forMonth: existing.forMonth,
+        entryDate: receivedOn,
+        amount: received.toString(),
+      },
+      select: { id: true },
+    });
+    if (twin) {
+      throw new AppError(
+        `A rent payment of ${received.toString()} for ${existing.forMonth} is already recorded on ${input.receivedOn}. Record it again only if a second payment really came in that day.`,
+        409,
+        'DUPLICATE_RENT_PAYMENT',
+        { existingEntryId: twin.id },
+      );
+    }
+  }
 
   const portfolioId = await resolveRentalPortfolioId(
     userId,

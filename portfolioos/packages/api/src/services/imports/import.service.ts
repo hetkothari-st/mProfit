@@ -315,14 +315,22 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
         ? { ...event, sourceHash: rowHash }
         : event;
 
-      const before = await prisma.transaction.count({ where: { portfolioId } });
+      let existed = false;
       const created = await createTransaction(
         job.userId,
         projectTransactionEvent(eventForProjection, portfolioId),
+        {
+          // A file the user re-uploads under a new name gets a new positional
+          // hash, and the same trade can also arrive from a broker sync or a
+          // CAS. Rows this job wrote are exempt: a file that lists the same
+          // trade twice is listing two real fills.
+          onDuplicate: 'skip',
+          ignoreImportJobId: importJobId,
+          onExisting: () => { existed = true; },
+        },
       );
-      const after = await prisma.transaction.count({ where: { portfolioId } });
 
-      if (after === before) {
+      if (existed) {
         // createTransaction returned an existing row (idempotent short-circuit).
         // Don't rewrite its importJobId — the first ingestion owns the lineage.
         skipped++;

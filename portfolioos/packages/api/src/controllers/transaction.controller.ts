@@ -8,6 +8,7 @@ import {
   listTransactions,
   updateTransaction,
 } from '../services/transaction.service.js';
+import { removeDuplicates, scanDuplicates } from '../services/duplicates.service.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
@@ -59,6 +60,9 @@ export const baseTransactionSchema = z.object({
   currency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
   fxRateAtTrade: decimalLike.optional(),
   inrEquivalent: decimalLike.optional(),
+  // Set only after the user has seen the duplicate we found and confirmed
+  // this is a second, genuine trade.
+  allowDuplicate: z.boolean().optional(),
 });
 
 const createSchema = baseTransactionSchema;
@@ -82,6 +86,25 @@ function userId(req: Request): string {
 export async function create(req: Request, res: Response) {
   const data = createSchema.parse(req.body);
   created(res, await createTransaction(userId(req), data));
+}
+
+export async function duplicates(req: Request, res: Response) {
+  ok(res, await scanDuplicates(userId(req)));
+}
+
+const removeDuplicatesSchema = z
+  .object({
+    transactionIds: z.array(z.string().cuid()).max(1000).optional(),
+    rentEntryIds: z.array(z.string().cuid()).max(1000).optional(),
+  })
+  .refine(
+    (v) => (v.transactionIds?.length ?? 0) + (v.rentEntryIds?.length ?? 0) > 0,
+    'Nothing selected to remove',
+  );
+
+export async function removeDuplicateRows(req: Request, res: Response) {
+  const body = removeDuplicatesSchema.parse(req.body);
+  ok(res, await removeDuplicates(userId(req), body));
 }
 
 export async function update(req: Request, res: Response) {

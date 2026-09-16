@@ -77,6 +77,16 @@ export function unwrap<T>(data: ApiResponse<T>): T {
   return data.data;
 }
 
+/**
+ * The server's own error code (`DUPLICATE_TRANSACTION`, `RATE_LIMIT`, …), for
+ * the few places that need to react to one rather than just show the message.
+ */
+export function apiErrorCode(err: unknown): string | undefined {
+  if (!axios.isAxiosError(err)) return undefined;
+  const data = err.response?.data as { code?: string } | undefined;
+  return data?.code;
+}
+
 export function apiErrorMessage(err: unknown, fallback = 'Something went wrong'): string {
   let raw: string | undefined;
   if (axios.isAxiosError(err)) {

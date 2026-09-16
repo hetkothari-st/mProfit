@@ -85,6 +85,7 @@ const markReceivedSchema = z.object({
   receivedAmount: moneyString,
   receivedOn: isoDate,
   notes: z.string().max(2000).nullable().optional(),
+  allowDuplicate: z.boolean().optional(),
 });
 
 const skipReceiptSchema = z.object({

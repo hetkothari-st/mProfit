@@ -3,11 +3,12 @@ import type { Money, Quantity } from '@everypaisa/shared';
 import type { AssetClass, Exchange, Prisma, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { AppError, BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { ensureStockMaster, ensureMutualFundMaster, resolveMutualFundId } from './masterData.service.js';
 import { recomputeForAsset } from './holdingsProjection.js';
 import { computeAssetKey, extractUnderlyingFromAssetName } from './assetKey.js';
 import { naturalKeyHash } from './sourceHash.js';
+import { findDuplicateTransaction } from './duplicateMatch.js';
 import { persistCapitalGainsForAsset } from './capitalGains.service.js';
 import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
 import { refreshAllHoldingPrices } from './holdings.service.js';
@@ -64,6 +65,13 @@ export interface CreateTransactionInput {
   sourceAdapter?: string;
   sourceAdapterVer?: string;
   sourceHash?: string;
+
+  /**
+   * Set by the UI when the user has looked at the duplicate we found and said
+   * "record it anyway" — two genuine fills of the same size on the same day
+   * are legal, we just refuse to assume it.
+   */
+  allowDuplicate?: boolean;
 
   // Forex: trade-time currency snapshot for non-INR transactions. `currency`
   // null/undefined → INR (backward compat). `fxRateAtTrade` is the base→INR
@@ -177,7 +185,29 @@ function deriveSourceHash(userId: string, input: CreateTransactionInput): string
   return null;
 }
 
-export async function createTransaction(userId: string, input: CreateTransactionInput) {
+export interface CreateTransactionOptions {
+  /**
+   * What to do when the row duplicates one already on the books.
+   * 'error' (default) → 409, so a person decides. Interactive callers.
+   * 'skip'            → return the existing row, the way sourceHash does.
+   *                     For importers and background jobs, which must never
+   *                     fail a whole batch over a repeat.
+   */
+  onDuplicate?: 'error' | 'skip';
+  /** Rows written by this import job are not duplicates of each other. */
+  ignoreImportJobId?: string;
+  /**
+   * Called instead of an insert when an existing row is returned, so importers
+   * can count what they skipped without counting rows before and after.
+   */
+  onExisting?: (existingId: string, because: 'sourceHash' | 'duplicate') => void;
+}
+
+export async function createTransaction(
+  userId: string,
+  input: CreateTransactionInput,
+  opts: CreateTransactionOptions = {},
+) {
   await assertPortfolio(userId, input.portfolioId);
 
   const qty = d(input.quantity);
@@ -193,7 +223,10 @@ export async function createTransaction(userId: string, input: CreateTransaction
   const sourceHash = deriveSourceHash(userId, input);
   if (sourceHash) {
     const existing = await prisma.transaction.findUnique({ where: { sourceHash } });
-    if (existing) return toTransactionDTO(existing);
+    if (existing) {
+      opts.onExisting?.(existing.id, 'sourceHash');
+      return toTransactionDTO(existing);
+    }
   }
 
   const refs = await resolveAssetRefs(input);
@@ -216,6 +249,39 @@ export async function createTransaction(userId: string, input: CreateTransaction
         foExpiryDate: input.expiryDate,
       })
     : computeAssetKey(refs);
+
+  // Second gate, for the same event arriving by a different road: a trade in
+  // a CAS, again in a contract note, again typed in. Those carry three
+  // different source hashes, so the gate above lets all three through.
+  if (!input.allowDuplicate) {
+    const dupe = await findDuplicateTransaction(
+      {
+        portfolioId: input.portfolioId,
+        assetKey,
+        transactionType: input.transactionType,
+        tradeDate: toDateOnly(input.tradeDate),
+        quantity: qty.toString(),
+        price: price.toString(),
+      },
+      { ignoreImportJobId: opts.ignoreImportJobId },
+    );
+    if (dupe) {
+      if (opts.onDuplicate === 'skip') {
+        const existing = await prisma.transaction.findUnique({ where: { id: dupe.id } });
+        if (existing) {
+          opts.onExisting?.(existing.id, 'duplicate');
+          return toTransactionDTO(existing);
+        }
+      } else {
+        throw new AppError(
+          `A ${input.transactionType} of ${qty.toString()} ${refs.assetName ?? input.assetName ?? 'this asset'} at ${price.toString()} on ${input.tradeDate} is already recorded. Record it again only if this is a second, genuine trade.`,
+          409,
+          'DUPLICATE_TRANSACTION',
+          { existingTransactionId: dupe.id },
+        );
+      }
+    }
+  }
 
   const data: Prisma.TransactionUncheckedCreateInput = {
     portfolioId: input.portfolioId,

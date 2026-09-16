@@ -44,6 +44,7 @@ import {
   type CreateExpenseInput,
 } from '@/api/rental.api';
 import { invalidateRentalCaches } from '@/api/rentalCache';
+import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import { DocumentVault } from '@/components/documents/DocumentVault';
 import { PropertyGallery } from '@/components/property/PropertyGallery';
 import { PropertyLocationCard } from '@/components/property/PropertyLocationCard';
@@ -113,12 +114,23 @@ function MarkReceivedDialog({
     notes: '',
   });
 
+  // The server refuses a second identical payment on the same day unless we
+  // say we meant it — the khata used to collect ten copies of one rent from a
+  // button pressed ten times.
+  const [duplicate, setDuplicate] = useState<string | null>(null);
+
   const mutation = useMutation({
     mutationFn: (input: MarkReceivedInput) =>
       rentalApi.markReceived(receipt.id, input),
     onSuccess: () => {
       invalidateRentalCaches(qc);
+      setDuplicate(null);
       onOpenChange(false);
+    },
+    onError: (err) => {
+      if (apiErrorCode(err) === 'DUPLICATE_RENT_PAYMENT') {
+        setDuplicate(apiErrorMessage(err, 'This rent is already recorded for that day'));
+      }
     },
   });
 
@@ -152,16 +164,32 @@ function MarkReceivedDialog({
             />
           </div>
         </div>
-        {mutation.isError && (
-          <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Error'}
-          </p>
+        {duplicate ? (
+          <div className="rounded-lg border border-negative/40 bg-negative/5 p-3 text-sm space-y-2">
+            <p className="font-medium">This rent is already on the khata</p>
+            <p className="text-muted-foreground">{duplicate}</p>
+          </div>
+        ) : (
+          mutation.isError && (
+            <p className="text-sm text-negative">
+              {apiErrorMessage(mutation.error, 'Could not record the payment')}
+            </p>
+          )
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => mutation.mutate(form)} disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : 'Mark received'}
-          </Button>
+          {duplicate ? (
+            <Button
+              onClick={() => mutation.mutate({ ...form, allowDuplicate: true })}
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending ? 'Saving…' : 'Record it anyway'}
+            </Button>
+          ) : (
+            <Button onClick={() => mutation.mutate(form)} disabled={mutation.isPending}>
+              {mutation.isPending ? 'Saving…' : 'Mark received'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

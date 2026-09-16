@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Receipt } from 'lucide-react';
+import { CopyCheck, Plus, Receipt } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { TransactionFormDialog } from './TransactionFormDialog';
+import { DuplicatesDialog } from './DuplicatesDialog';
 import type { TransactionDTO } from '@everypaisa/shared';
 import { formatINR, formatQuantity } from '@everypaisa/shared';
 
@@ -16,6 +17,7 @@ export function TransactionsPage() {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionDTO | null>(null);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [page, setPage] = useState(1);
 
   const { data: portfolios } = useQuery({
@@ -41,9 +43,14 @@ export function TransactionsPage() {
         title="Transactions"
         description="All buys, sells, dividends, SIPs, and corporate actions"
         actions={
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add transaction
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setDuplicatesOpen(true)}>
+              <CopyCheck className="h-4 w-4" /> Find duplicates
+            </Button>
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add transaction
+            </Button>
+          </div>
         }
       />
 
@@ -154,6 +161,7 @@ export function TransactionsPage() {
       </Card>
 
       <TransactionFormDialog open={open} onOpenChange={setOpen} initial={editing} />
+      <DuplicatesDialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen} />
     </div>
   );
 }

@@ -194,7 +194,7 @@ export async function syncKiteAccount(accountId: string): Promise<{
         broker: 'Zerodha',
         tradeNo: t.trade_id,
         orderNo: t.order_id,
-      });
+      }, { onDuplicate: 'skip' });
       tradesImported++;
     }
   } catch (err) {

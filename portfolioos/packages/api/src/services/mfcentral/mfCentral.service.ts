@@ -219,8 +219,7 @@ export async function submitOtpAndSync(input: SubmitOtpInput): Promise<SubmitOtp
     for (const tx of parsed) {
       try {
         const sourceHash = mfCentralTxnHash(userPan, tx);
-        const existing = await prisma.transaction.findUnique({ where: { sourceHash } });
-        const before = existing?.id;
+        let existed = false;
         await createTransaction(input.userId, {
           portfolioId: job.portfolioId!,
           assetClass: tx.assetClass,
@@ -235,8 +234,11 @@ export async function submitOtpAndSync(input: SubmitOtpInput): Promise<SubmitOtp
           sourceAdapter: SOURCE_ADAPTER,
           sourceAdapterVer: SOURCE_ADAPTER_VER,
           sourceHash,
+        }, {
+          onDuplicate: 'skip',
+          onExisting: () => { existed = true; },
         });
-        if (!before) inserted++;
+        if (!existed) inserted++;
         const fundKey = tx.isin ?? tx.assetName ?? '';
         if (fundKey) fundsSeen.add(fundKey);
       } catch (err) {

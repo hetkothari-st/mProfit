@@ -120,7 +120,7 @@ async function projectMfFolios(
 
         const sourceHash = txnHash(pan, schemeKey, t);
         try {
-          const existing = await prisma.transaction.findUnique({ where: { sourceHash } });
+          let existed = false;
           await createTransaction(userId, {
             portfolioId,
             assetClass: 'MUTUAL_FUND',
@@ -135,8 +135,13 @@ async function projectMfFolios(
             sourceAdapter: SOURCE_ADAPTER,
             sourceAdapterVer: SOURCE_ADAPTER_VER,
             sourceHash,
+          }, {
+            // A statement re-read, or a trade that also came in from a
+            // contract note, must not add a second copy.
+            onDuplicate: 'skip',
+            onExisting: () => { existed = true; },
           });
-          if (!existing) inserted++;
+          if (!existed) inserted++;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           warnings.push(`Failed to insert ${schemeName} ${t.date}: ${msg}`);

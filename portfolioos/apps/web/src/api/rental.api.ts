@@ -180,6 +180,12 @@ export interface MarkReceivedInput {
   receivedAmount: string;
   receivedOn: string;
   notes?: string | null;
+  /**
+   * Sent only after the user has seen the payment already on the khata and
+   * confirmed a second one really came in that day. Without it the server
+   * answers 409 DUPLICATE_RENT_PAYMENT.
+   */
+  allowDuplicate?: boolean;
 }
 
 export interface CreateExpenseInput {

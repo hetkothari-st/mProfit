@@ -21,7 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { AssetSearch } from '@/components/common/AssetSearch';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
-import { apiErrorMessage } from '@/api/client';
+import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import {
   AssetClass,
   TransactionType,
@@ -33,6 +33,8 @@ import {
   toDecimal,
   formatINR,
 } from '@everypaisa/shared';
+
+const isDuplicateError = (err: unknown) => apiErrorCode(err) === 'DUPLICATE_TRANSACTION';
 
 // Money/Quantity fields hydrate from Money-string DTOs (§3.2). z.coerce.number
 // alone types its input as `number`, which would force a `Number()` cast on
@@ -197,8 +199,12 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
     }
   }, [open, initial, defaultPortfolioId, portfolios, reset]);
 
+  // Set when the server answers 409: the values we tried, plus what it found.
+  // The user either confirms a second genuine trade or drops it.
+  const [duplicate, setDuplicate] = useState<{ message: string; values: FormOutput } | null>(null);
+
   const saveMutation = useMutation({
-    mutationFn: async (values: FormOutput) => {
+    mutationFn: async ({ values, allowDuplicate }: { values: FormOutput; allowDuplicate?: boolean }) => {
       const payload: CreateTransactionRequest = {
         portfolioId: values.portfolioId,
         transactionType: values.transactionType,
@@ -250,7 +256,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
       }
 
       if (isEdit && initial) return transactionsApi.update(initial.id, payload);
-      return transactionsApi.create(payload);
+      return transactionsApi.create({ ...payload, ...(allowDuplicate ? { allowDuplicate: true } : {}) });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -258,9 +264,16 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
       queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] });
       queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
       toast.success(isEdit ? 'Transaction updated' : 'Transaction added');
+      setDuplicate(null);
       onOpenChange(false);
     },
-    onError: (err) => toast.error(apiErrorMessage(err, 'Save failed')),
+    onError: (err, variables) => {
+      if (isDuplicateError(err)) {
+        setDuplicate({ message: apiErrorMessage(err, 'Looks like a duplicate'), values: variables.values });
+        return;
+      }
+      toast.error(apiErrorMessage(err, 'Save failed'));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -336,12 +349,33 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
           </DialogDescription>
         </DialogHeader>
 
+        {duplicate && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
+            <p className="font-medium">You may already have this one</p>
+            <p className="text-muted-foreground">{duplicate.message}</p>
+            <div className="flex gap-2 pt-1">
+              <Button type="button" size="sm" variant="outline" onClick={() => setDuplicate(null)}>
+                Let me check
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={saveMutation.isPending}
+                onClick={() => saveMutation.mutate({ values: duplicate.values, allowDuplicate: true })}
+              >
+                {saveMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Record it anyway
+              </Button>
+            </div>
+          </div>
+        )}
+
         <form
           onSubmit={handleSubmit((v) =>
             // zodResolver runs the preprocess/coerce pipeline, so at submit time
             // the values are FormOutput (numbers) even though TFieldValues is
             // FormValues (unknown-side inputs). The cast is the minimal bridge.
-            saveMutation.mutate(v as unknown as FormOutput),
+            saveMutation.mutate({ values: v as unknown as FormOutput }),
           )}
           className="space-y-4"
         >
