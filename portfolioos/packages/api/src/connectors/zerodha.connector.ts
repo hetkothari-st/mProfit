@@ -18,9 +18,14 @@ export interface KiteSessionResult {
   email: string;
 }
 
-export function buildKiteLoginUrl(): string {
+export function buildKiteLoginUrl(state?: string): string {
   if (!env.KITE_API_KEY) throw new Error('KITE_API_KEY not configured');
-  return `https://kite.trade/connect/login?api_key=${env.KITE_API_KEY}&v=3`;
+  const base = `https://kite.trade/connect/login?api_key=${env.KITE_API_KEY}&v=3`;
+  // Kite echoes any extra query parameters back to the redirect URL, which is
+  // how we get a CSRF state through a flow that has no state parameter of its
+  // own. Without it the callback cannot tell that the request token it is
+  // about to exchange came from a login THIS user started.
+  return state ? `${base}&state=${encodeURIComponent(state)}` : base;
 }
 
 export async function exchangeKiteRequestToken(requestToken: string): Promise<KiteSessionResult> {

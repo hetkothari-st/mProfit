@@ -1,6 +1,6 @@
 import rateLimit, { type Store } from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 
@@ -24,7 +24,7 @@ function makeStore(prefix: string): Store | undefined {
       enableOfflineQueue: false,
       lazyConnect: false,
     });
-    client.on('error', (err) => {
+    client.on('error', (err: Error) => {
       // Logged, not thrown — ioredis reconnects on its own, and an unhandled
       // 'error' event on a Redis client takes the process down.
       logger.warn({ err, prefix }, 'ratelimit.redis.error');

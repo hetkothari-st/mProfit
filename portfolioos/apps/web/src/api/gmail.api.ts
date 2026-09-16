@@ -15,10 +15,10 @@ export const gmailApi = {
     const { data } = await api.get<ApiResponse<{ url: string }>>('/api/gmail/auth-url');
     return unwrap(data);
   },
-  async callback(code: string): Promise<{ id: string; email: string }> {
+  async callback(code: string, state: string): Promise<{ id: string; email: string }> {
     const { data } = await api.post<ApiResponse<{ id: string; email: string }>>(
       '/api/gmail/callback',
-      { code },
+      { code, state },
     );
     return unwrap(data);
   },

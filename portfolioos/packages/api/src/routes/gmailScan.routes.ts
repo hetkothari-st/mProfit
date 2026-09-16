@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
 import {
-import { costlyOperationLimiter } from '../middleware/rateLimit.js';
   postScanJob,
   listScans,
   getScan,
@@ -21,6 +20,7 @@ import { costlyOperationLimiter } from '../middleware/rateLimit.js';
   postAutoApproveRule,
   deleteAutoApproveRule,
 } from '../controllers/gmailScan.controller.js';
+import { costlyOperationLimiter } from '../middleware/rateLimit.js';
 
 export const gmailScanRouter = Router();
 gmailScanRouter.use(authenticate);
