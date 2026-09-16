@@ -259,7 +259,6 @@ function VerifyEmailStep({
             inputMode="numeric"
             autoComplete="one-time-code"
             autoFocus
-            maxLength={6}
             placeholder="000000"
             className="mt-1 h-12 text-center text-xl font-semibold tracking-[0.5em] tabular-nums"
             value={code}

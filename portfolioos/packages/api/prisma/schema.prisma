@@ -307,6 +307,8 @@ model RefreshToken {
   @@index([userId])
 }
 
+/// A password reset in progress. `token` holds the HMAC of the 6-digit code
+/// emailed to the user (bound to their address), never the code itself.
 model PasswordResetToken {
   id        String    @id @default(cuid())
   token     String    @unique
@@ -314,6 +316,8 @@ model PasswordResetToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   usedAt    DateTime?
+  /// Wrong codes entered against this reset; locked at 5.
+  attempts  Int       @default(0)
   createdAt DateTime  @default(now())
 
   @@index([userId])
