@@ -74,9 +74,14 @@ function loadGsiScript(): Promise<void> {
 export interface GoogleSignInButtonProps {
   /** "signin" / "signup" / "continue" — controls button label only. */
   text?: 'signin_with' | 'signup_with' | 'continue_with';
+  /** The page's "Remember me" choice. Remembered unless told otherwise. */
+  remember?: boolean;
 }
 
-export function GoogleSignInButton({ text = 'continue_with' }: GoogleSignInButtonProps) {
+export function GoogleSignInButton({
+  text = 'continue_with',
+  remember = true,
+}: GoogleSignInButtonProps) {
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -87,7 +92,7 @@ export function GoogleSignInButton({ text = 'continue_with' }: GoogleSignInButto
   const googleMutation = useMutation({
     mutationFn: (idToken: string) => authApi.loginWithGoogle(idToken),
     onSuccess: (data) => {
-      setSession(data.user, data.tokens);
+      setSession(data.user, data.tokens, { remember });
       toast.success(
         data.isNew
           ? `Welcome to EveryPaisa, ${data.user.name.split(' ')[0]}!`

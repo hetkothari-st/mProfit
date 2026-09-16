@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,8 +12,8 @@ import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/api/auth.api';
-import { useAuthStore } from '@/stores/auth.store';
-import { apiErrorMessage } from '@/api/client';
+import { isSessionRemembered, useAuthStore } from '@/stores/auth.store';
+import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 
 const schema = z.object({
@@ -28,6 +28,8 @@ export function LoginPage() {
   const location = useLocation();
   const setSession = useAuthStore((s) => s.setSession);
   const isAuthed = useAuthStore((s) => Boolean(s.accessToken && s.user));
+  // Wrong email/password, shown under the field with a way out.
+  const [credentialsRejected, setCredentialsRejected] = useState(false);
 
   useEffect(() => {
     if (isAuthed) navigate('/dashboard', { replace: true });
@@ -36,25 +38,36 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { rememberMe: true },
+    defaultValues: { rememberMe: isSessionRemembered() },
   });
+  // Carried to the reset page so the user doesn't retype it.
+  const forgotLinkState = { email: watch('email') };
 
   const loginMutation = useMutation({
-    mutationFn: authApi.login,
-    onSuccess: (data) => {
-      setSession(data.user, data.tokens);
+    mutationFn: (values: FormValues) =>
+      authApi.login({ email: values.email, password: values.password }),
+    onSuccess: (data, values) => {
+      setSession(data.user, data.tokens, { remember: values.rememberMe ?? true });
       toast.success(`Welcome back, ${data.user.name.split(' ')[0]}!`);
       const to = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/dashboard';
       navigate(to, { replace: true });
     },
-    onError: (err) => toast.error(apiErrorMessage(err, 'Login failed')),
+    onError: (err) => {
+      if (apiErrorCode(err) === 'UNAUTHORIZED') {
+        setCredentialsRejected(true);
+        return;
+      }
+      toast.error(apiErrorMessage(err, 'Login failed'));
+    },
   });
 
   const onSubmit = (values: FormValues) => {
-    loginMutation.mutate({ email: values.email, password: values.password });
+    setCredentialsRejected(false);
+    loginMutation.mutate(values);
   };
 
   return (
@@ -79,28 +92,35 @@ export function LoginPage() {
             autoComplete="email"
             placeholder="you@example.com"
             className="mt-1"
-            aria-invalid={Boolean(errors.email)}
+            aria-invalid={Boolean(errors.email) || credentialsRejected}
             {...register('email')}
           />
           {errors.email && <p className="text-xs text-negative mt-1">{errors.email.message}</p>}
         </div>
 
         <div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
-            <Link to="/forgot-password" className="text-xs text-primary hover:underline">
-              Forgot password?
-            </Link>
-          </div>
+          <Label htmlFor="password">Password</Label>
           <PasswordInput
             id="password"
             autoComplete="current-password"
             containerClassName="mt-1"
-            aria-invalid={Boolean(errors.password)}
+            aria-invalid={Boolean(errors.password) || credentialsRejected}
             {...register('password')}
           />
           {errors.password && (
             <p className="text-xs text-negative mt-1">{errors.password.message}</p>
+          )}
+          {credentialsRejected && (
+            <p role="alert" className="text-xs text-negative mt-1">
+              Incorrect email or password.{' '}
+              <Link
+                to="/forgot-password"
+                state={forgotLinkState}
+                className="font-medium text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </p>
           )}
         </div>
 
@@ -118,6 +138,16 @@ export function LoginPage() {
           Sign in
         </Button>
 
+        <p className="text-center text-sm">
+          <Link
+            to="/forgot-password"
+            state={forgotLinkState}
+            className="font-medium text-primary hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </p>
+
         <div className="relative my-3">
           <div className="absolute inset-0 flex items-center">
             <span className="w-full border-t border-border" />
@@ -127,7 +157,7 @@ export function LoginPage() {
           </div>
         </div>
 
-        <GoogleSignInButton text="signin_with" />
+        <GoogleSignInButton text="signin_with" remember={watch('rememberMe') ?? true} />
 
         <p className="text-xs text-center text-muted-foreground pt-2">
           Demo credentials: <span className="font-mono">demo@everypaisa.in</span> /{' '}
