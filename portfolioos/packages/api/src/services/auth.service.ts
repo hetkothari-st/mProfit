@@ -1,16 +1,19 @@
 import crypto from 'node:crypto';
-import type { User } from '@prisma/client';
+import { Prisma, type User } from '@prisma/client';
 import { OAuth2Client } from 'google-auth-library';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import {
+  AppError,
   BadRequestError,
   ConflictError,
   NotFoundError,
+  TooManyRequestsError,
   UnauthorizedError,
 } from '../lib/errors.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { hashPassword, verifyPassword } from './password.service.js';
+import { sendEmail } from './notifications/email.service.js';
 import {
   generateRefreshToken,
   refreshTokenExpiry,
@@ -76,29 +79,200 @@ export async function issueSession(user: User) {
   };
 }
 
-export async function registerUser(input: {
+// ── Signup with email verification ────────────────────────────────────
+// Signup is two calls. `startRegistration` parks the details in
+// PendingRegistration and emails a 6-digit code; `verifyRegistration` checks
+// the code and only then creates the User. Nobody gets an account for an
+// address they haven't proven they can read.
+
+const CODE_TTL_MS = 10 * 60 * 1000;
+const RESEND_COOLDOWN_MS = 60 * 1000;
+const MAX_CODE_ATTEMPTS = 5;
+
+export interface RegistrationInput {
   email: string;
   password: string;
   name: string;
   phone?: string;
   role?: User['role'];
-}) {
+}
+
+export interface PendingRegistrationResult {
+  email: string;
+  expiresAt: string;
+  resendAvailableAt: string;
+}
+
+function generateCode(): string {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
+// Keyed and bound to the address, so a leaked row can't be brute-forced
+// offline and a code for one signup can't be replayed against another.
+function hashCode(email: string, code: string): string {
+  return crypto.createHmac('sha256', env.JWT_SECRET).update(`${email}:${code}`).digest('hex');
+}
+
+function codeMatches(email: string, code: string, storedHash: string): boolean {
+  const a = Buffer.from(hashCode(email, code), 'hex');
+  const b = Buffer.from(storedHash, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function assertCooldownElapsed(lastSentAt: Date): void {
+  const availableAt = lastSentAt.getTime() + RESEND_COOLDOWN_MS;
+  if (Date.now() < availableAt) {
+    const seconds = Math.ceil((availableAt - Date.now()) / 1000);
+    throw new TooManyRequestsError(`Please wait ${seconds}s before requesting another code`, {
+      resendAvailableAt: new Date(availableAt).toISOString(),
+    });
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+async function sendVerificationCode(email: string, name: string, code: string): Promise<void> {
+  const result = await sendEmail({
+    to: email,
+    subject: `${code} is your EveryPaisa verification code`,
+    html: `<p>Hi ${escapeHtml(name)},</p>
+<p>Your EveryPaisa verification code is:</p>
+<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:16px 0">${code}</p>
+<p>It expires in 10 minutes. If you didn't try to create an account, you can ignore this email.</p>`,
+  });
+  if (result.sent) return;
+  if (env.NODE_ENV !== 'production') {
+    // No SMTP in local dev — put the code in the server log so signup stays
+    // testable. Never in production: the code is the whole proof.
+    logger.warn({ email, code }, '[auth.register] email not sent — dev verification code');
+    return;
+  }
+  throw new AppError(
+    'We could not send the verification email. Please try again in a few minutes.',
+    503,
+    'EMAIL_SEND_FAILED',
+  );
+}
+
+function pendingResult(email: string, expiresAt: Date, sentAt: Date): PendingRegistrationResult {
+  return {
+    email,
+    expiresAt: expiresAt.toISOString(),
+    resendAvailableAt: new Date(sentAt.getTime() + RESEND_COOLDOWN_MS).toISOString(),
+  };
+}
+
+export async function startRegistration(
+  input: RegistrationInput,
+): Promise<PendingRegistrationResult> {
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) throw new ConflictError('Email already registered');
 
+  const pending = await prisma.pendingRegistration.findUnique({ where: { email: input.email } });
+  if (pending) assertCooldownElapsed(pending.lastSentAt);
+
   const passwordHash = await hashPassword(input.password);
-  const user = await prisma.user.create({
-    data: {
-      email: input.email,
-      passwordHash,
-      name: input.name,
-      phone: input.phone,
-      role: input.role ?? 'INVESTOR',
-      // plan is never client-supplied — every new account starts FREE and
-      // upgrades only through the billing flow (see requireFeature /
-      // FEATURE_MIN_TIER).
-    },
+  const code = generateCode();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + CODE_TTL_MS);
+  const details = {
+    name: input.name,
+    phone: input.phone ?? null,
+    passwordHash,
+    // plan is never client-supplied — every new account starts FREE and
+    // upgrades only through the billing flow (see requireFeature /
+    // FEATURE_MIN_TIER).
+    role: input.role ?? 'INVESTOR',
+    codeHash: hashCode(input.email, code),
+    attempts: 0,
+    expiresAt,
+    lastSentAt: now,
+  };
+  await prisma.pendingRegistration.upsert({
+    where: { email: input.email },
+    create: { email: input.email, ...details },
+    update: details,
   });
+
+  try {
+    await sendVerificationCode(input.email, input.name, code);
+  } catch (err) {
+    // A code nobody received must not hold the resend cooldown.
+    await prisma.pendingRegistration.deleteMany({ where: { email: input.email } });
+    throw err;
+  }
+  return pendingResult(input.email, expiresAt, now);
+}
+
+export async function resendRegistrationCode(email: string): Promise<PendingRegistrationResult> {
+  const pending = await prisma.pendingRegistration.findUnique({ where: { email } });
+  if (!pending) {
+    throw new BadRequestError('No signup in progress for this email. Please start again.');
+  }
+  assertCooldownElapsed(pending.lastSentAt);
+
+  const code = generateCode();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + CODE_TTL_MS);
+  await prisma.pendingRegistration.update({
+    where: { id: pending.id },
+    data: { codeHash: hashCode(email, code), attempts: 0, expiresAt, lastSentAt: now },
+  });
+  await sendVerificationCode(email, pending.name, code);
+  return pendingResult(email, expiresAt, now);
+}
+
+export async function verifyRegistration(email: string, code: string) {
+  const pending = await prisma.pendingRegistration.findUnique({ where: { email } });
+  if (!pending) {
+    throw new BadRequestError('No signup in progress for this email. Please start again.');
+  }
+  if (pending.expiresAt < new Date()) {
+    throw new BadRequestError('This code has expired. Request a new one.');
+  }
+  if (pending.attempts >= MAX_CODE_ATTEMPTS) {
+    throw new BadRequestError('Too many incorrect attempts. Request a new code.');
+  }
+  if (!codeMatches(email, code, pending.codeHash)) {
+    // Read the count back from the increment, not from `pending`: parallel
+    // guesses each saw the old count, and the atomic increment is the truth.
+    const { attempts } = await prisma.pendingRegistration.update({
+      where: { id: pending.id },
+      data: { attempts: { increment: 1 } },
+    });
+    const left = MAX_CODE_ATTEMPTS - attempts;
+    throw new BadRequestError(
+      left > 0
+        ? `Incorrect code. ${left} attempt${left === 1 ? '' : 's'} left.`
+        : 'Too many incorrect attempts. Request a new code.',
+    );
+  }
+
+  let user: User;
+  try {
+    user = await runInTransaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          email: pending.email,
+          passwordHash: pending.passwordHash,
+          name: pending.name,
+          phone: pending.phone,
+          role: pending.role,
+        },
+      });
+      await tx.pendingRegistration.delete({ where: { id: pending.id } });
+      return created;
+    });
+  } catch (err) {
+    // The address got taken between start and verify (e.g. Google sign-in).
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      await prisma.pendingRegistration.deleteMany({ where: { email } });
+      throw new ConflictError('Email already registered');
+    }
+    throw err;
+  }
 
   return issueSession(user);
 }

@@ -8,7 +8,9 @@ import {
   patchMe,
   refresh,
   register,
+  resendRegistrationHandler,
   resetPasswordHandler,
+  verifyRegistrationHandler,
 } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
@@ -17,6 +19,8 @@ import { authLimiter } from '../middleware/rateLimit.js';
 export const authRouter = Router();
 
 authRouter.post('/register', authLimiter, asyncHandler(register));
+authRouter.post('/register/verify', authLimiter, asyncHandler(verifyRegistrationHandler));
+authRouter.post('/register/resend', authLimiter, asyncHandler(resendRegistrationHandler));
 authRouter.post('/login', authLimiter, asyncHandler(login));
 authRouter.post('/google', authLimiter, asyncHandler(google));
 authRouter.post('/refresh', authLimiter, asyncHandler(refresh));

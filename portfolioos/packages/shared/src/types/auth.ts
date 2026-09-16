@@ -35,6 +35,18 @@ export interface RegisterRequest {
   // only through the billing flow (see @everypaisa/shared/entitlements).
 }
 
+/** Returned by register/resend: a code was emailed, no account exists yet. */
+export interface PendingRegistration {
+  email: string;
+  expiresAt: string;
+  resendAvailableAt: string;
+}
+
+export interface VerifyRegistrationRequest {
+  email: string;
+  code: string;
+}
+
 export interface LoginResponse {
   user: AuthUser;
   tokens: AuthTokens;

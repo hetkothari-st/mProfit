@@ -8,13 +8,14 @@ import {
   logoutAllSessions,
   logoutSession,
   refreshSession,
-  registerUser,
   requestPasswordReset,
+  resendRegistrationCode,
   resetPassword,
+  startRegistration,
   updateProfile,
+  verifyRegistration,
 } from '../services/auth.service.js';
 import { created, noContent, ok } from '../lib/response.js';
-// `created` is used by the Google flow when a new user is registered.
 import { UnauthorizedError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 
@@ -74,10 +75,33 @@ export const updateProfileSchema = z.object({
     .or(z.literal('')),
 });
 
+export const verifyRegistrationSchema = z.object({
+  email: z.string().email().toLowerCase(),
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code'),
+});
+
+export const resendRegistrationSchema = z.object({
+  email: z.string().email().toLowerCase(),
+});
+
+/** Signup step 1: stash the details and email a code. No account yet. */
 export async function register(req: Request, res: Response) {
   const data = registerSchema.parse(req.body);
-  const result = await registerUser(data);
+  const result = await startRegistration(data);
+  ok(res, result);
+}
+
+/** Signup step 2: the code checks out, so create the account and sign in. */
+export async function verifyRegistrationHandler(req: Request, res: Response) {
+  const { email, code } = verifyRegistrationSchema.parse(req.body);
+  const result = await verifyRegistration(email, code);
   created(res, result);
+}
+
+export async function resendRegistrationHandler(req: Request, res: Response) {
+  const { email } = resendRegistrationSchema.parse(req.body);
+  const result = await resendRegistrationCode(email);
+  ok(res, result);
 }
 
 export async function login(req: Request, res: Response) {
