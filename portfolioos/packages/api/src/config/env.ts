@@ -226,17 +226,18 @@ export function collectProductionSecretProblems(e: {
     );
   }
 
-  // A warning, not a boot failure. Production was confirmed (2026-09-16) to
-  // run without SECRETS_KEY, so refusing to boot would turn an existing
-  // exposure into an outage without making anything safer. lib/secrets.ts
-  // keeps using the legacy key until it is set, and the rotation job moves
-  // every stored secret onto the real key on the first start after it is.
+  // Fatal. This was temporarily a warning so the first hardened deploy could
+  // boot before the key existed (production ran without it until 2026-09-16).
+  // The key is now set and every stored secret was re-encrypted under it, so
+  // a missing key can only mean a misconfigured deployment — and booting
+  // without it would make every stored broker, Gmail and mailbox secret
+  // undecryptable while silently writing new ones under the public legacy key.
   if (!e.SECRETS_KEY) {
-    out.warnings.push(
-      'SECRETS_KEY is not set. Broker API keys/secrets/TOTP seeds, Gmail and ' +
-        'broker OAuth tokens, mailbox passwords and saved document passwords ' +
-        'are encrypted with a key committed to this repository. Set it: the ' +
-        'next start re-encrypts everything under it automatically.',
+    out.fatal.push(
+      'SECRETS_KEY is not set. Every stored broker API key/secret/TOTP seed, ' +
+        'Gmail and broker OAuth token, mailbox password and saved document ' +
+        'password is encrypted with it; without it they cannot be read, and ' +
+        'new ones would be written under a key committed to this repository.',
     );
   }
   // A warning: the webhook handler already rejects every call without the
