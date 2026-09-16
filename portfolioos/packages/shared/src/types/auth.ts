@@ -30,6 +30,8 @@ export interface AuthTokens {
 export interface LoginRequest {
   email: string;
   password: string;
+  /** Cancel a scheduled account deletion and sign in. */
+  restore?: boolean;
 }
 
 export interface RegisterRequest {

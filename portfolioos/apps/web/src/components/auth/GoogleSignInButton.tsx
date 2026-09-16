@@ -5,6 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
+import { RestoreAccountNotice, pendingDeletionDate } from './RestoreAccountNotice';
 
 /**
  * Google Identity Services (GSI) button.
@@ -89,9 +90,14 @@ export function GoogleSignInButton({
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
+  const [pendingRestore, setPendingRestore] = useState<{ idToken: string; scheduledFor: string } | null>(null);
+
   const googleMutation = useMutation({
-    mutationFn: (idToken: string) => authApi.loginWithGoogle(idToken),
-    onSuccess: (data) => {
+    mutationFn: ({ idToken, restore }: { idToken: string; restore?: boolean }) =>
+      authApi.loginWithGoogle(idToken, restore),
+    onSuccess: (data, { restore }) => {
+      setPendingRestore(null);
+      if (restore) toast.success('Your account has been restored.');
       setSession(data.user, data.tokens, { remember });
       toast.success(
         data.isNew
@@ -101,7 +107,14 @@ export function GoogleSignInButton({
       // A brand-new account goes through setup, whatever this browser saw before.
       navigate(data.isNew ? '/onboarding' : '/dashboard', { replace: true });
     },
-    onError: (err) => toast.error(apiErrorMessage(err, 'Google sign-in failed')),
+    onError: (err, { idToken }) => {
+      const scheduledFor = pendingDeletionDate(err);
+      if (scheduledFor !== null) {
+        setPendingRestore({ idToken, scheduledFor });
+        return;
+      }
+      toast.error(apiErrorMessage(err, 'Google sign-in failed'));
+    },
   });
 
   useEffect(() => {
@@ -121,7 +134,7 @@ export function GoogleSignInButton({
         gsi.initialize({
           client_id: clientId,
           callback: (response) => {
-            if (response?.credential) googleMutation.mutate(response.credential);
+            if (response?.credential) googleMutation.mutate({ idToken: response.credential });
           },
           ux_mode: 'popup',
           auto_select: false,
@@ -150,6 +163,14 @@ export function GoogleSignInButton({
 
   return (
     <div className="space-y-2">
+      {pendingRestore && (
+        <RestoreAccountNotice
+          scheduledFor={pendingRestore.scheduledFor}
+          pending={googleMutation.isPending}
+          onRestore={() => googleMutation.mutate({ idToken: pendingRestore.idToken, restore: true })}
+          onCancel={() => setPendingRestore(null)}
+        />
+      )}
       <div ref={containerRef} className="flex justify-center min-h-[40px]" />
       {loadError && (
         <p className="text-xs text-negative text-center">{loadError}</p>

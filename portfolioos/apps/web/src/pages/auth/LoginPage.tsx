@@ -15,6 +15,7 @@ import { authApi } from '@/api/auth.api';
 import { isSessionRemembered, useAuthStore } from '@/stores/auth.store';
 import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
+import { RestoreAccountNotice, pendingDeletionDate } from '@/components/auth/RestoreAccountNotice';
 
 const schema = z.object({
   email: z.string().email({ message: 'Enter a valid email address' }),
@@ -54,16 +55,26 @@ export function LoginPage() {
   // Carried to the reset page so the user doesn't retype it.
   const forgotLinkState = { email: watch('email') };
 
+  // Set when sign-in was refused because the account is pending deletion.
+  const [pendingRestore, setPendingRestore] = useState<{ values: FormValues; scheduledFor: string } | null>(null);
+
   const loginMutation = useMutation({
-    mutationFn: (values: FormValues) =>
-      authApi.login({ email: values.email, password: values.password }),
-    onSuccess: (data, values) => {
+    mutationFn: ({ values, restore }: { values: FormValues; restore?: boolean }) =>
+      authApi.login({ email: values.email, password: values.password, ...(restore ? { restore } : {}) }),
+    onSuccess: (data, { values, restore }) => {
+      setPendingRestore(null);
+      if (restore) toast.success('Your account has been restored.');
       setSession(data.user, data.tokens, { remember: values.rememberMe ?? true });
       toast.success(`Welcome back, ${data.user.name.split(' ')[0]}!`);
       const to = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/dashboard';
       navigate(to, { replace: true });
     },
-    onError: (err) => {
+    onError: (err, { values }) => {
+      const scheduledFor = pendingDeletionDate(err);
+      if (scheduledFor !== null) {
+        setPendingRestore({ values, scheduledFor });
+        return;
+      }
       if (apiErrorCode(err) === 'UNAUTHORIZED') {
         setCredentialsRejected(true);
         return;
@@ -74,7 +85,8 @@ export function LoginPage() {
 
   const onSubmit = (values: FormValues) => {
     setCredentialsRejected(false);
-    loginMutation.mutate(values);
+    setPendingRestore(null);
+    loginMutation.mutate({ values });
   };
 
   return (
@@ -91,6 +103,14 @@ export function LoginPage() {
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {pendingRestore && (
+          <RestoreAccountNotice
+            scheduledFor={pendingRestore.scheduledFor}
+            pending={loginMutation.isPending}
+            onRestore={() => loginMutation.mutate({ values: pendingRestore.values, restore: true })}
+            onCancel={() => setPendingRestore(null)}
+          />
+        )}
         <div>
           <Label htmlFor="email">Email</Label>
           <Input

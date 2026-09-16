@@ -43,6 +43,16 @@ model User {
   /// "deactivated account" in ~60 places and would silently drag this into
   /// gates it was never meant to affect.
   isShadowClient        Boolean   @default(false)
+  /// Account deletion (30-day grace). While `deletionScheduledFor` is set the
+  /// account cannot sign in without explicitly restoring it, and the purge job
+  /// erases everything once the date passes. See accountDeletion.service.ts.
+  deletionRequestedAt   DateTime?
+  deletionScheduledFor  DateTime?
+  /// Emailed code for confirming deletion when the user has no usable password
+  /// (Google sign-in). HMAC-hashed, expiring, attempt-capped.
+  deletionCodeHash      String?
+  deletionCodeExpiresAt DateTime?
+  deletionCodeAttempts  Int       @default(0)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -180,6 +190,8 @@ model User {
   // a CA). These two are the other side: the Client rows where this user IS
   // the subject, and both ends of the CA audit trail.
   clientRecords Client[] @relation("ClientSubject")
+
+  @@index([deletionScheduledFor])
 }
 
 model UserNotificationConfig {

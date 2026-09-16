@@ -21,6 +21,7 @@ import {
   signAccessToken,
 } from './jwt.service.js';
 import { panColumns } from './piiAtRest.service.js';
+import { assertNotPendingDeletion } from './accountDeletion.service.js';
 
 interface IssueTokensResult {
   accessToken: string;
@@ -357,7 +358,7 @@ function getDummyPasswordHash(): Promise<string> {
   return dummyPasswordHash;
 }
 
-export async function loginUser(email: string, password: string) {
+export async function loginUser(email: string, password: string, opts: { restore?: boolean } = {}) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.isActive) {
     await verifyPassword(password, await getDummyPasswordHash());
@@ -366,6 +367,9 @@ export async function loginUser(email: string, password: string) {
   assertNotShadowClient(user);
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) throw new UnauthorizedError('Invalid credentials');
+  // Only after the password checks out, so the pending state is never
+  // revealed to someone who doesn't own the account.
+  await assertNotPendingDeletion(user, opts.restore === true);
 
   return issueSession(user);
 }
@@ -390,6 +394,8 @@ export async function refreshSession(refreshToken: string) {
   }
   if (!stored.user.isActive) throw new UnauthorizedError('Account deactivated');
   assertNotShadowClient(stored.user);
+  // Deletion revokes every refresh token; this is the backstop.
+  if (stored.user.deletionScheduledFor) throw new UnauthorizedError('Account scheduled for deletion');
 
   await prisma.refreshToken.update({
     where: { id: stored.id },
@@ -571,7 +577,7 @@ function getGoogleClient(): OAuth2Client {
   return googleClient;
 }
 
-export async function loginOrRegisterWithGoogle(idToken: string) {
+export async function loginOrRegisterWithGoogle(idToken: string, opts: { restore?: boolean } = {}) {
   const client = getGoogleClient();
   let payload: import('google-auth-library').TokenPayload | undefined;
   try {
@@ -606,6 +612,7 @@ export async function loginOrRegisterWithGoogle(idToken: string) {
   // A CA may have entered the client's real Google address on the shadow
   // record; signing in with it must not adopt those books.
   assertNotShadowClient(user);
+  await assertNotPendingDeletion(user, opts.restore === true);
 
   return { ...(await issueSession(user)), isNew };
 }

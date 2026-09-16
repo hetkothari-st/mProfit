@@ -12,6 +12,9 @@ import {
   resetPasswordHandler,
   verifyRegistrationHandler,
   revealPan,
+  deletionCode,
+  deletionStatus,
+  requestDeletion,
 } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
@@ -32,3 +35,6 @@ authRouter.post('/reset-password', authLimiter, asyncHandler(resetPasswordHandle
 authRouter.post('/pan/reveal', authenticate, piiLimiter, asyncHandler(revealPan));
 authRouter.get('/me', authenticate, asyncHandler(me));
 authRouter.patch('/me', authenticate, asyncHandler(patchMe));
+authRouter.get('/me/deletion', authenticate, asyncHandler(deletionStatus));
+authRouter.post('/me/deletion/code', authenticate, authLimiter, asyncHandler(deletionCode));
+authRouter.post('/me/deletion', authenticate, authLimiter, asyncHandler(requestDeletion));
