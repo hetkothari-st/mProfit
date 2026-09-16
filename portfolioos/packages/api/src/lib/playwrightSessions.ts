@@ -7,6 +7,16 @@ interface ScrapeSession {
   page: Page;
   expiresAt: number;
   regNo: string;
+  /**
+   * The user who started this scrape.
+   *
+   * Sessions used to carry no owner at all, so getSession(id) resolved for
+   * any caller holding the id and verifyCarInfoOtp would write the resulting
+   * vehicle to whoever submitted the OTP. The MFCentral and CAMS mailback
+   * flows both check `job.userId` before resuming; this one had nothing to
+   * check against.
+   */
+  userId: string;
   [key: string]: unknown;
 }
 
@@ -19,7 +29,7 @@ class PlaywrightSessionManager {
     this.cleanupInterval = setInterval(() => this.cleanup(), 60000);
   }
 
-  async createSession(regNo: string): Promise<ScrapeSession> {
+  async createSession(regNo: string, userId: string): Promise<ScrapeSession> {
     const browser = await chromium.launch({
       headless: true,
       args: [
@@ -47,6 +57,7 @@ class PlaywrightSessionManager {
       browser,
       page,
       regNo,
+      userId,
       expiresAt: Date.now() + 10 * 60000, // 10 minutes expiry
     };
 
@@ -54,12 +65,17 @@ class PlaywrightSessionManager {
     return session;
   }
 
-  getSession(id: string): ScrapeSession | undefined {
+  /**
+   * Resolve a session, but only for the user who created it. `userId` is
+   * required: an unowned lookup is how another user's session could be
+   * resumed by id.
+   */
+  getSession(id: string, userId: string): ScrapeSession | undefined {
     const session = this.sessions.get(id);
-    if (session && session.expiresAt > Date.now()) {
-      return session;
-    }
-    return undefined;
+    if (!session) return undefined;
+    if (session.expiresAt <= Date.now()) return undefined;
+    if (session.userId !== userId) return undefined;
+    return session;
   }
 
   async closeSession(id: string) {

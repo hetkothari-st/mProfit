@@ -69,3 +69,9 @@ scratch_*.json
 
 # Stray test PDFs in repo root
 /*.pdf
+
+# This is a pnpm workspace (pnpm-lock.yaml). A package-lock.json here is
+# always stale and resolves a different dependency graph than what ships —
+# npm also cannot read the workspace:* / catalog: protocols this repo uses.
+package-lock.json
+yarn.lock

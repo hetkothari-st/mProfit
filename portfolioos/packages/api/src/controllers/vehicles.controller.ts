@@ -136,7 +136,7 @@ const carInfoVerifySchema = z.object({
 export async function carInfoInit(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const body = carInfoInitSchema.parse(req.body ?? {});
-  const sessionId = await initiateCarInfoScrape(body.registrationNo, body.mobileNo);
+  const sessionId = await initiateCarInfoScrape(body.registrationNo, body.mobileNo, req.user.id);
   ok(res, { sessionId });
 }
 
@@ -146,7 +146,7 @@ export async function carInfoVerify(req: Request, res: Response) {
   const userId = req.user.id;
 
   try {
-    const data = await verifyCarInfoOtp(body.sessionId, body.otp);
+    const data = await verifyCarInfoOtp(body.sessionId, body.otp, req.user.id);
     const parsed = (data?.parsed ?? null) as
       | (typeof data extends { parsed: infer P } ? P : null)
       | null;
