@@ -9,6 +9,7 @@ import { Loader2 } from 'lucide-react';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -91,11 +92,10 @@ export function LoginPage() {
               Forgot password?
             </Link>
           </div>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             autoComplete="current-password"
-            className="mt-1"
+            containerClassName="mt-1"
             aria-invalid={Boolean(errors.password)}
             {...register('password')}
           />
