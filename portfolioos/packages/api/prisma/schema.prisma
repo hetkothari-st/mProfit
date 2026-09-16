@@ -319,6 +319,25 @@ model PasswordResetToken {
   @@index([userId])
 }
 
+/// A signup waiting on its emailed verification code. The `User` row is not
+/// created until the code is confirmed, so an address nobody has proven they
+/// own never becomes an account. Deliberately no `userId` and no RLS: like
+/// PasswordResetToken it is read before anyone is authenticated, and its
+/// security is the code itself — HMAC-hashed, expiring, attempt-capped.
+model PendingRegistration {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  phone        String?
+  passwordHash String
+  role         UserRole @default(INVESTOR)
+  codeHash     String
+  attempts     Int      @default(0)
+  expiresAt    DateTime
+  lastSentAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+}
+
 // ─── CLIENTS (for Advisor/CA role) ──────────────────────────────
 
 /// A CA's client, in both directions the product supports.

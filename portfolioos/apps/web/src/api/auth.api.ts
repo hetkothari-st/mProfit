@@ -4,6 +4,8 @@ import type {
   AuthTokens,
   LoginRequest,
   RegisterRequest,
+  PendingRegistration,
+  VerifyRegistrationRequest,
   ForgotPasswordRequest,
   ResetPasswordRequest,
   UpdateProfileRequest,
@@ -21,8 +23,28 @@ export const authApi = {
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
-  async register(payload: RegisterRequest): Promise<AuthResult> {
-    const { data } = await api.post<ApiResponse<AuthResult>>('/api/auth/register', payload);
+  /** Emails a verification code. The account is created by `verifyRegistration`. */
+  async register(payload: RegisterRequest): Promise<PendingRegistration> {
+    const { data } = await api.post<ApiResponse<PendingRegistration>>(
+      '/api/auth/register',
+      payload,
+    );
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async verifyRegistration(payload: VerifyRegistrationRequest): Promise<AuthResult> {
+    const { data } = await api.post<ApiResponse<AuthResult>>(
+      '/api/auth/register/verify',
+      payload,
+    );
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async resendRegistrationCode(email: string): Promise<PendingRegistration> {
+    const { data } = await api.post<ApiResponse<PendingRegistration>>(
+      '/api/auth/register/resend',
+      { email },
+    );
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
