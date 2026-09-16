@@ -30,7 +30,7 @@ import {
   HandCoins,
   Users,
   Home,
-  Bug,
+  // Bug, — used only by the hidden Failures (DLQ) nav item
   Globe,
   Calculator,
   Split,
@@ -101,7 +101,8 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Corporate Actions', to: '/corporate-actions', icon: Split },
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
-      { label: 'Failures (DLQ)', to: '/import/failures', icon: Bug },
+      // Hidden for now — page still reachable at /import/failures.
+      // { label: 'Failures (DLQ)', to: '/import/failures', icon: Bug },
       { label: 'Settings', to: '/settings', icon: Settings },
     ],
   },

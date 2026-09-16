@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+// import { Link } from 'react-router-dom'; — only used by the hidden failures link
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { UploadCloud, Trash2, RefreshCw, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle, Inbox, Download, Lock, Square, CheckSquare } from 'lucide-react';
+import { UploadCloud, Trash2, RefreshCw, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle, Download, Lock, Square, CheckSquare } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -134,6 +134,8 @@ export function ImportPage() {
         description="Upload contract notes, CAS statements, back-office CSVs or Excel files. Transactions will be parsed and added to your portfolio automatically."
       />
 
+      {/* Failures link hidden for now — page still reachable at /import/failures.
+          Restore the `Link` and `Inbox` imports when uncommenting.
       <div className="flex justify-end mb-3">
         <Link to="/import/failures">
           <Button variant="outline" size="sm">
@@ -141,6 +143,7 @@ export function ImportPage() {
           </Button>
         </Link>
       </div>
+      */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <Card className="lg:col-span-2">
