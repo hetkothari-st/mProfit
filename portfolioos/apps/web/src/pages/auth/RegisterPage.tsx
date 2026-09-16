@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Loader2, MailCheck } from 'lucide-react';
+import { ArrowLeft, Loader2, MailCheck, UserCheck } from 'lucide-react';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -143,20 +143,24 @@ export function RegisterPage() {
           />
           {errors.email && <p className="text-xs text-negative mt-1">{errors.email.message}</p>}
           {takenEmail !== null && email === takenEmail && (
-            <p role="alert" className="text-xs text-negative mt-1">
-              This email already has an account.{' '}
-              <Link to="/login" className="font-medium text-primary hover:underline">
-                Sign in
-              </Link>
-              {' · '}
-              <Link
-                to="/forgot-password"
-                state={{ email }}
-                className="font-medium text-primary hover:underline"
-              >
-                Forgot password?
-              </Link>
-            </p>
+            <div role="alert" className="mt-2 rounded-lg border border-border bg-muted/40 p-3">
+              <p className="flex items-center gap-2 text-sm">
+                <UserCheck className="h-4 w-4 shrink-0 text-primary" />
+                You already have an account with this email.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button asChild size="sm">
+                  <Link to="/login" state={{ email }}>
+                    Sign in
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/forgot-password" state={{ email }}>
+                    Reset password
+                  </Link>
+                </Button>
+              </div>
+            </div>
           )}
         </div>
 
