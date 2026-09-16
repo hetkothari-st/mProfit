@@ -6,6 +6,7 @@ import { getFnoConnector } from '../adapters/fno/broker-registry.js';
 import type { FnoNormalizedTrade } from '../adapters/fno/types.js';
 import { ensureFoInstrument } from '../priceFeeds/nseFoMaster.service.js';
 import { computeAssetKey } from './assetKey.js';
+import { findDuplicateTransaction } from './duplicateMatch.js';
 import { recomputeDerivativePosition } from './derivativePosition.service.js';
 
 /**
@@ -119,6 +120,29 @@ async function ingestFnoTrade(
     foStrikePrice: t.strikePrice,
     foExpiryDate: t.expiryDate,
   });
+
+  // The same trade can already be on the books from a contract-note import or
+  // a manual entry, under a different sourceHash. A second fill of the same
+  // order is not that — findDuplicateTransaction keeps those apart by their
+  // order and trade numbers.
+  const twin = await findDuplicateTransaction(
+    {
+      portfolioId,
+      assetKey,
+      transactionType: isBuy ? 'BUY' : 'SELL',
+      tradeDate: new Date(`${t.tradeDate}T00:00:00.000Z`),
+      quantity: totalUnits.toString(),
+      price: price.toString(),
+    },
+    { naturalKey: { broker: t.brokerId, orderNo: t.orderNo, tradeNo: t.tradeNo } },
+  );
+  if (twin) {
+    logger.info(
+      { transactionId: twin.id, brokerId: t.brokerId, tradeNo: t.tradeNo },
+      '[fno-sync] trade already on the books under another source',
+    );
+    return { id: twin.id, assetKey };
+  }
 
   const tx = await prisma.transaction.create({
     data: {

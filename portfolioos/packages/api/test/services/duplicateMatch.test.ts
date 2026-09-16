@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   classifyTransactionGroup,
+  isSeparateFill,
   groupRentDuplicates,
   groupTransactionDuplicates,
   rentFingerprint,
@@ -166,5 +167,31 @@ describe('groupRentDuplicates', () => {
 
   it('leaves a genuine second payment on another day alone', () => {
     expect(groupRentDuplicates([rent({ id: 'a' }), rent({ id: 'b', entryDate: '2026-05-12' })])).toEqual([]);
+  });
+});
+
+describe('isSeparateFill', () => {
+  const existing = (over: Partial<{ orderNo: string | null; tradeNo: string | null }> = {}) => ({
+    id: 'x',
+    tradeDate: new Date('2025-11-04T00:00:00Z'),
+    importJobId: null,
+    broker: 'Zerodha',
+    orderNo: '111',
+    tradeNo: '1',
+    ...over,
+  });
+
+  it('keeps a second fill of one order out of the duplicate net', () => {
+    expect(isSeparateFill({ broker: 'Zerodha', orderNo: '111', tradeNo: '2' }, existing())).toBe(true);
+  });
+
+  it('calls the identical trade number a duplicate', () => {
+    expect(isSeparateFill({ broker: 'Zerodha', orderNo: '111', tradeNo: '1' }, existing())).toBe(false);
+  });
+
+  it('cannot tell fills apart when either side has no trade number', () => {
+    expect(isSeparateFill(undefined, existing())).toBe(false);
+    expect(isSeparateFill({ orderNo: '111', tradeNo: null }, existing())).toBe(false);
+    expect(isSeparateFill({ orderNo: '111', tradeNo: '2' }, existing({ tradeNo: null }))).toBe(false);
   });
 });

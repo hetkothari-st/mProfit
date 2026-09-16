@@ -263,7 +263,10 @@ export async function createTransaction(
         quantity: qty.toString(),
         price: price.toString(),
       },
-      { ignoreImportJobId: opts.ignoreImportJobId },
+      {
+        ignoreImportJobId: opts.ignoreImportJobId,
+        naturalKey: { broker: input.broker, orderNo: input.orderNo, tradeNo: input.tradeNo },
+      },
     );
     if (dupe) {
       if (opts.onDuplicate === 'skip') {
@@ -443,6 +446,33 @@ export async function updateTransaction(
           foExpiryDate: merged.expiryDate,
         })
       : computeAssetKey(refs);
+
+  // An edit can land on top of a row that already exists — correcting a date
+  // or a quantity is exactly how one trade becomes two identical ones.
+  if (!input.allowDuplicate) {
+    const dupe = await findDuplicateTransaction(
+      {
+        portfolioId: targetPortfolioId,
+        assetKey: newAssetKey,
+        transactionType: merged.transactionType,
+        tradeDate: toDateOnly(merged.tradeDate),
+        quantity: qty.toString(),
+        price: price.toString(),
+      },
+      {
+        excludeId: id,
+        naturalKey: { broker: merged.broker, orderNo: merged.orderNo, tradeNo: merged.tradeNo },
+      },
+    );
+    if (dupe) {
+      throw new AppError(
+        `Saving this would match a ${merged.transactionType} of ${qty.toString()} ${refs.assetName ?? merged.assetName ?? 'this asset'} at ${price.toString()} already recorded on ${merged.tradeDate}. Save it only if both are genuine.`,
+        409,
+        'DUPLICATE_TRANSACTION',
+        { existingTransactionId: dupe.id },
+      );
+    }
+  }
 
   const patch: Prisma.TransactionUncheckedUpdateInput = {
     portfolioId: targetPortfolioId,

@@ -226,12 +226,38 @@ function sortGroups(groups: DuplicateGroup[]): DuplicateGroup[] {
 
 // ------------------------------------------------------------- the write guard
 
+/** What the guard hands back about the row it matched. */
+export interface DuplicateTwin {
+  id: string;
+  tradeDate: Date;
+  importJobId: string | null;
+  broker: string | null;
+  orderNo: string | null;
+  tradeNo: string | null;
+}
+
+/**
+ * Two rows that both carry a broker's order and trade numbers, and carry
+ * different ones, are two fills of one order — the contract note says so. That
+ * is the one case where identical size, price and day is not a duplicate.
+ */
+export function isSeparateFill(
+  incoming: { broker?: string | null; orderNo?: string | null; tradeNo?: string | null } | undefined,
+  existing: DuplicateTwin,
+): boolean {
+  if (!incoming?.orderNo || !incoming.tradeNo) return false;
+  if (!existing.orderNo || !existing.tradeNo) return false;
+  return existing.orderNo !== incoming.orderNo || existing.tradeNo !== incoming.tradeNo;
+}
+
 /**
  * Returns the row a new transaction would duplicate, or null.
  *
  * `ignoreImportJobId` exempts rows already written by the import that is
  * running right now: two identical lines inside one file are two real trades,
- * and the file itself is the authority on that.
+ * and the file itself is the authority on that. `excludeId` exempts the row
+ * being edited, which is otherwise its own twin. `naturalKey` lets a caller
+ * that knows its order and trade numbers keep a second fill of one order.
  */
 export async function findDuplicateTransaction(
   input: {
@@ -242,8 +268,12 @@ export async function findDuplicateTransaction(
     quantity: string;
     price: string;
   },
-  opts: { ignoreImportJobId?: string } = {},
-): Promise<{ id: string; tradeDate: Date; importJobId: string | null } | null> {
+  opts: {
+    ignoreImportJobId?: string;
+    excludeId?: string;
+    naturalKey?: { broker?: string | null; orderNo?: string | null; tradeNo?: string | null };
+  } = {},
+): Promise<DuplicateTwin | null> {
   const where: Prisma.TransactionWhereInput = {
     portfolioId: input.portfolioId,
     assetKey: input.assetKey,
@@ -255,9 +285,15 @@ export async function findDuplicateTransaction(
   if (opts.ignoreImportJobId) {
     where.NOT = { importJobId: opts.ignoreImportJobId };
   }
-  return prisma.transaction.findFirst({
+  if (opts.excludeId) {
+    where.id = { not: opts.excludeId };
+  }
+  const rows = await prisma.transaction.findMany({
     where,
-    select: { id: true, tradeDate: true, importJobId: true },
+    select: { id: true, tradeDate: true, importJobId: true, broker: true, orderNo: true, tradeNo: true },
     orderBy: { createdAt: 'asc' },
+    // A handful is plenty: we only need one row that is not a separate fill.
+    take: 25,
   });
+  return rows.find((row) => !isSeparateFill(opts.naturalKey, row)) ?? null;
 }

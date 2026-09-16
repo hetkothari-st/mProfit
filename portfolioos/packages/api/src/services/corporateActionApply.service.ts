@@ -2,6 +2,7 @@ import { Decimal } from '@everypaisa/shared';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { recomputeForAsset } from './holdingsProjection.js';
+import { findDuplicateTransaction } from './duplicateMatch.js';
 
 /**
  * Turn stored CorporateAction rows into idempotent Transaction rows so the
@@ -27,6 +28,23 @@ import { recomputeForAsset } from './holdingsProjection.js';
  *
  * Returns the number of corporate-action transactions created.
  */
+/**
+ * The sourceHash above is keyed on the CorporateAction row's id, so the same
+ * split ingested twice from the feed carries two ids and passes that check.
+ * This asks the stronger question: is this exact effect already on the books?
+ */
+async function alreadyApplied(data: Prisma.TransactionUncheckedCreateInput): Promise<boolean> {
+  const twin = await findDuplicateTransaction({
+    portfolioId: data.portfolioId,
+    assetKey: data.assetKey!,
+    transactionType: data.transactionType,
+    tradeDate: data.tradeDate as Date,
+    quantity: String(data.quantity),
+    price: String(data.price),
+  });
+  return twin !== null;
+}
+
 export async function applyCorporateActionsForPortfolio(portfolioId: string): Promise<number> {
   const holdings = await prisma.holdingProjection.findMany({
     where: { portfolioId, stockId: { not: null } },
@@ -69,6 +87,7 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
           sourceAdapter: 'CORPORATE_ACTION',
           sourceHash,
         };
+        if (await alreadyApplied(data)) continue;
         await prisma.transaction.create({ data });
         applied += 1; // no qty change → no projection replay needed
         continue;
@@ -105,6 +124,7 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
         sourceAdapter: 'CORPORATE_ACTION',
         sourceHash,
       };
+      if (await alreadyApplied(data)) continue;
       await prisma.transaction.create({ data });
       touchedAssetKeys.add(h.assetKey);
       applied += 1;
