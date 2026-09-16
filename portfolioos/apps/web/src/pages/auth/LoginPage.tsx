@@ -42,7 +42,14 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { rememberMe: isSessionRemembered() },
+    defaultValues: {
+      // Signup sends people here with the address they already tried.
+      email: (() => {
+        const prefill = (location.state as { email?: unknown } | null)?.email;
+        return typeof prefill === 'string' ? prefill : '';
+      })(),
+      rememberMe: isSessionRemembered(),
+    },
   });
   // Carried to the reset page so the user doesn't retype it.
   const forgotLinkState = { email: watch('email') };
