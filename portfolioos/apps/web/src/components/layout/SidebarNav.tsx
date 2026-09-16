@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { BrandMark, BrandWordmark } from '@/components/brand/BrandLogo';
-import { BudgetGauge } from './BudgetGauge';
+// import { BudgetGauge } from './BudgetGauge'; — LLM spend gauge hidden for now
 import { UpgradeSidebarCard } from './UpgradeSidebarCard';
 import { AssetClassSectionList } from './AssetClassSectionList';
 import { FamilyNavTree } from './FamilyNavTree';
@@ -138,7 +138,8 @@ export function SidebarNav({
 
       <div className="border-t border-sidebar-border/70 pt-2">
         <UpgradeSidebarCard collapsed={collapsed} />
-        <BudgetGauge collapsed={collapsed} />
+        {/* LLM spend gauge hidden for now. */}
+        {/* <BudgetGauge collapsed={collapsed} /> */}
         {!collapsed && (
           <div className="px-4 py-3 flex items-center justify-between text-[10px] uppercase tracking-kerned text-sidebar-foreground/45">
             <span>v0.5.0</span>
