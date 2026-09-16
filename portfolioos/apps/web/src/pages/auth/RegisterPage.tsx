@@ -111,7 +111,10 @@ export function RegisterPage() {
         onVerified={(data) => {
           setSession(data.user, data.tokens, { remember: true });
           toast.success('Email verified. Welcome to EveryPaisa!');
-          navigate('/dashboard', { replace: true });
+          // Straight into setup. The dashboard only redirects when this
+          // browser has never finished onboarding, which is wrong for a new
+          // account made on a browser someone has used before.
+          navigate('/onboarding', { replace: true });
         }}
       />
     );
