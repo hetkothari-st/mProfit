@@ -65,6 +65,10 @@ const EnvSchema = z.object({
   // JWT — so this HMAC is their ONLY access control. Declared here rather than
   // read straight off process.env so it participates in the assertion below.
   FINFACTOR_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // Account Aggregator demo mode: fixtures only, no live Finvu traffic, so no
+  // webhook can legitimately arrive and the secret is not required to boot.
+  // The webhook handler still rejects every call without the secret.
+  FINFACTOR_DEMO_MODE: z.enum(['true', 'false']).optional(),
   KITE_API_KEY: z.string().optional(),
   KITE_API_SECRET: z.string().optional(),
   KITE_REDIRECT_URL: z.string().optional(),
@@ -195,6 +199,7 @@ export function collectProductionSecretProblems(e: {
   SECRETS_KEY?: string | undefined;
   ONLYOFFICE_JWT_SECRET: string;
   FINFACTOR_WEBHOOK_SECRET?: string | undefined;
+  FINFACTOR_DEMO_MODE?: string | undefined;
 }): string[] {
   if (e.NODE_ENV !== 'production') return [];
   const problems: string[] = [];
@@ -221,7 +226,10 @@ export function collectProductionSecretProblems(e: {
         'read this repository.',
     );
   }
-  if (!e.FINFACTOR_WEBHOOK_SECRET) {
+  // Only while Account Aggregator is live. In demo mode there is no Finvu
+  // traffic; the handler still fails closed, so requiring the secret to boot
+  // would only turn a paused integration into an outage.
+  if (!e.FINFACTOR_WEBHOOK_SECRET && e.FINFACTOR_DEMO_MODE !== 'true') {
     problems.push(
       'FINFACTOR_WEBHOOK_SECRET is not set. The Account Aggregator webhooks ' +
         'are unauthenticated by design and this HMAC is their only access ' +

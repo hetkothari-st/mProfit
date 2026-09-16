@@ -52,16 +52,53 @@ export function encryptSecret(plain: string): string {
   return `${VERSION}.${iv.toString('base64')}.${tag.toString('base64')}.${enc.toString('base64')}`;
 }
 
-export function decryptSecret(payload: string): string {
-  const parts = payload.split('.');
-  // v2 carries a leading version tag; rows written before this change do not.
-  // Both are the same cipher under the same key, so existing rows stay
-  // readable in place — no backfill — and re-encrypt to v2 next time they are
-  // written.
-  const [ivB64, tagB64, encB64] = parts.length === 4 ? parts.slice(1) : parts;
-  if (!ivB64 || !tagB64 || !encB64) throw new Error('Invalid encrypted payload');
-  const decipher = crypto.createDecipheriv(ALGO, getKey(), Buffer.from(ivB64, 'base64'));
+function decryptWith(key: Buffer, ivB64: string, tagB64: string, encB64: string): string {
+  const decipher = crypto.createDecipheriv(ALGO, key, Buffer.from(ivB64, 'base64'));
   decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
   const dec = Buffer.concat([decipher.update(Buffer.from(encB64, 'base64')), decipher.final()]);
   return dec.toString('utf8');
+}
+
+export function isCurrentFormat(payload: string): boolean {
+  return payload.startsWith(`${VERSION}.`);
+}
+
+/**
+ * Decrypt, reporting whether the legacy development key was needed.
+ *
+ * Production ran for a long time without SECRETS_KEY, so every value written
+ * before it was set is an unversioned (v1) payload encrypted under
+ * DEV_ONLY_KEY — a key published in this repository. Setting a real
+ * SECRETS_KEY must not make those unreadable, and must not leave them under
+ * the public key either. So:
+ *
+ *   - v2 payloads were written after this change, under the current key only.
+ *   - v1 payloads try the current key first (a deployment that DID set
+ *     SECRETS_KEY), then the legacy dev key.
+ *
+ * `usedLegacyKey` tells the caller the value must be re-encrypted;
+ * jobs/secretRotationJobs.ts does that for every stored secret on start.
+ * The GCM auth tag makes a wrong-key attempt fail loudly rather than return
+ * garbage, which is what makes trying two keys safe.
+ */
+export function decryptSecretWithKeyInfo(payload: string): { plain: string; usedLegacyKey: boolean } {
+  const parts = payload.split('.');
+  const versioned = parts.length === 4;
+  const [ivB64, tagB64, encB64] = versioned ? parts.slice(1) : parts;
+  if (!ivB64 || !tagB64 || !encB64) throw new Error('Invalid encrypted payload');
+
+  const current = getKey();
+  if (versioned) return { plain: decryptWith(current, ivB64, tagB64, encB64), usedLegacyKey: false };
+
+  try {
+    return { plain: decryptWith(current, ivB64, tagB64, encB64), usedLegacyKey: false };
+  } catch (err) {
+    const legacy = crypto.createHash('sha256').update(DEV_ONLY_KEY).digest();
+    if (legacy.equals(current)) throw err; // already tried it
+    return { plain: decryptWith(legacy, ivB64, tagB64, encB64), usedLegacyKey: true };
+  }
+}
+
+export function decryptSecret(payload: string): string {
+  return decryptSecretWithKeyInfo(payload).plain;
 }
