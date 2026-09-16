@@ -1,212 +1,283 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Briefcase, Mail, Users, FileUp, LayoutDashboard, ChevronRight, Check,
-} from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Check, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { portfoliosApi } from '@/api/portfolios.api';
+import { apiErrorMessage } from '@/api/client';
 import { cn } from '@/lib/cn';
 import { BrandMark, BrandWordmark } from '@/components/brand/BrandLogo';
-
-const STEPS = [
-  { id: 'portfolio', icon: Briefcase, title: 'Create your portfolio', subtitle: 'A portfolio groups your investments together.' },
-  { id: 'gmail', icon: Mail, title: 'Connect Gmail', subtitle: 'Automatically import transactions from email alerts.' },
-  { id: 'senders', icon: Users, title: 'Pick senders', subtitle: 'Choose which email senders to monitor.' },
-  { id: 'import', icon: FileUp, title: 'Import a CAS', subtitle: 'Upload a CAMS or KFintech statement for mutual funds.' },
-  { id: 'done', icon: LayoutDashboard, title: 'All set!', subtitle: 'Head to your dashboard to see your portfolio.' },
-] as const;
-
-type StepId = (typeof STEPS)[number]['id'];
+import {
+  ONBOARDING_GROUPS,
+  ONBOARDING_ITEMS,
+  onboardingItem,
+  type OnboardingItemId,
+} from './onboardingItems';
+import { QuickAddForm } from './QuickAddForms';
 
 interface Props {
   onComplete: () => void;
 }
 
+type Phase = 'pick' | 'add' | 'done';
+
+/**
+ * New-account setup: pick what you own, add each with a few fields, land on
+ * a dashboard that already has numbers. Every step can be skipped.
+ */
 export function OnboardingWizard({ onComplete }: Props) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [currentStep, setCurrentStep] = useState<StepId>('portfolio');
-  const [portfolioName, setPortfolioName] = useState('My Portfolio');
-  const [completed, setCompleted] = useState<Set<StepId>>(new Set());
+  const [phase, setPhase] = useState<Phase>('pick');
+  const [selected, setSelected] = useState<OnboardingItemId[]>([]);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [added, setAdded] = useState<Partial<Record<OnboardingItemId, string[]>>>({});
 
-  const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
-
-  const createPortfolioMut = useMutation({
-    // `onboarding: true` makes this idempotent server-side — if this
-    // account already has a portfolio (e.g. the wizard got re-shown on a
-    // second device/browser that never saw the completion flag), the
-    // server hands back the existing one instead of inserting a duplicate.
-    mutationFn: () => portfoliosApi.create({ name: portfolioName, type: 'INVESTMENT', onboarding: true }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['portfolios'] });
-      advance('portfolio');
-    },
-    onError: (e: Error) => toast.error(e.message),
+  // Every holding needs a portfolio, so one is created up front instead of
+  // asking the user to name it. `onboarding: true` makes this idempotent
+  // server-side: an account that already has a portfolio gets that one back.
+  const portfolioQuery = useQuery({
+    queryKey: ['onboarding', 'portfolio'],
+    queryFn: () =>
+      portfoliosApi.create({ name: 'My Portfolio', type: 'INVESTMENT', onboarding: true }),
+    staleTime: Infinity,
+    retry: 1,
   });
 
-  const advance = (stepId: StepId) => {
-    setCompleted((prev) => new Set([...prev, stepId]));
-    const idx = STEPS.findIndex((s) => s.id === stepId);
-    const next = STEPS[idx + 1];
-    if (next) setCurrentStep(next.id);
-  };
-
-  const skip = () => {
-    const idx = STEPS.findIndex((s) => s.id === currentStep);
-    const next = STEPS[idx + 1];
-    if (next) setCurrentStep(next.id);
-  };
-
-  const handleDone = () => {
+  const finish = () => {
     onComplete();
-    navigate('/dashboard');
+    // Everything added here feeds the dashboard; make sure it refetches.
+    // Not the onboarding portfolio query itself — refetching that would POST
+    // the create again.
+    void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'onboarding' });
+    navigate('/dashboard', { replace: true });
   };
+
+  const toggle = (id: OnboardingItemId) =>
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  // Keep the steps in the order the picker shows them, not tap order.
+  const steps = ONBOARDING_ITEMS.map((i) => i.id).filter((id) => selected.includes(id));
+  const currentId = steps[stepIndex];
+  const totalAdded = Object.values(added).reduce((n, list) => n + (list?.length ?? 0), 0);
+
+  const next = () => {
+    if (stepIndex + 1 < steps.length) setStepIndex(stepIndex + 1);
+    else setPhase('done');
+  };
+
+  const back = () => {
+    if (stepIndex > 0) setStepIndex(stepIndex - 1);
+    else setPhase('pick');
+  };
+
+  let body: JSX.Element;
+
+  if (portfolioQuery.isLoading) {
+    body = (
+      <div className="flex justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  } else if (portfolioQuery.isError || !portfolioQuery.data) {
+    body = (
+      <div className="text-center py-8">
+        <p className="text-sm text-negative mb-4">
+          {apiErrorMessage(portfolioQuery.error, 'Could not set up your account')}
+        </p>
+        <Button variant="outline" onClick={() => void portfolioQuery.refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
+  } else if (phase === 'pick') {
+    body = (
+      <div>
+        <h1 className="text-xl sm:text-2xl font-semibold mb-1">What do you have?</h1>
+        <p className="text-sm text-muted-foreground mb-6">
+          Pick everything that applies. You&apos;ll add each one with just a few details — rough
+          numbers are fine.
+        </p>
+        <div className="space-y-5">
+          {ONBOARDING_GROUPS.map((group) => (
+            <div key={group.heading}>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
+                {group.heading}
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {group.items.map((item) => {
+                  const on = selected.includes(item.id);
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggle(item.id)}
+                      className={cn(
+                        'relative flex items-center gap-2 rounded-lg border px-3 py-3 text-left text-sm transition-colors',
+                        on
+                          ? 'border-primary bg-primary/10 text-foreground'
+                          : 'border-border hover:border-foreground/30',
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          'h-4 w-4 shrink-0',
+                          on ? 'text-primary' : 'text-muted-foreground',
+                        )}
+                      />
+                      <span className="leading-tight">{item.label}</span>
+                      {on && <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <Button
+          className="w-full mt-8"
+          disabled={selected.length === 0}
+          onClick={() => {
+            setStepIndex(0);
+            setPhase('add');
+          }}
+        >
+          Continue
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+        <button
+          type="button"
+          onClick={finish}
+          className="mt-3 w-full text-center text-sm text-muted-foreground hover:text-foreground"
+        >
+          Skip — I&apos;ll add things later
+        </button>
+      </div>
+    );
+  } else if (phase === 'add' && currentId) {
+    const item = onboardingItem(currentId);
+    const addedHere = added[currentId] ?? [];
+    const Icon = item.icon;
+    body = (
+      <div>
+        <div className="flex items-center justify-between mb-4 text-xs text-muted-foreground">
+          <button
+            type="button"
+            onClick={back}
+            className="inline-flex items-center gap-1 hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back
+          </button>
+          <span>
+            {stepIndex + 1} of {steps.length}
+          </span>
+        </div>
+        <div className="h-1 rounded-full bg-muted mb-6 overflow-hidden">
+          <div
+            className="h-full bg-primary transition-all"
+            style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 mb-1">
+          <Icon className="h-5 w-5 text-primary" />
+          <h1 className="text-xl sm:text-2xl font-semibold">{item.label}</h1>
+        </div>
+        <p className="text-sm text-muted-foreground mb-5">{item.prompt}</p>
+
+        {addedHere.length > 0 && (
+          <ul className="mb-4 space-y-1.5">
+            {addedHere.map((line, i) => (
+              <li
+                key={i}
+                className="flex items-center gap-2 rounded-md bg-positive/10 px-3 py-2 text-sm"
+              >
+                <Check className="h-4 w-4 shrink-0 text-positive" />
+                <span className="truncate">{line}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Keyed per item so switching steps starts each form clean. */}
+        <QuickAddForm
+          key={currentId}
+          item={currentId}
+          portfolioId={portfolioQuery.data.id}
+          onSaved={(summary) =>
+            setAdded((prev) => ({ ...prev, [currentId]: [...(prev[currentId] ?? []), summary] }))
+          }
+        />
+
+        <Button
+          className="w-full mt-3"
+          variant={addedHere.length > 0 ? 'default' : 'ghost'}
+          onClick={next}
+        >
+          {addedHere.length > 0 ? (stepIndex + 1 < steps.length ? 'Next' : 'Finish') : 'Skip'}
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  } else {
+    body = (
+      <div className="text-center">
+        <div className="h-14 w-14 rounded-full bg-primary/15 grid place-items-center mx-auto mb-4">
+          <Check className="h-7 w-7 text-primary" />
+        </div>
+        <h1 className="text-xl sm:text-2xl font-semibold mb-2">
+          {totalAdded > 0 ? "You're all set" : 'Nothing added yet'}
+        </h1>
+        <p className="text-sm text-muted-foreground mb-6">
+          {totalAdded > 0
+            ? `${totalAdded} ${totalAdded === 1 ? 'entry' : 'entries'} added. Your dashboard is ready — you can refine any of them from its own page.`
+            : 'No problem — you can add investments any time from the sidebar.'}
+        </p>
+        {totalAdded > 0 && (
+          <ul className="mb-6 space-y-1.5 text-left">
+            {steps
+              .filter((id) => (added[id]?.length ?? 0) > 0)
+              .map((id) => (
+                <li
+                  key={id}
+                  className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  <span>{onboardingItem(id).label}</span>
+                  <span className="text-muted-foreground">{added[id]!.length}</span>
+                </li>
+              ))}
+          </ul>
+        )}
+        <Button onClick={finish} className="w-full" size="lg">
+          Go to dashboard
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+        {steps.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setStepIndex(steps.length - 1);
+              setPhase('add');
+            }}
+            className="mt-3 w-full text-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            Go back and add more
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-2xl">
-        {/* Logo */}
+    <div className="min-h-screen bg-background flex items-start sm:items-center justify-center px-4 py-10">
+      <div className="w-full max-w-xl">
         <div className="flex items-center justify-center gap-4 mb-8">
           <BrandMark />
           <BrandWordmark />
         </div>
-
-        {/* Step indicator */}
-        <div className="flex items-center justify-between mb-8 px-2">
-          {STEPS.map((step, i) => {
-            const isDone = completed.has(step.id);
-            const isCurrent = step.id === currentStep;
-            const StepIcon = step.icon;
-            return (
-              <div key={step.id} className="flex items-center flex-1">
-                <div className={cn(
-                  'h-9 w-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 transition-all',
-                  isDone ? 'bg-primary text-primary-foreground' :
-                  isCurrent ? 'bg-primary/15 text-primary ring-2 ring-primary/40' :
-                  'bg-muted text-muted-foreground',
-                )}>
-                  {isDone ? <Check className="h-4 w-4" /> : <StepIcon className="h-4 w-4" />}
-                </div>
-                {i < STEPS.length - 1 && (
-                  <div className={cn('flex-1 h-0.5 mx-2 transition-all', isDone ? 'bg-primary' : 'bg-muted')} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Step card */}
-        <div className="rounded-xl border bg-card shadow-sm p-4 sm:p-8">
-          {currentStep === 'portfolio' && (
-            <div>
-              <Briefcase className="h-10 w-10 text-primary mb-4" />
-              <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[0].title}</h2>
-              <p className="text-muted-foreground mb-6">{STEPS[0].subtitle}</p>
-              <div className="mb-6">
-                <Label>Portfolio name</Label>
-                <Input
-                  value={portfolioName}
-                  onChange={(e) => setPortfolioName(e.target.value)}
-                  placeholder="e.g. My Portfolio"
-                  className="mt-1"
-                />
-              </div>
-              <Button
-                onClick={() => createPortfolioMut.mutate()}
-                disabled={!portfolioName.trim() || createPortfolioMut.isPending}
-                className="w-full"
-              >
-                {createPortfolioMut.isPending ? 'Creating…' : 'Create portfolio'}
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          )}
-
-          {currentStep === 'gmail' && (
-            <div>
-              <Mail className="h-10 w-10 text-primary mb-4" />
-              <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[1].title}</h2>
-              <p className="text-muted-foreground mb-6">{STEPS[1].subtitle}</p>
-              <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 mb-6">
-                EveryPaisa connects to Gmail with read-only access to import transaction alerts from your bank, broker, and insurer emails.
-                Your emails are never stored — only the extracted transaction data is saved.
-              </p>
-              <div className="flex gap-3">
-                <Button onClick={() => { navigate('/mailboxes'); onComplete(); }} className="flex-1">
-                  Connect Gmail
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-                <Button variant="outline" onClick={skip}>Skip for now</Button>
-              </div>
-            </div>
-          )}
-
-          {currentStep === 'senders' && (
-            <div>
-              <Users className="h-10 w-10 text-primary mb-4" />
-              <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[2].title}</h2>
-              <p className="text-muted-foreground mb-6">{STEPS[2].subtitle}</p>
-              <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 mb-6">
-                After connecting Gmail, EveryPaisa will scan your inbox to discover financial email senders — HDFC alerts, Zerodha trade confirmations, LIC premium notices, and more.
-              </p>
-              <div className="flex gap-3">
-                <Button onClick={() => { navigate('/ingestion/senders'); onComplete(); }} className="flex-1">
-                  Set up senders
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-                <Button variant="outline" onClick={skip}>Skip for now</Button>
-              </div>
-            </div>
-          )}
-
-          {currentStep === 'import' && (
-            <div>
-              <FileUp className="h-10 w-10 text-primary mb-4" />
-              <h2 className="text-xl sm:text-2xl font-semibold mb-1">{STEPS[3].title}</h2>
-              <p className="text-muted-foreground mb-6">{STEPS[3].subtitle}</p>
-              <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 mb-6">
-                Download a Consolidated Account Statement (CAS) from CAMS or KFintech and upload it here to instantly import all your mutual fund holdings.
-              </p>
-              <div className="flex gap-3">
-                <Button onClick={() => { navigate('/cas'); onComplete(); }} className="flex-1">
-                  Upload CAS
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-                <Button variant="outline" onClick={skip}>Skip for now</Button>
-              </div>
-            </div>
-          )}
-
-          {currentStep === 'done' && (
-            <div className="text-center">
-              <div className="h-16 w-16 rounded-full bg-primary/15 grid place-items-center mx-auto mb-4">
-                <Check className="h-8 w-8 text-primary" />
-              </div>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-2">You're all set!</h2>
-              <p className="text-muted-foreground mb-8">
-                Your portfolio is ready. Add transactions manually, import more statements, or wait for Gmail to start pulling in your transaction emails.
-              </p>
-              <Button onClick={handleDone} className="w-full" size="lg">
-                Go to dashboard
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Footer nav */}
-        {currentStep !== 'done' && currentStep !== 'portfolio' && (
-          <p className="text-center text-sm text-muted-foreground mt-4">
-            Step {stepIndex + 1} of {STEPS.length} ·{' '}
-            <button type="button" onClick={handleDone} className="hover:underline">
-              Skip setup and go to dashboard
-            </button>
-          </p>
-        )}
+        <div className="rounded-xl border bg-card shadow-sm p-5 sm:p-8">{body}</div>
       </div>
     </div>
   );
