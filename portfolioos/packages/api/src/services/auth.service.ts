@@ -140,7 +140,9 @@ function escapeHtml(s: string): string {
 async function sendVerificationCode(email: string, name: string, code: string): Promise<void> {
   const result = await sendEmail({
     to: email,
-    subject: `${code} is your EveryPaisa verification code`,
+    // Never put the code in the subject: sendEmail logs subjects, and the
+    // code is the whole proof of owning the address.
+    subject: 'Your EveryPaisa verification code',
     html: `<p>Hi ${escapeHtml(name)},</p>
 <p>Your EveryPaisa verification code is:</p>
 <p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:16px 0">${code}</p>
@@ -396,7 +398,8 @@ export async function requestPasswordReset(email: string): Promise<{ codeSent: t
 
   const result = await sendEmail({
     to: email,
-    subject: `${code} is your EveryPaisa password reset code`,
+    // Code stays out of the subject — sendEmail logs subjects.
+    subject: 'Your EveryPaisa password reset code',
     html: `<p>Hi ${escapeHtml(user.name)},</p>
 <p>Use this code to reset your EveryPaisa password:</p>
 <p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:16px 0">${code}</p>

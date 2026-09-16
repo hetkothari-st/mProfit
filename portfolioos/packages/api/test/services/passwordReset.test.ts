@@ -17,12 +17,12 @@ const db = vi.hoisted(() => ({
   users: [] as Row[],
   tokens: [] as Row[],
   refreshTokens: [] as Row[],
-  sent: [] as { to: string; subject: string }[],
+  sent: [] as { to: string; subject: string; html: string }[],
   sendOk: true,
 }));
 
 vi.mock('../../src/services/notifications/email.service.js', () => ({
-  sendEmail: vi.fn(async (input: { to: string; subject: string }) => {
+  sendEmail: vi.fn(async (input: { to: string; subject: string; html: string }) => {
     db.sent.push(input);
     return db.sendOk ? { sent: true, messageId: 'test' } : { sent: false, reason: 'smtp down' };
   }),
@@ -104,7 +104,10 @@ const EMAIL = 'forgetful@example.com';
 const NEW_PASSWORD = 'brand-new-password';
 
 function lastCode(): string {
-  return db.sent.at(-1)!.subject.match(/^(\d{6}) /)![1]!;
+  const { html, subject } = db.sent.at(-1)!;
+  // The code must never reach the (logged) subject line.
+  expect(subject).not.toMatch(/\d{6}/);
+  return html.match(/>(\d{6})</)![1]!;
 }
 
 function wrongCode(code: string): string {

@@ -98,8 +98,10 @@ const EMAIL = 'new.person@example.com';
 const input = { email: EMAIL, password: 'correct-horse-battery', name: 'New Person' };
 
 function lastCode(): string {
-  const subject = db.sent.at(-1)!.subject;
-  return subject.match(/^(\d{6}) /)![1]!;
+  const { html, subject } = db.sent.at(-1)!;
+  // The code must never reach the (logged) subject line.
+  expect(subject).not.toMatch(/\d{6}/);
+  return html.match(/>(\d{6})</)![1]!;
 }
 
 function wrongCode(code: string): string {
