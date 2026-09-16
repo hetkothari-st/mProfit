@@ -4,7 +4,7 @@ import { backfillPiiAtRest } from '../services/piiAtRest.service.js';
 
 /**
  * Encrypt PAN and vehicle registration numbers still stored as plain text
- * (migration 20260916100000). Runs once on start; idempotent, so safe on every
+ * (migration 20260918100000). Runs once on start; idempotent, so safe on every
  * start. Mirrors jobs/insuranceJobs.ts, which does the same for policy numbers.
  *
  * Gated by ENABLE_PII_BACKFILL — set to "false" in test/CI.

@@ -4,7 +4,7 @@
  * These were stored as plain text (User.pan, Client.pan,
  * Vehicle.registrationNo), so a database dump, a backup, or any read path that
  * escaped Row-Level Security exposed them directly. Migration
- * 20260916100000_pii_at_rest_pan_regno adds encrypted, fingerprint and last-4
+ * 20260918100000_pii_at_rest_pan_regno adds encrypted, fingerprint and last-4
  * columns alongside, following the pattern policy numbers already use
  * (insurance.service policyNumberColumns / backfillPolicyNumberEncryption).
  *

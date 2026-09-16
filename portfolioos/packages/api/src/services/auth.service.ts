@@ -64,6 +64,20 @@ export function toAuthUser(user: User) {
   };
 }
 
+
+/**
+ * Digest a bearer token for storage and lookup.
+ *
+ * Refresh and password-reset tokens used to be stored in plaintext, so a
+ * database dump yielded usable sessions and resets for every user. Only the
+ * digest is stored now; the raw value exists only in the client and in the
+ * reset email. Plain SHA-256 is right for 32 random bytes — there is no
+ * guessable input space for a keyed hash to protect.
+ */
+function digestToken(token: string): string {
+  return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
 async function issueTokens(user: User): Promise<IssueTokensResult> {
   const { token: accessToken, expiresAt: accessTokenExpiresAt } = signAccessToken({
     sub: user.id,
@@ -74,7 +88,7 @@ async function issueTokens(user: User): Promise<IssueTokensResult> {
   const refreshToken = generateRefreshToken();
   await prisma.refreshToken.create({
     data: {
-      token: refreshToken,
+      tokenHash: digestToken(refreshToken),
       userId: user.id,
       expiresAt: refreshTokenExpiry(),
     },
@@ -358,11 +372,21 @@ export async function loginUser(email: string, password: string) {
 
 export async function refreshSession(refreshToken: string) {
   const stored = await prisma.refreshToken.findUnique({
-    where: { token: refreshToken },
+    where: { tokenHash: digestToken(refreshToken) },
     include: { user: true },
   });
-  if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+  if (!stored || stored.expiresAt < new Date()) {
     throw new UnauthorizedError('Invalid or expired refresh token');
+  }
+  if (stored.revokedAt) {
+    // Reuse of a rotated-out token. Refresh tokens are single-use, so a
+    // revoked one arriving again means two parties hold the same chain —
+    // the legitimate client and whoever copied it. Previously this just
+    // errored, and whichever party refreshed first kept a silently rotating
+    // session indefinitely. Revoke every session for the user and make both
+    // sign in again.
+    await logoutAllSessions(stored.userId);
+    throw new UnauthorizedError('Session invalidated — please sign in again');
   }
   if (!stored.user.isActive) throw new UnauthorizedError('Account deactivated');
   assertNotShadowClient(stored.user);
@@ -377,7 +401,7 @@ export async function refreshSession(refreshToken: string) {
 
 export async function logoutSession(refreshToken: string): Promise<void> {
   await prisma.refreshToken.updateMany({
-    where: { token: refreshToken, revokedAt: null },
+    where: { tokenHash: digestToken(refreshToken), revokedAt: null },
     data: { revokedAt: new Date() },
   });
 }

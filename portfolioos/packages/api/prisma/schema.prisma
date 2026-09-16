@@ -22,7 +22,7 @@ model User {
   name                  String
   phone                 String?
   pan                   String?
-  /// Encrypted PAN (AES-256-GCM). See migration 20260916100000.
+  /// Encrypted PAN (AES-256-GCM). See migration 20260918100000.
   panEnc                String?
   /// Keyed HMAC fingerprint for exact lookups; not reversible.
   panHash               String?
@@ -302,7 +302,11 @@ enum PlanTier {
 
 model RefreshToken {
   id        String    @id @default(cuid())
-  token     String    @unique
+  /// Legacy plaintext. Never written from 20260918110000 on; cleared and
+  /// dropped by a follow-up migration that needs explicit approval.
+  token     String?   @unique
+  /// SHA-256 of the bearer value. The only thing looked up.
+  tokenHash String    @unique
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
@@ -1593,7 +1597,7 @@ model Vehicle {
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   portfolioId        String?
   registrationNo     String
-  /// Encrypted registration (AES-256-GCM). See migration 20260916100000.
+  /// Encrypted registration (AES-256-GCM). See migration 20260918100000.
   registrationNoEnc   String?
   registrationNoHash  String?
   registrationNoLast4 String?

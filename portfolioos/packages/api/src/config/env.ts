@@ -181,7 +181,7 @@ const EnvSchema = z.object({
  * boot instead.
  *
  * `APP_ENCRYPTION_KEY` joined this list when PAN and vehicle registration
- * numbers moved to encrypted storage (migration 20260916100000). It used to
+ * numbers moved to encrypted storage (migration 20260918100000). It used to
  * guard only the optional provident-fund feature, so its absence was allowed
  * to degrade that one feature. Core profile data now depends on it, and the
  * alternative to refusing to boot would be silently writing PAN in plaintext.
