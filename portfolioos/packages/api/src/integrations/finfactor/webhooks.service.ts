@@ -16,22 +16,34 @@
  *   /webhook/subscription  — user subscription lifecycle.
  *
  * Webhook routes are mounted UNAUTHENTICATED — Finvu can't supply our
- * JWT — so HMAC verification is the only access control. If the secret
- * isn't configured we accept the payload (dev convenience) but log a
- * warning. Production deployments must set the secret.
+ * JWT — so HMAC verification is the only access control.
+ *
+ * This check used to return true when the secret was unconfigured, which
+ * meant a deployment that simply forgot the variable accepted any forged
+ * POST: an attacker could flip an AaConsent row to APPROVED for a real user.
+ * It now fails CLOSED outside development, and config/env.ts refuses to boot
+ * production without the secret, so the two halves cannot drift apart.
  */
 
 import crypto from 'node:crypto';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
+import { env } from '../../config/env.js';
 
 const SIGNATURE_HEADER = 'x-finfactor-signature';
 
 export function verifyWebhookSignature(rawBody: string, signature: string | undefined): boolean {
-  const secret = process.env['FINFACTOR_WEBHOOK_SECRET'];
+  const secret = env.FINFACTOR_WEBHOOK_SECRET;
   if (!secret) {
-    logger.warn({}, 'FINFACTOR_WEBHOOK_SECRET not set — accepting webhook without verification');
-    return true;
+    // Development only: no secret means no way to verify, so accept but say
+    // so loudly. Anywhere else this is a hard reject — an unverifiable
+    // webhook on an unauthenticated route is an open write endpoint.
+    if (env.NODE_ENV === 'development') {
+      logger.warn({}, 'FINFACTOR_WEBHOOK_SECRET not set — accepting webhook unverified (dev only)');
+      return true;
+    }
+    logger.error({}, 'FINFACTOR_WEBHOOK_SECRET not set — rejecting webhook');
+    return false;
   }
   if (!signature) return false;
   const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');

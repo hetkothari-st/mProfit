@@ -1,6 +1,13 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+/**
+ * The committed placeholder for ONLYOFFICE_JWT_SECRET. Exported so the
+ * production assertion and its regression test both name the same string
+ * rather than two copies that can drift apart.
+ */
+export const PLACEHOLDER_ONLYOFFICE_SECRET = 'dev-onlyoffice-secret-change-me';
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3001),
@@ -42,7 +49,22 @@ const EnvSchema = z.object({
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
 
-  SECRETS_KEY: z.string().optional(),
+  // AES-256-GCM key for every third-party secret we hold on a user's behalf:
+  // broker apiKey/apiSecret/totpSecret, Gmail + broker OAuth tokens, mailbox
+  // IMAP passwords, the SMTP password, forex account numbers and saved
+  // document-unlock passwords (lib/secrets.ts).
+  //
+  // Optional in the schema so dev and test boot without ceremony, but
+  // assertProductionSecrets() below makes it MANDATORY in production. It used
+  // to fall back silently to a key hardcoded in lib/secrets.ts, which meant a
+  // deployment that forgot this variable encrypted every one of the above
+  // under a key published in this repository.
+  SECRETS_KEY: z.string().min(32, 'SECRETS_KEY must be at least 32 characters').optional(),
+  // Signature secret for the Account Aggregator (Finvu/Finfactor) webhooks.
+  // Those routes are deliberately unauthenticated — Finvu cannot present our
+  // JWT — so this HMAC is their ONLY access control. Declared here rather than
+  // read straight off process.env so it participates in the assertion below.
+  FINFACTOR_WEBHOOK_SECRET: z.string().min(16).optional(),
   KITE_API_KEY: z.string().optional(),
   KITE_API_SECRET: z.string().optional(),
   KITE_REDIRECT_URL: z.string().optional(),
@@ -109,7 +131,14 @@ const EnvSchema = z.object({
   // (JWT_SECRET env var on its side). Disable JWT only in dev.
   ONLYOFFICE_PUBLIC_URL: z.string().url().default('http://localhost:8083'),
   ONLYOFFICE_INTERNAL_URL: z.string().url().default('http://localhost:8083'),
-  ONLYOFFICE_JWT_SECRET: z.string().min(8).default('dev-onlyoffice-secret-change-me'),
+  // This secret signs the document download/save tokens in
+  // controllers/document.controller.ts, and those tokens carry the userId the
+  // download handler then trusts. If it keeps the placeholder default below in
+  // production, anyone who has read this repository can mint a token for an
+  // arbitrary (userId, documentId) pair and stream any user's vault document
+  // from an unauthenticated route. assertProductionSecrets() refuses to boot
+  // in that case.
+  ONLYOFFICE_JWT_SECRET: z.string().min(8).default(PLACEHOLDER_ONLYOFFICE_SECRET),
   ONLYOFFICE_JWT_ENABLED: z.enum(['true', 'false']).default('true'),
   // Public base URL the DocumentServer uses to download/save files via the
   // API. In dev we run the API on the host (port 3001), so DocServer (in
@@ -142,6 +171,56 @@ const EnvSchema = z.object({
     ),
 });
 
+/**
+ * Secrets that silently degrade to an insecure-but-working state when unset.
+ *
+ * Each of these used to fail OPEN: the code kept running with a key or a
+ * signature check that an attacker already knows, and nothing said so. A
+ * missing variable is an ops mistake that looks identical to a correct
+ * deployment right up until someone exploits it, so production refuses to
+ * boot instead.
+ *
+ * `APP_ENCRYPTION_KEY` is deliberately NOT in this list. Its absence disables
+ * one optional feature (provident-fund accounts) and is already loud at boot;
+ * the three below have no such containment — they silently weaken auth,
+ * document access and webhook trust for the whole deployment.
+ *
+ * Exported for the regression test; returns the problems rather than throwing
+ * so the test can assert on them without spawning a process.
+ */
+export function collectProductionSecretProblems(e: {
+  NODE_ENV: string;
+  SECRETS_KEY?: string | undefined;
+  ONLYOFFICE_JWT_SECRET: string;
+  FINFACTOR_WEBHOOK_SECRET?: string | undefined;
+}): string[] {
+  if (e.NODE_ENV !== 'production') return [];
+  const problems: string[] = [];
+
+  if (!e.SECRETS_KEY) {
+    problems.push(
+      'SECRETS_KEY is not set. Broker API keys/secrets/TOTP seeds, Gmail and ' +
+        'broker OAuth tokens, mailbox passwords and saved document passwords ' +
+        'would be encrypted with a key hardcoded in this repository.',
+    );
+  }
+  if (e.ONLYOFFICE_JWT_SECRET === PLACEHOLDER_ONLYOFFICE_SECRET) {
+    problems.push(
+      'ONLYOFFICE_JWT_SECRET is still the committed placeholder. Document ' +
+        'download tokens would be forgeable for any user by anyone who has ' +
+        'read this repository.',
+    );
+  }
+  if (!e.FINFACTOR_WEBHOOK_SECRET) {
+    problems.push(
+      'FINFACTOR_WEBHOOK_SECRET is not set. The Account Aggregator webhooks ' +
+        'are unauthenticated by design and this HMAC is their only access ' +
+        'control, so consent/data callbacks would accept any forged payload.',
+    );
+  }
+  return problems;
+}
+
 function loadEnv() {
   const parsed = EnvSchema.safeParse(process.env);
   if (!parsed.success) {
@@ -156,6 +235,14 @@ function loadEnv() {
   // A variable set on the wrong service or an unlinked shared variable looks
   // identical to one that was never set; this line settles it from the deploy
   // log rather than from a user hitting an error.
+  // Fail closed on the secrets that would otherwise degrade silently.
+  const secretProblems = collectProductionSecretProblems(parsed.data);
+  if (secretProblems.length > 0) {
+    console.error('❌ Refusing to start: insecure secret configuration in production');
+    for (const p of secretProblems) console.error(`   • ${p}`);
+    process.exit(1);
+  }
+
   if (parsed.data.APP_ENCRYPTION_KEY) {
     console.info('✅ APP_ENCRYPTION_KEY present — PF credential encryption available');
   } else {

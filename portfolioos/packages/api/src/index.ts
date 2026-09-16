@@ -31,7 +31,26 @@ initSentry();
 const app = express();
 
 app.disable('x-powered-by');
-app.use(helmet({ contentSecurityPolicy: false }));
+
+// Railway terminates TLS and proxies every request, so the socket's remote
+// address is the edge, not the client. Without this, `req.ip` — which
+// express-rate-limit keys on — is identical for all traffic: one shared
+// bucket, so a single abuser exhausts everyone's login attempts and no
+// attacker is ever isolated. `1` = trust exactly one proxy hop; do not use
+// `true`, which trusts a client-supplied X-Forwarded-For outright and makes
+// the limiter trivially spoofable.
+app.set('trust proxy', 1);
+
+app.use(
+  helmet({
+    // This process serves JSON only (the SPA is a separate nginx origin), so
+    // a CSP here protects nothing the SPA's own CSP does not. Left off
+    // deliberately rather than by omission.
+    contentSecurityPolicy: false,
+    // Six months, and let the edge decide about preload.
+    hsts: { maxAge: 15_552_000, includeSubDomains: true, preload: false },
+  }),
+);
 const corsAllowList = env.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
 function isOriginAllowed(origin: string): boolean {
   if (corsAllowList.includes(origin)) return true;
@@ -47,16 +66,32 @@ app.use(
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (isOriginAllowed(origin)) return callback(null, true);
-      // Reflect the origin so error responses still carry CORS headers (browsers
-      // mask the real status otherwise). Logged for review; rejected upstream
-      // by application auth/authorization.
-      logger.warn({ origin }, 'cors.origin.unrecognized');
-      return callback(null, true);
+      // Reject. Every branch here used to call `callback(null, true)`, which
+      // made the allow-list above dead code and reflected any origin back
+      // alongside `credentials: true`. Auth is Bearer-header only today so
+      // that was not a live session-theft path, but it left nothing standing
+      // between an arbitrary site and this API the moment any cookie-based
+      // flow is added.
+      logger.warn({ origin }, 'cors.origin.rejected');
+      return callback(null, false);
     },
     credentials: true,
   }),
 );
-app.use(express.json({ limit: '10mb' }));
+app.use(
+  express.json({
+    limit: '10mb',
+    // Keep the exact bytes for routes that authenticate by signing the body.
+    // Scoped by path so we are not holding a second copy of every 10MB
+    // request in memory just for the handful that need it.
+    verify: (req, _res, buf) => {
+      const url = (req as IncomingMessage).url ?? '';
+      if (url.includes('/integrations/finfactor/webhook/')) {
+        (req as IncomingMessage & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      }
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(
   pinoHttp({
