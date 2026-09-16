@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+// The auth store persists through browser storage (see "Remember me" in
+// stores/auth.store.ts), so setting a token in the test needs a DOM.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthedEventSource } from './authedEventSource';
 import { useAuthStore } from '@/stores/auth.store';
