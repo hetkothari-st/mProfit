@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -47,11 +47,17 @@ function useCountdown(): [number, () => void] {
 
 export function ForgotPasswordPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   // Set once a code has been requested — switches the page to the reset step.
   const [email, setEmail] = useState<string | null>(null);
   const [resendIn, startCountdown] = useCountdown();
 
-  const emailForm = useForm<EmailValues>({ resolver: zodResolver(emailSchema) });
+  // Login and signup pass along whatever the user already typed.
+  const prefilledEmail = (location.state as { email?: unknown } | null)?.email;
+  const emailForm = useForm<EmailValues>({
+    resolver: zodResolver(emailSchema),
+    defaultValues: { email: typeof prefilledEmail === 'string' ? prefilledEmail : '' },
+  });
   const resetForm = useForm<ResetValues>({ resolver: zodResolver(resetSchema) });
 
   const requestMutation = useMutation({

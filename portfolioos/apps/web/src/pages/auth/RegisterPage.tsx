@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { authApi, type AuthResult } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
-import { apiErrorMessage } from '@/api/client';
+import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import { UserRole, type PendingRegistration } from '@everypaisa/shared';
 
@@ -52,15 +52,20 @@ export function RegisterPage() {
   const setSession = useAuthStore((s) => s.setSession);
   // Set once the code has been emailed — switches the page to the code step.
   const [pending, setPending] = useState<PendingRegistration | null>(null);
+  // The address the server said already has an account. The hint only shows
+  // while the field still holds that address.
+  const [takenEmail, setTakenEmail] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { role: UserRole.INVESTOR },
   });
+  const email = watch('email');
 
   const registerMutation = useMutation({
     mutationFn: authApi.register,
@@ -68,7 +73,13 @@ export function RegisterPage() {
       setPending(data);
       toast.success(`Verification code sent to ${data.email}`);
     },
-    onError: (err) => toast.error(apiErrorMessage(err, 'Registration failed')),
+    onError: (err, values) => {
+      if (apiErrorCode(err) === 'CONFLICT') {
+        setTakenEmail(values.email);
+        return;
+      }
+      toast.error(apiErrorMessage(err, 'Registration failed'));
+    },
   });
 
   const onSubmit = (values: FormValues) => {
@@ -98,7 +109,7 @@ export function RegisterPage() {
         // The form stays registered while unmounted, so the details come back.
         onBack={() => setPending(null)}
         onVerified={(data) => {
-          setSession(data.user, data.tokens);
+          setSession(data.user, data.tokens, { remember: true });
           toast.success('Email verified. Welcome to EveryPaisa!');
           navigate('/dashboard', { replace: true });
         }}
@@ -127,9 +138,26 @@ export function RegisterPage() {
             autoComplete="email"
             placeholder="you@example.com"
             className="mt-1"
+            aria-invalid={Boolean(errors.email) || (takenEmail !== null && email === takenEmail)}
             {...register('email')}
           />
           {errors.email && <p className="text-xs text-negative mt-1">{errors.email.message}</p>}
+          {takenEmail !== null && email === takenEmail && (
+            <p role="alert" className="text-xs text-negative mt-1">
+              This email already has an account.{' '}
+              <Link to="/login" className="font-medium text-primary hover:underline">
+                Sign in
+              </Link>
+              {' · '}
+              <Link
+                to="/forgot-password"
+                state={{ email }}
+                className="font-medium text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
