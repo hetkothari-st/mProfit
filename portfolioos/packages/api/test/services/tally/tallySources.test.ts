@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
-import { cardStatementDate, mapTrade, rentFromLedger, type TradeRow } from '../../../src/services/tally/tallySources.js';
+import {
+  cardStatementDate,
+  mapTrade,
+  rentFromLedger,
+  splitSharedHoldingKeys,
+  type TradeRow,
+} from '../../../src/services/tally/tallySources.js';
 
 // The loader's rules, as pure functions over database-shaped rows.
 
@@ -132,5 +138,24 @@ describe('rentFromLedger', () => {
       { id: 'e3', date: '2024-04-01', property: 'Andheri Flat', tenant: 'Ravi', kind: 'DEPOSIT', amount: '50000' },
       { id: 'r2', date: '2023-11-05', property: 'Pune Flat', tenant: 'Asha', kind: 'PAYMENT', amount: '18000' },
     ]);
+  });
+});
+
+// The app can hold two different things under one asset key (a Kotak deposit
+// and a post-office account, say). Exported as one ledger, the narration and
+// the ledger name disagree and two assets are added together.
+describe('splitSharedHoldingKeys', () => {
+  it('splits holdings the app keeps under one identity but names differently', () => {
+    const trades = [
+      { holdingKey: 'fd:1', holdingName: 'borivali' },
+      { holdingKey: 'fd:1', holdingName: 'Kotak' },
+      { holdingKey: 'stock:inf', holdingName: 'Infosys Ltd' },
+      { holdingKey: 'stock:inf', holdingName: 'Infosys Ltd' },
+    ];
+    const issues = splitSharedHoldingKeys(trades as Parameters<typeof splitSharedHoldingKeys>[0]);
+    expect(trades.map((t) => t.holdingKey)).toEqual(['fd:1|borivali', 'fd:1|kotak', 'stock:inf', 'stock:inf']);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.message).toMatch(/borivali/);
+    expect(issues[0]!.message).toMatch(/Kotak/);
   });
 });

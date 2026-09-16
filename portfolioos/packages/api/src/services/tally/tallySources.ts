@@ -101,6 +101,39 @@ export function mapTrade(t: TradeRow): { trade: TallySources['trades'][number] }
   };
 }
 
+/**
+ * The app can file two different things under one asset key — a Kotak deposit
+ * and a post-office account, say. Exported as one ledger, the narration and
+ * the ledger name disagree and two assets are added together. Split them by
+ * name, and say so.
+ */
+export function splitSharedHoldingKeys(trades: Array<{ holdingKey: string; holdingName: string }>): TallyIssue[] {
+  const namesByKey = new Map<string, Set<string>>();
+  for (const t of trades) {
+    const seen = namesByKey.get(t.holdingKey) ?? new Set<string>();
+    seen.add(t.holdingName.trim().toLowerCase());
+    namesByKey.set(t.holdingKey, seen);
+  }
+
+  const issues: TallyIssue[] = [];
+  for (const [key, names] of namesByKey) {
+    if (names.size < 2) continue;
+    const shown = [...new Set(trades.filter((t) => t.holdingKey === key).map((t) => t.holdingName.trim()))];
+    issues.push({
+      severity: 'warning',
+      message:
+        `The app keeps ${shown.map((n) => `"${n}"`).join(' and ')} under one holding. They are exported as separate ` +
+        `ledgers; check in the app that they really are separate holdings.`,
+    });
+  }
+  for (const t of trades) {
+    if ((namesByKey.get(t.holdingKey)?.size ?? 0) > 1) {
+      t.holdingKey = `${t.holdingKey}|${t.holdingName.trim().toLowerCase()}`;
+    }
+  }
+  return issues;
+}
+
 // ─── Cards ───────────────────────────────────────────────────────
 
 /** A statement for "YYYY-MM", dated on the card's statement day (clamped to the month). */
@@ -287,6 +320,7 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
     if ('skip' in mapped) issues.push({ severity: 'warning', message: mapped.skip });
     else trades.push(mapped.trade);
   }
+  issues.push(...splitSharedHoldingKeys(trades));
 
   const flows: TallySources['cashFlows'] = [];
   for (const cf of cashFlows) {

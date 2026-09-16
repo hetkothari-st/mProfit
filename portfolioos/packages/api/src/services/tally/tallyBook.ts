@@ -163,6 +163,12 @@ const FIXED_LEDGERS = {
   stcg: { name: 'Short-term Capital Gains', parent: 'Indirect Incomes' },
   ltcg: { name: 'Long-term Capital Gains', parent: 'Indirect Incomes' },
   capitalLoss: { name: 'Capital Losses', parent: 'Indirect Expenses' },
+  // Used when the app has not computed the gain itself: the export works the
+  // cost out first-in-first-out, but cannot say whether it is short or long
+  // term. A CA reclassifies from this one ledger.
+  realisedGain: { name: 'Realised Gains (to classify)', parent: 'Indirect Incomes' },
+  fnoProfit: { name: 'F&O Trading Profit', parent: 'Indirect Incomes' },
+  fnoLoss: { name: 'F&O Trading Loss', parent: 'Indirect Expenses' },
   dividend: { name: 'Dividend Income', parent: 'Indirect Incomes' },
   interest: { name: 'Interest Income', parent: 'Indirect Incomes' },
   loanInterest: { name: 'Loan Interest', parent: 'Indirect Expenses' },
@@ -341,9 +347,43 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
   }
 
   // ── Investments ────────────────────────────────────────────────
-  for (const t of sources.trades) {
+  //
+  // A first-in-first-out queue of what was bought and still held, so a sale
+  // whose gain the app has not computed is still booked at cost, with the
+  // realised gain recognised as income. Booking a sale at its sale value —
+  // what this used to do — leaves the profit inside the asset and, once a
+  // position closes, shows an asset with a credit balance.
+  const lots = new Map<string, Array<{ qty: Decimal; cost: Decimal }>>();
+  const addLot = (key: string, quantity: Decimal, cost: Decimal) => {
+    if (!quantity.greaterThan(0) || !cost.greaterThan(0)) return;
+    const list = lots.get(key) ?? [];
+    list.push({ qty: quantity, cost });
+    lots.set(key, list);
+  };
+  /** Consume from the front of the queue; returns the cost and quantity matched. */
+  const takeLots = (key: string, quantity: Decimal): { cost: Decimal; matched: Decimal } => {
+    const list = lots.get(key) ?? [];
+    let remaining = quantity;
+    let cost = ZERO;
+    while (remaining.greaterThan(0) && list.length > 0) {
+      const lot = list[0]!;
+      const take = Decimal.min(lot.qty, remaining);
+      const share = lot.cost.times(take).dividedBy(lot.qty);
+      cost = cost.plus(share);
+      lot.qty = lot.qty.minus(take);
+      lot.cost = lot.cost.minus(share);
+      remaining = remaining.minus(take);
+      if (!lot.qty.greaterThan(0)) list.shift();
+    }
+    return { cost, matched: quantity.minus(remaining) };
+  };
+  const isFno = (assetClass: string) => assetClass === 'FUTURES' || assetClass === 'OPTIONS';
+
+  // Date order, so the queue matches the order the trades happened in.
+  for (const t of [...sources.trades].sort((a, b) => a.date.localeCompare(b.date))) {
     const gross = dec(t.gross);
     const charges = dec(t.charges);
+    const quantity = dec(t.quantity);
     const name = t.holdingName;
 
     if (BUY_KINDS[t.kind]) {
@@ -354,27 +394,19 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
         [fixed('charges'), charges],
         [fixed('unallocated'), gross.plus(charges).negated()],
       ]);
+      addLot(t.holdingKey, quantity, gross);
     } else if (SELL_KINDS[t.kind]) {
       if (gross.isZero()) continue;
       const narration = `${SELL_KINDS[t.kind]} ${qty(t.quantity)} ${name} @ ${rs(t.price)}`;
       const proceeds = gross.minus(charges);
-      if (t.cost === null) {
-        issues.push({
-          severity: 'warning',
-          message:
-            `${SELL_KINDS[t.kind]} of ${name} on ${t.date}: its cost is not computed yet, so no capital gain is ` +
-            `booked and the holding is reduced by the sale value.`,
-        });
-        add(t.date, 'Journal', narration, [
-          [fixed('unallocated'), proceeds],
-          [fixed('charges'), charges],
-          [holding(t), gross.negated()],
-        ]);
-      } else {
-        const lines: Array<[string, Decimal]> = [
-          [fixed('unallocated'), proceeds],
-          [holding(t), dec(t.cost).negated()],
-        ];
+      const lines: Array<[string, Decimal]> = [
+        [fixed('unallocated'), proceeds],
+        [fixed('charges'), charges],
+      ];
+      if (t.cost !== null) {
+        // The app computed the gain: use its figures, and keep the queue in step.
+        takeLots(t.holdingKey, quantity);
+        lines.push([holding(t), dec(t.cost).negated()]);
         for (const [gain, ledger] of [
           [dec(t.shortTermGain), 'stcg'],
           [dec(t.longTermGain), 'ltcg'],
@@ -385,8 +417,26 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
         // Whatever the gains records leave over is the sale's charges.
         const residue = lines.reduce((s, [, a]) => s.plus(a), ZERO);
         if (!residue.isZero()) lines.push([fixed('charges'), residue.negated()]);
-        add(t.date, 'Journal', narration, lines);
+      } else {
+        const { cost, matched } = takeLots(t.holdingKey, quantity);
+        const unmatched = quantity.minus(matched);
+        // What no purchase covers is booked at its sale value, with no gain.
+        const unmatchedValue = quantity.greaterThan(0) ? gross.times(unmatched).dividedBy(quantity) : ZERO;
+        const gain = gross.minus(unmatchedValue).minus(cost);
+        lines.push([holding(t), cost.plus(unmatchedValue).negated()]);
+        if (gain.greaterThan(0)) lines.push([fixed(isFno(t.assetClass) ? 'fnoProfit' : 'realisedGain'), gain.negated()]);
+        else if (gain.lessThan(0)) lines.push([fixed(isFno(t.assetClass) ? 'fnoLoss' : 'capitalLoss'), gain.abs()]);
+        if (unmatched.greaterThan(0)) {
+          issues.push({
+            severity: 'warning',
+            message:
+              `${SELL_KINDS[t.kind]} of ${name} on ${t.date}: no purchase is on file for ${unmatched.toString()} of ` +
+              `the ${quantity.toString()} sold, so that part is booked at its sale value and no gain is worked out. ` +
+              `Add the original purchase in the app.`,
+          });
+        }
       }
+      add(t.date, 'Journal', narration, lines);
     } else if (t.kind === 'DIVIDEND_PAYOUT' || t.kind === 'INTEREST_RECEIVED') {
       const amount = gross.minus(charges);
       if (amount.isZero()) continue;
@@ -402,12 +452,14 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
         [holding(t), gross],
         [fixed('dividend'), gross.negated()],
       ]);
+      addLot(t.holdingKey, quantity, gross);
     } else if (t.kind === 'OPENING_BALANCE') {
       if (gross.isZero()) continue;
       add(t.date, 'Journal', `Opening balance ${qty(t.quantity)} ${name}`, [
         [holding(t), gross],
         [fixed('capital'), gross.negated()],
       ]);
+      addLot(t.holdingKey, quantity, gross);
     } else if (t.kind === 'MERGER_IN' || t.kind === 'DEMERGER_IN' || t.kind === 'MERGER_OUT' || t.kind === 'DEMERGER_OUT') {
       if (gross.isZero()) continue;
       const incoming = t.kind.endsWith('_IN');
@@ -416,6 +468,8 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
         [holding(t), incoming ? gross : gross.negated()],
         [fixed('corporateAction'), incoming ? gross.negated() : gross],
       ]);
+      if (incoming) addLot(t.holdingKey, quantity, gross);
+      else takeLots(t.holdingKey, quantity);
     }
     // BONUS and SPLIT move no money: quantities only, shown in the holdings report.
   }

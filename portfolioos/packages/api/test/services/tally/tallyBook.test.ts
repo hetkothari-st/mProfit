@@ -202,3 +202,102 @@ describe('an empty account', () => {
     expectBalanced(book);
   });
 });
+
+// When the app has not computed capital gains for a sale, the export works the
+// cost out of the buys it is exporting (first in, first out) rather than
+// reducing the holding by the sale value — which used to leave the realised
+// profit inside the asset and, for a closed F&O position, an asset with a
+// credit balance.
+describe('cost and realised gains worked out from the trades', () => {
+  const trade = (over: Partial<TallySources['trades'][number]>): TallySources['trades'][number] => ({
+    id: 'x',
+    date: '2024-05-01',
+    kind: 'BUY',
+    assetClass: 'EQUITY',
+    holdingKey: 'stock:z',
+    holdingName: 'Zed Ltd',
+    quantity: '10',
+    price: '100',
+    gross: '1000',
+    charges: '0',
+    cost: null,
+    shortTermGain: '0',
+    longTermGain: '0',
+    ...over,
+  });
+  const bookOf = (trades: TallySources['trades']) => buildTallyBook(sources({ trades }));
+  const sellIn = (book: TallyBook) => allVouchers(book).find((v) => v.narration.startsWith('Sell'))!;
+
+  it('takes the cost from the earliest buys still held', () => {
+    const book = bookOf([
+      trade({ id: 'b1', date: '2024-05-01', gross: '1000', quantity: '10', price: '100' }),
+      trade({ id: 'b2', date: '2024-06-01', gross: '1200', quantity: '10', price: '120' }),
+      trade({ id: 's1', date: '2024-07-01', kind: 'SELL', quantity: '15', price: '150', gross: '2250' }),
+    ]);
+    const sell = sellIn(book);
+    expect(lineOf(sell, 'Zed Ltd')).toBe('-1600'); // 10 at 100 + 5 at 120
+    expect(lineOf(sell, 'Realised Gains (to classify)')).toBe('-650');
+    expect(lineOf(sell, 'Unallocated Funds')).toBe('2250');
+    expectBalanced(book);
+  });
+
+  it('books a loss when the sale is below cost', () => {
+    const book = bookOf([
+      trade({ id: 'b1', gross: '1000' }),
+      trade({ id: 's1', date: '2024-07-01', kind: 'SELL', quantity: '10', price: '80', gross: '800' }),
+    ]);
+    const sell = sellIn(book);
+    expect(lineOf(sell, 'Zed Ltd')).toBe('-1000');
+    expect(lineOf(sell, 'Capital Losses')).toBe('200');
+    expectBalanced(book);
+  });
+
+  it('sends an F&O profit to its own ledger, closing the position at zero', () => {
+    const fno = { assetClass: 'OPTIONS', holdingKey: 'fo:nifty', holdingName: 'NIFTY27NOV2525500CE' };
+    const book = bookOf([
+      trade({ ...fno, id: 'b1', date: '2025-11-04', quantity: '75', price: '142.50', gross: '10687.50' }),
+      trade({ ...fno, id: 's1', date: '2025-11-04', kind: 'SELL', quantity: '75', price: '168.75', gross: '12656.25' }),
+    ]);
+    const sell = sellIn(book);
+    expect(lineOf(sell, 'NIFTY27NOV2525500CE')).toBe('-10687.5');
+    expect(lineOf(sell, 'F&O Trading Profit')).toBe('-1968.75');
+    expect(ledger(book, 'F&O Trading Profit')?.parent).toBe('Indirect Incomes');
+    expectBalanced(book);
+  });
+
+  it('sends an F&O loss to the F&O loss ledger', () => {
+    const fno = { assetClass: 'FUTURES', holdingKey: 'fo:bank', holdingName: 'BANKNIFTY27NOV2556000PE' };
+    const book = bookOf([
+      trade({ ...fno, id: 'b1', date: '2025-11-04', quantity: '35', price: '215.30', gross: '7535.50' }),
+      trade({ ...fno, id: 's1', date: '2025-11-05', kind: 'SELL', quantity: '35', price: '100', gross: '3500' }),
+    ]);
+    const sell = sellIn(book);
+    expect(lineOf(sell, 'F&O Trading Loss')).toBe('4035.5');
+    expect(ledger(book, 'F&O Trading Loss')?.parent).toBe('Indirect Expenses');
+    expectBalanced(book);
+  });
+
+  it('says so when more is sold than was ever bought, and books the rest at sale value', () => {
+    const book = bookOf([
+      trade({
+        id: 's1', date: '2024-07-01', kind: 'SELL', quantity: '100', price: '472.30', gross: '47230',
+        holdingName: 'ITC Limited', holdingKey: 'stock:itc',
+      }),
+    ]);
+    const sell = sellIn(book);
+    expect(lineOf(sell, 'ITC Limited')).toBe('-47230');
+    expect(book.issues.some((i) => i.message.includes('ITC Limited') && /no purchase/i.test(i.message))).toBe(true);
+    expectBalanced(book);
+  });
+
+  it("still uses the app's own capital-gains figures when it has them", () => {
+    const book = bookOf([
+      trade({ id: 'b1', gross: '1000' }),
+      trade({ id: 's1', date: '2024-07-01', kind: 'SELL', quantity: '10', price: '150', gross: '1500', cost: '900', shortTermGain: '600' }),
+    ]);
+    const sell = sellIn(book);
+    expect(lineOf(sell, 'Zed Ltd')).toBe('-900');
+    expect(lineOf(sell, 'Short-term Capital Gains')).toBe('-600');
+    expectBalanced(book);
+  });
+});
