@@ -134,6 +134,8 @@ export interface TallySources {
     amount: string;
     /** "YYYY-MM" the money was for, when the khata pinned it to a month. */
     forMonth?: string | null;
+    /** The tenancy's bank account, when one is set. */
+    bankAccountId?: string | null;
   }>;
   propertyExpenses: Array<{ id: string; date: string; property: string; description: string; amount: string }>;
   premiums: Array<{ id: string; date: string; policy: string; amount: string }>;
@@ -326,26 +328,6 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
       if (bankKey) add(cf.date, 'Payment', narration, [[fixed('unclassifiedOut'), amount], [bankKey, amount.negated()]]);
       else add(cf.date, 'Journal', narration, [[fixed('unclassifiedOut'), amount], [fixed('unallocated'), amount.negated()]]);
     }
-  }
-
-  // Each bank opens at the balance that makes Tally close on the app's balance.
-  let capitalOpening = ZERO;
-  for (const b of sources.bankAccounts) {
-    const slot = ledgers.get(bankKeys.get(b.id)!)!;
-    if (b.currentBalance === null) {
-      issues.push({
-        severity: 'warning',
-        message: `No balance is on file for ${slot.name}, so its opening balance is left at zero.`,
-      });
-      continue;
-    }
-    slot.opening = dec(b.currentBalance).minus(netFlowByBank.get(b.id) ?? ZERO);
-    capitalOpening = capitalOpening.minus(slot.opening);
-  }
-  if (!capitalOpening.isZero()) {
-    const capital = ledgers.get(fixed('capital'))!;
-    capital.opening = capitalOpening;
-    capital.used = true;
   }
 
   // ── Investments ────────────────────────────────────────────────
@@ -561,7 +543,14 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
       // Arrears are often cleared in one go: ten months, one day, one amount.
       // Without the month in the narration those are ten identical vouchers.
       const forMonth = r.forMonth ? ` for ${r.forMonth}` : '';
-      add(r.date, 'Journal', `Rent received - ${who}${forMonth}`, [[fixed('unallocated'), amount], [rent, amount.negated()]]);
+      const narration = `Rent received - ${who}${forMonth}`;
+      const bankKey = r.bankAccountId ? bankKeys.get(r.bankAccountId) : undefined;
+      if (bankKey) {
+        netFlowByBank.set(r.bankAccountId!, (netFlowByBank.get(r.bankAccountId!) ?? ZERO).plus(amount));
+        add(r.date, 'Receipt', narration, [[bankKey, amount], [rent, amount.negated()]]);
+      } else {
+        add(r.date, 'Journal', narration, [[fixed('unallocated'), amount], [rent, amount.negated()]]);
+      }
     } else {
       const deposit = defineLedger(
         `deposit:${r.property}:${r.tenant}`,
@@ -628,6 +617,26 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
 
   const firstFy = years[0]?.fy ?? financialYearFromDate(opts.today ?? new Date().toISOString().slice(0, 10));
   const booksBeginning = `${firstFy.slice(0, 4)}-04-01`;
+
+  // Each bank opens at the balance that makes Tally close on the app's balance.
+  let capitalOpening = ZERO;
+  for (const b of sources.bankAccounts) {
+    const slot = ledgers.get(bankKeys.get(b.id)!)!;
+    if (b.currentBalance === null) {
+      issues.push({
+        severity: 'warning',
+        message: `No balance is on file for ${slot.name}, so its opening balance is left at zero.`,
+      });
+      continue;
+    }
+    slot.opening = dec(b.currentBalance).minus(netFlowByBank.get(b.id) ?? ZERO);
+    capitalOpening = capitalOpening.minus(slot.opening);
+  }
+  if (!capitalOpening.isZero()) {
+    const capital = ledgers.get(fixed('capital'))!;
+    capital.opening = capitalOpening;
+    capital.used = true;
+  }
 
   const outLedgers: TallyLedger[] = [];
   const usedGroups = new Set<string>();

@@ -153,6 +153,7 @@ export interface RentLedgerRow {
   amount: Num;
   entryDate: Date;
   forMonth: string | null;
+  bankAccountId: string | null;
   property: string;
   tenant: string;
 }
@@ -163,6 +164,7 @@ export interface RentReceiptRow {
   receivedAmount: Num | null;
   receivedOn: Date | null;
   forMonth: string | null;
+  bankAccountId: string | null;
   property: string;
   tenant: string;
 }
@@ -188,6 +190,7 @@ export function rentFromLedger(ledger: RentLedgerRow[], receipts: RentReceiptRow
       kind: e.entryType as 'PAYMENT' | 'DEPOSIT' | 'DEPOSIT_REFUND',
       amount: d(e.amount).toString(),
       forMonth: e.forMonth,
+      bankAccountId: e.bankAccountId,
     });
   }
   for (const r of receipts) {
@@ -202,6 +205,7 @@ export function rentFromLedger(ledger: RentLedgerRow[], receipts: RentReceiptRow
       kind: 'PAYMENT',
       amount: amount.toString(),
       forMonth: r.forMonth,
+      bankAccountId: r.bankAccountId,
     });
   }
   return out;
@@ -226,7 +230,9 @@ function lastFour(value: string | null): string {
 }
 
 export async function loadTallySources(userId: string): Promise<{ sources: TallySources; issues: TallyIssue[] }> {
-  const tenancyNames = { select: { tenantName: true, property: { select: { name: true } } } } as const;
+  const tenancyNames = {
+    select: { tenantName: true, bankAccountId: true, property: { select: { name: true } } },
+  } as const;
   const [banks, cashFlows, transactions, premiums, loans, cards, ledgerRows, receipts, expenses] = await Promise.all([
     prisma.bankAccount.findMany({
       where: { userId },
@@ -400,6 +406,7 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
         amount: e.amount,
         entryDate: e.entryDate,
         forMonth: e.forMonth,
+        bankAccountId: e.tenancy.bankAccountId,
         property: e.tenancy.property.name,
         tenant: e.tenancy.tenantName,
       })),
@@ -409,6 +416,7 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
         receivedAmount: r.receivedAmount,
         receivedOn: r.receivedOn,
         forMonth: r.forMonth,
+        bankAccountId: r.tenancy.bankAccountId,
         property: r.tenancy.property.name,
         tenant: r.tenancy.tenantName,
       })),

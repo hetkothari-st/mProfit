@@ -25,6 +25,7 @@ import {
   type CreateLedgerEntryInput,
 } from '@/api/rental.api';
 import { invalidateRentalCaches } from '@/api/rentalCache';
+import { RentAccountPicker } from '@/components/rental/RentAccountPicker';
 
 // ── Entry direction ──────────────────────────────────────────────────
 // "You gave" = a charge against the tenant. "You got" = a credit (money in).
@@ -324,6 +325,20 @@ export function TenantKhataPage() {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to build reminder'),
   });
 
+  // Where this tenant's rent lands can be set here at any time, not only when
+  // the tenancy was created.
+  const accountMutation = useMutation({
+    mutationFn: (bankAccountId: string | null) =>
+      rentalApi.updateTenancy(tenancyId!, { bankAccountId }),
+    onSuccess: () => {
+      toast.success('Rent account updated');
+      invalidateRentalCaches(qc);
+      qc.invalidateQueries({ queryKey: ['tenancy-ledger', tenancyId] });
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Could not update the rent account'),
+  });
+
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const deleteMutation = useMutation({
@@ -450,6 +465,12 @@ export function TenantKhataPage() {
               Deposit held: {formatINR(deposit.toString())}
             </p>
           )}
+          <div className="mt-4 max-w-xs">
+            <RentAccountPicker
+              value={ledger.bankAccountId}
+              onChange={(bankAccountId) => accountMutation.mutate(bankAccountId)}
+            />
+          </div>
         </CardContent>
       </Card>
 

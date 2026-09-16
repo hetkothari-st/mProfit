@@ -66,6 +66,8 @@ const createTenancySchema = z.object({
   securityDeposit: moneyString.nullable().optional(),
   rentDueDay: z.number().int().min(1).max(31).optional(),
   notes: z.string().max(2000).nullable().optional(),
+  // The account this tenant's rent is credited to. null = not tracked.
+  bankAccountId: z.string().cuid().nullable().optional(),
 });
 
 const updateTenancySchema = z.object({
@@ -79,6 +81,7 @@ const updateTenancySchema = z.object({
   rentDueDay: z.number().int().min(1).max(31).optional(),
   notes: z.string().max(2000).nullable().optional(),
   isActive: z.boolean().optional(),
+  bankAccountId: z.string().cuid().nullable().optional(),
 });
 
 const markReceivedSchema = z.object({

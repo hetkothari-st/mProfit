@@ -368,6 +368,8 @@ export async function createLedgerEntry(
           type: direction,
           amount,
           description: `${entryType} — ${property.name} / ${tenancy.tenantName}`,
+          // The tenancy says which account this rent moves through.
+          bankAccountId: tenancy.bankAccountId ?? null,
         },
         select: { id: true },
       });
@@ -438,6 +440,7 @@ export async function updateLedgerEntry(
             type: nextDirection,
             amount: effectiveAmount,
             description: effectiveDescription,
+            bankAccountId: existing.tenancy?.bankAccountId ?? null,
           },
           select: { id: true },
         });
@@ -508,6 +511,8 @@ export interface TenancyLedgerDTO {
   monthlyRent: string;
   balanceDue: string;
   depositHeld: string;
+  /** Bank account this rent is credited to; null = not tracked. */
+  bankAccountId: string | null;
   /** Newest first. */
   rows: LedgerRowDTO[];
 }
@@ -568,6 +573,7 @@ export async function getTenancyLedger(
     monthlyRent: fresh.monthlyRent.toString(),
     balanceDue: fresh.balanceDue.toString(),
     depositHeld: fresh.depositHeld.toString(),
+    bankAccountId: tenancy.bankAccountId,
     rows: withBalance.reverse(),
   };
 }

@@ -86,6 +86,8 @@ export type UpdatePropertyInput = Partial<CreatePropertyInput>;
 export interface CreateTenancyInput {
   propertyId: string;
   tenantName: string;
+  /** Bank account the rent is credited to. null/undefined = not tracked. */
+  bankAccountId?: string | null;
   tenantContact?: string | null;
   tenantEmail?: string | null;
   tenantPhone?: string | null;
@@ -368,6 +370,23 @@ async function generateReceiptsForTenancy(
   return result.count;
 }
 
+/**
+ * A tenancy may only be paid into an account the landlord actually holds —
+ * otherwise one user's rent could be attributed to another's bank.
+ */
+async function assertOwnBankAccount(
+  userId: string,
+  bankAccountId: string | null | undefined,
+): Promise<string | null> {
+  if (!bankAccountId) return null;
+  const account = await prisma.bankAccount.findFirst({
+    where: { id: bankAccountId, userId },
+    select: { id: true },
+  });
+  if (!account) throw new BadRequestError('That bank account does not belong to you');
+  return account.id;
+}
+
 export async function createTenancy(userId: string, input: CreateTenancyInput) {
   const property = await getProperty(userId, input.propertyId);
   if (!property.isActive) {
@@ -393,6 +412,7 @@ export async function createTenancy(userId: string, input: CreateTenancyInput) {
     input.securityDeposit,
     'securityDeposit',
   );
+  const bankAccountId = await assertOwnBankAccount(userId, input.bankAccountId);
 
   return runInTransaction(async (tx) => {
     const tenancy = await tx.tenancy.create({
@@ -409,6 +429,7 @@ export async function createTenancy(userId: string, input: CreateTenancyInput) {
         rentDueDay,
         isActive: true,
         notes: input.notes ?? null,
+        bankAccountId,
       },
     });
     await generateReceiptsForTenancy(
@@ -473,6 +494,10 @@ export async function updateTenancy(
   }
   if (patch.notes !== undefined) data.notes = patch.notes;
   if (patch.isActive !== undefined) data.isActive = patch.isActive;
+  if (patch.bankAccountId !== undefined) {
+    const next = await assertOwnBankAccount(userId, patch.bankAccountId);
+    data.bankAccount = next ? { connect: { id: next } } : { disconnect: true };
+  }
 
   let newEndDate: Date | null | undefined;
   if (patch.endDate !== undefined) {
@@ -716,6 +741,7 @@ export async function markReceiptReceived(
           type: 'INFLOW',
           amount: received,
           description: `Rent received — ${existing.tenancy.property.name} / ${existing.tenancy.tenantName} (${existing.forMonth})`,
+          bankAccountId: existing.tenancy.bankAccountId ?? null,
         },
         select: { id: true },
       });

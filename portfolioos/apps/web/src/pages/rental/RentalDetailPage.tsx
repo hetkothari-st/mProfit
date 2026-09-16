@@ -44,6 +44,7 @@ import {
   type CreateExpenseInput,
 } from '@/api/rental.api';
 import { invalidateRentalCaches } from '@/api/rentalCache';
+import { RentAccountPicker } from '@/components/rental/RentAccountPicker';
 import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import { DocumentVault } from '@/components/documents/DocumentVault';
 import { PropertyGallery } from '@/components/property/PropertyGallery';
@@ -775,6 +776,10 @@ function AddTenancyDialog({
               onChange={(e) => setForm((f) => ({ ...f, securityDeposit: e.target.value }))}
             />
           </div>
+          <RentAccountPicker
+            value={form.bankAccountId}
+            onChange={(bankAccountId) => setForm((f) => ({ ...f, bankAccountId }))}
+          />
         </div>
         {mutation.isError && (
           <p className="text-sm text-negative">

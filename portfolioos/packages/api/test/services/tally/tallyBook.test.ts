@@ -311,3 +311,38 @@ describe('cost and realised gains worked out from the trades', () => {
     expectBalanced(book);
   });
 });
+
+// Rent that has an account behind it is money moving through a bank, not an
+// unexplained credit: it must post as a Receipt against that bank, and the
+// bank's opening balance must still leave Tally closing on the app's figure.
+describe('rent paid into a known bank account', () => {
+  const book = buildTallyBook(
+    sources({
+      bankAccounts: [
+        { id: 'b1', label: 'Kotak Bank Salary', last4: '9923', isOverdraft: false, currentBalance: '70000' },
+      ],
+      rent: [
+        { id: 'r1', date: '2024-05-03', property: 'Andheri Flat', tenant: 'Ravi', kind: 'PAYMENT', amount: '25000', forMonth: '2024-05', bankAccountId: 'b1' },
+        { id: 'r2', date: '2024-06-03', property: 'Andheri Flat', tenant: 'Ravi', kind: 'PAYMENT', amount: '25000', forMonth: '2024-06', bankAccountId: null },
+      ],
+    }),
+  );
+
+  it('books it as a Receipt against the bank', () => {
+    const receipt = allVouchers(book).find((v) => v.narration.includes('2024-05'))!;
+    expect(receipt.type).toBe('Receipt');
+    expect(lineOf(receipt, 'Kotak Bank Salary 9923')).toBe('25000');
+    expect(lineOf(receipt, 'Rent - Andheri Flat')).toBe('-25000');
+  });
+
+  it('still parks rent with no account in the suspense ledger', () => {
+    const journal = allVouchers(book).find((v) => v.narration.includes('2024-06'))!;
+    expect(journal.type).toBe('Journal');
+    expect(lineOf(journal, 'Unallocated Funds')).toBe('25000');
+  });
+
+  it('opens the bank so it closes on the balance the app holds', () => {
+    // ₹70,000 today, ₹25,000 of it received here → it opened at ₹45,000.
+    expect(ledger(book, 'Kotak Bank Salary 9923')?.openingBalance.toString()).toBe('45000');
+  });
+});

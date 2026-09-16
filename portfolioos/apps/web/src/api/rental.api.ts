@@ -54,6 +54,8 @@ export interface TenancyDTO {
   isActive: boolean;
   notes: string | null;
   createdAt: string;
+  /** Bank account this tenant's rent is credited to; null = not tracked. */
+  bankAccountId: string | null;
   rentReceipts?: RentReceiptDTO[];
 }
 
@@ -118,6 +120,8 @@ export interface TenancyLedgerDTO {
   monthlyRent: string;
   balanceDue: string;
   depositHeld: string;
+  /** Bank account this rent is credited to; null = not tracked. */
+  bankAccountId: string | null;
   /** Newest first. */
   rows: LedgerRowDTO[];
 }
@@ -170,6 +174,8 @@ export interface CreateTenancyInput {
   securityDeposit?: string | null;
   rentDueDay?: number;
   notes?: string | null;
+  /** Bank account the rent is credited to. null clears it. */
+  bankAccountId?: string | null;
 }
 
 export type UpdateTenancyInput = Partial<CreateTenancyInput> & {
