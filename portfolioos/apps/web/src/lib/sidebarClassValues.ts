@@ -8,8 +8,9 @@ import type { NetWorthResponse } from '@/api/dashboard.api';
  *
  * Every figure is the amount a user would read on that class's page: current
  * value for assets, balance for bank accounts, amount owed for loans and
- * cards, cover for insurance. Liabilities count by size, not sign — a large
- * home loan belongs near the top of the list, not the bottom.
+ * cards, yearly premium for insurance (ranking by cover would put a term plan
+ * above everything the user actually holds). Liabilities count by size, not
+ * sign — a large home loan belongs near the top of the list, not the bottom.
  */
 
 /** Holdings asset class → sidebar section. Mirrors the dashboard's mapping. */
@@ -98,7 +99,7 @@ export function computeSidebarValues(src: SidebarValueSources): Map<string, Deci
   if (src.netWorth) {
     add('/loans', dec(src.netWorth.liabilities.totalOutstanding));
     add('/credit-cards', dec(src.netWorth.liabilities.totalCreditCardOutstanding));
-    add('/insurance', dec(src.netWorth.insurance.totalSumAssured));
+    add('/insurance', dec(src.netWorth.insurance.annualPremiumTotal));
   }
   for (const balance of src.bankBalances ?? []) add('/bank-accounts', dec(balance));
   add('/real-estate', dec(src.ownedRealEstateValue));
