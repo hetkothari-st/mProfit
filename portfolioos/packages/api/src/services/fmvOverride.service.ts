@@ -1,5 +1,5 @@
 import { Decimal, toDecimal } from '@everypaisa/shared';
-import type { AssetClass, Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
@@ -8,14 +8,6 @@ import {
   persistCapitalGainsForPortfolio,
   GRANDFATHERING_CUTOFF,
 } from './capitalGains.service.js';
-
-// Section 112A grandfathering only applies to these asset classes — debt
-// MFs/bonds have their own indexation path (capitalGains.service.ts).
-const GRANDFATHERING_ASSET_CLASSES: ReadonlySet<AssetClass> = new Set([
-  'EQUITY',
-  'ETF',
-  'MUTUAL_FUND',
-]);
 
 // fmvPerUnit validation: positive Decimal, max 8 digits before the point,
 // max 4 after (matches FmvOverride.fmvPerUnit's Decimal(18,4) column, with
@@ -198,7 +190,11 @@ export async function listGrandfatheringRows(
       (r) =>
         r.capitalGainType === 'LONG_TERM' &&
         r.buyDate <= GRANDFATHERING_CUTOFF &&
-        GRANDFATHERING_ASSET_CLASSES.has(r.assetClass) &&
+        // Sec 55(2)(ac) covers 112A assets only — equity shares, equity-oriented
+        // fund units, business-trust units — never debt funds, which index instead.
+        r.isEquityOriented &&
+        // 112A (and so grandfathering) applies to transfers from 1-Apr-2018.
+        r.sellDate >= new Date('2018-04-01T00:00:00Z') &&
         (fy === undefined || r.financialYear === fy),
     )
     .map((r): GrandfatheringRow => {

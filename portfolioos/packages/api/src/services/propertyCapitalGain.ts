@@ -1,15 +1,15 @@
 /**
  * Property capital-gain computation for SOLD `OwnedProperty` rows.
  *
- * Property is "land or building" under section 112; LTCG threshold is
- * 24 months. For property bought on or before 23-Jul-2024 the taxpayer
- * may choose between:
- *   - Indexed cost @ 20% rate (with CII)
- *   - Non-indexed cost @ 12.5% rate (Finance Act 2024)
- * After 23-Jul-2024 only the 12.5% non-indexed regime applies.
+ * Property is "land or building" under section 112; it is long-term when
+ * held for MORE than 24 months. The rate depends on the sale date:
+ *   - Sold before 23-Jul-2024: indexed cost @ 20% (the only regime then).
+ *   - Sold on/after 23-Jul-2024, bought before it: a resident may choose
+ *     indexed @ 20% or non-indexed @ 12.5% (Finance (No. 2) Act 2024).
+ *   - Bought on/after 23-Jul-2024: non-indexed @ 12.5% only.
  *
- * Short-term (< 24 months) gains are taxed at slab rate; we report a
- * 30% top-bracket estimate as a "max likely tax" hint.
+ * Short-term gains are taxed at slab rate; we report a 30% top-bracket
+ * estimate as a "max likely tax" hint.
  *
  * All money math via `decimal.js` per §3.2 / §5.1 task 2. The compute
  * runs server-side; the client only renders the response.
@@ -49,6 +49,14 @@ function nz(d: { toString(): string } | null): Decimal {
   return new Decimal(d.toString());
 }
 
+/** Same calendar day `months` later, clamped to month end. */
+function addMonthsUTC(d: Date, months: number): Date {
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + months;
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(d.getUTCDate(), last)));
+}
+
 function monthsBetween(a: Date, b: Date): number {
   const years = b.getUTCFullYear() - a.getUTCFullYear();
   const months = b.getUTCMonth() - a.getUTCMonth();
@@ -78,7 +86,9 @@ export function computePropertyCapitalGain(
   const netSaleProceeds = salePrice.minus(saleBrokerage);
 
   const holdingMonths = monthsBetween(property.purchaseDate, property.saleDate);
-  const isLongTerm = holdingMonths >= LTCG_MONTHS_THRESHOLD;
+  // Sec 2(42A): long-term only if held for more than 24 months.
+  const isLongTerm =
+    property.saleDate.getTime() > addMonthsUTC(property.purchaseDate, LTCG_MONTHS_THRESHOLD).getTime();
 
   // Owner's share factor — gains belong to the owner pro-rata.
   const ownershipPctRaw = property.ownershipPercent
@@ -123,12 +133,22 @@ export function computePropertyCapitalGain(
     }
   }
 
-  // User has indexation choice if they bought on/before 2024-07-23 AND it's LTCG
   const purchaseIso = dateToIso(property.purchaseDate);
-  const hasIndexationChoice =
-    isLongTerm &&
-    purchaseIso <= PROPERTY_INDEXATION_CHOICE_CUTOFF &&
-    indexedGain !== null;
+  const saleIso = dateToIso(property.saleDate);
+  const boughtBeforeCutoff = purchaseIso < PROPERTY_INDEXATION_CHOICE_CUTOFF;
+  const soldBeforeCutoff = saleIso < PROPERTY_INDEXATION_CHOICE_CUTOFF;
+  const regime: PropertyCapitalGainDTO['regime'] = !isLongTerm
+    ? 'SHORT_TERM'
+    : soldBeforeCutoff
+      ? 'INDEXED_20'
+      : boughtBeforeCutoff
+        ? 'CHOICE'
+        : 'NON_INDEXED_12_5';
+  // The indexed figure is needed but a CII value is missing (sale FY not yet
+  // notified, or a purchase before FY 2001-02, which indexes from the
+  // 1-Apr-2001 fair market value instead).
+  const ciiUnavailable = (regime === 'INDEXED_20' || regime === 'CHOICE') && indexedGain === null;
+  const hasIndexationChoice = regime === 'CHOICE' && indexedGain !== null;
 
   return {
     propertyId: property.id,
@@ -152,5 +172,7 @@ export function computePropertyCapitalGain(
       ? serializeMoney(estimatedTaxIndexed)
       : null,
     hasIndexationChoice,
+    regime,
+    ciiUnavailable,
   };
 }

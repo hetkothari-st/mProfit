@@ -8,39 +8,17 @@ import type {
   TransactionType,
 } from '@prisma/client';
 import { CII_BY_FY } from '@everypaisa/shared';
-import { prisma } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { getFmvForUser } from './fmvOverride.service.js';
+import { computeAssetKey } from './assetKey.js';
 
 // ─── Indian tax constants ───────────────────────────────────────────
 
 // Cost Inflation Index (CII) — CBDT Notifications, keyed by the *starting*
-// year of the FY (e.g. 2001 means FY 2001-02 with base CII 100).
-//
-// This used to be a second, hand-maintained copy of the CII table that lived
-// only here and silently drifted out of sync with the "YYYY-YY"-keyed
-// `CII_BY_FY` table in `@everypaisa/shared` (used by `propertyCapitalGain.ts`
-// for `OwnedProperty` sales) — this copy stopped at FY2024-25 while the
-// shared one already carries a documented FY2025-26 estimate. Derive from the
-// shared table instead so there is exactly one place to update when CBDT
-// publishes a new value, for both ingestion paths that can produce
-// indexation-eligible rows:
-//   1. `OwnedProperty` sales → `propertyCapitalGain.ts` (its own 20%/12.5%
-//      choice model, using `CII_BY_FY` directly).
-//   2. Manually-entered `Transaction` rows with `assetClass: REAL_ESTATE`
-//      (or BOND/GOLD_BOND/GOLD_ETF/PHYSICAL_GOLD/PHYSICAL_SILVER/debt
-//      MUTUAL_FUND) → this FIFO engine. `AssetClass` accepts REAL_ESTATE on
-//      `Transaction` (see `transaction.controller.ts`), so a user can record
-//      a property sale as a plain transaction instead of via `OwnedProperty`
-//      — that row does NOT flow through `propertyCapitalGain.ts` at all, only
-//      through here. The two paths must therefore share one CII source, or
-//      the same property could get two different indexed costs depending on
-//      which the user picked.
-//
-// FY2025-26 is CBDT's most recent notified value at the time of writing; if a
-// future FY has no entry, indexation is unavailable, not silently skipped —
-// see `indexedCost()` below, which returns `status: 'cii_unavailable'` rather
-// than a bare `null` so callers can flag the row instead of quietly reporting
-// a non-indexed (higher) taxable gain as if it were final.
+// year of the FY (e.g. 2001 means FY 2001-02 with base CII 100). Derived from
+// the shared "YYYY-YY"-keyed table so property sales (propertyCapitalGain.ts)
+// and Transaction rows index against the same values. A missing FY is
+// reported as `cii_unavailable` and flagged, never silently skipped.
 const CII: Record<number, number> = Object.fromEntries(
   Object.entries(CII_BY_FY).map(([fy, value]) => [Number.parseInt(fy.slice(0, 4), 10), value]),
 );
@@ -49,7 +27,18 @@ const CII: Record<number, number> = Object.fromEntries(
 // CapitalGain rows are eligible for grandfathering (circular import — safe,
 // only referenced inside function bodies, never at module-eval time).
 export const GRANDFATHERING_CUTOFF = new Date('2018-01-31T00:00:00Z');
-const DEBT_MF_INDEXATION_CUTOFF = new Date('2023-04-01T00:00:00Z');
+/** Sec 112A applies to transfers from this date; before it, 10(38) exempted equity LTCG. */
+const SEC_112A_START = new Date('2018-04-01T00:00:00Z');
+/** Sec 50AA: non-equity MF units acquired on/after this date are "specified mutual funds". */
+const SPECIFIED_MF_CUTOFF = new Date('2023-04-01T00:00:00Z');
+/**
+ * Finance (No. 2) Act 2024: for transfers on/after this date, holding periods
+ * are 12 months (listed securities, equity-fund units, business-trust units)
+ * or 24 months (everything else), and indexation is withdrawn.
+ */
+export const FINANCE_ACT_2024_CUTOFF = new Date('2024-07-23T00:00:00Z');
+/** From FY 2025-26, sec 50AA covers only funds with more than 65% in debt, so gold ETFs drop out. */
+const SPECIFIED_MF_NARROWED = new Date('2025-04-01T00:00:00Z');
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -67,10 +56,6 @@ function fyStartYear(d: Date): number {
   return m >= 4 ? y : y - 1;
 }
 
-function daysBetween(a: Date, b: Date): number {
-  return Math.floor((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000));
-}
-
 function sameDay(a: Date, b: Date): boolean {
   return (
     a.getUTCFullYear() === b.getUTCFullYear() &&
@@ -79,107 +64,183 @@ function sameDay(a: Date, b: Date): boolean {
   );
 }
 
+/** Same calendar day `months` later, clamped to month end (31 Jan + 1 month → 28/29 Feb). */
+export function addMonthsUTC(d: Date, months: number): Date {
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + months;
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(d.getUTCDate(), last)));
+}
+
+/**
+ * Sec 2(42A): an asset is short-term if held for "not more than" N months, so
+ * it is long-term only when sold strictly after the same day N months later.
+ */
+export function heldMoreThanMonths(buyDate: Date, sellDate: Date, months: number): boolean {
+  return sellDate.getTime() > addMonthsUTC(buyDate, months).getTime();
+}
+
 function isEquityLike(ac: AssetClass): boolean {
   return ac === 'EQUITY' || ac === 'ETF';
 }
 
 /**
- * F&O bypasses the capital-gains FIFO engine — its tax treatment is
- * §43(5) business income (intraday equity = speculative; F&O = non-
- * speculative), computed by `foPnl.service`. Returning true here means
- * "skip this row entirely from CG computation".
+ * Asset classes that never produce capital gains here:
+ *  - F&O and forex pairs are §43(5)/§28 business income (foPnl / forex services).
+ *  - Deposits, small savings, PF, NPS, insurance and cash return principal plus
+ *    interest; a maturity is not a transfer of a capital asset, and the
+ *    interest is income from other sources (reported by the income reports).
  */
-function isFnoSkipped(ac: AssetClass): boolean {
-  return ac === 'FUTURES' || ac === 'OPTIONS';
+const NON_CAPITAL_ASSETS = new Set<AssetClass>([
+  'FUTURES',
+  'OPTIONS',
+  'FOREX_PAIR',
+  'FIXED_DEPOSIT',
+  'RECURRING_DEPOSIT',
+  'NPS',
+  'PPF',
+  'EPF',
+  'ULIP',
+  'INSURANCE',
+  'CASH',
+  'NSC',
+  'KVP',
+  'SCSS',
+  'SSY',
+  'POST_OFFICE_MIS',
+  'POST_OFFICE_RD',
+  'POST_OFFICE_TD',
+  'POST_OFFICE_SAVINGS',
+]);
+
+/** INR value of a transaction's net amount (Rule 115: foreign legs at the rate frozen on the trade date). */
+function inrNetAmount(tx: Transaction): { value: Decimal; converted: boolean } {
+  const raw = new Decimal(tx.netAmount.toString());
+  const currency = (tx as Transaction & { currency?: string | null }).currency;
+  if (!currency || currency === 'INR') return { value: raw, converted: true };
+  const t = tx as Transaction & {
+    fxRateAtTrade?: { toString(): string } | null;
+    inrEquivalent?: { toString(): string } | null;
+  };
+  if (t.fxRateAtTrade) return { value: raw.times(t.fxRateAtTrade.toString()), converted: true };
+  if (t.inrEquivalent) return { value: new Decimal(t.inrEquivalent.toString()), converted: true };
+  return { value: raw, converted: false };
 }
 
-/**
- * Forex pair trades (USDINR, EURUSD, …) are speculative business income under
- * §43(5)/§28 — not capital gains. They bypass the FIFO engine entirely; P&L
- * is computed separately by `forex.service.ts` and surfaced as business
- * income in tax reports.
- */
-function isForexPair(ac: AssetClass): boolean {
-  return ac === 'FOREX_PAIR';
-}
+// ─── Tax treatment ──────────────────────────────────────────────────
+
+type MfOrientation = 'equity' | 'debt' | 'ambiguous' | 'unknown';
 
 /**
- * Foreign equity (US/international listed shares) is a non-equity capital
- * asset for Indian tax purposes:
- *   - LTCG threshold: 24 months (Finance Act 2023).
- *   - Post-Apr-2023 buys: 12.5% flat LTCG, no indexation (Finance Act 2024).
- *   - Pre-Apr-2023 buys held >36 months historically qualified for
- *     indexation. We treat post-2023 as the new normal; pre-2023 indexation
- *     can be re-enabled by flipping `qualifiesForIndexation` for FOREIGN_EQUITY.
- *   - STCG: slab rate (handled at report level, not here).
- *   - Currency conversion uses fxRateAtTrade frozen at each leg per Rule 115.
+ * Whether a MUTUAL_FUND is equity-oriented. Unknown or mixed categories are
+ * never guessed as equity: they get debt-conservative treatment and a review
+ * flag, because index funds, ETFs, hybrids and fund-of-funds can be either.
  */
-function isForeignEquity(ac: AssetClass): boolean {
-  return ac === 'FOREIGN_EQUITY';
-}
-
-/**
- * Whether a MUTUAL_FUND row is equity-oriented for tax purposes. This is the
- * single source of truth other services must use instead of assuming
- * `assetClass === 'MUTUAL_FUND'` means equity — see TASK-01 for the bug this
- * replaces (every MF was silently treated as equity-style regardless of its
- * real AMFI category).
- *
- * Do NOT default missing/unknown category to `true` (equity). An unclassified
- * fund must fall back to debt-conservative treatment (36-month LT threshold,
- * date-based indexation eligibility, no 112A grandfathering) and get flagged
- * via `CapitalGainRow.needsReview` — silently guessing equity treatment is
- * the exact bug being fixed here.
- *
- * HYBRID funds need their own equity-allocation-% rule (not yet implemented);
- * until that exists, HYBRID is treated as non-equity-oriented (conservative).
- */
-function isEquityOrientedMF(fundId: string | null, fundCategoryMap?: Map<string, MFCategory>): boolean {
-  if (!fundId || !fundCategoryMap) return false;
+function mfOrientation(fundId: string | null, fundCategoryMap?: Map<string, MFCategory>): MfOrientation {
+  if (!fundId || !fundCategoryMap) return 'unknown';
   const cat = fundCategoryMap.get(fundId);
-  return cat === 'EQUITY' || cat === 'ELSS';
+  if (!cat) return 'unknown';
+  if (cat === 'EQUITY' || cat === 'ELSS') return 'equity';
+  if (cat === 'DEBT' || cat === 'LIQUID' || cat === 'FMP') return 'debt';
+  return 'ambiguous';
 }
 
-function longTermThresholdMonths(
+const UNKNOWN_MF_NOTE =
+  'Mutual fund category could not be resolved — taxed as a debt fund (no 12-month equity rule, no 112A grandfathering); verify the fund category.';
+const AMBIGUOUS_MF_NOTE =
+  'Fund category (index / ETF / hybrid / solution-oriented / other) can be equity- or debt-oriented — taxed as a debt fund; if it holds 65% or more in Indian equity it is equity-oriented (12-month rule, sec 111A/112A).';
+
+interface TaxTreatment {
+  /** Months that must be exceeded for long-term; null = always short-term. */
+  longTermAfterMonths: number | null;
+  indexation: boolean;
+  /** Sec 111A / 112A asset (listed equity, equity-oriented fund, business-trust unit). */
+  equityOriented: boolean;
+  note: string | null;
+}
+
+/**
+ * Holding period, indexation and tax section for one lot, by the rules in
+ * force on the transfer date.
+ */
+function taxTreatment(
   ac: AssetClass,
-  fundId: string | null,
-  fundCategoryMap?: Map<string, MFCategory>,
-): number {
-  if (isEquityLike(ac)) return 12;
-  if (ac === 'MUTUAL_FUND') return isEquityOrientedMF(fundId, fundCategoryMap) ? 12 : 36;
-  if (isForeignEquity(ac)) return 24; // Finance Act 2023
-  // Bonds, gold, real estate, PMS, AIF, REIT, others
-  return 36;
+  buyDate: Date,
+  sellDate: Date,
+  orientation: MfOrientation,
+): TaxTreatment {
+  const newRegime = sellDate >= FINANCE_ACT_2024_CUTOFF;
+  switch (ac) {
+    case 'EQUITY':
+    case 'ETF':
+      return { longTermAfterMonths: 12, indexation: false, equityOriented: true, note: null };
+    case 'REIT':
+    case 'INVIT':
+      // Listed business-trust units: 36 months before 23-Jul-2024, 12 after; sec 111A/112A.
+      return { longTermAfterMonths: newRegime ? 12 : 36, indexation: false, equityOriented: true, note: null };
+    case 'MUTUAL_FUND': {
+      if (orientation === 'equity') {
+        return { longTermAfterMonths: 12, indexation: false, equityOriented: true, note: null };
+      }
+      const note =
+        orientation === 'unknown' ? UNKNOWN_MF_NOTE : orientation === 'ambiguous' ? AMBIGUOUS_MF_NOTE : null;
+      if (buyDate >= SPECIFIED_MF_CUTOFF) {
+        // Sec 50AA: gains on specified mutual fund units are always short-term.
+        return { longTermAfterMonths: null, indexation: false, equityOriented: false, note };
+      }
+      return newRegime
+        ? { longTermAfterMonths: 24, indexation: false, equityOriented: false, note }
+        : { longTermAfterMonths: 36, indexation: true, equityOriented: false, note };
+    }
+    case 'GOLD_ETF':
+      if (buyDate >= SPECIFIED_MF_CUTOFF && sellDate < SPECIFIED_MF_NARROWED) {
+        return { longTermAfterMonths: null, indexation: false, equityOriented: false, note: null };
+      }
+      return newRegime
+        ? { longTermAfterMonths: 24, indexation: false, equityOriented: false, note: null }
+        : { longTermAfterMonths: 36, indexation: true, equityOriented: false, note: null };
+    case 'GOLD_BOND':
+      // Sovereign Gold Bonds are listed; sec 48 lets SGBs keep indexation (until 23-Jul-2024).
+      return { longTermAfterMonths: 12, indexation: !newRegime, equityOriented: false, note: null };
+    case 'BOND':
+    case 'GOVT_BOND':
+    case 'CORPORATE_BOND':
+      // Treated as listed. Sec 48 denies indexation on bonds and debentures.
+      return { longTermAfterMonths: 12, indexation: false, equityOriented: false, note: null };
+    case 'REAL_ESTATE':
+      return newRegime
+        ? { longTermAfterMonths: 24, indexation: false, equityOriented: false, note: null }
+        : { longTermAfterMonths: 24, indexation: true, equityOriented: false, note: null };
+    case 'FOREIGN_EQUITY':
+    case 'PRIVATE_EQUITY':
+      // Unlisted in India: 24 months; indexation until 23-Jul-2024.
+      return { longTermAfterMonths: 24, indexation: !newRegime, equityOriented: false, note: null };
+    case 'CRYPTOCURRENCY':
+      return {
+        longTermAfterMonths: null,
+        indexation: false,
+        equityOriented: false,
+        note: 'Virtual digital asset: taxed at a flat 30% under sec 115BBH with no deduction other than cost, and losses cannot be set off or carried forward.',
+      };
+    default:
+      // Physical gold/silver, art, AIF/PMS units and other capital assets.
+      return newRegime
+        ? { longTermAfterMonths: 24, indexation: false, equityOriented: false, note: null }
+        : { longTermAfterMonths: 36, indexation: true, equityOriented: false, note: null };
+  }
 }
 
-// Exported only for the CII-coverage guard test (test/invariants) — not used
-// by any other runtime caller outside this file.
+// Exported for the CII-coverage guard test. `sellDate` defaults to the last day
+// indexation existed, so the guard lists every class that could ever index.
 export function qualifiesForIndexation(
   ac: AssetClass,
   buyDate: Date,
   fundId: string | null = null,
   fundCategoryMap?: Map<string, MFCategory>,
+  sellDate: Date = new Date('2024-07-22T00:00:00Z'),
 ): boolean {
-  // Equity/equity MFs: no indexation
-  if (isEquityLike(ac) || ac === 'ETF') return false;
-  if (ac === 'MUTUAL_FUND') {
-    if (isEquityOrientedMF(fundId, fundCategoryMap)) return false;
-    // Debt MFs bought before 1-Apr-2023 still qualify; post that, no indexation.
-    return buyDate < DEBT_MF_INDEXATION_CUTOFF;
-  }
-  // Foreign equity post Finance Act 2024 — flat 12.5%, no indexation.
-  if (isForeignEquity(ac)) return false;
-  // Bonds, gold, real estate, etc.
-  return (
-    ac === 'BOND' ||
-    ac === 'CORPORATE_BOND' ||
-    ac === 'GOVT_BOND' ||
-    ac === 'GOLD_BOND' ||
-    ac === 'GOLD_ETF' ||
-    ac === 'PHYSICAL_GOLD' ||
-    ac === 'PHYSICAL_SILVER' ||
-    ac === 'REAL_ESTATE'
-  );
+  if (NON_CAPITAL_ASSETS.has(ac)) return false;
+  return taxTreatment(ac, buyDate, sellDate, mfOrientation(fundId, fundCategoryMap)).indexation;
 }
 
 export type IndexationStatus = 'applied' | 'cii_unavailable';
@@ -189,40 +250,13 @@ export interface IndexationResult {
   status: IndexationStatus;
 }
 
-/**
- * Computes the indexed cost of acquisition for a lot, or reports why it
- * couldn't be computed. Never silently returns `null` on its own — the
- * caller must inspect `status` and, on `'cii_unavailable'`, flag the row for
- * manual review rather than quietly falling back to a non-indexed (higher,
- * possibly wrong) taxable gain. See `qualifiesForIndexation()` call site in
- * `computeFIFOGains` below.
- */
 function indexedCost(cost: Decimal, buyDate: Date, sellDate: Date): IndexationResult {
-  const buyFy = fyStartYear(buyDate);
-  const sellFy = fyStartYear(sellDate);
-  const buyCii = CII[buyFy];
-  const sellCii = CII[sellFy];
+  const buyCii = CII[fyStartYear(buyDate)];
+  const sellCii = CII[fyStartYear(sellDate)];
   if (!buyCii || !sellCii) {
     return { indexedCost: null, status: 'cii_unavailable' };
   }
   return { indexedCost: cost.times(sellCii).dividedBy(buyCii), status: 'applied' };
-}
-
-function classify(
-  ac: AssetClass,
-  buyDate: Date,
-  sellDate: Date,
-  txType: TransactionType,
-  fundId: string | null,
-  fundCategoryMap?: Map<string, MFCategory>,
-): CapitalGainType {
-  // Intraday only applies to equity BUY+SELL same day
-  if (isEquityLike(ac) && sameDay(buyDate, sellDate) && txType === 'SELL') {
-    return 'INTRADAY';
-  }
-  const holdingDays = daysBetween(buyDate, sellDate);
-  const thresholdDays = longTermThresholdMonths(ac, fundId, fundCategoryMap) * 30; // approximate
-  return holdingDays >= thresholdDays ? 'LONG_TERM' : 'SHORT_TERM';
 }
 
 // ─── FIFO engine ────────────────────────────────────────────────────
@@ -232,39 +266,33 @@ const BUY_TYPES = new Set<TransactionType>([
   'SIP',
   'SWITCH_IN',
   'BONUS',
-  'MERGER_IN',
-  'DEMERGER_IN',
   'RIGHTS_ISSUE',
   'DIVIDEND_REINVEST',
   'OPENING_BALANCE',
 ]);
 
-const SELL_TYPES = new Set<TransactionType>([
-  'SELL',
-  'SWITCH_OUT',
-  'MERGER_OUT',
-  'DEMERGER_OUT',
-  'REDEMPTION',
-  'MATURITY',
-]);
+const SELL_TYPES = new Set<TransactionType>(['SELL', 'SWITCH_OUT', 'REDEMPTION', 'MATURITY']);
+
+/** Amalgamation / demerger legs: not transfers (sec 47); cost and holding date carry over. */
+const CARRY_OUT_TYPES = new Set<TransactionType>(['MERGER_OUT', 'DEMERGER_OUT']);
+const CARRY_IN_TYPES = new Set<TransactionType>(['MERGER_IN', 'DEMERGER_IN']);
+/** How far apart a merger's out and in legs may be recorded and still be linked. */
+const CARRY_WINDOW_DAYS = 31;
 
 interface Lot {
   buyTxId: string;
   buyDate: Date;
   qty: Decimal;
-  costPerUnit: Decimal; // net of charges
+  costPerUnit: Decimal; // INR, net of charges
+  note: string | null;
 }
 
-interface AssetKey {
-  portfolioId: string;
-  assetClass: AssetClass;
-  stockId: string | null;
-  fundId: string | null;
-  isin: string | null;
-}
-
-function keyString(k: AssetKey): string {
-  return `${k.portfolioId}|${k.assetClass}|${k.stockId ?? ''}|${k.fundId ?? ''}|${k.isin ?? ''}`;
+interface CarriedLot {
+  buyTxId: string;
+  buyDate: Date;
+  qty: Decimal;
+  cost: Decimal;
+  outDate: Date;
 }
 
 export interface CapitalGainRow {
@@ -286,18 +314,12 @@ export interface CapitalGainRow {
   gainLoss: Decimal;
   taxableGain: Decimal;
   financialYear: string;
-  // Whether this row's underlying instrument is treated as equity-oriented
-  // for tax-section bucketing (Sec 111A/112A vs Sec 112). Single source of
-  // truth for downstream consumers — do not re-derive from `assetClass`
-  // alone, since MUTUAL_FUND rows split into equity- and debt-oriented.
+  // Whether this row is a sec 111A/112A asset. Single source of truth for
+  // downstream consumers — do not re-derive from `assetClass` alone, since
+  // MUTUAL_FUND rows split into equity- and debt-oriented.
   isEquityOriented: boolean;
-  // True when this row needs a human look before the numbers can be trusted
-  // as final — either (a) a MUTUAL_FUND row's fund category is unknown (no
-  // fundId, or fundId not found in fundCategoryMap), so tax treatment fell
-  // back to debt-conservative instead of guessing equity, or (b) the asset
-  // class qualifies for indexation but the CII table has no entry for the
-  // buy/sell FY, so `taxableGain` is the non-indexed (possibly overstated)
-  // figure. `reviewReason` explains which (or both) applied.
+  // True when the numbers need a human look before they can be trusted as
+  // final; `reviewReason` explains why.
   needsReview: boolean;
   reviewReason: string | null;
 }
@@ -310,25 +332,31 @@ export interface CapitalGainsResult {
   >;
 }
 
-function groupByAsset(txs: Transaction[]): Map<string, { key: AssetKey; txs: Transaction[] }> {
-  const m = new Map<string, { key: AssetKey; txs: Transaction[] }>();
-  for (const tx of txs) {
-    const key: AssetKey = {
-      portfolioId: tx.portfolioId,
-      assetClass: tx.assetClass,
-      stockId: tx.stockId,
-      fundId: tx.fundId,
-      isin: tx.isin,
-    };
-    const id = keyString(key);
-    let bucket = m.get(id);
-    if (!bucket) {
-      bucket = { key, txs: [] };
-      m.set(id, bucket);
-    }
-    bucket.txs.push(tx);
-  }
-  return m;
+interface Group {
+  portfolioId: string;
+  assetClass: AssetClass;
+  fundId: string | null;
+  isin: string | null;
+  assetName: string;
+  lots: Lot[];
+}
+
+function groupKey(tx: Transaction): string {
+  return `${tx.portfolioId}|${tx.assetKey ?? computeAssetKey(tx)}`;
+}
+
+/** Same-day processing order: split first (ex-date), then acquisitions, merger legs, disposals. */
+function sameDayRank(type: TransactionType): number {
+  if (type === 'SPLIT') return 0;
+  if (BUY_TYPES.has(type)) return 1;
+  if (CARRY_OUT_TYPES.has(type)) return 2;
+  if (CARRY_IN_TYPES.has(type)) return 3;
+  return 4;
+}
+
+function joinNotes(notes: Array<string | null>): string | null {
+  const unique = [...new Set(notes.filter((n): n is string => Boolean(n)))];
+  return unique.length ? unique.join(' ') : null;
 }
 
 export function computeFIFOGains(
@@ -336,184 +364,370 @@ export function computeFIFOGains(
   fmvMap?: Map<string, Decimal>, // isin -> fmvPerUnit on 31-Jan-2018
   fundCategoryMap?: Map<string, MFCategory>, // fundId -> MutualFundMaster.category
 ): CapitalGainRow[] {
-  // F&O and forex pairs are §43(5)/§28 business income, not capital gains —
-  // strip those rows upstream of the FIFO engine so they can never silently
-  // get bucketed as STCG/LTCG.
-  const cgEligible = txs.filter(
-    (t) => !isFnoSkipped(t.assetClass) && !isForexPair(t.assetClass),
+  const relevant = txs.filter(
+    (t) =>
+      !NON_CAPITAL_ASSETS.has(t.assetClass) &&
+      (BUY_TYPES.has(t.transactionType) ||
+        SELL_TYPES.has(t.transactionType) ||
+        CARRY_OUT_TYPES.has(t.transactionType) ||
+        CARRY_IN_TYPES.has(t.transactionType) ||
+        t.transactionType === 'SPLIT'),
   );
-  const groups = groupByAsset(cgEligible);
+
+  // One lot queue per (portfolio, assetKey) — the key holdings use, so a sale
+  // imported with an ISIN still meets a purchase entered without one, and two
+  // different name-only assets never share lots.
+  const groups = new Map<string, Group>();
+  for (const tx of relevant) {
+    const k = groupKey(tx);
+    const g = groups.get(k);
+    if (!g) {
+      groups.set(k, {
+        portfolioId: tx.portfolioId,
+        assetClass: tx.assetClass,
+        fundId: tx.fundId,
+        isin: tx.isin,
+        assetName: tx.assetName ?? '',
+        lots: [],
+      });
+    } else {
+      g.fundId ??= tx.fundId;
+      g.isin ??= tx.isin;
+      if (!g.assetName && tx.assetName) g.assetName = tx.assetName;
+    }
+  }
+
+  // Chronological across all assets, so a merger's out leg (one asset) is seen
+  // before its in leg (another asset).
+  const ordered = [...relevant].sort((a, b) => {
+    const d = a.tradeDate.getTime() - b.tradeDate.getTime();
+    if (d !== 0) return d;
+    const r = sameDayRank(a.transactionType) - sameDayRank(b.transactionType);
+    if (r !== 0) return r;
+    return a.createdAt.getTime() - b.createdAt.getTime();
+  });
+
+  const carried = new Map<string, CarriedLot[]>(); // portfolioId -> lots taken out by a merger
   const rows: CapitalGainRow[] = [];
 
-  for (const { key, txs: list } of groups.values()) {
-    // Only BUY/SELL-type transactions matter for capital gains
-    const relevant = list.filter(
-      (t) => BUY_TYPES.has(t.transactionType) || SELL_TYPES.has(t.transactionType),
-    );
-    relevant.sort((a, b) => {
-      const d = a.tradeDate.getTime() - b.tradeDate.getTime();
-      if (d !== 0) return d;
-      // Same-day tie-break: BUY before SELL for intraday correctness
-      const aBuy = BUY_TYPES.has(a.transactionType) ? 0 : 1;
-      const bBuy = BUY_TYPES.has(b.transactionType) ? 0 : 1;
-      return aBuy - bBuy;
-    });
+  for (const tx of ordered) {
+    const g = groups.get(groupKey(tx))!;
+    const qty = new Decimal(tx.quantity.toString());
+    if (qty.isZero() || qty.isNegative()) continue;
+    const { value: net, converted } = inrNetAmount(tx);
+    const fxNote = converted
+      ? null
+      : `Foreign-currency trade has no exchange rate — amounts are in ${
+          (tx as Transaction & { currency?: string | null }).currency
+        }, not INR; add the rate on the trade date.`;
+    const type = tx.transactionType;
 
-    const lots: Lot[] = [];
+    if (type === 'SPLIT') {
+      // SPLIT rows carry the extra units. Spread them over the open lots so each
+      // keeps its purchase date and total cost.
+      const open = g.lots.reduce((s, l) => s.plus(l.qty), new Decimal(0));
+      if (open.greaterThan(0)) {
+        const factor = open.plus(qty).dividedBy(open);
+        for (const lot of g.lots) {
+          lot.qty = lot.qty.times(factor);
+          lot.costPerUnit = lot.costPerUnit.dividedBy(factor);
+        }
+      }
+      continue;
+    }
 
-    for (const tx of relevant) {
-      const qty = new Decimal(tx.quantity.toString());
-      const net = new Decimal(tx.netAmount.toString());
+    if (BUY_TYPES.has(type)) {
+      // Bonus shares cost nil and are held from allotment (sec 55(2)(aa)).
+      const costPerUnit = type === 'BONUS' ? new Decimal(0) : net.dividedBy(qty);
+      g.lots.push({ buyTxId: tx.id, buyDate: tx.tradeDate, qty, costPerUnit, note: fxNote });
+      continue;
+    }
 
-      if (BUY_TYPES.has(tx.transactionType)) {
-        if (qty.isZero() || qty.isNegative()) continue;
-        // Bonus/demerger/rights in without cost → 0 cost basis
-        const zeroCost =
-          tx.transactionType === 'BONUS' ||
-          tx.transactionType === 'DEMERGER_IN' ||
-          tx.transactionType === 'MERGER_IN';
-        const costPerUnit = zeroCost ? new Decimal(0) : net.dividedBy(qty);
-        lots.push({
+    if (CARRY_OUT_TYPES.has(type)) {
+      let remaining = qty;
+      const out = carried.get(g.portfolioId) ?? [];
+      while (remaining.greaterThan(0) && g.lots.length > 0) {
+        const lot = g.lots[0]!;
+        const take = Decimal.min(lot.qty, remaining);
+        out.push({
+          buyTxId: lot.buyTxId,
+          buyDate: lot.buyDate,
+          qty: take,
+          cost: lot.costPerUnit.times(take),
+          outDate: tx.tradeDate,
+        });
+        lot.qty = lot.qty.minus(take);
+        remaining = remaining.minus(take);
+        if (lot.qty.lessThanOrEqualTo(0)) g.lots.shift();
+      }
+      carried.set(g.portfolioId, out);
+      continue;
+    }
+
+    if (CARRY_IN_TYPES.has(type)) {
+      const windowStart = tx.tradeDate.getTime() - CARRY_WINDOW_DAYS * 86_400_000;
+      const pool = (carried.get(g.portfolioId) ?? []).filter(
+        (c) => c.outDate.getTime() >= windowStart && c.outDate.getTime() <= tx.tradeDate.getTime(),
+      );
+      if (pool.length > 0) {
+        // Sec 49(2) / 2(42A): the new shares take over the old cost and holding period.
+        const poolQty = pool.reduce((s, c) => s.plus(c.qty), new Decimal(0));
+        for (const c of pool) {
+          const newQty = qty.times(c.qty).dividedBy(poolQty);
+          g.lots.push({
+            buyTxId: c.buyTxId,
+            buyDate: c.buyDate,
+            qty: newQty,
+            costPerUnit: c.cost.dividedBy(newQty),
+            note: fxNote,
+          });
+        }
+        carried.set(
+          g.portfolioId,
+          (carried.get(g.portfolioId) ?? []).filter((c) => !pool.includes(c)),
+        );
+      } else {
+        g.lots.push({
           buyTxId: tx.id,
           buyDate: tx.tradeDate,
           qty,
-          costPerUnit,
+          costPerUnit: net.dividedBy(qty),
+          note: joinNotes([
+            fxNote,
+            `${type === 'MERGER_IN' ? 'Merger' : 'Demerger'} units are not linked to the shares they replaced — cost and holding period should carry over from the original purchase (sec 49(2), 2(42A)); record the matching ${type === 'MERGER_IN' ? 'MERGER_OUT' : 'DEMERGER_OUT'} or edit the cost.`,
+          ]),
         });
-      } else if (SELL_TYPES.has(tx.transactionType)) {
-        if (qty.isZero() || qty.isNegative()) continue;
-        const sellPricePerUnit = qty.isZero() ? new Decimal(0) : net.dividedBy(qty);
-
-        let remaining = qty;
-        while (remaining.greaterThan(0) && lots.length > 0) {
-          const lot = lots[0]!;
-          const take = Decimal.min(lot.qty, remaining);
-          const costBasis = lot.costPerUnit.times(take);
-          const proceeds = sellPricePerUnit.times(take);
-          const gainLoss = proceeds.minus(costBasis);
-
-          const gainType = classify(
-            key.assetClass,
-            lot.buyDate,
-            tx.tradeDate,
-            tx.transactionType,
-            key.fundId,
-            fundCategoryMap,
-          );
-          const equityOriented =
-            isEquityLike(key.assetClass) ||
-            (key.assetClass === 'MUTUAL_FUND' && isEquityOrientedMF(key.fundId, fundCategoryMap));
-          const mfCategoryUnresolved =
-            key.assetClass === 'MUTUAL_FUND' && !fundCategoryMap?.get(key.fundId ?? '');
-
-          let indexed: Decimal | null = null;
-          let taxableGain = gainLoss;
-          let needsReview = mfCategoryUnresolved;
-          let reviewReason: string | null = mfCategoryUnresolved
-            ? 'Mutual fund category could not be resolved — taxed as debt-conservative (36-month LTCG threshold, no 112A grandfathering); verify the fund category.'
-            : null;
-          if (
-            gainType === 'LONG_TERM' &&
-            qualifiesForIndexation(key.assetClass, lot.buyDate, key.fundId, fundCategoryMap)
-          ) {
-            const result = indexedCost(costBasis, lot.buyDate, tx.tradeDate);
-            if (result.status === 'applied') {
-              indexed = result.indexedCost;
-              taxableGain = proceeds.minus(indexed!);
-            } else {
-              // Asset class qualifies for indexation but the CII table has no
-              // entry for the buy or sell FY — do NOT silently report the
-              // non-indexed (higher, possibly wrong) taxable gain as final.
-              const sellFy = financialYearOf(tx.tradeDate);
-              needsReview = true;
-              const ciiReason = `CII not available for FY ${sellFy} — indexation could not be computed; taxable gain shown is non-indexed and may overstate tax.`;
-              reviewReason = reviewReason ? `${reviewReason} ${ciiReason}` : ciiReason;
-            }
-          }
-
-          // Section 112A grandfathering (Sec 55(2)(ac)): cost of acquisition
-          // for pre-31-Jan-2018 equity = higher of (actual cost, lower of
-          // (FMV on 31-Jan-2018, full value of consideration)). The "lower of
-          // FMV/proceeds" cap is mandatory — without it, a lot bought cheap
-          // with an FMV above the eventual sale price would understate the
-          // taxable gain (or fabricate a loss) beyond what the section allows.
-          // Requires a caller-supplied fmvMap (computeUserCapitalGains/
-          // computePortfolioCapitalGains preload it from fmvOverride.service.ts);
-          // rows for ISINs missing from the map are left uncorrected
-          // (gainLoss/taxableGain at actual cost) — the Schedule 112A tab
-          // flags those for the user to fill in.
-          if (
-            gainType === 'LONG_TERM' &&
-            equityOriented &&
-            lot.buyDate <= GRANDFATHERING_CUTOFF &&
-            fmvMap &&
-            key.isin &&
-            fmvMap.has(key.isin)
-          ) {
-            const fmvPerUnit = fmvMap.get(key.isin)!;
-            const fmvBasis = fmvPerUnit.times(take);
-            const lowerOfFmvAndProceeds = Decimal.min(fmvBasis, proceeds);
-            const adjustedBasis = Decimal.max(costBasis, lowerOfFmvAndProceeds);
-            // taxableGain under Sec 55(2)(ac): use adjusted cost
-            taxableGain = proceeds.minus(adjustedBasis);
-            // Store adjustedBasis in indexedCostOfAcquisition column
-            // (re-using this nullable column — it's the "adjusted acquisition cost")
-            indexed = adjustedBasis;
-          }
-
-          rows.push({
-            portfolioId: key.portfolioId,
-            sellTransactionId: tx.id,
-            buyTransactionId: lot.buyTxId,
-            assetClass: key.assetClass,
-            assetName: tx.assetName ?? '',
-            isin: key.isin,
-            buyDate: lot.buyDate,
-            sellDate: tx.tradeDate,
-            quantity: take,
-            buyPrice: lot.costPerUnit,
-            sellPrice: sellPricePerUnit,
-            buyAmount: costBasis,
-            sellAmount: proceeds,
-            indexedCostOfAcquisition: indexed,
-            capitalGainType: gainType,
-            gainLoss,
-            taxableGain,
-            financialYear: financialYearOf(tx.tradeDate),
-            isEquityOriented: equityOriented,
-            needsReview,
-            reviewReason,
-          });
-
-          lot.qty = lot.qty.minus(take);
-          remaining = remaining.minus(take);
-          if (lot.qty.lessThanOrEqualTo(0)) lots.shift();
-        }
-        // remaining > 0 here means we sold more than we held → skip overflow
       }
+      continue;
+    }
+
+    // ── Disposal ──
+    const sellPricePerUnit = net.dividedBy(qty);
+    const orientation = g.assetClass === 'MUTUAL_FUND' ? mfOrientation(g.fundId, fundCategoryMap) : 'equity';
+
+    // An intraday square-off matches that day's purchases before older lots.
+    const intradayFirst = isEquityLike(g.assetClass) && type === 'SELL';
+    const order = intradayFirst
+      ? [
+          ...g.lots.filter((l) => sameDay(l.buyDate, tx.tradeDate)),
+          ...g.lots.filter((l) => !sameDay(l.buyDate, tx.tradeDate)),
+        ]
+      : [...g.lots];
+
+    let remaining = qty;
+    for (const lot of order) {
+      if (remaining.lessThanOrEqualTo(0)) break;
+      const take = Decimal.min(lot.qty, remaining);
+      const costBasis = lot.costPerUnit.times(take);
+      const proceeds = sellPricePerUnit.times(take);
+      const gainLoss = proceeds.minus(costBasis);
+      const treatment = taxTreatment(g.assetClass, lot.buyDate, tx.tradeDate, orientation);
+      const notes: Array<string | null> = [lot.note, fxNote, treatment.note];
+
+      let gainType: CapitalGainType;
+      if (isEquityLike(g.assetClass) && type === 'SELL' && sameDay(lot.buyDate, tx.tradeDate)) {
+        gainType = 'INTRADAY';
+      } else if (treatment.longTermAfterMonths === null) {
+        gainType = 'SHORT_TERM';
+      } else {
+        gainType = heldMoreThanMonths(lot.buyDate, tx.tradeDate, treatment.longTermAfterMonths)
+          ? 'LONG_TERM'
+          : 'SHORT_TERM';
+      }
+
+      let indexed: Decimal | null = null;
+      let taxableGain = gainLoss;
+
+      if (gainType === 'LONG_TERM' && treatment.indexation) {
+        const result = indexedCost(costBasis, lot.buyDate, tx.tradeDate);
+        if (result.status === 'applied') {
+          indexed = result.indexedCost;
+          taxableGain = proceeds.minus(indexed!);
+        } else {
+          notes.push(
+            `CII not available for FY ${financialYearOf(lot.buyDate)} or ${financialYearOf(tx.tradeDate)} — indexation could not be computed; taxable gain shown is non-indexed and may overstate tax.`,
+          );
+        }
+      }
+
+      if (
+        g.assetClass === 'REAL_ESTATE' &&
+        gainType === 'LONG_TERM' &&
+        tx.tradeDate >= FINANCE_ACT_2024_CUTOFF &&
+        lot.buyDate < FINANCE_ACT_2024_CUTOFF
+      ) {
+        notes.push(
+          'Land or building bought before 23-Jul-2024: a resident individual/HUF may instead pay 20% on the indexed gain if that is lower (sec 112 proviso).',
+        );
+      }
+
+      if (
+        ['BOND', 'GOVT_BOND', 'CORPORATE_BOND'].includes(g.assetClass) &&
+        gainType === 'LONG_TERM'
+      ) {
+        notes.push(
+          'Treated as a listed bond (long-term after 12 months). If it is unlisted: it needed 36 months before 23-Jul-2024, and from 23-Jul-2024 its gains are always short-term (sec 50AA).',
+        );
+      }
+
+      if (
+        g.assetClass === 'GOLD_ETF' &&
+        tx.tradeDate >= FINANCE_ACT_2024_CUTOFF &&
+        gainType === 'SHORT_TERM' &&
+        treatment.longTermAfterMonths !== null &&
+        heldMoreThanMonths(lot.buyDate, tx.tradeDate, 12)
+      ) {
+        notes.push(
+          'Gold ETF held more than 12 but not more than 24 months: treated as short-term; check whether listed-ETF units qualify for the 12-month rule for this sale.',
+        );
+      }
+
+      // Sec 55(2)(ac) grandfathering for 112A assets bought on/before 31-Jan-2018:
+      // cost = higher of (actual cost, lower of (FMV on 31-Jan-2018, sale value)).
+      if (
+        gainType === 'LONG_TERM' &&
+        treatment.equityOriented &&
+        lot.buyDate <= GRANDFATHERING_CUTOFF &&
+        tx.tradeDate >= SEC_112A_START &&
+        fmvMap &&
+        g.isin &&
+        fmvMap.has(g.isin)
+      ) {
+        const fmvBasis = fmvMap.get(g.isin)!.times(take);
+        const adjustedBasis = Decimal.max(costBasis, Decimal.min(fmvBasis, proceeds));
+        taxableGain = proceeds.minus(adjustedBasis);
+        // Stored in indexedCostOfAcquisition — it's the adjusted cost of acquisition.
+        indexed = adjustedBasis;
+      }
+
+      if (gainType === 'LONG_TERM' && treatment.equityOriented && tx.tradeDate < SEC_112A_START) {
+        taxableGain = new Decimal(0);
+        notes.push('Long-term gain on listed equity transferred before 1-Apr-2018: exempt under sec 10(38).');
+      }
+
+      if (g.assetClass === 'GOLD_BOND' && (type === 'MATURITY' || type === 'REDEMPTION')) {
+        taxableGain = new Decimal(0);
+        notes.push('Sovereign Gold Bond redeemed with RBI: exempt for individuals under sec 47(viic).');
+      }
+
+      const reviewReason = joinNotes(notes);
+      rows.push({
+        portfolioId: g.portfolioId,
+        sellTransactionId: tx.id,
+        buyTransactionId: lot.buyTxId,
+        assetClass: g.assetClass,
+        assetName: tx.assetName ?? g.assetName,
+        isin: g.isin,
+        buyDate: lot.buyDate,
+        sellDate: tx.tradeDate,
+        quantity: take,
+        buyPrice: lot.costPerUnit,
+        sellPrice: sellPricePerUnit,
+        buyAmount: costBasis,
+        sellAmount: proceeds,
+        indexedCostOfAcquisition: indexed,
+        capitalGainType: gainType,
+        gainLoss,
+        taxableGain,
+        financialYear: financialYearOf(tx.tradeDate),
+        isEquityOriented: treatment.equityOriented,
+        needsReview: reviewReason !== null,
+        reviewReason,
+      });
+
+      lot.qty = lot.qty.minus(take);
+      remaining = remaining.minus(take);
+    }
+    g.lots = g.lots.filter((l) => l.qty.greaterThan(0));
+
+    if (remaining.greaterThan(0)) {
+      // Sold more than the recorded purchases: keep the sale visible (at nil
+      // cost, so tax is not understated) and ask for the missing purchase.
+      const proceeds = sellPricePerUnit.times(remaining);
+      const treatment = taxTreatment(g.assetClass, tx.tradeDate, tx.tradeDate, orientation);
+      rows.push({
+        portfolioId: g.portfolioId,
+        sellTransactionId: tx.id,
+        buyTransactionId: tx.id,
+        assetClass: g.assetClass,
+        assetName: tx.assetName ?? g.assetName,
+        isin: g.isin,
+        buyDate: tx.tradeDate,
+        sellDate: tx.tradeDate,
+        quantity: remaining,
+        buyPrice: new Decimal(0),
+        sellPrice: sellPricePerUnit,
+        buyAmount: new Decimal(0),
+        sellAmount: proceeds,
+        indexedCostOfAcquisition: null,
+        capitalGainType: 'SHORT_TERM',
+        gainLoss: proceeds,
+        taxableGain: proceeds,
+        financialYear: financialYearOf(tx.tradeDate),
+        isEquityOriented: treatment.equityOriented,
+        needsReview: true,
+        reviewReason: joinNotes([
+          fxNote,
+          `Sold ${remaining.toString()} more units than the recorded purchases — shown at nil cost and short-term; add the purchase to compute the real cost and holding period.`,
+        ]),
+      });
     }
   }
 
   return rows;
 }
 
-function summarize(rows: CapitalGainRow[]): CapitalGainsResult['summaryByFy'] {
-  const s: CapitalGainsResult['summaryByFy'] = {};
+/**
+ * Per-FY totals. `taxable` applies the set-off rules instead of netting
+ * everything: short-term losses reduce short-term then long-term gains,
+ * long-term losses reduce only long-term gains, speculative (intraday) losses
+ * stay within speculation, and virtual-digital-asset losses offset nothing.
+ */
+export function summarizeCapitalGains(rows: CapitalGainRow[]): CapitalGainsResult['summaryByFy'] {
+  const acc: Record<
+    string,
+    { intraday: Decimal; stcg: Decimal; ltcg: Decimal; st: Decimal; lt: Decimal; spec: Decimal; vda: Decimal }
+  > = {};
+  const zero = () => new Decimal(0);
   for (const r of rows) {
-    if (!s[r.financialYear]) {
-      s[r.financialYear] = {
-        intraday: new Decimal(0),
-        stcg: new Decimal(0),
-        ltcg: new Decimal(0),
-        taxable: new Decimal(0),
-      };
+    const b = (acc[r.financialYear] ??= {
+      intraday: zero(),
+      stcg: zero(),
+      ltcg: zero(),
+      st: zero(),
+      lt: zero(),
+      spec: zero(),
+      vda: zero(),
+    });
+    if (r.capitalGainType === 'INTRADAY') {
+      b.intraday = b.intraday.plus(r.gainLoss);
+      b.spec = b.spec.plus(r.taxableGain);
+    } else if (r.assetClass === 'CRYPTOCURRENCY') {
+      b.stcg = b.stcg.plus(r.gainLoss);
+      if (r.taxableGain.greaterThan(0)) b.vda = b.vda.plus(r.taxableGain);
+    } else if (r.capitalGainType === 'SHORT_TERM') {
+      b.stcg = b.stcg.plus(r.gainLoss);
+      b.st = b.st.plus(r.taxableGain);
+    } else {
+      b.ltcg = b.ltcg.plus(r.gainLoss);
+      b.lt = b.lt.plus(r.taxableGain);
     }
-    const b = s[r.financialYear]!;
-    if (r.capitalGainType === 'INTRADAY') b.intraday = b.intraday.plus(r.gainLoss);
-    if (r.capitalGainType === 'SHORT_TERM') b.stcg = b.stcg.plus(r.gainLoss);
-    if (r.capitalGainType === 'LONG_TERM') b.ltcg = b.ltcg.plus(r.gainLoss);
-    b.taxable = b.taxable.plus(r.taxableGain);
   }
-  return s;
+  const out: CapitalGainsResult['summaryByFy'] = {};
+  for (const [fy, b] of Object.entries(acc)) {
+    let st = b.st;
+    let lt = b.lt;
+    if (st.isNegative()) {
+      lt = lt.plus(st);
+      st = zero();
+    }
+    const taxable = Decimal.max(st, 0)
+      .plus(Decimal.max(lt, 0))
+      .plus(Decimal.max(b.spec, 0))
+      .plus(b.vda);
+    out[fy] = { intraday: b.intraday, stcg: b.stcg, ltcg: b.ltcg, taxable };
+  }
+  return out;
 }
 
 async function loadFmvMap(userId: string): Promise<Map<string, Decimal>> {
@@ -554,7 +768,7 @@ export async function computePortfolioCapitalGains(portfolioId: string): Promise
   ]);
   const fundCategoryMap = await loadFundCategoryMap(txs);
   const rows = computeFIFOGains(txs, fmvMap, fundCategoryMap);
-  return { rows, summaryByFy: summarize(rows) };
+  return { rows, summaryByFy: summarizeCapitalGains(rows) };
 }
 
 export async function computeUserCapitalGains(userId: string): Promise<CapitalGainsResult> {
@@ -567,7 +781,7 @@ export async function computeUserCapitalGains(userId: string): Promise<CapitalGa
   ]);
   const fundCategoryMap = await loadFundCategoryMap(txs);
   const rows = computeFIFOGains(txs, fmvMap, fundCategoryMap);
-  return { rows, summaryByFy: summarize(rows) };
+  return { rows, summaryByFy: summarizeCapitalGains(rows) };
 }
 
 function toCGCreateInput(r: CapitalGainRow): Prisma.CapitalGainCreateManyInput {
@@ -597,24 +811,24 @@ function toCGCreateInput(r: CapitalGainRow): Prisma.CapitalGainCreateManyInput {
 
 export async function persistCapitalGainsForPortfolio(portfolioId: string): Promise<number> {
   const { rows } = await computePortfolioCapitalGains(portfolioId);
-  // Replace existing rows for this portfolio
-  await prisma.capitalGain.deleteMany({ where: { portfolioId } });
-  if (rows.length === 0) return 0;
   const data = rows.map(toCGCreateInput);
-  await prisma.capitalGain.createMany({ data });
+  // Replace atomically: a failed insert keeps the previous rows, and two
+  // rebuilds can't interleave into duplicates.
+  await runInTransaction(async (db) => {
+    await db.capitalGain.deleteMany({ where: { portfolioId } });
+    if (data.length > 0) await db.capitalGain.createMany({ data });
+  });
   return data.length;
 }
 
 /**
  * Scoped re-persist: only rebuilds CapitalGain rows for one (portfolio,
- * assetKey). Used by transaction edit/delete so we don't re-FIFO the whole
- * portfolio every time a narration changes. §5.1 task 10 / BUG-004.
+ * assetKey). Used by transaction create/edit/delete so we don't re-FIFO the
+ * whole portfolio every time a narration changes. §5.1 task 10 / BUG-004.
  *
  * `buyTransactionId` is a bare String on CapitalGain (no FK), so deleting a
  * BUY does NOT cascade-delete the CG rows that reference it — we explicitly
- * wipe by touching-tx-id here. `sellTransactionId` has onDelete:Cascade, but
- * deleteMany is idempotent, so covering both sides is safe and keeps the
- * logic symmetric.
+ * wipe by touching-tx-id here.
  */
 export async function persistCapitalGainsForAsset(
   portfolioId: string,
@@ -633,24 +847,18 @@ export async function persistCapitalGainsForAsset(
   ]);
   const fundCategoryMap = await loadFundCategoryMap(txs);
   const txIds = txs.map((t) => t.id);
+  const data = computeFIFOGains(txs, fmvMap, fundCategoryMap).map(toCGCreateInput);
 
-  // Clear any prior CG rows that touch this asset's transactions (either as
-  // buy or sell leg). Scope to portfolioId as a belt-and-suspenders filter so
-  // we never wander into another user's data.
-  if (txIds.length > 0) {
-    await prisma.capitalGain.deleteMany({
-      where: {
-        portfolioId,
-        OR: [
-          { buyTransactionId: { in: txIds } },
-          { sellTransactionId: { in: txIds } },
-        ],
-      },
-    });
-  }
-
-  const rows = computeFIFOGains(txs, fmvMap, fundCategoryMap);
-  if (rows.length === 0) return 0;
-  await prisma.capitalGain.createMany({ data: rows.map(toCGCreateInput) });
-  return rows.length;
+  await runInTransaction(async (db) => {
+    if (txIds.length > 0) {
+      await db.capitalGain.deleteMany({
+        where: {
+          portfolioId,
+          OR: [{ buyTransactionId: { in: txIds } }, { sellTransactionId: { in: txIds } }],
+        },
+      });
+    }
+    if (data.length > 0) await db.capitalGain.createMany({ data });
+  });
+  return data.length;
 }
