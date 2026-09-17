@@ -19,9 +19,11 @@ interface Props {
   onToggleVisibility: (key: string) => void;
   /** Only for optional sections (bonds, crypto…): takes it off the sidebar. */
   onRemove?: (key: string) => void;
+  /** Nothing recorded in this class yet: shown lighter, still clickable. */
+  dimmed?: boolean;
 }
 
-export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onToggleVisibility, onRemove }: Props) {
+export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onToggleVisibility, onRemove, dimmed = false }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.to,
     disabled: !isEditing,
@@ -63,12 +65,14 @@ export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onTog
                     ? 'bg-accent/15 ring-1 ring-accent/40 text-accent'
                     : 'hover:bg-sidebar-accent/70',
                   isEditing && !pref.visible && 'opacity-40',
+                  dimmed && !isActive && !isEditing && 'opacity-50',
                 )
               : cn(
                   'flex items-center gap-3 rounded-md px-3 py-2 text-[14px] flex-1 min-w-0',
                   'hover:bg-sidebar-accent/70',
                   isActive && !isEditing && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
                   isEditing && !pref.visible && 'opacity-40',
+                  dimmed && !isActive && !isEditing && 'opacity-50',
                 ),
           )
         }
