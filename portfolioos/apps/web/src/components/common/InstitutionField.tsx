@@ -1,5 +1,5 @@
 /**
- * Bank / lender / card issuer / insurer name field for onboarding: type to
+ * Bank / lender / card issuer / insurer name field: type to
  * filter, or open the full list, with each institution's logo. Free text is
  * still accepted for anything not listed.
  */

@@ -20,6 +20,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Decimal, formatINR } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { InstitutionField } from '@/components/common/InstitutionField';
 import { LoansGivenSection } from './given/LoansGivenSection';
 import { LoanSectionHeader, LoanSectionNav, LoansOverview, type LoanSectionKey } from './LoanSections';
 import { loansGivenApi } from '@/api/loansGiven.api';
@@ -434,9 +435,16 @@ function CreateLoanDialog({
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="col-span-2">
               <Label>Lender name *</Label>
-              <Input placeholder="HDFC Bank, SBI…" {...inp('lenderName')} />
+              <div className="mt-1">
+                <InstitutionField
+                  kind="lender"
+                  value={form.lenderName}
+                  onChange={(v) => set('lenderName', v)}
+                  placeholder="Search or pick your bank / lender"
+                />
+              </div>
               {errors['lenderName'] && <p className="text-xs text-negative mt-1">{errors['lenderName']}</p>}
             </div>
             <div>

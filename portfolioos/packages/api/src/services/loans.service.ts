@@ -347,6 +347,31 @@ export function buildAmortizationSchedule(
 }
 
 /**
+ * Principal and interest in one payment. The split is optional when a payment
+ * is recorded, so a payment saved without one takes it from the schedule: an
+ * EMI pays that month's interest first and the rest goes to principal; a
+ * prepayment or foreclosure is all principal.
+ */
+export function splitLoanPayment(
+  payment: Pick<StoredPayment, 'paymentType' | 'paidOn' | 'amount' | 'principalPart' | 'interestPart' | 'forMonth'>,
+  schedule: AmortizationRow[],
+): { principal: Decimal; interest: Decimal } {
+  const ZERO = new Decimal(0);
+  if (payment.principalPart || payment.interestPart) {
+    return {
+      principal: payment.principalPart ? new Decimal(payment.principalPart.toString()) : ZERO,
+      interest: payment.interestPart ? new Decimal(payment.interestPart.toString()) : ZERO,
+    };
+  }
+  const amount = new Decimal(payment.amount.toString());
+  if (payment.paymentType !== 'EMI') return { principal: amount, interest: ZERO };
+  const month = payment.forMonth ?? dateToIso(payment.paidOn).slice(0, 7);
+  const row = schedule.find((r) => r.date.slice(0, 7) === month);
+  const interest = row ? Decimal.min(new Decimal(row.interestPart), amount) : ZERO;
+  return { principal: amount.minus(interest), interest };
+}
+
+/**
  * Compute a high-level summary of the current loan state.
  */
 export function computeLoanSummary(loan: StoredLoan): LoanSummary {
@@ -362,8 +387,9 @@ export function computeLoanSummary(loan: StoredLoan): LoanSummary {
   let totalInterestPaid = ZERO;
 
   for (const p of emiPayments) {
-    if (p.principalPart) totalPrincipalPaid = totalPrincipalPaid.plus(new Decimal(p.principalPart.toString()));
-    if (p.interestPart) totalInterestPaid = totalInterestPaid.plus(new Decimal(p.interestPart.toString()));
+    const split = splitLoanPayment(p, schedule);
+    totalPrincipalPaid = totalPrincipalPaid.plus(split.principal);
+    totalInterestPaid = totalInterestPaid.plus(split.interest);
   }
 
   // Outstanding balance: last closing balance in schedule before today (or principal if no schedule)
@@ -663,8 +689,31 @@ export async function addPayment(
   loanId: string,
   input: AddPaymentInput,
 ) {
-  const loan = await prisma.loan.findFirst({ where: { id: loanId, userId } });
+  const loan = await prisma.loan.findFirst({
+    where: { id: loanId, userId },
+    include: { payments: { orderBy: { paidOn: 'asc' } } },
+  });
   if (!loan) throw new NotFoundError(`Loan ${loanId} not found`);
+
+  // Store the split even when the form left it blank, so every reader of
+  // principalPart / interestPart (dashboard, accounting, tax) sees real parts.
+  let principalPart = input.principalPart ?? null;
+  let interestPart = input.interestPart ?? null;
+  if (!principalPart && !interestPart && (input.paymentType === 'EMI' || input.paymentType === 'PREPAYMENT')) {
+    const split = splitLoanPayment(
+      {
+        paymentType: input.paymentType,
+        paidOn: toDate(input.paidOn),
+        amount: new Prisma.Decimal(input.amount),
+        principalPart: null,
+        interestPart: null,
+        forMonth: input.forMonth ?? null,
+      },
+      buildAmortizationSchedule(loan as unknown as StoredLoan),
+    );
+    principalPart = split.principal.toFixed(2);
+    interestPart = split.interest.toFixed(2);
+  }
 
   return prisma.loanPayment.create({
     data: {
@@ -672,8 +721,8 @@ export async function addPayment(
       paymentType: input.paymentType,
       paidOn: toDate(input.paidOn),
       amount: new Prisma.Decimal(input.amount),
-      principalPart: input.principalPart ? new Prisma.Decimal(input.principalPart) : null,
-      interestPart: input.interestPart ? new Prisma.Decimal(input.interestPart) : null,
+      principalPart: principalPart ? new Prisma.Decimal(principalPart) : null,
+      interestPart: interestPart ? new Prisma.Decimal(interestPart) : null,
       forMonth: input.forMonth ?? null,
       canonicalEventId: input.canonicalEventId ?? null,
       notes: input.notes ?? null,
