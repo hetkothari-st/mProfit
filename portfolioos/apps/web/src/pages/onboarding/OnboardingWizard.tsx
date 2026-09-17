@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, ChevronRight, Loader2 } from 'lucide-react';
@@ -7,6 +7,8 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import { cn } from '@/lib/cn';
 import { BrandMark, BrandWordmark } from '@/components/brand/BrandLogo';
+import { useAuthStore } from '@/stores/auth.store';
+import { markOnboardingFinished, markOnboardingStarted } from '@/lib/onboardingProgress';
 import {
   ONBOARDING_GROUPS,
   ONBOARDING_ITEMS,
@@ -32,19 +34,28 @@ export function OnboardingWizard({ onComplete }: Props) {
   const [selected, setSelected] = useState<OnboardingItemId[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
   const [added, setAdded] = useState<Partial<Record<OnboardingItemId, string[]>>>({});
+  const userId = useAuthStore((s) => s.user?.id);
+
+  // Remember that this account is mid-setup, so signing in again resumes it.
+  useEffect(() => {
+    if (userId) markOnboardingStarted(userId);
+  }, [userId]);
 
   // Every holding needs a portfolio, so one is created up front instead of
   // asking the user to name it. `onboarding: true` makes this idempotent
   // server-side: an account that already has a portfolio gets that one back.
   const portfolioQuery = useQuery({
-    queryKey: ['onboarding', 'portfolio'],
+    // Per account: never reuse another account's portfolio id from the cache.
+    queryKey: ['onboarding', 'portfolio', userId],
     queryFn: () =>
       portfoliosApi.create({ name: 'My Portfolio', type: 'INVESTMENT', onboarding: true }),
+    enabled: Boolean(userId),
     staleTime: Infinity,
     retry: 1,
   });
 
   const finish = () => {
+    if (userId) markOnboardingFinished(userId);
     onComplete();
     // Everything added here feeds the dashboard; make sure it refetches.
     // Not the onboarding portfolio query itself — refetching that would POST
