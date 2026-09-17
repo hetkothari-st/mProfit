@@ -106,6 +106,10 @@ export interface LoanSummary {
   totalInterestPaid: string;
   nextEmiDate: string | null;
   nextEmiAmount: string;
+  /** Scheduled EMIs marked paid, across the whole loan (not capped like list payments). */
+  paidEmiCount: number;
+  /** EMIs in the current plan; shorter than tenure after a tenure-reducing prepayment. */
+  scheduledEmiCount: number;
   remainingEmiCount: number;
   remainingTenureMonths: number;
   totalInterestPayable: string;
@@ -418,6 +422,9 @@ export function computeLoanSummary(loan: StoredLoan): LoanSummary {
     totalInterestPaid: serializeMoney(totalInterestPaid),
     nextEmiDate,
     nextEmiAmount: serializeMoney(nextEmiAmount),
+    paidEmiCount: schedule.filter((r) => r.isPaid).length,
+    // Rounding can leave a last few-rupee row past the tenure; it is not an EMI.
+    scheduledEmiCount: Math.min(schedule.length, loan.tenureMonths),
     remainingEmiCount,
     remainingTenureMonths,
     totalInterestPayable: serializeMoney(totalInterestPayable),

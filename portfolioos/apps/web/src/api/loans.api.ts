@@ -51,6 +51,8 @@ export interface LoanSummaryDTO {
   totalInterestPaid: string;
   nextEmiDate: string | null;
   nextEmiAmount: string;
+  paidEmiCount: number;
+  scheduledEmiCount: number;
   remainingEmiCount: number;
   remainingTenureMonths: number;
   totalInterestPayable: string;

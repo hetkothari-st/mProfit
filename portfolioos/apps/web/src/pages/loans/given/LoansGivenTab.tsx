@@ -10,6 +10,7 @@ import { loansGivenApi, type LoanGivenDTO } from '@/api/loansGiven.api';
 import { LoanGivenFormDialog } from './LoanGivenFormDialog';
 import { formatDay, relationshipLabel } from './loanGivenFormat';
 import { LoanGivenStatusBadge } from './LoanGivenStatusBadge';
+import { InstallmentProgress, InstallmentTracker } from '../InstallmentTracker';
 
 function SummaryStrip({ loans }: { loans: LoanGivenDTO[] }) {
   const active = loans.filter((l) => l.status === 'ACTIVE');
@@ -84,9 +85,18 @@ function LoanGivenCard({ loan, onOpen }: { loan: LoanGivenDTO; onOpen: () => voi
           </div>
         </div>
 
-        <div className="mt-3 h-1.5 rounded-full bg-muted overflow-hidden">
-          <div className="h-full bg-positive" style={{ width: `${Math.min(pct, 100)}%` }} />
-        </div>
+        {summary.emi ? (
+          <InstallmentTracker
+            className="mt-3"
+            done={summary.emi.installmentsPaid}
+            total={summary.emi.installmentsTotal}
+            accent="hsl(var(--positive))"
+          />
+        ) : (
+          <div className="mt-3 h-1.5 rounded-full bg-muted overflow-hidden">
+            <div className="h-full bg-positive" style={{ width: `${Math.min(pct, 100)}%` }} />
+          </div>
+        )}
 
         {loan.status === 'ACTIVE' && summary.nextDue && (
           <div
@@ -101,6 +111,15 @@ function LoanGivenCard({ loan, onOpen }: { loan: LoanGivenDTO; onOpen: () => voi
               ? `${formatINR(summary.nextDue.amount)} overdue by ${summary.overdueDays} day${summary.overdueDays === 1 ? '' : 's'}`
               : `${formatINR(summary.nextDue.amount)} due ${formatDay(summary.nextDue.date)}`}
           </div>
+        )}
+
+        {summary.emi && (
+          <InstallmentProgress
+            className="mt-4"
+            done={summary.emi.installmentsPaid}
+            total={summary.emi.installmentsTotal}
+            accent="hsl(var(--positive))"
+          />
         )}
       </CardContent>
     </Card>
