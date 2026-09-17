@@ -1,6 +1,7 @@
+import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, Loader2, RefreshCw, AlertTriangle, Info, AlertOctagon, ShieldAlert, Zap } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, AlertTriangle, Info, AlertOctagon, ShieldAlert, Zap, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -97,6 +98,33 @@ function DeterministicInsightCardView({ card }: { card: DeterministicInsight }) 
   );
 }
 
+/**
+ * Open/closed state for the panel, remembered per browser so a user who folds
+ * it away doesn't have it spring open on every visit. Open by default. Storage
+ * can be unavailable (private mode, blocked site data), so every access is
+ * guarded and falls back to open.
+ */
+export const INSIGHTS_COLLAPSED_KEY = 'analytics_insights_collapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(INSIGHTS_COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** False when storage is blocked: the panel still folds, it just isn't remembered. */
+function writeCollapsed(collapsed: boolean): boolean {
+  try {
+    if (collapsed) localStorage.setItem(INSIGHTS_COLLAPSED_KEY, '1');
+    else localStorage.removeItem(INSIGHTS_COLLAPSED_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 interface InsightsPanelProps {
   portfolioId: string | undefined;
   period: Period;
@@ -104,17 +132,27 @@ interface InsightsPanelProps {
 
 export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
   const queryClient = useQueryClient();
+  const contentId = useId();
+  const [open, setOpen] = useState(() => !readCollapsed());
+
+  function toggle() {
+    writeCollapsed(open);
+    setOpen(!open);
+  }
 
   const latestQuery = useQuery({
     queryKey: ['analytics', 'insights', portfolioId ?? 'all'],
     queryFn: () => analyticsApi.insights(portfolioId),
     staleTime: 23 * 60 * 60 * 1000, // ~24h
+    // Folded away: nothing on screen needs this, so don't fetch until opened.
+    enabled: open,
   });
 
   const spendQuery = useQuery({
     queryKey: ['analytics', 'insights-spend'],
     queryFn: () => analyticsApi.insightsSpend(),
     staleTime: 60_000,
+    enabled: open,
   });
 
   // Deterministic cards are cheap (no LLM call) and always reflect current
@@ -124,6 +162,7 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
     queryKey: ['analytics', 'insights-deterministic'],
     queryFn: () => analyticsApi.deterministicInsights(),
     staleTime: 5 * 60 * 1000,
+    enabled: open,
   });
 
   const generateMutation = useMutation({
@@ -154,41 +193,59 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between pb-3 gap-3 flex-wrap">
+      <CardHeader className={`flex-row items-center justify-between gap-3 flex-wrap ${open ? 'pb-3' : ''}`}>
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-accent" strokeWidth={1.8} />
-          <CardTitle className="flex items-center gap-1.5">AI Portfolio Insights<AnalyticsInfo k="insights" /></CardTitle>
-          {okPayload?.fromCache && (
+          <CardTitle className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={toggle}
+              aria-expanded={open}
+              aria-controls={contentId}
+              className="-ml-1 flex items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              <ChevronDown
+                aria-hidden
+                className={`h-4 w-4 text-muted-foreground transition-transform ${open ? '' : '-rotate-90'}`}
+                strokeWidth={1.9}
+              />
+              <Sparkles aria-hidden className="h-4 w-4 text-accent" strokeWidth={1.8} />
+              AI Portfolio Insights
+            </button>
+            <AnalyticsInfo k="insights" />
+          </CardTitle>
+          {open && okPayload?.fromCache && (
             <span className="text-[10px] uppercase tracking-kerned text-muted-foreground border rounded-full px-2 py-0.5">
               Cached · {new Date(okPayload.generatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {spend && (
-            <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span>Budget</span>
-              <span className={`tabular-nums font-medium ${capped ? 'text-red-600 dark:text-red-400' : warning ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>
-                ₹{toDecimal(spend.monthToDate).toFixed(2)} / ₹{toDecimal(spend.capInr).toFixed(0)}
-              </span>
-            </div>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => generateMutation.mutate(true)}
-            disabled={generateMutation.isPending || capped}
-          >
-            {generateMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
+        {open && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {spend && (
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span>Budget</span>
+                <span className={`tabular-nums font-medium ${capped ? 'text-red-600 dark:text-red-400' : warning ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>
+                  ₹{toDecimal(spend.monthToDate).toFixed(2)} / ₹{toDecimal(spend.capInr).toFixed(0)}
+                </span>
+              </div>
             )}
-            <span className="ml-1.5">{okPayload ? 'Regenerate' : 'Generate'}</span>
-          </Button>
-        </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => generateMutation.mutate(true)}
+              disabled={generateMutation.isPending || capped}
+            >
+              {generateMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              <span className="ml-1.5">{okPayload ? 'Regenerate' : 'Generate'}</span>
+            </Button>
+          </div>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent id={contentId} hidden={!open}>
         {!!deterministicQuery.data?.length && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
             {deterministicQuery.data.map((c) => (
