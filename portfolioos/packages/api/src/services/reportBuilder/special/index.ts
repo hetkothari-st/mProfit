@@ -9,7 +9,7 @@
  */
 
 import { Decimal } from 'decimal.js';
-import type { AssetClass } from '@prisma/client';
+import type { AssetClass, CanonicalEventType, TransactionType } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import {
   fmtDateDDMMYYYY,
@@ -67,7 +67,9 @@ import {
 } from '../../accounting.service.js';
 import { computeUserXirr } from '../../xirr.service.js';
 import { resolveMutualFundId } from '../../masterData.service.js';
-import { holdingsAsOf, sortHoldings } from '../../holdingsAsOf.service.js';
+import { acquisitionDates, holdingsAsOf, sortHoldings } from '../../holdingsAsOf.service.js';
+import { cashDirection } from '../../cashDirection.js';
+import { inrAmount, transactionInrNet } from '../../investmentIncome.service.js';
 import { availableTaxFys, buildTaxSummary } from '../../tax.service.js';
 import { readPan } from '../../piiAtRest.service.js';
 
@@ -922,6 +924,18 @@ export async function buildDailyTransactionsLayout(
     arr.push(t);
     byBroker.set(k, arr);
   }
+  // Amounts signed by cash direction (received +, paid −) and in INR, so a
+  // broker's total is the net payable/receivable. Bonus, split and merger rows
+  // carry no cash.
+  const signedInr = (t: (typeof txs)[number], amount: { toString(): string }): Decimal => {
+    const dir = cashDirection(t.transactionType);
+    if (dir === 'NONE') return new Decimal(0);
+    const inr = transactionInrNet({ ...t, netAmount: amount });
+    return dir === 'IN' ? inr : inr.negated();
+  };
+  const brokerageInr = (t: (typeof txs)[number]): Decimal => transactionInrNet({ ...t, netAmount: t.brokerage });
+  const sumOf = (list: typeof txs, f: (t: (typeof txs)[number]) => Decimal) =>
+    list.reduce((acc, t) => acc.plus(f(t)), new Decimal(0));
   const sections: ReportSection[] = Array.from(byBroker.entries()).map(([broker, list]) => ({
     banner: broker,
     groups: [{
@@ -932,17 +946,17 @@ export async function buildDailyTransactionsLayout(
           script: t.assetName ?? '—',
           qty: t.quantity.toString(),
           rate: t.price.toString(),
-          gross: t.grossAmount.toString(),
-          brokerage: t.brokerage.toString(),
-          net: t.netAmount.toString(),
+          gross: signedInr(t, t.grossAmount).toString(),
+          brokerage: brokerageInr(t).toString(),
+          net: signedInr(t, t.netAmount).toString(),
         },
       })),
       subtotal: {
         label: `Total: ${broker}`,
         values: {
-          gross: list.reduce((s, t) => s.plus(t.grossAmount.toString()), new Decimal(0)).toString(),
-          brokerage: list.reduce((s, t) => s.plus(t.brokerage.toString()), new Decimal(0)).toString(),
-          net: list.reduce((s, t) => s.plus(t.netAmount.toString()), new Decimal(0)).toString(),
+          gross: sumOf(list, (t) => signedInr(t, t.grossAmount)).toString(),
+          brokerage: sumOf(list, brokerageInr).toString(),
+          net: sumOf(list, (t) => signedInr(t, t.netAmount)).toString(),
         },
       },
     }],
@@ -954,17 +968,19 @@ export async function buildDailyTransactionsLayout(
     { key: 'script', label: 'Script Name', width: 24, align: 'left' },
     { key: 'qty', label: 'Qty', width: 6, align: 'right', formatter: QTY },
     { key: 'rate', label: 'Rate', width: 8, align: 'right', formatter: MONEY },
-    { key: 'gross', label: 'Gross Amt.', width: 9, align: 'right', formatter: MONEY },
+    { key: 'gross', label: 'Gross Amt.', width: 9, align: 'right', formatter: MONEY, signed: true },
     { key: 'brokerage', label: 'Brokerage', width: 8, align: 'right', formatter: MONEY },
     { key: 'net', label: 'Net Amount', width: 10, align: 'right', formatter: MONEY, signed: true },
   ];
 
-  const grandGross = txs.reduce((s, t) => s.plus(t.grossAmount.toString()), new Decimal(0));
-  const grandBrokerage = txs.reduce((s, t) => s.plus(t.brokerage.toString()), new Decimal(0));
-  const grandNet = txs.reduce((s, t) => s.plus(t.netAmount.toString()), new Decimal(0));
+  const grandGross = sumOf(txs, (t) => signedInr(t, t.grossAmount));
+  const grandBrokerage = sumOf(txs, brokerageInr);
+  const grandNet = sumOf(txs, (t) => signedInr(t, t.netAmount));
 
   return {
-    reportTitle: `BrokerBill Register As On ${todayDDMMYYYY()}`,
+    reportTitle: opts.from || opts.to
+      ? `BrokerBill Register From ${opts.from ? fmtDateDDMMYYYY(opts.from) : '—'} To ${opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY()}`
+      : `BrokerBill Register As On ${todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -1024,8 +1040,9 @@ export async function buildIncomeReportLayout(
         }],
       },
     ],
+    // Dividends + interest; maturity rows return principal and stay out of the total.
     grandTotal: {
-      label: 'Grand Total',
+      label: 'Total Income (excl. maturity proceeds)',
       values: { amount: r.total },
     },
     filenameStem: `income-report${fy ? `-${fy}` : ''}`,
@@ -1339,6 +1356,74 @@ export async function buildTaxSummaryLayout(
   };
 }
 
+// Cash flow statement categories. Typed over every transaction type so a new
+// type has to be placed; null = no cash in the period (units only, switches,
+// opening balances).
+const CASH_FLOW_TX_CATEGORY: Record<TransactionType, string | null> = {
+  BUY: 'Investment Purchases',
+  SIP: 'Investment Purchases',
+  RIGHTS_ISSUE: 'Investment Purchases',
+  DEPOSIT: 'Deposits Placed',
+  SELL: 'Sale Proceeds',
+  REDEMPTION: 'Sale Proceeds',
+  MATURITY: 'Maturity Proceeds',
+  WITHDRAWAL: 'Withdrawals',
+  DIVIDEND_PAYOUT: 'Dividend Received',
+  INTEREST_RECEIVED: 'Interest Received',
+  SWITCH_IN: null,
+  SWITCH_OUT: null,
+  OPENING_BALANCE: null,
+  BONUS: null,
+  SPLIT: null,
+  MERGER_IN: null,
+  MERGER_OUT: null,
+  DEMERGER_IN: null,
+  DEMERGER_OUT: null,
+  DIVIDEND_REINVEST: null,
+};
+
+const RENT_LEDGER_CATEGORY: Record<string, string> = {
+  PAYMENT: 'Rental Income',
+  LATE_FEE: 'Rental Income',
+  OTHER_CHARGE: 'Rental Income',
+  // Refundable: money held for the tenant, not income.
+  DEPOSIT: 'Security Deposits Received',
+  DEPOSIT_REFUND: 'Security Deposits Refunded',
+};
+
+const EVENT_CASH_CATEGORY: Partial<Record<CanonicalEventType, string>> = {
+  DIVIDEND: 'Dividend Received',
+  INTEREST_CREDIT: 'Interest Received',
+  MATURITY_CREDIT: 'Maturity Proceeds',
+  FD_MATURITY: 'Maturity Proceeds',
+  RENT_RECEIVED: 'Rental Income',
+  RENT_PAID: 'Rent Paid',
+  INTEREST_DEBIT: 'Interest Paid',
+  EMI_DEBIT: 'Loan / EMI',
+  PREMIUM_PAID: 'Insurance Premium',
+  CARD_PAYMENT: 'Credit Card Payments',
+  CARD_PURCHASE: 'Card Spends',
+  SIP_INSTALLMENT: 'Investment Purchases',
+  FD_CREATION: 'Deposits Placed',
+};
+
+/** Fallback for a cash flow with no known source: whole words, by direction. */
+function describedCashCategory(dir: 'IN' | 'OUT', description: string | null): string {
+  const d = (description ?? '').toLowerCase();
+  if (dir === 'IN') {
+    if (/dividends?/.test(d)) return 'Dividend Received';
+    if (/interest/.test(d)) return 'Interest Received';
+    if (/rent(al)?/.test(d)) return 'Rental Income';
+    if (/maturity/.test(d)) return 'Maturity Proceeds';
+    return 'Other Receipts';
+  }
+  if (/premium/.test(d)) return 'Insurance Premium';
+  if (/(emi|loan)/.test(d)) return 'Loan / EMI';
+  if (/interest/.test(d)) return 'Interest Paid';
+  if (/rent/.test(d)) return 'Rent Paid';
+  return 'Other Payments';
+}
+
 // ─── 16. Cash Flow Statement ──────────────────────────────────────
 //
 // Period inflows / outflows from the CashFlow table grouped by
@@ -1363,32 +1448,65 @@ export async function buildCashFlowStatementLayout(
     include: { portfolio: { select: { name: true } } },
     orderBy: { date: 'asc' },
   });
-
-  // Categorise from the type + description. Pretty coarse on purpose:
-  // INFLOW + "dividend" → Dividend Received, INFLOW + "interest" → Interest, etc.
-  function category(f: { type: string; description: string | null }): string {
-    const d = (f.description ?? '').toLowerCase();
-    if (d.includes('dividend')) return 'Dividend Received';
-    if (d.includes('interest')) return 'Interest Received';
-    if (d.includes('rent')) return 'Rental Income';
-    if (d.includes('maturity')) return 'Maturity Proceeds';
-    if (d.includes('sell') || d.includes('sale')) return 'Sale Proceeds';
-    if (d.includes('buy') || d.includes('purchase')) return 'Investment Purchases';
-    if (d.includes('premium')) return 'Insurance Premium';
-    if (d.includes('emi') || d.includes('loan')) return 'Loan / EMI';
-    return f.type === 'INFLOW' ? 'Other Income' : 'Other Outflow';
-  }
+  const txWhere: Record<string, unknown> = { portfolio: { userId } };
+  if (where['date']) txWhere['tradeDate'] = where['date'];
+  const txs = await prisma.transaction.findMany({ where: txWhere, orderBy: { tradeDate: 'asc' } });
 
   const inflowByCat = new Map<string, Decimal>();
   const outflowByCat = new Map<string, Decimal>();
+  const add = (dir: 'IN' | 'OUT', cat: string, amt: Decimal) => {
+    const m2 = dir === 'IN' ? inflowByCat : outflowByCat;
+    m2.set(cat, (m2.get(cat) ?? new Decimal(0)).plus(amt));
+  };
+  const seen = new Set<string>();
+  const dedupKey = (portfolioId: string, dir: string, cat: string, date: Date, amt: Decimal) =>
+    `${portfolioId}|${dir}|${cat}|${date.toISOString().slice(0, 10)}|${amt.toFixed(2)}`;
+
+  // Trades and income booked as transactions, by type. Futures move margin and
+  // daily settlement, not the contract value, and switches and opening balances
+  // move no cash in the period, so they are left out.
+  for (const t of txs) {
+    const cat = CASH_FLOW_TX_CATEGORY[t.transactionType];
+    if (!cat || t.assetClass === 'FUTURES') continue;
+    const dir = cashDirection(t.transactionType);
+    if (dir === 'NONE') continue;
+    const amt = transactionInrNet(t);
+    add(dir, cat, amt);
+    seen.add(dedupKey(t.portfolioId, dir, cat, t.tradeDate, amt));
+  }
+
+  // Cash flows: categorised by what created them (rent receipt, rent ledger
+  // entry, bank/broker email event); the description is only a fallback.
+  const flowIds = flows.map((f) => f.id);
+  const [receipts, ledgerEntries, events] = flowIds.length
+    ? await Promise.all([
+        prisma.rentReceipt.findMany({ where: { cashFlowId: { in: flowIds } }, select: { cashFlowId: true } }),
+        prisma.rentLedgerEntry.findMany({ where: { cashFlowId: { in: flowIds } }, select: { cashFlowId: true, entryType: true } }),
+        prisma.canonicalEvent.findMany({
+          where: { userId, projectedCashFlowId: { in: flowIds } },
+          select: { projectedCashFlowId: true, eventType: true },
+        }),
+      ])
+    : [[], [], []];
+  const sourceCategory = new Map<string, string>();
+  for (const r of receipts) if (r.cashFlowId) sourceCategory.set(r.cashFlowId, 'Rental Income');
+  for (const e of ledgerEntries) {
+    const cat = RENT_LEDGER_CATEGORY[e.entryType];
+    if (e.cashFlowId && cat) sourceCategory.set(e.cashFlowId, cat);
+  }
+  for (const e of events) {
+    const cat = EVENT_CASH_CATEGORY[e.eventType];
+    if (e.projectedCashFlowId && cat) sourceCategory.set(e.projectedCashFlowId, cat);
+  }
   for (const f of flows) {
-    const cat = category(f);
-    const amt = new Decimal(String(f.amount));
-    if (f.type === 'INFLOW') {
-      inflowByCat.set(cat, (inflowByCat.get(cat) ?? new Decimal(0)).plus(amt));
-    } else {
-      outflowByCat.set(cat, (outflowByCat.get(cat) ?? new Decimal(0)).plus(amt));
-    }
+    const dir = f.type === 'INFLOW' ? 'IN' : 'OUT';
+    const cat = sourceCategory.get(f.id) ?? describedCashCategory(dir, f.description);
+    const amt = inrAmount(f);
+    // The same dividend can arrive both as a CAS transaction and a bank email.
+    const key = dedupKey(f.portfolioId, dir, cat, f.date, amt);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    add(dir, cat, amt);
   }
 
   const inflowList = Array.from(inflowByCat.entries())
@@ -1440,7 +1558,10 @@ export async function buildCashFlowStatementLayout(
 
   const fromStamp = opts.from
     ? fmtDateDDMMYYYY(opts.from)
-    : (flows[0] ? fmtDateDDMMYYYY(flows[0].date) : 'inception');
+    : (() => {
+        const first = [flows[0]?.date, txs[0]?.tradeDate].filter((d): d is Date => !!d).sort((x, y) => x.getTime() - y.getTime())[0];
+        return first ? fmtDateDDMMYYYY(first) : 'inception';
+      })();
   const toStamp = opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY();
 
   return {
@@ -2382,9 +2503,10 @@ export async function buildFinancialLedgerLayout(
       include: { voucher: true },
       orderBy: { voucher: { date: 'asc' } },
     });
-    if (entries.length === 0) continue;
-
-    let opening = new Decimal(0);
+    // Opening = the account's own opening balance (kept on its normal side;
+    // debit-positive here) plus every voucher before the period.
+    const ob = new Decimal(a.openingBalance.toString());
+    let opening = a.type === 'ASSET' || a.type === 'EXPENSE' ? ob : ob.negated();
     if (fromDate) {
       const priorEntries = await prisma.voucherEntry.findMany({
         where: {
@@ -2398,6 +2520,8 @@ export async function buildFinancialLedgerLayout(
         else opening = opening.minus(amt);
       }
     }
+    // An account with a balance brought forward still belongs in the ledger.
+    if (entries.length === 0 && opening.isZero()) continue;
 
     let running = opening;
     const rows: BodyRowLite[] = [{
@@ -2477,21 +2601,14 @@ export async function buildClosingBalanceLayout(
   // Positions as they stood on the cut-off, not today's.
   const holdings = sortHoldings(await holdingsAsOf({ userId }, asOf), ['assetClass', 'assetName']);
 
-  // First-acquisition date per asset = earliest BUY txn for that asset.
-  const txs = await prisma.transaction.findMany({
-    where: {
-      portfolio: { userId },
-      tradeDate: { lte: cutoff },
-    },
-    select: { assetKey: true, assetName: true, tradeDate: true, transactionType: true },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const firstDate = new Map<string, Date>();
-  for (const t of txs) {
-    if (!BUY_TXN_TYPES.has(t.transactionType)) continue;
-    const k = t.assetKey ?? `name:${t.assetName ?? ''}`;
-    if (!firstDate.has(k)) firstDate.set(k, t.tradeDate);
-  }
+  // Acquisition date = oldest lot still held (a position sold out and bought
+  // again dates from the re-purchase), keyed portfolio|asset.
+  const firstDate = await acquisitionDates(
+    await prisma.transaction.findMany({
+      where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
+      orderBy: { tradeDate: 'asc' },
+    }),
+  );
 
   const byClass = new Map<string, typeof holdings>();
   for (const h of holdings) {
@@ -2504,7 +2621,6 @@ export async function buildClosingBalanceLayout(
   // splits into separate windows. We compress into sections with
   // banners (Equity / Mutual Fund / F & O).
   const sections: ReportSection[] = [];
-  let grandQty = new Decimal(0);
   let grandInvested = new Decimal(0);
   let grandValue = new Decimal(0);
   for (const [assetClass, list] of byClass) {
@@ -2516,15 +2632,13 @@ export async function buildClosingBalanceLayout(
       }),
       { qty: new Decimal(0), invested: new Decimal(0), value: new Decimal(0) },
     );
-    grandQty = grandQty.plus(tot.qty);
     grandInvested = grandInvested.plus(tot.invested);
     grandValue = grandValue.plus(tot.value);
     sections.push({
       banner: `${assetClass.replace(/_/g, ' ')} — Closing Balance As On ${fmtDateDDMMYYYY(cutoff)}`,
       groups: [{
         rows: list.map((h) => {
-          const k = h.assetKey;
-          const acqDate = firstDate.get(k);
+          const acqDate = firstDate.get(`${h.portfolioId}|${h.assetKey}`);
           return {
             cells: {
               assetName: h.assetName ?? '—',
@@ -2533,15 +2647,16 @@ export async function buildClosingBalanceLayout(
               purPrice: h.avgCostPrice.toString(),
               invested: h.totalCost.toString(),
               currPrice: h.currentPrice?.toString() ?? '',
-              currValue: h.currentValue?.toString() ?? '',
+              // No price: carried at cost, the same figure the totals use.
+              currValue: (h.currentValue ?? h.totalCost).toString(),
               isin: h.isin ?? '',
             },
           };
         }),
         subtotal: {
           label: `Total: ${assetClass.replace(/_/g, ' ')}`,
+          // Units of different assets don't add up, so no quantity total.
           values: {
-            qty: tot.qty.toString(),
             invested: tot.invested.toString(),
             currValue: tot.value.toString(),
           },
@@ -2573,7 +2688,6 @@ export async function buildClosingBalanceLayout(
     grandTotal: {
       label: 'Grand Total',
       values: {
-        qty: grandQty.toString(),
         invested: grandInvested.toString(),
         currValue: grandValue.toString(),
       },
@@ -3868,17 +3982,14 @@ export async function buildOpeningStockLayout(
   // Positions as they stood on the cut-off, not today's.
   const holdings = sortHoldings(await holdingsAsOf({ userId }, asOf), ['assetClass', 'assetName']);
 
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
-    select: { assetKey: true, assetName: true, tradeDate: true, transactionType: true },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const firstBuy = new Map<string, Date>();
-  for (const t of txs) {
-    if (!BUY_TXN_TYPES.has(t.transactionType)) continue;
-    const k = t.assetKey ?? `name:${t.assetName ?? ''}`;
-    if (!firstBuy.has(k)) firstBuy.set(k, t.tradeDate);
-  }
+  // Acquisition date = oldest lot still held (a position sold out and bought
+  // again dates from the re-purchase), keyed portfolio|asset.
+  const firstBuy = await acquisitionDates(
+    await prisma.transaction.findMany({
+      where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
+      orderBy: { tradeDate: 'asc' },
+    }),
+  );
 
   const byClass = new Map<string, typeof holdings>();
   for (const h of holdings) {
@@ -3906,7 +4017,7 @@ export async function buildOpeningStockLayout(
       groups: [{
         rows: list.map((h) => ({
           cells: {
-            acqDate: firstBuy.get(h.assetKey)?.toISOString().slice(0, 10) ?? '',
+            acqDate: firstBuy.get(`${h.portfolioId}|${h.assetKey}`)?.toISOString().slice(0, 10) ?? '',
             isin: h.isin ?? '',
             assetName: h.assetName ?? '—',
             qty: h.quantity.toString(),
@@ -3964,17 +4075,14 @@ export async function buildHoldingPeriodReturnLayout(
   // Positions as they stood on the cut-off, not today's.
   const holdings = sortHoldings(await holdingsAsOf({ userId }, asOf), ['assetName']);
 
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
-    select: { assetKey: true, assetName: true, tradeDate: true, transactionType: true },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const firstBuy = new Map<string, Date>();
-  for (const t of txs) {
-    if (!BUY_TXN_TYPES.has(t.transactionType)) continue;
-    const k = t.assetKey ?? `name:${t.assetName ?? ''}`;
-    if (!firstBuy.has(k)) firstBuy.set(k, t.tradeDate);
-  }
+  // Acquisition date = oldest lot still held (a position sold out and bought
+  // again dates from the re-purchase), keyed portfolio|asset.
+  const firstBuy = await acquisitionDates(
+    await prisma.transaction.findMany({
+      where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
+      orderBy: { tradeDate: 'asc' },
+    }),
+  );
 
   const rows: BodyRowLite[] = [];
   let tQty = new Decimal(0);
@@ -3987,7 +4095,7 @@ export async function buildHoldingPeriodReturnLayout(
     const cost = new Decimal(h.totalCost.toString());
     const mv = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
     const gl = mv.minus(cost);
-    const buyDate = firstBuy.get(h.assetKey);
+    const buyDate = firstBuy.get(`${h.portfolioId}|${h.assetKey}`);
     const days = buyDate ? Math.floor((cutoff.getTime() - buyDate.getTime()) / 86400000) : 0;
     tQty = tQty.plus(qty);
     tAmt = tAmt.plus(cost);
@@ -4354,7 +4462,12 @@ export async function buildBrokerBillRegisterLayout(
   opts: { from?: string; to?: string },
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
-  const where: Record<string, unknown> = { portfolio: { userId } };
+  // A broker bill carries exchange trades only.
+  const where: Record<string, unknown> = {
+    portfolio: { userId },
+    transactionType: { in: ['BUY', 'SELL'] },
+    assetClass: { in: CONTRACT_NOTE_ASSET_CLASSES },
+  };
   if (opts.from || opts.to) {
     where['tradeDate'] = {
       ...(opts.from && { gte: new Date(opts.from) }),
@@ -4375,7 +4488,6 @@ export async function buildBrokerBillRegisterLayout(
   }
 
   const sections: ReportSection[] = [];
-  let familyQty = new Decimal(0);
   let familyBrok = new Decimal(0);
   let familyNet = new Decimal(0);
 
@@ -4395,7 +4507,6 @@ export async function buildBrokerBillRegisterLayout(
       byBill.set(billKey, arr);
     }
     const groups: SubGroup[] = [];
-    let brokerQty = new Decimal(0);
     let brokerBrok = new Decimal(0);
     let brokerNet = new Decimal(0);
     for (const [billNo, blist] of byBill) {
@@ -4413,19 +4524,19 @@ export async function buildBrokerBillRegisterLayout(
               type: isSell ? 'Sold' : 'Bought',
               qty: isSell ? qty.negated().toString() : qty.toString(),
               holdingType: `${t.assetClass.replace(/_/g, ' ')} A/C`,
-              brokerage: t.brokerage.toString(),
+              brokerage: transactionInrNet({ ...t, netAmount: t.brokerage }).toString(),
               rate: t.price.toString(),
-              net: t.netAmount.toString(),
+              // Receivable on a sale (+), payable on a purchase (−), in INR.
+              net: (isSell ? transactionInrNet(t) : transactionInrNet(t).negated()).toString(),
             },
           };
         }),
       });
       for (const t of blist) {
-        const q = new Decimal(t.quantity.toString());
         const isSell = SELL_TXN_TYPES.has(t.transactionType);
-        brokerQty = brokerQty.plus(isSell ? q.negated() : q);
-        brokerBrok = brokerBrok.plus(t.brokerage.toString());
-        brokerNet = brokerNet.plus(t.netAmount.toString());
+        const net = transactionInrNet(t);
+        brokerBrok = brokerBrok.plus(transactionInrNet({ ...t, netAmount: t.brokerage }));
+        brokerNet = brokerNet.plus(isSell ? net : net.negated());
       }
     }
     groups.push({
@@ -4433,14 +4544,12 @@ export async function buildBrokerBillRegisterLayout(
       subtotal: {
         label: `Broker : ${broker} TOTAL :`,
         values: {
-          qty: brokerQty.toString(),
           brokerage: brokerBrok.toString(),
           net: brokerNet.toString(),
         },
       },
     });
     sections.push({ banner: broker, groups });
-    familyQty = familyQty.plus(brokerQty);
     familyBrok = familyBrok.plus(brokerBrok);
     familyNet = familyNet.plus(brokerNet);
   }
@@ -4449,7 +4558,7 @@ export async function buildBrokerBillRegisterLayout(
     { key: 'consultant', label: 'Consultant Name', width: 14, align: 'left' },
     { key: 'script', label: 'Script Name', width: 22, align: 'left' },
     { key: 'type', label: 'Type', width: 6, align: 'left' },
-    { key: 'qty', label: 'Qty', width: 7, align: 'right', formatter: (v) => indianMoney(v, 2), signed: true },
+    { key: 'qty', label: 'Qty', width: 7, align: 'right', formatter: QTY, signed: true },
     { key: 'holdingType', label: 'Holding Type', width: 16, align: 'left' },
     { key: 'brokerage', label: 'Brokerage', width: 8, align: 'right', formatter: MONEY },
     { key: 'rate', label: 'Rate', width: 8, align: 'right', formatter: MONEY },
@@ -4457,7 +4566,9 @@ export async function buildBrokerBillRegisterLayout(
   ];
 
   return {
-    reportTitle: `FamilyWise MemberWise Bill Register As On ${todayDDMMYYYY()}`,
+    reportTitle: opts.from || opts.to
+      ? `FamilyWise MemberWise Bill Register From ${opts.from ? fmtDateDDMMYYYY(opts.from) : '—'} To ${opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY()}`
+      : `FamilyWise MemberWise Bill Register As On ${todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -4468,7 +4579,6 @@ export async function buildBrokerBillRegisterLayout(
     grandTotal: {
       label: `Family : ${(m.family ?? 'FAMILY').toUpperCase()} TOTAL :`,
       values: {
-        qty: familyQty.toString(),
         brokerage: familyBrok.toString(),
         net: familyNet.toString(),
       },

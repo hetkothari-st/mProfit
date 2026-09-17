@@ -10,9 +10,8 @@
  */
 
 import { Decimal } from 'decimal.js';
-import type { TransactionType } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
-import { financialYearOf } from '../../capitalGains.service.js';
+import { investmentIncome, type IncomeRow } from '../../investmentIncome.service.js';
 import { fmtNum, fmtDate, type ExportPayload, type ExportSection } from '../../export.service.js';
 
 export interface IncomeStatementParams {
@@ -20,8 +19,6 @@ export interface IncomeStatementParams {
   portfolioIds: string[];
   fy?: string;
 }
-
-const INCOME_TYPES: TransactionType[] = ['DIVIDEND_PAYOUT', 'INTEREST_RECEIVED', 'MATURITY'];
 
 const TYPE_LABEL: Record<string, string> = {
   DIVIDEND_PAYOUT: 'Dividend',
@@ -50,40 +47,33 @@ export async function buildIncomeStatement(
     select: { id: true, name: true },
   });
   const portfolioIds = portfolios.map((p) => p.id);
-  const portfolioName = new Map(portfolios.map((p) => [p.id, p.name] as const));
 
-  const txs = await prisma.transaction.findMany({
-    where: {
-      portfolioId: { in: portfolioIds },
-      transactionType: { in: INCOME_TYPES },
-    },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const filtered = params.fy
-    ? txs.filter((t) => financialYearOf(t.tradeDate) === params.fy)
-    : txs;
+  // Amounts in INR, including dividends/interest confirmed from bank emails.
+  const income = await investmentIncome({ id: { in: portfolioIds } }, params.fy);
+  const filtered = income.rows;
 
   const buckets = {
-    DIVIDEND_PAYOUT: filtered.filter((t) => t.transactionType === 'DIVIDEND_PAYOUT'),
-    INTEREST_RECEIVED: filtered.filter((t) => t.transactionType === 'INTEREST_RECEIVED'),
-    MATURITY: filtered.filter((t) => t.transactionType === 'MATURITY'),
+    DIVIDEND_PAYOUT: filtered.filter((t) => t.type === 'DIVIDEND_PAYOUT'),
+    INTEREST_RECEIVED: filtered.filter((t) => t.type === 'INTEREST_RECEIVED'),
+    MATURITY: filtered.filter((t) => t.type === 'MATURITY'),
   };
 
   const totals = {
-    DIVIDEND_PAYOUT: sum(buckets.DIVIDEND_PAYOUT),
-    INTEREST_RECEIVED: sum(buckets.INTEREST_RECEIVED),
-    MATURITY: sum(buckets.MATURITY),
+    DIVIDEND_PAYOUT: new Decimal(income.dividend),
+    INTEREST_RECEIVED: new Decimal(income.interest),
+    MATURITY: new Decimal(income.maturity),
   };
-  const grand = totals.DIVIDEND_PAYOUT.plus(totals.INTEREST_RECEIVED).plus(totals.MATURITY);
+  // Maturity proceeds return principal; they are listed but are not income.
+  const grand = new Decimal(income.total);
 
-  function toRow(t: (typeof filtered)[number]): Record<string, unknown> {
+  function toRow(t: IncomeRow): Record<string, unknown> {
     return {
-      date: fmtDate(t.tradeDate),
-      asset: t.assetName ?? '—',
+      date: fmtDate(t.date),
+      asset: t.assetName || '—',
       isin: t.isin ?? '',
-      portfolio: portfolioName.get(t.portfolioId) ?? '',
-      type: TYPE_LABEL[t.transactionType] ?? t.transactionType,
-      amount: fmtNum(new Decimal(t.netAmount.toString()).toFixed(2)),
+      portfolio: t.portfolioName,
+      type: TYPE_LABEL[t.type] ?? t.type,
+      amount: fmtNum(new Decimal(t.amount).toFixed(2)),
       narration: t.narration ?? '',
     };
   }
@@ -111,7 +101,7 @@ export async function buildIncomeStatement(
 
   const dividends = section('Dividends', buckets.DIVIDEND_PAYOUT, totals.DIVIDEND_PAYOUT);
   const interest = section('Interest received', buckets.INTEREST_RECEIVED, totals.INTEREST_RECEIVED);
-  const maturity = section('Maturity proceeds', buckets.MATURITY, totals.MATURITY);
+  const maturity = section('Maturity proceeds (principal returned — not income)', buckets.MATURITY, totals.MATURITY);
 
   const portfolioLabel = portfolios.length === 1
     ? portfolios[0]!.name
@@ -129,8 +119,8 @@ export async function buildIncomeStatement(
     footer: {
       Dividends: `₹${fmtNum(totals.DIVIDEND_PAYOUT.toFixed(2))}`,
       Interest: `₹${fmtNum(totals.INTEREST_RECEIVED.toFixed(2))}`,
-      Maturity: `₹${fmtNum(totals.MATURITY.toFixed(2))}`,
       'Total Income': `₹${fmtNum(grand.toFixed(2))}`,
+      'Maturity proceeds (not income)': `₹${fmtNum(totals.MATURITY.toFixed(2))}`,
     },
     columns: dividends.columns,
     rows: dividends.rows,
@@ -138,8 +128,4 @@ export async function buildIncomeStatement(
     additionalSections: [interest, maturity],
     filenameStem: `everypaisa-income-statement-${fyLabel.replace(/[^a-z0-9-]+/gi, '_')}`,
   };
-}
-
-function sum(rows: { netAmount: { toString(): string } }[]): Decimal {
-  return rows.reduce((s, r) => s.plus(new Decimal(r.netAmount.toString())), new Decimal(0));
 }

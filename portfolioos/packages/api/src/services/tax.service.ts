@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { investmentIncome } from './investmentIncome.service.js';
 import { logger } from '../lib/logger.js';
 import {
   computeOpenLots,
@@ -205,43 +206,8 @@ export async function userSchedule112Report(userId: string, fy?: string) {
 
 // ─── Income (dividends + interest) consolidated across portfolios ───
 
-const INCOME_TYPES: TransactionType[] = ['DIVIDEND_PAYOUT', 'INTEREST_RECEIVED', 'MATURITY'];
-
 export async function userIncomeReport(userId: string, fy?: string, portfolioIds?: string[]) {
-  const txs = await prisma.transaction.findMany({
-    where: {
-      portfolio: { userId, ...(portfolioIds?.length ? { id: { in: portfolioIds } } : {}) },
-      transactionType: { in: INCOME_TYPES },
-    },
-    include: { portfolio: { select: { name: true } } },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const filtered = fy ? txs.filter((t) => financialYearOf(t.tradeDate) === fy) : txs;
-  let dividend = new Decimal(0);
-  let interest = new Decimal(0);
-  let maturity = new Decimal(0);
-  for (const t of filtered) {
-    const amt = new Decimal(t.netAmount.toString());
-    if (t.transactionType === 'DIVIDEND_PAYOUT') dividend = dividend.plus(amt);
-    else if (t.transactionType === 'INTEREST_RECEIVED') interest = interest.plus(amt);
-    else if (t.transactionType === 'MATURITY') maturity = maturity.plus(amt);
-  }
-  return {
-    rows: filtered.map((t) => ({
-      id: t.id,
-      date: t.tradeDate,
-      type: t.transactionType,
-      assetName: t.assetName ?? '',
-      portfolioName: t.portfolio?.name ?? '',
-      amount: t.netAmount.toString(),
-      narration: t.narration ?? null,
-    })),
-    dividend: dividend.toString(),
-    interest: interest.toString(),
-    maturity: maturity.toString(),
-    total: dividend.plus(interest).plus(maturity).toString(),
-    count: filtered.length,
-  };
+  return investmentIncome({ userId, ...(portfolioIds?.length ? { id: { in: portfolioIds } } : {}) }, fy);
 }
 
 // ─── Tax summary — consolidated FY view with estimated tax ──────────

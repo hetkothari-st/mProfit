@@ -2,6 +2,7 @@ import { Prisma, type AssetClass, type HoldingProjection, type Transaction } fro
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { replayTransactions } from './holdingsProjection.js';
+import { computeOpenLots, isCapitalAssetClass, loadFundCategoryMap } from './capitalGains.service.js';
 import { getCryptoPriceAt } from '../priceFeeds/crypto.service.js';
 
 export interface PriceMeta {
@@ -129,4 +130,38 @@ export function sortHoldings<T extends HoldingProjection>(
     }
     return 0;
   });
+}
+
+/**
+ * Acquisition date of each position still held, keyed `portfolioId|assetKey`:
+ * the buy date of its oldest open FIFO lot, so a position sold out and bought
+ * again later dates from the re-purchase. Assets outside the lot engine
+ * (deposits, PF, insurance) date from the first buy since the position was
+ * last fully closed. Pass transactions up to the cut-off.
+ */
+export async function acquisitionDates(txs: Transaction[]): Promise<Map<string, Date>> {
+  const out = new Map<string, Date>();
+  const keyOf = (t: Transaction) => `${t.portfolioId}|${t.assetKey ?? `name:${t.assetName ?? ''}`}`;
+  const groups = new Map<string, Transaction[]>();
+  for (const t of [...txs].sort((a, b) => a.tradeDate.getTime() - b.tradeDate.getTime())) {
+    const list = groups.get(keyOf(t));
+    if (list) list.push(t);
+    else groups.set(keyOf(t), [t]);
+  }
+  const lots = computeOpenLots(txs, await loadFundCategoryMap(txs));
+  for (const p of lots) {
+    const oldest = p.lots.reduce<Date | null>((min, l) => (!min || l.buyDate < min ? l.buyDate : min), null);
+    if (oldest) out.set(`${p.portfolioId}|${p.assetKey}`, oldest);
+  }
+  for (const [key, list] of groups) {
+    if (out.has(key) || isCapitalAssetClass(list[0]!.assetClass)) continue;
+    let since: Date | null = null;
+    for (let i = 0; i < list.length; i++) {
+      const held = replayTransactions(list.slice(0, i + 1)).quantity;
+      if (held.lessThanOrEqualTo(0)) since = null;
+      else if (!since) since = list[i]!.tradeDate;
+    }
+    if (since) out.set(key, since);
+  }
+  return out;
 }

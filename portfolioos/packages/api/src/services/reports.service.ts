@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { investmentIncome } from './investmentIncome.service.js';
 import {
   computePortfolioCapitalGains,
   computeUserCapitalGains,
@@ -112,42 +113,8 @@ export async function schedule112AReport(portfolioId: string, fy?: string) {
 
 // ─── Income report (dividends + interest) ───────────────────────────
 
-const INCOME_TYPES = new Set<TransactionType>([
-  'DIVIDEND_PAYOUT',
-  'INTEREST_RECEIVED',
-  'MATURITY',
-]);
-
 export async function incomeReport(portfolioId: string, fy?: string) {
-  const txs = await prisma.transaction.findMany({
-    where: { portfolioId, transactionType: { in: Array.from(INCOME_TYPES) } },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const filtered = fy ? txs.filter((t) => financialYearOf(t.tradeDate) === fy) : txs;
-  let dividend = new Decimal(0);
-  let interest = new Decimal(0);
-  let maturity = new Decimal(0);
-  for (const t of filtered) {
-    const amt = new Decimal(t.netAmount.toString());
-    if (t.transactionType === 'DIVIDEND_PAYOUT') dividend = dividend.plus(amt);
-    else if (t.transactionType === 'INTEREST_RECEIVED') interest = interest.plus(amt);
-    else if (t.transactionType === 'MATURITY') maturity = maturity.plus(amt);
-  }
-  return {
-    rows: filtered.map((t) => ({
-      id: t.id,
-      date: t.tradeDate,
-      type: t.transactionType,
-      assetName: t.assetName ?? '',
-      amount: t.netAmount.toString(),
-      narration: t.narration ?? null,
-    })),
-    dividend: dividend.toString(),
-    interest: interest.toString(),
-    maturity: maturity.toString(),
-    total: dividend.plus(interest).plus(maturity).toString(),
-    count: filtered.length,
-  };
+  return investmentIncome({ id: portfolioId }, fy);
 }
 
 // ─── Unrealised P&L (current holdings snapshot) ─────────────────────
@@ -371,38 +338,7 @@ export async function userSchedule112AReport(userId: string, fy?: string) {
 }
 
 export async function userIncomeReport(userId: string, fy?: string) {
-  const txs = await prisma.transaction.findMany({
-    where: {
-      portfolio: { userId },
-      transactionType: { in: Array.from(INCOME_TYPES) },
-    },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const filtered = fy ? txs.filter((t) => financialYearOf(t.tradeDate) === fy) : txs;
-  let dividend = new Decimal(0);
-  let interest = new Decimal(0);
-  let maturity = new Decimal(0);
-  for (const t of filtered) {
-    const amt = new Decimal(t.netAmount.toString());
-    if (t.transactionType === 'DIVIDEND_PAYOUT') dividend = dividend.plus(amt);
-    else if (t.transactionType === 'INTEREST_RECEIVED') interest = interest.plus(amt);
-    else if (t.transactionType === 'MATURITY') maturity = maturity.plus(amt);
-  }
-  return {
-    rows: filtered.map((t) => ({
-      id: t.id,
-      date: t.tradeDate,
-      type: t.transactionType,
-      assetName: t.assetName ?? '',
-      amount: t.netAmount.toString(),
-      narration: t.narration ?? null,
-    })),
-    dividend: dividend.toString(),
-    interest: interest.toString(),
-    maturity: maturity.toString(),
-    total: dividend.plus(interest).plus(maturity).toString(),
-    count: filtered.length,
-  };
+  return investmentIncome({ userId }, fy);
 }
 
 export async function userUnrealisedReport(userId: string) {

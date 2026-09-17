@@ -830,8 +830,8 @@ function IncomeView({
     <Card>
       <CardHeader>
         <CardTitle className="text-sm">
-          Dividends ₹{fmt(data.dividend)} · Interest ₹{fmt(data.interest)} · Maturity ₹
-          {fmt(data.maturity)} · Total ₹{fmt(data.total)}
+          Dividends ₹{fmt(data.dividend)} · Interest ₹{fmt(data.interest)} · Total income ₹
+          {fmt(data.total)} · Maturity proceeds ₹{fmt(data.maturity)} (principal, not income)
         </CardTitle>
       </CardHeader>
       <CardContent>

@@ -200,8 +200,8 @@ function incomePayload(data: Awaited<ReturnType<typeof userIncomeReport>>, fy?: 
     footer: {
       Dividends: fmtNum(data.dividend),
       Interest: fmtNum(data.interest),
-      Maturity: fmtNum(data.maturity),
-      Total: fmtNum(data.total),
+      'Total income': fmtNum(data.total),
+      'Maturity proceeds (not income)': fmtNum(data.maturity),
     },
   };
 }
@@ -1033,8 +1033,7 @@ export async function downloadTrialBalance(req: Request, res: Response) {
 
 export async function downloadAccountLedger(req: Request, res: Response) {
   const accountId = (req.query.accountId as string | undefined)?.trim() || undefined;
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, async (userId) => {
     await ensureAccountingProjected(req, userId);
     return buildAccountLedgerLayout(userId, { accountId, from, to });
@@ -1042,8 +1041,7 @@ export async function downloadAccountLedger(req: Request, res: Response) {
 }
 
 export async function downloadProfitLoss(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, async (userId) => {
     await ensureAccountingProjected(req, userId);
     return buildProfitLossLayout(userId, { from, to });
@@ -1071,8 +1069,7 @@ export async function downloadMFCapitalGain(req: Request, res: Response) {
 }
 
 export async function downloadDailyTransactions(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildDailyTransactionsLayout(userId, { from, to }));
 }
 
@@ -1096,6 +1093,21 @@ export async function downloadHoldingsSummary(req: Request, res: Response) {
   await emitForSubjects(req, res, (userId) => buildPortfolioHoldingsSummaryLayout(userId, pid));
 }
 
+/** `from` / `to` query dates, validated: a bad date or a reversed range is a 400, not a 500. */
+function dateRangeQuery(req: Request): { from?: string; to?: string } {
+  const read = (name: 'from' | 'to') => {
+    const v = (req.query[name] as string | undefined)?.trim() || undefined;
+    if (v && Number.isNaN(new Date(v).getTime())) throw new BadRequestError(`Invalid \`${name}\` date`);
+    return v;
+  };
+  const from = read('from');
+  const to = read('to');
+  if (from && to && new Date(from).getTime() > new Date(to).getTime()) {
+    throw new BadRequestError('`from` date is after `to` date');
+  }
+  return { from, to };
+}
+
 export async function downloadPerformance(req: Request, res: Response) {
   await emitForSubjects(req, res, (userId) => buildPerformanceLayout(userId));
 }
@@ -1106,8 +1118,7 @@ export async function downloadTaxSummary(req: Request, res: Response) {
 }
 
 export async function downloadCashFlow(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildCashFlowStatementLayout(userId, { from, to }));
 }
 
@@ -1126,8 +1137,7 @@ export async function downloadFamilyWiseHoldings(req: Request, res: Response) {
 }
 
 export async function downloadScriptwiseQtywise(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildScriptwiseQtywiseLayout(userId, { from, to }));
 }
 
@@ -1146,8 +1156,7 @@ export async function downloadMfM2M(req: Request, res: Response) {
 }
 
 export async function downloadFinancialLedger(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   const accountId = (req.query.accountId as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
     await ensureAccountingProjected(req, userId);
@@ -1179,14 +1188,12 @@ export async function downloadContractNotesSummary(req: Request, res: Response) 
 }
 
 export async function downloadBrokerwiseCapitalGain(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildBrokerwiseCapitalGainLayout(userId, { from, to }));
 }
 
 export async function downloadTaxPnL(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildTaxPnLLayout(userId, { from, to }));
 }
 
@@ -1200,8 +1207,7 @@ export async function downloadStt10Db(req: Request, res: Response) {
 }
 
 export async function downloadCapitalGainsFifo(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildCapitalGainsFifoLayout(userId, { from, to }));
 }
 
@@ -1239,8 +1245,7 @@ export async function downloadChartOfAccounts(req: Request, res: Response) {
 }
 
 export async function downloadFundFlow(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, async (userId) => {
     await ensureAccountingProjected(req, userId);
     return buildFundFlowLayout(userId, { from, to });
@@ -1248,8 +1253,7 @@ export async function downloadFundFlow(req: Request, res: Response) {
 }
 
 export async function downloadBrokerBillRegister(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildBrokerBillRegisterLayout(userId, { from, to }));
 }
 
@@ -1270,14 +1274,12 @@ export async function downloadDayBook(req: Request, res: Response) {
 
 export async function downloadDividendReport(req: Request, res: Response) {
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildDividendReportLayout(userId, { fy, from, to }));
 }
 
 export async function downloadBankReconciliation(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, async (userId) => {
     await ensureAccountingProjected(req, userId);
     return buildBankReconciliationLayout(userId, { from, to });
