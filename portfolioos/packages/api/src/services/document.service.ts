@@ -88,6 +88,14 @@ async function assertOwnerAccessible(
       if (!row) throw new ForbiddenError('Owned property not owned by user');
       return;
     }
+    case 'LOAN_GIVEN': {
+      const row = await prisma.loanGiven.findFirst({
+        where: { id: ownerId, userId },
+        select: { id: true },
+      });
+      if (!row) throw new ForbiddenError('Loan not owned by user');
+      return;
+    }
     case 'OTHER':
       // free-form; userId on Document is the only guard
       return;

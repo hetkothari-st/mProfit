@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { NotFoundError } from '../lib/errors.js';
 import type { AlertType, AssetClass } from '@prisma/client';
 import { generateLoanEmiAlerts } from './loans.service.js';
+import { generateLoanGivenAlerts } from './loansGiven.service.js';
 import { generateCreditCardAlerts } from './creditCards.service.js';
 import { generateRealEstateAlerts } from './realEstateAlerts.js';
 import { generateDepositReminderAlerts } from './depositReminders.service.js';
@@ -337,22 +338,24 @@ export async function runAllAlertScans(userId?: string): Promise<{
   rent: number;
   poMaturity: number;
   loan: number;
+  loanGiven: number;
   creditCard: number;
   realEstate: number;
   deposit: number;
   insurance: number;
   insuranceClaims: number;
 }> {
-  const [vehicle, rent, poMaturity, loan, creditCard, realEstate, deposit, insurance, insuranceClaims] = await Promise.all([
+  const [vehicle, rent, poMaturity, loan, loanGiven, creditCard, realEstate, deposit, insurance, insuranceClaims] = await Promise.all([
     generateVehicleExpiryAlerts(userId),
     generateRentOverdueAlerts(userId),
     generatePoMaturityAlerts(userId),
     generateLoanEmiAlerts(userId),
+    generateLoanGivenAlerts(userId),
     generateCreditCardAlerts(userId),
     generateRealEstateAlerts(userId),
     generateDepositReminderAlerts(userId),
     generateRenewalAlerts(userId),
     generateClaimAlerts(userId),
   ]);
-  return { vehicle, rent, poMaturity, loan, creditCard, realEstate, deposit, insurance, insuranceClaims };
+  return { vehicle, rent, poMaturity, loan, loanGiven, creditCard, realEstate, deposit, insurance, insuranceClaims };
 }

@@ -70,6 +70,8 @@ function alertHref(type: string): string {
     case 'LOAN_EMI_OVERDUE':
     case 'LOAN_EMI_DUE':
       return '/loans';
+    case 'LOAN_GIVEN_DUE':
+      return '/loans?view=given';
     default:
       return '/alerts';
   }
@@ -247,6 +249,7 @@ function assetClassSidebarKey(cls: string): string {
     case 'REAL_ESTATE':       return '/real-estate';
     case 'ULIP':
     case 'INSURANCE':         return '/insurance';
+    case 'LOAN_GIVEN':        return '/loans';
     default:                  return '/others';
   }
 }
