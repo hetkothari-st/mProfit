@@ -1064,9 +1064,12 @@ export function LoanDetailPage() {
   const emisPaid = loan.payments.filter((p) => p.paymentType === 'EMI').length;
   const tenureElapsedPct = Math.min(100, Math.round((emisPaid / loan.tenureMonths) * 100));
 
-  const totalPrincipalPaid = loan.payments
-    .filter((p) => p.principalPart)
-    .reduce((s, p) => s.plus(new Decimal(p.principalPart!)), new Decimal(0));
+  // The summary fills in the split for payments saved without one.
+  const totalPrincipalPaid = summary
+    ? new Decimal(summary.totalPrincipalPaid)
+    : loan.payments
+        .filter((p) => p.principalPart)
+        .reduce((s, p) => s.plus(new Decimal(p.principalPart!)), new Decimal(0));
   const principalRepaidPct = new Decimal(loan.principalAmount).isZero()
     ? 0
     : Math.min(100, totalPrincipalPaid.div(new Decimal(loan.principalAmount)).mul(100).toNumber());
