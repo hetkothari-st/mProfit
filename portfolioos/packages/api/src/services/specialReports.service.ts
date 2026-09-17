@@ -11,77 +11,34 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import {
+  GRANDFATHERING_CUTOFF,
   computeUserCapitalGains,
   type CapitalGainRow,
 } from './capitalGains.service.js';
+import { getFmvForUser } from './fmvOverride.service.js';
 
 // ─── 1. Grandfathering LTCG report ─────────────────────────────────
 //
-// Pre-31-Jan-2018 equity / equity-MF buys, sold under LTCG rules.
-// As per §112A grandfathering: cost basis = max(actual cost, FMV on
-// 31-Jan-2018). Tax-saving is the delta the report makes visible.
-//
-// We don't yet store a global FMV table for 31-Jan-2018, so the report
-// surfaces actual cost vs sale price and leaves a column for FMV that
-// can be populated once the user uploads the lookup table. The
-// computed gain still falls back to actual cost (matches legacy app
-// behaviour when FMV is missing).
+// Long-term sales of 112A assets (listed equity, equity-oriented funds,
+// business-trust units) bought on or before the grandfathering FMV date. Sec
+// 55(2)(ac): cost = higher of (actual cost, lower of (FMV on that date, sale
+// value)). The capital-gains engine applies this row by row with the user's
+// FMV source (FmvOverride, then SystemFmvSeed) and stores the adjusted cost in
+// indexedCostOfAcquisition — reports read it from there instead of re-deriving.
 
-const GF_CUTOFF = new Date('2018-01-31T23:59:59.999Z');
-
-/**
- * Fetch FMV (close price) on / near 31-Jan-2018 for a set of ISINs.
- * Window is ±2 days to handle non-trading days. Returns whatever is
- * actually in StockPrice; missing ISINs are simply absent from the map.
- *
- * Exported so other services (e.g. Schedule 112A) can apply the same
- * grandfathering substitution without re-implementing the query.
- */
-export async function fetchFmvOn31Jan2018(isins: string[]): Promise<Map<string, Decimal>> {
-  const fmv = new Map<string, Decimal>();
-  const real = Array.from(new Set(isins.filter((i): i is string => !!i)));
-  if (real.length === 0) return fmv;
-  const stocks = await prisma.stockMaster.findMany({
-    where: { isin: { in: real } },
-    select: { id: true, isin: true },
-  });
-  const stockIds = stocks.map((s) => s.id);
-  const isinByStock = new Map(stocks.map((s) => [s.id, s.isin]));
-  const prices = await prisma.stockPrice.findMany({
-    where: {
-      stockId: { in: stockIds },
-      date: { gte: new Date('2018-01-28'), lte: new Date('2018-02-02') },
-    },
-    orderBy: { date: 'desc' },
-  });
-  for (const p of prices) {
-    const isin = isinByStock.get(p.stockId);
-    if (isin && !fmv.has(isin)) {
-      fmv.set(isin, new Decimal(p.close.toString()));
-    }
-  }
-  return fmv;
+/** FMV per unit on the grandfathering date for this user: their overrides, then the system seed. */
+export async function fetchGrandfatheringFmv(userId: string): Promise<Map<string, Decimal>> {
+  const byIsin = await getFmvForUser(userId);
+  return new Map([...byIsin.entries()].map(([isin, r]) => [isin, new Decimal(r.fmvPerUnit.toString())]));
 }
 
-/**
- * Apply Sec 112A grandfathering to a single capital-gain row.
- * Returns the FMV-adjusted gain ( = sellAmount - max(actualCost, FMV*qty) )
- * when FMV is known and the lot pre-dates 31-Jan-2018; otherwise returns
- * the raw gain unchanged.
- */
-export function adjustGainForGrandfathering(
-  buyDate: Date,
-  quantity: Decimal,
-  buyAmount: Decimal,
-  sellAmount: Decimal,
-  rawGain: Decimal,
-  fmvPerUnit: Decimal | null,
-): Decimal {
-  if (buyDate.getTime() > GF_CUTOFF.getTime()) return rawGain;
-  if (!fmvPerUnit) return rawGain;
-  const fmvCost = fmvPerUnit.times(quantity);
-  if (fmvCost.lessThanOrEqualTo(buyAmount)) return rawGain;
-  return sellAmount.minus(fmvCost);
+/** The sec 55(2)(ac) cost the engine used for a row, or null when the row isn't grandfathered. */
+export function grandfatheredCost(
+  r: Pick<CapitalGainRow, 'capitalGainType' | 'isEquityOriented' | 'buyDate' | 'indexedCostOfAcquisition'>,
+): Decimal | null {
+  if (r.capitalGainType !== 'LONG_TERM' || !r.isEquityOriented) return null;
+  if (r.buyDate.getTime() > GRANDFATHERING_CUTOFF.getTime()) return null;
+  return r.indexedCostOfAcquisition ?? null;
 }
 
 export interface GrandfatheringRow {
@@ -122,7 +79,7 @@ export interface GrandfatheringReport {
 function isGrandfatherEligible(row: CapitalGainRow): boolean {
   if (row.capitalGainType !== 'LONG_TERM') return false;
   if (!row.isEquityOriented) return false;
-  return row.buyDate.getTime() <= GF_CUTOFF.getTime();
+  return row.buyDate.getTime() <= GRANDFATHERING_CUTOFF.getTime();
 }
 
 export async function grandfatheringReport(
@@ -134,18 +91,13 @@ export async function grandfatheringReport(
     (r) => isGrandfatherEligible(r) && (!fy || r.financialYear === fy),
   );
 
-  const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
-  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
+  const fmvByIsin = await fetchGrandfatheringFmv(userId);
 
-  // Apply Sec 112A grandfathering: cost basis = max(actualCost, FMV × qty)
-  // whenever FMV-on-31-Jan-2018 is available. Recompute gain/loss with the
-  // substituted cost; without the substitution, displayed gain would be
-  // higher than the legally taxable one.
+  // Gain at the grandfathered cost the engine computed (falls back to actual
+  // cost when no FMV is known for the ISIN).
   const out: GrandfatheringRow[] = filtered.map((r) => {
     const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const actualCost = r.buyAmount;
-    const fmvCost = fmv ? fmv.times(r.quantity) : null;
-    const effectiveCost = fmvCost && fmvCost.greaterThan(actualCost) ? fmvCost : actualCost;
+    const effectiveCost = grandfatheredCost(r) ?? r.buyAmount;
     const adjustedGain = r.sellAmount.minus(effectiveCost);
     const isGain = adjustedGain.greaterThanOrEqualTo(0);
     return {

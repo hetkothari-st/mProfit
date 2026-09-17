@@ -53,14 +53,9 @@ function currentFy(): string {
   return `${start}-${String(start + 1).slice(2)}`;
 }
 
+/** With no activity on record yet, only the current FY is meaningful. */
 function fyOptionsFallback(): string[] {
-  const years: string[] = [];
-  const now = new Date();
-  const startYear = now.getUTCMonth() + 1 >= 4 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
-  for (let y = startYear; y >= startYear - 7; y--) {
-    years.push(`${y}-${String(y + 1).slice(2)}`);
-  }
-  return years;
+  return [currentFy()];
 }
 
 function fmt(n: string | number | null | undefined, decimals = 2): string {
@@ -85,6 +80,30 @@ function fmt(n: string | number | null | undefined, decimals = 2): string {
   }
   const signed = negative ? '-' + grouped : grouped;
   return fracPart ? `${signed}.${fracPart}` : signed;
+}
+
+function isZeroMoney(s: string | number | null | undefined): boolean {
+  if (s == null || s === '') return true;
+  try {
+    return toDecimal(s).isZero();
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Rate actually applied to a section: tax / taxable. A year that straddles a
+ * rate change mixes two rates, so this is shown instead of a single statutory
+ * rate; with nothing taxable, the statutory rate (when known) is shown.
+ */
+function effectiveRate(section: { taxable: string; tax: string }, statutoryPct: number | null): string {
+  try {
+    const taxable = toDecimal(section.taxable);
+    if (taxable.isZero()) return statutoryPct == null ? '—' : `${statutoryPct}%`;
+    return `${toDecimal(section.tax).dividedBy(taxable).times(100).toDecimalPlaces(2).toString()}%`;
+  } catch {
+    return '—';
+  }
 }
 
 function isNonNegativeMoney(s: string | number | null | undefined): boolean {
@@ -470,30 +489,30 @@ function SummaryView({
                 <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.section111A_stcgEquity.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.section111A_stcgEquity.gain)}
                 </td>
-                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section111A_stcgEquity.gain)}</td>
-                <td data-label="Rate" className="p-2 text-right">{data.rates.stcgEquityPct}%</td>
+                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section111A_stcgEquity.taxable)}</td>
+                <td data-label="Rate" className="p-2 text-right">{effectiveRate(cg.section111A_stcgEquity, data.rates.stcgEquityPct)}</td>
                 <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.section111A_stcgEquity.tax)}</td>
               </tr>
               <tr className="border-b">
                 <td data-label="Section" className="p-2 font-medium">Sec. 112A</td>
                 <td data-label="Description" className="p-2">
-                  LTCG on listed equity (exemption ₹{fmt(cg.section112A_ltcgEquity.exemption, 0)})
+                  LTCG on listed equity (exemption used ₹{fmt(cg.section112A_ltcgEquity.exemption, 0)} of ₹{fmt(data.rates.ltcgEquityExemption, 0)})
                 </td>
                 <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.section112A_ltcgEquity.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.section112A_ltcgEquity.gain)}
                 </td>
                 <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section112A_ltcgEquity.taxable)}</td>
-                <td data-label="Rate" className="p-2 text-right">{data.rates.ltcgEquityPct}%</td>
+                <td data-label="Rate" className="p-2 text-right">{effectiveRate(cg.section112A_ltcgEquity, data.rates.ltcgEquityPct)}</td>
                 <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.section112A_ltcgEquity.tax)}</td>
               </tr>
               <tr className="border-b">
                 <td data-label="Section" className="p-2 font-medium">Sec. 112</td>
-                <td data-label="Description" className="p-2">LTCG on other assets (indexed 20% / non-indexed 12.5%)</td>
+                <td data-label="Description" className="p-2">LTCG on other assets (with / without indexation)</td>
                 <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.section112_ltcgOther.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.section112_ltcgOther.gain)}
                 </td>
                 <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section112_ltcgOther.taxable)}</td>
-                <td data-label="Rate" className="p-2 text-right">mixed</td>
+                <td data-label="Rate" className="p-2 text-right">{effectiveRate(cg.section112_ltcgOther, data.rates.ltcgOtherNonIndexedPct)}</td>
                 <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.section112_ltcgOther.tax)}</td>
               </tr>
               <tr className="border-b">
@@ -502,7 +521,7 @@ function SummaryView({
                 <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.stcgOther.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.stcgOther.gain)}
                 </td>
-                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.stcgOther.gain)}</td>
+                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.stcgOther.taxable)}</td>
                 <td data-label="Rate" className="p-2 text-right">{data.rates.slabPct}%</td>
                 <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.stcgOther.tax)}</td>
               </tr>
@@ -512,10 +531,22 @@ function SummaryView({
                 <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.intradaySpeculative.gain) ? 'text-positive' : 'text-negative')}>
                   ₹{fmt(cg.intradaySpeculative.gain)}
                 </td>
-                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.intradaySpeculative.gain)}</td>
+                <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.intradaySpeculative.taxable)}</td>
                 <td data-label="Rate" className="p-2 text-right">{data.rates.slabPct}%</td>
                 <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.intradaySpeculative.tax)}</td>
               </tr>
+              {!isZeroMoney(cg.virtualDigitalAssets.gain) && (
+                <tr className="border-b">
+                  <td data-label="Section" className="p-2 font-medium">Sec. 115BBH</td>
+                  <td data-label="Description" className="p-2">Virtual digital assets (losses cannot be set off)</td>
+                  <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.virtualDigitalAssets.gain) ? 'text-positive' : 'text-negative')}>
+                    ₹{fmt(cg.virtualDigitalAssets.gain)}
+                  </td>
+                  <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.virtualDigitalAssets.taxable)}</td>
+                  <td data-label="Rate" className="p-2 text-right">{effectiveRate(cg.virtualDigitalAssets, null)}</td>
+                  <td data-label="Tax" className="p-2 text-right font-medium">₹{fmt(cg.virtualDigitalAssets.tax)}</td>
+                </tr>
+              )}
               <tr className="border-b">
                 <td data-label="Section" className="p-2 font-medium">Sec. 43(5)</td>
                 <td data-label="Description" className="p-2">
@@ -539,6 +570,27 @@ function SummaryView({
               </tr>
             </tfoot>
           </table>
+          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+            <p>
+              Taxable amounts are after setting off losses (short-term losses against any capital gain,
+              long-term losses against long-term gains only) and the 112A exemption; rates follow each
+              sale&apos;s date.
+            </p>
+            {data.slabIsEstimate && (
+              <p>
+                Slab-rate lines use {data.rates.slabPct}% because your income-tax slab is not on file. Add it
+                in your risk profile for an exact figure.
+              </p>
+            )}
+            {(!isZeroMoney(data.carryForward.shortTermLoss) ||
+              !isZeroMoney(data.carryForward.longTermLoss) ||
+              !isZeroMoney(data.carryForward.speculativeLoss)) && (
+              <p>
+                Losses to carry forward: short-term ₹{fmt(data.carryForward.shortTermLoss)}, long-term ₹
+                {fmt(data.carryForward.longTermLoss)}, speculative ₹{fmt(data.carryForward.speculativeLoss)}.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

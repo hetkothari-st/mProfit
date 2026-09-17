@@ -25,12 +25,17 @@ export interface TaxSummary {
     slabPct: number;
   };
   capitalGains: {
-    section111A_stcgEquity: { gain: string; tax: string };
+    section111A_stcgEquity: { gain: string; taxable: string; tax: string };
     section112A_ltcgEquity: { gain: string; exemption: string; taxable: string; tax: string };
     section112_ltcgOther: { gain: string; taxable: string; tax: string };
-    stcgOther: { gain: string; tax: string };
-    intradaySpeculative: { gain: string; tax: string };
+    stcgOther: { gain: string; taxable: string; tax: string };
+    intradaySpeculative: { gain: string; taxable: string; tax: string };
+    virtualDigitalAssets: { gain: string; taxable: string; tax: string };
   };
+  /** Losses left after this FY's set-off, available to carry forward. */
+  carryForward: { shortTermLoss: string; longTermLoss: string; speculativeLoss: string };
+  /** True when slab-rate figures use a stand-in rate because no income-tax slab is on file. */
+  slabIsEstimate: boolean;
   fnoBusinessIncome: { netPnl: string; turnover: string; tax: string; auditApplicable: boolean };
   otherIncome: { dividend: string; interest: string; maturity: string };
   totalRealisedGain: string;
@@ -130,6 +135,7 @@ export interface TaxHarvestReport {
     unrealisedPnL: string;
     pctReturn: string;
     longTermEligible: boolean;
+    equityOriented: boolean;
     oldestBuyDate: string;   // ISO date, oldest BUY for this holding
     classification: 'STCG_LOSS' | 'LTCG_LOSS' | 'STCG_GAIN' | 'LTCG_GAIN';
   }>;

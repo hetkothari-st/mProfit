@@ -52,8 +52,11 @@ export function computeHarvestSavings(input: HarvestSavingsInput): HarvestSaving
   const ltcgRate = input.ltcgRate;
   const exemption = input.ltcgExemption;
 
+  // Realised losses are set off first: a net short-term loss already reduces
+  // realised LTCG; a net long-term loss cannot touch STCG and is carried forward.
+  const realisedStcl = input.realisedStcg.isNegative() ? input.realisedStcg.negated() : ZERO;
   const gStcg0 = Decimal.max(input.realisedStcg, ZERO);
-  const gLtcg0 = Decimal.max(input.realisedLtcg, ZERO);
+  const gLtcg0 = Decimal.max(input.realisedLtcg.minus(realisedStcl), ZERO);
   let stcl = Decimal.max(input.stcgLossAvailable, ZERO);
   let ltcl = Decimal.max(input.ltcgLossAvailable, ZERO);
 

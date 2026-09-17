@@ -13,10 +13,9 @@ import {
   computeUserXirr,
 } from './xirr.service.js';
 import { getCryptoPriceAt } from '../priceFeeds/crypto.service.js';
-import {
-  fetchFmvOn31Jan2018,
-  adjustGainForGrandfathering,
-} from './specialReports.service.js';
+import { grandfatheredCost } from './specialReports.service.js';
+import { listedEquityLtcgExemptionFor } from '@everypaisa/shared';
+import { computeCapitalGainsTax } from './taxComputation.js';
 
 async function listUserPortfolioIds(userId: string): Promise<string[]> {
   const ps = await prisma.portfolio.findMany({ where: { userId }, select: { id: true } });
@@ -75,40 +74,39 @@ export async function ltcgReport(portfolioId: string, fy?: string) {
 }
 
 /**
+ * Schedule 112A — long-term gains on 112A assets. Each row's gain is at the
+ * grandfathered cost the engine applied; totals get each FY's own exemption
+ * and transfer-date rates (taxComputation), so multi-year views are right too.
+ */
+function schedule112AFromRows(rows: CapitalGainRow[], fy?: string) {
+  const filtered = rows.filter(
+    (r) => (!fy || r.financialYear === fy) && r.capitalGainType === 'LONG_TERM' && r.isEquityOriented,
+  );
+  const adjusted = filtered.map((r) => {
+    const costOfAcquisition = grandfatheredCost(r) ?? r.buyAmount;
+    return { ...r, costOfAcquisition, gainLoss: r.sellAmount.minus(costOfAcquisition) };
+  });
+  const perFy = [...new Set(filtered.map((r) => r.financialYear))].map((y) => computeCapitalGainsTax(filtered, y));
+  const sum = (pick: (t: (typeof perFy)[number]) => Decimal) =>
+    perFy.reduce((acc, t) => acc.plus(pick(t)), new Decimal(0));
+  return {
+    rows: adjusted,
+    totalGain: sum((t) => t.s112A.gain).toString(),
+    exemptionLimit: perFy
+      .reduce((acc, t) => acc.plus(listedEquityLtcgExemptionFor(t.financialYear)), new Decimal(0))
+      .toString(),
+    taxable: sum((t) => t.s112A.taxable).toString(),
+    count: adjusted.length,
+  };
+}
+
+/**
  * Schedule 112A — LTCG from equity/equity MFs. Applies Section 112A ₹1L
  * threshold; amount above is taxed at 10% (12.5% post-Jul-2024).
  */
 export async function schedule112AReport(portfolioId: string, fy?: string) {
   const { rows } = await computePortfolioCapitalGains(portfolioId);
-  const filtered = rows.filter((r) => {
-    if (fy && r.financialYear !== fy) return false;
-    if (r.capitalGainType !== 'LONG_TERM') return false;
-    return r.isEquityOriented;
-  });
-  const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
-  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
-  const adjusted = filtered.map((r) => {
-    const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const adjGain = adjustGainForGrandfathering(
-      r.buyDate,
-      r.quantity,
-      r.buyAmount,
-      r.sellAmount,
-      r.gainLoss,
-      fmv,
-    );
-    return { ...r, gainLoss: adjGain };
-  });
-  const totalGain = adjusted.reduce((acc, r) => acc.plus(r.gainLoss), new Decimal(0));
-  const exemptionLimit = new Decimal(100000);
-  const taxable = Decimal.max(totalGain.minus(exemptionLimit), new Decimal(0));
-  return {
-    rows: adjusted,
-    totalGain: totalGain.toString(),
-    exemptionLimit: exemptionLimit.toString(),
-    taxable: taxable.toString(),
-    count: adjusted.length,
-  };
+  return schedule112AFromRows(rows, fy);
 }
 
 // ─── Income report (dividends + interest) ───────────────────────────
@@ -443,35 +441,7 @@ export async function userLtcgReport(userId: string, fy?: string) {
 
 export async function userSchedule112AReport(userId: string, fy?: string) {
   const { rows } = await computeUserCapitalGains(userId);
-  const filtered = rows.filter((r) => {
-    if (fy && r.financialYear !== fy) return false;
-    if (r.capitalGainType !== 'LONG_TERM') return false;
-    return r.isEquityOriented;
-  });
-  const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
-  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
-  const adjusted = filtered.map((r) => {
-    const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const adjGain = adjustGainForGrandfathering(
-      r.buyDate,
-      r.quantity,
-      r.buyAmount,
-      r.sellAmount,
-      r.gainLoss,
-      fmv,
-    );
-    return { ...r, gainLoss: adjGain };
-  });
-  const totalGain = adjusted.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
-  const exemptionLimit = new Decimal(100000);
-  const taxable = Decimal.max(totalGain.minus(exemptionLimit), new Decimal(0));
-  return {
-    rows: adjusted,
-    totalGain: totalGain.toString(),
-    exemptionLimit: exemptionLimit.toString(),
-    taxable: taxable.toString(),
-    count: adjusted.length,
-  };
+  return schedule112AFromRows(rows, fy);
 }
 
 export async function userIncomeReport(userId: string, fy?: string) {

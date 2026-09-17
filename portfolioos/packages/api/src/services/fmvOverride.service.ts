@@ -1,4 +1,4 @@
-import { Decimal, toDecimal } from '@everypaisa/shared';
+import { CAPITAL_GAINS_KEY_DATES, Decimal, isOnOrAfter, toDecimal } from '@everypaisa/shared';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError } from '../lib/errors.js';
@@ -194,7 +194,7 @@ export async function listGrandfatheringRows(
         // fund units, business-trust units — never debt funds, which index instead.
         r.isEquityOriented &&
         // 112A (and so grandfathering) applies to transfers from 1-Apr-2018.
-        r.sellDate >= new Date('2018-04-01T00:00:00Z') &&
+        isOnOrAfter(r.sellDate, CAPITAL_GAINS_KEY_DATES.listedEquityLtcgTaxableFrom) &&
         (fy === undefined || r.financialYear === fy),
     )
     .map((r): GrandfatheringRow => {

@@ -37,8 +37,8 @@ export async function streamCapitalGainsTaxReport(
 ): Promise<void> {
   // ─── PHASE 0 — fetch all data up front ────────────────────────────
   const [taxSummary, harvestData, cgStatement] = await Promise.all([
-    buildTaxSummary(params.userId, params.fy),
-    taxHarvestReport(params.userId, params.fy),
+    buildTaxSummary(params.userId, params.fy, params.portfolioIds),
+    taxHarvestReport(params.userId, params.fy, params.portfolioIds),
     buildCapitalGainsStatement({
       userId: params.userId,
       portfolioIds: params.portfolioIds,
@@ -50,8 +50,8 @@ export async function streamCapitalGainsTaxReport(
   const unrealisedRows = harvestData.rows;
   type UnrealisedRow = (typeof unrealisedRows)[number];
 
-  const isEquityClass = (r: UnrealisedRow): boolean =>
-    ['EQUITY', 'ETF', 'MUTUAL_FUND'].includes(r.assetClass);
+  // Sec 111A/112A by the engine's rules (a debt fund is not equity).
+  const isEquityClass = (r: UnrealisedRow): boolean => r.equityOriented;
 
   const unrealisedGroups = {
     stcgEquity: unrealisedRows.filter((r) => r.classification === 'STCG_GAIN' && isEquityClass(r)),
@@ -63,7 +63,7 @@ export async function streamCapitalGainsTaxReport(
   // Tax harvesting candidates — biggest unrealised loss first, top 10.
   const harvestCandidates = harvestData.rows
     .filter((r) => r.classification === 'STCG_LOSS' || r.classification === 'LTCG_LOSS')
-    .sort((a, b) => new Decimal(a.unrealisedPnL).minus(new Decimal(b.unrealisedPnL)).toNumber())
+    .sort((a, b) => new Decimal(a.unrealisedPnL).comparedTo(b.unrealisedPnL))
     .slice(0, 10);
 
   // ─── PHASE 1 — open PDFKit (landscape A4, single continuous doc) ──

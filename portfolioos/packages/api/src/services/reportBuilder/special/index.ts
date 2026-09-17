@@ -24,8 +24,8 @@ import {
   grandfatheringReport,
   dematHoldingReport,
   m2mReport,
-  fetchFmvOn31Jan2018,
-  adjustGainForGrandfathering,
+  fetchGrandfatheringFmv,
+  grandfatheredCost,
   residualLots,
   BUY_TXN_TYPES,
   SELL_TXN_TYPES,
@@ -42,7 +42,20 @@ import {
   userIncomeReport,
   incomeReport,
 } from '../../reports.service.js';
-import { computeUserCapitalGains, type CapitalGainRow } from '../../capitalGains.service.js';
+import {
+  GRANDFATHERING_CUTOFF,
+  computeOpenLots,
+  computeUserCapitalGains,
+  financialYearOf,
+  loadFundCategoryMap,
+  transactionIsEquityOriented,
+  type CapitalGainRow,
+} from '../../capitalGains.service.js';
+import {
+  ADVANCE_TAX_INSTALMENTS,
+  CAPITAL_GAINS_KEY_DATES,
+  CAPITAL_GAINS_RULE_SETS,
+} from '@everypaisa/shared';
 import {
   getTrialBalance,
   getAccountLedger,
@@ -51,6 +64,7 @@ import {
   listAccountsFlat,
 } from '../../accounting.service.js';
 import { computeUserXirr } from '../../xirr.service.js';
+import { availableTaxFys, buildTaxSummary } from '../../tax.service.js';
 import { readPan } from '../../piiAtRest.service.js';
 
 async function userMember(userId: string): Promise<{ family: string; member: string; pan: string | undefined }> {
@@ -745,16 +759,30 @@ export async function buildSchedule112ALayout(
   portfolioId?: string,
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
-  const r = portfolioId ? await schedule112AReport(portfolioId, fy) : await userSchedule112AReport(userId, fy);
-  const rows = r.rows.map((row) => ({
+  const [r, fmvByIsin] = await Promise.all([
+    portfolioId ? schedule112AReport(portfolioId, fy) : userSchedule112AReport(userId, fy),
+    fetchGrandfatheringFmv(userId),
+  ]);
+  const categoryOf = (assetClass: string) =>
+    assetClass === 'EQUITY'
+      ? 'Equity Shares'
+      : assetClass === 'REIT' || assetClass === 'INVIT'
+        ? 'Units of Business Trust'
+        : 'Units of Equity Oriented Fund';
+  const rows = r.rows.map((row) => {
+    // FMV column: FMV on the grandfathering date × quantity, for rows the
+    // engine grandfathered; cost is the sec 55(2)(ac) cost, so Sale − Cost = Gain.
+    const fmvPerUnit = row.isin ? fmvByIsin.get(row.isin) ?? null : null;
+    const grandfathered = grandfatheredCost(row) !== null;
+    return {
     cells: {
       listed: 'Listed',
-      category: row.needsReview ? 'Equity Shares (⚠ verify category)' : 'Equity Shares',
+      category: row.needsReview ? `${categoryOf(row.assetClass)} (⚠ verify)` : categoryOf(row.assetClass),
       term: 'Long term',
       name: row.assetName,
       sale: row.sellAmount,
-      cost: row.buyAmount,
-      fmv: '',
+      cost: row.costOfAcquisition,
+      fmv: grandfathered && fmvPerUnit ? fmvPerUnit.times(row.quantity).toString() : '',
       expenses: '0',
       transferDate: row.sellDate,
       acquisitionDate: row.buyDate,
@@ -762,10 +790,12 @@ export async function buildSchedule112ALayout(
       sellRate: row.sellPrice.toString(),
       gain: row.gainLoss.toString(),
     },
-  }));
+    };
+  });
 
-  const totalSale = r.rows.reduce((s, x) => s.plus(x.sellAmount), new Decimal(0));
-  const totalCost = r.rows.reduce((s, x) => s.plus(x.buyAmount), new Decimal(0));
+  const totalSale = r.rows.reduce((acc, x) => acc.plus(x.sellAmount), new Decimal(0));
+  const totalCost = r.rows.reduce((acc, x) => acc.plus(x.costOfAcquisition), new Decimal(0));
+  const totalGain = r.rows.reduce((acc, x) => acc.plus(x.gainLoss), new Decimal(0));
 
   const columns: ColumnDef[] = [
     { key: 'listed', label: 'Listed/Unlisted', width: 9, align: 'left' },
@@ -774,7 +804,7 @@ export async function buildSchedule112ALayout(
     { key: 'name', label: 'Name of Company', width: 18, align: 'left' },
     { key: 'sale', label: 'Sale Amount', width: 9, align: 'right', formatter: MONEY },
     { key: 'cost', label: 'Cost of Acq.', width: 9, align: 'right', formatter: MONEY },
-    { key: 'fmv', label: 'FMV', width: 7, align: 'right' },
+    { key: 'fmv', label: 'FMV', width: 7, align: 'right', formatter: (v) => (v ? MONEY(v) : '') },
     { key: 'expenses', label: 'Expenses', width: 7, align: 'right' },
     { key: 'transferDate', label: 'Transfer Date', width: 8, align: 'center', formatter: DATE },
     { key: 'acquisitionDate', label: 'Acq. Date', width: 8, align: 'center', formatter: DATE },
@@ -798,7 +828,7 @@ export async function buildSchedule112ALayout(
       values: {
         sale: totalSale.toString(),
         cost: totalCost.toString(),
-        gain: r.totalGain,
+        gain: totalGain.toString(),
       },
     },
     filenameStem: `itr-schedule-112a${fy ? `-${fy}` : ''}`,
@@ -815,9 +845,16 @@ export async function buildMFCapitalGainLayout(userId: string, fy?: string): Pro
       (r.assetClass === 'MUTUAL_FUND' || r.assetClass === 'ETF') &&
       (!fy || r.financialYear === fy),
   );
-  const stcgRows = filtered.filter((r) => r.capitalGainType !== 'LONG_TERM');
+  const stcgRows = filtered.filter((r) => r.capitalGainType === 'SHORT_TERM');
   const ltcgRows = filtered.filter((r) => r.capitalGainType === 'LONG_TERM');
+  // Same-day ETF square-offs are speculative business income, not capital gains.
+  const intradayRows = filtered.filter((r) => r.capitalGainType === 'INTRADAY');
   const sections: ReportSection[] = [];
+  if (intradayRows.length) {
+    const sec = buildCgSection(intradayRows);
+    sec.banner = 'Speculation (intraday)';
+    sections.push(sec);
+  }
   if (stcgRows.length) {
     const sec = buildCgSection(stcgRows);
     sec.banner = 'Short Term';
@@ -1207,49 +1244,40 @@ export async function buildTaxSummaryLayout(
   fy?: string,
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
-  const [intraday, stcg, ltcg, s112a, income] = await Promise.all([
-    userIntradayReport(userId, fy),
-    userStcgReport(userId, fy),
-    userLtcgReport(userId, fy),
-    userSchedule112AReport(userId, fy),
-    userIncomeReport(userId, fy),
-  ]);
+  // One FY at a time (exemptions and set-off are per FY). With none requested,
+  // the latest FY the user has activity in.
+  const financialYear = fy ?? (await availableTaxFys(userId))[0] ?? financialYearOf(new Date());
+  const s = await buildTaxSummary(userId, financialYear);
+  const cg = s.capitalGains;
+  const D = (v: string) => new Decimal(v);
 
-  const sum = (rows: Array<{ gainLoss: Decimal | string }>): Decimal =>
-    rows.reduce((s, r) => s.plus(new Decimal(String(r.gainLoss))), new Decimal(0));
-
-  const intradayPL = sum(intraday.rows);
-  const stcgPL = sum(stcg.rows);
-  const ltcgPL = sum(ltcg.rows);
-  const s112aTaxable = new Decimal(s112a.taxable);
-  const s112aTotal = new Decimal(s112a.totalGain);
-
-  // userIncomeReport returns rows with `amount` field, not gainLoss.
-  // Re-derive the totals it already publishes on the response.
-  const dividend = new Decimal(income.dividend);
-  const interest = new Decimal(income.interest);
-  const maturity = new Decimal(income.maturity);
-
-  // ITR head sub-totals.
-  const totalCapGain = intradayPL.plus(stcgPL).plus(ltcgPL);
-  const otherIncome = dividend.plus(interest).plus(maturity);
-  const grand = totalCapGain.plus(otherIncome);
-
-  type Row = { head: string; section: string; line: string; amount: string; note?: string };
+  // Gains before set-off, as they go into the ITR schedules; taxable and tax
+  // after set-off and the 112A exemption. Maturity proceeds return principal
+  // and are not income, so they are not part of any total.
+  type Row = { head: string; section: string; line: string; amount: string; tax: string; note?: string };
   const data: Row[] = [
-    { head: 'Capital Gains', section: 'Speculation', line: 'Intraday (business income)', amount: intradayPL.toString() },
-    { head: 'Capital Gains', section: 'STCG (Sec 111A)', line: 'Equity / Equity-MF short-term gain', amount: stcgPL.toString() },
-    { head: 'Capital Gains', section: 'LTCG (Sec 112)', line: 'Long-term gain (non-grandfathered)', amount: ltcgPL.toString() },
-    { head: 'Capital Gains', section: 'LTCG (Sec 112A)', line: 'Equity / Equity-MF LTCG (gross)', amount: s112aTotal.toString(), note: '₹1L exemption applies' },
-    { head: 'Capital Gains', section: 'LTCG (Sec 112A)', line: 'Equity / Equity-MF LTCG (taxable)', amount: s112aTaxable.toString() },
-    { head: 'Other Income', section: 'IFOS', line: 'Dividend income', amount: dividend.toString() },
-    { head: 'Other Income', section: 'IFOS', line: 'Interest received', amount: interest.toString() },
-    { head: 'Other Income', section: 'IFOS', line: 'Maturity proceeds', amount: maturity.toString() },
+    { head: 'Capital Gains', section: 'STCG (Sec 111A)', line: 'Listed equity / equity funds — short-term', amount: cg.section111A_stcgEquity.gain, tax: cg.section111A_stcgEquity.tax },
+    { head: 'Capital Gains', section: 'STCG (slab)', line: 'Other assets — short-term', amount: cg.stcgOther.gain, tax: cg.stcgOther.tax, note: s.slabIsEstimate ? `Slab rate estimated at ${s.rates.slabPct}%` : `Slab rate ${s.rates.slabPct}%` },
+    { head: 'Capital Gains', section: 'LTCG (Sec 112A)', line: 'Listed equity / equity funds — long-term (grandfathered)', amount: cg.section112A_ltcgEquity.gain, tax: cg.section112A_ltcgEquity.tax, note: `Exemption used ${indianMoney(cg.section112A_ltcgEquity.exemption)}; taxable ${indianMoney(cg.section112A_ltcgEquity.taxable)}` },
+    { head: 'Capital Gains', section: 'LTCG (Sec 112)', line: 'Other assets — long-term', amount: cg.section112_ltcgOther.gain, tax: cg.section112_ltcgOther.tax, note: `Taxable after indexation and set-off ${indianMoney(cg.section112_ltcgOther.taxable)}` },
+    { head: 'Capital Gains', section: 'VDA (Sec 115BBH)', line: 'Virtual digital assets', amount: cg.virtualDigitalAssets.gain, tax: cg.virtualDigitalAssets.tax },
+    { head: 'Business Income', section: 'Speculation', line: 'Intraday equity', amount: cg.intradaySpeculative.gain, tax: cg.intradaySpeculative.tax },
+    { head: 'Business Income', section: 'Non-speculative', line: 'Futures & options', amount: s.fnoBusinessIncome.netPnl, tax: s.fnoBusinessIncome.tax },
+    { head: 'Other Income', section: 'IFOS', line: 'Dividend income', amount: s.otherIncome.dividend, tax: '0', note: 'Taxed at slab with your other income' },
+    { head: 'Other Income', section: 'IFOS', line: 'Interest received', amount: s.otherIncome.interest, tax: '0', note: 'Taxed at slab with your other income' },
   ];
+  const cf = s.carryForward;
+  const carryNote = [
+    D(cf.shortTermLoss).greaterThan(0) ? `short-term ${indianMoney(cf.shortTermLoss)}` : null,
+    D(cf.longTermLoss).greaterThan(0) ? `long-term ${indianMoney(cf.longTermLoss)}` : null,
+    D(cf.speculativeLoss).greaterThan(0) ? `speculative ${indianMoney(cf.speculativeLoss)}` : null,
+  ].filter(Boolean).join(', ');
+  const grand = data.reduce((acc, r) => acc.plus(D(r.amount)), new Decimal(0));
 
-  const sections: ReportSection[] = (['Capital Gains', 'Other Income'] as const).map((head) => {
+  const sections: ReportSection[] = (['Capital Gains', 'Business Income', 'Other Income'] as const).map((head) => {
     const list = data.filter((d) => d.head === head);
-    const sub = list.reduce((s, r) => s.plus(new Decimal(r.amount)), new Decimal(0));
+    const sub = list.reduce((acc, r) => acc.plus(new Decimal(r.amount)), new Decimal(0));
+    const subTax = list.reduce((acc, r) => acc.plus(new Decimal(r.tax)), new Decimal(0));
     return {
       banner: head.toUpperCase(),
       groups: [{
@@ -1258,12 +1286,13 @@ export async function buildTaxSummaryLayout(
             section: r.section,
             line: r.line,
             amount: r.amount,
+            tax: r.tax,
             note: r.note ?? '',
           },
         })),
         subtotal: {
           label: `Total: ${head}`,
-          values: { amount: sub.toString() },
+          values: { amount: sub.toString(), tax: subTax.toString() },
         },
       }],
     };
@@ -1272,25 +1301,26 @@ export async function buildTaxSummaryLayout(
   const columns: ColumnDef[] = [
     { key: 'section', label: 'Tax Section', width: 16, align: 'left' },
     { key: 'line', label: 'Description', width: 32, align: 'left' },
-    { key: 'amount', label: 'Amount', width: 12, align: 'right', formatter: MONEY, signed: true },
-    { key: 'note', label: 'Notes', width: 18, align: 'left' },
+    { key: 'amount', label: 'Gain / Income', width: 12, align: 'right', formatter: MONEY, signed: true },
+    { key: 'tax', label: 'Estimated Tax', width: 11, align: 'right', formatter: MONEY },
+    { key: 'note', label: 'Notes', width: 26, align: 'left' },
   ];
 
   return {
-    reportTitle: `Tax Summary (Form 16 Helper) ${fy ? `FY ${fy}` : ''}`,
+    reportTitle: `Tax Summary (Form 16 Helper) FY ${financialYear}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
-    financialYear: fy ?? 'All',
+    financialYear,
     headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
     headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
     columns,
     sections,
     grandTotal: {
-      label: 'Total Taxable + Reportable',
-      values: { amount: grand.toString() },
+      label: carryNote ? `Total (losses to carry forward: ${carryNote})` : 'Total',
+      values: { amount: grand.toString(), tax: s.totalEstimatedTax },
     },
-    filenameStem: `tax-summary${fy ? `-${fy}` : ''}`,
+    filenameStem: `tax-summary-${financialYear}`,
   };
 }
 
@@ -1488,14 +1518,8 @@ export async function buildCombinedRealisedUnrealisedLayout(
     return null;
   };
 
-  // FMV table for grandfathering -----------------------------------
-  const allIsins = Array.from(new Set([
-    ...equityCg.map((r) => r.isin),
-    ...lots.map((l) => l.isin),
-  ].filter((i): i is string => !!i)));
-  const fmvByIsin = await fetchFmvOn31Jan2018(allIsins);
-
-  const GF_CUTOFF = new Date('2018-01-31T23:59:59.999Z');
+  // FMV for grandfathering: the user's overrides, then the system seed ------
+  const fmvByIsin = await fetchGrandfatheringFmv(userId);
 
   // Row shape -----------------------------------------------------
   type Row = {
@@ -1531,15 +1555,9 @@ export async function buildCombinedRealisedUnrealisedLayout(
   // Realised rows -------------------------------------------------
   for (const r of equityCg) {
     const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const adjGain = adjustGainForGrandfathering(
-      r.buyDate,
-      r.quantity,
-      r.buyAmount,
-      r.sellAmount,
-      r.gainLoss,
-      fmv,
-    );
-    const isGf = r.buyDate.getTime() <= GF_CUTOFF.getTime() && fmv != null;
+    const gfCostRow = grandfatheredCost(r);
+    const adjGain = gfCostRow ? r.sellAmount.minus(gfCostRow) : r.gainLoss;
+    const isGf = gfCostRow !== null;
     const isIntraday = r.capitalGainType === 'INTRADAY';
     const isST = r.capitalGainType === 'SHORT_TERM';
     const isLT = r.capitalGainType === 'LONG_TERM';
@@ -1565,7 +1583,7 @@ export async function buildCombinedRealisedUnrealisedLayout(
       unrealisedGL: '',
       holdingDays: String(holdingDays),
       gfRate: isGf && fmv ? fmv.toFixed(4) : '',
-      gfCost: isGf && fmv ? fmv.times(r.quantity).toString() : '',
+      gfCost: gfCostRow ? gfCostRow.toString() : '',
       gfComputedGL: isGf ? adjGain.toString() : '',
     });
   }
@@ -1577,10 +1595,14 @@ export async function buildCombinedRealisedUnrealisedLayout(
     const unrealised = mkt ? mkt.minus(l.rate).times(l.qty) : null;
     const days = Math.round((cutoff.getTime() - l.date.getTime()) / 86_400_000);
     const fmv = l.isin ? fmvByIsin.get(l.isin) ?? null : null;
-    const isGf = l.date.getTime() <= GF_CUTOFF.getTime() && fmv != null;
-    const gfGL = mkt && isGf && fmv
-      ? mkt.times(l.qty).minus(fmv.times(l.qty)).toString()
-      : '';
+    const isGf = l.date.getTime() <= GRANDFATHERING_CUTOFF.getTime() && fmv != null;
+    // Sec 55(2)(ac) on a notional sale at today's price: cost = higher of
+    // (actual cost, lower of (FMV, value)).
+    const lotCost = l.qty.times(l.rate);
+    const lotGfCost = isGf && fmv && mkt
+      ? Decimal.max(lotCost, Decimal.min(fmv.times(l.qty), mkt.times(l.qty)))
+      : null;
+    const gfGL = mkt && lotGfCost ? mkt.times(l.qty).minus(lotGfCost).toString() : '';
     addRow(name, {
       scriptName: name,
       scriptCode: l.isin ?? '',
@@ -1600,7 +1622,7 @@ export async function buildCombinedRealisedUnrealisedLayout(
       unrealisedGL: unrealised ? unrealised.toString() : '',
       holdingDays: String(days),
       gfRate: isGf && fmv ? fmv.toFixed(4) : '',
-      gfCost: isGf && fmv ? fmv.times(l.qty).toString() : '',
+      gfCost: lotGfCost ? lotGfCost.toString() : '',
       gfComputedGL: gfGL,
     });
   }
@@ -2922,11 +2944,6 @@ export async function buildContractNotesSummaryLayout(
 
 // ─── Helpers for capital-gain summary reports (27, 28, 30, 31) ────
 
-// Cut-off for the 22-July-2024 LTCG rate change (Budget 2024). Sells
-// up to and including 22-Jul-2024 use the old 10% / 20% schedule;
-// 23-Jul-2024 onwards uses the new 12.5% schedule. Several reports
-// split the column accordingly.
-const LTCG_RATE_CHANGE_CUTOFF = new Date('2024-07-22T23:59:59.999Z');
 
 type ScriptBucket = {
   assetName: string;
@@ -2968,6 +2985,134 @@ function emptyBucket(name: string, isin: string | null): ScriptBucket {
   };
 }
 
+// A capital-gains rule change (rate / holding-period table) that falls inside
+// the report window splits the "before / from" columns. Taken from the shared
+// rules table, so a future change needs no code edit here.
+function rateChangeWithin(fromDate: Date | null, toDate: Date): Date | null {
+  let split: Date | null = null;
+  for (const set of CAPITAL_GAINS_RULE_SETS) {
+    const d = new Date(`${set.effectiveFrom}T00:00:00Z`);
+    if ((!fromDate || d.getTime() > fromDate.getTime()) && d.getTime() <= toDate.getTime()) split = d;
+  }
+  return split;
+}
+
+function splitColumnLabels(split: Date | null): { before: string; from: string } {
+  if (!split) return { before: 'Before rate change (none in period)', from: 'Whole period' };
+  const dayBefore = new Date(split.getTime() - 86_400_000);
+  return { before: `Upto ${fmtDateDDMMYYYY(dayBefore)}`, from: `From ${fmtDateDDMMYYYY(split)}` };
+}
+
+/**
+ * Per-script movement for the equity capital-gain downloads (Tax P&L, Capital
+ * Gains FIFO, Brokerwise, Advance Tax). Only sec 111A/112A assets. Opening and
+ * closing are the FIFO lots still held at the window's edges — the same lots
+ * the capital-gain rows are matched against — so
+ * Closing = Opening + Purchases − Sale proceeds + Capital G/L reconciles.
+ */
+async function equityScriptBuckets(
+  userId: string,
+  fromDate: Date | null,
+  toDate: Date,
+  groupOf: (t: { broker: string | null } | undefined) => string = () => '',
+): Promise<{ groups: Map<string, Map<string, ScriptBucket>>; split: Date | null; cgRows: CapitalGainRow[] }> {
+  const [{ rows: cgRows }, allTxs] = await Promise.all([
+    computeUserCapitalGains(userId),
+    prisma.transaction.findMany({
+      where: { portfolio: { userId }, tradeDate: { lte: toDate } },
+      orderBy: { tradeDate: 'asc' },
+    }),
+  ]);
+  const fundCategoryMap = await loadFundCategoryMap(allTxs);
+  const txs = allTxs.filter((t) => transactionIsEquityOriented(t, fundCategoryMap));
+  const txById = new Map(allTxs.map((t) => [t.id, t]));
+
+  const groups = new Map<string, Map<string, ScriptBucket>>();
+  const bucket = (group: string, name: string, isin: string | null): ScriptBucket => {
+    let inner = groups.get(group);
+    if (!inner) {
+      inner = new Map();
+      groups.set(group, inner);
+    }
+    let b = inner.get(name);
+    if (!b) {
+      b = emptyBucket(name, isin);
+      inner.set(name, b);
+    }
+    return b;
+  };
+  const inWindow = (d: Date) =>
+    (!fromDate || d.getTime() >= fromDate.getTime()) && d.getTime() <= toDate.getTime();
+
+  const txsByScript = new Map<string, { group: string; name: string; isin: string | null; txs: typeof txs }>();
+  for (const t of txs) {
+    const group = groupOf(t);
+    const name = t.assetName ?? '—';
+    const key = JSON.stringify([group, name]);
+    const entry = txsByScript.get(key) ?? { group, name, isin: t.isin, txs: [] };
+    entry.txs.push(t);
+    txsByScript.set(key, entry);
+    if (!inWindow(t.tradeDate)) continue;
+    const b = bucket(group, name, t.isin);
+    const q = new Decimal(t.quantity.toString());
+    const net = new Decimal(t.netAmount.toString());
+    if (BUY_TXN_TYPES.has(t.transactionType)) {
+      b.buyQty = b.buyQty.plus(q);
+      b.buyValue = b.buyValue.plus(net);
+    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
+      b.sellQty = b.sellQty.plus(q);
+      b.sellValue = b.sellValue.plus(net);
+    }
+  }
+
+  const sumLots = (positions: ReturnType<typeof computeOpenLots>) =>
+    positions
+      .flatMap((p) => p.lots)
+      .reduce(
+        (acc, l) => ({
+          qty: acc.qty.plus(l.quantity),
+          value: acc.value.plus(l.costPerUnit.times(l.quantity)),
+        }),
+        { qty: new Decimal(0), value: new Decimal(0) },
+      );
+  for (const { group, name, isin, txs: list } of txsByScript.values()) {
+    const opening = fromDate
+      ? sumLots(computeOpenLots(list.filter((t) => t.tradeDate.getTime() < fromDate.getTime()), fundCategoryMap))
+      : { qty: new Decimal(0), value: new Decimal(0) };
+    const closing = sumLots(computeOpenLots(list, fundCategoryMap));
+    if (opening.qty.isZero() && closing.qty.isZero() && !groups.get(group)?.has(name)) continue;
+    const b = bucket(group, name, isin);
+    b.openQty = opening.qty;
+    b.openValue = opening.value;
+    b.closingQty = closing.qty;
+    b.closingValue = closing.value;
+  }
+
+  const split = rateChangeWithin(fromDate, toDate);
+  for (const r of cgRows) {
+    if (!r.isEquityOriented) continue;
+    if (!inWindow(r.sellDate)) continue;
+    const b = bucket(groupOf(txById.get(r.sellTransactionId)), r.assetName, r.isin);
+    b.capitalGL = b.capitalGL.plus(r.gainLoss);
+    const before = split !== null && r.sellDate.getTime() < split.getTime();
+    if (r.capitalGainType === 'INTRADAY') {
+      b.speculation = b.speculation.plus(r.gainLoss);
+      if (r.gainLoss.greaterThanOrEqualTo(0)) b.speculationGain = b.speculationGain.plus(r.gainLoss);
+      else b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
+    } else if (r.capitalGainType === 'SHORT_TERM') {
+      b.shortTerm = b.shortTerm.plus(r.gainLoss);
+      if (before) b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
+      else b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
+    } else if (r.capitalGainType === 'LONG_TERM') {
+      b.longTerm = b.longTerm.plus(r.gainLoss);
+      if (before) b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
+      else b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
+    }
+  }
+
+  return { groups, split, cgRows };
+}
+
 // ─── 27. Brokerwise Capital Gain/Loss ─────────────────────────────
 
 export async function buildBrokerwiseCapitalGainLayout(
@@ -2978,93 +3123,13 @@ export async function buildBrokerwiseCapitalGainLayout(
   const fromDate = opts.from ? new Date(opts.from) : null;
   const toDate = opts.to ? new Date(opts.to) : new Date();
 
-  // Realised gains per (broker, asset) — pull from CapitalGain rows,
-  // join broker via sellTransaction.
-  const { rows: cgRows } = await computeUserCapitalGains(userId);
-  const txs = await prisma.transaction.findMany({
-    where: {
-      portfolio: { userId },
-      tradeDate: { lte: toDate },
-    },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const txById = new Map(txs.map((t) => [t.id, t]));
-
-  // Bucket by (broker, scriptName).
-  const buckets = new Map<string, Map<string, ScriptBucket>>();
-  const getBucket = (broker: string, name: string, isin: string | null): ScriptBucket => {
-    let inner = buckets.get(broker);
-    if (!inner) {
-      inner = new Map();
-      buckets.set(broker, inner);
-    }
-    let b = inner.get(name);
-    if (!b) {
-      b = emptyBucket(name, isin);
-      inner.set(name, b);
-    }
-    return b;
-  };
-
-  // Walk txs to fill opening / purchase / sale columns + closing qty.
-  for (const t of txs) {
-    const broker = t.broker ?? 'SELF-BROKER A/C';
-    const b = getBucket(broker, t.assetName ?? '—', t.isin);
-    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
-    const q = new Decimal(t.quantity.toString());
-    const net = new Decimal(t.netAmount.toString());
-    if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (!inWindow) {
-        b.openQty = b.openQty.plus(q);
-        b.openValue = b.openValue.plus(net);
-      } else {
-        b.buyQty = b.buyQty.plus(q);
-        b.buyValue = b.buyValue.plus(net);
-      }
-      b.closingQty = b.closingQty.plus(q);
-      b.closingValue = b.closingValue.plus(net);
-    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-      if (inWindow) {
-        b.sellQty = b.sellQty.plus(q);
-        b.sellValue = b.sellValue.plus(net);
-      }
-      const avg = b.closingQty.isZero() ? new Decimal(0) : b.closingValue.dividedBy(b.closingQty);
-      b.closingQty = b.closingQty.minus(q);
-      b.closingValue = b.closingValue.minus(avg.times(q));
-    }
-  }
-
-  // Apply CG rows for ST/LT/Speculation split + 22-July cutoff.
-  for (const r of cgRows) {
-    if (fromDate && r.sellDate.getTime() < fromDate.getTime()) continue;
-    if (r.sellDate.getTime() > toDate.getTime()) continue;
-    const sellTx = txById.get(r.sellTransactionId);
-    const broker = sellTx?.broker ?? 'SELF-BROKER A/C';
-    const b = getBucket(broker, r.assetName, r.isin);
-    b.capitalGL = b.capitalGL.plus(r.gainLoss);
-    if (r.capitalGainType === 'INTRADAY') {
-      b.speculation = b.speculation.plus(r.gainLoss);
-      if (r.gainLoss.greaterThanOrEqualTo(0)) {
-        b.speculationGain = b.speculationGain.plus(r.gainLoss);
-      } else {
-        b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
-      }
-    } else if (r.capitalGainType === 'SHORT_TERM') {
-      b.shortTerm = b.shortTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) {
-        b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
-      } else {
-        b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
-      }
-    } else if (r.capitalGainType === 'LONG_TERM') {
-      b.longTerm = b.longTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) {
-        b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
-      } else {
-        b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
-      }
-    }
-  }
+  // Per (broker, script); only sec 111A/112A assets (the report is "(Equity)").
+  const { groups: buckets } = await equityScriptBuckets(
+    userId,
+    fromDate,
+    toDate,
+    (t) => t?.broker ?? 'SELF-BROKER A/C',
+  );
 
   const sections: ReportSection[] = Array.from(buckets.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -3194,67 +3259,9 @@ export async function buildTaxPnLLayout(
   const fromDate = opts.from ? new Date(opts.from) : null;
   const toDate = opts.to ? new Date(opts.to) : new Date();
 
-  const { rows: cgRows } = await computeUserCapitalGains(userId);
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: toDate } },
-    orderBy: { tradeDate: 'asc' },
-  });
-
-  const byScript = new Map<string, ScriptBucket>();
-  const getB = (name: string, isin: string | null): ScriptBucket => {
-    let b = byScript.get(name);
-    if (!b) {
-      b = emptyBucket(name, isin);
-      byScript.set(name, b);
-    }
-    return b;
-  };
-
-  for (const t of txs) {
-    const b = getB(t.assetName ?? '—', t.isin);
-    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
-    const q = new Decimal(t.quantity.toString());
-    const net = new Decimal(t.netAmount.toString());
-    if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (!inWindow) {
-        b.openQty = b.openQty.plus(q);
-        b.openValue = b.openValue.plus(net);
-      } else {
-        b.buyQty = b.buyQty.plus(q);
-        b.buyValue = b.buyValue.plus(net);
-      }
-      b.closingQty = b.closingQty.plus(q);
-      b.closingValue = b.closingValue.plus(net);
-    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-      if (inWindow) {
-        b.sellQty = b.sellQty.plus(q);
-        b.sellValue = b.sellValue.plus(net);
-      }
-      const avg = b.closingQty.isZero() ? new Decimal(0) : b.closingValue.dividedBy(b.closingQty);
-      b.closingQty = b.closingQty.minus(q);
-      b.closingValue = b.closingValue.minus(avg.times(q));
-    }
-  }
-
-  for (const r of cgRows) {
-    if (fromDate && r.sellDate.getTime() < fromDate.getTime()) continue;
-    if (r.sellDate.getTime() > toDate.getTime()) continue;
-    const b = getB(r.assetName, r.isin);
-    b.capitalGL = b.capitalGL.plus(r.gainLoss);
-    if (r.capitalGainType === 'INTRADAY') {
-      b.speculation = b.speculation.plus(r.gainLoss);
-      if (r.gainLoss.greaterThanOrEqualTo(0)) b.speculationGain = b.speculationGain.plus(r.gainLoss);
-      else b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
-    } else if (r.capitalGainType === 'SHORT_TERM') {
-      b.shortTerm = b.shortTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
-      else b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
-    } else if (r.capitalGainType === 'LONG_TERM') {
-      b.longTerm = b.longTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
-      else b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
-    }
-  }
+  const { groups, split } = await equityScriptBuckets(userId, fromDate, toDate);
+  const byScript = groups.get('') ?? new Map<string, ScriptBucket>();
+  const splitLabels = splitColumnLabels(split);
 
   const list = Array.from(byScript.values()).sort((a, b) => a.assetName.localeCompare(b.assetName));
   const tot = list.reduce((acc, b) => ({
@@ -3305,8 +3312,8 @@ export async function buildTaxPnLLayout(
     { key: 'speculation', label: 'Speculation', width: 6, align: 'right', formatter: MONEY, signed: true },
     { key: 'specGain', label: 'Spec Gain', width: 6, align: 'right', formatter: MONEY },
     { key: 'specLoss', label: 'Spec Loss', width: 6, align: 'right', formatter: MONEY },
-    { key: 'stUp', label: 'Short Term (Upto 22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
-    { key: 'ltUp', label: 'Long Term (Upto 22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'stUp', label: `Short Term (${splitLabels.before})`, width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'ltUp', label: `Long Term (${splitLabels.before})`, width: 7, align: 'right', formatter: MONEY, signed: true },
   ];
 
   return {
@@ -3323,7 +3330,7 @@ export async function buildTaxPnLLayout(
       { label: 'Closing=Op+Pur-Sell(+/-) G/L', spanCols: 3 },
       { label: 'Capital Gain/Loss', spanCols: 1 },
       { label: 'Gain/Loss', spanCols: 5 },
-      { label: 'Upto 22 July 2024', spanCols: 2 },
+      { label: splitLabels.before, spanCols: 2 },
     ],
     headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
     columns,
@@ -3390,13 +3397,19 @@ export async function buildTaxPnLLayout(
 export async function buildStt10DbLayout(
   userId: string,
   asOf?: Date,
+  fy?: string,
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
-  const cutoff = asOf ?? new Date();
+  // Form 10DB is per financial year: the requested FY, or the FY containing
+  // `asOf` (today by default) up to that date.
+  const cutoff = fy ? financialYearBounds(fy).end : asOf ?? new Date();
+  const fyStart = financialYearBounds(fy ?? financialYearOf(cutoff)).start;
   const txs = await prisma.transaction.findMany({
     where: {
       portfolio: { userId },
-      tradeDate: { lte: cutoff },
+      tradeDate: { gte: fyStart, lte: cutoff },
+      // Only trades that actually bore securities transaction tax.
+      stt: { gt: 0 },
     },
     orderBy: [{ broker: 'asc' }, { tradeDate: 'asc' }],
   });
@@ -3480,7 +3493,7 @@ export async function buildStt10DbLayout(
 
 // ─── 30. Capital Gains FIFO ───────────────────────────────────────
 //
-// Per-script capital gain summary with full Upto / Onward 22-July
+// Per-script capital gain summary, split before / from any rule change in the window
 // split. Uses the same data flow as Tax PnL but extra ST/LT-onward
 // columns and section-wise sub-totals per equity / share trading.
 
@@ -3489,71 +3502,14 @@ export async function buildCapitalGainsFifoLayout(
   opts: { from?: string; to?: string },
 ): Promise<MprofitLayout> {
   // The data engine is identical to Tax PnL — re-use it and just swap
-  // the column set + add the Onward 23-July columns.
+  // the column set + add the "from rule change" columns.
   const m = await userMember(userId);
   const fromDate = opts.from ? new Date(opts.from) : null;
   const toDate = opts.to ? new Date(opts.to) : new Date();
 
-  const { rows: cgRows } = await computeUserCapitalGains(userId);
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: toDate } },
-    orderBy: { tradeDate: 'asc' },
-  });
-
-  const byScript = new Map<string, ScriptBucket>();
-  const getB = (name: string, isin: string | null): ScriptBucket => {
-    let b = byScript.get(name);
-    if (!b) {
-      b = emptyBucket(name, isin);
-      byScript.set(name, b);
-    }
-    return b;
-  };
-
-  for (const t of txs) {
-    const b = getB(t.assetName ?? '—', t.isin);
-    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
-    const q = new Decimal(t.quantity.toString());
-    const net = new Decimal(t.netAmount.toString());
-    if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (!inWindow) {
-        b.openQty = b.openQty.plus(q);
-        b.openValue = b.openValue.plus(net);
-      } else {
-        b.buyQty = b.buyQty.plus(q);
-        b.buyValue = b.buyValue.plus(net);
-      }
-      b.closingQty = b.closingQty.plus(q);
-      b.closingValue = b.closingValue.plus(net);
-    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-      if (inWindow) {
-        b.sellQty = b.sellQty.plus(q);
-        b.sellValue = b.sellValue.plus(net);
-      }
-      const avg = b.closingQty.isZero() ? new Decimal(0) : b.closingValue.dividedBy(b.closingQty);
-      b.closingQty = b.closingQty.minus(q);
-      b.closingValue = b.closingValue.minus(avg.times(q));
-    }
-  }
-  for (const r of cgRows) {
-    if (fromDate && r.sellDate.getTime() < fromDate.getTime()) continue;
-    if (r.sellDate.getTime() > toDate.getTime()) continue;
-    const b = getB(r.assetName, r.isin);
-    b.capitalGL = b.capitalGL.plus(r.gainLoss);
-    if (r.capitalGainType === 'INTRADAY') {
-      b.speculation = b.speculation.plus(r.gainLoss);
-      if (r.gainLoss.greaterThanOrEqualTo(0)) b.speculationGain = b.speculationGain.plus(r.gainLoss);
-      else b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
-    } else if (r.capitalGainType === 'SHORT_TERM') {
-      b.shortTerm = b.shortTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
-      else b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
-    } else if (r.capitalGainType === 'LONG_TERM') {
-      b.longTerm = b.longTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
-      else b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
-    }
-  }
+  const { groups, split } = await equityScriptBuckets(userId, fromDate, toDate);
+  const byScript = groups.get('') ?? new Map<string, ScriptBucket>();
+  const splitLabels = splitColumnLabels(split);
 
   const list = Array.from(byScript.values()).sort((a, b) => a.assetName.localeCompare(b.assetName));
   const tot = list.reduce((acc, b) => ({
@@ -3584,10 +3540,10 @@ export async function buildCapitalGainsFifoLayout(
     { key: 'speculation', label: 'Speculation', width: 6, align: 'right', formatter: MONEY, signed: true },
     { key: 'specGain', label: 'Spec Gain', width: 6, align: 'right', formatter: MONEY },
     { key: 'specLoss', label: 'Spec Loss', width: 6, align: 'right', formatter: MONEY },
-    { key: 'stUp', label: 'Short Term (≤22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
-    { key: 'ltUp', label: 'Long Term (≤22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
-    { key: 'stOn', label: 'Short Term (≥23-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
-    { key: 'ltOn', label: 'Long Term (≥23-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'stUp', label: `Short Term (${splitLabels.before})`, width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'ltUp', label: `Long Term (${splitLabels.before})`, width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'stOn', label: `Short Term (${splitLabels.from})`, width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'ltOn', label: `Long Term (${splitLabels.from})`, width: 7, align: 'right', formatter: MONEY, signed: true },
   ];
 
   return {
@@ -3600,8 +3556,8 @@ export async function buildCapitalGainsFifoLayout(
       { label: 'Closing=Op+Pur-Sell(+/-) G/L', spanCols: 3 },
       { label: 'Capital Gain/Loss', spanCols: 1 },
       { label: 'Gain/Loss', spanCols: 5 },
-      { label: 'Upto 22 July 2024', spanCols: 2 },
-      { label: 'Onward 23 July 2024', spanCols: 2 },
+      { label: splitLabels.before, spanCols: 2 },
+      { label: splitLabels.from, spanCols: 2 },
     ],
     headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
     columns,
@@ -3643,6 +3599,43 @@ export async function buildCapitalGainsFifoLayout(
       },
     },
     filenameStem: `capital-gains-fifo${opts.from ? `-${opts.from}` : ''}`,
+  };
+}
+
+/**
+ * Advance-tax windows for a financial year: FY start to the first instalment
+ * due date, each due date to the next, the last due date to FY end, then the
+ * whole FY. Due dates come from the shared ADVANCE_TAX_INSTALMENTS table.
+ */
+function advanceTaxPeriods(fyStart: Date, fyEnd: Date): Array<{ label: string; from: Date; to: Date }> {
+  const startYear = fyStart.getUTCFullYear();
+  const dayMs = 86_400_000;
+  const endOfDay = (d: Date) => new Date(d.getTime() + dayMs - 1);
+  const dues = ADVANCE_TAX_INSTALMENTS.map((i) => {
+    const [month, day] = i.dueMonthDay.split('-').map((v) => Number.parseInt(v, 10));
+    // April–December dues fall in the FY's first calendar year, January–March in the next.
+    const year = month! >= 4 ? startYear : startYear + 1;
+    return new Date(Date.UTC(year, month! - 1, day!));
+  }).sort((a, b) => a.getTime() - b.getTime());
+  const periods: Array<{ label: string; from: Date; to: Date }> = [];
+  let from = fyStart;
+  for (const due of dues) {
+    periods.push({ label: `${fmtDateDDMMYYYY(from)} TO ${fmtDateDDMMYYYY(due)}`, from, to: endOfDay(due) });
+    from = new Date(due.getTime() + dayMs);
+  }
+  if (from.getTime() <= fyEnd.getTime()) {
+    periods.push({ label: `${fmtDateDDMMYYYY(from)} TO ${fmtDateDDMMYYYY(fyEnd)}`, from, to: fyEnd });
+  }
+  periods.push({ label: `${fmtDateDDMMYYYY(fyStart)} TO ${fmtDateDDMMYYYY(fyEnd)}`, from: fyStart, to: fyEnd });
+  return periods;
+}
+
+/** First and last day of an Indian financial year ("YYYY-YY"). */
+function financialYearBounds(fy: string): { start: Date; end: Date } {
+  const startYear = Number.parseInt(fy.slice(0, 4), 10);
+  return {
+    start: new Date(Date.UTC(startYear, 3, 1)),
+    end: new Date(Date.UTC(startYear + 1, 2, 31, 23, 59, 59, 999)),
   };
 }
 
@@ -3689,13 +3682,12 @@ export async function buildAdvanceTaxSummaryLayout(
   const { fromDate, toDate, label: fyLabel } = fyToBoundary(opts.fy);
   const fyStartYear = fromDate.getUTCFullYear();
 
-  const { rows: cgRows } = await computeUserCapitalGains(userId);
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: toDate } },
-    orderBy: { tradeDate: 'asc' },
-  });
+  // Opening / purchase / sale from the shared equity movement (FIFO opening),
+  // gains per script with sec 55(2)(ac) grandfathering as the engine applied it.
+  const { groups, cgRows } = await equityScriptBuckets(userId, fromDate, toDate);
+  const fmvByIsin = await fetchGrandfatheringFmv(userId);
 
-  const byScript = new Map<string, {
+  type AdvanceTaxBucket = {
     name: string; isin: string | null;
     openQty: Decimal; openValue: Decimal;
     buyQty: Decimal; buyValue: Decimal;
@@ -3703,67 +3695,50 @@ export async function buildAdvanceTaxSummaryLayout(
     gainLoss: Decimal; gain: Decimal; loss: Decimal;
     fmv31Jan2018: Decimal | null; gfCost: Decimal;
     shortTerm: Decimal; longTerm: Decimal; speculation: Decimal;
-  }>();
-  const getB = (name: string, isin: string | null) => {
+  };
+  const zero = () => new Decimal(0);
+  const byScript = new Map<string, AdvanceTaxBucket>();
+  const getB = (name: string, isin: string | null): AdvanceTaxBucket => {
     let b = byScript.get(name);
     if (!b) {
       b = {
         name, isin,
-        openQty: new Decimal(0), openValue: new Decimal(0),
-        buyQty: new Decimal(0), buyValue: new Decimal(0),
-        sellQty: new Decimal(0), sellValue: new Decimal(0),
-        gainLoss: new Decimal(0), gain: new Decimal(0), loss: new Decimal(0),
-        fmv31Jan2018: null, gfCost: new Decimal(0),
-        shortTerm: new Decimal(0), longTerm: new Decimal(0), speculation: new Decimal(0),
+        openQty: zero(), openValue: zero(),
+        buyQty: zero(), buyValue: zero(),
+        sellQty: zero(), sellValue: zero(),
+        gainLoss: zero(), gain: zero(), loss: zero(),
+        fmv31Jan2018: null, gfCost: zero(),
+        shortTerm: zero(), longTerm: zero(), speculation: zero(),
       };
       byScript.set(name, b);
     }
     return b;
   };
-
-  for (const t of txs) {
-    const b = getB(t.assetName ?? '—', t.isin);
-    const inWindow = t.tradeDate.getTime() >= fromDate.getTime() && t.tradeDate.getTime() <= toDate.getTime();
-    const q = new Decimal(t.quantity.toString());
-    const net = new Decimal(t.netAmount.toString());
-    if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (!inWindow) {
-        b.openQty = b.openQty.plus(q);
-        b.openValue = b.openValue.plus(net);
-      } else {
-        b.buyQty = b.buyQty.plus(q);
-        b.buyValue = b.buyValue.plus(net);
-      }
-    } else if (SELL_TXN_TYPES.has(t.transactionType) && inWindow) {
-      b.sellQty = b.sellQty.plus(q);
-      b.sellValue = b.sellValue.plus(net);
-    }
+  for (const m of (groups.get('') ?? new Map<string, ScriptBucket>()).values()) {
+    const b = getB(m.assetName, m.isin);
+    b.openQty = m.openQty; b.openValue = m.openValue;
+    b.buyQty = m.buyQty; b.buyValue = m.buyValue;
+    b.sellQty = m.sellQty; b.sellValue = m.sellValue;
   }
 
-  // FMV on 31-Jan-2018 for grandfathering.
-  const isins = Array.from(new Set(
-    Array.from(byScript.values()).map((b) => b.isin).filter((i): i is string => !!i),
-  ));
-  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
-
-  // CG rows in FY window.
-  for (const r of cgRows) {
-    if (r.sellDate.getTime() < fromDate.getTime() || r.sellDate.getTime() > toDate.getTime()) continue;
-    const b = getB(r.assetName, r.isin);
-    const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const adjusted = adjustGainForGrandfathering(
-      r.buyDate, r.quantity, r.buyAmount, r.sellAmount, r.gainLoss, fmv,
+  const equityRowsIn = (from: Date, to: Date) =>
+    cgRows.filter(
+      (r) => r.isEquityOriented && r.sellDate.getTime() >= from.getTime() && r.sellDate.getTime() <= to.getTime(),
     );
-    b.gainLoss = b.gainLoss.plus(adjusted);
-    if (adjusted.greaterThanOrEqualTo(0)) b.gain = b.gain.plus(adjusted);
-    else b.loss = b.loss.plus(adjusted.abs());
-    if (fmv && r.buyDate.getTime() <= new Date('2018-01-31T23:59:59.999Z').getTime()) {
-      b.fmv31Jan2018 = fmv;
-      b.gfCost = b.gfCost.plus(fmv.times(r.quantity));
+  for (const r of equityRowsIn(fromDate, toDate)) {
+    const b = getB(r.assetName, r.isin);
+    const gfCost = grandfatheredCost(r);
+    const gain = gfCost ? r.sellAmount.minus(gfCost) : r.gainLoss;
+    b.gainLoss = b.gainLoss.plus(gain);
+    if (gain.greaterThanOrEqualTo(0)) b.gain = b.gain.plus(gain);
+    else b.loss = b.loss.plus(gain.abs());
+    if (gfCost) {
+      b.fmv31Jan2018 = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
+      b.gfCost = b.gfCost.plus(gfCost);
     }
-    if (r.capitalGainType === 'INTRADAY') b.speculation = b.speculation.plus(adjusted);
-    else if (r.capitalGainType === 'SHORT_TERM') b.shortTerm = b.shortTerm.plus(adjusted);
-    else if (r.capitalGainType === 'LONG_TERM') b.longTerm = b.longTerm.plus(adjusted);
+    if (r.capitalGainType === 'INTRADAY') b.speculation = b.speculation.plus(gain);
+    else if (r.capitalGainType === 'SHORT_TERM') b.shortTerm = b.shortTerm.plus(gain);
+    else if (r.capitalGainType === 'LONG_TERM') b.longTerm = b.longTerm.plus(gain);
   }
 
   const list = Array.from(byScript.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -3784,15 +3759,9 @@ export async function buildAdvanceTaxSummaryLayout(
     shortTerm: new Decimal(0), longTerm: new Decimal(0), speculation: new Decimal(0),
   });
 
-  // Period-wise stock profit summary (advance-tax instalments).
-  const periods = [
-    { label: `01/04/${fyStartYear} TO 15/06/${fyStartYear}`, from: new Date(`${fyStartYear}-04-01`), to: new Date(`${fyStartYear}-06-15T23:59:59.999Z`) },
-    { label: `16/06/${fyStartYear} TO 15/09/${fyStartYear}`, from: new Date(`${fyStartYear}-06-16`), to: new Date(`${fyStartYear}-09-15T23:59:59.999Z`) },
-    { label: `16/09/${fyStartYear} TO 15/12/${fyStartYear}`, from: new Date(`${fyStartYear}-09-16`), to: new Date(`${fyStartYear}-12-15T23:59:59.999Z`) },
-    { label: `16/12/${fyStartYear} TO 15/03/${fyStartYear + 1}`, from: new Date(`${fyStartYear}-12-16`), to: new Date(`${fyStartYear + 1}-03-15T23:59:59.999Z`) },
-    { label: `16/03/${fyStartYear + 1} TO 31/03/${fyStartYear + 1}`, from: new Date(`${fyStartYear + 1}-03-16`), to: new Date(`${fyStartYear + 1}-03-31T23:59:59.999Z`) },
-    { label: `01/04/${fyStartYear} TO 31/03/${fyStartYear + 1}`, from: fromDate, to: toDate },
-  ];
+  // Period-wise stock profit summary, by the advance-tax instalment due dates
+  // (shared data table), plus the whole FY.
+  const periods = advanceTaxPeriods(fromDate, toDate);
   const periodRows: BodyRowLite[] = periods.map((p) => {
     let gainLoss = new Decimal(0);
     let gain = new Decimal(0);
@@ -3801,14 +3770,13 @@ export async function buildAdvanceTaxSummaryLayout(
     let shortTerm = new Decimal(0);
     let longTerm = new Decimal(0);
     let speculation = new Decimal(0);
-    for (const r of cgRows) {
-      if (r.sellDate.getTime() < p.from.getTime() || r.sellDate.getTime() > p.to.getTime()) continue;
-      const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-      const adj = adjustGainForGrandfathering(r.buyDate, r.quantity, r.buyAmount, r.sellAmount, r.gainLoss, fmv);
+    for (const r of equityRowsIn(p.from, p.to)) {
+      const rowGf = grandfatheredCost(r);
+      const adj = rowGf ? r.sellAmount.minus(rowGf) : r.gainLoss;
       gainLoss = gainLoss.plus(adj);
       if (adj.greaterThanOrEqualTo(0)) gain = gain.plus(adj);
       else loss = loss.plus(adj.abs());
-      if (fmv) gfCost = gfCost.plus(fmv.times(r.quantity));
+      if (rowGf) gfCost = gfCost.plus(rowGf);
       if (r.capitalGainType === 'INTRADAY') speculation = speculation.plus(adj);
       else if (r.capitalGainType === 'SHORT_TERM') shortTerm = shortTerm.plus(adj);
       else if (r.capitalGainType === 'LONG_TERM') longTerm = longTerm.plus(adj);
@@ -3838,7 +3806,7 @@ export async function buildAdvanceTaxSummaryLayout(
     { key: 'gainLoss', label: 'Gain/Loss', width: 7, align: 'right', formatter: MONEY, signed: true },
     { key: 'gain', label: 'Gain', width: 6, align: 'right', formatter: MONEY },
     { key: 'loss', label: 'Loss', width: 6, align: 'right', formatter: MONEY, signed: true },
-    { key: 'fmv31Jan2018', label: '31st January 2018', width: 7, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'fmv31Jan2018', label: `FMV on ${fmtDateDDMMYYYY(CAPITAL_GAINS_KEY_DATES.grandfatheringFmvDate)}`, width: 7, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'gfCost', label: 'Grandfathered Cost', width: 8, align: 'right', formatter: MONEY },
     { key: 'shortTerm', label: 'Short Term', width: 6, align: 'right', formatter: MONEY, signed: true },
     { key: 'longTerm', label: 'Long Term', width: 6, align: 'right', formatter: MONEY, signed: true },

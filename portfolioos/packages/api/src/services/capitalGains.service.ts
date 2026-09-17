@@ -7,7 +7,13 @@ import type {
   Transaction,
   TransactionType,
 } from '@prisma/client';
-import { CII_BY_FY } from '@everypaisa/shared';
+import {
+  CAPITAL_GAINS_KEY_DATES,
+  CAPITAL_GAINS_RULE_SETS,
+  CII_BY_FY,
+  capitalGainsRulesFor,
+  isOnOrAfter,
+} from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { getFmvForUser } from './fmvOverride.service.js';
 import { computeAssetKey } from './assetKey.js';
@@ -23,22 +29,15 @@ const CII: Record<number, number> = Object.fromEntries(
   Object.entries(CII_BY_FY).map(([fy, value]) => [Number.parseInt(fy.slice(0, 4), 10), value]),
 );
 
+// Key dates come from the shared rules table (CAPITAL_GAINS_KEY_DATES); holding
+// periods, indexation and rates come from the rule set in force on each
+// transfer date (capitalGainsRulesFor). Nothing here is year-specific.
+const KEY = CAPITAL_GAINS_KEY_DATES;
+
 // Exported: fmvOverride.service.ts uses the same cutoff to decide which
 // CapitalGain rows are eligible for grandfathering (circular import — safe,
 // only referenced inside function bodies, never at module-eval time).
-export const GRANDFATHERING_CUTOFF = new Date('2018-01-31T00:00:00Z');
-/** Sec 112A applies to transfers from this date; before it, 10(38) exempted equity LTCG. */
-const SEC_112A_START = new Date('2018-04-01T00:00:00Z');
-/** Sec 50AA: non-equity MF units acquired on/after this date are "specified mutual funds". */
-const SPECIFIED_MF_CUTOFF = new Date('2023-04-01T00:00:00Z');
-/**
- * Finance (No. 2) Act 2024: for transfers on/after this date, holding periods
- * are 12 months (listed securities, equity-fund units, business-trust units)
- * or 24 months (everything else), and indexation is withdrawn.
- */
-export const FINANCE_ACT_2024_CUTOFF = new Date('2024-07-23T00:00:00Z');
-/** From FY 2025-26, sec 50AA covers only funds with more than 65% in debt, so gold ETFs drop out. */
-const SPECIFIED_MF_NARROWED = new Date('2025-04-01T00:00:00Z');
+export const GRANDFATHERING_CUTOFF = new Date(`${KEY.grandfatheringFmvDate}T00:00:00Z`);
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -146,9 +145,9 @@ function mfOrientation(fundId: string | null, fundCategoryMap?: Map<string, MFCa
 }
 
 const UNKNOWN_MF_NOTE =
-  'Mutual fund category could not be resolved — taxed as a debt fund (no 12-month equity rule, no 112A grandfathering); verify the fund category.';
+  'Mutual fund category could not be resolved — taxed as a debt fund (no equity holding-period rule, no 112A grandfathering); verify the fund category.';
 const AMBIGUOUS_MF_NOTE =
-  'Fund category (index / ETF / hybrid / solution-oriented / other) can be equity- or debt-oriented — taxed as a debt fund; if it holds 65% or more in Indian equity it is equity-oriented (12-month rule, sec 111A/112A).';
+  'Fund category (index / ETF / hybrid / solution-oriented / other) can be equity- or debt-oriented — taxed as a debt fund; if it holds 65% or more in Indian equity it is equity-oriented (sec 111A/112A).';
 
 interface TaxTreatment {
   /** Months that must be exceeded for long-term; null = always short-term. */
@@ -169,75 +168,75 @@ function taxTreatment(
   sellDate: Date,
   orientation: MfOrientation,
 ): TaxTreatment {
-  const newRegime = sellDate >= FINANCE_ACT_2024_CUTOFF;
+  const rules = capitalGainsRulesFor(sellDate);
+  const months = rules.longTermAfterMonths;
+  const indexation = rules.indexationAvailable;
+  const specified = isOnOrAfter(buyDate, KEY.specifiedMutualFundFrom);
   switch (ac) {
     case 'EQUITY':
     case 'ETF':
-      return { longTermAfterMonths: 12, indexation: false, equityOriented: true, note: null };
+      return { longTermAfterMonths: months.listedEquity, indexation: false, equityOriented: true, note: null };
     case 'REIT':
     case 'INVIT':
-      // Listed business-trust units: 36 months before 23-Jul-2024, 12 after; sec 111A/112A.
-      return { longTermAfterMonths: newRegime ? 12 : 36, indexation: false, equityOriented: true, note: null };
+      // Listed business-trust units: sec 111A/112A.
+      return { longTermAfterMonths: months.businessTrustUnits, indexation: false, equityOriented: true, note: null };
     case 'MUTUAL_FUND': {
       if (orientation === 'equity') {
-        return { longTermAfterMonths: 12, indexation: false, equityOriented: true, note: null };
+        return { longTermAfterMonths: months.listedEquity, indexation: false, equityOriented: true, note: null };
       }
       const note =
         orientation === 'unknown' ? UNKNOWN_MF_NOTE : orientation === 'ambiguous' ? AMBIGUOUS_MF_NOTE : null;
-      if (buyDate >= SPECIFIED_MF_CUTOFF) {
+      if (specified) {
         // Sec 50AA: gains on specified mutual fund units are always short-term.
         return { longTermAfterMonths: null, indexation: false, equityOriented: false, note };
       }
-      return newRegime
-        ? { longTermAfterMonths: 24, indexation: false, equityOriented: false, note }
-        : { longTermAfterMonths: 36, indexation: true, equityOriented: false, note };
+      return { longTermAfterMonths: months.nonEquityFundUnits, indexation, equityOriented: false, note };
     }
     case 'GOLD_ETF':
-      if (buyDate >= SPECIFIED_MF_CUTOFF && sellDate < SPECIFIED_MF_NARROWED) {
+      if (specified && !isOnOrAfter(sellDate, KEY.specifiedMutualFundNarrowedFrom)) {
         return { longTermAfterMonths: null, indexation: false, equityOriented: false, note: null };
       }
-      return newRegime
-        ? { longTermAfterMonths: 24, indexation: false, equityOriented: false, note: null }
-        : { longTermAfterMonths: 36, indexation: true, equityOriented: false, note: null };
+      return { longTermAfterMonths: months.nonEquityFundUnits, indexation, equityOriented: false, note: null };
     case 'GOLD_BOND':
-      // Sovereign Gold Bonds are listed; sec 48 lets SGBs keep indexation (until 23-Jul-2024).
-      return { longTermAfterMonths: 12, indexation: !newRegime, equityOriented: false, note: null };
+      // Sovereign Gold Bonds are listed; sec 48 lets SGBs index while indexation exists.
+      return { longTermAfterMonths: months.listedSecurities, indexation, equityOriented: false, note: null };
     case 'BOND':
     case 'GOVT_BOND':
     case 'CORPORATE_BOND':
       // Treated as listed. Sec 48 denies indexation on bonds and debentures.
-      return { longTermAfterMonths: 12, indexation: false, equityOriented: false, note: null };
+      return { longTermAfterMonths: months.listedSecurities, indexation: false, equityOriented: false, note: null };
     case 'REAL_ESTATE':
-      return newRegime
-        ? { longTermAfterMonths: 24, indexation: false, equityOriented: false, note: null }
-        : { longTermAfterMonths: 24, indexation: true, equityOriented: false, note: null };
+      return { longTermAfterMonths: months.immovableProperty, indexation, equityOriented: false, note: null };
     case 'FOREIGN_EQUITY':
     case 'PRIVATE_EQUITY':
-      // Unlisted in India: 24 months; indexation until 23-Jul-2024.
-      return { longTermAfterMonths: 24, indexation: !newRegime, equityOriented: false, note: null };
+      return { longTermAfterMonths: months.unlistedShares, indexation, equityOriented: false, note: null };
     case 'CRYPTOCURRENCY':
       return {
         longTermAfterMonths: null,
         indexation: false,
         equityOriented: false,
-        note: 'Virtual digital asset: taxed at a flat 30% under sec 115BBH with no deduction other than cost, and losses cannot be set off or carried forward.',
+        note: `Virtual digital asset: taxed at a flat ${rules.ratesPct.virtualDigitalAsset}% under sec 115BBH with no deduction other than cost, and losses cannot be set off or carried forward.`,
       };
     default:
       // Physical gold/silver, art, AIF/PMS units and other capital assets.
-      return newRegime
-        ? { longTermAfterMonths: 24, indexation: false, equityOriented: false, note: null }
-        : { longTermAfterMonths: 36, indexation: true, equityOriented: false, note: null };
+      return { longTermAfterMonths: months.other, indexation, equityOriented: false, note: null };
   }
 }
 
-// Exported for the CII-coverage guard test. `sellDate` defaults to the last day
+/** A transfer date on which indexation was available, from the rules table. */
+function dateWithIndexation(): Date {
+  const set = [...CAPITAL_GAINS_RULE_SETS].reverse().find((s) => s.indexationAvailable);
+  return new Date(`${(set ?? CAPITAL_GAINS_RULE_SETS[0]!).effectiveFrom}T00:00:00Z`);
+}
+
+// Exported for the CII-coverage guard test. `sellDate` defaults to a date when
 // indexation existed, so the guard lists every class that could ever index.
 export function qualifiesForIndexation(
   ac: AssetClass,
   buyDate: Date,
   fundId: string | null = null,
   fundCategoryMap?: Map<string, MFCategory>,
-  sellDate: Date = new Date('2024-07-22T00:00:00Z'),
+  sellDate: Date = dateWithIndexation(),
 ): boolean {
   if (NON_CAPITAL_ASSETS.has(ac)) return false;
   return taxTreatment(ac, buyDate, sellDate, mfOrientation(fundId, fundCategoryMap)).indexation;
@@ -361,9 +360,85 @@ function joinNotes(notes: Array<string | null>): string | null {
 
 export function computeFIFOGains(
   txs: Transaction[],
-  fmvMap?: Map<string, Decimal>, // isin -> fmvPerUnit on 31-Jan-2018
+  fmvMap?: Map<string, Decimal>, // isin -> fmvPerUnit on the grandfathering date
   fundCategoryMap?: Map<string, MFCategory>, // fundId -> MutualFundMaster.category
 ): CapitalGainRow[] {
+  return runFifo(txs, fmvMap, fundCategoryMap).rows;
+}
+
+export interface OpenLot {
+  buyDate: Date;
+  quantity: Decimal;
+  costPerUnit: Decimal;
+}
+
+export interface OpenPosition {
+  portfolioId: string;
+  assetKey: string;
+  assetClass: AssetClass;
+  fundId: string | null;
+  lots: OpenLot[];
+}
+
+/** Lots still held after replaying every transaction FIFO (splits, mergers and same-day matching applied). */
+export function computeOpenLots(
+  txs: Transaction[],
+  fundCategoryMap?: Map<string, MFCategory>,
+): OpenPosition[] {
+  const { groups } = runFifo(txs, undefined, fundCategoryMap);
+  return [...groups.entries()]
+    .map(([key, g]) => ({
+      portfolioId: g.portfolioId,
+      assetKey: key.slice(g.portfolioId.length + 1),
+      assetClass: g.assetClass,
+      fundId: g.fundId,
+      lots: g.lots
+        .filter((l) => l.qty.greaterThan(0))
+        .map((l) => ({ buyDate: l.buyDate, quantity: l.qty, costPerUnit: l.costPerUnit })),
+    }))
+    .filter((p) => p.lots.length > 0);
+}
+
+/**
+ * Whether selling a lot on `asOf` would be long-term and sec 111A/112A, by the
+ * same rules the engine applies to real sales.
+ */
+export function lotTaxStatus(
+  position: Pick<OpenPosition, 'assetClass' | 'fundId'>,
+  buyDate: Date,
+  asOf: Date,
+  fundCategoryMap?: Map<string, MFCategory>,
+): { longTerm: boolean; equityOriented: boolean } {
+  const orientation =
+    position.assetClass === 'MUTUAL_FUND' ? mfOrientation(position.fundId, fundCategoryMap) : 'equity';
+  const t = taxTreatment(position.assetClass, buyDate, asOf, orientation);
+  const longTerm =
+    t.longTermAfterMonths !== null &&
+    !sameDay(buyDate, asOf) &&
+    heldMoreThanMonths(buyDate, asOf, t.longTermAfterMonths);
+  return { longTerm, equityOriented: t.equityOriented };
+}
+
+/** Whether gains on this asset class are capital gains (not deposits, PF, insurance, F&O or forex). */
+export function isCapitalAssetClass(ac: AssetClass): boolean {
+  return !NON_CAPITAL_ASSETS.has(ac);
+}
+
+/** Whether a transaction's asset is a sec 111A/112A asset (listed equity, equity-oriented fund, business-trust unit). */
+export function transactionIsEquityOriented(
+  tx: Pick<Transaction, 'assetClass' | 'fundId' | 'tradeDate'>,
+  fundCategoryMap?: Map<string, MFCategory>,
+): boolean {
+  if (NON_CAPITAL_ASSETS.has(tx.assetClass)) return false;
+  const orientation = tx.assetClass === 'MUTUAL_FUND' ? mfOrientation(tx.fundId, fundCategoryMap) : 'equity';
+  return taxTreatment(tx.assetClass, tx.tradeDate, tx.tradeDate, orientation).equityOriented;
+}
+
+function runFifo(
+  txs: Transaction[],
+  fmvMap?: Map<string, Decimal>, // isin -> fmvPerUnit on the grandfathering date
+  fundCategoryMap?: Map<string, MFCategory>, // fundId -> MutualFundMaster.category
+): { rows: CapitalGainRow[]; groups: Map<string, Group> } {
   const relevant = txs.filter(
     (t) =>
       !NON_CAPITAL_ASSETS.has(t.assetClass) &&
@@ -550,14 +625,16 @@ export function computeFIFOGains(
         }
       }
 
+      const rules = capitalGainsRulesFor(tx.tradeDate);
+
       if (
         g.assetClass === 'REAL_ESTATE' &&
         gainType === 'LONG_TERM' &&
-        tx.tradeDate >= FINANCE_ACT_2024_CUTOFF &&
-        lot.buyDate < FINANCE_ACT_2024_CUTOFF
+        !rules.indexationAvailable &&
+        !isOnOrAfter(lot.buyDate, KEY.propertyIndexationChoiceAcquiredBefore)
       ) {
         notes.push(
-          'Land or building bought before 23-Jul-2024: a resident individual/HUF may instead pay 20% on the indexed gain if that is lower (sec 112 proviso).',
+          `Land or building acquired before ${KEY.propertyIndexationChoiceAcquiredBefore}: a resident individual/HUF may instead pay ${rules.ratesPct.ltcgIndexed}% on the indexed gain if that is lower (sec 112 proviso).`,
         );
       }
 
@@ -566,29 +643,32 @@ export function computeFIFOGains(
         gainType === 'LONG_TERM'
       ) {
         notes.push(
-          'Treated as a listed bond (long-term after 12 months). If it is unlisted: it needed 36 months before 23-Jul-2024, and from 23-Jul-2024 its gains are always short-term (sec 50AA).',
+          isOnOrAfter(tx.tradeDate, KEY.unlistedBondsShortTermFrom)
+            ? `Treated as a listed bond (long-term after ${rules.longTermAfterMonths.listedSecurities} months). If it is unlisted, its gains are always short-term (sec 50AA).`
+            : `Treated as a listed bond (long-term after ${rules.longTermAfterMonths.listedSecurities} months). If it is unlisted, it needed more than ${rules.longTermAfterMonths.other} months.`,
         );
       }
 
       if (
         g.assetClass === 'GOLD_ETF' &&
-        tx.tradeDate >= FINANCE_ACT_2024_CUTOFF &&
         gainType === 'SHORT_TERM' &&
         treatment.longTermAfterMonths !== null &&
-        heldMoreThanMonths(lot.buyDate, tx.tradeDate, 12)
+        rules.longTermAfterMonths.listedSecurities < treatment.longTermAfterMonths &&
+        heldMoreThanMonths(lot.buyDate, tx.tradeDate, rules.longTermAfterMonths.listedSecurities)
       ) {
         notes.push(
-          'Gold ETF held more than 12 but not more than 24 months: treated as short-term; check whether listed-ETF units qualify for the 12-month rule for this sale.',
+          `Gold ETF held more than ${rules.longTermAfterMonths.listedSecurities} but not more than ${treatment.longTermAfterMonths} months: treated as short-term; check whether listed-ETF units qualify for the ${rules.longTermAfterMonths.listedSecurities}-month rule for this sale.`,
         );
       }
 
-      // Sec 55(2)(ac) grandfathering for 112A assets bought on/before 31-Jan-2018:
-      // cost = higher of (actual cost, lower of (FMV on 31-Jan-2018, sale value)).
+      // Sec 55(2)(ac) grandfathering for 112A assets bought on/before the FMV date:
+      // cost = higher of (actual cost, lower of (FMV on that date, sale value)).
+      const ltcgTaxable = isOnOrAfter(tx.tradeDate, KEY.listedEquityLtcgTaxableFrom);
       if (
         gainType === 'LONG_TERM' &&
         treatment.equityOriented &&
         lot.buyDate <= GRANDFATHERING_CUTOFF &&
-        tx.tradeDate >= SEC_112A_START &&
+        ltcgTaxable &&
         fmvMap &&
         g.isin &&
         fmvMap.has(g.isin)
@@ -600,9 +680,11 @@ export function computeFIFOGains(
         indexed = adjustedBasis;
       }
 
-      if (gainType === 'LONG_TERM' && treatment.equityOriented && tx.tradeDate < SEC_112A_START) {
+      if (gainType === 'LONG_TERM' && treatment.equityOriented && !ltcgTaxable) {
         taxableGain = new Decimal(0);
-        notes.push('Long-term gain on listed equity transferred before 1-Apr-2018: exempt under sec 10(38).');
+        notes.push(
+          `Long-term gain on listed equity transferred before ${KEY.listedEquityLtcgTaxableFrom}: exempt under sec 10(38).`,
+        );
       }
 
       if (g.assetClass === 'GOLD_BOND' && (type === 'MATURITY' || type === 'REDEMPTION')) {
@@ -674,7 +756,7 @@ export function computeFIFOGains(
     }
   }
 
-  return rows;
+  return { rows, groups };
 }
 
 /**
