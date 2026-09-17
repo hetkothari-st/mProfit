@@ -41,7 +41,7 @@ export function CapitalGainPanel({ propertyId }: Props) {
           <Stat
             label="Holding period"
             value={`${cg.holdingMonths} months`}
-            sub={cg.isLongTerm ? 'Long-term (≥ 24 mo)' : 'Short-term'}
+            sub={cg.isLongTerm ? 'Long-term (over 24 mo)' : 'Short-term'}
           />
           <Stat
             label="Owner's share"
@@ -49,10 +49,34 @@ export function CapitalGainPanel({ propertyId }: Props) {
           />
         </div>
 
-        {cg.isLongTerm && cg.hasIndexationChoice ? (
+        {cg.ciiUnavailable ? (
+          <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+            The indexed figure can't be computed: no Cost Inflation Index for{' '}
+            {cg.ciiBuyYear === null ? `FY ${cg.buyFY} (purchases before FY 2001-02 index from the 1-Apr-2001 fair market value)` : `FY ${cg.sellFY} yet`}.
+          </p>
+        ) : null}
+
+        {cg.regime === 'INDEXED_20' ? (
           <>
             <p className="text-xs text-muted-foreground border-t pt-3">
-              Bought on or before 23-Jul-2024. Finance Act 2024 lets you choose either method:
+              Sold before 23-Jul-2024 — long-term gain taxed at 20% on the indexed cost.
+            </p>
+            <RegimeBox
+              title="LTCG @ 20% with indexation"
+              gainLabel="Indexed gain"
+              gain={cg.indexedGain}
+              tax={cg.estimatedTaxIndexed}
+              note={
+                cg.ciiBuyYear && cg.ciiSellYear
+                  ? `CII ${cg.buyFY} = ${cg.ciiBuyYear} → ${cg.sellFY} = ${cg.ciiSellYear}. Indexed cost: ${formatINR(cg.indexedCost ?? '0')}`
+                  : 'CII data unavailable'
+              }
+            />
+          </>
+        ) : cg.regime === 'CHOICE' && cg.hasIndexationChoice ? (
+          <>
+            <p className="text-xs text-muted-foreground border-t pt-3">
+              Bought before and sold on/after 23-Jul-2024. A resident individual or HUF can choose either method:
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <RegimeBox
@@ -81,7 +105,9 @@ export function CapitalGainPanel({ propertyId }: Props) {
         ) : cg.isLongTerm ? (
           <>
             <p className="text-xs text-muted-foreground border-t pt-3">
-              Bought after 23-Jul-2024 — indexation no longer applies. Flat 12.5% rate under section 112.
+              {cg.regime === 'NON_INDEXED_12_5'
+                ? 'Bought on/after 23-Jul-2024 — indexation does not apply. Flat 12.5% rate under section 112.'
+                : 'Flat 12.5% rate under section 112 (the indexed option could not be computed).'}
             </p>
             <RegimeBox
               title="LTCG @ 12.5%"
@@ -94,7 +120,7 @@ export function CapitalGainPanel({ propertyId }: Props) {
         ) : (
           <>
             <p className="text-xs text-muted-foreground border-t pt-3">
-              Short-term (held &lt; 24 months). Taxed at slab rate.
+              Short-term (held 24 months or less). Taxed at slab rate.
             </p>
             <RegimeBox
               title="STCG (slab rate)"

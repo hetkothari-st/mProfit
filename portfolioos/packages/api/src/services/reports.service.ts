@@ -1,22 +1,22 @@
 import { Decimal } from 'decimal.js';
-import type { AssetClass, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { investmentIncome } from './investmentIncome.service.js';
 import {
   computePortfolioCapitalGains,
   computeUserCapitalGains,
   type CapitalGainRow,
-  financialYearOf,
 } from './capitalGains.service.js';
 import {
   computePortfolioXirr,
   computeRollingXirr,
+  computeUserRollingXirr,
   computeUserXirr,
 } from './xirr.service.js';
-import { getCryptoPriceAt } from '../priceFeeds/crypto.service.js';
-import {
-  fetchFmvOn31Jan2018,
-  adjustGainForGrandfathering,
-} from './specialReports.service.js';
+import { priceAt } from './holdingsAsOf.service.js';
+import { replayTransactions } from './holdingsProjection.js';
+import { grandfatheredCost } from './specialReports.service.js';
+import { listedEquityLtcgExemptionFor } from '@everypaisa/shared';
+import { computeCapitalGainsTax } from './taxComputation.js';
 
 async function listUserPortfolioIds(userId: string): Promise<string[]> {
   const ps = await prisma.portfolio.findMany({ where: { userId }, select: { id: true } });
@@ -75,80 +75,45 @@ export async function ltcgReport(portfolioId: string, fy?: string) {
 }
 
 /**
+ * Schedule 112A — long-term gains on 112A assets. Each row's gain is at the
+ * grandfathered cost the engine applied; totals get each FY's own exemption
+ * and transfer-date rates (taxComputation), so multi-year views are right too.
+ */
+function schedule112AFromRows(rows: CapitalGainRow[], fy?: string) {
+  const filtered = rows.filter(
+    (r) => (!fy || r.financialYear === fy) && r.capitalGainType === 'LONG_TERM' && r.isEquityOriented,
+  );
+  const adjusted = filtered.map((r) => {
+    const costOfAcquisition = grandfatheredCost(r) ?? r.buyAmount;
+    return { ...r, costOfAcquisition, gainLoss: r.sellAmount.minus(costOfAcquisition) };
+  });
+  const perFy = [...new Set(filtered.map((r) => r.financialYear))].map((y) => computeCapitalGainsTax(filtered, y));
+  const sum = (pick: (t: (typeof perFy)[number]) => Decimal) =>
+    perFy.reduce((acc, t) => acc.plus(pick(t)), new Decimal(0));
+  return {
+    rows: adjusted,
+    totalGain: sum((t) => t.s112A.gain).toString(),
+    exemptionLimit: perFy
+      .reduce((acc, t) => acc.plus(listedEquityLtcgExemptionFor(t.financialYear)), new Decimal(0))
+      .toString(),
+    taxable: sum((t) => t.s112A.taxable).toString(),
+    count: adjusted.length,
+  };
+}
+
+/**
  * Schedule 112A — LTCG from equity/equity MFs. Applies Section 112A ₹1L
  * threshold; amount above is taxed at 10% (12.5% post-Jul-2024).
  */
 export async function schedule112AReport(portfolioId: string, fy?: string) {
   const { rows } = await computePortfolioCapitalGains(portfolioId);
-  const filtered = rows.filter((r) => {
-    if (fy && r.financialYear !== fy) return false;
-    if (r.capitalGainType !== 'LONG_TERM') return false;
-    return r.isEquityOriented;
-  });
-  const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
-  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
-  const adjusted = filtered.map((r) => {
-    const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const adjGain = adjustGainForGrandfathering(
-      r.buyDate,
-      r.quantity,
-      r.buyAmount,
-      r.sellAmount,
-      r.gainLoss,
-      fmv,
-    );
-    return { ...r, gainLoss: adjGain };
-  });
-  const totalGain = adjusted.reduce((acc, r) => acc.plus(r.gainLoss), new Decimal(0));
-  const exemptionLimit = new Decimal(100000);
-  const taxable = Decimal.max(totalGain.minus(exemptionLimit), new Decimal(0));
-  return {
-    rows: adjusted,
-    totalGain: totalGain.toString(),
-    exemptionLimit: exemptionLimit.toString(),
-    taxable: taxable.toString(),
-    count: adjusted.length,
-  };
+  return schedule112AFromRows(rows, fy);
 }
 
 // ─── Income report (dividends + interest) ───────────────────────────
 
-const INCOME_TYPES = new Set<TransactionType>([
-  'DIVIDEND_PAYOUT',
-  'INTEREST_RECEIVED',
-  'MATURITY',
-]);
-
 export async function incomeReport(portfolioId: string, fy?: string) {
-  const txs = await prisma.transaction.findMany({
-    where: { portfolioId, transactionType: { in: Array.from(INCOME_TYPES) } },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const filtered = fy ? txs.filter((t) => financialYearOf(t.tradeDate) === fy) : txs;
-  let dividend = new Decimal(0);
-  let interest = new Decimal(0);
-  let maturity = new Decimal(0);
-  for (const t of filtered) {
-    const amt = new Decimal(t.netAmount.toString());
-    if (t.transactionType === 'DIVIDEND_PAYOUT') dividend = dividend.plus(amt);
-    else if (t.transactionType === 'INTEREST_RECEIVED') interest = interest.plus(amt);
-    else if (t.transactionType === 'MATURITY') maturity = maturity.plus(amt);
-  }
-  return {
-    rows: filtered.map((t) => ({
-      id: t.id,
-      date: t.tradeDate,
-      type: t.transactionType,
-      assetName: t.assetName ?? '',
-      amount: t.netAmount.toString(),
-      narration: t.narration ?? null,
-    })),
-    dividend: dividend.toString(),
-    interest: interest.toString(),
-    maturity: maturity.toString(),
-    total: dividend.plus(interest).plus(maturity).toString(),
-    count: filtered.length,
-  };
+  return investmentIncome({ id: portfolioId }, fy);
 }
 
 // ─── Unrealised P&L (current holdings snapshot) ─────────────────────
@@ -163,7 +128,8 @@ export async function unrealisedReport(portfolioId: string) {
   let totalValue = new Decimal(0);
   const rows = holdings.map((h) => {
     const cost = new Decimal(h.totalCost.toString());
-    const value = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+    // Unpriced holdings are carried at cost (as on the dashboard), not at 0.
+    const value = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
     totalCost = totalCost.plus(cost);
     totalValue = totalValue.plus(value);
     const pnl = value.minus(cost);
@@ -226,81 +192,44 @@ export async function historicalValuation(
     cursor.setUTCMonth(cursor.getUTCMonth() + step);
   }
 
-  // For each snapshot date, compute running quantity + cost per asset key.
-  // Value = qty * price at that date from historical feeds; falls back to cost.
-  const keyMap = new Map<
-    string,
-    { assetClass: AssetClass; stockId: string | null; fundId: string | null; isin: string | null }
-  >();
+  // Each snapshot replays every holding (keyed by its own assetKey) through
+  // the projection's replay, so cost is INR and splits, bonuses and exits match
+  // the live holdings. Value = quantity × stored price on that date, else cost.
+  const byAsset = new Map<string, typeof txs>();
   for (const t of txs) {
-    const k = valuationKeyOf(t);
-    if (!keyMap.has(k)) {
-      keyMap.set(k, {
-        assetClass: t.assetClass,
-        stockId: t.stockId,
-        fundId: t.fundId,
-        isin: t.isin,
-      });
-    }
+    const key = t.assetKey ?? `name:${t.assetName ?? ''}`;
+    const list = byAsset.get(key);
+    if (list) list.push(t);
+    else byAsset.set(key, [t]);
   }
 
   const points: HistoricalValuationPoint[] = [];
-
   for (const snap of snapshotDates) {
-    // Running totals by key
-    const qty = new Map<string, Decimal>();
-    const cost = new Map<string, Decimal>();
-    for (const t of txs) {
-      if (t.tradeDate > snap) break;
-      const k = valuationKeyOf(t);
-      const q = new Decimal(t.quantity.toString());
-      const n = new Decimal(t.netAmount.toString());
-      const curQ = qty.get(k) ?? new Decimal(0);
-      const curC = cost.get(k) ?? new Decimal(0);
-      // Must mirror BUY_TYPES / SELL_TYPES in holdingsProjection.ts. DEPOSIT
-      // covers FDs / EPF / insurance / salary imports — without it those
-      // holdings never enter `qty`/`cost` and the chart flatlines at zero
-      // even when the live projection shows them. BONUS adds qty only.
-      if (['BUY', 'SIP', 'SWITCH_IN', 'BONUS', 'MERGER_IN', 'DEMERGER_IN', 'RIGHTS_ISSUE', 'DIVIDEND_REINVEST', 'OPENING_BALANCE', 'DEPOSIT'].includes(t.transactionType)) {
-        qty.set(k, curQ.plus(q));
-        if (t.transactionType !== 'BONUS') {
-          cost.set(k, curC.plus(n));
-        }
-      } else if (['SELL', 'SWITCH_OUT', 'REDEMPTION', 'MATURITY', 'MERGER_OUT', 'DEMERGER_OUT', 'WITHDRAWAL'].includes(t.transactionType)) {
-        if (curQ.greaterThan(0)) {
-          const sellQ = Decimal.min(q, curQ);
-          const avg = curC.dividedBy(curQ);
-          const newQ = curQ.minus(sellQ);
-          const newC = curC.minus(avg.times(sellQ));
-          qty.set(k, newQ.isNegative() ? new Decimal(0) : newQ);
-          cost.set(k, newC.isNegative() ? new Decimal(0) : newC);
-        }
-      } else if (t.transactionType === 'SPLIT') {
-        qty.set(k, curQ.plus(q));
-      }
-    }
-
+    const endOfSnap = new Date(snap.getTime() + 86_400_000 - 1);
     let totalCost = new Decimal(0);
     let totalValue = new Decimal(0);
     let holdingCount = 0;
-    for (const [k, q] of qty) {
-      const c = cost.get(k) ?? new Decimal(0);
-      // Skip truly closed positions only. Non-tradable holdings (FDs, real
-      // estate, insurance) may have qty equal to principal AND no live price
-      // feed — the cost basis IS the value at any historical snapshot.
-      if (q.lessThanOrEqualTo(0) && c.lessThanOrEqualTo(0)) continue;
+    for (const list of byAsset.values()) {
+      const upTo = list.filter((t) => t.tradeDate.getTime() <= endOfSnap.getTime());
+      if (upTo.length === 0) continue;
+      const agg = replayTransactions(upTo);
+      // Closed positions drop out; cost-only holdings (FDs, property) stay.
+      if (agg.quantity.lessThanOrEqualTo(0) && agg.totalCost.lessThanOrEqualTo(0)) continue;
       holdingCount++;
-      totalCost = totalCost.plus(c);
-
-      const meta = keyMap.get(k)!;
-      const price = q.greaterThan(0) ? await priceAt(meta, snap) : null;
-      if (price) {
-        totalValue = totalValue.plus(q.times(price));
-      } else {
-        totalValue = totalValue.plus(c); // fallback to cost
-      }
+      totalCost = totalCost.plus(agg.totalCost);
+      const foreign = upTo.some((t) => {
+        const c = (t as typeof t & { currency?: string | null }).currency;
+        return !!c && c !== 'INR';
+      });
+      const meta = {
+        assetClass: upTo[0]!.assetClass,
+        stockId: upTo.find((t) => t.stockId)?.stockId ?? null,
+        fundId: upTo.find((t) => t.fundId)?.fundId ?? null,
+        isin: upTo.find((t) => t.isin)?.isin ?? null,
+      };
+      const price = !foreign && agg.quantity.greaterThan(0) ? await priceAt(meta, endOfSnap) : null;
+      totalValue = totalValue.plus(price ? agg.quantity.times(price) : agg.totalCost);
     }
-
     points.push({
       date: snap,
       cost: totalCost.toString(),
@@ -310,45 +239,6 @@ export async function historicalValuation(
   }
 
   return { points };
-}
-
-/**
- * Stable per-holding key for historical valuation. Stocks/funds key on their
- * master id; crypto (which has neither) keys on its CoinGecko slug stored in
- * `isin`, so distinct coins don't collapse into one bucket.
- */
-function valuationKeyOf(t: {
-  assetClass: AssetClass;
-  stockId: string | null;
-  fundId: string | null;
-  isin: string | null;
-}): string {
-  const cryptoSlug = !t.stockId && !t.fundId ? (t.isin ?? '') : '';
-  return `${t.assetClass}|${t.stockId ?? ''}|${t.fundId ?? ''}|${cryptoSlug}`;
-}
-
-async function priceAt(
-  meta: { assetClass: AssetClass; stockId: string | null; fundId: string | null; isin: string | null },
-  date: Date,
-): Promise<Decimal | null> {
-  if (meta.fundId) {
-    const row = await prisma.mFNav.findFirst({
-      where: { fundId: meta.fundId, date: { lte: date } },
-      orderBy: { date: 'desc' },
-    });
-    return row ? new Decimal(row.nav.toString()) : null;
-  }
-  if (meta.stockId) {
-    const row = await prisma.stockPrice.findFirst({
-      where: { stockId: meta.stockId, date: { lte: date } },
-      orderBy: { date: 'desc' },
-    });
-    return row ? new Decimal(row.close.toString()) : null;
-  }
-  if (meta.assetClass === 'CRYPTOCURRENCY' && meta.isin) {
-    return getCryptoPriceAt(meta.isin, date);
-  }
-  return null;
 }
 
 // ─── Portfolio summary ─────────────────────────────────────────────
@@ -393,10 +283,10 @@ export async function portfolioSummary(portfolioId: string) {
       ]),
     ),
     xirr: {
-      overall: xirrOverall.xirr,
-      oneYear: xirr1y.xirr,
-      threeYear: xirr3y.xirr,
-      fiveYear: xirr5y.xirr,
+      overall: xirrOverall.reliable ? xirrOverall.xirr : null,
+      oneYear: xirr1y.reliable ? xirr1y.xirr : null,
+      threeYear: xirr3y.reliable ? xirr3y.xirr : null,
+      fiveYear: xirr5y.reliable ? xirr5y.xirr : null,
     },
   };
 }
@@ -443,70 +333,11 @@ export async function userLtcgReport(userId: string, fy?: string) {
 
 export async function userSchedule112AReport(userId: string, fy?: string) {
   const { rows } = await computeUserCapitalGains(userId);
-  const filtered = rows.filter((r) => {
-    if (fy && r.financialYear !== fy) return false;
-    if (r.capitalGainType !== 'LONG_TERM') return false;
-    return r.isEquityOriented;
-  });
-  const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
-  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
-  const adjusted = filtered.map((r) => {
-    const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const adjGain = adjustGainForGrandfathering(
-      r.buyDate,
-      r.quantity,
-      r.buyAmount,
-      r.sellAmount,
-      r.gainLoss,
-      fmv,
-    );
-    return { ...r, gainLoss: adjGain };
-  });
-  const totalGain = adjusted.reduce((s, r) => s.plus(r.gainLoss), new Decimal(0));
-  const exemptionLimit = new Decimal(100000);
-  const taxable = Decimal.max(totalGain.minus(exemptionLimit), new Decimal(0));
-  return {
-    rows: adjusted,
-    totalGain: totalGain.toString(),
-    exemptionLimit: exemptionLimit.toString(),
-    taxable: taxable.toString(),
-    count: adjusted.length,
-  };
+  return schedule112AFromRows(rows, fy);
 }
 
 export async function userIncomeReport(userId: string, fy?: string) {
-  const txs = await prisma.transaction.findMany({
-    where: {
-      portfolio: { userId },
-      transactionType: { in: Array.from(INCOME_TYPES) },
-    },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const filtered = fy ? txs.filter((t) => financialYearOf(t.tradeDate) === fy) : txs;
-  let dividend = new Decimal(0);
-  let interest = new Decimal(0);
-  let maturity = new Decimal(0);
-  for (const t of filtered) {
-    const amt = new Decimal(t.netAmount.toString());
-    if (t.transactionType === 'DIVIDEND_PAYOUT') dividend = dividend.plus(amt);
-    else if (t.transactionType === 'INTEREST_RECEIVED') interest = interest.plus(amt);
-    else if (t.transactionType === 'MATURITY') maturity = maturity.plus(amt);
-  }
-  return {
-    rows: filtered.map((t) => ({
-      id: t.id,
-      date: t.tradeDate,
-      type: t.transactionType,
-      assetName: t.assetName ?? '',
-      amount: t.netAmount.toString(),
-      narration: t.narration ?? null,
-    })),
-    dividend: dividend.toString(),
-    interest: interest.toString(),
-    maturity: maturity.toString(),
-    total: dividend.plus(interest).plus(maturity).toString(),
-    count: filtered.length,
-  };
+  return investmentIncome({ userId }, fy);
 }
 
 export async function userUnrealisedReport(userId: string) {
@@ -518,7 +349,8 @@ export async function userUnrealisedReport(userId: string) {
   let totalValue = new Decimal(0);
   const rows = holdings.map((h) => {
     const cost = new Decimal(h.totalCost.toString());
-    const value = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+    // Unpriced holdings are carried at cost (as on the dashboard), not at 0.
+    const value = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
     totalCost = totalCost.plus(cost);
     totalValue = totalValue.plus(value);
     const pnl = value.minus(cost);
@@ -621,40 +453,17 @@ export async function userSummary(userId: string) {
       ]),
     ),
     xirr: {
-      overall: xirrOverall.xirr,
-      oneYear: xirr1y.xirr,
-      threeYear: xirr3y.xirr,
-      fiveYear: xirr5y.xirr,
+      overall: xirrOverall.reliable ? xirrOverall.xirr : null,
+      oneYear: xirr1y.reliable ? xirr1y.xirr : null,
+      threeYear: xirr3y.reliable ? xirr3y.xirr : null,
+      fiveYear: xirr5y.reliable ? xirr5y.xirr : null,
     },
   };
 }
 
-// Rolling user-XIRR — mirrors computeRollingXirr() but at user scope.
+// Rolling user-XIRR solved on all portfolios' pooled cash flows (with the
+// holdings' value at the window start), the same figure /xirr shows.
 async function userRollingXirr(userId: string, years: 1 | 3 | 5) {
-  const to = new Date();
-  const from = new Date(to);
-  from.setUTCFullYear(from.getUTCFullYear() - years);
-  const ids = await listUserPortfolioIds(userId);
-  if (ids.length === 0) {
-    return { xirr: null as number | null };
-  }
-  const each = await Promise.all(ids.map((id) => computeRollingXirr(id, years)));
-  // Re-merge cashflows: each per-portfolio result already has summed terminal
-  // value within its window. We use a value-weighted average of the XIRRs by
-  // invested capital so a tiny side-portfolio doesn't skew the headline.
-  let weightedSum = 0;
-  let totalWeight = 0;
-  for (const e of each) {
-    if (e.xirr == null) continue;
-    const w = parseFloat(e.totalInvested);
-    if (!isFinite(w) || w <= 0) continue;
-    weightedSum += e.xirr * w;
-    totalWeight += w;
-  }
-  const blended = totalWeight > 0 ? weightedSum / totalWeight : null;
-  return {
-    xirr: blended,
-    from,
-    to,
-  };
+  const r = await computeUserRollingXirr(userId, years);
+  return { xirr: r.xirr, reliable: r.reliable };
 }

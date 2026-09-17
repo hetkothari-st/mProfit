@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { BadRequestError } from '../lib/errors.js';
 import { recomputeDerivativePosition } from './derivativePosition.service.js';
 import { getLatestFoContractPrice } from '../priceFeeds/nseFoMaster.service.js';
 import { findDuplicateTransaction } from './duplicateMatch.js';
@@ -74,7 +75,8 @@ export async function scanExpiringPositions(): Promise<{
       jobsCreated += 1;
 
       const autoApprove = p.portfolio?.portfolioSetting?.autoApproveExpiryClose ?? false;
-      if (autoApprove) {
+      // Without a settlement price the close would be booked at 0 — leave it for review.
+      if (autoApprove && settlementPrice) {
         await approveExpiryClose(job.id);
         autoClosed += 1;
       }
@@ -94,9 +96,12 @@ export async function approveExpiryClose(jobId: string): Promise<void> {
   const position = await prisma.derivativePosition.findUnique({ where: { id: job.positionId } });
   if (!position) throw new Error('Position not found');
 
-  const settlement = job.settlementPrice
-    ? new Decimal(job.settlementPrice.toString())
-    : new Decimal(0);
+  if (!job.settlementPrice) {
+    throw new BadRequestError(
+      'No settlement price for this contract yet — add it before closing the position at expiry.',
+    );
+  }
+  const settlement = new Decimal(job.settlementPrice.toString());
   const netQty = new Decimal(position.netQuantity.toString());
   if (netQty.isZero()) {
     await prisma.expiryCloseJob.update({
@@ -106,7 +111,8 @@ export async function approveExpiryClose(jobId: string): Promise<void> {
     return;
   }
 
-  const totalUnits = netQty.times(position.lotSize).abs();
+  // netQuantity is already in units (lots × lot size at import).
+  const totalUnits = netQty.abs();
   const grossAmount = totalUnits.times(settlement);
   // Long position settles via SELL at settlement; short via BUY at settlement.
   const closingType = netQty.isPositive() ? 'SELL' : 'BUY';

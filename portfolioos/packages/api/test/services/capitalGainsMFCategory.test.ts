@@ -91,7 +91,7 @@ describe('capitalGains.service — MF debt/equity category classification', () =
     expect(row.taxableGain.toFixed(2)).toBe('3629.92'); // 5000 - 1370.08
   });
 
-  it('DEBT-category MF bought after the indexation cutoff, held >36 months, gets long-term slab treatment with no indexation', () => {
+  it('DEBT-category MF bought on/after 1-Apr-2023 is a specified mutual fund: short-term however long it is held (sec 50AA)', () => {
     const txs = [
       tx({ id: 'b1', fundId: DEBT_FUND, transactionType: 'BUY', tradeDate: '2023-05-01', quantity: '100', netAmount: '1000' }),
       tx({ id: 's1', fundId: DEBT_FUND, transactionType: 'SELL', tradeDate: '2027-01-01', quantity: '100', netAmount: '1500' }),
@@ -101,7 +101,7 @@ describe('capitalGains.service — MF debt/equity category classification', () =
 
     expect(rows).toHaveLength(1);
     const row = rows[0]!;
-    expect(row.capitalGainType).toBe('LONG_TERM');
+    expect(row.capitalGainType).toBe('SHORT_TERM');
     expect(row.isEquityOriented).toBe(false);
     expect(row.indexedCostOfAcquisition).toBeNull(); // no indexation post-cutoff
     expect(row.taxableGain.toString()).toBe(row.gainLoss.toString()); // taxed at slab on raw gain

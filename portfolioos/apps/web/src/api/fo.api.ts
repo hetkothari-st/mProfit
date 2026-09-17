@@ -43,7 +43,8 @@ export interface FoSummary {
   closedCount: number;
   totalRealizedPnl: string;
   totalUnrealizedPnl: string;
-  exposureByUnderlying: Record<string, number>;
+  /** Notional exposure (units × mark) per underlying, as a money string. */
+  exposureByUnderlying: Record<string, string>;
   expiringSoon: Array<{ assetKey: string; underlying: string; expiryDate: string }>;
 }
 

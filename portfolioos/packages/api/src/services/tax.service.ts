@@ -1,15 +1,26 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { investmentIncome } from './investmentIncome.service.js';
 import { logger } from '../lib/logger.js';
 import {
+  computeOpenLots,
   computeUserCapitalGains,
+  isCapitalAssetClass,
   financialYearOf,
+  loadFundCategoryMap,
+  lotTaxStatus,
   type CapitalGainRow,
 } from './capitalGains.service.js';
 import { buildSchedule43Report } from './reports/schedule43.report.js';
 import { computeHarvestSavings } from './taxHarvestMath.js';
 import { getFmvForUser } from './fmvOverride.service.js';
+import {
+  SLAB_RATE_ESTIMATE_PCT,
+  capitalGainsRulesFor,
+  listedEquityLtcgExemptionFor,
+} from '@everypaisa/shared';
+import { computeCapitalGainsTax, slabRateForUser } from './taxComputation.js';
 
 /**
  * Tax module — user-level (cross-portfolio) tax reporting.
@@ -25,9 +36,13 @@ import { getFmvForUser } from './fmvOverride.service.js';
  *   - Tax-loss harvesting view (unrealised losses available to offset)
  */
 
-// ─── Tax rates (FY 2024-25+, post-Finance Act 2024) ─────────────────
-
-const RATE_CHANGE_DATE = new Date('2024-07-23T00:00:00Z');
+// ─── Tax rates ──────────────────────────────────────────────────────
+//
+// Rates, the 112A exemption and the dates they change on come from the shared
+// rules table (`@everypaisa/shared` capitalGainsTaxRules); the slab rate is the
+// user's own when on file. Totals are computed row by row by transfer date in
+// taxComputation.ts — the helpers below only describe the rates in force at a
+// point in time, for display and forward-looking estimates.
 
 interface TaxRates {
   // §111A: STCG on listed equity / equity MF / ETF (STT paid)
@@ -35,31 +50,31 @@ interface TaxRates {
   // §112A: LTCG on listed equity / equity MF / ETF over exemption
   ltcgEquityPct: number;
   ltcgEquityExemption: Decimal;
-  // §112: LTCG on other assets — indexed (pre-23-Jul-2024) or non-indexed (post)
+  // §112: LTCG on other assets — with and without indexation
   ltcgOtherIndexedPct: number;
   ltcgOtherNonIndexedPct: number;
-  // Slab (used as estimate for STCG non-equity, intraday speculation, F&O)
-  // Defaults to top slab; user-configurable in future.
+  // Slab (non-equity STCG, intraday speculation, F&O)
   slabPct: number;
 }
 
-export function ratesForDate(d: Date): TaxRates {
-  const isPost = d >= RATE_CHANGE_DATE;
+export function ratesForDate(d: Date, slabPct: number = SLAB_RATE_ESTIMATE_PCT): TaxRates {
+  const rates = capitalGainsRulesFor(d).ratesPct;
   return {
-    stcgEquityPct: isPost ? 20 : 15,
-    ltcgEquityPct: isPost ? 12.5 : 10,
-    ltcgEquityExemption: new Decimal(isPost ? 125000 : 100000),
-    ltcgOtherIndexedPct: 20,
-    ltcgOtherNonIndexedPct: 12.5,
-    slabPct: 30,
+    stcgEquityPct: rates.stcgListedEquity,
+    ltcgEquityPct: rates.ltcgListedEquity,
+    ltcgEquityExemption: new Decimal(listedEquityLtcgExemptionFor(financialYearOf(d))),
+    ltcgOtherIndexedPct: rates.ltcgIndexed,
+    ltcgOtherNonIndexedPct: rates.ltcgWithoutIndexation,
+    slabPct,
   };
 }
 
-// Returns the predominant rate set for an FY (taken from the FY-end date).
-function ratesForFy(fy: string): TaxRates {
-  const startYear = parseInt(fy.split('-')[0]!, 10);
-  // Use 31-Mar of the closing year as a reference point
-  return ratesForDate(new Date(`${startYear + 1}-03-31T00:00:00Z`));
+/** Rates in force for an FY as of today, or at its last day once it has ended. */
+function ratesForFy(fy: string, slabPct?: number): TaxRates {
+  const startYear = Number.parseInt(fy.slice(0, 4), 10);
+  const fyEnd = new Date(Date.UTC(startYear + 1, 2, 31));
+  const today = new Date();
+  return ratesForDate(today < fyEnd ? today : fyEnd, slabPct);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -129,24 +144,37 @@ export async function userIntradayReport(userId: string, fy?: string) {
 }
 
 /**
- * Schedule 112A — LTCG on listed equity / equity MF / ETF.
- * Applies the post-Jul-2024 ₹1.25L exemption if FY ≥ 2024-25, else ₹1L.
+ * Per-FY tax on a subset of rows (one schedule), summed across the FYs the rows
+ * fall in — each FY gets its own exemption and its rows' transfer-date rates.
+ */
+function scheduleTotals(rows: CapitalGainRow[]) {
+  const fys = [...new Set(rows.map((r) => r.financialYear))];
+  return fys.map((fy) => computeCapitalGainsTax(rows, fy));
+}
+
+/**
+ * Schedule 112A — LTCG on listed equity / equity MF / ETF. Gains are the
+ * grandfathered taxable gains; the exemption is the one for each FY.
  */
 export async function userSchedule112AReport(userId: string, fy?: string) {
   const all = await userCgRows(userId, fy);
   const rows = all.filter(
     (r) => r.capitalGainType === 'LONG_TERM' && r.isEquityOriented,
   );
-  const totalGain = rows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
-  const rates = fy ? ratesForFy(fy) : ratesForDate(new Date());
-  const taxable = Decimal.max(totalGain.minus(rates.ltcgEquityExemption), new Decimal(0));
-  const estimatedTax = pct(taxable, rates.ltcgEquityPct);
+  const perFy = scheduleTotals(rows);
+  const sum = (pick: (t: (typeof perFy)[number]) => Decimal) =>
+    perFy.reduce((s, t) => s.plus(pick(t)), new Decimal(0));
+  const totalGain = sum((t) => t.s112A.gain);
+  const taxable = sum((t) => t.s112A.taxable);
+  const estimatedTax = sum((t) => t.s112A.tax);
+  const exemption = sum((t) => new Decimal(listedEquityLtcgExemptionFor(t.financialYear)));
   return {
     rows: rows.map(rowToJson),
     totalGain: totalGain.toString(),
-    exemptionLimit: rates.ltcgEquityExemption.toString(),
+    exemptionLimit: exemption.toString(),
     taxable: taxable.toString(),
-    ratePct: rates.ltcgEquityPct,
+    // Effective rate: FYs that straddle a rate change mix two rates.
+    ratePct: taxable.isZero() ? ratesForFy(fy ?? financialYearOf(new Date())).ltcgEquityPct : estimatedTax.dividedBy(taxable).times(100).toDecimalPlaces(2).toNumber(),
     estimatedTax: estimatedTax.toString(),
     count: rows.length,
     rowsNeedingReview: rows.filter((r) => r.needsReview).length,
@@ -164,12 +192,8 @@ export async function userSchedule112Report(userId: string, fy?: string) {
   );
   const totalGain = rows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
   const totalTaxable = rows.reduce((a, r) => a.plus(r.taxableGain), new Decimal(0));
-  // Per-row estimated tax: indexed → 20%, non-indexed → 12.5%
-  let estimatedTax = new Decimal(0);
-  for (const r of rows) {
-    const ratePct = r.indexedCostOfAcquisition ? 20 : 12.5;
-    estimatedTax = estimatedTax.plus(pct(r.taxableGain, ratePct));
-  }
+  // Rates by each row's transfer date, losses netted within the FY.
+  const estimatedTax = scheduleTotals(rows).reduce((s, t) => s.plus(t.s112.tax), new Decimal(0));
   return {
     rows: rows.map(rowToJson),
     totalGain: totalGain.toString(),
@@ -182,43 +206,8 @@ export async function userSchedule112Report(userId: string, fy?: string) {
 
 // ─── Income (dividends + interest) consolidated across portfolios ───
 
-const INCOME_TYPES: TransactionType[] = ['DIVIDEND_PAYOUT', 'INTEREST_RECEIVED', 'MATURITY'];
-
-export async function userIncomeReport(userId: string, fy?: string) {
-  const txs = await prisma.transaction.findMany({
-    where: {
-      portfolio: { userId },
-      transactionType: { in: INCOME_TYPES },
-    },
-    include: { portfolio: { select: { name: true } } },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const filtered = fy ? txs.filter((t) => financialYearOf(t.tradeDate) === fy) : txs;
-  let dividend = new Decimal(0);
-  let interest = new Decimal(0);
-  let maturity = new Decimal(0);
-  for (const t of filtered) {
-    const amt = new Decimal(t.netAmount.toString());
-    if (t.transactionType === 'DIVIDEND_PAYOUT') dividend = dividend.plus(amt);
-    else if (t.transactionType === 'INTEREST_RECEIVED') interest = interest.plus(amt);
-    else if (t.transactionType === 'MATURITY') maturity = maturity.plus(amt);
-  }
-  return {
-    rows: filtered.map((t) => ({
-      id: t.id,
-      date: t.tradeDate,
-      type: t.transactionType,
-      assetName: t.assetName ?? '',
-      portfolioName: t.portfolio?.name ?? '',
-      amount: t.netAmount.toString(),
-      narration: t.narration ?? null,
-    })),
-    dividend: dividend.toString(),
-    interest: interest.toString(),
-    maturity: maturity.toString(),
-    total: dividend.plus(interest).plus(maturity).toString(),
-    count: filtered.length,
-  };
+export async function userIncomeReport(userId: string, fy?: string, portfolioIds?: string[]) {
+  return investmentIncome({ userId, ...(portfolioIds?.length ? { id: { in: portfolioIds } } : {}) }, fy);
 }
 
 // ─── Tax summary — consolidated FY view with estimated tax ──────────
@@ -234,12 +223,17 @@ export interface TaxSummary {
     slabPct: number;
   };
   capitalGains: {
-    section111A_stcgEquity: { gain: string; tax: string };
+    section111A_stcgEquity: { gain: string; taxable: string; tax: string };
     section112A_ltcgEquity: { gain: string; exemption: string; taxable: string; tax: string };
     section112_ltcgOther: { gain: string; taxable: string; tax: string };
-    stcgOther: { gain: string; tax: string };
-    intradaySpeculative: { gain: string; tax: string };
+    stcgOther: { gain: string; taxable: string; tax: string };
+    intradaySpeculative: { gain: string; taxable: string; tax: string };
+    virtualDigitalAssets: { gain: string; taxable: string; tax: string };
   };
+  /** Losses left after this FY's set-off, available to carry forward. */
+  carryForward: { shortTermLoss: string; longTermLoss: string; speculativeLoss: string };
+  /** True when slab-rate figures use the stand-in rate because the user's slab isn't on file. */
+  slabIsEstimate: boolean;
   fnoBusinessIncome: { netPnl: string; turnover: string; tax: string; auditApplicable: boolean };
   otherIncome: { dividend: string; interest: string; maturity: string };
   totalRealisedGain: string;
@@ -247,96 +241,77 @@ export interface TaxSummary {
   availableFys: string[];
 }
 
-export async function buildTaxSummary(userId: string, fy: string): Promise<TaxSummary> {
-  const { rows } = await computeUserCapitalGains(userId);
-  const inFy = rows.filter((r) => r.financialYear === fy);
-  const rates = ratesForFy(fy);
+export async function buildTaxSummary(
+  userId: string,
+  fy: string,
+  portfolioIds?: string[],
+): Promise<TaxSummary> {
+  const [{ rows: allRows }, slab] = await Promise.all([computeUserCapitalGains(userId), slabRateForUser(userId)]);
+  // Optional portfolio scope (empty = every portfolio).
+  const rows = portfolioIds?.length ? allRows.filter((r) => portfolioIds.includes(r.portfolioId)) : allRows;
+  const rates = ratesForFy(fy, slab.slabPct);
+  // Section totals, set-off, the FY's 112A exemption and transfer-date rates.
+  const cg = computeCapitalGainsTax(rows, fy, slab);
 
-  // §111A — STCG on listed equity (STT paid)
-  const s111ARows = inFy.filter(
-    (r) => r.capitalGainType === 'SHORT_TERM' && r.isEquityOriented,
-  );
-  const s111AGain = s111ARows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
-  const s111ATax = pct(Decimal.max(s111AGain, new Decimal(0)), rates.stcgEquityPct);
-
-  // §112A — LTCG on listed equity
-  const s112ARows = inFy.filter(
-    (r) => r.capitalGainType === 'LONG_TERM' && r.isEquityOriented,
-  );
-  const s112AGain = s112ARows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
-  const s112ATaxable = Decimal.max(s112AGain.minus(rates.ltcgEquityExemption), new Decimal(0));
-  const s112ATax = pct(s112ATaxable, rates.ltcgEquityPct);
-
-  // §112 — LTCG on other assets (indexed vs non-indexed mix)
-  const s112Rows = inFy.filter(
-    (r) => r.capitalGainType === 'LONG_TERM' && !r.isEquityOriented,
-  );
-  const s112Gain = s112Rows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
-  const s112Taxable = s112Rows.reduce((a, r) => a.plus(r.taxableGain), new Decimal(0));
-  let s112Tax = new Decimal(0);
-  for (const r of s112Rows) {
-    const pctRate = r.indexedCostOfAcquisition ? rates.ltcgOtherIndexedPct : rates.ltcgOtherNonIndexedPct;
-    s112Tax = s112Tax.plus(pct(Decimal.max(r.taxableGain, new Decimal(0)), pctRate));
-  }
-
-  // STCG on non-equity (slab rate)
-  const stcgOtherRows = inFy.filter(
-    (r) => r.capitalGainType === 'SHORT_TERM' && !r.isEquityOriented,
-  );
-  const stcgOtherGain = stcgOtherRows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
-  const stcgOtherTax = pct(Decimal.max(stcgOtherGain, new Decimal(0)), rates.slabPct);
-
-  // Intraday speculative business income (slab rate)
-  const intradayRows = inFy.filter((r) => r.capitalGainType === 'INTRADAY');
-  const intradayGain = intradayRows.reduce((a, r) => a.plus(r.gainLoss), new Decimal(0));
-  const intradayTax = pct(Decimal.max(intradayGain, new Decimal(0)), rates.slabPct);
+  const s111AGain = cg.s111A.gain;
+  const s111ATax = cg.s111A.tax;
+  const s112AGain = cg.s112A.gain;
+  const s112ATaxable = cg.s112A.taxable;
+  const s112ATax = cg.s112A.tax;
+  const s112Gain = cg.s112.rawGain;
+  const s112Taxable = cg.s112.taxable;
+  const s112Tax = cg.s112.tax;
+  const stcgOtherGain = cg.stcgOther.gain;
+  const stcgOtherTax = cg.stcgOther.tax;
+  const intradayGain = cg.intraday.gain;
+  const intradayTax = cg.intraday.tax;
 
   // F&O — non-speculative business income (slab rate)
   let fnoNet = new Decimal(0);
   let fnoTurnover = new Decimal(0);
   let fnoAudit = false;
   try {
-    const s43 = await buildSchedule43Report(userId, fy);
-    fnoNet = new Decimal(s43.nonSpeculative.netPnl);
-    fnoTurnover = new Decimal(s43.nonSpeculative.turnover);
-    fnoAudit = s43.taxAuditApplicable;
+    const reports = portfolioIds?.length
+      ? await Promise.all(portfolioIds.map((pid) => buildSchedule43Report(userId, fy, pid)))
+      : [await buildSchedule43Report(userId, fy)];
+    for (const s43 of reports) {
+      fnoNet = fnoNet.plus(s43.nonSpeculative.netPnl);
+      fnoTurnover = fnoTurnover.plus(s43.nonSpeculative.turnover);
+      fnoAudit = fnoAudit || s43.taxAuditApplicable;
+    }
   } catch (err) {
     logger.warn({ userId, fy, err }, 'tax.summary: F&O schedule-43 failed; treating as zero');
   }
   const fnoTax = pct(Decimal.max(fnoNet, new Decimal(0)), rates.slabPct);
 
   // Other income (informational; taxed at slab outside this estimate)
-  const income = await userIncomeReport(userId, fy);
+  const income = await userIncomeReport(userId, fy, portfolioIds);
 
   const totalRealisedGain = s111AGain
     .plus(s112AGain)
     .plus(s112Gain)
     .plus(stcgOtherGain)
     .plus(intradayGain)
+    .plus(cg.vda.gain)
     .plus(fnoNet);
 
-  const totalEstimatedTax = s111ATax
-    .plus(s112ATax)
-    .plus(s112Tax)
-    .plus(stcgOtherTax)
-    .plus(intradayTax)
-    .plus(fnoTax);
+  const totalEstimatedTax = cg.totalTax.plus(fnoTax);
 
   return {
     financialYear: fy,
     rates: {
       stcgEquityPct: rates.stcgEquityPct,
       ltcgEquityPct: rates.ltcgEquityPct,
-      ltcgEquityExemption: rates.ltcgEquityExemption.toString(),
+      ltcgEquityExemption: String(listedEquityLtcgExemptionFor(fy)),
       ltcgOtherIndexedPct: rates.ltcgOtherIndexedPct,
       ltcgOtherNonIndexedPct: rates.ltcgOtherNonIndexedPct,
       slabPct: rates.slabPct,
     },
     capitalGains: {
-      section111A_stcgEquity: { gain: s111AGain.toString(), tax: s111ATax.toString() },
+      section111A_stcgEquity: { gain: s111AGain.toString(), taxable: cg.s111A.taxable.toString(), tax: s111ATax.toString() },
       section112A_ltcgEquity: {
         gain: s112AGain.toString(),
-        exemption: rates.ltcgEquityExemption.toString(),
+        exemption: cg.s112A.exemption.toString(),
         taxable: s112ATaxable.toString(),
         tax: s112ATax.toString(),
       },
@@ -345,9 +320,16 @@ export async function buildTaxSummary(userId: string, fy: string): Promise<TaxSu
         taxable: s112Taxable.toString(),
         tax: s112Tax.toString(),
       },
-      stcgOther: { gain: stcgOtherGain.toString(), tax: stcgOtherTax.toString() },
-      intradaySpeculative: { gain: intradayGain.toString(), tax: intradayTax.toString() },
+      stcgOther: { gain: stcgOtherGain.toString(), taxable: cg.stcgOther.taxable.toString(), tax: stcgOtherTax.toString() },
+      intradaySpeculative: { gain: intradayGain.toString(), taxable: cg.intraday.taxable.toString(), tax: intradayTax.toString() },
+      virtualDigitalAssets: { gain: cg.vda.gain.toString(), taxable: cg.vda.taxable.toString(), tax: cg.vda.tax.toString() },
     },
+    carryForward: {
+      shortTermLoss: cg.carryForward.shortTermLoss.toString(),
+      longTermLoss: cg.carryForward.longTermLoss.toString(),
+      speculativeLoss: cg.carryForward.speculativeLoss.toString(),
+    },
+    slabIsEstimate: slab.isEstimate,
     fnoBusinessIncome: {
       netPnl: fnoNet.toString(),
       turnover: fnoTurnover.toString(),
@@ -530,7 +512,8 @@ export interface TaxHarvestRow {
   currentValue: string;
   unrealisedPnL: string;
   pctReturn: string;
-  longTermEligible: boolean; // current holding period ≥ LTCG threshold
+  longTermEligible: boolean; // every lot still held would be long-term if sold today
+  equityOriented: boolean; // sec 111A/112A asset
   oldestBuyDate: string;     // ISO date string of the oldest BUY for this holding
   classification: 'STCG_LOSS' | 'LTCG_LOSS' | 'STCG_GAIN' | 'LTCG_GAIN';
 }
@@ -540,57 +523,72 @@ export interface TaxHarvestRow {
  * realised gains in the current FY. Includes all holdings (not just losses)
  * so the user can also see unrealised gains close to LTCG threshold.
  */
-export async function taxHarvestReport(userId: string, fy?: string) {
+export async function taxHarvestReport(userId: string, fy?: string, portfolioIds?: string[]) {
+  const portfolioScope = portfolioIds?.length ? { id: { in: portfolioIds } } : {};
   const holdings = await prisma.holdingProjection.findMany({
-    where: { portfolio: { userId } },
+    where: { portfolio: { userId, ...portfolioScope } },
     include: { portfolio: { select: { name: true } } },
   });
 
-  // Use oldest BUY tradeDate per (portfolioId, assetKey) as the holding-period
-  // anchor for "long-term eligible" classification.
-  const oldestByAsset = new Map<string, Date>();
+  // Remaining FIFO lots per holding — a holding can mix long- and short-term
+  // lots, and a fully sold-then-rebought position starts a new holding period.
   const txs = await prisma.transaction.findMany({
-    where: {
-      portfolio: { userId },
-      transactionType: { in: ['BUY', 'SIP', 'OPENING_BALANCE', 'BONUS', 'MERGER_IN', 'DEMERGER_IN', 'RIGHTS_ISSUE', 'DIVIDEND_REINVEST', 'SWITCH_IN'] },
-    },
-    select: { portfolioId: true, assetKey: true, tradeDate: true },
+    where: { portfolio: { userId, ...portfolioScope } },
     orderBy: { tradeDate: 'asc' },
   });
-  for (const t of txs) {
-    const k = `${t.portfolioId}|${t.assetKey}`;
-    if (!oldestByAsset.has(k)) oldestByAsset.set(k, t.tradeDate);
-  }
+  const fundCategoryMap = await loadFundCategoryMap(txs);
+  const openByAsset = new Map(
+    computeOpenLots(txs, fundCategoryMap).map((p) => [`${p.portfolioId}|${p.assetKey}`, p]),
+  );
 
   const now = new Date();
-  function isLongTermEligible(ac: AssetClass, oldestBuy: Date): boolean {
-    const months = (ac === 'EQUITY' || ac === 'ETF' || ac === 'MUTUAL_FUND') ? 12
-      : (ac === 'FOREIGN_EQUITY') ? 24 : 36;
-    const days = (now.getTime() - oldestBuy.getTime()) / (24 * 60 * 60 * 1000);
-    return days >= months * 30;
-  }
-
   const out: Array<TaxHarvestRow & { portfolioName: string }> = [];
   let totalUnrealisedLoss = new Decimal(0);
   let stcgLossAvailable = new Decimal(0);
   let ltcgLossAvailable = new Decimal(0);
 
   for (const h of holdings) {
+    // Deposits, PF, insurance etc. produce no capital loss to harvest.
+    if (!isCapitalAssetClass(h.assetClass)) continue;
+    // A holding with no transaction history (e.g. a holdings-only import) is
+    // one lot of unknown date: shown, and counted as short-term.
+    const position = openByAsset.get(`${h.portfolioId}|${h.assetKey}`) ?? {
+      portfolioId: h.portfolioId,
+      assetKey: h.assetKey,
+      assetClass: h.assetClass,
+      fundId: h.fundId,
+      lots: [{ buyDate: now, quantity: new Decimal(h.quantity.toString()), costPerUnit: new Decimal(h.avgCostPrice.toString()) }],
+    };
     const cost = new Decimal(h.totalCost.toString());
     const value = h.currentValue ? new Decimal(h.currentValue.toString()) : cost;
     const pnl = value.minus(cost);
     const pctReturn = cost.isZero() ? '0' : pnl.dividedBy(cost).times(100).toFixed(2);
-    const oldest = oldestByAsset.get(`${h.portfolioId}|${h.assetKey}`) ?? now;
-    const ltEligible = isLongTermEligible(h.assetClass, oldest);
-    let classification: TaxHarvestRow['classification'];
-    if (pnl.isNegative()) classification = ltEligible ? 'LTCG_LOSS' : 'STCG_LOSS';
-    else classification = ltEligible ? 'LTCG_GAIN' : 'STCG_GAIN';
 
-    if (pnl.isNegative()) {
-      totalUnrealisedLoss = totalUnrealisedLoss.plus(pnl.abs());
-      if (ltEligible) ltcgLossAvailable = ltcgLossAvailable.plus(pnl.abs());
-      else stcgLossAvailable = stcgLossAvailable.plus(pnl.abs());
+    // Split the unrealised result by lot term at today's price.
+    const heldQty = position.lots.reduce((s, l) => s.plus(l.quantity), new Decimal(0));
+    const pricePerUnit = heldQty.isZero() ? new Decimal(0) : value.dividedBy(heldQty);
+    let stPnl = new Decimal(0);
+    let ltPnl = new Decimal(0);
+    let allLongTerm = true;
+    for (const lot of position.lots) {
+      const lotPnl = pricePerUnit.minus(lot.costPerUnit).times(lot.quantity);
+      if (lotTaxStatus(position, lot.buyDate, now, fundCategoryMap).longTerm) ltPnl = ltPnl.plus(lotPnl);
+      else {
+        stPnl = stPnl.plus(lotPnl);
+        allLongTerm = false;
+      }
     }
+    const oldest = position.lots.reduce((d, l) => (l.buyDate < d ? l.buyDate : d), position.lots[0]!.buyDate);
+    const dominantLongTerm = ltPnl.abs().greaterThan(stPnl.abs());
+    let classification: TaxHarvestRow['classification'];
+    if (pnl.isNegative()) classification = dominantLongTerm ? 'LTCG_LOSS' : 'STCG_LOSS';
+    else classification = dominantLongTerm ? 'LTCG_GAIN' : 'STCG_GAIN';
+
+    if (stPnl.isNegative()) stcgLossAvailable = stcgLossAvailable.plus(stPnl.abs());
+    if (ltPnl.isNegative()) ltcgLossAvailable = ltcgLossAvailable.plus(ltPnl.abs());
+    if (pnl.isNegative()) totalUnrealisedLoss = totalUnrealisedLoss.plus(pnl.abs());
+    const ltEligible = allLongTerm;
+    const equityOriented = lotTaxStatus(position, now, now, fundCategoryMap).equityOriented;
 
     out.push({
       portfolioId: h.portfolioId,
@@ -606,6 +604,7 @@ export async function taxHarvestReport(userId: string, fy?: string) {
       unrealisedPnL: pnl.toString(),
       pctReturn,
       longTermEligible: ltEligible,
+      equityOriented,
       oldestBuyDate: oldest.toISOString().slice(0, 10),
       classification,
     });
@@ -615,22 +614,21 @@ export async function taxHarvestReport(userId: string, fy?: string) {
   let realisedStcg = new Decimal(0);
   let realisedLtcg = new Decimal(0);
   if (fy) {
-    const cgRows = await userCgRows(userId, fy);
+    const cgRows = (await userCgRows(userId, fy)).filter(
+      (r) => !portfolioIds?.length || portfolioIds.includes(r.portfolioId),
+    );
     for (const r of cgRows) {
-      if (r.capitalGainType === 'SHORT_TERM') realisedStcg = realisedStcg.plus(r.gainLoss);
-      else if (r.capitalGainType === 'LONG_TERM') realisedLtcg = realisedLtcg.plus(r.gainLoss);
+      if (r.capitalGainType === 'SHORT_TERM') realisedStcg = realisedStcg.plus(r.taxableGain);
+      else if (r.capitalGainType === 'LONG_TERM') realisedLtcg = realisedLtcg.plus(r.taxableGain);
     }
   }
 
   // Sort: biggest unrealised losses first
-  out.sort((a, b) => {
-    const ap = new Decimal(a.unrealisedPnL);
-    const bp = new Decimal(b.unrealisedPnL);
-    return ap.minus(bp).toNumber();
-  });
+  out.sort((a, b) => new Decimal(a.unrealisedPnL).comparedTo(b.unrealisedPnL));
 
   // Optimiser: how much tax the harvestable losses could offset against the
-  // gains already realised this FY (informational — see taxHarvestMath).
+  // gains already realised this FY (informational — see taxHarvestMath). A
+  // harvest sale happens now, so today's rates apply; the exemption is the FY's.
   const rates = fy ? ratesForFy(fy) : ratesForDate(now);
   const savings = computeHarvestSavings({
     realisedStcg,

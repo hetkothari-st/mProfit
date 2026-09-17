@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { sumDecimal } from '@everypaisa/shared';
+import { isValidFinancialYear, sumDecimal } from '@everypaisa/shared';
 import { ok, noContent } from '../lib/response.js';
 import { BadRequestError } from '../lib/errors.js';
 import {
@@ -14,6 +14,7 @@ import { schedule112ACsv, ratesForDate } from '../services/tax.service.js';
 
 function getFy(req: Request): string | undefined {
   const fy = (req.query.fy as string | undefined)?.trim();
+  if (fy && !isValidFinancialYear(fy)) throw new BadRequestError(`Invalid financial year "${fy}" — expected consecutive years like 2025-26`);
   return fy || undefined;
 }
 

@@ -1,6 +1,7 @@
 import { Decimal } from '@everypaisa/shared';
 import type { CorporateActionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { quantityHeldBefore } from './holdingsProjection.js';
 
 /**
  * Read model for the Corporate Actions page. Joins stored CorporateAction rows
@@ -114,17 +115,34 @@ export async function getCorporateActionsReport(
       portfolioId: { in: holdings.map((h) => h.portfolioId) },
       sourceAdapter: 'CORPORATE_ACTION',
     },
-    select: { id: true, sourceHash: true, tradeDate: true, netAmount: true, transactionType: true },
+    select: { id: true, sourceHash: true, tradeDate: true, netAmount: true, transactionType: true, quantity: true },
   });
+  // Every transaction per holding, to know how many units were held on each ex-date.
+  const holdingTxs = await prisma.transaction.findMany({
+    where: { portfolioId: { in: holdings.map((h) => h.portfolioId) }, assetKey: { in: holdings.map((h) => h.assetKey) } },
+    orderBy: { tradeDate: 'asc' },
+  });
+  const txsByHolding = new Map<string, typeof holdingTxs>();
+  for (const t of holdingTxs) {
+    const k = `${t.portfolioId}|${t.assetKey}`;
+    txsByHolding.set(k, [...(txsByHolding.get(k) ?? []), t]);
+  }
   const txByHash = new Map(appliedTxs.filter((t) => t.sourceHash).map((t) => [t.sourceHash!, t]));
 
   const rows: CorporateActionReportRow[] = [];
   for (const h of holdings) {
-    const qty = new Decimal(h.quantity.toString());
+    const txsForHolding = txsByHolding.get(`${h.portfolioId}|${h.assetKey}`) ?? [];
     for (const ca of actions) {
       if (ca.stockId !== h.stockId) continue;
       const sourceHash = `ca:${ca.id}:${h.id}`;
       const appliedTx = txByHash.get(sourceHash) ?? null;
+      // Units held going into the ex-date (current units for a future ex-date).
+      const qty =
+        ca.exDate.getTime() > now.getTime()
+          ? new Decimal(h.quantity.toString())
+          : quantityHeldBefore(txsForHolding, ca.exDate);
+      // Nothing was held when the action happened: it doesn't apply to this holding.
+      if (!appliedTx && qty.lessThanOrEqualTo(0)) continue;
       const status = classify(ca.type, ca.exDate, !!appliedTx, now);
       if (filters.status && status !== filters.status) continue;
 
@@ -132,9 +150,13 @@ export async function getCorporateActionsReport(
       const amount = ca.amount ? new Decimal(ca.amount.toString()) : null;
       let qtyDelta: string | null = null;
       let cashImpact: string | null = null;
-      if (ca.type === 'SPLIT' && ratio) qtyDelta = qty.times(ratio.minus(1)).toString();
+      if (appliedTx && appliedTx.transactionType !== 'DIVIDEND_PAYOUT') {
+        qtyDelta = appliedTx.quantity.toString(); // what was actually booked
+      } else if (ca.type === 'SPLIT' && ratio) qtyDelta = qty.times(ratio.minus(1)).toString();
       else if (ca.type === 'BONUS' && ratio) qtyDelta = qty.times(ratio).toString();
-      else if (ca.type === 'DIVIDEND' && amount) cashImpact = amount.times(qty).toString();
+      if (ca.type === 'DIVIDEND') {
+        cashImpact = appliedTx ? appliedTx.netAmount.toString() : amount ? amount.times(qty).toString() : null;
+      }
 
       const stock = stockById.get(h.stockId!);
       rows.push({

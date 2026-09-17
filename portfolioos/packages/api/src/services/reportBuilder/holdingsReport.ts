@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import { derivativePositionValue } from '../derivativePosition.service.js';
 import { logger } from '../../lib/logger.js';
 import { fmtNum, fmtDate, type ExportPayload, type ExportColumn } from '../export.service.js';
 import type { BarDatum } from '../charts/pdfCharts.js';
@@ -110,7 +111,7 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
       const qty   = new Decimal(p.netQuantity.toString());
       const cost  = new Decimal(p.totalCost.toString());
       const price = p.mtmPrice ? new Decimal(p.mtmPrice.toString()) : null;
-      const value = price ? qty.times(price).times(p.lotSize) : null;
+      const value = derivativePositionValue(p);
       const optTag = p.instrumentType === 'FUTURES'
         ? 'FUT'
         : `${p.instrumentType === 'CALL' ? 'CE' : 'PE'} ${p.strikePrice?.toString() ?? ''}`;
@@ -197,8 +198,8 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
       portfolioId: { in: resolvedIds },
       ...(classFilter ? { assetClass: { in: classFilter } } : {}),
     },
+    // Every transaction: income received below is built from this list too.
     orderBy: { tradeDate: 'desc' },
-    take: 2000,
   });
 
   const txnColumns: ExportColumn[] = [

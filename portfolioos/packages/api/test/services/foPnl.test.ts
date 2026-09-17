@@ -105,4 +105,13 @@ describe('foPnl.service — FIFO close events', () => {
     expect(new Decimal(r.summaryByFy['2026-27']!.totalPnl).toString()).toBe('-1000');
     expect(new Decimal(r.summaryByFy['2026-27']!.turnover).toString()).toBe('1000');
   });
+
+  it('keeps each portfolio a separate FIFO book', () => {
+    const r = computeFoPnl([
+      tx({ id: 'a-b', portfolioId: 'A', transactionType: 'BUY', tradeDate: '2026-11-01', quantity: '75', netAmount: '7500' }),
+      tx({ id: 'b-s', portfolioId: 'B', transactionType: 'SELL', tradeDate: '2026-11-05', quantity: '75', netAmount: '11250' }),
+    ]);
+    // A long in portfolio A and a short in portfolio B are both still open.
+    expect(r.rows).toHaveLength(0);
+  });
 });

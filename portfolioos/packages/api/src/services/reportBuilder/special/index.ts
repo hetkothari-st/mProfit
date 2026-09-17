@@ -9,6 +9,7 @@
  */
 
 import { Decimal } from 'decimal.js';
+import type { AssetClass, CanonicalEventType, TransactionType } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import {
   fmtDateDDMMYYYY,
@@ -24,8 +25,8 @@ import {
   grandfatheringReport,
   dematHoldingReport,
   m2mReport,
-  fetchFmvOn31Jan2018,
-  adjustGainForGrandfathering,
+  fetchGrandfatheringFmv,
+  grandfatheredCost,
   residualLots,
   BUY_TXN_TYPES,
   SELL_TXN_TYPES,
@@ -42,7 +43,22 @@ import {
   userIncomeReport,
   incomeReport,
 } from '../../reports.service.js';
-import { computeUserCapitalGains, type CapitalGainRow } from '../../capitalGains.service.js';
+import {
+  GRANDFATHERING_CUTOFF,
+  computeOpenLots,
+  isCapitalAssetClass,
+  computeUserCapitalGains,
+  financialYearOf,
+  loadFundCategoryMap,
+  transactionIsEquityOriented,
+  type CapitalGainRow,
+} from '../../capitalGains.service.js';
+import {
+  ADVANCE_TAX_INSTALMENTS,
+  CAPITAL_GAINS_KEY_DATES,
+  CAPITAL_GAINS_RULE_SETS,
+  calendarDaysBetweenIST,
+} from '@everypaisa/shared';
 import {
   getTrialBalance,
   getAccountLedger,
@@ -51,6 +67,11 @@ import {
   listAccountsFlat,
 } from '../../accounting.service.js';
 import { computeUserXirr } from '../../xirr.service.js';
+import { resolveMutualFundId } from '../../masterData.service.js';
+import { acquisitionDates, holdingsAsOf, sortHoldings } from '../../holdingsAsOf.service.js';
+import { cashDirection } from '../../cashDirection.js';
+import { inrAmount, transactionInrNet } from '../../investmentIncome.service.js';
+import { availableTaxFys, buildTaxSummary } from '../../tax.service.js';
 import { readPan } from '../../piiAtRest.service.js';
 
 async function userMember(userId: string): Promise<{ family: string; member: string; pan: string | undefined }> {
@@ -67,7 +88,18 @@ async function userMember(userId: string): Promise<{ family: string; member: str
 }
 
 const MONEY = (v: unknown) => indianMoney(v);
-const INT = (v: unknown) => indianInt(v);
+// Whole units print as integers; fractional units (mutual funds, SIPs, splits)
+// keep up to 4 decimals instead of being rounded away.
+const QTY = (v: unknown) => {
+  if (v == null || v === '') return '';
+  let d: Decimal;
+  try {
+    d = new Decimal(String(v));
+  } catch {
+    return String(v);
+  }
+  return d.isInteger() ? indianInt(v) : indianMoney(d.toDecimalPlaces(4).toString(), d.decimalPlaces() > 4 ? 4 : d.decimalPlaces());
+};
 const DATE = (v: unknown) => fmtDateDDMMYYYY(v);
 
 // ─── Helper: group CapitalGainRow[] by assetName ─────────────────
@@ -149,12 +181,12 @@ export async function buildGrandfatheringLayout(userId: string, fy?: string): Pr
   const columns: ColumnDef[] = [
     { key: 'scriptName', label: 'Script Name', width: 14, align: 'left' },
     { key: 'buyDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
-    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'buyRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
     { key: 'buyAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
     { key: 'fmv', label: 'FMV', width: 7, align: 'right', formatter: (v) => (v ? MONEY(v) : '') },
     { key: 'sellDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
-    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'sellRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
     { key: 'sellAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
     { key: 'gainLoss', label: 'Gain/Loss', width: 8, align: 'right', formatter: MONEY, signed: true },
@@ -251,9 +283,9 @@ export async function buildDematHoldingsLayout(userId: string): Promise<MprofitL
   const columns: ColumnDef[] = [
     { key: 'date', label: 'Date', width: 12, align: 'center', formatter: DATE },
     { key: 'reason', label: 'Demat Account / Script Name', width: 38, align: 'left' },
-    { key: 'inQty', label: 'In Qty.', width: 16, align: 'right', formatter: INT },
-    { key: 'outQty', label: 'Out Qty.', width: 16, align: 'right', formatter: INT },
-    { key: 'balanceQty', label: 'Balance Qty.', width: 18, align: 'right', formatter: INT, signed: true },
+    { key: 'inQty', label: 'In Qty.', width: 16, align: 'right', formatter: QTY },
+    { key: 'outQty', label: 'Out Qty.', width: 16, align: 'right', formatter: QTY },
+    { key: 'balanceQty', label: 'Balance Qty.', width: 18, align: 'right', formatter: QTY, signed: true },
   ];
 
   return {
@@ -338,7 +370,7 @@ export async function buildM2MLayout(userId: string, asOf?: Date): Promise<Mprof
   const columns: ColumnDef[] = [
     { key: 'scriptName', label: 'Script Name', width: 16, align: 'left' },
     { key: 'closingDate', label: 'Closing Date', width: 7, align: 'center', formatter: DATE },
-    { key: 'qty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'qty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'purRate', label: 'Pur Rate', width: 7, align: 'right', formatter: MONEY },
     { key: 'purValue', label: 'Pur Value', width: 8, align: 'right', formatter: MONEY },
     { key: 'bhavRate', label: 'Bhav Rate', width: 7, align: 'right', formatter: MONEY },
@@ -386,11 +418,11 @@ function cgColumns(): ColumnDef[] {
   return [
     { key: 'scriptName', label: 'Script Name', width: 14, align: 'left' },
     { key: 'buyDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
-    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'buyRate', label: 'Rate', width: 7, align: 'right', formatter: MONEY },
     { key: 'buyAmount', label: 'Amount', width: 9, align: 'right', formatter: MONEY },
     { key: 'sellDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
-    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'sellRate', label: 'Rate', width: 7, align: 'right', formatter: MONEY },
     { key: 'sellAmount', label: 'Amount', width: 9, align: 'right', formatter: MONEY },
     { key: 'gainLoss', label: 'Gain/Loss', width: 9, align: 'right', formatter: MONEY, signed: true },
@@ -512,13 +544,29 @@ export async function buildShortLongSpecLayout(
 export async function buildTrialBalanceLayout(userId: string, asOf?: string): Promise<MprofitLayout> {
   const m = await userMember(userId);
   const rows = await getTrialBalance(userId, asOf);
-  const tDr = rows.reduce((s, r) => s.plus(r.totalDebit), new Decimal(0));
-  const tCr = rows.reduce((s, r) => s.plus(r.totalCredit), new Decimal(0));
+  // Closing balance on its side: a debit-nature account with a positive
+  // balance (or a credit-nature one with a negative balance) is a debit.
+  const sides = rows.map((r) => {
+    const closing = new Decimal(r.closingBalance);
+    const debitNature = r.type === 'ASSET' || r.type === 'EXPENSE';
+    const onDebit = debitNature ? closing.greaterThanOrEqualTo(0) : closing.lessThan(0);
+    return { r, closing, closingDr: onDebit ? closing.abs() : new Decimal(0), closingCr: onDebit ? new Decimal(0) : closing.abs() };
+  });
+  const kept = sides.filter(
+    ({ r, closing }) => !closing.isZero() || !new Decimal(r.openingBalance).isZero() || !new Decimal(r.totalDebit).isZero() || !new Decimal(r.totalCredit).isZero(),
+  );
+  const total = (pick: (x: (typeof sides)[number]) => Decimal | string) =>
+    kept.reduce((s, x) => s.plus(pick(x)), new Decimal(0)).toString();
+  const nonZero = (v: Decimal | string) => (new Decimal(v).isZero() ? '' : new Decimal(v).toString());
 
   const columns: ColumnDef[] = [
-    { key: 'name', label: 'Particulars', width: 38, align: 'left' },
-    { key: 'totalDebit', label: 'Debit', width: 14, align: 'right', formatter: MONEY },
-    { key: 'totalCredit', label: 'Credit', width: 14, align: 'right', formatter: MONEY },
+    { key: 'code', label: 'Code', width: 7, align: 'left' },
+    { key: 'name', label: 'Particulars', width: 30, align: 'left' },
+    { key: 'opening', label: 'Opening', width: 12, align: 'right', formatter: MONEY, signed: true },
+    { key: 'totalDebit', label: 'Debit', width: 12, align: 'right', formatter: MONEY },
+    { key: 'totalCredit', label: 'Credit', width: 12, align: 'right', formatter: MONEY },
+    { key: 'closingDr', label: 'Closing Dr', width: 12, align: 'right', formatter: MONEY },
+    { key: 'closingCr', label: 'Closing Cr', width: 12, align: 'right', formatter: MONEY },
   ];
 
   return {
@@ -533,23 +581,29 @@ export async function buildTrialBalanceLayout(userId: string, asOf?: string): Pr
       {
         groups: [
           {
-            rows: rows
-              .filter((r) => Number(r.totalDebit) !== 0 || Number(r.totalCredit) !== 0)
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((r) => ({
-                cells: {
-                  name: r.name.toUpperCase(),
-                  totalDebit: Number(r.totalDebit) > 0 ? r.totalDebit : '',
-                  totalCredit: Number(r.totalCredit) > 0 ? r.totalCredit : '',
-                },
-              })),
+            rows: kept.map(({ r, closingDr, closingCr }) => ({
+              cells: {
+                code: r.code,
+                name: r.name.toUpperCase(),
+                opening: nonZero(r.openingBalance),
+                totalDebit: nonZero(r.totalDebit),
+                totalCredit: nonZero(r.totalCredit),
+                closingDr: nonZero(closingDr),
+                closingCr: nonZero(closingCr),
+              },
+            })),
           },
         ],
       },
     ],
     grandTotal: {
       label: 'Grand Total',
-      values: { totalDebit: tDr.toString(), totalCredit: tCr.toString() },
+      values: {
+        totalDebit: total((x) => x.r.totalDebit),
+        totalCredit: total((x) => x.r.totalCredit),
+        closingDr: total((x) => x.closingDr),
+        closingCr: total((x) => x.closingCr),
+      },
     },
     filenameStem: `trial-balance${asOf ? `-${asOf}` : ''}`,
   };
@@ -566,10 +620,12 @@ export async function buildAccountLedgerLayout(
   const groups: SubGroup[] = [];
   for (const a of accounts) {
     const led = await getAccountLedger(userId, a.id, opts);
-    if (led.entries.length === 0) continue;
+    if (led.entries.length === 0 && new Decimal(led.openingBalance).isZero()) continue;
     groups.push({
       header: `${a.code} — ${a.name}`,
-      rows: led.entries.map((e) => ({
+      rows: [
+        { cells: { date: '', voucher: '', narration: 'Opening balance', debit: '', credit: '', balance: led.openingBalance } },
+        ...led.entries.map((e) => ({
         cells: {
           date: e.date,
           voucher: `${e.voucherType} ${e.voucherNo}`,
@@ -579,6 +635,7 @@ export async function buildAccountLedgerLayout(
           balance: e.balance,
         },
       })),
+      ],
       subtotal: {
         label: 'Closing balance',
         values: { balance: led.closingBalance },
@@ -699,6 +756,10 @@ export async function buildBalanceSheetLayout(userId: string, asOf?: string): Pr
     { name: 'Retained Earnings (P&L)', amount: bs.retainedEarnings },
   ];
   const assets = bs.assets.map((x) => ({ name: x.name, amount: x.closingBalance }));
+  // Opening balances that don't net to zero: shown on the short side so both totals agree.
+  const openingDiff = new Decimal(bs.openingDifference);
+  if (openingDiff.greaterThan(0)) liabilities.push({ name: 'Difference in Opening Balances', amount: openingDiff.toString() });
+  if (openingDiff.lessThan(0)) assets.push({ name: 'Difference in Opening Balances', amount: openingDiff.abs().toString() });
   const maxLen = Math.max(liabilities.length, assets.length);
   const rows: Array<{ cells: Record<string, unknown> }> = [];
   for (let i = 0; i < maxLen; i++) {
@@ -719,7 +780,8 @@ export async function buildBalanceSheetLayout(userId: string, asOf?: string): Pr
     { key: 'aAmount', label: 'Amt. in Rs.', width: 13, align: 'right', formatter: MONEY, signed: true },
   ];
 
-  const totalLiab = new Decimal(bs.totalLiabilities).plus(bs.totalEquity);
+  const totalLiab = new Decimal(bs.totalLiabilities).plus(bs.totalEquity).plus(Decimal.max(openingDiff, 0));
+  const totalAssets = new Decimal(bs.totalAssets).plus(Decimal.max(openingDiff.negated(), 0));
   return {
     reportTitle: `Balance Sheet Report As On ${asOf ? fmtDateDDMMYYYY(asOf) : todayDDMMYYYY()}`,
     family: m.family,
@@ -731,7 +793,7 @@ export async function buildBalanceSheetLayout(userId: string, asOf?: string): Pr
     sections: [{ groups: [{ rows }] }],
     grandTotal: {
       label: 'Grand Total',
-      values: { lAmount: totalLiab.toString(), aAmount: bs.totalAssets },
+      values: { lAmount: totalLiab.toString(), aAmount: totalAssets.toString() },
     },
     filenameStem: `balance-sheet${asOf ? `-${asOf}` : ''}`,
   };
@@ -745,16 +807,30 @@ export async function buildSchedule112ALayout(
   portfolioId?: string,
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
-  const r = portfolioId ? await schedule112AReport(portfolioId, fy) : await userSchedule112AReport(userId, fy);
-  const rows = r.rows.map((row) => ({
+  const [r, fmvByIsin] = await Promise.all([
+    portfolioId ? schedule112AReport(portfolioId, fy) : userSchedule112AReport(userId, fy),
+    fetchGrandfatheringFmv(userId),
+  ]);
+  const categoryOf = (assetClass: string) =>
+    assetClass === 'EQUITY'
+      ? 'Equity Shares'
+      : assetClass === 'REIT' || assetClass === 'INVIT'
+        ? 'Units of Business Trust'
+        : 'Units of Equity Oriented Fund';
+  const rows = r.rows.map((row) => {
+    // FMV column: FMV on the grandfathering date × quantity, for rows the
+    // engine grandfathered; cost is the sec 55(2)(ac) cost, so Sale − Cost = Gain.
+    const fmvPerUnit = row.isin ? fmvByIsin.get(row.isin) ?? null : null;
+    const grandfathered = grandfatheredCost(row) !== null;
+    return {
     cells: {
       listed: 'Listed',
-      category: row.needsReview ? 'Equity Shares (⚠ verify category)' : 'Equity Shares',
+      category: row.needsReview ? `${categoryOf(row.assetClass)} (⚠ verify)` : categoryOf(row.assetClass),
       term: 'Long term',
       name: row.assetName,
       sale: row.sellAmount,
-      cost: row.buyAmount,
-      fmv: '',
+      cost: row.costOfAcquisition,
+      fmv: grandfathered && fmvPerUnit ? fmvPerUnit.times(row.quantity).toString() : '',
       expenses: '0',
       transferDate: row.sellDate,
       acquisitionDate: row.buyDate,
@@ -762,10 +838,12 @@ export async function buildSchedule112ALayout(
       sellRate: row.sellPrice.toString(),
       gain: row.gainLoss.toString(),
     },
-  }));
+    };
+  });
 
-  const totalSale = r.rows.reduce((s, x) => s.plus(x.sellAmount), new Decimal(0));
-  const totalCost = r.rows.reduce((s, x) => s.plus(x.buyAmount), new Decimal(0));
+  const totalSale = r.rows.reduce((acc, x) => acc.plus(x.sellAmount), new Decimal(0));
+  const totalCost = r.rows.reduce((acc, x) => acc.plus(x.costOfAcquisition), new Decimal(0));
+  const totalGain = r.rows.reduce((acc, x) => acc.plus(x.gainLoss), new Decimal(0));
 
   const columns: ColumnDef[] = [
     { key: 'listed', label: 'Listed/Unlisted', width: 9, align: 'left' },
@@ -774,11 +852,11 @@ export async function buildSchedule112ALayout(
     { key: 'name', label: 'Name of Company', width: 18, align: 'left' },
     { key: 'sale', label: 'Sale Amount', width: 9, align: 'right', formatter: MONEY },
     { key: 'cost', label: 'Cost of Acq.', width: 9, align: 'right', formatter: MONEY },
-    { key: 'fmv', label: 'FMV', width: 7, align: 'right' },
+    { key: 'fmv', label: 'FMV', width: 7, align: 'right', formatter: (v) => (v ? MONEY(v) : '') },
     { key: 'expenses', label: 'Expenses', width: 7, align: 'right' },
     { key: 'transferDate', label: 'Transfer Date', width: 8, align: 'center', formatter: DATE },
     { key: 'acquisitionDate', label: 'Acq. Date', width: 8, align: 'center', formatter: DATE },
-    { key: 'qty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'qty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'sellRate', label: 'Sell Rate', width: 7, align: 'right', formatter: MONEY },
     { key: 'gain', label: 'Gain/Loss', width: 8, align: 'right', formatter: MONEY, signed: true },
   ];
@@ -798,7 +876,7 @@ export async function buildSchedule112ALayout(
       values: {
         sale: totalSale.toString(),
         cost: totalCost.toString(),
-        gain: r.totalGain,
+        gain: totalGain.toString(),
       },
     },
     filenameStem: `itr-schedule-112a${fy ? `-${fy}` : ''}`,
@@ -815,9 +893,16 @@ export async function buildMFCapitalGainLayout(userId: string, fy?: string): Pro
       (r.assetClass === 'MUTUAL_FUND' || r.assetClass === 'ETF') &&
       (!fy || r.financialYear === fy),
   );
-  const stcgRows = filtered.filter((r) => r.capitalGainType !== 'LONG_TERM');
+  const stcgRows = filtered.filter((r) => r.capitalGainType === 'SHORT_TERM');
   const ltcgRows = filtered.filter((r) => r.capitalGainType === 'LONG_TERM');
+  // Same-day ETF square-offs are speculative business income, not capital gains.
+  const intradayRows = filtered.filter((r) => r.capitalGainType === 'INTRADAY');
   const sections: ReportSection[] = [];
+  if (intradayRows.length) {
+    const sec = buildCgSection(intradayRows);
+    sec.banner = 'Speculation (intraday)';
+    sections.push(sec);
+  }
   if (stcgRows.length) {
     const sec = buildCgSection(stcgRows);
     sec.banner = 'Short Term';
@@ -870,6 +955,18 @@ export async function buildDailyTransactionsLayout(
     arr.push(t);
     byBroker.set(k, arr);
   }
+  // Amounts signed by cash direction (received +, paid −) and in INR, so a
+  // broker's total is the net payable/receivable. Bonus, split and merger rows
+  // carry no cash.
+  const signedInr = (t: (typeof txs)[number], amount: { toString(): string }): Decimal => {
+    const dir = cashDirection(t.transactionType);
+    if (dir === 'NONE') return new Decimal(0);
+    const inr = transactionInrNet({ ...t, netAmount: amount });
+    return dir === 'IN' ? inr : inr.negated();
+  };
+  const brokerageInr = (t: (typeof txs)[number]): Decimal => transactionInrNet({ ...t, netAmount: t.brokerage });
+  const sumOf = (list: typeof txs, f: (t: (typeof txs)[number]) => Decimal) =>
+    list.reduce((acc, t) => acc.plus(f(t)), new Decimal(0));
   const sections: ReportSection[] = Array.from(byBroker.entries()).map(([broker, list]) => ({
     banner: broker,
     groups: [{
@@ -880,17 +977,17 @@ export async function buildDailyTransactionsLayout(
           script: t.assetName ?? '—',
           qty: t.quantity.toString(),
           rate: t.price.toString(),
-          gross: t.grossAmount.toString(),
-          brokerage: t.brokerage.toString(),
-          net: t.netAmount.toString(),
+          gross: signedInr(t, t.grossAmount).toString(),
+          brokerage: brokerageInr(t).toString(),
+          net: signedInr(t, t.netAmount).toString(),
         },
       })),
       subtotal: {
         label: `Total: ${broker}`,
         values: {
-          gross: list.reduce((s, t) => s.plus(t.grossAmount.toString()), new Decimal(0)).toString(),
-          brokerage: list.reduce((s, t) => s.plus(t.brokerage.toString()), new Decimal(0)).toString(),
-          net: list.reduce((s, t) => s.plus(t.netAmount.toString()), new Decimal(0)).toString(),
+          gross: sumOf(list, (t) => signedInr(t, t.grossAmount)).toString(),
+          brokerage: sumOf(list, brokerageInr).toString(),
+          net: sumOf(list, (t) => signedInr(t, t.netAmount)).toString(),
         },
       },
     }],
@@ -900,19 +997,21 @@ export async function buildDailyTransactionsLayout(
     { key: 'tradeDate', label: 'Date', width: 8, align: 'center', formatter: DATE },
     { key: 'type', label: 'Type', width: 8, align: 'left' },
     { key: 'script', label: 'Script Name', width: 24, align: 'left' },
-    { key: 'qty', label: 'Qty', width: 6, align: 'right', formatter: INT },
+    { key: 'qty', label: 'Qty', width: 6, align: 'right', formatter: QTY },
     { key: 'rate', label: 'Rate', width: 8, align: 'right', formatter: MONEY },
-    { key: 'gross', label: 'Gross Amt.', width: 9, align: 'right', formatter: MONEY },
+    { key: 'gross', label: 'Gross Amt.', width: 9, align: 'right', formatter: MONEY, signed: true },
     { key: 'brokerage', label: 'Brokerage', width: 8, align: 'right', formatter: MONEY },
     { key: 'net', label: 'Net Amount', width: 10, align: 'right', formatter: MONEY, signed: true },
   ];
 
-  const grandGross = txs.reduce((s, t) => s.plus(t.grossAmount.toString()), new Decimal(0));
-  const grandBrokerage = txs.reduce((s, t) => s.plus(t.brokerage.toString()), new Decimal(0));
-  const grandNet = txs.reduce((s, t) => s.plus(t.netAmount.toString()), new Decimal(0));
+  const grandGross = sumOf(txs, (t) => signedInr(t, t.grossAmount));
+  const grandBrokerage = sumOf(txs, brokerageInr);
+  const grandNet = sumOf(txs, (t) => signedInr(t, t.netAmount));
 
   return {
-    reportTitle: `BrokerBill Register As On ${todayDDMMYYYY()}`,
+    reportTitle: opts.from || opts.to
+      ? `BrokerBill Register From ${opts.from ? fmtDateDDMMYYYY(opts.from) : '—'} To ${opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY()}`
+      : `BrokerBill Register As On ${todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -972,8 +1071,9 @@ export async function buildIncomeReportLayout(
         }],
       },
     ],
+    // Dividends + interest; maturity rows return principal and stay out of the total.
     grandTotal: {
-      label: 'Grand Total',
+      label: 'Total Income (excl. maturity proceeds)',
       values: { amount: r.total },
     },
     filenameStem: `income-report${fy ? `-${fy}` : ''}`,
@@ -1133,17 +1233,24 @@ export async function buildPerformanceLayout(userId: string): Promise<MprofitLay
   // per-portfolio breakdown plus the user roll-up in a single layout.
   const { computePortfolioXirr } = await import('../../xirr.service.js');
 
+  // Absolute return = current value + money received − money invested.
+  // XIRR under the minimum history is too volatile to show.
+  const xirrCell = (x: { xirr: number | null; reliable: boolean }) =>
+    x.xirr != null && x.reliable ? new Decimal(x.xirr).times(100).toFixed(2) : '—';
   const rows: BodyRowLite[] = [];
   let totalInvested = new Decimal(0);
   let totalValue = new Decimal(0);
+  let totalReceived = new Decimal(0);
   for (const p of portfolios) {
     const x = await computePortfolioXirr(p.id);
     const invested = new Decimal(x.totalInvested);
     const value = new Decimal(x.terminalValue);
-    const absRet = value.minus(invested);
+    const received = new Decimal(x.totalReceived);
+    const absRet = value.plus(received).minus(invested);
     const absPct = invested.greaterThan(0) ? absRet.dividedBy(invested).times(100) : new Decimal(0);
     totalInvested = totalInvested.plus(invested);
     totalValue = totalValue.plus(value);
+    totalReceived = totalReceived.plus(received);
     rows.push({
       cells: {
         name: p.name,
@@ -1152,13 +1259,13 @@ export async function buildPerformanceLayout(userId: string): Promise<MprofitLay
         value: value.toString(),
         absRet: absRet.toString(),
         absPct: absPct.toFixed(2),
-        xirr: x.xirr != null ? new Decimal(x.xirr).times(100).toFixed(2) : '—',
+        xirr: xirrCell(x),
       },
     });
   }
 
   const user = await computeUserXirr(userId);
-  const grandAbs = totalValue.minus(totalInvested);
+  const grandAbs = totalValue.plus(totalReceived).minus(totalInvested);
   const grandPct = totalInvested.greaterThan(0)
     ? grandAbs.dividedBy(totalInvested).times(100)
     : new Decimal(0);
@@ -1189,7 +1296,7 @@ export async function buildPerformanceLayout(userId: string): Promise<MprofitLay
         value: totalValue.toString(),
         absRet: grandAbs.toString(),
         absPct: grandPct.toFixed(2),
-        xirr: user.xirr != null ? new Decimal(user.xirr).times(100).toFixed(2) : '—',
+        xirr: xirrCell(user),
       },
     },
     filenameStem: `performance-xirr-${new Date().toISOString().slice(0, 10)}`,
@@ -1207,49 +1314,40 @@ export async function buildTaxSummaryLayout(
   fy?: string,
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
-  const [intraday, stcg, ltcg, s112a, income] = await Promise.all([
-    userIntradayReport(userId, fy),
-    userStcgReport(userId, fy),
-    userLtcgReport(userId, fy),
-    userSchedule112AReport(userId, fy),
-    userIncomeReport(userId, fy),
-  ]);
+  // One FY at a time (exemptions and set-off are per FY). With none requested,
+  // the latest FY the user has activity in.
+  const financialYear = fy ?? (await availableTaxFys(userId))[0] ?? financialYearOf(new Date());
+  const s = await buildTaxSummary(userId, financialYear);
+  const cg = s.capitalGains;
+  const D = (v: string) => new Decimal(v);
 
-  const sum = (rows: Array<{ gainLoss: Decimal | string }>): Decimal =>
-    rows.reduce((s, r) => s.plus(new Decimal(String(r.gainLoss))), new Decimal(0));
-
-  const intradayPL = sum(intraday.rows);
-  const stcgPL = sum(stcg.rows);
-  const ltcgPL = sum(ltcg.rows);
-  const s112aTaxable = new Decimal(s112a.taxable);
-  const s112aTotal = new Decimal(s112a.totalGain);
-
-  // userIncomeReport returns rows with `amount` field, not gainLoss.
-  // Re-derive the totals it already publishes on the response.
-  const dividend = new Decimal(income.dividend);
-  const interest = new Decimal(income.interest);
-  const maturity = new Decimal(income.maturity);
-
-  // ITR head sub-totals.
-  const totalCapGain = intradayPL.plus(stcgPL).plus(ltcgPL);
-  const otherIncome = dividend.plus(interest).plus(maturity);
-  const grand = totalCapGain.plus(otherIncome);
-
-  type Row = { head: string; section: string; line: string; amount: string; note?: string };
+  // Gains before set-off, as they go into the ITR schedules; taxable and tax
+  // after set-off and the 112A exemption. Maturity proceeds return principal
+  // and are not income, so they are not part of any total.
+  type Row = { head: string; section: string; line: string; amount: string; tax: string; note?: string };
   const data: Row[] = [
-    { head: 'Capital Gains', section: 'Speculation', line: 'Intraday (business income)', amount: intradayPL.toString() },
-    { head: 'Capital Gains', section: 'STCG (Sec 111A)', line: 'Equity / Equity-MF short-term gain', amount: stcgPL.toString() },
-    { head: 'Capital Gains', section: 'LTCG (Sec 112)', line: 'Long-term gain (non-grandfathered)', amount: ltcgPL.toString() },
-    { head: 'Capital Gains', section: 'LTCG (Sec 112A)', line: 'Equity / Equity-MF LTCG (gross)', amount: s112aTotal.toString(), note: '₹1L exemption applies' },
-    { head: 'Capital Gains', section: 'LTCG (Sec 112A)', line: 'Equity / Equity-MF LTCG (taxable)', amount: s112aTaxable.toString() },
-    { head: 'Other Income', section: 'IFOS', line: 'Dividend income', amount: dividend.toString() },
-    { head: 'Other Income', section: 'IFOS', line: 'Interest received', amount: interest.toString() },
-    { head: 'Other Income', section: 'IFOS', line: 'Maturity proceeds', amount: maturity.toString() },
+    { head: 'Capital Gains', section: 'STCG (Sec 111A)', line: 'Listed equity / equity funds — short-term', amount: cg.section111A_stcgEquity.gain, tax: cg.section111A_stcgEquity.tax },
+    { head: 'Capital Gains', section: 'STCG (slab)', line: 'Other assets — short-term', amount: cg.stcgOther.gain, tax: cg.stcgOther.tax, note: s.slabIsEstimate ? `Slab rate estimated at ${s.rates.slabPct}%` : `Slab rate ${s.rates.slabPct}%` },
+    { head: 'Capital Gains', section: 'LTCG (Sec 112A)', line: 'Listed equity / equity funds — long-term (grandfathered)', amount: cg.section112A_ltcgEquity.gain, tax: cg.section112A_ltcgEquity.tax, note: `Exemption used ${indianMoney(cg.section112A_ltcgEquity.exemption)}; taxable ${indianMoney(cg.section112A_ltcgEquity.taxable)}` },
+    { head: 'Capital Gains', section: 'LTCG (Sec 112)', line: 'Other assets — long-term', amount: cg.section112_ltcgOther.gain, tax: cg.section112_ltcgOther.tax, note: `Taxable after indexation and set-off ${indianMoney(cg.section112_ltcgOther.taxable)}` },
+    { head: 'Capital Gains', section: 'VDA (Sec 115BBH)', line: 'Virtual digital assets', amount: cg.virtualDigitalAssets.gain, tax: cg.virtualDigitalAssets.tax },
+    { head: 'Business Income', section: 'Speculation', line: 'Intraday equity', amount: cg.intradaySpeculative.gain, tax: cg.intradaySpeculative.tax },
+    { head: 'Business Income', section: 'Non-speculative', line: 'Futures & options', amount: s.fnoBusinessIncome.netPnl, tax: s.fnoBusinessIncome.tax },
+    { head: 'Other Income', section: 'IFOS', line: 'Dividend income', amount: s.otherIncome.dividend, tax: '0', note: 'Taxed at slab with your other income' },
+    { head: 'Other Income', section: 'IFOS', line: 'Interest received', amount: s.otherIncome.interest, tax: '0', note: 'Taxed at slab with your other income' },
   ];
+  const cf = s.carryForward;
+  const carryNote = [
+    D(cf.shortTermLoss).greaterThan(0) ? `short-term ${indianMoney(cf.shortTermLoss)}` : null,
+    D(cf.longTermLoss).greaterThan(0) ? `long-term ${indianMoney(cf.longTermLoss)}` : null,
+    D(cf.speculativeLoss).greaterThan(0) ? `speculative ${indianMoney(cf.speculativeLoss)}` : null,
+  ].filter(Boolean).join(', ');
+  const grand = data.reduce((acc, r) => acc.plus(D(r.amount)), new Decimal(0));
 
-  const sections: ReportSection[] = (['Capital Gains', 'Other Income'] as const).map((head) => {
+  const sections: ReportSection[] = (['Capital Gains', 'Business Income', 'Other Income'] as const).map((head) => {
     const list = data.filter((d) => d.head === head);
-    const sub = list.reduce((s, r) => s.plus(new Decimal(r.amount)), new Decimal(0));
+    const sub = list.reduce((acc, r) => acc.plus(new Decimal(r.amount)), new Decimal(0));
+    const subTax = list.reduce((acc, r) => acc.plus(new Decimal(r.tax)), new Decimal(0));
     return {
       banner: head.toUpperCase(),
       groups: [{
@@ -1258,12 +1356,13 @@ export async function buildTaxSummaryLayout(
             section: r.section,
             line: r.line,
             amount: r.amount,
+            tax: r.tax,
             note: r.note ?? '',
           },
         })),
         subtotal: {
           label: `Total: ${head}`,
-          values: { amount: sub.toString() },
+          values: { amount: sub.toString(), tax: subTax.toString() },
         },
       }],
     };
@@ -1272,26 +1371,95 @@ export async function buildTaxSummaryLayout(
   const columns: ColumnDef[] = [
     { key: 'section', label: 'Tax Section', width: 16, align: 'left' },
     { key: 'line', label: 'Description', width: 32, align: 'left' },
-    { key: 'amount', label: 'Amount', width: 12, align: 'right', formatter: MONEY, signed: true },
-    { key: 'note', label: 'Notes', width: 18, align: 'left' },
+    { key: 'amount', label: 'Gain / Income', width: 12, align: 'right', formatter: MONEY, signed: true },
+    { key: 'tax', label: 'Estimated Tax', width: 11, align: 'right', formatter: MONEY },
+    { key: 'note', label: 'Notes', width: 26, align: 'left' },
   ];
 
   return {
-    reportTitle: `Tax Summary (Form 16 Helper) ${fy ? `FY ${fy}` : ''}`,
+    reportTitle: `Tax Summary (Form 16 Helper) FY ${financialYear}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
-    financialYear: fy ?? 'All',
+    financialYear,
     headerRow1: columns.map((c) => ({ label: c.label, spanCols: 1 })),
     headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
     columns,
     sections,
     grandTotal: {
-      label: 'Total Taxable + Reportable',
-      values: { amount: grand.toString() },
+      label: carryNote ? `Total (losses to carry forward: ${carryNote})` : 'Total',
+      values: { amount: grand.toString(), tax: s.totalEstimatedTax },
     },
-    filenameStem: `tax-summary${fy ? `-${fy}` : ''}`,
+    filenameStem: `tax-summary-${financialYear}`,
   };
+}
+
+// Cash flow statement categories. Typed over every transaction type so a new
+// type has to be placed; null = no cash in the period (units only, switches,
+// opening balances).
+const CASH_FLOW_TX_CATEGORY: Record<TransactionType, string | null> = {
+  BUY: 'Investment Purchases',
+  SIP: 'Investment Purchases',
+  RIGHTS_ISSUE: 'Investment Purchases',
+  DEPOSIT: 'Deposits Placed',
+  SELL: 'Sale Proceeds',
+  REDEMPTION: 'Sale Proceeds',
+  MATURITY: 'Maturity Proceeds',
+  WITHDRAWAL: 'Withdrawals',
+  DIVIDEND_PAYOUT: 'Dividend Received',
+  INTEREST_RECEIVED: 'Interest Received',
+  SWITCH_IN: null,
+  SWITCH_OUT: null,
+  OPENING_BALANCE: null,
+  BONUS: null,
+  SPLIT: null,
+  MERGER_IN: null,
+  MERGER_OUT: null,
+  DEMERGER_IN: null,
+  DEMERGER_OUT: null,
+  DIVIDEND_REINVEST: null,
+};
+
+const RENT_LEDGER_CATEGORY: Record<string, string> = {
+  PAYMENT: 'Rental Income',
+  LATE_FEE: 'Rental Income',
+  OTHER_CHARGE: 'Rental Income',
+  // Refundable: money held for the tenant, not income.
+  DEPOSIT: 'Security Deposits Received',
+  DEPOSIT_REFUND: 'Security Deposits Refunded',
+};
+
+const EVENT_CASH_CATEGORY: Partial<Record<CanonicalEventType, string>> = {
+  DIVIDEND: 'Dividend Received',
+  INTEREST_CREDIT: 'Interest Received',
+  MATURITY_CREDIT: 'Maturity Proceeds',
+  FD_MATURITY: 'Maturity Proceeds',
+  RENT_RECEIVED: 'Rental Income',
+  RENT_PAID: 'Rent Paid',
+  INTEREST_DEBIT: 'Interest Paid',
+  EMI_DEBIT: 'Loan / EMI',
+  PREMIUM_PAID: 'Insurance Premium',
+  CARD_PAYMENT: 'Credit Card Payments',
+  CARD_PURCHASE: 'Card Spends',
+  SIP_INSTALLMENT: 'Investment Purchases',
+  FD_CREATION: 'Deposits Placed',
+};
+
+/** Fallback for a cash flow with no known source: whole words, by direction. */
+function describedCashCategory(dir: 'IN' | 'OUT', description: string | null): string {
+  const d = (description ?? '').toLowerCase();
+  if (dir === 'IN') {
+    if (/\bdividends?\b/.test(d)) return 'Dividend Received';
+    if (/\binterest\b/.test(d)) return 'Interest Received';
+    if (/\brent(al)?\b/.test(d)) return 'Rental Income';
+    if (/\bmaturity\b/.test(d)) return 'Maturity Proceeds';
+    return 'Other Receipts';
+  }
+  if (/\bpremium\b/.test(d)) return 'Insurance Premium';
+  if (/\b(emi|loan)\b/.test(d)) return 'Loan / EMI';
+  if (/\binterest\b/.test(d)) return 'Interest Paid';
+  if (/\brent\b/.test(d)) return 'Rent Paid';
+  return 'Other Payments';
 }
 
 // ─── 16. Cash Flow Statement ──────────────────────────────────────
@@ -1318,32 +1486,65 @@ export async function buildCashFlowStatementLayout(
     include: { portfolio: { select: { name: true } } },
     orderBy: { date: 'asc' },
   });
-
-  // Categorise from the type + description. Pretty coarse on purpose:
-  // INFLOW + "dividend" → Dividend Received, INFLOW + "interest" → Interest, etc.
-  function category(f: { type: string; description: string | null }): string {
-    const d = (f.description ?? '').toLowerCase();
-    if (d.includes('dividend')) return 'Dividend Received';
-    if (d.includes('interest')) return 'Interest Received';
-    if (d.includes('rent')) return 'Rental Income';
-    if (d.includes('maturity')) return 'Maturity Proceeds';
-    if (d.includes('sell') || d.includes('sale')) return 'Sale Proceeds';
-    if (d.includes('buy') || d.includes('purchase')) return 'Investment Purchases';
-    if (d.includes('premium')) return 'Insurance Premium';
-    if (d.includes('emi') || d.includes('loan')) return 'Loan / EMI';
-    return f.type === 'INFLOW' ? 'Other Income' : 'Other Outflow';
-  }
+  const txWhere: Record<string, unknown> = { portfolio: { userId } };
+  if (where['date']) txWhere['tradeDate'] = where['date'];
+  const txs = await prisma.transaction.findMany({ where: txWhere, orderBy: { tradeDate: 'asc' } });
 
   const inflowByCat = new Map<string, Decimal>();
   const outflowByCat = new Map<string, Decimal>();
+  const add = (dir: 'IN' | 'OUT', cat: string, amt: Decimal) => {
+    const m2 = dir === 'IN' ? inflowByCat : outflowByCat;
+    m2.set(cat, (m2.get(cat) ?? new Decimal(0)).plus(amt));
+  };
+  const seen = new Set<string>();
+  const dedupKey = (portfolioId: string, dir: string, cat: string, date: Date, amt: Decimal) =>
+    `${portfolioId}|${dir}|${cat}|${date.toISOString().slice(0, 10)}|${amt.toFixed(2)}`;
+
+  // Trades and income booked as transactions, by type. Futures move margin and
+  // daily settlement, not the contract value, and switches and opening balances
+  // move no cash in the period, so they are left out.
+  for (const t of txs) {
+    const cat = CASH_FLOW_TX_CATEGORY[t.transactionType];
+    if (!cat || t.assetClass === 'FUTURES') continue;
+    const dir = cashDirection(t.transactionType);
+    if (dir === 'NONE') continue;
+    const amt = transactionInrNet(t);
+    add(dir, cat, amt);
+    seen.add(dedupKey(t.portfolioId, dir, cat, t.tradeDate, amt));
+  }
+
+  // Cash flows: categorised by what created them (rent receipt, rent ledger
+  // entry, bank/broker email event); the description is only a fallback.
+  const flowIds = flows.map((f) => f.id);
+  const [receipts, ledgerEntries, events] = flowIds.length
+    ? await Promise.all([
+        prisma.rentReceipt.findMany({ where: { cashFlowId: { in: flowIds } }, select: { cashFlowId: true } }),
+        prisma.rentLedgerEntry.findMany({ where: { cashFlowId: { in: flowIds } }, select: { cashFlowId: true, entryType: true } }),
+        prisma.canonicalEvent.findMany({
+          where: { userId, projectedCashFlowId: { in: flowIds } },
+          select: { projectedCashFlowId: true, eventType: true },
+        }),
+      ])
+    : [[], [], []];
+  const sourceCategory = new Map<string, string>();
+  for (const r of receipts) if (r.cashFlowId) sourceCategory.set(r.cashFlowId, 'Rental Income');
+  for (const e of ledgerEntries) {
+    const cat = RENT_LEDGER_CATEGORY[e.entryType];
+    if (e.cashFlowId && cat) sourceCategory.set(e.cashFlowId, cat);
+  }
+  for (const e of events) {
+    const cat = EVENT_CASH_CATEGORY[e.eventType];
+    if (e.projectedCashFlowId && cat) sourceCategory.set(e.projectedCashFlowId, cat);
+  }
   for (const f of flows) {
-    const cat = category(f);
-    const amt = new Decimal(String(f.amount));
-    if (f.type === 'INFLOW') {
-      inflowByCat.set(cat, (inflowByCat.get(cat) ?? new Decimal(0)).plus(amt));
-    } else {
-      outflowByCat.set(cat, (outflowByCat.get(cat) ?? new Decimal(0)).plus(amt));
-    }
+    const dir = f.type === 'INFLOW' ? 'IN' : 'OUT';
+    const cat = sourceCategory.get(f.id) ?? describedCashCategory(dir, f.description);
+    const amt = inrAmount(f);
+    // The same dividend can arrive both as a CAS transaction and a bank email.
+    const key = dedupKey(f.portfolioId, dir, cat, f.date, amt);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    add(dir, cat, amt);
   }
 
   const inflowList = Array.from(inflowByCat.entries())
@@ -1395,7 +1596,10 @@ export async function buildCashFlowStatementLayout(
 
   const fromStamp = opts.from
     ? fmtDateDDMMYYYY(opts.from)
-    : (flows[0] ? fmtDateDDMMYYYY(flows[0].date) : 'inception');
+    : (() => {
+        const first = [flows[0]?.date, txs[0]?.tradeDate].filter((d): d is Date => !!d).sort((x, y) => x.getTime() - y.getTime())[0];
+        return first ? fmtDateDDMMYYYY(first) : 'inception';
+      })();
   const toStamp = opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY();
 
   return {
@@ -1450,22 +1654,7 @@ export async function buildCombinedRealisedUnrealisedLayout(
     },
     orderBy: { tradeDate: 'asc' },
   });
-  const lots = residualLots(
-    allTxs.map((t) => {
-      const q = new Decimal(t.quantity.toString());
-      const net = new Decimal(t.netAmount.toString());
-      const effective = q.isZero() ? new Decimal(t.price.toString()) : net.dividedBy(q);
-      return {
-        tradeDate: t.tradeDate,
-        quantity: q,
-        price: effective,
-        assetKey: t.assetKey ?? `name:${t.assetName ?? ''}`,
-        assetName: t.assetName,
-        isin: t.isin,
-        transactionType: t.transactionType,
-      };
-    }),
-  );
+  const lots = residualLots(allTxs, await loadFundCategoryMap(allTxs));
 
   // Latest market price per stockId (via assetKey lookup) ----------
   const stockIds = Array.from(new Set(
@@ -1488,14 +1677,8 @@ export async function buildCombinedRealisedUnrealisedLayout(
     return null;
   };
 
-  // FMV table for grandfathering -----------------------------------
-  const allIsins = Array.from(new Set([
-    ...equityCg.map((r) => r.isin),
-    ...lots.map((l) => l.isin),
-  ].filter((i): i is string => !!i)));
-  const fmvByIsin = await fetchFmvOn31Jan2018(allIsins);
-
-  const GF_CUTOFF = new Date('2018-01-31T23:59:59.999Z');
+  // FMV for grandfathering: the user's overrides, then the system seed ------
+  const fmvByIsin = await fetchGrandfatheringFmv(userId);
 
   // Row shape -----------------------------------------------------
   type Row = {
@@ -1531,15 +1714,9 @@ export async function buildCombinedRealisedUnrealisedLayout(
   // Realised rows -------------------------------------------------
   for (const r of equityCg) {
     const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const adjGain = adjustGainForGrandfathering(
-      r.buyDate,
-      r.quantity,
-      r.buyAmount,
-      r.sellAmount,
-      r.gainLoss,
-      fmv,
-    );
-    const isGf = r.buyDate.getTime() <= GF_CUTOFF.getTime() && fmv != null;
+    const gfCostRow = grandfatheredCost(r);
+    const adjGain = gfCostRow ? r.sellAmount.minus(gfCostRow) : r.gainLoss;
+    const isGf = gfCostRow !== null;
     const isIntraday = r.capitalGainType === 'INTRADAY';
     const isST = r.capitalGainType === 'SHORT_TERM';
     const isLT = r.capitalGainType === 'LONG_TERM';
@@ -1565,7 +1742,7 @@ export async function buildCombinedRealisedUnrealisedLayout(
       unrealisedGL: '',
       holdingDays: String(holdingDays),
       gfRate: isGf && fmv ? fmv.toFixed(4) : '',
-      gfCost: isGf && fmv ? fmv.times(r.quantity).toString() : '',
+      gfCost: gfCostRow ? gfCostRow.toString() : '',
       gfComputedGL: isGf ? adjGain.toString() : '',
     });
   }
@@ -1577,10 +1754,14 @@ export async function buildCombinedRealisedUnrealisedLayout(
     const unrealised = mkt ? mkt.minus(l.rate).times(l.qty) : null;
     const days = Math.round((cutoff.getTime() - l.date.getTime()) / 86_400_000);
     const fmv = l.isin ? fmvByIsin.get(l.isin) ?? null : null;
-    const isGf = l.date.getTime() <= GF_CUTOFF.getTime() && fmv != null;
-    const gfGL = mkt && isGf && fmv
-      ? mkt.times(l.qty).minus(fmv.times(l.qty)).toString()
-      : '';
+    const isGf = l.date.getTime() <= GRANDFATHERING_CUTOFF.getTime() && fmv != null;
+    // Sec 55(2)(ac) on a notional sale at today's price: cost = higher of
+    // (actual cost, lower of (FMV, value)).
+    const lotCost = l.qty.times(l.rate);
+    const lotGfCost = isGf && fmv && mkt
+      ? Decimal.max(lotCost, Decimal.min(fmv.times(l.qty), mkt.times(l.qty)))
+      : null;
+    const gfGL = mkt && lotGfCost ? mkt.times(l.qty).minus(lotGfCost).toString() : '';
     addRow(name, {
       scriptName: name,
       scriptCode: l.isin ?? '',
@@ -1600,7 +1781,7 @@ export async function buildCombinedRealisedUnrealisedLayout(
       unrealisedGL: unrealised ? unrealised.toString() : '',
       holdingDays: String(days),
       gfRate: isGf && fmv ? fmv.toFixed(4) : '',
-      gfCost: isGf && fmv ? fmv.times(l.qty).toString() : '',
+      gfCost: lotGfCost ? lotGfCost.toString() : '',
       gfComputedGL: gfGL,
     });
   }
@@ -1668,14 +1849,14 @@ export async function buildCombinedRealisedUnrealisedLayout(
     { key: 'scriptName', label: 'Script Name', width: 12, align: 'left' },
     { key: 'scriptCode', label: 'Script Code', width: 7, align: 'left' },
     { key: 'buyDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
-    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'buyRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
     { key: 'buyAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
     { key: 'sellDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
-    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'sellRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
     { key: 'sellAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
-    { key: 'closingQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'closingQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'mktRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
     { key: 'intradayGL', label: 'IntraDay G/L', width: 7, align: 'right', formatter: MONEY, signed: true },
     { key: 'realizedST', label: 'ST', width: 6, align: 'right', formatter: MONEY, signed: true },
@@ -1738,11 +1919,8 @@ export async function buildFamilyWiseHoldingsLayout(
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
   const cutoff = asOf ?? new Date();
-  const holdings = await prisma.holdingProjection.findMany({
-    where: { portfolio: { userId } },
-    include: { portfolio: { select: { name: true } } },
-    orderBy: [{ portfolioId: 'asc' }, { assetClass: 'asc' }, { assetName: 'asc' }],
-  });
+  // Positions as they stood on the cut-off, not today's.
+  const holdings = sortHoldings(await holdingsAsOf({ userId }, asOf), ['portfolioId', 'assetClass', 'assetName']);
 
   const effectiveVal = (h: { currentValue: unknown; totalCost: unknown }): Decimal =>
     h.currentValue != null ? new Decimal(String(h.currentValue)) : new Decimal(String(h.totalCost));
@@ -1863,9 +2041,6 @@ export async function buildScriptwiseQtywiseLayout(
     orderBy: { tradeDate: 'asc' },
   });
 
-  // Walk the txs once, tracking per-asset running average. Snapshot
-  // when we cross `from` for the opening figure; accumulate in/out
-  // figures while in the window.
   type Bucket = {
     assetName: string;
     isin: string | null;
@@ -1875,77 +2050,60 @@ export async function buildScriptwiseQtywiseLayout(
     buyValue: Decimal;
     sellQty: Decimal;
     sellValue: Decimal;
-    // Running average for net-position computation
     runningQty: Decimal;
     runningValue: Decimal;
   };
+  const zero = () => new Decimal(0);
   const buckets = new Map<string, Bucket>();
-  const keyOf = (t: typeof txs[number]): string => t.assetKey ?? `name:${t.assetName ?? ''}`;
-  const getBucket = (t: typeof txs[number]): Bucket => {
-    const k = keyOf(t);
-    let b = buckets.get(k);
-    if (!b) {
-      b = {
-        assetName: t.assetName ?? k,
-        isin: t.isin,
-        openingQty: new Decimal(0),
-        openingValue: new Decimal(0),
-        buyQty: new Decimal(0),
-        buyValue: new Decimal(0),
-        sellQty: new Decimal(0),
-        sellValue: new Decimal(0),
-        runningQty: new Decimal(0),
-        runningValue: new Decimal(0),
-      };
-      buckets.set(k, b);
-    }
-    return b;
-  };
-  // Snapshot opening once per bucket when first crossing `from`.
-  const snapped = new Set<string>();
+  const keyOf = (t: { assetKey: string | null; assetName: string | null }): string =>
+    t.assetKey ?? `name:${t.assetName ?? ''}`;
   for (const t of txs) {
     const k = keyOf(t);
-    const b = getBucket(t);
-    // "In window" = inside [from, to]. With no `from`, the entire
-    // history is in-window (opening stays 0) — otherwise the report
-    // shows everything as Opening with empty Purchase/Sale columns.
-    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
-    if (fromDate && t.tradeDate.getTime() >= fromDate.getTime() && !snapped.has(k)) {
-      b.openingQty = b.runningQty;
-      b.openingValue = b.runningValue;
-      snapped.add(k);
+    let bucket = buckets.get(k);
+    if (!bucket) {
+      bucket = {
+        assetName: t.assetName ?? k, isin: t.isin,
+        openingQty: zero(), openingValue: zero(), buyQty: zero(), buyValue: zero(),
+        sellQty: zero(), sellValue: zero(), runningQty: zero(), runningValue: zero(),
+      };
+      buckets.set(k, bucket);
     }
+    // With no `from`, the whole history is in the window (opening stays 0).
+    if (fromDate && t.tradeDate.getTime() < fromDate.getTime()) continue;
     const q = new Decimal(t.quantity.toString());
     const net = new Decimal(t.netAmount.toString());
-    if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (inWindow) {
-        b.buyQty = b.buyQty.plus(q);
-        b.buyValue = b.buyValue.plus(net);
-      }
-      b.runningQty = b.runningQty.plus(q);
-      b.runningValue = b.runningValue.plus(net);
+    if (t.transactionType === 'SPLIT' || t.transactionType === 'BONUS') {
+      bucket.buyQty = bucket.buyQty.plus(q); // extra units at no cost
+    } else if (BUY_TXN_TYPES.has(t.transactionType)) {
+      bucket.buyQty = bucket.buyQty.plus(q);
+      bucket.buyValue = bucket.buyValue.plus(net);
     } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-      if (inWindow) {
-        b.sellQty = b.sellQty.plus(q);
-        b.sellValue = b.sellValue.plus(net);
-      }
-      // Average-method exit: remove qty at the running average cost.
-      const avg = b.runningQty.isZero() ? new Decimal(0) : b.runningValue.dividedBy(b.runningQty);
-      b.runningQty = b.runningQty.minus(q);
-      b.runningValue = b.runningValue.minus(avg.times(q));
+      bucket.sellQty = bucket.sellQty.plus(q);
+      bucket.sellValue = bucket.sellValue.plus(net);
     }
   }
-
-  // Buckets with no in-window transactions: opening = full running
-  // state at end of pre-window. Only relevant when fromDate is set.
+  // Opening (before `from`) and closing (at `to`) positions are the FIFO lots
+  // still held — the same lots the capital-gains reports sell from.
+  const fundCategoryMap = await loadFundCategoryMap(txs);
+  const addLots = (list: typeof txs, set: (b: Bucket, qty: Decimal, cost: Decimal) => void) => {
+    for (const p of computeOpenLots(list, fundCategoryMap)) {
+      const bucket = buckets.get(p.assetKey);
+      if (!bucket) continue;
+      const qty = p.lots.reduce((acc, l) => acc.plus(l.quantity), zero());
+      const cost = p.lots.reduce((acc, l) => acc.plus(l.quantity.times(l.costPerUnit)), zero());
+      set(bucket, qty, cost);
+    }
+  };
   if (fromDate) {
-    for (const [k, b] of buckets) {
-      if (!snapped.has(k)) {
-        b.openingQty = b.runningQty;
-        b.openingValue = b.runningValue;
-      }
-    }
+    addLots(txs.filter((t) => t.tradeDate.getTime() < fromDate.getTime()), (bk, qty, cost) => {
+      bk.openingQty = bk.openingQty.plus(qty);
+      bk.openingValue = bk.openingValue.plus(cost);
+    });
   }
+  addLots(txs, (bk, qty, cost) => {
+    bk.runningQty = bk.runningQty.plus(qty);
+    bk.runningValue = bk.runningValue.plus(cost);
+  });
 
   const rows = Array.from(buckets.values())
     .filter((b) => !b.openingQty.isZero() || !b.buyQty.isZero() || !b.sellQty.isZero() || !b.runningQty.isZero())
@@ -1995,16 +2153,16 @@ export async function buildScriptwiseQtywiseLayout(
   const columns: ColumnDef[] = [
     { key: 'sr', label: 'Sr No', width: 4, align: 'center' },
     { key: 'name', label: 'Name of the Company', width: 16, align: 'left' },
-    { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'openRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
     { key: 'openAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
-    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'buyRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
     { key: 'buyAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
-    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'sellRate', label: 'Avg Rate', width: 6, align: 'right', formatter: MONEY },
     { key: 'sellAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
-    { key: 'netQty', label: 'Qty', width: 5, align: 'right', formatter: INT, signed: true },
+    { key: 'netQty', label: 'Qty', width: 5, align: 'right', formatter: QTY, signed: true },
     { key: 'netAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY, signed: true },
   ];
 
@@ -2213,27 +2371,16 @@ export async function buildMfM2MLayout(
     },
     orderBy: { tradeDate: 'asc' },
   });
-  const lots = residualLots(
-    txs.map((t) => {
-      const q = new Decimal(t.quantity.toString());
-      const net = new Decimal(t.netAmount.toString());
-      const eff = q.isZero() ? new Decimal(t.price.toString()) : net.dividedBy(q);
-      return {
-        tradeDate: t.tradeDate,
-        quantity: q,
-        price: eff,
-        assetKey: t.assetKey ?? `name:${t.assetName ?? ''}`,
-        assetName: t.assetName,
-        isin: t.isin,
-        transactionType: t.transactionType,
-      };
-    }),
-  );
+  const lots = residualLots(txs, await loadFundCategoryMap(txs));
 
   // Latest NAV per fundId.
-  const fundIds = Array.from(new Set(
-    lots.filter((l) => l.assetKey.startsWith('fund:')).map((l) => l.assetKey.slice(5)),
-  ));
+  // Resolve a fund for lots keyed by ISIN or name, then take its NAV.
+  const fundIdByKey = new Map<string, string | null>();
+  for (const l of lots) {
+    if (fundIdByKey.has(l.assetKey)) continue;
+    fundIdByKey.set(l.assetKey, l.fundId ?? (await resolveMutualFundId({ isin: l.isin, schemeName: l.scriptName })));
+  }
+  const fundIds = Array.from(new Set([...fundIdByKey.values()].filter((v): v is string => !!v)));
   const navByFund = new Map<string, Decimal>();
   if (fundIds.length > 0) {
     const navs = await prisma.mFNav.findMany({
@@ -2247,8 +2394,8 @@ export async function buildMfM2MLayout(
     }
   }
   const navFor = (key: string): Decimal | null => {
-    if (key.startsWith('fund:')) return navByFund.get(key.slice(5)) ?? null;
-    return null;
+    const fundId = fundIdByKey.get(key);
+    return fundId ? navByFund.get(fundId) ?? null : null;
   };
 
   const byScheme = new Map<string, typeof lots>();
@@ -2394,9 +2541,10 @@ export async function buildFinancialLedgerLayout(
       include: { voucher: true },
       orderBy: { voucher: { date: 'asc' } },
     });
-    if (entries.length === 0) continue;
-
-    let opening = new Decimal(0);
+    // Opening = the account's own opening balance (kept on its normal side;
+    // debit-positive here) plus every voucher before the period.
+    const ob = new Decimal(a.openingBalance.toString());
+    let opening = a.type === 'ASSET' || a.type === 'EXPENSE' ? ob : ob.negated();
     if (fromDate) {
       const priorEntries = await prisma.voucherEntry.findMany({
         where: {
@@ -2410,6 +2558,8 @@ export async function buildFinancialLedgerLayout(
         else opening = opening.minus(amt);
       }
     }
+    // An account with a balance brought forward still belongs in the ledger.
+    if (entries.length === 0 && opening.isZero()) continue;
 
     let running = opening;
     const rows: BodyRowLite[] = [{
@@ -2486,26 +2636,17 @@ export async function buildClosingBalanceLayout(
   const m = await userMember(userId);
   const cutoff = asOf ?? new Date();
 
-  const holdings = await prisma.holdingProjection.findMany({
-    where: { portfolio: { userId } },
-    orderBy: [{ assetClass: 'asc' }, { assetName: 'asc' }],
-  });
+  // Positions as they stood on the cut-off, not today's.
+  const holdings = sortHoldings(await holdingsAsOf({ userId }, asOf), ['assetClass', 'assetName']);
 
-  // First-acquisition date per asset = earliest BUY txn for that asset.
-  const txs = await prisma.transaction.findMany({
-    where: {
-      portfolio: { userId },
-      tradeDate: { lte: cutoff },
-    },
-    select: { assetKey: true, assetName: true, tradeDate: true, transactionType: true },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const firstDate = new Map<string, Date>();
-  for (const t of txs) {
-    if (!BUY_TXN_TYPES.has(t.transactionType)) continue;
-    const k = t.assetKey ?? `name:${t.assetName ?? ''}`;
-    if (!firstDate.has(k)) firstDate.set(k, t.tradeDate);
-  }
+  // Acquisition date = oldest lot still held (a position sold out and bought
+  // again dates from the re-purchase), keyed portfolio|asset.
+  const firstDate = await acquisitionDates(
+    await prisma.transaction.findMany({
+      where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
+      orderBy: { tradeDate: 'asc' },
+    }),
+  );
 
   const byClass = new Map<string, typeof holdings>();
   for (const h of holdings) {
@@ -2518,7 +2659,6 @@ export async function buildClosingBalanceLayout(
   // splits into separate windows. We compress into sections with
   // banners (Equity / Mutual Fund / F & O).
   const sections: ReportSection[] = [];
-  let grandQty = new Decimal(0);
   let grandInvested = new Decimal(0);
   let grandValue = new Decimal(0);
   for (const [assetClass, list] of byClass) {
@@ -2530,15 +2670,13 @@ export async function buildClosingBalanceLayout(
       }),
       { qty: new Decimal(0), invested: new Decimal(0), value: new Decimal(0) },
     );
-    grandQty = grandQty.plus(tot.qty);
     grandInvested = grandInvested.plus(tot.invested);
     grandValue = grandValue.plus(tot.value);
     sections.push({
       banner: `${assetClass.replace(/_/g, ' ')} — Closing Balance As On ${fmtDateDDMMYYYY(cutoff)}`,
       groups: [{
         rows: list.map((h) => {
-          const k = h.assetKey;
-          const acqDate = firstDate.get(k);
+          const acqDate = firstDate.get(`${h.portfolioId}|${h.assetKey}`);
           return {
             cells: {
               assetName: h.assetName ?? '—',
@@ -2547,15 +2685,16 @@ export async function buildClosingBalanceLayout(
               purPrice: h.avgCostPrice.toString(),
               invested: h.totalCost.toString(),
               currPrice: h.currentPrice?.toString() ?? '',
-              currValue: h.currentValue?.toString() ?? '',
+              // No price: carried at cost, the same figure the totals use.
+              currValue: (h.currentValue ?? h.totalCost).toString(),
               isin: h.isin ?? '',
             },
           };
         }),
         subtotal: {
           label: `Total: ${assetClass.replace(/_/g, ' ')}`,
+          // Units of different assets don't add up, so no quantity total.
           values: {
-            qty: tot.qty.toString(),
             invested: tot.invested.toString(),
             currValue: tot.value.toString(),
           },
@@ -2587,7 +2726,6 @@ export async function buildClosingBalanceLayout(
     grandTotal: {
       label: 'Grand Total',
       values: {
-        qty: grandQty.toString(),
         invested: grandInvested.toString(),
         currValue: grandValue.toString(),
       },
@@ -2629,8 +2767,8 @@ export async function buildTopHoldingsLayout(userId: string): Promise<MprofitLay
       (acc, h) => ({
         qty: acc.qty.plus(new Decimal(h.quantity.toString())),
         invested: acc.invested.plus(new Decimal(h.totalCost.toString())),
-        bseValue: acc.bseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0)),
-        nseValue: acc.nseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0)),
+        bseValue: acc.bseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString())),
+        nseValue: acc.nseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString())),
       }),
       { qty: new Decimal(0), invested: new Decimal(0), bseValue: new Decimal(0), nseValue: new Decimal(0) },
     );
@@ -2647,7 +2785,7 @@ export async function buildTopHoldingsLayout(userId: string): Promise<MprofitLay
         rows: top5.map((h) => {
           const invested = new Decimal(h.totalCost.toString());
           const weight = totalInClass.greaterThan(0) ? invested.dividedBy(totalInClass).times(100) : new Decimal(0);
-          const currValue = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+          const currValue = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
           return {
             cells: {
               scriptName: h.assetName ?? '—',
@@ -2737,7 +2875,7 @@ export async function buildSectorWiseAllocationLayout(
       const rec = bySector.get(s) ?? { qty: new Decimal(0), invested: new Decimal(0), bseValue: new Decimal(0), nseValue: new Decimal(0) };
       rec.qty = rec.qty.plus(new Decimal(h.quantity.toString()));
       rec.invested = rec.invested.plus(new Decimal(h.totalCost.toString()));
-      const v = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+      const v = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
       rec.bseValue = rec.bseValue.plus(v);
       rec.nseValue = rec.nseValue.plus(v);
       bySector.set(s, rec);
@@ -2792,8 +2930,8 @@ export async function buildSectorWiseAllocationLayout(
         (acc, h) => ({
           qty: acc.qty.plus(new Decimal(h.quantity.toString())),
           invested: acc.invested.plus(new Decimal(h.totalCost.toString())),
-          bseValue: acc.bseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0)),
-          nseValue: acc.nseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0)),
+          bseValue: acc.bseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString())),
+          nseValue: acc.nseValue.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString())),
         }),
         { qty: new Decimal(0), invested: new Decimal(0), bseValue: new Decimal(0), nseValue: new Decimal(0) },
       );
@@ -2805,7 +2943,7 @@ export async function buildSectorWiseAllocationLayout(
             const weight = totalInvested.greaterThan(0)
               ? invested.dividedBy(totalInvested).times(100).toFixed(2)
               : '0.00';
-            const v = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+            const v = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
             return {
               cells: {
                 scriptName: h.assetName ?? '—',
@@ -2855,6 +2993,11 @@ export async function buildSectorWiseAllocationLayout(
 // One row per contract note (Transaction.orderNo + broker). Payable
 // if user bought (net out-flow), Receivable if sold (net in-flow).
 
+const CONTRACT_NOTE_ASSET_CLASSES: AssetClass[] = [
+  'EQUITY', 'ETF', 'FUTURES', 'OPTIONS', 'BOND', 'GOVT_BOND', 'CORPORATE_BOND',
+  'GOLD_BOND', 'GOLD_ETF', 'REIT', 'INVIT',
+];
+
 export async function buildContractNotesSummaryLayout(
   userId: string,
   asOf?: Date,
@@ -2866,11 +3009,15 @@ export async function buildContractNotesSummaryLayout(
       portfolio: { userId },
       tradeDate: { lte: cutoff },
       orderNo: { not: null },
+      // Contract notes are exchange trades — not insurance premiums, FDs or
+      // bank rows that also carry a reference number.
+      transactionType: { in: ['BUY', 'SELL'] },
+      assetClass: { in: CONTRACT_NOTE_ASSET_CLASSES },
     },
     orderBy: { tradeDate: 'desc' },
   });
 
-  const byNote = new Map<string, { broker: string; date: Date; orderNo: string; total: Decimal; isBuy: boolean }>();
+  const byNote = new Map<string, { broker: string; date: Date; orderNo: string; total: Decimal }>();
   for (const t of txs) {
     const key = `${t.broker ?? 'SELF-BROKER A/C'}::${t.orderNo}`;
     let rec = byNote.get(key);
@@ -2880,11 +3027,12 @@ export async function buildContractNotesSummaryLayout(
         date: t.tradeDate,
         orderNo: t.orderNo!,
         total: new Decimal(0),
-        isBuy: BUY_TXN_TYPES.has(t.transactionType),
       };
       byNote.set(key, rec);
     }
-    rec.total = rec.total.plus(new Decimal(t.netAmount.toString()));
+    // Net per note: purchases are payable, sales receivable.
+    const net = new Decimal(t.netAmount.toString());
+    rec.total = t.transactionType === 'BUY' ? rec.total.plus(net) : rec.total.minus(net);
   }
 
   const rows: BodyRowLite[] = Array.from(byNote.values())
@@ -2894,7 +3042,7 @@ export async function buildContractNotesSummaryLayout(
         date: rec.date.toISOString().slice(0, 10),
         broker: rec.broker,
         contractNoteNo: rec.orderNo,
-        type: rec.isBuy ? 'Payable' : 'Receivable',
+        type: rec.total.isNegative() ? 'Receivable' : 'Payable',
         amount: rec.total.abs().toString(),
       },
     }));
@@ -2908,7 +3056,7 @@ export async function buildContractNotesSummaryLayout(
   ];
 
   return {
-    reportTitle: `Contract Notes Summary Report As On ${fmtDateDDMMYYYY(cutoff)} (Equity)`,
+    reportTitle: `Contract Notes Summary Report As On ${fmtDateDDMMYYYY(cutoff)}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -2922,11 +3070,6 @@ export async function buildContractNotesSummaryLayout(
 
 // ─── Helpers for capital-gain summary reports (27, 28, 30, 31) ────
 
-// Cut-off for the 22-July-2024 LTCG rate change (Budget 2024). Sells
-// up to and including 22-Jul-2024 use the old 10% / 20% schedule;
-// 23-Jul-2024 onwards uses the new 12.5% schedule. Several reports
-// split the column accordingly.
-const LTCG_RATE_CHANGE_CUTOFF = new Date('2024-07-22T23:59:59.999Z');
 
 type ScriptBucket = {
   assetName: string;
@@ -2968,6 +3111,134 @@ function emptyBucket(name: string, isin: string | null): ScriptBucket {
   };
 }
 
+// A capital-gains rule change (rate / holding-period table) that falls inside
+// the report window splits the "before / from" columns. Taken from the shared
+// rules table, so a future change needs no code edit here.
+function rateChangeWithin(fromDate: Date | null, toDate: Date): Date | null {
+  let split: Date | null = null;
+  for (const set of CAPITAL_GAINS_RULE_SETS) {
+    const d = new Date(`${set.effectiveFrom}T00:00:00Z`);
+    if ((!fromDate || d.getTime() > fromDate.getTime()) && d.getTime() <= toDate.getTime()) split = d;
+  }
+  return split;
+}
+
+function splitColumnLabels(split: Date | null): { before: string; from: string } {
+  if (!split) return { before: 'Before rate change (none in period)', from: 'Whole period' };
+  const dayBefore = new Date(split.getTime() - 86_400_000);
+  return { before: `Upto ${fmtDateDDMMYYYY(dayBefore)}`, from: `From ${fmtDateDDMMYYYY(split)}` };
+}
+
+/**
+ * Per-script movement for the equity capital-gain downloads (Tax P&L, Capital
+ * Gains FIFO, Brokerwise, Advance Tax). Only sec 111A/112A assets. Opening and
+ * closing are the FIFO lots still held at the window's edges — the same lots
+ * the capital-gain rows are matched against — so
+ * Closing = Opening + Purchases − Sale proceeds + Capital G/L reconciles.
+ */
+async function equityScriptBuckets(
+  userId: string,
+  fromDate: Date | null,
+  toDate: Date,
+  groupOf: (t: { broker: string | null } | undefined) => string = () => '',
+): Promise<{ groups: Map<string, Map<string, ScriptBucket>>; split: Date | null; cgRows: CapitalGainRow[] }> {
+  const [{ rows: cgRows }, allTxs] = await Promise.all([
+    computeUserCapitalGains(userId),
+    prisma.transaction.findMany({
+      where: { portfolio: { userId }, tradeDate: { lte: toDate } },
+      orderBy: { tradeDate: 'asc' },
+    }),
+  ]);
+  const fundCategoryMap = await loadFundCategoryMap(allTxs);
+  const txs = allTxs.filter((t) => transactionIsEquityOriented(t, fundCategoryMap));
+  const txById = new Map(allTxs.map((t) => [t.id, t]));
+
+  const groups = new Map<string, Map<string, ScriptBucket>>();
+  const bucket = (group: string, name: string, isin: string | null): ScriptBucket => {
+    let inner = groups.get(group);
+    if (!inner) {
+      inner = new Map();
+      groups.set(group, inner);
+    }
+    let b = inner.get(name);
+    if (!b) {
+      b = emptyBucket(name, isin);
+      inner.set(name, b);
+    }
+    return b;
+  };
+  const inWindow = (d: Date) =>
+    (!fromDate || d.getTime() >= fromDate.getTime()) && d.getTime() <= toDate.getTime();
+
+  const txsByScript = new Map<string, { group: string; name: string; isin: string | null; txs: typeof txs }>();
+  for (const t of txs) {
+    const group = groupOf(t);
+    const name = t.assetName ?? '—';
+    const key = JSON.stringify([group, name]);
+    const entry = txsByScript.get(key) ?? { group, name, isin: t.isin, txs: [] };
+    entry.txs.push(t);
+    txsByScript.set(key, entry);
+    if (!inWindow(t.tradeDate)) continue;
+    const b = bucket(group, name, t.isin);
+    const q = new Decimal(t.quantity.toString());
+    const net = new Decimal(t.netAmount.toString());
+    if (BUY_TXN_TYPES.has(t.transactionType)) {
+      b.buyQty = b.buyQty.plus(q);
+      b.buyValue = b.buyValue.plus(net);
+    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
+      b.sellQty = b.sellQty.plus(q);
+      b.sellValue = b.sellValue.plus(net);
+    }
+  }
+
+  const sumLots = (positions: ReturnType<typeof computeOpenLots>) =>
+    positions
+      .flatMap((p) => p.lots)
+      .reduce(
+        (acc, l) => ({
+          qty: acc.qty.plus(l.quantity),
+          value: acc.value.plus(l.costPerUnit.times(l.quantity)),
+        }),
+        { qty: new Decimal(0), value: new Decimal(0) },
+      );
+  for (const { group, name, isin, txs: list } of txsByScript.values()) {
+    const opening = fromDate
+      ? sumLots(computeOpenLots(list.filter((t) => t.tradeDate.getTime() < fromDate.getTime()), fundCategoryMap))
+      : { qty: new Decimal(0), value: new Decimal(0) };
+    const closing = sumLots(computeOpenLots(list, fundCategoryMap));
+    if (opening.qty.isZero() && closing.qty.isZero() && !groups.get(group)?.has(name)) continue;
+    const b = bucket(group, name, isin);
+    b.openQty = opening.qty;
+    b.openValue = opening.value;
+    b.closingQty = closing.qty;
+    b.closingValue = closing.value;
+  }
+
+  const split = rateChangeWithin(fromDate, toDate);
+  for (const r of cgRows) {
+    if (!r.isEquityOriented) continue;
+    if (!inWindow(r.sellDate)) continue;
+    const b = bucket(groupOf(txById.get(r.sellTransactionId)), r.assetName, r.isin);
+    b.capitalGL = b.capitalGL.plus(r.gainLoss);
+    const before = split !== null && r.sellDate.getTime() < split.getTime();
+    if (r.capitalGainType === 'INTRADAY') {
+      b.speculation = b.speculation.plus(r.gainLoss);
+      if (r.gainLoss.greaterThanOrEqualTo(0)) b.speculationGain = b.speculationGain.plus(r.gainLoss);
+      else b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
+    } else if (r.capitalGainType === 'SHORT_TERM') {
+      b.shortTerm = b.shortTerm.plus(r.gainLoss);
+      if (before) b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
+      else b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
+    } else if (r.capitalGainType === 'LONG_TERM') {
+      b.longTerm = b.longTerm.plus(r.gainLoss);
+      if (before) b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
+      else b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
+    }
+  }
+
+  return { groups, split, cgRows };
+}
+
 // ─── 27. Brokerwise Capital Gain/Loss ─────────────────────────────
 
 export async function buildBrokerwiseCapitalGainLayout(
@@ -2978,93 +3249,13 @@ export async function buildBrokerwiseCapitalGainLayout(
   const fromDate = opts.from ? new Date(opts.from) : null;
   const toDate = opts.to ? new Date(opts.to) : new Date();
 
-  // Realised gains per (broker, asset) — pull from CapitalGain rows,
-  // join broker via sellTransaction.
-  const { rows: cgRows } = await computeUserCapitalGains(userId);
-  const txs = await prisma.transaction.findMany({
-    where: {
-      portfolio: { userId },
-      tradeDate: { lte: toDate },
-    },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const txById = new Map(txs.map((t) => [t.id, t]));
-
-  // Bucket by (broker, scriptName).
-  const buckets = new Map<string, Map<string, ScriptBucket>>();
-  const getBucket = (broker: string, name: string, isin: string | null): ScriptBucket => {
-    let inner = buckets.get(broker);
-    if (!inner) {
-      inner = new Map();
-      buckets.set(broker, inner);
-    }
-    let b = inner.get(name);
-    if (!b) {
-      b = emptyBucket(name, isin);
-      inner.set(name, b);
-    }
-    return b;
-  };
-
-  // Walk txs to fill opening / purchase / sale columns + closing qty.
-  for (const t of txs) {
-    const broker = t.broker ?? 'SELF-BROKER A/C';
-    const b = getBucket(broker, t.assetName ?? '—', t.isin);
-    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
-    const q = new Decimal(t.quantity.toString());
-    const net = new Decimal(t.netAmount.toString());
-    if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (!inWindow) {
-        b.openQty = b.openQty.plus(q);
-        b.openValue = b.openValue.plus(net);
-      } else {
-        b.buyQty = b.buyQty.plus(q);
-        b.buyValue = b.buyValue.plus(net);
-      }
-      b.closingQty = b.closingQty.plus(q);
-      b.closingValue = b.closingValue.plus(net);
-    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-      if (inWindow) {
-        b.sellQty = b.sellQty.plus(q);
-        b.sellValue = b.sellValue.plus(net);
-      }
-      const avg = b.closingQty.isZero() ? new Decimal(0) : b.closingValue.dividedBy(b.closingQty);
-      b.closingQty = b.closingQty.minus(q);
-      b.closingValue = b.closingValue.minus(avg.times(q));
-    }
-  }
-
-  // Apply CG rows for ST/LT/Speculation split + 22-July cutoff.
-  for (const r of cgRows) {
-    if (fromDate && r.sellDate.getTime() < fromDate.getTime()) continue;
-    if (r.sellDate.getTime() > toDate.getTime()) continue;
-    const sellTx = txById.get(r.sellTransactionId);
-    const broker = sellTx?.broker ?? 'SELF-BROKER A/C';
-    const b = getBucket(broker, r.assetName, r.isin);
-    b.capitalGL = b.capitalGL.plus(r.gainLoss);
-    if (r.capitalGainType === 'INTRADAY') {
-      b.speculation = b.speculation.plus(r.gainLoss);
-      if (r.gainLoss.greaterThanOrEqualTo(0)) {
-        b.speculationGain = b.speculationGain.plus(r.gainLoss);
-      } else {
-        b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
-      }
-    } else if (r.capitalGainType === 'SHORT_TERM') {
-      b.shortTerm = b.shortTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) {
-        b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
-      } else {
-        b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
-      }
-    } else if (r.capitalGainType === 'LONG_TERM') {
-      b.longTerm = b.longTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) {
-        b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
-      } else {
-        b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
-      }
-    }
-  }
+  // Per (broker, script); only sec 111A/112A assets (the report is "(Equity)").
+  const { groups: buckets } = await equityScriptBuckets(
+    userId,
+    fromDate,
+    toDate,
+    (t) => t?.broker ?? 'SELF-BROKER A/C',
+  );
 
   const sections: ReportSection[] = Array.from(buckets.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -3134,16 +3325,16 @@ export async function buildBrokerwiseCapitalGainLayout(
 
   const columns: ColumnDef[] = [
     { key: 'scriptName', label: 'Script Name', width: 18, align: 'left' },
-    { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'openRate', label: 'Rate', width: 6, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'openAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
-    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'buyRate', label: 'Rate', width: 6, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'buyAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
-    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'sellRate', label: 'Rate', width: 6, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'sellAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
-    { key: 'closingQty', label: 'Qty', width: 5, align: 'right', formatter: INT, signed: true },
+    { key: 'closingQty', label: 'Qty', width: 5, align: 'right', formatter: QTY, signed: true },
     { key: 'closingRate', label: 'Rate', width: 6, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'closingValue', label: 'Value', width: 8, align: 'right', formatter: MONEY, signed: true },
     { key: 'capitalGL', label: 'Capital Gain/Loss', width: 9, align: 'right', formatter: MONEY, signed: true },
@@ -3194,67 +3385,9 @@ export async function buildTaxPnLLayout(
   const fromDate = opts.from ? new Date(opts.from) : null;
   const toDate = opts.to ? new Date(opts.to) : new Date();
 
-  const { rows: cgRows } = await computeUserCapitalGains(userId);
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: toDate } },
-    orderBy: { tradeDate: 'asc' },
-  });
-
-  const byScript = new Map<string, ScriptBucket>();
-  const getB = (name: string, isin: string | null): ScriptBucket => {
-    let b = byScript.get(name);
-    if (!b) {
-      b = emptyBucket(name, isin);
-      byScript.set(name, b);
-    }
-    return b;
-  };
-
-  for (const t of txs) {
-    const b = getB(t.assetName ?? '—', t.isin);
-    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
-    const q = new Decimal(t.quantity.toString());
-    const net = new Decimal(t.netAmount.toString());
-    if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (!inWindow) {
-        b.openQty = b.openQty.plus(q);
-        b.openValue = b.openValue.plus(net);
-      } else {
-        b.buyQty = b.buyQty.plus(q);
-        b.buyValue = b.buyValue.plus(net);
-      }
-      b.closingQty = b.closingQty.plus(q);
-      b.closingValue = b.closingValue.plus(net);
-    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-      if (inWindow) {
-        b.sellQty = b.sellQty.plus(q);
-        b.sellValue = b.sellValue.plus(net);
-      }
-      const avg = b.closingQty.isZero() ? new Decimal(0) : b.closingValue.dividedBy(b.closingQty);
-      b.closingQty = b.closingQty.minus(q);
-      b.closingValue = b.closingValue.minus(avg.times(q));
-    }
-  }
-
-  for (const r of cgRows) {
-    if (fromDate && r.sellDate.getTime() < fromDate.getTime()) continue;
-    if (r.sellDate.getTime() > toDate.getTime()) continue;
-    const b = getB(r.assetName, r.isin);
-    b.capitalGL = b.capitalGL.plus(r.gainLoss);
-    if (r.capitalGainType === 'INTRADAY') {
-      b.speculation = b.speculation.plus(r.gainLoss);
-      if (r.gainLoss.greaterThanOrEqualTo(0)) b.speculationGain = b.speculationGain.plus(r.gainLoss);
-      else b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
-    } else if (r.capitalGainType === 'SHORT_TERM') {
-      b.shortTerm = b.shortTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
-      else b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
-    } else if (r.capitalGainType === 'LONG_TERM') {
-      b.longTerm = b.longTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
-      else b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
-    }
-  }
+  const { groups, split } = await equityScriptBuckets(userId, fromDate, toDate);
+  const byScript = groups.get('') ?? new Map<string, ScriptBucket>();
+  const splitLabels = splitColumnLabels(split);
 
   const list = Array.from(byScript.values()).sort((a, b) => a.assetName.localeCompare(b.assetName));
   const tot = list.reduce((acc, b) => ({
@@ -3287,16 +3420,16 @@ export async function buildTaxPnLLayout(
 
   const columns: ColumnDef[] = [
     { key: 'scriptName', label: 'Script Name', width: 16, align: 'left' },
-    { key: 'openQty', label: 'Qty', width: 4, align: 'right', formatter: INT },
+    { key: 'openQty', label: 'Qty', width: 4, align: 'right', formatter: QTY },
     { key: 'openRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'openAmount', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
-    { key: 'buyQty', label: 'Qty', width: 4, align: 'right', formatter: INT },
+    { key: 'buyQty', label: 'Qty', width: 4, align: 'right', formatter: QTY },
     { key: 'buyRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'buyAmount', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
-    { key: 'sellQty', label: 'Qty', width: 4, align: 'right', formatter: INT },
+    { key: 'sellQty', label: 'Qty', width: 4, align: 'right', formatter: QTY },
     { key: 'sellRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'sellAmount', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
-    { key: 'closingQty', label: 'Qty', width: 4, align: 'right', formatter: INT, signed: true },
+    { key: 'closingQty', label: 'Qty', width: 4, align: 'right', formatter: QTY, signed: true },
     { key: 'closingRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'closingValue', label: 'Value', width: 7, align: 'right', formatter: MONEY, signed: true },
     { key: 'capitalGL', label: 'Capital G/L', width: 7, align: 'right', formatter: MONEY, signed: true },
@@ -3305,8 +3438,8 @@ export async function buildTaxPnLLayout(
     { key: 'speculation', label: 'Speculation', width: 6, align: 'right', formatter: MONEY, signed: true },
     { key: 'specGain', label: 'Spec Gain', width: 6, align: 'right', formatter: MONEY },
     { key: 'specLoss', label: 'Spec Loss', width: 6, align: 'right', formatter: MONEY },
-    { key: 'stUp', label: 'Short Term (Upto 22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
-    { key: 'ltUp', label: 'Long Term (Upto 22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'stUp', label: `Short Term (${splitLabels.before})`, width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'ltUp', label: `Long Term (${splitLabels.before})`, width: 7, align: 'right', formatter: MONEY, signed: true },
   ];
 
   return {
@@ -3323,7 +3456,7 @@ export async function buildTaxPnLLayout(
       { label: 'Closing=Op+Pur-Sell(+/-) G/L', spanCols: 3 },
       { label: 'Capital Gain/Loss', spanCols: 1 },
       { label: 'Gain/Loss', spanCols: 5 },
-      { label: 'Upto 22 July 2024', spanCols: 2 },
+      { label: splitLabels.before, spanCols: 2 },
     ],
     headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
     columns,
@@ -3390,13 +3523,19 @@ export async function buildTaxPnLLayout(
 export async function buildStt10DbLayout(
   userId: string,
   asOf?: Date,
+  fy?: string,
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
-  const cutoff = asOf ?? new Date();
+  // Form 10DB is per financial year: the requested FY, or the FY containing
+  // `asOf` (today by default) up to that date.
+  const cutoff = fy ? financialYearBounds(fy).end : asOf ?? new Date();
+  const fyStart = financialYearBounds(fy ?? financialYearOf(cutoff)).start;
   const txs = await prisma.transaction.findMany({
     where: {
       portfolio: { userId },
-      tradeDate: { lte: cutoff },
+      tradeDate: { gte: fyStart, lte: cutoff },
+      // Only trades that actually bore securities transaction tax.
+      stt: { gt: 0 },
     },
     orderBy: [{ broker: 'asc' }, { tradeDate: 'asc' }],
   });
@@ -3480,7 +3619,7 @@ export async function buildStt10DbLayout(
 
 // ─── 30. Capital Gains FIFO ───────────────────────────────────────
 //
-// Per-script capital gain summary with full Upto / Onward 22-July
+// Per-script capital gain summary, split before / from any rule change in the window
 // split. Uses the same data flow as Tax PnL but extra ST/LT-onward
 // columns and section-wise sub-totals per equity / share trading.
 
@@ -3489,71 +3628,14 @@ export async function buildCapitalGainsFifoLayout(
   opts: { from?: string; to?: string },
 ): Promise<MprofitLayout> {
   // The data engine is identical to Tax PnL — re-use it and just swap
-  // the column set + add the Onward 23-July columns.
+  // the column set + add the "from rule change" columns.
   const m = await userMember(userId);
   const fromDate = opts.from ? new Date(opts.from) : null;
   const toDate = opts.to ? new Date(opts.to) : new Date();
 
-  const { rows: cgRows } = await computeUserCapitalGains(userId);
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: toDate } },
-    orderBy: { tradeDate: 'asc' },
-  });
-
-  const byScript = new Map<string, ScriptBucket>();
-  const getB = (name: string, isin: string | null): ScriptBucket => {
-    let b = byScript.get(name);
-    if (!b) {
-      b = emptyBucket(name, isin);
-      byScript.set(name, b);
-    }
-    return b;
-  };
-
-  for (const t of txs) {
-    const b = getB(t.assetName ?? '—', t.isin);
-    const inWindow = !fromDate || t.tradeDate.getTime() >= fromDate.getTime();
-    const q = new Decimal(t.quantity.toString());
-    const net = new Decimal(t.netAmount.toString());
-    if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (!inWindow) {
-        b.openQty = b.openQty.plus(q);
-        b.openValue = b.openValue.plus(net);
-      } else {
-        b.buyQty = b.buyQty.plus(q);
-        b.buyValue = b.buyValue.plus(net);
-      }
-      b.closingQty = b.closingQty.plus(q);
-      b.closingValue = b.closingValue.plus(net);
-    } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-      if (inWindow) {
-        b.sellQty = b.sellQty.plus(q);
-        b.sellValue = b.sellValue.plus(net);
-      }
-      const avg = b.closingQty.isZero() ? new Decimal(0) : b.closingValue.dividedBy(b.closingQty);
-      b.closingQty = b.closingQty.minus(q);
-      b.closingValue = b.closingValue.minus(avg.times(q));
-    }
-  }
-  for (const r of cgRows) {
-    if (fromDate && r.sellDate.getTime() < fromDate.getTime()) continue;
-    if (r.sellDate.getTime() > toDate.getTime()) continue;
-    const b = getB(r.assetName, r.isin);
-    b.capitalGL = b.capitalGL.plus(r.gainLoss);
-    if (r.capitalGainType === 'INTRADAY') {
-      b.speculation = b.speculation.plus(r.gainLoss);
-      if (r.gainLoss.greaterThanOrEqualTo(0)) b.speculationGain = b.speculationGain.plus(r.gainLoss);
-      else b.speculationLoss = b.speculationLoss.plus(r.gainLoss.abs());
-    } else if (r.capitalGainType === 'SHORT_TERM') {
-      b.shortTerm = b.shortTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.shortTermUpto22Jul = b.shortTermUpto22Jul.plus(r.gainLoss);
-      else b.shortTermOnward23Jul = b.shortTermOnward23Jul.plus(r.gainLoss);
-    } else if (r.capitalGainType === 'LONG_TERM') {
-      b.longTerm = b.longTerm.plus(r.gainLoss);
-      if (r.sellDate.getTime() <= LTCG_RATE_CHANGE_CUTOFF.getTime()) b.longTermUpto22Jul = b.longTermUpto22Jul.plus(r.gainLoss);
-      else b.longTermOnward23Jul = b.longTermOnward23Jul.plus(r.gainLoss);
-    }
-  }
+  const { groups, split } = await equityScriptBuckets(userId, fromDate, toDate);
+  const byScript = groups.get('') ?? new Map<string, ScriptBucket>();
+  const splitLabels = splitColumnLabels(split);
 
   const list = Array.from(byScript.values()).sort((a, b) => a.assetName.localeCompare(b.assetName));
   const tot = list.reduce((acc, b) => ({
@@ -3575,7 +3657,7 @@ export async function buildCapitalGainsFifoLayout(
 
   const columns: ColumnDef[] = [
     { key: 'scriptName', label: 'Script Name', width: 14, align: 'left' },
-    { key: 'closingQty', label: 'Qty', width: 4, align: 'right', formatter: INT, signed: true },
+    { key: 'closingQty', label: 'Qty', width: 4, align: 'right', formatter: QTY, signed: true },
     { key: 'closingRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'closingValue', label: 'Value', width: 7, align: 'right', formatter: MONEY, signed: true },
     { key: 'capitalGL', label: 'Capital G/L', width: 7, align: 'right', formatter: MONEY, signed: true },
@@ -3584,10 +3666,10 @@ export async function buildCapitalGainsFifoLayout(
     { key: 'speculation', label: 'Speculation', width: 6, align: 'right', formatter: MONEY, signed: true },
     { key: 'specGain', label: 'Spec Gain', width: 6, align: 'right', formatter: MONEY },
     { key: 'specLoss', label: 'Spec Loss', width: 6, align: 'right', formatter: MONEY },
-    { key: 'stUp', label: 'Short Term (≤22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
-    { key: 'ltUp', label: 'Long Term (≤22-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
-    { key: 'stOn', label: 'Short Term (≥23-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
-    { key: 'ltOn', label: 'Long Term (≥23-Jul-24)', width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'stUp', label: `Short Term (${splitLabels.before})`, width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'ltUp', label: `Long Term (${splitLabels.before})`, width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'stOn', label: `Short Term (${splitLabels.from})`, width: 7, align: 'right', formatter: MONEY, signed: true },
+    { key: 'ltOn', label: `Long Term (${splitLabels.from})`, width: 7, align: 'right', formatter: MONEY, signed: true },
   ];
 
   return {
@@ -3600,8 +3682,8 @@ export async function buildCapitalGainsFifoLayout(
       { label: 'Closing=Op+Pur-Sell(+/-) G/L', spanCols: 3 },
       { label: 'Capital Gain/Loss', spanCols: 1 },
       { label: 'Gain/Loss', spanCols: 5 },
-      { label: 'Upto 22 July 2024', spanCols: 2 },
-      { label: 'Onward 23 July 2024', spanCols: 2 },
+      { label: splitLabels.before, spanCols: 2 },
+      { label: splitLabels.from, spanCols: 2 },
     ],
     headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
     columns,
@@ -3643,6 +3725,43 @@ export async function buildCapitalGainsFifoLayout(
       },
     },
     filenameStem: `capital-gains-fifo${opts.from ? `-${opts.from}` : ''}`,
+  };
+}
+
+/**
+ * Advance-tax windows for a financial year: FY start to the first instalment
+ * due date, each due date to the next, the last due date to FY end, then the
+ * whole FY. Due dates come from the shared ADVANCE_TAX_INSTALMENTS table.
+ */
+function advanceTaxPeriods(fyStart: Date, fyEnd: Date): Array<{ label: string; from: Date; to: Date }> {
+  const startYear = fyStart.getUTCFullYear();
+  const dayMs = 86_400_000;
+  const endOfDay = (d: Date) => new Date(d.getTime() + dayMs - 1);
+  const dues = ADVANCE_TAX_INSTALMENTS.map((i) => {
+    const [month, day] = i.dueMonthDay.split('-').map((v) => Number.parseInt(v, 10));
+    // April–December dues fall in the FY's first calendar year, January–March in the next.
+    const year = month! >= 4 ? startYear : startYear + 1;
+    return new Date(Date.UTC(year, month! - 1, day!));
+  }).sort((a, b) => a.getTime() - b.getTime());
+  const periods: Array<{ label: string; from: Date; to: Date }> = [];
+  let from = fyStart;
+  for (const due of dues) {
+    periods.push({ label: `${fmtDateDDMMYYYY(from)} TO ${fmtDateDDMMYYYY(due)}`, from, to: endOfDay(due) });
+    from = new Date(due.getTime() + dayMs);
+  }
+  if (from.getTime() <= fyEnd.getTime()) {
+    periods.push({ label: `${fmtDateDDMMYYYY(from)} TO ${fmtDateDDMMYYYY(fyEnd)}`, from, to: fyEnd });
+  }
+  periods.push({ label: `${fmtDateDDMMYYYY(fyStart)} TO ${fmtDateDDMMYYYY(fyEnd)}`, from: fyStart, to: fyEnd });
+  return periods;
+}
+
+/** First and last day of an Indian financial year ("YYYY-YY"). */
+function financialYearBounds(fy: string): { start: Date; end: Date } {
+  const startYear = Number.parseInt(fy.slice(0, 4), 10);
+  return {
+    start: new Date(Date.UTC(startYear, 3, 1)),
+    end: new Date(Date.UTC(startYear + 1, 2, 31, 23, 59, 59, 999)),
   };
 }
 
@@ -3689,13 +3808,12 @@ export async function buildAdvanceTaxSummaryLayout(
   const { fromDate, toDate, label: fyLabel } = fyToBoundary(opts.fy);
   const fyStartYear = fromDate.getUTCFullYear();
 
-  const { rows: cgRows } = await computeUserCapitalGains(userId);
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: toDate } },
-    orderBy: { tradeDate: 'asc' },
-  });
+  // Opening / purchase / sale from the shared equity movement (FIFO opening),
+  // gains per script with sec 55(2)(ac) grandfathering as the engine applied it.
+  const { groups, cgRows } = await equityScriptBuckets(userId, fromDate, toDate);
+  const fmvByIsin = await fetchGrandfatheringFmv(userId);
 
-  const byScript = new Map<string, {
+  type AdvanceTaxBucket = {
     name: string; isin: string | null;
     openQty: Decimal; openValue: Decimal;
     buyQty: Decimal; buyValue: Decimal;
@@ -3703,67 +3821,50 @@ export async function buildAdvanceTaxSummaryLayout(
     gainLoss: Decimal; gain: Decimal; loss: Decimal;
     fmv31Jan2018: Decimal | null; gfCost: Decimal;
     shortTerm: Decimal; longTerm: Decimal; speculation: Decimal;
-  }>();
-  const getB = (name: string, isin: string | null) => {
+  };
+  const zero = () => new Decimal(0);
+  const byScript = new Map<string, AdvanceTaxBucket>();
+  const getB = (name: string, isin: string | null): AdvanceTaxBucket => {
     let b = byScript.get(name);
     if (!b) {
       b = {
         name, isin,
-        openQty: new Decimal(0), openValue: new Decimal(0),
-        buyQty: new Decimal(0), buyValue: new Decimal(0),
-        sellQty: new Decimal(0), sellValue: new Decimal(0),
-        gainLoss: new Decimal(0), gain: new Decimal(0), loss: new Decimal(0),
-        fmv31Jan2018: null, gfCost: new Decimal(0),
-        shortTerm: new Decimal(0), longTerm: new Decimal(0), speculation: new Decimal(0),
+        openQty: zero(), openValue: zero(),
+        buyQty: zero(), buyValue: zero(),
+        sellQty: zero(), sellValue: zero(),
+        gainLoss: zero(), gain: zero(), loss: zero(),
+        fmv31Jan2018: null, gfCost: zero(),
+        shortTerm: zero(), longTerm: zero(), speculation: zero(),
       };
       byScript.set(name, b);
     }
     return b;
   };
-
-  for (const t of txs) {
-    const b = getB(t.assetName ?? '—', t.isin);
-    const inWindow = t.tradeDate.getTime() >= fromDate.getTime() && t.tradeDate.getTime() <= toDate.getTime();
-    const q = new Decimal(t.quantity.toString());
-    const net = new Decimal(t.netAmount.toString());
-    if (BUY_TXN_TYPES.has(t.transactionType)) {
-      if (!inWindow) {
-        b.openQty = b.openQty.plus(q);
-        b.openValue = b.openValue.plus(net);
-      } else {
-        b.buyQty = b.buyQty.plus(q);
-        b.buyValue = b.buyValue.plus(net);
-      }
-    } else if (SELL_TXN_TYPES.has(t.transactionType) && inWindow) {
-      b.sellQty = b.sellQty.plus(q);
-      b.sellValue = b.sellValue.plus(net);
-    }
+  for (const m of (groups.get('') ?? new Map<string, ScriptBucket>()).values()) {
+    const b = getB(m.assetName, m.isin);
+    b.openQty = m.openQty; b.openValue = m.openValue;
+    b.buyQty = m.buyQty; b.buyValue = m.buyValue;
+    b.sellQty = m.sellQty; b.sellValue = m.sellValue;
   }
 
-  // FMV on 31-Jan-2018 for grandfathering.
-  const isins = Array.from(new Set(
-    Array.from(byScript.values()).map((b) => b.isin).filter((i): i is string => !!i),
-  ));
-  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
-
-  // CG rows in FY window.
-  for (const r of cgRows) {
-    if (r.sellDate.getTime() < fromDate.getTime() || r.sellDate.getTime() > toDate.getTime()) continue;
-    const b = getB(r.assetName, r.isin);
-    const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const adjusted = adjustGainForGrandfathering(
-      r.buyDate, r.quantity, r.buyAmount, r.sellAmount, r.gainLoss, fmv,
+  const equityRowsIn = (from: Date, to: Date) =>
+    cgRows.filter(
+      (r) => r.isEquityOriented && r.sellDate.getTime() >= from.getTime() && r.sellDate.getTime() <= to.getTime(),
     );
-    b.gainLoss = b.gainLoss.plus(adjusted);
-    if (adjusted.greaterThanOrEqualTo(0)) b.gain = b.gain.plus(adjusted);
-    else b.loss = b.loss.plus(adjusted.abs());
-    if (fmv && r.buyDate.getTime() <= new Date('2018-01-31T23:59:59.999Z').getTime()) {
-      b.fmv31Jan2018 = fmv;
-      b.gfCost = b.gfCost.plus(fmv.times(r.quantity));
+  for (const r of equityRowsIn(fromDate, toDate)) {
+    const b = getB(r.assetName, r.isin);
+    const gfCost = grandfatheredCost(r);
+    const gain = gfCost ? r.sellAmount.minus(gfCost) : r.gainLoss;
+    b.gainLoss = b.gainLoss.plus(gain);
+    if (gain.greaterThanOrEqualTo(0)) b.gain = b.gain.plus(gain);
+    else b.loss = b.loss.plus(gain.abs());
+    if (gfCost) {
+      b.fmv31Jan2018 = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
+      b.gfCost = b.gfCost.plus(gfCost);
     }
-    if (r.capitalGainType === 'INTRADAY') b.speculation = b.speculation.plus(adjusted);
-    else if (r.capitalGainType === 'SHORT_TERM') b.shortTerm = b.shortTerm.plus(adjusted);
-    else if (r.capitalGainType === 'LONG_TERM') b.longTerm = b.longTerm.plus(adjusted);
+    if (r.capitalGainType === 'INTRADAY') b.speculation = b.speculation.plus(gain);
+    else if (r.capitalGainType === 'SHORT_TERM') b.shortTerm = b.shortTerm.plus(gain);
+    else if (r.capitalGainType === 'LONG_TERM') b.longTerm = b.longTerm.plus(gain);
   }
 
   const list = Array.from(byScript.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -3784,15 +3885,9 @@ export async function buildAdvanceTaxSummaryLayout(
     shortTerm: new Decimal(0), longTerm: new Decimal(0), speculation: new Decimal(0),
   });
 
-  // Period-wise stock profit summary (advance-tax instalments).
-  const periods = [
-    { label: `01/04/${fyStartYear} TO 15/06/${fyStartYear}`, from: new Date(`${fyStartYear}-04-01`), to: new Date(`${fyStartYear}-06-15T23:59:59.999Z`) },
-    { label: `16/06/${fyStartYear} TO 15/09/${fyStartYear}`, from: new Date(`${fyStartYear}-06-16`), to: new Date(`${fyStartYear}-09-15T23:59:59.999Z`) },
-    { label: `16/09/${fyStartYear} TO 15/12/${fyStartYear}`, from: new Date(`${fyStartYear}-09-16`), to: new Date(`${fyStartYear}-12-15T23:59:59.999Z`) },
-    { label: `16/12/${fyStartYear} TO 15/03/${fyStartYear + 1}`, from: new Date(`${fyStartYear}-12-16`), to: new Date(`${fyStartYear + 1}-03-15T23:59:59.999Z`) },
-    { label: `16/03/${fyStartYear + 1} TO 31/03/${fyStartYear + 1}`, from: new Date(`${fyStartYear + 1}-03-16`), to: new Date(`${fyStartYear + 1}-03-31T23:59:59.999Z`) },
-    { label: `01/04/${fyStartYear} TO 31/03/${fyStartYear + 1}`, from: fromDate, to: toDate },
-  ];
+  // Period-wise stock profit summary, by the advance-tax instalment due dates
+  // (shared data table), plus the whole FY.
+  const periods = advanceTaxPeriods(fromDate, toDate);
   const periodRows: BodyRowLite[] = periods.map((p) => {
     let gainLoss = new Decimal(0);
     let gain = new Decimal(0);
@@ -3801,14 +3896,13 @@ export async function buildAdvanceTaxSummaryLayout(
     let shortTerm = new Decimal(0);
     let longTerm = new Decimal(0);
     let speculation = new Decimal(0);
-    for (const r of cgRows) {
-      if (r.sellDate.getTime() < p.from.getTime() || r.sellDate.getTime() > p.to.getTime()) continue;
-      const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-      const adj = adjustGainForGrandfathering(r.buyDate, r.quantity, r.buyAmount, r.sellAmount, r.gainLoss, fmv);
+    for (const r of equityRowsIn(p.from, p.to)) {
+      const rowGf = grandfatheredCost(r);
+      const adj = rowGf ? r.sellAmount.minus(rowGf) : r.gainLoss;
       gainLoss = gainLoss.plus(adj);
       if (adj.greaterThanOrEqualTo(0)) gain = gain.plus(adj);
       else loss = loss.plus(adj.abs());
-      if (fmv) gfCost = gfCost.plus(fmv.times(r.quantity));
+      if (rowGf) gfCost = gfCost.plus(rowGf);
       if (r.capitalGainType === 'INTRADAY') speculation = speculation.plus(adj);
       else if (r.capitalGainType === 'SHORT_TERM') shortTerm = shortTerm.plus(adj);
       else if (r.capitalGainType === 'LONG_TERM') longTerm = longTerm.plus(adj);
@@ -3829,16 +3923,16 @@ export async function buildAdvanceTaxSummaryLayout(
 
   const columns: ColumnDef[] = [
     { key: 'scriptName', label: 'Script Name', width: 18, align: 'left' },
-    { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'openValue', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
-    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'buyValue', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
-    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: INT },
+    { key: 'sellQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'sellValue', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
     { key: 'gainLoss', label: 'Gain/Loss', width: 7, align: 'right', formatter: MONEY, signed: true },
     { key: 'gain', label: 'Gain', width: 6, align: 'right', formatter: MONEY },
     { key: 'loss', label: 'Loss', width: 6, align: 'right', formatter: MONEY, signed: true },
-    { key: 'fmv31Jan2018', label: '31st January 2018', width: 7, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
+    { key: 'fmv31Jan2018', label: `FMV on ${fmtDateDDMMYYYY(CAPITAL_GAINS_KEY_DATES.grandfatheringFmvDate)}`, width: 7, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'gfCost', label: 'Grandfathered Cost', width: 8, align: 'right', formatter: MONEY },
     { key: 'shortTerm', label: 'Short Term', width: 6, align: 'right', formatter: MONEY, signed: true },
     { key: 'longTerm', label: 'Long Term', width: 6, align: 'right', formatter: MONEY, signed: true },
@@ -3923,22 +4017,17 @@ export async function buildOpeningStockLayout(
   const m = await userMember(userId);
   const cutoff = asOf ?? new Date();
 
-  const holdings = await prisma.holdingProjection.findMany({
-    where: { portfolio: { userId } },
-    orderBy: [{ assetClass: 'asc' }, { assetName: 'asc' }],
-  });
+  // Positions as they stood on the cut-off, not today's.
+  const holdings = sortHoldings(await holdingsAsOf({ userId }, asOf), ['assetClass', 'assetName']);
 
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
-    select: { assetKey: true, assetName: true, tradeDate: true, transactionType: true },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const firstBuy = new Map<string, Date>();
-  for (const t of txs) {
-    if (!BUY_TXN_TYPES.has(t.transactionType)) continue;
-    const k = t.assetKey ?? `name:${t.assetName ?? ''}`;
-    if (!firstBuy.has(k)) firstBuy.set(k, t.tradeDate);
-  }
+  // Acquisition date = oldest lot still held (a position sold out and bought
+  // again dates from the re-purchase), keyed portfolio|asset.
+  const firstBuy = await acquisitionDates(
+    await prisma.transaction.findMany({
+      where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
+      orderBy: { tradeDate: 'asc' },
+    }),
+  );
 
   const byClass = new Map<string, typeof holdings>();
   for (const h of holdings) {
@@ -3966,7 +4055,7 @@ export async function buildOpeningStockLayout(
       groups: [{
         rows: list.map((h) => ({
           cells: {
-            acqDate: firstBuy.get(h.assetKey)?.toISOString().slice(0, 10) ?? '',
+            acqDate: firstBuy.get(`${h.portfolioId}|${h.assetKey}`)?.toISOString().slice(0, 10) ?? '',
             isin: h.isin ?? '',
             assetName: h.assetName ?? '—',
             qty: h.quantity.toString(),
@@ -4021,22 +4110,17 @@ export async function buildHoldingPeriodReturnLayout(
   const m = await userMember(userId);
   const cutoff = asOf ?? new Date();
 
-  const holdings = await prisma.holdingProjection.findMany({
-    where: { portfolio: { userId } },
-    orderBy: { assetName: 'asc' },
-  });
+  // Positions as they stood on the cut-off, not today's.
+  const holdings = sortHoldings(await holdingsAsOf({ userId }, asOf), ['assetName']);
 
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
-    select: { assetKey: true, assetName: true, tradeDate: true, transactionType: true },
-    orderBy: { tradeDate: 'asc' },
-  });
-  const firstBuy = new Map<string, Date>();
-  for (const t of txs) {
-    if (!BUY_TXN_TYPES.has(t.transactionType)) continue;
-    const k = t.assetKey ?? `name:${t.assetName ?? ''}`;
-    if (!firstBuy.has(k)) firstBuy.set(k, t.tradeDate);
-  }
+  // Acquisition date = oldest lot still held (a position sold out and bought
+  // again dates from the re-purchase), keyed portfolio|asset.
+  const firstBuy = await acquisitionDates(
+    await prisma.transaction.findMany({
+      where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
+      orderBy: { tradeDate: 'asc' },
+    }),
+  );
 
   const rows: BodyRowLite[] = [];
   let tQty = new Decimal(0);
@@ -4047,10 +4131,10 @@ export async function buildHoldingPeriodReturnLayout(
     if (new Decimal(h.quantity.toString()).isZero()) continue;
     const qty = new Decimal(h.quantity.toString());
     const cost = new Decimal(h.totalCost.toString());
-    const mv = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+    const mv = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
     const gl = mv.minus(cost);
-    const buyDate = firstBuy.get(h.assetKey);
-    const days = buyDate ? Math.floor((cutoff.getTime() - buyDate.getTime()) / 86400000) : 0;
+    const buyDate = firstBuy.get(`${h.portfolioId}|${h.assetKey}`);
+    const days = buyDate ? calendarDaysBetweenIST(buyDate, cutoff) : 0;
     tQty = tQty.plus(qty);
     tAmt = tAmt.plus(cost);
     tMv = tMv.plus(mv);
@@ -4116,111 +4200,89 @@ export async function buildScriptLedgerLayout(
   const m = await userMember(userId);
   const cutoff = asOf ?? new Date();
 
-  const txs = await prisma.transaction.findMany({
+  // Capital assets only (deposits, PF and insurance have no script account).
+  const allTxs = await prisma.transaction.findMany({
     where: { portfolio: { userId }, tradeDate: { lte: cutoff } },
     orderBy: { tradeDate: 'asc' },
   });
+  const txs = allTxs.filter((t) => isCapitalAssetClass(t.assetClass) && t.assetClass !== 'FUTURES' && t.assetClass !== 'OPTIONS');
+  const txById = new Map(txs.map((t) => [t.id, t]));
+  const fundCategoryMap = await loadFundCategoryMap(txs);
+  // Gains computed live by the engine (the stored CapitalGain table can lag
+  // behind new transactions), matched to the script by the sale's assetKey.
+  const { rows: cgRows } = await computeUserCapitalGains(userId);
 
-  const userPortfolios = await prisma.portfolio.findMany({
-    where: { userId },
-    select: { id: true },
-  });
-  const cgRows = await prisma.capitalGain.findMany({
-    where: {
-      portfolioId: { in: userPortfolios.map((p) => p.id) },
-      sellDate: { lte: cutoff },
-    },
-  });
-
-  const byScript = new Map<string, { name: string; txs: typeof txs; cgs: typeof cgRows }>();
+  const byScript = new Map<string, { name: string; txs: typeof txs; cgs: CapitalGainRow[] }>();
   for (const t of txs) {
-    const name = t.assetName ?? '—';
-    const k = `${name}::${t.assetKey ?? name}`;
-    const bucket = byScript.get(k) ?? { name, txs: [], cgs: [] };
+    const key = t.assetKey ?? `name:${t.assetName ?? ''}`;
+    const bucket = byScript.get(key) ?? { name: t.assetName ?? '—', txs: [], cgs: [] };
     bucket.txs.push(t);
-    byScript.set(k, bucket);
+    byScript.set(key, bucket);
   }
   for (const c of cgRows) {
-    const name = c.assetName ?? '—';
-    for (const [k, v] of byScript.entries()) {
-      if (v.name === name) { v.cgs.push(c); break; }
-    }
+    if (c.sellDate.getTime() > cutoff.getTime()) continue;
+    const sale = txById.get(c.sellTransactionId);
+    const bucket = sale ? byScript.get(sale.assetKey ?? `name:${sale.assetName ?? ''}`) : undefined;
+    if (bucket) bucket.cgs.push(c);
   }
 
   const sections: ReportSection[] = [];
   for (const { name, txs: stxs, cgs } of byScript.values()) {
-    let openQty = new Decimal(0);
-    let openCost = new Decimal(0);
     const rows: BodyRowLite[] = [];
     for (const t of stxs) {
       const qty = new Decimal(t.quantity.toString());
       const amt = new Decimal(t.netAmount.toString());
-      if (BUY_TXN_TYPES.has(t.transactionType)) {
-        openQty = openQty.plus(qty);
-        openCost = openCost.plus(amt);
-        rows.push({
-          cells: {
-            scriptName: '',
-            date: t.tradeDate.toISOString().slice(0, 10),
-            settlement: t.settlementDate?.toISOString().slice(0, 10) ?? '',
-            description: 'Bought',
-            debit: amt.toString(),
-            credit: '',
-            avgRate: t.price.toString(),
-            qty: qty.toString(),
-          },
-        });
+      const base = {
+        scriptName: '',
+        date: t.tradeDate.toISOString().slice(0, 10),
+        settlement: t.settlementDate?.toISOString().slice(0, 10) ?? '',
+      };
+      if (t.transactionType === 'SPLIT' || t.transactionType === 'BONUS') {
+        // Units added at no cost: quantity only.
+        rows.push({ cells: { ...base, description: t.transactionType === 'SPLIT' ? 'Split' : 'Bonus', debit: '', credit: '', avgRate: '', qty: qty.toString() } });
+      } else if (BUY_TXN_TYPES.has(t.transactionType)) {
+        rows.push({ cells: { ...base, description: 'Bought', debit: amt.toString(), credit: '', avgRate: t.price.toString(), qty: qty.toString() } });
       } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-        openQty = openQty.minus(qty);
-        rows.push({
-          cells: {
-            scriptName: '',
-            date: t.tradeDate.toISOString().slice(0, 10),
-            settlement: t.settlementDate?.toISOString().slice(0, 10) ?? '',
-            description: 'Sold',
-            debit: '',
-            credit: amt.toString(),
-            avgRate: t.price.toString(),
-            qty: qty.negated().toString(),
-          },
-        });
+        rows.push({ cells: { ...base, description: 'Sold', debit: '', credit: amt.toString(), avgRate: t.price.toString(), qty: qty.negated().toString() } });
       }
     }
-    const closingValue = openCost;
+
+    // Closing: the FIFO lots still held — the same lots the gains below were matched against.
+    const open = computeOpenLots(stxs, fundCategoryMap).flatMap((p) => p.lots);
+    const openQty = open.reduce((acc, l) => acc.plus(l.quantity), new Decimal(0));
+    const closingValue = open.reduce((acc, l) => acc.plus(l.quantity.times(l.costPerUnit)), new Decimal(0));
     const avgRate = openQty.greaterThan(0) ? closingValue.dividedBy(openQty) : new Decimal(0);
     rows.push({
-      cells: {
-        scriptName: '',
-        date: '',
-        settlement: '',
-        description: 'Closing Values',
-        debit: '',
-        credit: closingValue.toString(),
-        avgRate: avgRate.toString(),
-        qty: openQty.toString(),
-      },
+      cells: { scriptName: '', date: '', settlement: '', description: 'Closing Values', debit: '', credit: closingValue.toString(), avgRate: avgRate.toString(), qty: openQty.toString() },
     });
+
     let lt = new Decimal(0);
     let st = new Decimal(0);
     let spec = new Decimal(0);
     for (const c of cgs) {
-      const g = new Decimal(c.gainLoss.toString());
-      if (c.capitalGainType === 'LONG_TERM') lt = lt.plus(g);
-      else if (c.capitalGainType === 'SHORT_TERM') st = st.plus(g);
-      else if (c.capitalGainType === 'INTRADAY') spec = spec.plus(g);
+      // Book gain = sale proceeds − actual cost of the lots sold, so the account
+      // balances; grandfathered and indexed cost are tax figures, not book ones.
+      const book = c.sellAmount.minus(c.buyAmount);
+      if (c.capitalGainType === 'LONG_TERM') lt = lt.plus(book);
+      else if (c.capitalGainType === 'SHORT_TERM') st = st.plus(book);
+      else if (c.capitalGainType === 'INTRADAY') spec = spec.plus(book);
     }
-    rows.push({
-      cells: { description: 'LONG TERM  GAIN / LOSS', debit: lt.lessThan(0) ? lt.toString() : '', credit: lt.greaterThanOrEqualTo(0) ? lt.toString() : '', qty: '0' },
+    // A gain is a debit to the script account and a loss a credit, both positive,
+    // so purchases + gains = sales + closing value + losses.
+    const glRow = (description: string, g: Decimal): BodyRowLite => ({
+      cells: {
+        description,
+        debit: g.greaterThan(0) ? g.toString() : '',
+        credit: g.lessThan(0) ? g.abs().toString() : '',
+        qty: '0',
+      },
     });
-    rows.push({
-      cells: { description: 'SHORT TERM  GAIN / LOSS', debit: st.lessThan(0) ? st.toString() : '', credit: st.greaterThanOrEqualTo(0) ? st.toString() : '', qty: '0' },
-    });
-    rows.push({
-      cells: { description: 'SPECULATION GAIN / LOSS', debit: spec.lessThan(0) ? spec.toString() : '', credit: spec.greaterThanOrEqualTo(0) ? spec.toString() : '', qty: '0' },
-    });
+    rows.push(glRow('LONG TERM  GAIN / LOSS', lt));
+    rows.push(glRow('SHORT TERM  GAIN / LOSS', st));
+    rows.push(glRow('SPECULATION GAIN / LOSS', spec));
 
-    const totDebit = rows.reduce((s, r) => s.plus(new Decimal(String(r.cells['debit'] ?? '0') || '0')), new Decimal(0));
-    const totCredit = rows.reduce((s, r) => s.plus(new Decimal(String(r.cells['credit'] ?? '0') || '0')), new Decimal(0));
+    const totDebit = rows.reduce((acc, r) => acc.plus(new Decimal(String(r.cells['debit'] ?? '0') || '0')), new Decimal(0));
+    const totCredit = rows.reduce((acc, r) => acc.plus(new Decimal(String(r.cells['credit'] ?? '0') || '0')), new Decimal(0));
 
     sections.push({
       banner: name,
@@ -4228,11 +4290,7 @@ export async function buildScriptLedgerLayout(
         rows,
         subtotal: {
           label: `Total for ${name}`,
-          values: {
-            debit: totDebit.toString(),
-            credit: totCredit.toString(),
-            qty: openQty.toString(),
-          },
+          values: { debit: totDebit.toString(), credit: totCredit.toString(), qty: openQty.toString() },
         },
       }],
     });
@@ -4442,7 +4500,12 @@ export async function buildBrokerBillRegisterLayout(
   opts: { from?: string; to?: string },
 ): Promise<MprofitLayout> {
   const m = await userMember(userId);
-  const where: Record<string, unknown> = { portfolio: { userId } };
+  // A broker bill carries exchange trades only.
+  const where: Record<string, unknown> = {
+    portfolio: { userId },
+    transactionType: { in: ['BUY', 'SELL'] },
+    assetClass: { in: CONTRACT_NOTE_ASSET_CLASSES },
+  };
   if (opts.from || opts.to) {
     where['tradeDate'] = {
       ...(opts.from && { gte: new Date(opts.from) }),
@@ -4463,7 +4526,6 @@ export async function buildBrokerBillRegisterLayout(
   }
 
   const sections: ReportSection[] = [];
-  let familyQty = new Decimal(0);
   let familyBrok = new Decimal(0);
   let familyNet = new Decimal(0);
 
@@ -4483,7 +4545,6 @@ export async function buildBrokerBillRegisterLayout(
       byBill.set(billKey, arr);
     }
     const groups: SubGroup[] = [];
-    let brokerQty = new Decimal(0);
     let brokerBrok = new Decimal(0);
     let brokerNet = new Decimal(0);
     for (const [billNo, blist] of byBill) {
@@ -4501,19 +4562,19 @@ export async function buildBrokerBillRegisterLayout(
               type: isSell ? 'Sold' : 'Bought',
               qty: isSell ? qty.negated().toString() : qty.toString(),
               holdingType: `${t.assetClass.replace(/_/g, ' ')} A/C`,
-              brokerage: t.brokerage.toString(),
+              brokerage: transactionInrNet({ ...t, netAmount: t.brokerage }).toString(),
               rate: t.price.toString(),
-              net: t.netAmount.toString(),
+              // Receivable on a sale (+), payable on a purchase (−), in INR.
+              net: (isSell ? transactionInrNet(t) : transactionInrNet(t).negated()).toString(),
             },
           };
         }),
       });
       for (const t of blist) {
-        const q = new Decimal(t.quantity.toString());
         const isSell = SELL_TXN_TYPES.has(t.transactionType);
-        brokerQty = brokerQty.plus(isSell ? q.negated() : q);
-        brokerBrok = brokerBrok.plus(t.brokerage.toString());
-        brokerNet = brokerNet.plus(t.netAmount.toString());
+        const net = transactionInrNet(t);
+        brokerBrok = brokerBrok.plus(transactionInrNet({ ...t, netAmount: t.brokerage }));
+        brokerNet = brokerNet.plus(isSell ? net : net.negated());
       }
     }
     groups.push({
@@ -4521,14 +4582,12 @@ export async function buildBrokerBillRegisterLayout(
       subtotal: {
         label: `Broker : ${broker} TOTAL :`,
         values: {
-          qty: brokerQty.toString(),
           brokerage: brokerBrok.toString(),
           net: brokerNet.toString(),
         },
       },
     });
     sections.push({ banner: broker, groups });
-    familyQty = familyQty.plus(brokerQty);
     familyBrok = familyBrok.plus(brokerBrok);
     familyNet = familyNet.plus(brokerNet);
   }
@@ -4537,7 +4596,7 @@ export async function buildBrokerBillRegisterLayout(
     { key: 'consultant', label: 'Consultant Name', width: 14, align: 'left' },
     { key: 'script', label: 'Script Name', width: 22, align: 'left' },
     { key: 'type', label: 'Type', width: 6, align: 'left' },
-    { key: 'qty', label: 'Qty', width: 7, align: 'right', formatter: (v) => indianMoney(v, 2), signed: true },
+    { key: 'qty', label: 'Qty', width: 7, align: 'right', formatter: QTY, signed: true },
     { key: 'holdingType', label: 'Holding Type', width: 16, align: 'left' },
     { key: 'brokerage', label: 'Brokerage', width: 8, align: 'right', formatter: MONEY },
     { key: 'rate', label: 'Rate', width: 8, align: 'right', formatter: MONEY },
@@ -4545,7 +4604,9 @@ export async function buildBrokerBillRegisterLayout(
   ];
 
   return {
-    reportTitle: `FamilyWise MemberWise Bill Register As On ${todayDDMMYYYY()}`,
+    reportTitle: opts.from || opts.to
+      ? `FamilyWise MemberWise Bill Register From ${opts.from ? fmtDateDDMMYYYY(opts.from) : '—'} To ${opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY()}`
+      : `FamilyWise MemberWise Bill Register As On ${todayDDMMYYYY()}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -4556,7 +4617,6 @@ export async function buildBrokerBillRegisterLayout(
     grandTotal: {
       label: `Family : ${(m.family ?? 'FAMILY').toUpperCase()} TOTAL :`,
       values: {
-        qty: familyQty.toString(),
         brokerage: familyBrok.toString(),
         net: familyNet.toString(),
       },
@@ -4578,13 +4638,11 @@ export async function buildPortfolioSnapshotLayout(
   const m = await userMember(userId);
   const cutoff = asOf ?? new Date();
 
-  const holdings = await prisma.holdingProjection.findMany({
-    where: { portfolio: { userId } },
-    orderBy: { assetName: 'asc' },
-  });
+  // Positions as they stood on the cut-off, not today's.
+  const holdings = sortHoldings(await holdingsAsOf({ userId }, asOf), ['assetName']);
 
   const totalValue = holdings.reduce((s, h) =>
-    s.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0)),
+    s.plus(h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString())),
     new Decimal(0),
   );
 
@@ -4598,7 +4656,7 @@ export async function buildPortfolioSnapshotLayout(
     if (new Decimal(h.quantity.toString()).isZero()) continue;
     const qty = new Decimal(h.quantity.toString());
     const inv = new Decimal(h.totalCost.toString());
-    const cv = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+    const cv = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
     const gain = cv.minus(inv);
     const pct = totalValue.greaterThan(0) ? cv.dividedBy(totalValue).times(100) : new Decimal(0);
     tQty = tQty.plus(qty);

@@ -10,78 +10,38 @@
 
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
+import { derivativePositionValue, replayFoTransactions } from './derivativePosition.service.js';
+import type { AssetClass, MFCategory, Transaction } from '@prisma/client';
 import {
+  GRANDFATHERING_CUTOFF,
+  computeOpenLots,
   computeUserCapitalGains,
   type CapitalGainRow,
 } from './capitalGains.service.js';
+import { getFmvForUser } from './fmvOverride.service.js';
 
 // ─── 1. Grandfathering LTCG report ─────────────────────────────────
 //
-// Pre-31-Jan-2018 equity / equity-MF buys, sold under LTCG rules.
-// As per §112A grandfathering: cost basis = max(actual cost, FMV on
-// 31-Jan-2018). Tax-saving is the delta the report makes visible.
-//
-// We don't yet store a global FMV table for 31-Jan-2018, so the report
-// surfaces actual cost vs sale price and leaves a column for FMV that
-// can be populated once the user uploads the lookup table. The
-// computed gain still falls back to actual cost (matches legacy app
-// behaviour when FMV is missing).
+// Long-term sales of 112A assets (listed equity, equity-oriented funds,
+// business-trust units) bought on or before the grandfathering FMV date. Sec
+// 55(2)(ac): cost = higher of (actual cost, lower of (FMV on that date, sale
+// value)). The capital-gains engine applies this row by row with the user's
+// FMV source (FmvOverride, then SystemFmvSeed) and stores the adjusted cost in
+// indexedCostOfAcquisition — reports read it from there instead of re-deriving.
 
-const GF_CUTOFF = new Date('2018-01-31T23:59:59.999Z');
-
-/**
- * Fetch FMV (close price) on / near 31-Jan-2018 for a set of ISINs.
- * Window is ±2 days to handle non-trading days. Returns whatever is
- * actually in StockPrice; missing ISINs are simply absent from the map.
- *
- * Exported so other services (e.g. Schedule 112A) can apply the same
- * grandfathering substitution without re-implementing the query.
- */
-export async function fetchFmvOn31Jan2018(isins: string[]): Promise<Map<string, Decimal>> {
-  const fmv = new Map<string, Decimal>();
-  const real = Array.from(new Set(isins.filter((i): i is string => !!i)));
-  if (real.length === 0) return fmv;
-  const stocks = await prisma.stockMaster.findMany({
-    where: { isin: { in: real } },
-    select: { id: true, isin: true },
-  });
-  const stockIds = stocks.map((s) => s.id);
-  const isinByStock = new Map(stocks.map((s) => [s.id, s.isin]));
-  const prices = await prisma.stockPrice.findMany({
-    where: {
-      stockId: { in: stockIds },
-      date: { gte: new Date('2018-01-28'), lte: new Date('2018-02-02') },
-    },
-    orderBy: { date: 'desc' },
-  });
-  for (const p of prices) {
-    const isin = isinByStock.get(p.stockId);
-    if (isin && !fmv.has(isin)) {
-      fmv.set(isin, new Decimal(p.close.toString()));
-    }
-  }
-  return fmv;
+/** FMV per unit on the grandfathering date for this user: their overrides, then the system seed. */
+export async function fetchGrandfatheringFmv(userId: string): Promise<Map<string, Decimal>> {
+  const byIsin = await getFmvForUser(userId);
+  return new Map([...byIsin.entries()].map(([isin, r]) => [isin, new Decimal(r.fmvPerUnit.toString())]));
 }
 
-/**
- * Apply Sec 112A grandfathering to a single capital-gain row.
- * Returns the FMV-adjusted gain ( = sellAmount - max(actualCost, FMV*qty) )
- * when FMV is known and the lot pre-dates 31-Jan-2018; otherwise returns
- * the raw gain unchanged.
- */
-export function adjustGainForGrandfathering(
-  buyDate: Date,
-  quantity: Decimal,
-  buyAmount: Decimal,
-  sellAmount: Decimal,
-  rawGain: Decimal,
-  fmvPerUnit: Decimal | null,
-): Decimal {
-  if (buyDate.getTime() > GF_CUTOFF.getTime()) return rawGain;
-  if (!fmvPerUnit) return rawGain;
-  const fmvCost = fmvPerUnit.times(quantity);
-  if (fmvCost.lessThanOrEqualTo(buyAmount)) return rawGain;
-  return sellAmount.minus(fmvCost);
+/** The sec 55(2)(ac) cost the engine used for a row, or null when the row isn't grandfathered. */
+export function grandfatheredCost(
+  r: Pick<CapitalGainRow, 'capitalGainType' | 'isEquityOriented' | 'buyDate' | 'indexedCostOfAcquisition'>,
+): Decimal | null {
+  if (r.capitalGainType !== 'LONG_TERM' || !r.isEquityOriented) return null;
+  if (r.buyDate.getTime() > GRANDFATHERING_CUTOFF.getTime()) return null;
+  return r.indexedCostOfAcquisition ?? null;
 }
 
 export interface GrandfatheringRow {
@@ -122,7 +82,7 @@ export interface GrandfatheringReport {
 function isGrandfatherEligible(row: CapitalGainRow): boolean {
   if (row.capitalGainType !== 'LONG_TERM') return false;
   if (!row.isEquityOriented) return false;
-  return row.buyDate.getTime() <= GF_CUTOFF.getTime();
+  return row.buyDate.getTime() <= GRANDFATHERING_CUTOFF.getTime();
 }
 
 export async function grandfatheringReport(
@@ -134,18 +94,13 @@ export async function grandfatheringReport(
     (r) => isGrandfatherEligible(r) && (!fy || r.financialYear === fy),
   );
 
-  const isins = filtered.map((r) => r.isin).filter((i): i is string => !!i);
-  const fmvByIsin = await fetchFmvOn31Jan2018(isins);
+  const fmvByIsin = await fetchGrandfatheringFmv(userId);
 
-  // Apply Sec 112A grandfathering: cost basis = max(actualCost, FMV × qty)
-  // whenever FMV-on-31-Jan-2018 is available. Recompute gain/loss with the
-  // substituted cost; without the substitution, displayed gain would be
-  // higher than the legally taxable one.
+  // Gain at the grandfathered cost the engine computed (falls back to actual
+  // cost when no FMV is known for the ISIN).
   const out: GrandfatheringRow[] = filtered.map((r) => {
     const fmv = r.isin ? fmvByIsin.get(r.isin) ?? null : null;
-    const actualCost = r.buyAmount;
-    const fmvCost = fmv ? fmv.times(r.quantity) : null;
-    const effectiveCost = fmvCost && fmvCost.greaterThan(actualCost) ? fmvCost : actualCost;
+    const effectiveCost = grandfatheredCost(r) ?? r.buyAmount;
     const adjustedGain = r.sellAmount.minus(effectiveCost);
     const isGain = adjustedGain.greaterThanOrEqualTo(0);
     return {
@@ -298,9 +253,15 @@ function txnKindLabel(t: string): string {
   }
 }
 
+/** Securities held in a demat account; deposits, F&O contracts and physical assets are not. */
+export const DEMAT_ASSET_CLASSES = [
+  'EQUITY', 'ETF', 'MUTUAL_FUND', 'BOND', 'GOVT_BOND', 'CORPORATE_BOND',
+  'GOLD_BOND', 'GOLD_ETF', 'REIT', 'INVIT', 'FOREIGN_EQUITY',
+] as const satisfies readonly AssetClass[];
+
 export async function dematHoldingReport(userId: string): Promise<DematHoldingReport> {
   const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId } },
+    where: { portfolio: { userId }, assetClass: { in: [...DEMAT_ASSET_CLASSES] } },
     orderBy: [{ tradeDate: 'asc' }],
   });
 
@@ -437,76 +398,47 @@ export interface M2MReport {
 }
 
 interface M2MSummary {
+  /** Cost of rows that have a valuation. */
   purValue: string;
   valuation: string;
   unrealisedPnL: string;
+  /** Cost of rows with no price to value them at. */
+  unpricedPurValue: string;
 }
 
 // FIFO residual lots — same algorithm as capital-gains service but we
 // keep the open part instead of the matched part.
-export function residualLots(txs: {
-  tradeDate: Date;
-  quantity: Decimal;
-  price: Decimal;
-  assetKey: string;
-  assetName: string | null;
-  isin: string | null;
-  transactionType: string;
-}[]): Array<{
+/**
+ * Lots still held, one row per lot: the capital-gains engine's FIFO lots, so
+ * these reports see splits, bonus, mergers, same-day matching, per-portfolio
+ * books and INR conversion exactly as the tax reports do. `rate` is the INR
+ * cost per unit including charges.
+ */
+export function residualLots(
+  txs: Transaction[],
+  fundCategoryMap?: Map<string, MFCategory>,
+): Array<{
+  portfolioId: string;
   scriptName: string;
   isin: string | null;
+  fundId: string | null;
   assetKey: string;
   date: Date;
   qty: Decimal;
   rate: Decimal;
 }> {
-  // Sort + group by assetKey, then FIFO-match sells.
-  const byKey = new Map<string, typeof txs>();
-  for (const t of txs) {
-    const arr = byKey.get(t.assetKey) ?? [];
-    arr.push(t);
-    byKey.set(t.assetKey, arr);
-  }
-  const out: ReturnType<typeof residualLots> = [];
-  for (const [key, list] of byKey) {
-    const sorted = [...list].sort((a, b) => a.tradeDate.getTime() - b.tradeDate.getTime());
-    const lots: Array<{ date: Date; qty: Decimal; rate: Decimal; name: string; isin: string | null }> = [];
-    for (const t of sorted) {
-      if (BUY_TXN_TYPES.has(t.transactionType)) {
-        lots.push({
-          date: t.tradeDate,
-          qty: t.quantity,
-          rate: t.price,
-          name: t.assetName ?? key,
-          isin: t.isin,
-        });
-      } else if (SELL_TXN_TYPES.has(t.transactionType)) {
-        let toRemove = t.quantity;
-        while (toRemove.greaterThan(0) && lots.length > 0) {
-          const lot = lots[0]!;
-          if (lot.qty.lessThanOrEqualTo(toRemove)) {
-            toRemove = toRemove.minus(lot.qty);
-            lots.shift();
-          } else {
-            lot.qty = lot.qty.minus(toRemove);
-            toRemove = new Decimal(0);
-          }
-        }
-      }
-    }
-    for (const lot of lots) {
-      if (lot.qty.isZero() || lot.qty.isNegative()) continue;
-      out.push({
-        scriptName: lot.name,
-        isin: lot.isin,
-        assetKey: key,
-        date: lot.date,
-        qty: lot.qty,
-        rate: lot.rate,
-      });
-    }
-  }
-  return out;
+  return computeOpenLots(txs, fundCategoryMap).flatMap((p) =>
+    p.lots.map((l) => ({
+      portfolioId: p.portfolioId,
+      scriptName: p.assetName || p.assetKey,
+      isin: p.isin,
+      fundId: p.fundId,
+      assetKey: p.assetKey,
+      date: l.buyDate,
+      qty: l.quantity,
+      rate: l.costPerUnit,
+    })),
+  );
 }
 
 async function priceForAssetKey(assetKey: string, asOf: Date): Promise<Decimal | null> {
@@ -570,22 +502,7 @@ export async function m2mReport(userId: string, asOf?: Date): Promise<M2MReport>
     // Effective price = netAmount / quantity. This rolls brokerage,
     // STT, stamp duty etc. into the cost basis so the M2M valuation
     // measures real-money unrealised P&L, not gross-rate P&L.
-    const lots = residualLots(
-      src.map((t) => {
-        const q = new Decimal(t.quantity.toString());
-        const net = new Decimal(t.netAmount.toString());
-        const effectivePrice = q.isZero() ? new Decimal(t.price.toString()) : net.dividedBy(q);
-        return {
-          tradeDate: t.tradeDate,
-          quantity: q,
-          price: effectivePrice,
-          assetKey: t.assetKey ?? `name:${t.assetName ?? ''}`,
-          assetName: t.assetName,
-          isin: t.isin,
-          transactionType: t.transactionType,
-        };
-      }),
-    );
+    const lots = residualLots(src);
     const rows: M2MRow[] = [];
     for (const lot of lots) {
       const purValue = lot.qty.times(lot.rate);
@@ -598,7 +515,8 @@ export async function m2mReport(userId: string, asOf?: Date): Promise<M2MReport>
       const monthlyRoi = actualRoi != null ? (actualRoi * 30) / days : null;
       const annualRoi = actualRoi != null ? (actualRoi * 365) / days : null;
       let cagr: number | null = null;
-      if (valuation && !purValue.isZero() && valuation.greaterThan(0)) {
+      // Annualising a return over less than a year exaggerates it; CAGR is shown from one year held.
+      if (days >= 365 && valuation && !purValue.isZero() && valuation.greaterThan(0)) {
         try {
           const ratio = valuation.dividedBy(purValue).toNumber();
           if (ratio > 0) cagr = (Math.pow(ratio, 365 / days) - 1) * 100;
@@ -628,16 +546,75 @@ export async function m2mReport(userId: string, asOf?: Date): Promise<M2MReport>
   }
 
   const equityRows = await build('EQUITY', equityTxs);
-  const fnoRows = await build('FNO', fnoTxs);
+  const fnoRows = await buildFno(fnoTxs);
+
+  // F&O: positions replayed from trades up to the cut-off (shorts included),
+  // marked at the position's current mark only when the cut-off is today.
+  async function buildFno(src: typeof txs): Promise<M2MRow[]> {
+    const byKey = new Map<string, typeof txs>();
+    for (const t of src) {
+      const k = `${t.portfolioId}|${t.assetKey}`;
+      byKey.set(k, [...(byKey.get(k) ?? []), t]);
+    }
+    const isToday = cutoff.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+    const marks = isToday
+      ? await prisma.derivativePosition.findMany({
+          where: { portfolio: { userId }, status: 'OPEN' },
+          select: { portfolioId: true, assetKey: true, mtmPrice: true },
+        })
+      : [];
+    const markByKey = new Map(marks.map((p) => [`${p.portfolioId}|${p.assetKey}`, p.mtmPrice]));
+    const rows: M2MRow[] = [];
+    for (const [key, list] of byKey) {
+      const replay = replayFoTransactions(list);
+      if (!replay || replay.netQuantity.isZero()) continue;
+      const mark = markByKey.get(key);
+      const value = derivativePositionValue({
+        netQuantity: replay.netQuantity,
+        totalCost: replay.totalCost,
+        avgEntryPrice: replay.avgEntryPrice,
+        mtmPrice: mark ?? null,
+      });
+      const purValue = replay.totalCost;
+      const pnl = value ? value.minus(purValue) : null;
+      const firstOpen = replay.openLots[0]?.tradeDate ?? cutoff.toISOString().slice(0, 10);
+      const days = Math.max(1, Math.floor((cutoff.getTime() - new Date(firstOpen).getTime()) / 86_400_000));
+      rows.push({
+        segment: 'FNO',
+        scriptName: list[0]!.assetName ?? replay.underlying,
+        isin: null,
+        closingDate: firstOpen,
+        qty: replay.netQuantity.toString(),
+        purRate: replay.avgEntryPrice.toFixed(4),
+        purValue: purValue.toFixed(2),
+        bhavRate: mark ? new Decimal(mark.toString()).toFixed(4) : null,
+        valuation: value ? value.toFixed(2) : null,
+        unrealisedPnL: pnl ? pnl.toFixed(2) : null,
+        noOfDays: days,
+        actualRoiPct: pnl && !purValue.isZero() ? Number(pnl.dividedBy(purValue).times(100).toFixed(4)) : null,
+        monthlyRoiPct: null,
+        annualRoiPct: null,
+        cagrPct: null,
+      });
+    }
+    return rows.sort((a, b) => a.scriptName.localeCompare(b.scriptName));
+  }
 
   function summarize(rows: M2MRow[]): M2MSummary {
-    const sumPur = rows.reduce((s, r) => s.plus(r.purValue), new Decimal(0));
-    const sumVal = rows.reduce((s, r) => s.plus(r.valuation ?? '0'), new Decimal(0));
-    const sumPnl = rows.reduce((s, r) => s.plus(r.unrealisedPnL ?? '0'), new Decimal(0));
+    // Cost, value and P&L over priced rows only, so valuation − cost = P&L;
+    // cost with no price to compare against is reported on its own.
+    const priced = rows.filter((r) => r.valuation != null);
+    const sumPur = priced.reduce((acc, r) => acc.plus(r.purValue), new Decimal(0));
+    const sumVal = priced.reduce((acc, r) => acc.plus(r.valuation!), new Decimal(0));
+    const sumPnl = priced.reduce((acc, r) => acc.plus(r.unrealisedPnL ?? '0'), new Decimal(0));
+    const unpriced = rows
+      .filter((r) => r.valuation == null)
+      .reduce((acc, r) => acc.plus(r.purValue), new Decimal(0));
     return {
       purValue: sumPur.toFixed(2),
       valuation: sumVal.toFixed(2),
       unrealisedPnL: sumPnl.toFixed(2),
+      unpricedPurValue: unpriced.toFixed(2),
     };
   }
 
@@ -647,6 +624,7 @@ export async function m2mReport(userId: string, asOf?: Date): Promise<M2MReport>
     purValue: new Decimal(equityTotals.purValue).plus(fnoTotals.purValue).toFixed(2),
     valuation: new Decimal(equityTotals.valuation).plus(fnoTotals.valuation).toFixed(2),
     unrealisedPnL: new Decimal(equityTotals.unrealisedPnL).plus(fnoTotals.unrealisedPnL).toFixed(2),
+    unpricedPurValue: new Decimal(equityTotals.unpricedPurValue).plus(fnoTotals.unpricedPurValue).toFixed(2),
   };
 
   return {

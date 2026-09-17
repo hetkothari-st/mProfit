@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { ok, noContent } from '../lib/response.js';
 import { UnauthorizedError, NotFoundError, ForbiddenError, BadRequestError } from '../lib/errors.js';
@@ -82,16 +83,18 @@ export async function summary(req: Request, res: Response) {
   }
   const positions = await prisma.derivativePosition.findMany({ where });
   const open = positions.filter((p) => p.status === 'OPEN');
-  const totalRealized = positions.reduce((acc, p) => acc + Number(p.realizedPnl), 0);
-  const totalUnrealized = open.reduce((acc, p) => acc + Number(p.unrealizedPnl ?? 0), 0);
-  const exposureByUnderlying: Record<string, number> = {};
+  const totalRealized = positions.reduce((acc, p) => acc.plus(p.realizedPnl.toString()), new Decimal(0));
+  const totalUnrealized = open.reduce((acc, p) => acc.plus((p.unrealizedPnl ?? 0).toString()), new Decimal(0));
+  // Notional exposure: |units| × mark (quantities are already in units).
+  const exposure = new Map<string, Decimal>();
   for (const p of open) {
-    const lot = Number(p.lotSize);
-    const qty = Number(p.netQuantity);
-    const mark = Number(p.mtmPrice ?? p.avgEntryPrice);
-    const expo = Math.abs(qty * lot * mark);
-    exposureByUnderlying[p.underlying] = (exposureByUnderlying[p.underlying] ?? 0) + expo;
+    const mark = new Decimal((p.mtmPrice ?? p.avgEntryPrice).toString());
+    const expo = new Decimal(p.netQuantity.toString()).abs().times(mark);
+    exposure.set(p.underlying, (exposure.get(p.underlying) ?? new Decimal(0)).plus(expo));
   }
+  const exposureByUnderlying: Record<string, string> = Object.fromEntries(
+    [...exposure.entries()].map(([k, v]) => [k, v.toFixed(2)]),
+  );
   const expiringSoon = open
     .filter((p) => {
       const days = Math.ceil((p.expiryDate.getTime() - Date.now()) / (24 * 3600 * 1000));

@@ -62,11 +62,12 @@ describe('investments', () => {
     expect(ledger(book, 'Unallocated Funds')?.parent).toBe('Suspense A/c');
   });
 
-  it('books a buy as a journal against Unallocated Funds, charges included', () => {
+  it('books a buy as a journal against Unallocated Funds, charges in the cost', () => {
+    // The capital-gains cost includes purchase charges, so the holding does too;
+    // expensing them as well would count them twice when the gain is booked.
     const buy = allVouchers(book).find((v) => v.narration.includes('Buy 10 Infosys Ltd'))!;
     expect(buy.type).toBe('Journal');
-    expect(lineOf(buy, 'Infosys Ltd')).toBe('14500');
-    expect(lineOf(buy, 'Brokerage & Charges')).toBe('20');
+    expect(lineOf(buy, 'Infosys Ltd')).toBe('14520');
     expect(lineOf(buy, 'Unallocated Funds')).toBe('-14520');
   });
 
@@ -297,6 +298,41 @@ describe('cost and realised gains worked out from the trades', () => {
     const sell = sellIn(book);
     expect(lineOf(sell, 'ITC Limited')).toBe('-47230');
     expect(book.issues.some((i) => i.message.includes('ITC Limited') && /no purchase/i.test(i.message))).toBe(true);
+    expectBalanced(book);
+  });
+
+  it('expenses STT on a purchase instead of adding it to cost', () => {
+    const book = bookOf([trade({ id: 'b1', gross: '1000', charges: '25', stt: '5' })]);
+    const buy = allVouchers(book).find((v) => v.narration.startsWith('Buy'))!;
+    expect(lineOf(buy, 'Zed Ltd')).toBe('1020');
+    expect(lineOf(buy, 'Brokerage & Charges')).toBe('5');
+    expectBalanced(book);
+  });
+
+  it('books unmatched units of a partly matched sale against the holding, and says so', () => {
+    const book = bookOf([
+      trade({ id: 'b1', gross: '1000' }),
+      trade({
+        id: 's1', date: '2024-07-01', kind: 'SELL', quantity: '15', price: '120', gross: '1800',
+        cost: '1000', shortTermGain: '200', unmatchedValue: '600', unmatchedQuantity: '5',
+      }),
+    ]);
+    const sell = sellIn(book);
+    expect(lineOf(sell, 'Zed Ltd')).toBe('-1600');
+    expect(lineOf(sell, 'Short-term Capital Gains')).toBe('-200');
+    expect(lineOf(sell, 'Brokerage & Charges')).toBeUndefined(); // nothing left over for charges
+    expect(book.issues.some((i) => /no purchase is on file for 5/.test(i.message))).toBe(true);
+    expectBalanced(book);
+  });
+
+  it('books an intraday gain as speculative income, not a capital gain', () => {
+    const book = bookOf([
+      trade({ id: 'b1', gross: '1000' }),
+      trade({ id: 's1', date: '2024-05-01', kind: 'SELL', quantity: '10', price: '120', gross: '1200', cost: '1000', speculativeGain: '200' }),
+    ]);
+    const sell = sellIn(book);
+    expect(lineOf(sell, 'Speculative Business Income')).toBe('-200');
+    expect(lineOf(sell, 'Short-term Capital Gains')).toBeUndefined();
     expectBalanced(book);
   });
 

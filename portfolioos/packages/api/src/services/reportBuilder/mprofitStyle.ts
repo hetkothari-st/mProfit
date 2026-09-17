@@ -21,9 +21,10 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
-import { Decimal } from '@everypaisa/shared';
+import { Decimal, istCalendarDate } from '@everypaisa/shared';
 import { pdfSafe } from '../charts/pdfCharts.js';
 import { DARK_THEME, LIGHT_THEME, hexToArgb, type ThemeName } from '../charts/pdfTheme.js';
+import { excelSheetName, setExcelValue } from '../excelCells.js';
 
 // ─── Palette — pulled from the screenshots ───────────────────────
 //
@@ -175,9 +176,8 @@ export function fmtDateDDMMYYYY(v: unknown): string {
   const s = String(v);
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yy = d.getFullYear();
+  // Indian calendar date, so a stored date never shifts a day with the server time zone.
+  const [yy, mm, dd] = istCalendarDate(d).split('-');
   return `${dd}/${mm}/${yy}`;
 }
 
@@ -498,7 +498,7 @@ export async function streamMprofitExcel(res: Response, layout: MprofitLayout): 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'EveryPaisa';
   wb.created = new Date();
-  const ws = wb.addWorksheet(layout.reportTitle.slice(0, 31));
+  const ws = wb.addWorksheet(excelSheetName(layout.reportTitle));
 
   const totalCols = layout.columns.length;
 
@@ -563,7 +563,9 @@ export async function streamMprofitExcel(res: Response, layout: MprofitLayout): 
       const raw = values[c.key];
       const display = c.formatter ? c.formatter(raw) : raw == null ? '' : String(raw);
       const cell = ws.getCell(row, i + 1);
-      cell.value = display;
+      // Amounts and quantities as real numbers so the sheet can be summed and sorted.
+      if (c.formatter) setExcelValue(cell, raw, display);
+      else cell.value = display;
       cell.fill = solid(fill);
       // Always an explicit colour, not just on the negative branch — Excel's
       // own default text colour is black, which the dark theme's tinted

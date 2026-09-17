@@ -9,6 +9,8 @@
  */
 
 import { Decimal } from 'decimal.js';
+import { cashDirection } from '../../cashDirection.js';
+import { inrAmount, transactionInrNet } from '../../investmentIncome.service.js';
 import { prisma } from '../../../lib/prisma.js';
 import { fmtNum, fmtDate, type ExportPayload } from '../../export.service.js';
 
@@ -54,10 +56,6 @@ const TX_TYPE_LABEL: Record<string, string> = {
   DEPOSIT: 'Deposit', WITHDRAWAL: 'Withdrawal', OPENING_BALANCE: 'Opening Bal',
 };
 
-const CREDIT_TX = new Set<string>([
-  'SELL', 'SWITCH_OUT', 'DIVIDEND_PAYOUT', 'INTEREST_RECEIVED', 'MATURITY',
-  'REDEMPTION', 'DEPOSIT', 'OPENING_BALANCE', 'MERGER_OUT', 'DEMERGER_OUT',
-]);
 
 export async function buildLedgerStatement(
   params: LedgerStatementParams,
@@ -95,8 +93,11 @@ export async function buildLedgerStatement(
   // Normalise both sources into LedgerEntry rows.
   const entries: LedgerEntry[] = [];
   for (const t of txs) {
-    const amount = new Decimal(t.netAmount.toString());
-    const isCredit = CREDIT_TX.has(t.transactionType);
+    // Money received is a credit, money invested a debit; bonus, split, merger
+    // and reinvested dividends move units only. Amounts in INR.
+    const direction = cashDirection(t.transactionType);
+    const amount = direction === 'NONE' ? new Decimal(0) : transactionInrNet(t);
+    const isCredit = direction === 'IN';
     entries.push({
       date: t.tradeDate,
       portfolioId: t.portfolioId,
@@ -109,7 +110,7 @@ export async function buildLedgerStatement(
     });
   }
   for (const cf of cashFlows) {
-    const amount = new Decimal(cf.amount.toString());
+    const amount = inrAmount(cf);
     const isCredit = cf.type === 'INFLOW';
     entries.push({
       date: cf.date,

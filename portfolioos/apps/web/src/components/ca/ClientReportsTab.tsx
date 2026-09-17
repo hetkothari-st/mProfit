@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { financialYearRange } from '@everypaisa/shared';
 import { cn } from '@/lib/cn';
 import { getApiBaseUrl } from '@/api/baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
@@ -182,7 +183,8 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
               disabled={busy !== null}
               onClick={() =>
                 void downloadRaw(
-                  `/api/reports/statement/provident-fund?format=xlsx&clientId=${clientId}`,
+                  // The file is named for the year, so it covers only that year.
+                  `/api/reports/statement/provident-fund?format=xlsx&clientId=${clientId}&from=${financialYearRange(fy).from}&to=${financialYearRange(fy).to}`,
                   `provident-fund-${fy}.xlsx`,
                   'pf',
                 )

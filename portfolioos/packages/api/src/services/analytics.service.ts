@@ -1,9 +1,11 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { financialYearOf } from '@everypaisa/shared';
 import {
   computePortfolioXirr,
   computeRollingXirr,
+  computePortfoliosRollingXirr,
   computeUserXirr,
 } from './xirr.service.js';
 import {
@@ -95,8 +97,8 @@ export interface KpiBlock {
 }
 
 function currentFy(date: Date = new Date()): string {
-  const year = date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
-  return `${year}-${String(year + 1).slice(-2)}`;
+  // The Indian financial year of today's Indian date, whatever the server's time zone.
+  return financialYearOf(date);
 }
 
 function fyStartDate(fy: string): Date {
@@ -146,22 +148,10 @@ export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
   const pids = await portfolioIdsFor(scope);
   const userXirr = await computeUserXirr(scope.userId);
 
-  // For rolling: solve per portfolio inside the date window, then take a
-  // simple invested-weighted mean. Acceptable proxy for the consolidated view.
-  async function weightedRolling(years: 1 | 3 | 5): Promise<number | null> {
-    let weightedSum = ZERO;
-    let weightTotal = ZERO;
-    for (const pid of pids) {
-      const r = await computeRollingXirr(pid, years);
-      if (r.xirr == null) continue;
-      const w = new Decimal(r.totalInvested);
-      if (w.lte(0)) continue;
-      weightedSum = weightedSum.plus(new Decimal(r.xirr).times(w));
-      weightTotal = weightTotal.plus(w);
-    }
-    if (weightTotal.isZero()) return null;
-    return weightedSum.dividedBy(weightTotal).toNumber();
-  }
+  // Rolling windows solved once on the pooled cash flows of all portfolios in
+  // scope — an average of per-portfolio IRRs is not a money-weighted return.
+  const weightedRolling = async (years: 1 | 3 | 5): Promise<number | null> =>
+    pids.length === 0 ? null : (await computePortfoliosRollingXirr(pids, years)).xirr;
 
   const [x1, x3, x5, cg, ...unrealisedAndIncome] = await Promise.all([
     weightedRolling(1),

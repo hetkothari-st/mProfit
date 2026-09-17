@@ -1,3 +1,4 @@
+import { financialYearOf } from '../format/date.js';
 /**
  * Cost Inflation Index (CII) — published by CBDT under section 48 of the
  * Income-tax Act for indexed cost of acquisition / improvement when computing
@@ -47,12 +48,8 @@ export const CII_BY_FY: Record<string, number> = {
  * 2024-03-15 → "2023-24".
  */
 export function financialYearFromDate(input: string | Date): string {
-  const d = input instanceof Date ? input : new Date(input);
-  const year = d.getUTCFullYear();
-  const month = d.getUTCMonth(); // 0-indexed
-  const startYear = month >= 3 ? year : year - 1;
-  const endYearShort = String((startYear + 1) % 100).padStart(2, '0');
-  return `${startYear}-${endYearShort}`;
+  // Same rule as financialYearOf: the Indian calendar date decides the year.
+  return financialYearOf(input);
 }
 
 /**

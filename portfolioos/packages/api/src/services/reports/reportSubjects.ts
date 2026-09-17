@@ -367,6 +367,43 @@ export async function buildPayloadForSubjects<
     }
   }
 
+  // Additional sections (capital-gains buckets, interest, maturity, PF
+  // ledgers…) merge the same way as the main table: matched by title across
+  // members, every row tagged with its member. Per-member totals are dropped
+  // for the same reason as the footer.
+  type Section = { title: string; columns: Array<{ key: string; header: string; width?: number }>; rows: Array<Record<string, unknown>>; totals?: unknown; emptyMessage?: string };
+  const sectionsOf = (p: T) => ((p as T & { additionalSections?: Section[] }).additionalSections ?? []);
+  const mergedSections: Section[] = [];
+  for (const { subject, payload } of built) {
+    for (const section of sectionsOf(payload)) {
+      let merged = mergedSections.find((m) => m.title === section.title);
+      if (!merged) {
+        merged = {
+          title: section.title,
+          columns: [{ key: 'member', header: 'Member', width: 20 }, ...section.columns],
+          rows: [],
+          emptyMessage: section.emptyMessage,
+        };
+        mergedSections.push(merged);
+      }
+      merged.rows.push(...section.rows.map((r) => ({ member: subject.label, ...r })));
+    }
+  }
+
+  // Meta shared by everyone (the year, the date range) stays as is; anything
+  // that differs by member (counts, portfolio names) is shown per member.
+  type Meta = Record<string, string | number>;
+  const metas = built.map(({ subject, payload }) => ({ subject, meta: (payload as T & { meta?: Meta }).meta ?? {} }));
+  const meta: Meta = {};
+  for (const key of new Set(metas.flatMap((m) => Object.keys(m.meta)))) {
+    const values = metas.map((m) => m.meta[key]);
+    if (values.every((v) => v === values[0])) {
+      if (values[0] !== undefined) meta[key] = values[0];
+    } else {
+      for (const m of metas) if (m.meta[key] !== undefined) meta[`${m.subject.label} — ${key}`] = m.meta[key]!;
+    }
+  }
+
   return {
     ...first,
     title: familyLabel ? `${first.title} — ${familyLabel}` : first.title,
@@ -374,6 +411,10 @@ export async function buildPayloadForSubjects<
     rows,
     footer: Object.keys(footer).length > 0 ? footer : undefined,
     filenameStem: first.filenameStem ? `${first.filenameStem}-household` : undefined,
+    ...(mergedSections.length > 0 || 'additionalSections' in first ? { additionalSections: mergedSections } : {}),
+    ...('meta' in first ? { meta } : {}),
+    // A total row belongs to one member's rows; the merged table has no single one.
+    ...('totals' in first ? { totals: undefined } : {}),
   };
 }
 

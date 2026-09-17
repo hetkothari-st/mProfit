@@ -5,6 +5,7 @@ import { Decimal, toDecimal } from '@everypaisa/shared';
 import { drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
 import { themeFor, hexToArgb, type PdfTheme, type ThemeName } from './charts/pdfTheme.js';
 import { drawBrandLockup } from './charts/pdfBrand.js';
+import { excelSheetName, setExcelValue } from './excelCells.js';
 
 export type { PdfTheme, ThemeName } from './charts/pdfTheme.js';
 
@@ -80,7 +81,7 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
   const wb = new ExcelJS.Workbook();
   wb.creator = 'EveryPaisa';
   wb.created = new Date();
-  const ws = wb.addWorksheet(payload.title.slice(0, 31));
+  const ws = wb.addWorksheet(excelSheetName(payload.title));
 
   let row = 1;
   ws.getCell(row, 1).value = payload.title;
@@ -96,6 +97,11 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
     }
     row += 1;
   }
+
+  const writeValue = (cell: ExcelJS.Cell, col: ExportColumn, raw: unknown) => {
+    if (col.formatter) setExcelValue(cell, raw, col.formatter(raw));
+    else cell.value = raw as ExcelJS.CellValue;
+  };
 
   const headerRow = ws.getRow(row);
   payload.columns.forEach((col, i) => {
@@ -117,26 +123,59 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
 
   for (const data of payload.rows) {
     const r = ws.getRow(row);
-    payload.columns.forEach((col, i) => {
-      const raw = data[col.key];
-      r.getCell(i + 1).value = col.formatter
-        ? col.formatter(raw)
-        : (raw as ExcelJS.CellValue);
-    });
+    payload.columns.forEach((col, i) => writeValue(r.getCell(i + 1), col, data[col.key]));
     row += 1;
   }
 
   if (payload.totals) {
     const r = ws.getRow(row);
     payload.columns.forEach((col, i) => {
-      const raw = payload.totals![col.key];
       const cell = r.getCell(i + 1);
-      cell.value = col.formatter ? col.formatter(raw) : (raw as ExcelJS.CellValue);
+      writeValue(cell, col, payload.totals![col.key]);
       cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(C.tableHeaderBg) } };
       cell.border = { top: { style: 'thin', color: { argb: hexToArgb(C.border) } } };
     });
     row += 1;
+  }
+
+  // Every additional section the PDF shows (capital-gains buckets, interest,
+  // maturity, PF ledgers…) goes into the workbook too, in order.
+  for (const section of payload.additionalSections ?? []) {
+    row += 1;
+    ws.getCell(row, 1).value = section.title;
+    ws.getCell(row, 1).font = { bold: true, size: 12 };
+    row += 1;
+    const head = ws.getRow(row);
+    section.columns.forEach((col, i) => {
+      const cell = head.getCell(i + 1);
+      cell.value = col.header;
+      cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(C.tableHeaderBg) } };
+      const width = ws.getColumn(i + 1).width ?? 0;
+      if (col.width && col.width > width) ws.getColumn(i + 1).width = col.width;
+    });
+    row += 1;
+    if (section.rows.length === 0 && section.emptyMessage) {
+      ws.getCell(row, 1).value = section.emptyMessage;
+      ws.getCell(row, 1).font = { italic: true, color: { argb: hexToArgb(C.muted) } };
+      row += 1;
+    }
+    for (const data of section.rows) {
+      const r = ws.getRow(row);
+      section.columns.forEach((col, i) => writeValue(r.getCell(i + 1), col, data[col.key]));
+      row += 1;
+    }
+    if (section.totals) {
+      const r = ws.getRow(row);
+      section.columns.forEach((col, i) => {
+        const cell = r.getCell(i + 1);
+        writeValue(cell, col, section.totals![col.key]);
+        cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(C.tableHeaderBg) } };
+      });
+      row += 1;
+    }
   }
 
   if (payload.note) {
@@ -156,7 +195,7 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
     }
   }
 
-  const safeTitle = payload.title.replace(/[^a-z0-9-_]+/gi, '_');
+  const safeTitle = (payload.filenameStem ?? payload.title).replace(/[^a-z0-9-_]+/gi, '_');
   res.setHeader(
     'Content-Type',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

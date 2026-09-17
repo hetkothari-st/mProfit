@@ -104,6 +104,13 @@ export interface TallySources {
     cost: string | null;
     shortTermGain: string;
     longTermGain: string;
+    /** Securities transaction tax within `charges` — never part of cost (sec 48). */
+    stt?: string;
+    /** Intraday (speculative) gain from the capital-gains records. */
+    speculativeGain?: string;
+    /** Sale value of units sold with no purchase on file, and how many. */
+    unmatchedValue?: string;
+    unmatchedQuantity?: string;
   }>;
   loans: Array<{ id: string; label: string; principal: string; disbursedOn: string }>;
   loanPayments: Array<{
@@ -167,6 +174,8 @@ const FIXED_LEDGERS = {
   stcg: { name: 'Short-term Capital Gains', parent: 'Indirect Incomes' },
   ltcg: { name: 'Long-term Capital Gains', parent: 'Indirect Incomes' },
   capitalLoss: { name: 'Capital Losses', parent: 'Indirect Expenses' },
+  speculative: { name: 'Speculative Business Income', parent: 'Indirect Incomes' },
+  speculativeLoss: { name: 'Speculative Business Loss', parent: 'Indirect Expenses' },
   // Used when the app has not computed the gain itself: the export works the
   // cost out first-in-first-out, but cannot say whether it is short or long
   // term. A CA reclassifies from this one ledger.
@@ -373,12 +382,16 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
     if (BUY_KINDS[t.kind]) {
       if (gross.plus(charges).isZero()) continue;
       const narration = `${BUY_KINDS[t.kind]} ${qty(t.quantity)} ${name} @ ${rs(t.price)}`;
+      // Purchase charges are part of the investment's cost — the cost the
+      // capital-gains figures use — except STT, which is an expense (sec 48).
+      const stt = dec(t.stt ?? '0');
+      const cost = gross.plus(charges).minus(stt);
       add(t.date, 'Journal', narration, [
-        [holding(t), gross],
-        [fixed('charges'), charges],
+        [holding(t), cost],
+        [fixed('charges'), stt],
         [fixed('unallocated'), gross.plus(charges).negated()],
       ]);
-      addLot(t.holdingKey, quantity, gross);
+      addLot(t.holdingKey, quantity, cost);
     } else if (SELL_KINDS[t.kind]) {
       if (gross.isZero()) continue;
       const narration = `${SELL_KINDS[t.kind]} ${qty(t.quantity)} ${name} @ ${rs(t.price)}`;
@@ -390,17 +403,31 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
       if (t.cost !== null) {
         // The app computed the gain: use its figures, and keep the queue in step.
         takeLots(t.holdingKey, quantity);
-        lines.push([holding(t), dec(t.cost).negated()]);
-        for (const [gain, ledger] of [
-          [dec(t.shortTermGain), 'stcg'],
-          [dec(t.longTermGain), 'ltcg'],
+        // Units with no purchase on file leave the holding at their sale value, with no gain.
+        const unmatchedValue = dec(t.unmatchedValue ?? '0');
+        lines.push([holding(t), dec(t.cost).plus(unmatchedValue).negated()]);
+        for (const [gain, ledger, lossLedger] of [
+          [dec(t.shortTermGain), 'stcg', 'capitalLoss'],
+          [dec(t.longTermGain), 'ltcg', 'capitalLoss'],
+          [dec(t.speculativeGain ?? '0'), 'speculative', 'speculativeLoss'],
         ] as const) {
           if (gain.greaterThan(0)) lines.push([fixed(ledger), gain.negated()]);
-          else if (gain.lessThan(0)) lines.push([fixed('capitalLoss'), gain.abs()]);
+          else if (gain.lessThan(0)) lines.push([fixed(lossLedger), gain.abs()]);
         }
-        // Whatever the gains records leave over is the sale's charges.
+        // What the gains records leave over is the sale's own charges (bar STT,
+        // which they don't deduct), so only charges ever land there.
         const residue = lines.reduce((s, [, a]) => s.plus(a), ZERO);
         if (!residue.isZero()) lines.push([fixed('charges'), residue.negated()]);
+        const unmatchedQty = dec(t.unmatchedQuantity ?? '0');
+        if (unmatchedQty.greaterThan(0)) {
+          issues.push({
+            severity: 'warning',
+            message:
+              `${SELL_KINDS[t.kind]} of ${name} on ${t.date}: no purchase is on file for ${unmatchedQty.toString()} of ` +
+              `the ${quantity.toString()} sold, so that part is booked at its sale value and no gain is worked out. ` +
+              `Add the original purchase in the app.`,
+          });
+        }
       } else {
         const { cost, matched } = takeLots(t.holdingKey, quantity);
         const unmatched = quantity.minus(matched);

@@ -209,6 +209,16 @@ export interface ProjectionAggregate {
  * lot matching used for tax reports.) Returns zero quantity + zero cost once
  * cumulative SELLs have cleared the position.
  */
+/**
+ * Units held going into `exDate` — what a corporate action on that date
+ * applies to. Trades on the ex-date itself don't qualify (they settle after the
+ * record date), and the action's own booked row is on the ex-date so it's
+ * excluded too.
+ */
+export function quantityHeldBefore(txs: Transaction[], exDate: Date): Decimal {
+  return replayTransactions(txs.filter((t) => t.tradeDate.getTime() < exDate.getTime())).quantity;
+}
+
 export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
   let quantity = new Decimal(0);
   let totalCost = new Decimal(0);

@@ -73,22 +73,35 @@ function findRow(rows: CapitalGainRow[]): CapitalGainRow {
 }
 
 describe('capitalGains.service — CII gap handling (TASK 02)', () => {
-  it('bond bought in a covered year, sold in the last CII-covered FY → indexation applies, no flag', () => {
+  it('gold bought in a covered year and sold before 23-Jul-2024 → indexation applies, no flag', () => {
     const txs = [
-      tx({ id: 'b1', assetClass: 'BOND', transactionType: 'BUY', tradeDate: '2010-06-01', quantity: '10', netAmount: '10000', assetKey: 'bond:1' }),
-      tx({ id: 's1', assetClass: 'BOND', transactionType: 'SELL', tradeDate: '2025-01-15', quantity: '10', netAmount: '20000', assetKey: 'bond:1' }),
+      tx({ id: 'b1', assetClass: 'PHYSICAL_GOLD', transactionType: 'BUY', tradeDate: '2010-06-01', quantity: '10', netAmount: '10000', assetKey: 'gold:1' }),
+      tx({ id: 's1', assetClass: 'PHYSICAL_GOLD', transactionType: 'SELL', tradeDate: '2024-06-01', quantity: '10', netAmount: '20000', assetKey: 'gold:1' }),
     ];
     const row = findRow(computeFIFOGains(txs));
     expect(row.capitalGainType).toBe('LONG_TERM');
-    expect(row.indexedCostOfAcquisition).not.toBeNull();
+    // CII 2010-11 = 167, 2024-25 = 363.
+    expect(row.indexedCostOfAcquisition!.toFixed(2)).toBe('21736.53');
     expect(row.needsReview).toBe(false);
     expect(row.reviewReason).toBeNull();
   });
 
-  it('bond sold in a hypothetical future FY with no CII entry → flagged, non-indexed fallback, no crash', () => {
+  it('gold sold on/after 23-Jul-2024 → no indexation (Finance (No. 2) Act 2024)', () => {
     const txs = [
-      tx({ id: 'b1', assetClass: 'BOND', transactionType: 'BUY', tradeDate: '2010-06-01', quantity: '10', netAmount: '10000', assetKey: 'bond:2' }),
-      tx({ id: 's1', assetClass: 'BOND', transactionType: 'SELL', tradeDate: '2040-06-01', quantity: '10', netAmount: '20000', assetKey: 'bond:2' }),
+      tx({ id: 'b1', assetClass: 'PHYSICAL_GOLD', transactionType: 'BUY', tradeDate: '2010-06-01', quantity: '10', netAmount: '10000', assetKey: 'gold:2' }),
+      tx({ id: 's1', assetClass: 'PHYSICAL_GOLD', transactionType: 'SELL', tradeDate: '2025-01-15', quantity: '10', netAmount: '20000', assetKey: 'gold:2' }),
+    ];
+    const row = findRow(computeFIFOGains(txs));
+    expect(row.capitalGainType).toBe('LONG_TERM');
+    expect(row.indexedCostOfAcquisition).toBeNull();
+    expect(row.taxableGain.toString()).toBe('10000');
+    expect(row.needsReview).toBe(false);
+  });
+
+  it('purchase before the CII base year (FY 2001-02) → flagged, non-indexed fallback, no crash', () => {
+    const txs = [
+      tx({ id: 'b1', assetClass: 'PHYSICAL_GOLD', transactionType: 'BUY', tradeDate: '1995-06-01', quantity: '10', netAmount: '10000', assetKey: 'gold:3' }),
+      tx({ id: 's1', assetClass: 'PHYSICAL_GOLD', transactionType: 'SELL', tradeDate: '2020-06-01', quantity: '10', netAmount: '20000', assetKey: 'gold:3' }),
     ];
     const row = findRow(computeFIFOGains(txs));
     expect(row.capitalGainType).toBe('LONG_TERM');
@@ -97,10 +110,21 @@ describe('capitalGains.service — CII gap handling (TASK 02)', () => {
     expect(row.taxableGain.toString()).toBe(row.gainLoss.toString());
     expect(row.needsReview).toBe(true);
     expect(row.reviewReason).toContain('CII not available');
-    expect(row.reviewReason).toContain('2040-41');
+    expect(row.reviewReason).toContain('1995-96');
   });
 
-  it('equity sale in the same uncovered future FY is unaffected — equity never used indexation', () => {
+  it('bonds and debentures never get indexation (sec 48)', () => {
+    const txs = [
+      tx({ id: 'b1', assetClass: 'BOND', transactionType: 'BUY', tradeDate: '2010-06-01', quantity: '10', netAmount: '10000', assetKey: 'bond:1' }),
+      tx({ id: 's1', assetClass: 'BOND', transactionType: 'SELL', tradeDate: '2020-01-15', quantity: '10', netAmount: '20000', assetKey: 'bond:1' }),
+    ];
+    const row = findRow(computeFIFOGains(txs));
+    expect(row.capitalGainType).toBe('LONG_TERM');
+    expect(row.indexedCostOfAcquisition).toBeNull();
+    expect(row.taxableGain.toString()).toBe('10000');
+  });
+
+  it('equity sale in an uncovered future FY is unaffected — equity never used indexation', () => {
     const txs = [
       tx({ id: 'b1', assetClass: 'EQUITY', transactionType: 'BUY', tradeDate: '2010-06-01', quantity: '10', netAmount: '1000', assetKey: 'stock:1' }),
       tx({ id: 's1', assetClass: 'EQUITY', transactionType: 'SELL', tradeDate: '2040-06-01', quantity: '10', netAmount: '5000', assetKey: 'stock:1' }),
@@ -112,30 +136,36 @@ describe('capitalGains.service — CII gap handling (TASK 02)', () => {
   });
 
   // Real estate: `Transaction` rows with assetClass REAL_ESTATE are a distinct
-  // ingestion path from `OwnedProperty` sales (propertyCapitalGain.ts, which
-  // has its own 20%-indexed/12.5%-non-indexed choice model driven by the same
-  // `CII_BY_FY` table). A user who logs a property sale as a plain
-  // Transaction instead of via OwnedProperty DOES flow through
-  // `computeFIFOGains`/CII here — the two systems are not mutually
-  // exclusive, so keep both reading from `CII_BY_FY` (see the comment above
-  // the `CII` constant in capitalGains.service.ts).
+  // ingestion path from `OwnedProperty` sales (propertyCapitalGain.ts). Both
+  // read `CII_BY_FY`.
   it('real estate booked as a plain Transaction also flows through computeFIFOGains (not exclusively OwnedProperty)', () => {
-    const txs = [
+    const before = [
       tx({ id: 'b1', assetClass: 'REAL_ESTATE', transactionType: 'BUY', tradeDate: '2010-06-01', quantity: '1', netAmount: '1000000', assetKey: 'name:flat' }),
-      tx({ id: 's1', assetClass: 'REAL_ESTATE', transactionType: 'SELL', tradeDate: '2025-01-15', quantity: '1', netAmount: '2000000', assetKey: 'name:flat' }),
+      tx({ id: 's1', assetClass: 'REAL_ESTATE', transactionType: 'SELL', tradeDate: '2024-06-15', quantity: '1', netAmount: '2000000', assetKey: 'name:flat' }),
     ];
-    const row = findRow(computeFIFOGains(txs));
-    expect(row.capitalGainType).toBe('LONG_TERM');
-    expect(row.indexedCostOfAcquisition).not.toBeNull();
-    expect(row.needsReview).toBe(false);
+    const indexedRow = findRow(computeFIFOGains(before));
+    expect(indexedRow.capitalGainType).toBe('LONG_TERM');
+    expect(indexedRow.indexedCostOfAcquisition).not.toBeNull();
+    expect(indexedRow.needsReview).toBe(false);
+
+    const after = [
+      tx({ id: 'b2', assetClass: 'REAL_ESTATE', transactionType: 'BUY', tradeDate: '2010-06-01', quantity: '1', netAmount: '1000000', assetKey: 'name:flat2' }),
+      tx({ id: 's2', assetClass: 'REAL_ESTATE', transactionType: 'SELL', tradeDate: '2025-01-15', quantity: '1', netAmount: '2000000', assetKey: 'name:flat2' }),
+    ];
+    const newRegime = findRow(computeFIFOGains(after));
+    expect(newRegime.indexedCostOfAcquisition).toBeNull();
+    expect(newRegime.taxableGain.toString()).toBe('1000000');
+    // Resident sellers keep the 20%-with-indexation option for pre-cutoff land/buildings.
+    expect(newRegime.needsReview).toBe(true);
+    expect(newRegime.reviewReason).toContain('20% on the indexed gain');
   });
 
-  it('never throws for any qualifying asset class sold in an uncovered FY', () => {
+  it('never throws for any indexation-eligible asset class whose purchase predates the CII table', () => {
     for (const ac of Object.values(AssetClass)) {
       if (!qualifiesForIndexation(ac, new Date('2010-06-01'))) continue;
       const txs = [
-        tx({ id: `b-${ac}`, assetClass: ac, transactionType: 'BUY', tradeDate: '2010-06-01', quantity: '10', netAmount: '10000', assetKey: `t:${ac}` }),
-        tx({ id: `s-${ac}`, assetClass: ac, transactionType: 'SELL', tradeDate: '2040-06-01', quantity: '10', netAmount: '20000', assetKey: `t:${ac}` }),
+        tx({ id: `b-${ac}`, assetClass: ac, transactionType: 'BUY', tradeDate: '1995-06-01', quantity: '10', netAmount: '10000', assetKey: `t:${ac}` }),
+        tx({ id: `s-${ac}`, assetClass: ac, transactionType: 'SELL', tradeDate: '2020-06-01', quantity: '10', netAmount: '20000', assetKey: `t:${ac}` }),
       ];
       expect(() => computeFIFOGains(txs)).not.toThrow();
       const row = findRow(computeFIFOGains(txs));
@@ -154,10 +184,13 @@ describe('capitalGains.service — CII gap handling (TASK 02)', () => {
    */
   it('CII-coverage guard: every indexation-eligible asset class is a reviewed, documented decision', () => {
     const DOCUMENTED_INDEXATION_ELIGIBLE = new Set<AssetClass>([
-      AssetClass.BOND,
-      AssetClass.CORPORATE_BOND,
-      AssetClass.GOVT_BOND,
-      AssetClass.GOLD_BOND,
+      AssetClass.GOLD_BOND, // SGBs keep indexation (sec 48); other bonds and debentures never did
+      AssetClass.FOREIGN_EQUITY,
+      AssetClass.PRIVATE_EQUITY,
+      AssetClass.PMS,
+      AssetClass.AIF,
+      AssetClass.ART_COLLECTIBLES,
+      AssetClass.OTHER,
       AssetClass.GOLD_ETF,
       AssetClass.PHYSICAL_GOLD,
       AssetClass.PHYSICAL_SILVER,
