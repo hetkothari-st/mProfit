@@ -2613,9 +2613,13 @@ model LoanGivenEntry {
   amount Decimal  @db.Decimal(14, 2)
   date   DateTime @db.Date
   notes  String?
+  /// EMI loans: the instalment (1-based) this payment or waiver was marked against.
+  /// Null = not tied to one; counts toward the schedule oldest instalment first.
+  installmentNo Int?
   createdAt DateTime @default(now())
 
   @@index([loanId, date])
+  @@index([loanId, installmentNo])
 }
 
 model Loan {

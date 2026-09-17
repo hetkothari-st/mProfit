@@ -10,8 +10,9 @@
  *   day on the principal still outstanding; an optional due date drives
  *   reminders.
  * - EMI: fixed instalments. Each instalment is emiAmount, starting
- *   firstEmiDate, monthly for tenureMonths; everything received counts toward
- *   the schedule in order.
+ *   firstEmiDate, monthly for tenureMonths. A payment or waiver can be marked
+ *   against one instalment (installmentNo); anything untied, and anything
+ *   beyond an instalment's amount, fills the schedule oldest instalment first.
  */
 import { Decimal } from 'decimal.js';
 import { Prisma } from '@prisma/client';
@@ -82,6 +83,139 @@ export interface LedgerEntry {
   kind: string;
   amount: Decimal.Value;
   date: Date;
+  installmentNo?: number | null;
+}
+
+export type InstallmentStatus = 'PAID' | 'WAIVED' | 'PARTIAL' | 'OVERDUE' | 'DUE' | 'UPCOMING';
+
+export interface ScheduleRow {
+  no: number;
+  dueDate: string;
+  amount: string;
+  /** Interest-bearing loans only: the standard amortisation split. */
+  principal: string | null;
+  interest: string | null;
+  /** Principal left after this instalment, per the amortisation schedule. */
+  balanceAfter: string;
+  paid: string;
+  waived: string;
+  remaining: string;
+  status: InstallmentStatus;
+  /** Due date passed and not fully covered (also true for PARTIAL rows). */
+  overdue: boolean;
+  lastPaidOn: string | null;
+  /** Some of the cover comes from entries marked against this instalment. */
+  marked: boolean;
+}
+
+/** Instalments due within this many days show as DUE rather than UPCOMING. */
+const DUE_SOON_DAYS = 7;
+
+/**
+ * The EMI schedule with what has been received against each instalment.
+ * Null for loans without complete EMI terms.
+ */
+export function computeEmiSchedule(
+  terms: LoanTerms,
+  entries: LedgerEntry[],
+  today: Date = todayUtc(),
+): ScheduleRow[] | null {
+  if (terms.repaymentMode !== 'EMI' || !terms.emiAmount || !terms.tenureMonths || !terms.firstEmiDate) {
+    return null;
+  }
+  const n = terms.tenureMonths;
+  const emi = new Decimal(terms.emiAmount);
+  const r = new Decimal(terms.interestRate).dividedBy(1200);
+  const rows = Array.from({ length: n }, () => ({
+    paid: ZERO,
+    waived: ZERO,
+    lastPaidOn: null as Date | null,
+    marked: false,
+  }));
+  const covered = (i: number) => rows[i]!.paid.plus(rows[i]!.waived);
+
+  const credit = (i: number, amount: Decimal, kind: string, date: Date): Decimal => {
+    const room = Decimal.max(emi.minus(covered(i)), ZERO);
+    const take = Decimal.min(room, amount);
+    if (take.greaterThan(0)) {
+      const row = rows[i]!;
+      if (kind === 'WAIVER') row.waived = row.waived.plus(take);
+      else {
+        row.paid = row.paid.plus(take);
+        if (!row.lastPaidOn || date > row.lastPaidOn) row.lastPaidOn = date;
+      }
+    }
+    return amount.minus(take);
+  };
+
+  const scheduleKinds = new Set(['REPAYMENT', 'INTEREST_RECEIVED', 'WAIVER']);
+  const pool: Array<{ kind: string; amount: Decimal; date: Date }> = [];
+  const byDate = [...entries]
+    .filter((e) => scheduleKinds.has(e.kind))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  // Marked entries first, so untied money can't take an instalment's place.
+  for (const e of byDate) {
+    const no = e.installmentNo;
+    if (no && no >= 1 && no <= n && e.kind !== 'INTEREST_RECEIVED') {
+      rows[no - 1]!.marked = true;
+      const left = credit(no - 1, new Decimal(e.amount), e.kind, e.date);
+      if (left.greaterThan(0)) pool.push({ kind: e.kind, amount: left, date: e.date });
+    } else {
+      pool.push({ kind: e.kind, amount: new Decimal(e.amount), date: e.date });
+    }
+  }
+  pool.sort((a, b) => a.date.getTime() - b.date.getTime());
+  for (const p of pool) {
+    let left = p.amount;
+    for (let i = 0; i < n && left.greaterThan(0); i++) left = credit(i, left, p.kind, p.date);
+  }
+
+  let balance = new Decimal(terms.principalAmount);
+  return rows.map((row, i) => {
+    const due = addMonths(terms.firstEmiDate!, i);
+    let principalPart: Decimal;
+    let interestPart: Decimal | null = null;
+    if (r.isZero()) {
+      principalPart = Decimal.min(emi, balance);
+    } else {
+      interestPart = balance.times(r).toDecimalPlaces(2);
+      principalPart = Decimal.min(emi.minus(interestPart), balance);
+    }
+    balance = Decimal.max(balance.minus(principalPart), ZERO);
+
+    const cover = covered(i);
+    const full = cover.greaterThanOrEqualTo(emi);
+    const overdue = !full && due.getTime() < today.getTime();
+    const daysToDue = daysBetween(today, due);
+    const status: InstallmentStatus = full
+      ? row.paid.greaterThan(0)
+        ? 'PAID'
+        : 'WAIVED'
+      : cover.greaterThan(0)
+        ? 'PARTIAL'
+        : overdue
+          ? 'OVERDUE'
+          : daysToDue <= DUE_SOON_DAYS
+            ? 'DUE'
+            : 'UPCOMING';
+
+    return {
+      no: i + 1,
+      dueDate: isoDay(due),
+      amount: serializeMoney(emi),
+      principal: interestPart ? serializeMoney(principalPart) : null,
+      interest: interestPart ? serializeMoney(interestPart) : null,
+      balanceAfter: serializeMoney(balance.toDecimalPlaces(2)),
+      paid: serializeMoney(row.paid),
+      waived: serializeMoney(row.waived),
+      remaining: serializeMoney(Decimal.max(emi.minus(cover), ZERO)),
+      status,
+      overdue,
+      lastPaidOn: row.lastPaidOn ? isoDay(row.lastPaidOn) : null,
+      marked: row.marked,
+    };
+  });
 }
 
 export interface LoanGivenSummary {
@@ -138,14 +272,16 @@ export function computeLoanGivenSummary(
     const emiAmount = new Decimal(terms.emiAmount);
     const expectedTotal = emiAmount.times(terms.tenureMonths).plus(additional);
     const receivedTowardSchedule = totalReceived.plus(waived);
-    const installmentsPaid = emiAmount.isZero()
+    const schedule = computeEmiSchedule(terms, entries, today)!;
+    const installmentsPaid = schedule.filter((row) => new Decimal(row.remaining).isZero()).length;
+
+    // Principal left after k full instalments' worth of money on a standard
+    // amortising loan (whichever instalments it was marked against); anything
+    // beyond k instalments comes straight off principal.
+    const r = rate.dividedBy(1200);
+    const k = emiAmount.isZero()
       ? 0
       : Math.min(receivedTowardSchedule.dividedToIntegerBy(emiAmount).toNumber(), terms.tenureMonths);
-
-    // Principal left after k full instalments on a standard amortising loan;
-    // anything received beyond k instalments comes straight off principal.
-    const r = rate.dividedBy(1200);
-    const k = installmentsPaid;
     let balance: Decimal;
     if (r.isZero()) {
       balance = principal.minus(emiAmount.times(k));
@@ -164,11 +300,10 @@ export function computeLoanGivenSummary(
       remainingToReceive: serializeMoney(remainingToReceive),
     };
 
-    if (active && installmentsPaid < terms.tenureMonths) {
-      const dueDate = addMonths(terms.firstEmiDate, installmentsPaid);
-      const partPaid = beyond.lessThan(emiAmount) ? beyond : ZERO;
-      nextDue = { date: isoDay(dueDate), amount: serializeMoney(emiAmount.minus(partPaid)) };
-      overdueDays = Math.max(daysBetween(dueDate, today), 0);
+    const open = schedule.find((row) => new Decimal(row.remaining).greaterThan(0));
+    if (active && open) {
+      nextDue = { date: open.dueDate, amount: open.remaining };
+      overdueDays = Math.max(daysBetween(toDate(open.dueDate), today), 0);
     }
   } else {
     outstanding = Decimal.max(principalLent.minus(repaid).minus(waived), ZERO);
@@ -247,7 +382,12 @@ function termsOf(loan: LoanRow): LoanTerms {
 }
 
 function entriesOf(loan: LoanRow): LedgerEntry[] {
-  return loan.entries.map((e) => ({ kind: e.kind, amount: e.amount.toString(), date: e.date }));
+  return loan.entries.map((e) => ({
+    kind: e.kind,
+    amount: e.amount.toString(),
+    date: e.date,
+    installmentNo: e.installmentNo,
+  }));
 }
 
 function toDTO(loan: LoanRow) {
@@ -276,8 +416,10 @@ function toDTO(loan: LoanRow) {
         amount: serializeMoney(e.amount.toString()),
         date: isoDay(e.date),
         notes: e.notes,
+        installmentNo: e.installmentNo,
       })),
     summary: computeLoanGivenSummary(termsOf(loan), entriesOf(loan)),
+    schedule: computeEmiSchedule(termsOf(loan), entriesOf(loan)),
   };
 }
 
@@ -418,6 +560,69 @@ export async function deleteLoanGivenEntry(userId: string, entryId: string) {
   await findOwned(userId, entry.loanId);
   await prisma.loanGivenEntry.delete({ where: { id: entry.id } });
   return getLoanGiven(userId, entry.loanId);
+}
+
+export const INSTALLMENT_ACTIONS = ['PAID', 'PARTIAL', 'WAIVED', 'PENDING'] as const;
+export type InstallmentAction = (typeof INSTALLMENT_ACTIONS)[number];
+
+/**
+ * One-click status for an EMI instalment:
+ * - PAID: add a repayment for whatever the instalment still needs, keeping any
+ *   part payment already recorded against it.
+ * - WAIVED: likewise, forgiving what it still needs.
+ * - PARTIAL: set the amount received against it (replacing earlier marks); more
+ *   than the EMI spills into the next instalments.
+ * - PENDING: clear its marks. Untied repayments logged in History still count.
+ *
+ * Defaults the date to the due date, or today for an instalment not yet due.
+ */
+export async function setLoanGivenInstallment(
+  userId: string,
+  loanId: string,
+  installmentNo: number,
+  input: { action: InstallmentAction; amount?: string; date?: string; notes?: string | null },
+) {
+  const loan = await findOwned(userId, loanId);
+  if (loan.status !== 'ACTIVE') throw new BadRequestError('Reopen the loan to update its instalments');
+  const topUp = input.action === 'PAID' || input.action === 'WAIVED';
+  // Top-ups measure what's left with the existing marks; resets without them.
+  const basis = topUp ? loan.entries : loan.entries.filter((e) => e.installmentNo !== installmentNo);
+  const schedule = computeEmiSchedule(termsOf(loan), entriesOf({ ...loan, entries: basis }));
+  if (!schedule) throw new BadRequestError('Only EMI loans have instalments');
+  const row = schedule[installmentNo - 1];
+  if (!row) throw new BadRequestError(`This loan has ${schedule.length} instalments`);
+
+  const today = isoDay(todayUtc());
+  const date = input.date ?? (row.dueDate < today ? row.dueDate : today);
+  let entry: { kind: LoanGivenEntryKind; amount: Decimal } | null = null;
+  if (topUp) {
+    const remaining = new Decimal(row.remaining);
+    if (remaining.greaterThan(0)) {
+      entry = { kind: input.action === 'PAID' ? 'REPAYMENT' : 'WAIVER', amount: remaining };
+    }
+  } else if (input.action === 'PARTIAL') {
+    if (!input.amount || new Decimal(input.amount).lessThanOrEqualTo(0)) {
+      throw new BadRequestError('Enter the amount received');
+    }
+    entry = { kind: 'REPAYMENT', amount: new Decimal(input.amount) };
+  }
+
+  await runInTransaction(async (tx) => {
+    if (!topUp) await tx.loanGivenEntry.deleteMany({ where: { loanId: loan.id, installmentNo } });
+    if (entry) {
+      await tx.loanGivenEntry.create({
+        data: {
+          loanId: loan.id,
+          kind: entry.kind,
+          amount: new Prisma.Decimal(entry.amount.toFixed(2)),
+          date: toDate(date),
+          notes: input.notes || null,
+          installmentNo,
+        },
+      });
+    }
+  });
+  return getLoanGiven(userId, loan.id);
 }
 
 /** Close the loan as fully settled. */

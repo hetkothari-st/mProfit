@@ -14,6 +14,8 @@ import {
   listLoansGiven,
   reopenLoanGiven,
   settleLoanGiven,
+  setLoanGivenInstallment,
+  INSTALLMENT_ACTIONS,
   updateLoanGiven,
   writeOffLoanGiven,
 } from '../services/loansGiven.service.js';
@@ -40,6 +42,13 @@ const entrySchema = z.object({
   kind: z.enum(LOAN_GIVEN_ENTRY_KINDS),
   amount: moneyString,
   date: isoDate,
+  notes: z.string().max(1000).nullable().optional(),
+});
+
+const installmentSchema = z.object({
+  action: z.enum(INSTALLMENT_ACTIONS),
+  amount: moneyString.optional(),
+  date: isoDate.optional(),
   notes: z.string().max(1000).nullable().optional(),
 });
 
@@ -80,6 +89,11 @@ export async function addEntryHandler(req: Request, res: Response) {
 
 export async function deleteEntryHandler(req: Request, res: Response) {
   ok(res, await deleteLoanGivenEntry(userId(req), req.params['entryId']!));
+}
+
+export async function installmentHandler(req: Request, res: Response) {
+  const no = z.coerce.number().int().min(1).max(600).parse(req.params['no']);
+  ok(res, await setLoanGivenInstallment(userId(req), req.params['id']!, no, installmentSchema.parse(req.body)));
 }
 
 export async function settleHandler(req: Request, res: Response) {
