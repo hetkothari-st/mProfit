@@ -23,6 +23,7 @@ import { creditCardsApi } from '@/api/creditCards.api';
 import { insuranceApi } from '@/api/insurance.api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { OnboardingItemId } from './onboardingItems';
+import { InstitutionField } from './InstitutionField';
 
 export interface QuickFormProps {
   portfolioId: string;
@@ -319,10 +320,11 @@ function FixedDepositForm({ portfolioId, onSaved }: QuickFormProps) {
       }}
     >
       <Field label="Bank">
-        <Input
+        <InstitutionField
+          kind="bank"
           value={bank}
-          onChange={(e) => setBank(e.target.value)}
-          placeholder="e.g. HDFC Bank"
+          onChange={setBank}
+          placeholder="Search or pick your bank"
         />
       </Field>
       <div className="grid grid-cols-2 gap-3">
@@ -593,14 +595,15 @@ function LoanForm({ portfolioId, onSaved }: QuickFormProps) {
         onSaved(s);
       }}
     >
+      <Field label="Lender">
+        <InstitutionField
+          kind="lender"
+          value={lender}
+          onChange={setLender}
+          placeholder="Search or pick your bank / lender"
+        />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Lender">
-          <Input
-            value={lender}
-            onChange={(e) => setLender(e.target.value)}
-            placeholder="e.g. SBI"
-          />
-        </Field>
         <Field label="Type">
           <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
             {LOAN_KINDS.map((k) => (
@@ -610,13 +613,11 @@ function LoanForm({ portfolioId, onSaved }: QuickFormProps) {
             ))}
           </Select>
         </Field>
+        <Field label="Still owed (₹)">
+          <AmountInput value={owed} onChange={setOwed} placeholder="e.g. 2500000" />
+        </Field>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="col-span-2 sm:col-span-1">
-          <Field label="Still owed (₹)">
-            <AmountInput value={owed} onChange={setOwed} placeholder="e.g. 2500000" />
-          </Field>
-        </div>
+      <div className="grid grid-cols-2 gap-3">
         <Field label="EMI (₹)">
           <AmountInput value={emi} onChange={setEmi} placeholder="e.g. 25000" />
         </Field>
@@ -678,14 +679,15 @@ function CreditCardForm({ portfolioId, onSaved }: QuickFormProps) {
         onSaved(s);
       }}
     >
+      <Field label="Issuer">
+        <InstitutionField
+          kind="cardIssuer"
+          value={bank}
+          onChange={setBank}
+          placeholder="Search or pick the card's bank"
+        />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Issuer">
-          <Input
-            value={bank}
-            onChange={(e) => setBank(e.target.value)}
-            placeholder="e.g. ICICI Bank"
-          />
-        </Field>
         <Field label="Last 4 digits">
           <Input
             inputMode="numeric"
@@ -757,24 +759,25 @@ function InsuranceForm({ portfolioId, onSaved }: QuickFormProps) {
         onSaved(s);
       }}
     >
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Insurer">
-          <Input
-            value={insurer}
-            onChange={(e) => setInsurer(e.target.value)}
-            placeholder="e.g. HDFC Life"
-          />
-        </Field>
-        <Field label="Type">
-          <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-            {POLICY_KINDS.map((k) => (
-              <option key={k.value} value={k.value}>
-                {k.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
+      {/* Type first: it narrows the insurer list to companies that sell it. */}
+      <Field label="Type">
+        <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+          {POLICY_KINDS.map((k) => (
+            <option key={k.value} value={k.value}>
+              {k.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Insurer">
+        <InstitutionField
+          kind="insurer"
+          policyType={kind}
+          value={insurer}
+          onChange={setInsurer}
+          placeholder="Search or pick your insurer"
+        />
+      </Field>
       <Field label="Policy number">
         <Input value={policyNo} onChange={(e) => setPolicyNo(e.target.value)} />
       </Field>

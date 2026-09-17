@@ -6,6 +6,7 @@ import {
   useState,
   type InputHTMLAttributes,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -25,6 +26,8 @@ interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'o
   options: SuggestOption[];
   onPick?: (option: SuggestOption) => void;
   maxResults?: number;
+  /** Optional leading visual per suggestion, e.g. a bank logo. */
+  renderIcon?: (option: SuggestOption) => ReactNode;
 }
 
 /** Prefix matches first, then substring matches, each in list order. */
@@ -52,6 +55,7 @@ export function SuggestInput({
   options,
   onPick,
   maxResults = 8,
+  renderIcon,
   className,
   onFocus,
   onBlur,
@@ -202,11 +206,19 @@ export function SuggestInput({
               onMouseEnter={() => setActive(i)}
               onClick={() => pick(o)}
               className={cn(
-                'flex cursor-pointer items-baseline justify-between gap-3 px-3 py-2 text-sm',
+                'flex cursor-pointer justify-between gap-3 px-3 py-2 text-sm',
+                renderIcon ? 'items-center' : 'items-baseline',
                 i === active && 'bg-accent text-accent-foreground',
               )}
             >
-              <span className="truncate">{o.value}</span>
+              {renderIcon ? (
+                <span className="flex min-w-0 items-center gap-2">
+                  {renderIcon(o)}
+                  <span className="truncate">{o.value}</span>
+                </span>
+              ) : (
+                <span className="truncate">{o.value}</span>
+              )}
               {o.hint && <span className="shrink-0 text-xs text-muted-foreground">{o.hint}</span>}
             </li>
           ))}
