@@ -16,6 +16,8 @@ import { cn } from '@/lib/cn';
 import { useAssetSectionsStore } from '@/stores/assetSections.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { SortableAssetClassItem } from './SortableAssetClassItem';
+import { useAssetSortMode, useSidebarClassValues } from '@/hooks/useSidebarClassValues';
+import { sortSectionsByValue } from '@/lib/sidebarClassValues';
 
 interface NavItem {
   label: string;
@@ -49,6 +51,8 @@ export function AssetClassSectionList({ items, collapsed }: Props) {
     removeSection,
   } = useAssetSectionsStore();
   const [adding, setAdding] = useState(false);
+  const [sortMode, setSortMode] = useAssetSortMode();
+  const classValues = useSidebarClassValues(isAuthenticated && sortMode === 'value');
 
   useEffect(() => {
     if (isAuthenticated) fetchPreferences();
@@ -75,7 +79,12 @@ export function AssetClassSectionList({ items, collapsed }: Props) {
 
   const activeSections = isEditing ? editingSections : sections;
   const itemMap = new Map(items.map((i) => [i.to, i]));
-  const displayPrefs = activeSections.filter((s) => isEditing || s.visible);
+  const visiblePrefs = activeSections.filter((s) => isEditing || s.visible);
+  // By value: biggest class first, empty ones last. Editing always shows the
+  // saved order, since that is the order being dragged.
+  const byValue = sortMode === 'value' && !isEditing && classValues !== null;
+  const displayPrefs = byValue ? sortSectionsByValue(visiblePrefs, classValues) : visiblePrefs;
+  const isEmptyClass = (key: string) => byValue && (classValues.get(key)?.isZero() ?? true);
   const hiddenCount = sections.filter((s) => !s.visible).length;
   // Only once preferences have loaded — before then every optional class
   // would look addable for a moment.
@@ -90,6 +99,20 @@ export function AssetClassSectionList({ items, collapsed }: Props) {
             Asset Classes
           </span>
           <span className="flex-1 h-px bg-sidebar-border/60" />
+          {!isEditing && (
+            <button
+              type="button"
+              onClick={() => setSortMode(sortMode === 'value' ? 'manual' : 'value')}
+              title={
+                sortMode === 'value'
+                  ? 'Sorted by value, largest first. Click to use your own order.'
+                  : 'Using your own order. Click to sort by value.'
+              }
+              className="text-[10px] text-sidebar-foreground/50 font-medium hover:text-sidebar-foreground/80 focus:outline-none"
+            >
+              {sortMode === 'value' ? 'By value' : 'My order'}
+            </button>
+          )}
           {!isEditing ? (
             <button
               type="button"
@@ -135,6 +158,7 @@ export function AssetClassSectionList({ items, collapsed }: Props) {
                   collapsed={collapsed}
                   onToggleVisibility={toggleVisibility}
                   onRemove={OPTIONAL.has(pref.key) ? removeSection : undefined}
+                  dimmed={isEmptyClass(pref.key)}
                 />
               );
             })}

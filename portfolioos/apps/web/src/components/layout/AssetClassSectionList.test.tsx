@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { AssetSectionPref } from '@everypaisa/shared';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn() }));
@@ -30,10 +31,13 @@ function setSections(sections: AssetSectionPref[]) {
 }
 
 function renderList() {
+  // The list reads per-class values through React Query (idle here: no session).
   render(
-    <MemoryRouter>
-      <AssetClassSectionList items={ASSET_CLASS_ITEMS} collapsed={false} />
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <AssetClassSectionList items={ASSET_CLASS_ITEMS} collapsed={false} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
