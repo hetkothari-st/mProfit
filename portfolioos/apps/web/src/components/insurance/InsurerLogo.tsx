@@ -12,6 +12,7 @@ export function InsurerLogo({
   type,
   size = 30,
   maxWidth,
+  variant,
   className,
 }: {
   /** Any label naming the insurer: "HDFC Ergo", "LIC of India". */
@@ -20,6 +21,7 @@ export function InsurerLogo({
   type: string;
   size?: number;
   maxWidth?: number;
+  variant?: 'plate' | 'bare';
   className?: string;
 }) {
   const brand = insurerBrandFor(insurer);
@@ -31,6 +33,7 @@ export function InsurerLogo({
       fallbackColor={typeColor ? tileSurface(typeColor, null).to : undefined}
       size={size}
       maxWidth={maxWidth}
+      variant={variant}
       className={className}
     />
   );

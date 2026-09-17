@@ -109,9 +109,15 @@ export function InstitutionField({
 
   const logo = (name: string, size: number) =>
     kind === 'insurer' ? (
-      <InsurerLogo insurer={name} type={policyType ?? 'TERM'} size={size} maxWidth={size * 3} />
+      <InsurerLogo
+        insurer={name}
+        type={policyType ?? 'TERM'}
+        size={size}
+        maxWidth={size * 3}
+        variant="bare"
+      />
     ) : (
-      <BankLogo bankName={name} size={size} maxWidth={size * 3} />
+      <BankLogo bankName={name} size={size} maxWidth={size * 3} variant="bare" />
     );
 
   // Only once the text names a listed institution — not for half-typed text.

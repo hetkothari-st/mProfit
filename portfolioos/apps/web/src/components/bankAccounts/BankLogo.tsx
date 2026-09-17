@@ -34,6 +34,7 @@ export function BrandLogo({
   fallbackColor = 'hsl(215 16% 35%)',
   size = 40,
   maxWidth,
+  variant = 'plate',
   className,
 }: {
   brand: BankBrand | null;
@@ -43,10 +44,31 @@ export function BrandLogo({
   size?: number;
   /** Cap for wide wordmarks (default 5× the height). */
   maxWidth?: number;
+  /**
+   * `plate` (default): the mark centred on a padded white tile.
+   * `bare`: just the mark at its own shape — no tile, no padding — for
+   * compact lists where the tile's white margin is noise.
+   */
+  variant?: 'plate' | 'bare';
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [brand?.logo]);
+
+  if (brand?.logo && !failed && variant === 'bare') {
+    const width = Math.min(Math.round(size * brand.aspect), maxWidth ?? size * 5);
+    return (
+      <img
+        src={brand.logo}
+        alt={`${brand.name} logo`}
+        loading="lazy"
+        decoding="async"
+        className={`${className ?? ''} shrink-0 object-contain`}
+        style={{ width, height: size }}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
 
   if (brand?.logo && !failed) {
     const pad = Math.round(size * 0.15);
@@ -93,10 +115,12 @@ export function BankLogo({
   bankName,
   size = 40,
   maxWidth,
+  variant,
   className,
 }: {
   /** Any label naming the bank: "HDFC Bank", "SBI", "HDFC FD 2025". */
   bankName: string;
+  variant?: 'plate' | 'bare';
   /** Plate height in px; width follows the mark's shape. */
   size?: number;
   /** Cap for wide wordmarks (default 5× the height). */
@@ -110,6 +134,7 @@ export function BankLogo({
       initials={bankInitials(brand?.name ?? bankName)}
       size={size}
       maxWidth={maxWidth}
+      variant={variant}
       className={className}
     />
   );
