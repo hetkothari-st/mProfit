@@ -8,6 +8,7 @@ import type {
   TaxHarvestSummary,
 } from '@/api/analytics.api';
 import { CHART_COLORS, shortInr } from '../chartColors';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 const TOOLTIP_STYLE = {
   background: 'hsl(var(--popover))',
@@ -29,7 +30,7 @@ export function CgByFyBar({ rows }: { rows: CgByFyRow[] }) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Realised</p>
-        <CardTitle>Capital gains by FY</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Capital gains by FY<AnalyticsInfo k="cgByFy" /></CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -66,7 +67,7 @@ export function IncomeTrendBar({ rows }: { rows: IncomeMonthRow[] }) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Cashflow</p>
-        <CardTitle>Income by month</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Income by month<AnalyticsInfo k="incomeByMonth" /></CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -103,7 +104,7 @@ export function RealisedVsUnrealisedCard({ data }: { data: RealisedVsUnrealised 
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">P&L split</p>
-        <CardTitle>Realised vs unrealised</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Realised vs unrealised<AnalyticsInfo k="realisedVsUnrealised" /></CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={120}>
@@ -138,24 +139,24 @@ export function TaxHarvestTable({ data }: { data: TaxHarvestSummary }) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Tax-loss harvest</p>
-        <CardTitle>Candidates to realise losses</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Candidates to realise losses<AnalyticsInfo k="taxHarvest" /></CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div className="rounded-lg bg-muted/50 p-3">
-            <p className="text-xs text-muted-foreground">Unrealised loss pool</p>
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">Unrealised loss pool<AnalyticsInfo k="harvestLossPool" /></p>
             <p className="text-base font-semibold mt-0.5 text-red-600 dark:text-red-400">{formatINR(data.unrealisedLoss)}</p>
           </div>
           <div className="rounded-lg bg-muted/50 p-3">
-            <p className="text-xs text-muted-foreground">STCG offset available</p>
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">STCG offset available<AnalyticsInfo k="harvestStcgOffset" /></p>
             <p className="text-base font-semibold mt-0.5">{formatINR(data.stcgLossAvailable)}</p>
           </div>
           <div className="rounded-lg bg-muted/50 p-3">
-            <p className="text-xs text-muted-foreground">LTCG offset available</p>
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">LTCG offset available<AnalyticsInfo k="harvestLtcgOffset" /></p>
             <p className="text-base font-semibold mt-0.5">{formatINR(data.ltcgLossAvailable)}</p>
           </div>
           <div className="rounded-lg bg-muted/50 p-3">
-            <p className="text-xs text-muted-foreground">Realised gains (FY)</p>
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">Realised gains (FY)<AnalyticsInfo k="harvestRealisedFy" /></p>
             <p className="text-base font-semibold mt-0.5">
               STCG {formatINR(data.realisedStcgInFy)} · LTCG {formatINR(data.realisedLtcgInFy)}
             </p>

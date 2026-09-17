@@ -2,6 +2,7 @@ import { Activity, TrendingDown, Shield, Scale } from 'lucide-react';
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import type { RiskMetrics, ValuationPoint, AllocationSlice } from '@/api/analytics.api';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 interface RiskProps {
   metrics: RiskMetrics | undefined;
@@ -32,12 +33,14 @@ export function RiskMetricsCards({ metrics, loading }: RiskProps) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <MetricCard
         label="Volatility (annualised)"
+        info={<AnalyticsInfo k="volatility" />}
         value={fmt(metrics.volatilityPct)}
         icon={Activity}
         hint={`${metrics.observations} monthly returns`}
       />
       <MetricCard
         label="Sharpe ratio"
+        info={<AnalyticsInfo k="sharpe" />}
         value={metrics.sharpe == null ? '—' : metrics.sharpe.toFixed(2)}
         icon={Shield}
         trend={{
@@ -47,12 +50,14 @@ export function RiskMetricsCards({ metrics, loading }: RiskProps) {
       />
       <MetricCard
         label="Max drawdown"
+        info={<AnalyticsInfo k="maxDrawdown" />}
         value={fmt(metrics.maxDrawdownPct == null ? null : -Math.abs(metrics.maxDrawdownPct))}
         icon={TrendingDown}
         hint="Peak-to-trough"
       />
       <MetricCard
         label="Beta vs NIFTY"
+        info={<AnalyticsInfo k="beta" />}
         value={metrics.betaVsNifty == null ? '—' : metrics.betaVsNifty.toFixed(2)}
         icon={Scale}
         hint={
@@ -95,7 +100,7 @@ export function AllocationCorrelationGrid({
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Diversification</p>
-        <CardTitle>Asset class weight grid</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Asset class weight grid<AnalyticsInfo k="weightGrid" /></CardTitle>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">

@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { formatINR, toDecimal } from '@everypaisa/shared';
 import type { CashflowMonth } from '@/api/analytics.api';
 import { POS_COLOR, NEG_COLOR, shortInr } from '../chartColors';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 const TOOLTIP_STYLE = {
   background: 'hsl(var(--popover))',
@@ -26,7 +27,7 @@ export function CashflowWaterfall({ rows }: { rows: CashflowMonth[] }) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Cashflow</p>
-        <CardTitle>Net flow by month</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Net flow by month<AnalyticsInfo k="netFlow" /></CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (

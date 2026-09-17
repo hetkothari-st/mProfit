@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { formatINR, toDecimal } from '@everypaisa/shared';
 import type { LiabilitiesVsAssets } from '@/api/analytics.api';
 import { CHART_COLORS, shortInr } from '../chartColors';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 const TOOLTIP_STYLE = {
   background: 'hsl(var(--popover))',
@@ -27,7 +28,7 @@ export function LiabilitiesVsAssetsCard({ data }: { data: LiabilitiesVsAssets })
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Balance sheet</p>
-        <CardTitle>Assets vs liabilities</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Assets vs liabilities<AnalyticsInfo k="assetsVsLiabilities" /></CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={200}>

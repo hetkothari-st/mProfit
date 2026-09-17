@@ -14,13 +14,15 @@ interface MetricCardProps {
     direction: 'up' | 'down' | 'flat';
   };
   hint?: string;
+  /** Optional element beside the label, e.g. an InfoTip explaining the metric. */
+  info?: React.ReactNode;
 }
 
 function looksLikeMoney(s: string) {
   return /[₹]|^Rs\.?/.test(s) || /^[+-]?[\d,]+(\.\d+)?$/.test(s);
 }
 
-export function MetricCard({ label, value, icon: Icon, trend, hint }: MetricCardProps) {
+export function MetricCard({ label, value, icon: Icon, trend, hint, info }: MetricCardProps) {
   const isMoney = looksLikeMoney(value);
 
   return (
@@ -28,8 +30,9 @@ export function MetricCard({ label, value, icon: Icon, trend, hint }: MetricCard
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
-            {label}
+          <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
+            <span>{label}</span>
+            {info}
           </div>
           <AutoFitText className="mt-3">
             {isMoney ? (

@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { formatINR, formatPercent, ASSET_CLASS_LABELS } from '@everypaisa/shared';
 import type { HoldingRankRow, ConcentrationRow, AssetClassXirrRow } from '@/api/analytics.api';
 import { POS_COLOR, NEG_COLOR } from '../chartColors';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 const TOOLTIP_STYLE = {
   background: 'hsl(var(--popover))',
@@ -21,7 +22,7 @@ function HoldingRankTable({ title, rows, kind }: { title: string; rows: HoldingR
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">{title}<AnalyticsInfo k={kind === 'win' ? 'topWinners' : 'topLosers'} /></CardTitle>
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (
@@ -73,7 +74,7 @@ export function ConcentrationCard({ rows }: { rows: ConcentrationRow[] }) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Risk lens</p>
-        <CardTitle>Concentration — top {rows.length} holdings</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Concentration — top {rows.length} holdings<AnalyticsInfo k="concentration" /></CardTitle>
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (
@@ -123,7 +124,7 @@ export function AssetClassXirrBar({ rows }: { rows: AssetClassXirrRow[] }) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Returns</p>
-        <CardTitle>XIRR by asset class</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">XIRR by asset class<AnalyticsInfo k="xirrByClass" /></CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (

@@ -15,6 +15,7 @@ import type {
   DeterministicInsight,
 } from '@/api/analytics.api';
 import { apiErrorMessage } from '@/api/client';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 const CATEGORY_LABEL: Record<InsightCategory, string> = {
   diversification: 'Diversification',
@@ -156,7 +157,7 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
       <CardHeader className="flex-row items-center justify-between pb-3 gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-accent" strokeWidth={1.8} />
-          <CardTitle>AI Portfolio Insights</CardTitle>
+          <CardTitle className="flex items-center gap-1.5">AI Portfolio Insights<AnalyticsInfo k="insights" /></CardTitle>
           {okPayload?.fromCache && (
             <span className="text-[10px] uppercase tracking-kerned text-muted-foreground border rounded-full px-2 py-0.5">
               Cached · {new Date(okPayload.generatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}

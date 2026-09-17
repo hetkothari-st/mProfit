@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { formatINR, toDecimal } from '@everypaisa/shared';
 import type { ValuationPoint, CostValueDriftPoint, BenchmarkPoint } from '@/api/analytics.api';
 import { shortInr } from '../chartColors';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 const TOOLTIP_STYLE = {
   background: 'hsl(var(--popover))',
@@ -29,7 +30,7 @@ export function PortfolioValueLine({ points }: ValueLineProps) {
     <Card className="lg:col-span-2">
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Trajectory</p>
-        <CardTitle>Portfolio value over time</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Portfolio value over time<AnalyticsInfo k="valueOverTime" /></CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -76,7 +77,7 @@ export function CostVsValueDrift({ points }: DriftProps) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Drift</p>
-        <CardTitle>Return on invested capital</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Return on invested capital<AnalyticsInfo k="returnOnCapital" /></CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -111,7 +112,7 @@ export function BenchmarkOverlay({ portfolio, benchmark }: BenchmarkProps) {
       <Card>
         <CardHeader className="pb-2">
           <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Benchmark</p>
-          <CardTitle>Portfolio vs NIFTY 50 / Sensex</CardTitle>
+          <CardTitle className="flex items-center gap-1.5">Portfolio vs NIFTY 50 / Sensex<AnalyticsInfo k="benchmark" /></CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-56 grid place-items-center text-sm text-muted-foreground border border-dashed rounded-md">
@@ -149,7 +150,7 @@ export function BenchmarkOverlay({ portfolio, benchmark }: BenchmarkProps) {
     <Card className="lg:col-span-2">
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Benchmark</p>
-        <CardTitle>Portfolio vs NIFTY 50 / Sensex (rebased to 100)</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Portfolio vs NIFTY 50 / Sensex (rebased to 100)<AnalyticsInfo k="benchmark" /></CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={280}>
