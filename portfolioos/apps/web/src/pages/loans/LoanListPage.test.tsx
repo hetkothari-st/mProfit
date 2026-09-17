@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LoanDTO, LoanSummaryDTO } from '@/api/loans.api';
 import { LoanListPage } from './LoanListPage';
@@ -11,6 +11,47 @@ vi.mock('@/api/loans.api', () => ({
   loansApi: { list: api.list, getSummary: api.getSummary, remove: api.remove, create: vi.fn(), update: vi.fn() },
 }));
 vi.mock('@/components/reports/DownloadReportButton', () => ({ DownloadReportButton: () => null }));
+const givenApi = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock('@/api/loansGiven.api', () => ({
+  loansGivenApi: { list: givenApi.list },
+  LOANS_GIVEN_KEYS: [['loans-given'], ['dashboard']],
+}));
+const scrollIntoView = vi.hoisted(() => vi.fn());
+Element.prototype.scrollIntoView = scrollIntoView;
+
+const GIVEN = {
+  id: 'g1',
+  borrowerName: 'Rahul Yadav',
+  borrowerContact: null,
+  relationship: 'FRIEND',
+  principalAmount: '100000.0000',
+  lentOn: '2026-08-01',
+  interestRate: '0',
+  dueDate: null,
+  repaymentMode: 'EMI',
+  emiAmount: '10000.0000',
+  tenureMonths: 10,
+  firstEmiDate: '2026-09-01',
+  status: 'ACTIVE',
+  closedOn: null,
+  notes: null,
+  createdAt: '2026-08-01T00:00:00.000Z',
+  entries: [],
+  schedule: null,
+  summary: {
+    principalLent: '100000.0000',
+    repaid: '10000.0000',
+    waived: '0.0000',
+    interestReceived: '0.0000',
+    totalReceived: '10000.0000',
+    outstandingPrincipal: '90000.0000',
+    interestAccrued: null,
+    interestDue: null,
+    nextDue: { date: '2026-10-01', amount: '10000.0000' },
+    overdueDays: 0,
+    emi: { installmentsTotal: 10, installmentsPaid: 1, expectedTotal: '100000.0000', remainingToReceive: '90000.0000' },
+  },
+};
 
 // ₹50L home loan from HDFC, 20 years, first EMI 5 Jun 2024; 28 EMIs paid.
 const LOAN: LoanDTO = {
@@ -68,6 +109,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-10T06:00:00Z') });
   api.list.mockResolvedValue([LOAN]);
   api.getSummary.mockResolvedValue(SUMMARY);
+  givenApi.list.mockResolvedValue([GIVEN]);
 });
 
 afterEach(() => {
@@ -76,11 +118,17 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderPage() {
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname + location.search}</div>;
+}
+
+function renderPage(path = '/loans') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/loans']}>
+      <MemoryRouter initialEntries={[path]}>
+        <LocationProbe />
         <Routes>
           <Route path="/loans" element={<LoanListPage />} />
           <Route path="/loans/:id" element={<div>LOAN DETAIL</div>} />
@@ -156,5 +204,44 @@ describe('Loan card', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Delete loan' }));
     expect(screen.queryByText('LOAN DETAIL')).toBeNull();
     expect(screen.getByText('Delete "HDFC Bank" loan?')).toBeTruthy();
+  });
+});
+
+describe('Loans page: taken and given together', () => {
+  it('shows both sections, with an overview of each side', async () => {
+    renderPage();
+    expect(await screen.findByRole('heading', { name: /Loans taken/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Loans given/ })).toBeTruthy();
+    await findCard();
+    expect(await screen.findByText('Rahul Yadav')).toBeTruthy();
+    const owe = screen.getByRole('button', { name: /You owe/ });
+    expect(await within(owe).findByText(/45,23,000.12/)).toBeTruthy();
+    const owed = screen.getByRole('button', { name: /Owed to you/ });
+    expect(within(owed).getByText(/90,000.00/)).toBeTruthy();
+    expect(within(owed).getByText(/10,000.00/)).toBeTruthy();
+  });
+
+  it('jumps to the given section from the sticky switcher and remembers it in the URL', async () => {
+    renderPage();
+    await screen.findByText('Rahul Yadav');
+    const nav = screen.getByRole('navigation', { name: 'Loan sections' });
+    fireEvent.click(within(nav).getByRole('button', { name: /Given/ }));
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(document.getElementById('loans-given'));
+    expect(within(nav).getByRole('button', { name: /Given/ }).getAttribute('aria-current')).toBe('true');
+    expect(screen.getByTestId('location').textContent).toBe('/loans?view=given');
+
+    fireEvent.click(within(nav).getByRole('button', { name: /Taken/ }));
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(document.getElementById('loans-taken'));
+    expect(screen.getByTestId('location').textContent).toBe('/loans');
+  });
+
+  it('opens on the given section for ?view=given links', async () => {
+    renderPage('/loans?view=given');
+    await screen.findByText('Rahul Yadav');
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    expect(scrollIntoView.mock.contexts).toContain(document.getElementById('loans-given'));
+    const nav = screen.getByRole('navigation', { name: 'Loan sections' });
+    expect(within(nav).getByRole('button', { name: /Given/ }).getAttribute('aria-current')).toBe('true');
   });
 });

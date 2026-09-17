@@ -11,38 +11,7 @@ import { LoanGivenFormDialog } from './LoanGivenFormDialog';
 import { formatDay, relationshipLabel } from './loanGivenFormat';
 import { LoanGivenStatusBadge } from './LoanGivenStatusBadge';
 import { InstallmentProgress, InstallmentTracker } from '../InstallmentTracker';
-
-function SummaryStrip({ loans }: { loans: LoanGivenDTO[] }) {
-  const active = loans.filter((l) => l.status === 'ACTIVE');
-  const outstanding = active.reduce(
-    (s, l) => s.plus(l.summary.outstandingPrincipal),
-    new Decimal(0),
-  );
-  const interestDue = active.reduce((s, l) => s.plus(l.summary.interestDue ?? 0), new Decimal(0));
-  const overdue = active.filter((l) => l.summary.overdueDays > 0).length;
-  const stats = [
-    { label: 'Still owed to you', value: formatINR(outstanding.toString()) },
-    { label: 'Interest due', value: formatINR(interestDue.toString()) },
-    { label: 'Active loans', value: String(active.length) },
-    { label: 'Overdue', value: String(overdue), warn: overdue > 0 },
-  ];
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-      {stats.map((s) => (
-        <Card key={s.label}>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">{s.label}</div>
-            <div
-              className={`mt-1 text-lg font-semibold tabular-nums ${s.warn ? 'text-negative' : ''}`}
-            >
-              {s.value}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
+import { LoanSectionHeader } from '../LoanSections';
 
 function LoanGivenCard({ loan, onOpen }: { loan: LoanGivenDTO; onOpen: () => void }) {
   const { summary } = loan;
@@ -126,8 +95,8 @@ function LoanGivenCard({ loan, onOpen }: { loan: LoanGivenDTO; onOpen: () => voi
   );
 }
 
-/** "Given" tab of the Loans page: money the user has lent out. */
-export function LoansGivenTab() {
+/** "Loans given" section of the Loans page: money the user has lent out. */
+export function LoansGivenSection() {
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
   const { data, isLoading } = useQuery({
@@ -141,13 +110,17 @@ export function LoansGivenTab() {
 
   return (
     <div>
-      <div className="flex justify-end mb-4">
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> Lend money
-        </Button>
-      </div>
-
-      {!isLoading && loans.length > 0 && <SummaryStrip loans={loans} />}
+      <LoanSectionHeader
+        section="given"
+        title="Loans given"
+        subtitle="Money you have lent — what they owe, repayments and interest"
+        count={isLoading ? undefined : active.length}
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" /> Lend money
+          </Button>
+        }
+      />
 
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -180,9 +153,9 @@ export function LoansGivenTab() {
 
       {closed.length > 0 && (
         <>
-          <h2 className="text-sm font-medium text-muted-foreground mt-8 mb-3">
+          <h3 className="text-sm font-medium text-muted-foreground mt-8 mb-3">
             Settled / Written off
-          </h2>
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-70">
             {closed.map((loan) => (
               <LoanGivenCard key={loan.id} loan={loan} onOpen={() => open(loan.id)} />

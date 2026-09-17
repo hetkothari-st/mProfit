@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   Briefcase,
@@ -20,8 +20,9 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Decimal, formatINR } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { cn } from '@/lib/cn';
-import { LoansGivenTab } from './given/LoansGivenTab';
+import { LoansGivenSection } from './given/LoansGivenSection';
+import { LoanSectionHeader, LoanSectionNav, LoansOverview, type LoanSectionKey } from './LoanSections';
+import { loansGivenApi } from '@/api/loansGiven.api';
 import { InstallmentProgress, InstallmentTracker } from './InstallmentTracker';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
@@ -73,38 +74,6 @@ function addMonthsIso(iso: string, months: number): string {
   const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
   d.setUTCMonth(d.getUTCMonth() + months);
   return d.toISOString().slice(0, 10);
-}
-
-// ── Summary strip ─────────────────────────────────────────────────────
-
-function SummaryStrip({ loans }: { loans: LoanDTO[] }) {
-  const active = loans.filter((l) => l.status === 'ACTIVE');
-  const totalOutstanding = active.reduce(
-    (s, l) => s.plus(new Decimal(l.principalAmount)),
-    new Decimal(0),
-  );
-  const monthlyEmi = active.reduce(
-    (s, l) => s.plus(new Decimal(l.emiAmount)),
-    new Decimal(0),
-  );
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-      {[
-        { label: 'Total disbursed', value: formatINR(totalOutstanding.toString()), sub: 'original principal (active loans)' },
-        { label: 'Monthly EMI', value: formatINR(monthlyEmi.toString()), sub: 'combined across active loans' },
-        { label: 'Active loans', value: String(active.length), sub: `of ${loans.length} total` },
-      ].map((m) => (
-        <Card key={m.label}>
-          <CardContent className="px-4 py-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{m.label}</p>
-            <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words">{m.value}</p>
-            <p className="text-xs text-muted-foreground">{m.sub}</p>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
 }
 
 // ── Loan card ─────────────────────────────────────────────────────────
@@ -622,46 +591,38 @@ function CreateLoanDialog({
 
 // ── Page ──────────────────────────────────────────────────────────────
 
-/** Taken (money you owe) vs Given (money owed to you), kept in the URL. */
-function LoanViewTabs({ view, onChange }: { view: 'taken' | 'given'; onChange: (v: 'taken' | 'given') => void }) {
-  const tabs = [
-    ['taken', 'Taken'],
-    ['given', 'Given'],
-  ] as const;
-  return (
-    <div role="tablist" aria-label="Loan type" className="mb-6 inline-flex rounded-lg border border-border p-1">
-      {tabs.map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          role="tab"
-          aria-selected={view === value}
-          onClick={() => onChange(value)}
-          className={cn(
-            'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
-            view === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
+const SECTION_IDS: Record<LoanSectionKey, string> = { taken: 'loans-taken', given: 'loans-given' };
+
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === 'auto' || overflowY === 'scroll') return node;
+  }
+  return null;
 }
 
+/**
+ * Loans taken and loans given on one page: an overview of both sides, a sticky
+ * switcher that scrolls between them, then each section in turn. `?view=given`
+ * (reminders, the given-loan pages) lands on the given section.
+ */
 export function LoanListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const view = searchParams.get('view') === 'given' ? 'given' : 'taken';
-  const setView = (v: 'taken' | 'given') =>
-    setSearchParams(v === 'given' ? { view: 'given' } : {}, { replace: true });
+  const requested: LoanSectionKey = searchParams.get('view') === 'given' ? 'given' : 'taken';
+  const [activeSection, setActiveSection] = useState<LoanSectionKey>(requested);
   const [createOpen, setCreateOpen] = useState(false);
   const [editLoan, setEditLoan] = useState<LoanDTO | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const qc = useQueryClient();
+  const landedOnRequested = useRef(false);
 
   const { data: loans, isLoading } = useQuery({
     queryKey: ['loans'],
     queryFn: () => loansApi.list(),
+  });
+  const { data: givenLoans, isLoading: givenLoading } = useQuery({
+    queryKey: ['loans-given'],
+    queryFn: () => loansGivenApi.list(),
   });
 
   const deleteMutation = useMutation({
@@ -677,94 +638,147 @@ export function LoanListPage() {
   const list = loans ?? [];
   const active = list.filter((l) => l.status === 'ACTIVE');
   const inactive = list.filter((l) => l.status !== 'ACTIVE');
+  const given = givenLoans ?? [];
+  const givenActive = given.filter((l) => l.status === 'ACTIVE');
+
+  // Same query keys as each card, so these share one request per loan.
+  const summaries = useQueries({
+    queries: active.map((l) => ({
+      queryKey: ['loans', l.id, 'summary'],
+      queryFn: () => loansApi.getSummary(l.id),
+    })),
+  });
+
+  const owed = active.reduce(
+    (s, l, i) => s.plus(summaries[i]?.data?.outstandingBalance ?? l.principalAmount),
+    new Decimal(0),
+  );
+  const emiOut = active.reduce((s, l) => s.plus(l.emiAmount), new Decimal(0));
+  const owedToYou = givenActive.reduce(
+    (s, l) => s.plus(l.summary.outstandingPrincipal),
+    new Decimal(0),
+  );
+  const emiIn = givenActive.reduce(
+    (s, l) => (l.repaymentMode === 'EMI' && l.emiAmount ? s.plus(l.emiAmount) : s),
+    new Decimal(0),
+  );
+  const givenOverdue = givenActive.filter((l) => l.summary.overdueDays > 0).length;
+
+  const jump = (section: LoanSectionKey) => {
+    setActiveSection(section);
+    setSearchParams(section === 'given' ? { view: 'given' } : {}, { replace: true });
+    document.getElementById(SECTION_IDS[section])?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Deep link to the given section: scroll once both halves have rendered, so
+  // loans taken loading in above it can't push it back out of view.
+  useEffect(() => {
+    if (landedOnRequested.current || isLoading || givenLoading) return;
+    landedOnRequested.current = true;
+    if (requested !== 'given') return;
+    requestAnimationFrame(() =>
+      document.getElementById(SECTION_IDS.given)?.scrollIntoView({ block: 'start' }),
+    );
+  }, [requested, isLoading, givenLoading]);
+
+  // Highlight the section being read. The given section sits last and may be
+  // too short to reach the top, so reaching the bottom also counts as given.
+  useEffect(() => {
+    const givenEl = document.getElementById(SECTION_IDS.given);
+    const scroller = scrollParent(givenEl);
+    if (!givenEl || !scroller) return;
+    const update = () => {
+      if (scroller.scrollHeight <= scroller.clientHeight + 4) return;
+      const top = givenEl.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      const atBottom =
+        scroller.scrollTop > 0 &&
+        scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4;
+      setActiveSection(atBottom || top <= scroller.clientHeight * 0.45 ? 'given' : 'taken');
+    };
+    scroller.addEventListener('scroll', update, { passive: true });
+    return () => scroller.removeEventListener('scroll', update);
+  }, [isLoading, givenLoading]);
 
   return (
     <div>
-      <PageHeader
-        title="Loans"
-        description={
-          view === 'given'
-            ? 'Money you have lent to others — what they owe, repayments and interest'
-            : 'Track home, car, personal, and other loans'
-        }
-        actions={view === 'given' ? undefined : (
-          <div className="flex gap-2">
-            <DownloadReportButton type="loans" />
-            <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
-              <Plus className="h-4 w-4" /> Add loan
-            </Button>
-          </div>
-        )}
+      <PageHeader title="Loans" description="Money you owe and money owed to you, in one place" />
+
+      <LoansOverview
+        onJump={jump}
+        taken={{
+          headline: isLoading ? '…' : formatINR(owed.toString()),
+          lines: [
+            { label: 'EMIs / month', value: isLoading ? '…' : formatINR(emiOut.toString()) },
+            { label: 'Active loans', value: isLoading ? '…' : String(active.length) },
+            { label: 'Closed', value: isLoading ? '…' : String(inactive.length) },
+          ],
+        }}
+        given={{
+          headline: givenLoading ? '…' : formatINR(owedToYou.toString()),
+          lines: [
+            { label: 'EMIs in / month', value: givenLoading ? '…' : formatINR(emiIn.toString()) },
+            { label: 'Active loans', value: givenLoading ? '…' : String(givenActive.length) },
+            {
+              label: 'Overdue',
+              value: givenLoading ? '…' : String(givenOverdue),
+              warn: givenOverdue > 0,
+            },
+          ],
+        }}
       />
 
-      <LoanViewTabs view={view} onChange={setView} />
+      <LoanSectionNav
+        active={activeSection}
+        counts={{
+          taken: isLoading ? undefined : list.length,
+          given: givenLoading ? undefined : given.length,
+        }}
+        onJump={jump}
+      />
 
-      {view === 'given' ? <LoansGivenTab /> : (<>
-      {!isLoading && list.length > 0 && <SummaryStrip loans={list} />}
-
-      {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="h-44 animate-pulse bg-muted/60" />
-          ))}
-        </div>
-      )}
-
-      {!isLoading && list.length === 0 && (
-        <EmptyState
-          icon={Landmark}
-          title="No loans yet"
-          description="Track your home, car, personal, and education loans — payments, amortization, and tax benefits."
-          action={
-            <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
-              <Plus className="h-4 w-4" /> Add first loan
-            </Button>
+      <section id={SECTION_IDS.taken} aria-label="Loans taken" className="scroll-mt-20">
+        <LoanSectionHeader
+          section="taken"
+          title="Loans taken"
+          subtitle="Home, car, personal and other loans you are repaying"
+          count={isLoading ? undefined : active.length}
+          actions={
+            <>
+              <DownloadReportButton type="loans" />
+              <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
+                <Plus className="h-4 w-4" /> Add loan
+              </Button>
+            </>
           }
         />
-      )}
+        {isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} className="h-44 animate-pulse bg-muted/60" />
+            ))}
+          </div>
+        )}
 
-      {!isLoading && active.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {active.map((loan) =>
-            confirmDeleteId === loan.id ? (
-              <Card key={loan.id} className="border-destructive">
-                <CardContent className="p-5 flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium truncate">Delete "{loan.lenderName}" loan?</p>
-                  <div className="flex gap-2 shrink-0">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(loan.id)}
-                    >
-                      {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <LoanCard
-                key={loan.id}
-                loan={loan}
-                onEdit={() => { setEditLoan(loan); setCreateOpen(true); }}
-                onDelete={() => setConfirmDeleteId(loan.id)}
-                isDeleting={deleteMutation.isPending && confirmDeleteId === loan.id}
-              />
-            )
-          )}
-        </div>
-      )}
+        {!isLoading && list.length === 0 && (
+          <EmptyState
+            icon={Landmark}
+            title="No loans yet"
+            description="Track your home, car, personal, and education loans — payments, amortization, and tax benefits."
+            action={
+              <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
+                <Plus className="h-4 w-4" /> Add first loan
+              </Button>
+            }
+          />
+        )}
 
-      {!isLoading && inactive.length > 0 && (
-        <>
-          <h2 className="text-sm font-medium text-muted-foreground mt-8 mb-3">Closed / Foreclosed</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-60">
-            {inactive.map((loan) =>
+        {!isLoading && active.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {active.map((loan) =>
               confirmDeleteId === loan.id ? (
                 <Card key={loan.id} className="border-destructive">
                   <CardContent className="p-5 flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium truncate">Delete "{loan.lenderName}"?</p>
+                    <p className="text-sm font-medium truncate">Delete "{loan.lenderName}" loan?</p>
                     <div className="flex gap-2 shrink-0">
                       <Button
                         variant="destructive"
@@ -789,15 +803,56 @@ export function LoanListPage() {
               )
             )}
           </div>
-        </>
-      )}
+        )}
+
+        {!isLoading && inactive.length > 0 && (
+          <>
+            <h3 className="text-sm font-medium text-muted-foreground mt-8 mb-3">Closed / Foreclosed</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-60">
+              {inactive.map((loan) =>
+                confirmDeleteId === loan.id ? (
+                  <Card key={loan.id} className="border-destructive">
+                    <CardContent className="p-5 flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium truncate">Delete "{loan.lenderName}"?</p>
+                      <div className="flex gap-2 shrink-0">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => deleteMutation.mutate(loan.id)}
+                        >
+                          {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <LoanCard
+                    key={loan.id}
+                    loan={loan}
+                    onEdit={() => { setEditLoan(loan); setCreateOpen(true); }}
+                    onDelete={() => setConfirmDeleteId(loan.id)}
+                    isDeleting={deleteMutation.isPending && confirmDeleteId === loan.id}
+                  />
+                )
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
+      <div aria-hidden className="my-10 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+
+      <section id={SECTION_IDS.given} aria-label="Loans given" className="scroll-mt-20">
+        <LoansGivenSection />
+      </section>
 
       <CreateLoanDialog
         open={createOpen}
         onOpenChange={(v) => { setCreateOpen(v); if (!v) setEditLoan(null); }}
         initial={editLoan}
       />
-      </>)}
     </div>
   );
 }
