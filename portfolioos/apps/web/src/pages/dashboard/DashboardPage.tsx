@@ -22,6 +22,8 @@ import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { portfoliosApi } from '@/api/portfolios.api';
+import { isOnboardingUnfinished } from '@/lib/onboardingProgress';
+import { useAuthStore } from '@/stores/auth.store';
 import { transactionsApi } from '@/api/transactions.api';
 import { assetsApi } from '@/api/assets.api';
 import { dashboardApi } from '@/api/dashboard.api';
@@ -354,6 +356,13 @@ export function DashboardPage() {
       navigate('/onboarding', { replace: true });
     }
   }, [portfoliosQuery.isLoading, portfolios.length, navigate]);
+
+  // An account that left onboarding unfinished (e.g. reloaded mid-setup)
+  // goes back to it rather than an empty dashboard.
+  const signedInUserId = useAuthStore((s) => s.user?.id);
+  useEffect(() => {
+    if (isOnboardingUnfinished(signedInUserId)) navigate('/onboarding', { replace: true });
+  }, [signedInUserId, navigate]);
 
   const netWorthQuery = useQuery({
     queryKey: ['dashboard', 'net-worth', selectedId],

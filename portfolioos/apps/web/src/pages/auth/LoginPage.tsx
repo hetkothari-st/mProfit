@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { authApi } from '@/api/auth.api';
 import { isSessionRemembered, useAuthStore } from '@/stores/auth.store';
 import { apiErrorCode, apiErrorMessage } from '@/api/client';
+import { isOnboardingUnfinished } from '@/lib/onboardingProgress';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import { RestoreAccountNotice, pendingDeletionDate } from '@/components/auth/RestoreAccountNotice';
 
@@ -66,7 +67,10 @@ export function LoginPage() {
       if (restore) toast.success('Your account has been restored.');
       setSession(data.user, data.tokens, { remember: values.rememberMe ?? true });
       toast.success(`Welcome back, ${data.user.name.split(' ')[0]}!`);
-      const to = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/dashboard';
+      // An account that left setup unfinished picks it back up.
+      const to = isOnboardingUnfinished(data.user.id)
+        ? '/onboarding'
+        : ((location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/dashboard');
       navigate(to, { replace: true });
     },
     onError: (err, { values }) => {

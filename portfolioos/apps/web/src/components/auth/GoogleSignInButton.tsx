@@ -5,6 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
+import { isOnboardingUnfinished } from '@/lib/onboardingProgress';
 import { RestoreAccountNotice, pendingDeletionDate } from './RestoreAccountNotice';
 
 /**
@@ -105,7 +106,10 @@ export function GoogleSignInButton({
           : `Welcome back, ${data.user.name.split(' ')[0]}!`,
       );
       // A brand-new account goes through setup, whatever this browser saw before.
-      navigate(data.isNew ? '/onboarding' : '/dashboard', { replace: true });
+      // New accounts, and accounts that left setup unfinished, go to onboarding.
+      navigate(data.isNew || isOnboardingUnfinished(data.user.id) ? '/onboarding' : '/dashboard', {
+        replace: true,
+      });
     },
     onError: (err, { idToken }) => {
       const scheduledFor = pendingDeletionDate(err);
