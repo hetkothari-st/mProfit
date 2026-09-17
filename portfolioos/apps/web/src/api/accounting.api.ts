@@ -95,6 +95,8 @@ export interface BalanceSheetResult {
   equity: TrialBalanceRow[];
   retainedEarnings: string;
   totalAssets: string;
+  /** Opening balances that don't net to zero: positive = liabilities side short. */
+  openingDifference?: string;
   totalLiabilities: string;
   totalEquity: string;
 }

@@ -44,7 +44,8 @@ export async function projectBooks(
 ): Promise<GenerateFromActivityResult> {
   const result = await generateVouchersFromActivity(userId);
   if (audit) {
-    await runInTransaction((tx) => recordProjectionIfAny(tx, audit, result.created));
+    const changed = result.created + result.updated + result.removed;
+    await runInTransaction((tx) => recordProjectionIfAny(tx, audit, changed));
   }
   return result;
 }

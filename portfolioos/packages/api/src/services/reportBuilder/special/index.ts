@@ -544,13 +544,29 @@ export async function buildShortLongSpecLayout(
 export async function buildTrialBalanceLayout(userId: string, asOf?: string): Promise<MprofitLayout> {
   const m = await userMember(userId);
   const rows = await getTrialBalance(userId, asOf);
-  const tDr = rows.reduce((s, r) => s.plus(r.totalDebit), new Decimal(0));
-  const tCr = rows.reduce((s, r) => s.plus(r.totalCredit), new Decimal(0));
+  // Closing balance on its side: a debit-nature account with a positive
+  // balance (or a credit-nature one with a negative balance) is a debit.
+  const sides = rows.map((r) => {
+    const closing = new Decimal(r.closingBalance);
+    const debitNature = r.type === 'ASSET' || r.type === 'EXPENSE';
+    const onDebit = debitNature ? closing.greaterThanOrEqualTo(0) : closing.lessThan(0);
+    return { r, closing, closingDr: onDebit ? closing.abs() : new Decimal(0), closingCr: onDebit ? new Decimal(0) : closing.abs() };
+  });
+  const kept = sides.filter(
+    ({ r, closing }) => !closing.isZero() || !new Decimal(r.openingBalance).isZero() || !new Decimal(r.totalDebit).isZero() || !new Decimal(r.totalCredit).isZero(),
+  );
+  const total = (pick: (x: (typeof sides)[number]) => Decimal | string) =>
+    kept.reduce((s, x) => s.plus(pick(x)), new Decimal(0)).toString();
+  const nonZero = (v: Decimal | string) => (new Decimal(v).isZero() ? '' : new Decimal(v).toString());
 
   const columns: ColumnDef[] = [
-    { key: 'name', label: 'Particulars', width: 38, align: 'left' },
-    { key: 'totalDebit', label: 'Debit', width: 14, align: 'right', formatter: MONEY },
-    { key: 'totalCredit', label: 'Credit', width: 14, align: 'right', formatter: MONEY },
+    { key: 'code', label: 'Code', width: 7, align: 'left' },
+    { key: 'name', label: 'Particulars', width: 30, align: 'left' },
+    { key: 'opening', label: 'Opening', width: 12, align: 'right', formatter: MONEY, signed: true },
+    { key: 'totalDebit', label: 'Debit', width: 12, align: 'right', formatter: MONEY },
+    { key: 'totalCredit', label: 'Credit', width: 12, align: 'right', formatter: MONEY },
+    { key: 'closingDr', label: 'Closing Dr', width: 12, align: 'right', formatter: MONEY },
+    { key: 'closingCr', label: 'Closing Cr', width: 12, align: 'right', formatter: MONEY },
   ];
 
   return {
@@ -565,23 +581,29 @@ export async function buildTrialBalanceLayout(userId: string, asOf?: string): Pr
       {
         groups: [
           {
-            rows: rows
-              .filter((r) => Number(r.totalDebit) !== 0 || Number(r.totalCredit) !== 0)
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((r) => ({
-                cells: {
-                  name: r.name.toUpperCase(),
-                  totalDebit: Number(r.totalDebit) > 0 ? r.totalDebit : '',
-                  totalCredit: Number(r.totalCredit) > 0 ? r.totalCredit : '',
-                },
-              })),
+            rows: kept.map(({ r, closingDr, closingCr }) => ({
+              cells: {
+                code: r.code,
+                name: r.name.toUpperCase(),
+                opening: nonZero(r.openingBalance),
+                totalDebit: nonZero(r.totalDebit),
+                totalCredit: nonZero(r.totalCredit),
+                closingDr: nonZero(closingDr),
+                closingCr: nonZero(closingCr),
+              },
+            })),
           },
         ],
       },
     ],
     grandTotal: {
       label: 'Grand Total',
-      values: { totalDebit: tDr.toString(), totalCredit: tCr.toString() },
+      values: {
+        totalDebit: total((x) => x.r.totalDebit),
+        totalCredit: total((x) => x.r.totalCredit),
+        closingDr: total((x) => x.closingDr),
+        closingCr: total((x) => x.closingCr),
+      },
     },
     filenameStem: `trial-balance${asOf ? `-${asOf}` : ''}`,
   };
@@ -598,10 +620,12 @@ export async function buildAccountLedgerLayout(
   const groups: SubGroup[] = [];
   for (const a of accounts) {
     const led = await getAccountLedger(userId, a.id, opts);
-    if (led.entries.length === 0) continue;
+    if (led.entries.length === 0 && new Decimal(led.openingBalance).isZero()) continue;
     groups.push({
       header: `${a.code} — ${a.name}`,
-      rows: led.entries.map((e) => ({
+      rows: [
+        { cells: { date: '', voucher: '', narration: 'Opening balance', debit: '', credit: '', balance: led.openingBalance } },
+        ...led.entries.map((e) => ({
         cells: {
           date: e.date,
           voucher: `${e.voucherType} ${e.voucherNo}`,
@@ -611,6 +635,7 @@ export async function buildAccountLedgerLayout(
           balance: e.balance,
         },
       })),
+      ],
       subtotal: {
         label: 'Closing balance',
         values: { balance: led.closingBalance },
@@ -731,6 +756,10 @@ export async function buildBalanceSheetLayout(userId: string, asOf?: string): Pr
     { name: 'Retained Earnings (P&L)', amount: bs.retainedEarnings },
   ];
   const assets = bs.assets.map((x) => ({ name: x.name, amount: x.closingBalance }));
+  // Opening balances that don't net to zero: shown on the short side so both totals agree.
+  const openingDiff = new Decimal(bs.openingDifference);
+  if (openingDiff.greaterThan(0)) liabilities.push({ name: 'Difference in Opening Balances', amount: openingDiff.toString() });
+  if (openingDiff.lessThan(0)) assets.push({ name: 'Difference in Opening Balances', amount: openingDiff.abs().toString() });
   const maxLen = Math.max(liabilities.length, assets.length);
   const rows: Array<{ cells: Record<string, unknown> }> = [];
   for (let i = 0; i < maxLen; i++) {
@@ -751,7 +780,8 @@ export async function buildBalanceSheetLayout(userId: string, asOf?: string): Pr
     { key: 'aAmount', label: 'Amt. in Rs.', width: 13, align: 'right', formatter: MONEY, signed: true },
   ];
 
-  const totalLiab = new Decimal(bs.totalLiabilities).plus(bs.totalEquity);
+  const totalLiab = new Decimal(bs.totalLiabilities).plus(bs.totalEquity).plus(Decimal.max(openingDiff, 0));
+  const totalAssets = new Decimal(bs.totalAssets).plus(Decimal.max(openingDiff.negated(), 0));
   return {
     reportTitle: `Balance Sheet Report As On ${asOf ? fmtDateDDMMYYYY(asOf) : todayDDMMYYYY()}`,
     family: m.family,
@@ -763,7 +793,7 @@ export async function buildBalanceSheetLayout(userId: string, asOf?: string): Pr
     sections: [{ groups: [{ rows }] }],
     grandTotal: {
       label: 'Grand Total',
-      values: { lAmount: totalLiab.toString(), aAmount: bs.totalAssets },
+      values: { lAmount: totalLiab.toString(), aAmount: totalAssets.toString() },
     },
     filenameStem: `balance-sheet${asOf ? `-${asOf}` : ''}`,
   };

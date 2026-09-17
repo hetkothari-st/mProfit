@@ -1,3 +1,4 @@
+import { logger } from '../lib/logger.js';
 import type { Request, Response } from 'express';
 import {
   listAccountsTree,
@@ -125,8 +126,22 @@ export async function nextVoucherNoHandler(req: Request, res: Response) {
 
 // ─── Ledger ────────────────────────────────────────────────────────────────────
 
+/**
+ * Bring the books up to date before a statement is read, as the downloads do,
+ * so the screen and the file never disagree. A failed projection is logged and
+ * the statement is served from the vouchers already booked.
+ */
+async function projectBeforeRead(userId: string): Promise<void> {
+  try {
+    await generateVouchersFromActivity(userId);
+  } catch (err) {
+    logger.error({ err, userId }, 'accounting.project_before_read_failed');
+  }
+}
+
 export async function getLedgerHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
+  await projectBeforeRead(req.user.id);
   const { from, to } = req.query as Record<string, string>;
   const ledger = await getAccountLedger(req.user.id, req.params['accountId']!, { from, to });
   ok(res, ledger);
@@ -136,6 +151,7 @@ export async function getLedgerHandler(req: Request, res: Response) {
 
 export async function getTrialBalanceHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
+  await projectBeforeRead(req.user.id);
   const { asOf } = req.query as Record<string, string>;
   const tb = await getTrialBalance(req.user.id, asOf);
   ok(res, tb);
@@ -143,6 +159,7 @@ export async function getTrialBalanceHandler(req: Request, res: Response) {
 
 export async function getPnLHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
+  await projectBeforeRead(req.user.id);
   const { from, to } = req.query as Record<string, string>;
   const pnl = await getPnL(req.user.id, from, to);
   ok(res, pnl);
@@ -150,6 +167,7 @@ export async function getPnLHandler(req: Request, res: Response) {
 
 export async function getBalanceSheetHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
+  await projectBeforeRead(req.user.id);
   const { asOf } = req.query as Record<string, string>;
   const bs = await getBalanceSheet(req.user.id, asOf);
   ok(res, bs);

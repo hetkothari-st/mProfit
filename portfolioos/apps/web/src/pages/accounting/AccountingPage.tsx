@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { formatINR } from '@everypaisa/shared';
+import { financialYearOf, financialYearRange, formatINR, toDecimal } from '@everypaisa/shared';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { TallyExportButton } from '@/components/tally/TallyExportButton';
 import {
@@ -55,7 +55,7 @@ function AccountTreeNode({ node, depth, onAdd, onDelete }: {
         <span className="flex-1 text-sm">{node.name}</span>
         <span className={`text-xs font-medium ${typeColors[node.type]} w-20 text-right`}>{node.type}</span>
         <span className="text-xs tabular-nums text-muted-foreground w-28 text-right">
-          {parseFloat(node.openingBalance) !== 0 ? formatINR(node.openingBalance) : '—'}
+          {!toDecimal(node.openingBalance).isZero() ? formatINR(node.openingBalance) : '—'}
         </span>
         <div className="opacity-0 group-hover:opacity-100 flex gap-1 ml-2">
           <button type="button" onClick={() => onAdd(node.id)} className="p-0.5 hover:text-primary">
@@ -238,7 +238,13 @@ function VoucherFormDialog({ open, onOpenChange, accounts, initial }: {
   const updateEntry = (i: number, field: keyof VoucherEntryInput, value: string) =>
     setEntries((es) => es.map((e, idx) => idx === i ? { ...e, [field]: value } : e));
 
-  const totalAmount = entries.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const totalAmount = entries.reduce((s, e) => {
+    try {
+      return s.plus(e.amount || 0);
+    } catch {
+      return s; // amount still being typed
+    }
+  }, toDecimal(0));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -420,7 +426,7 @@ function VouchersTab() {
               </thead>
               <tbody>
                 {(data?.vouchers ?? []).map((v: VoucherDTO) => {
-                  const total = v.entries.reduce((s, e) => s + parseFloat(e.amount), 0);
+                  const total = v.entries.reduce((s, e) => s.plus(e.amount), toDecimal(0));
                   return (
                     <tr key={v.id} className="border-b last:border-0 hover:bg-muted/20">
                       <td data-label="Date" className="px-4 py-3 tabular-nums text-sm">{v.date}</td>
@@ -563,8 +569,8 @@ function TrialBalanceReport() {
     queryFn: () => accountingApi.getTrialBalance(asOf || undefined),
   });
 
-  const totalDebit = data.reduce((s, r) => s + parseFloat(r.totalDebit), 0);
-  const totalCredit = data.reduce((s, r) => s + parseFloat(r.totalCredit), 0);
+  const totalDebit = data.reduce((s, r) => s.plus(r.totalDebit), toDecimal(0));
+  const totalCredit = data.reduce((s, r) => s.plus(r.totalCredit), toDecimal(0));
 
   const grouped = TYPE_SECTION_ORDER.reduce<Record<string, typeof data>>((acc, t) => {
     acc[t] = data.filter((r) => r.type === t);
@@ -603,8 +609,8 @@ function TrialBalanceReport() {
                         <td data-label="Code" className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.code}</td>
                         <td data-label="Account" className="px-4 py-2">{r.name}</td>
                         <td data-label="Opening" className="px-4 py-2 text-right tabular-nums text-muted-foreground hidden lg:table-cell">{formatINR(r.openingBalance)}</td>
-                        <td data-label="Debit" className="px-4 py-2 text-right tabular-nums">{parseFloat(r.totalDebit) ? formatINR(r.totalDebit) : '—'}</td>
-                        <td data-label="Credit" className="px-4 py-2 text-right tabular-nums">{parseFloat(r.totalCredit) ? formatINR(r.totalCredit) : '—'}</td>
+                        <td data-label="Debit" className="px-4 py-2 text-right tabular-nums">{!toDecimal(r.totalDebit).isZero() ? formatINR(r.totalDebit) : '—'}</td>
+                        <td data-label="Credit" className="px-4 py-2 text-right tabular-nums">{!toDecimal(r.totalCredit).isZero() ? formatINR(r.totalCredit) : '—'}</td>
                         <td data-label="Balance" className="px-4 py-2 text-right tabular-nums font-medium">{formatINR(r.closingBalance)}</td>
                       </tr>
                     )),
@@ -614,7 +620,7 @@ function TrialBalanceReport() {
                   <td colSpan={3} className="px-4 py-2.5 text-sm">Total</td>
                   <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalDebit.toFixed(4))}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalCredit.toFixed(4))}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{formatINR((totalDebit - totalCredit).toFixed(4))}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalDebit.minus(totalCredit).toFixed(4))}</td>
                 </tr>
               </tbody>
             </table>
@@ -626,14 +632,15 @@ function TrialBalanceReport() {
 }
 
 function PnLReport() {
-  const currentYear = new Date().getFullYear();
-  const [from, setFrom] = useState(`${currentYear}-04-01`);
-  const [to, setTo] = useState(`${currentYear + 1}-03-31`);
+  // Default to the current Indian financial year (Jan–Mar belong to the year that began last April).
+  const currentFy = financialYearRange(financialYearOf(new Date()));
+  const [from, setFrom] = useState(currentFy.from);
+  const [to, setTo] = useState(currentFy.to);
   const { data, isLoading } = useQuery({
     queryKey: ['pnl', from, to],
     queryFn: () => accountingApi.getPnL(from || undefined, to || undefined),
   });
-  const netClass = data ? (parseFloat(data.netProfit) >= 0 ? 'text-positive' : 'text-negative') : '';
+  const netClass = data ? (toDecimal(data.netProfit).gte(0) ? 'text-positive' : 'text-negative') : '';
 
   return (
     <div className="space-y-4">
@@ -685,7 +692,7 @@ function PnLReport() {
           </Card>
           <Card className="md:col-span-2">
             <CardContent className="flex items-center justify-between py-4 px-6">
-              <span className="text-lg font-semibold">Net {parseFloat(data.netProfit) >= 0 ? 'Profit' : 'Loss'}</span>
+              <span className="text-lg font-semibold">Net {toDecimal(data.netProfit).gte(0) ? 'Profit' : 'Loss'}</span>
               <span className={`text-xl sm:text-2xl font-bold tabular-nums break-words ${netClass}`}>{formatINR(data.netProfit)}</span>
             </CardContent>
           </Card>
@@ -720,9 +727,17 @@ function BalanceSheetReport() {
                       <td className="px-4 py-2 text-right tabular-nums">{formatINR(r.closingBalance)}</td>
                     </tr>
                   ))}
+                  {toDecimal(data.openingDifference ?? 0).lt(0) && (
+                    <tr className="border-b italic">
+                      <td className="px-4 py-2 text-xs text-muted-foreground">Difference in Opening Balances</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{formatINR(toDecimal(data.openingDifference ?? 0).abs().toFixed(4))}</td>
+                    </tr>
+                  )}
                   <tr className="border-t-2 font-semibold bg-muted/20">
                     <td className="px-4 py-2.5">Total Assets</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(data.totalAssets)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      {formatINR(toDecimal(data.totalAssets).plus(toDecimal(data.openingDifference ?? 0).lt(0) ? toDecimal(data.openingDifference ?? 0).abs() : 0).toFixed(4))}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -749,10 +764,21 @@ function BalanceSheetReport() {
                     <td className="px-4 py-2 text-xs text-muted-foreground">Retained Earnings</td>
                     <td className="px-4 py-2 text-right tabular-nums">{formatINR(data.retainedEarnings)}</td>
                   </tr>
+                  {toDecimal(data.openingDifference ?? 0).gt(0) && (
+                    <tr className="border-b italic">
+                      <td className="px-4 py-2 text-xs text-muted-foreground">Difference in Opening Balances</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{formatINR(toDecimal(data.openingDifference ?? 0).toFixed(4))}</td>
+                    </tr>
+                  )}
                   <tr className="border-t-2 font-semibold bg-muted/20">
                     <td className="px-4 py-2.5">Total Liabilities + Equity</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
-                      {formatINR((parseFloat(data.totalLiabilities) + parseFloat(data.totalEquity)).toFixed(4))}
+                      {formatINR(
+                        toDecimal(data.totalLiabilities)
+                          .plus(data.totalEquity)
+                          .plus(toDecimal(data.openingDifference ?? 0).gt(0) ? toDecimal(data.openingDifference ?? 0) : 0)
+                          .toFixed(4),
+                      )}
                     </td>
                   </tr>
                 </tbody>

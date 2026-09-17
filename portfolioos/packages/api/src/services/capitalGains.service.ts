@@ -112,9 +112,16 @@ const NON_CAPITAL_ASSETS = new Set<AssetClass>([
   'POST_OFFICE_SAVINGS',
 ]);
 
-/** INR value of a transaction's net amount (Rule 115: foreign legs at the rate frozen on the trade date). */
+/**
+ * INR amount of a trade for capital gains (Rule 115: foreign legs at the rate
+ * frozen on the trade date). Sec 48 allows no deduction for securities
+ * transaction tax, so STT is taken back out of the net amount: a purchase's
+ * cost excludes it and a sale's proceeds are before it.
+ */
 function inrNetAmount(tx: Transaction): { value: Decimal; converted: boolean } {
-  const raw = new Decimal(tx.netAmount.toString());
+  const stt = new Decimal((tx.stt ?? 0).toString());
+  const net = new Decimal(tx.netAmount.toString());
+  const raw = stt.isZero() ? net : SELL_TYPES.has(tx.transactionType) ? net.plus(stt) : net.minus(stt);
   const currency = (tx as Transaction & { currency?: string | null }).currency;
   if (!currency || currency === 'INR') return { value: raw, converted: true };
   const t = tx as Transaction & {

@@ -13,6 +13,7 @@
  */
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../lib/prisma.js';
+import { computeUserCapitalGains } from '../capitalGains.service.js';
 import type { TallyIssue, TallySources } from './tallyBook.js';
 
 type Num = { toString(): string };
@@ -46,7 +47,18 @@ export interface TradeRow {
   assetName: string | null;
   stock: { name: string } | null;
   fund: { schemeName: string } | null;
-  capitalGains: Array<{ buyAmount: Num; gainLoss: Num; capitalGainType: string }>;
+  /**
+   * Capital-gains rows for this sale. `unmatched` marks units sold with no
+   * purchase on file (the engine reports them at nil cost).
+   */
+  capitalGains: Array<{
+    buyAmount: Num;
+    gainLoss: Num;
+    capitalGainType: string;
+    sellAmount?: Num;
+    quantity?: Num;
+    unmatched?: boolean;
+  }>;
 }
 
 function holdingKeyOf(t: TradeRow): string {
@@ -79,8 +91,12 @@ export function mapTrade(t: TradeRow): { trade: TallySources['trades'][number] }
   const gains = foreign ? [] : t.capitalGains;
   const sumOf = (rows: typeof gains, pick: (g: (typeof gains)[number]) => Num) =>
     rows.reduce<Decimal>((s, g) => s.plus(d(pick(g))), new Decimal(0));
-  const longTerm = gains.filter((g) => g.capitalGainType === 'LONG_TERM');
-  const shortTerm = gains.filter((g) => g.capitalGainType !== 'LONG_TERM');
+  const matched = gains.filter((g) => !g.unmatched);
+  const unmatched = gains.filter((g) => g.unmatched);
+  const longTerm = matched.filter((g) => g.capitalGainType === 'LONG_TERM');
+  const shortTerm = matched.filter((g) => g.capitalGainType === 'SHORT_TERM');
+  // Intraday equity is speculative business income, not a short-term capital gain.
+  const speculative = matched.filter((g) => g.capitalGainType === 'INTRADAY');
 
   return {
     trade: {
@@ -94,9 +110,13 @@ export function mapTrade(t: TradeRow): { trade: TallySources['trades'][number] }
       price: d(t.price).times(rate).toString(),
       gross: d(t.grossAmount).times(rate).toString(),
       charges: charges.times(rate).toString(),
-      cost: gains.length > 0 ? sumOf(gains, (g) => g.buyAmount).toString() : null,
+      stt: d(t.stt).times(rate).toString(),
+      cost: gains.length > 0 ? sumOf(matched, (g) => g.buyAmount).toString() : null,
       shortTermGain: sumOf(shortTerm, (g) => g.gainLoss).toString(),
       longTermGain: sumOf(longTerm, (g) => g.gainLoss).toString(),
+      speculativeGain: sumOf(speculative, (g) => g.gainLoss).toString(),
+      unmatchedValue: sumOf(unmatched, (g) => g.sellAmount ?? g.gainLoss).toString(),
+      unmatchedQuantity: sumOf(unmatched, (g) => g.quantity ?? 0).toString(),
     },
   };
 }
@@ -270,7 +290,6 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
         assetName: true,
         stock: { select: { name: true } },
         fund: { select: { schemeName: true } },
-        capitalGains: { select: { buyAmount: true, gainLoss: true, capitalGainType: true } },
       },
     }),
     prisma.premiumPayment.findMany({
@@ -330,10 +349,27 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
   );
   const premiumTransactions = new Set(premiums.map((p) => p.sourceTransactionId).filter((id): id is string => id !== null));
 
+  // Gains from the live engine, so the export matches the in-app reports even
+  // when stored gains haven't been recomputed since the last edit.
+  const { rows: gainRows } = await computeUserCapitalGains(userId);
+  const gainsBySale = new Map<string, TradeRow['capitalGains']>();
+  for (const g of gainRows) {
+    const list = gainsBySale.get(g.sellTransactionId) ?? [];
+    list.push({
+      buyAmount: g.buyAmount,
+      gainLoss: g.gainLoss,
+      capitalGainType: g.capitalGainType,
+      sellAmount: g.sellAmount,
+      quantity: g.quantity,
+      unmatched: g.buyTransactionId === g.sellTransactionId,
+    });
+    gainsBySale.set(g.sellTransactionId, list);
+  }
+
   const trades: TallySources['trades'] = [];
   for (const t of transactions) {
     if (premiumTransactions.has(t.id)) continue;
-    const mapped = mapTrade(t);
+    const mapped = mapTrade({ ...t, capitalGains: gainsBySale.get(t.id) ?? [] });
     if ('skip' in mapped) issues.push({ severity: 'warning', message: mapped.skip });
     else trades.push(mapped.trade);
   }
