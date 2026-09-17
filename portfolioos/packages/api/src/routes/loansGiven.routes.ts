@@ -7,6 +7,7 @@ import {
   deleteEntryHandler,
   deleteHandler,
   getHandler,
+  installmentHandler,
   listHandler,
   reopenHandler,
   settleHandler,
@@ -25,6 +26,7 @@ loansGivenRouter.get('/:id', asyncHandler(getHandler));
 loansGivenRouter.patch('/:id', asyncHandler(updateHandler));
 loansGivenRouter.delete('/:id', asyncHandler(deleteHandler));
 loansGivenRouter.post('/:id/entries', asyncHandler(addEntryHandler));
+loansGivenRouter.put('/:id/installments/:no', asyncHandler(installmentHandler));
 loansGivenRouter.post('/:id/settle', asyncHandler(settleHandler));
 loansGivenRouter.post('/:id/write-off', asyncHandler(writeOffHandler));
 loansGivenRouter.post('/:id/reopen', asyncHandler(reopenHandler));

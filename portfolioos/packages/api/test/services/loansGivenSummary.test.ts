@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { computeLoanGivenSummary, type LoanTerms, type LedgerEntry } from '../../src/services/loansGiven.service.js';
+import { Decimal } from 'decimal.js';
+import {
+  computeEmiSchedule,
+  computeLoanGivenSummary,
+  type LoanTerms,
+  type LedgerEntry,
+} from '../../src/services/loansGiven.service.js';
 
 const d = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
@@ -122,5 +128,81 @@ describe('computeLoanGivenSummary — EMI', () => {
     );
     expect(s.nextDue?.date).toBe('2026-02-28');
     expect(s.overdueDays).toBe(10);
+  });
+});
+
+describe('computeEmiSchedule', () => {
+  const terms = (over: Partial<LoanTerms> = {}): LoanTerms => ({
+    principalAmount: '60000',
+    lentOn: d('2026-01-01'),
+    interestRate: '0',
+    dueDate: null,
+    repaymentMode: 'EMI',
+    emiAmount: '10000',
+    tenureMonths: 6,
+    firstEmiDate: d('2026-02-01'),
+    status: 'ACTIVE',
+    closedOn: null,
+    ...over,
+  });
+  const marked = (kind: string, amount: string, date: string, no: number): LedgerEntry => ({
+    ...entry(kind, amount, date),
+    installmentNo: no,
+  });
+
+  it('is null for flexible loans', () => {
+    expect(computeEmiSchedule(terms({ repaymentMode: 'FLEXIBLE' }), [])).toBeNull();
+  });
+
+  it('keeps a payment on the instalment it was marked against', () => {
+    const today = d('2026-03-15');
+    const rows = computeEmiSchedule(terms(), [marked('REPAYMENT', '10000', '2026-03-10', 3)], today)!;
+    expect(rows.map((r) => r.status)).toEqual(['OVERDUE', 'OVERDUE', 'PAID', 'UPCOMING', 'UPCOMING', 'UPCOMING']);
+    expect(rows[2]!.marked).toBe(true);
+    expect(rows[2]!.lastPaidOn).toBe('2026-03-10');
+
+    const s = computeLoanGivenSummary(terms(), [marked('REPAYMENT', '10000', '2026-03-10', 3)], today);
+    expect(s.emi?.installmentsPaid).toBe(1);
+    expect(s.nextDue).toEqual({ date: '2026-02-01', amount: '10000.0000' });
+    expect(s.overdueDays).toBe(42);
+    expect(s.outstandingPrincipal).toBe('50000.0000');
+  });
+
+  it('spills a marked overpayment into the next instalment', () => {
+    const rows = computeEmiSchedule(terms(), [marked('REPAYMENT', '15000', '2026-02-01', 1)], d('2026-02-02'))!;
+    expect(rows[0]!.status).toBe('PAID');
+    expect(rows[1]!.status).toBe('PARTIAL');
+    expect(rows[1]!.paid).toBe('5000.0000');
+    expect(rows[1]!.remaining).toBe('5000.0000');
+    expect(rows[1]!.marked).toBe(false);
+  });
+
+  it('fills untied repayments around marked instalments, oldest first', () => {
+    const rows = computeEmiSchedule(
+      terms(),
+      [marked('WAIVER', '10000', '2026-02-01', 1), entry('REPAYMENT', '12000', '2026-02-20')],
+      d('2026-02-25'),
+    )!;
+    expect(rows[0]!.status).toBe('WAIVED');
+    expect(rows[1]!.status).toBe('PAID');
+    expect(rows[2]!.paid).toBe('2000.0000');
+  });
+
+  it('flags instalments due within a week as DUE', () => {
+    const rows = computeEmiSchedule(terms(), [], d('2026-01-26'))!;
+    expect(rows[0]!.status).toBe('DUE');
+    expect(rows[1]!.status).toBe('UPCOMING');
+  });
+
+  it('splits interest and principal on an interest-bearing EMI', () => {
+    const rows = computeEmiSchedule(
+      terms({ principalAmount: '100000', interestRate: '12', emiAmount: '8884.88', tenureMonths: 12 }),
+      [],
+      d('2026-01-01'),
+    )!;
+    expect(rows[0]!.interest).toBe('1000.0000');
+    expect(rows[0]!.principal).toBe('7884.8800');
+    expect(rows[0]!.balanceAfter).toBe('92115.1200');
+    expect(new Decimal(rows[11]!.balanceAfter).lessThan(1)).toBe(true);
   });
 });

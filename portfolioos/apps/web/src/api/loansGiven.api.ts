@@ -25,12 +25,33 @@ export interface LoanGivenSummary {
   } | null;
 }
 
+export type InstallmentStatus = 'PAID' | 'WAIVED' | 'PARTIAL' | 'OVERDUE' | 'DUE' | 'UPCOMING';
+export type InstallmentAction = 'PAID' | 'PARTIAL' | 'WAIVED' | 'PENDING';
+
+export interface InstallmentRow {
+  no: number;
+  dueDate: string;
+  amount: string;
+  principal: string | null;
+  interest: string | null;
+  balanceAfter: string;
+  paid: string;
+  waived: string;
+  remaining: string;
+  status: InstallmentStatus;
+  overdue: boolean;
+  lastPaidOn: string | null;
+  /** Some of the cover was marked against this instalment (so it can be undone here). */
+  marked: boolean;
+}
+
 export interface LoanGivenEntryDTO {
   id: string;
   kind: LoanGivenEntryKind;
   amount: string;
   date: string;
   notes: string | null;
+  installmentNo: number | null;
 }
 
 export interface LoanGivenDTO {
@@ -52,6 +73,8 @@ export interface LoanGivenDTO {
   createdAt: string;
   entries: LoanGivenEntryDTO[];
   summary: LoanGivenSummary;
+  /** EMI loans only. */
+  schedule: InstallmentRow[] | null;
 }
 
 export interface LoanGivenInput {
@@ -115,6 +138,17 @@ export const loansGivenApi = {
       date,
       notes,
     });
+    return unwrap(data);
+  },
+  async setInstallment(
+    id: string,
+    no: number,
+    input: { action: InstallmentAction; amount?: string; date?: string; notes?: string | null },
+  ): Promise<LoanGivenDTO> {
+    const { data } = await api.put<ApiResponse<LoanGivenDTO>>(
+      `${BASE}/${id}/installments/${no}`,
+      input,
+    );
     return unwrap(data);
   },
   async reopen(id: string): Promise<LoanGivenDTO> {
