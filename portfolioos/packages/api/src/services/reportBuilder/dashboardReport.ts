@@ -33,6 +33,7 @@ import { fmtNum, fmtDate } from '../export.service.js';
 import { computePortfolioXirr } from '../xirr.service.js';
 import { computePortfolioCapitalGains } from '../capitalGains.service.js';
 import { computePortfolioFoPnl } from '../foPnl.service.js';
+import { derivativePositionValue } from '../derivativePosition.service.js';
 import { getDashboardNetWorth } from '../dashboard.service.js';
 import {
   drawPieChart,
@@ -138,11 +139,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   let foTotalValue = new Decimal(0);
   for (const p of foPositions) {
     foTotalCost = foTotalCost.plus(d(p.totalCost));
-    if (p.mtmPrice) {
-      foTotalValue = foTotalValue.plus(d(p.netQuantity).times(d(p.mtmPrice)).times(p.lotSize));
-    } else {
-      foTotalValue = foTotalValue.plus(d(p.totalCost));
-    }
+    foTotalValue = foTotalValue.plus(derivativePositionValue(p) ?? d(p.totalCost));
   }
 
   // ─── F&O realised P&L ───────────────────────────────────────────────────────
@@ -487,7 +484,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
       const tag = p.instrumentType === 'FUTURES' ? 'FUT' : `${p.instrumentType === 'CALL' ? 'CE' : 'PE'} ${p.strikePrice?.toString() ?? ''}`;
       const qty = d(p.netQuantity);
       const cost = d(p.totalCost);
-      const val = p.mtmPrice ? qty.times(d(p.mtmPrice)).times(p.lotSize) : cost;
+      const val = derivativePositionValue(p) ?? cost;
       return {
         portfolioName: portfolioNameMap[p.portfolioId] ?? '',
         instrument: `${p.underlying} ${tag}`,

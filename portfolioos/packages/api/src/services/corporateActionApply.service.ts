@@ -1,7 +1,7 @@
 import { Decimal } from '@everypaisa/shared';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { recomputeForAsset } from './holdingsProjection.js';
+import { quantityHeldBefore, recomputeForAsset } from './holdingsProjection.js';
 import { findDuplicateTransaction } from './duplicateMatch.js';
 
 /**
@@ -56,6 +56,7 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
   for (const h of holdings) {
     const actions = await prisma.corporateAction.findMany({
       where: { stockId: h.stockId!, exDate: { lte: new Date() } },
+      orderBy: { exDate: 'asc' },
     });
 
     for (const ca of actions) {
@@ -63,7 +64,14 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
       const exists = await prisma.transaction.findFirst({ where: { sourceHash } });
       if (exists) continue;
 
-      const qty = new Decimal(h.quantity.toString());
+      // Units held going into the ex-date, including earlier splits/bonuses
+      // booked in this loop — not today's quantity.
+      const txsForHolding = await prisma.transaction.findMany({
+        where: { portfolioId: h.portfolioId, assetKey: h.assetKey },
+        orderBy: { tradeDate: 'asc' },
+      });
+      const qty = quantityHeldBefore(txsForHolding, ca.exDate);
+      if (qty.lessThanOrEqualTo(0)) continue;
       const ratio = ca.ratio ? new Decimal(ca.ratio.toString()) : null;
       const amount = ca.amount ? new Decimal(ca.amount.toString()) : null;
 

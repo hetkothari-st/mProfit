@@ -9,6 +9,7 @@
  */
 
 import { Decimal } from 'decimal.js';
+import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import {
   fmtDateDDMMYYYY,
@@ -2877,6 +2878,11 @@ export async function buildSectorWiseAllocationLayout(
 // One row per contract note (Transaction.orderNo + broker). Payable
 // if user bought (net out-flow), Receivable if sold (net in-flow).
 
+const CONTRACT_NOTE_ASSET_CLASSES: AssetClass[] = [
+  'EQUITY', 'ETF', 'FUTURES', 'OPTIONS', 'BOND', 'GOVT_BOND', 'CORPORATE_BOND',
+  'GOLD_BOND', 'GOLD_ETF', 'REIT', 'INVIT',
+];
+
 export async function buildContractNotesSummaryLayout(
   userId: string,
   asOf?: Date,
@@ -2888,11 +2894,15 @@ export async function buildContractNotesSummaryLayout(
       portfolio: { userId },
       tradeDate: { lte: cutoff },
       orderNo: { not: null },
+      // Contract notes are exchange trades — not insurance premiums, FDs or
+      // bank rows that also carry a reference number.
+      transactionType: { in: ['BUY', 'SELL'] },
+      assetClass: { in: CONTRACT_NOTE_ASSET_CLASSES },
     },
     orderBy: { tradeDate: 'desc' },
   });
 
-  const byNote = new Map<string, { broker: string; date: Date; orderNo: string; total: Decimal; isBuy: boolean }>();
+  const byNote = new Map<string, { broker: string; date: Date; orderNo: string; total: Decimal }>();
   for (const t of txs) {
     const key = `${t.broker ?? 'SELF-BROKER A/C'}::${t.orderNo}`;
     let rec = byNote.get(key);
@@ -2902,11 +2912,12 @@ export async function buildContractNotesSummaryLayout(
         date: t.tradeDate,
         orderNo: t.orderNo!,
         total: new Decimal(0),
-        isBuy: BUY_TXN_TYPES.has(t.transactionType),
       };
       byNote.set(key, rec);
     }
-    rec.total = rec.total.plus(new Decimal(t.netAmount.toString()));
+    // Net per note: purchases are payable, sales receivable.
+    const net = new Decimal(t.netAmount.toString());
+    rec.total = t.transactionType === 'BUY' ? rec.total.plus(net) : rec.total.minus(net);
   }
 
   const rows: BodyRowLite[] = Array.from(byNote.values())
@@ -2916,7 +2927,7 @@ export async function buildContractNotesSummaryLayout(
         date: rec.date.toISOString().slice(0, 10),
         broker: rec.broker,
         contractNoteNo: rec.orderNo,
-        type: rec.isBuy ? 'Payable' : 'Receivable',
+        type: rec.total.isNegative() ? 'Receivable' : 'Payable',
         amount: rec.total.abs().toString(),
       },
     }));
@@ -2930,7 +2941,7 @@ export async function buildContractNotesSummaryLayout(
   ];
 
   return {
-    reportTitle: `Contract Notes Summary Report As On ${fmtDateDDMMYYYY(cutoff)} (Equity)`,
+    reportTitle: `Contract Notes Summary Report As On ${fmtDateDDMMYYYY(cutoff)}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
