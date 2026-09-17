@@ -59,6 +59,8 @@ export function sidebarKeyForAssetClass(cls: string): string {
     case 'ULIP':
     case 'INSURANCE':
       return '/insurance';
+    case 'LOAN_GIVEN':
+      return '/loans';
     default:
       return '/others';
   }

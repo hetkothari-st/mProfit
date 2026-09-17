@@ -3,6 +3,7 @@ import type { AssetClass } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@everypaisa/shared';
 import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
+import { outstandingLoansGiven } from './loansGiven.service.js';
 import { computeCardSummary } from './creditCards.service.js';
 import { getEffectiveScope, type EffectiveScope } from './familyScope.service.js';
 import { runAsUser } from '../lib/requestContext.js';
@@ -154,6 +155,13 @@ export async function getDashboardNetWorth(
   });
 
   const rentalValue = properties.reduce((s, p) => s.plus(d(p.currentValue)), ZERO);
+
+  // Money lent to others and still owed back — an asset, not a liability.
+  // Shares the LOAN visibility grant with loans taken.
+  const loansGiven = canSee('LOAN')
+    ? await outstandingLoansGiven(userId)
+    : { count: 0, total: ZERO };
+  const loansGivenValue = loansGiven.total;
   const monthlyRent = properties.reduce((s, p) => {
     return s.plus(p.tenancies.reduce((t, tn) => t.plus(d(tn.monthlyRent)), ZERO));
   }, ZERO);
@@ -310,7 +318,7 @@ export async function getDashboardNetWorth(
   }
 
   // ── 6. Expanded allocation (all tangible assets) ─────────────────────
-  const totalTangible = portfolioValue.plus(vehicleValue).plus(rentalValue);
+  const totalTangible = portfolioValue.plus(vehicleValue).plus(rentalValue).plus(loansGivenValue);
   const allocationBreakdown: Array<{
     key: string;
     label: string;
@@ -353,6 +361,17 @@ export async function getDashboardNetWorth(
       numericValue: rentalValue.toNumber(),
       percent: totalTangible.greaterThan(0) ? rentalValue.dividedBy(totalTangible).times(100).toNumber() : 0,
       category: 'REAL_ESTATE',
+    });
+  }
+
+  if (loansGivenValue.greaterThan(0)) {
+    allocationBreakdown.push({
+      key: 'LOAN_GIVEN',
+      label: 'Loans given',
+      value: serializeMoney(loansGivenValue),
+      numericValue: loansGivenValue.toNumber(),
+      percent: totalTangible.greaterThan(0) ? loansGivenValue.dividedBy(totalTangible).times(100).toNumber() : 0,
+      category: 'FINANCIAL',
     });
   }
 
@@ -440,7 +459,7 @@ export async function getDashboardNetWorth(
   // ── 7. Net worth totals ──────────────────────────────────────────────
   // totalNetWorth = gross assets (unchanged for backward compat)
   // netWorthAfterLiabilities = assets − all outstanding loans & CC balances
-  const totalNetWorth = portfolioValue.plus(vehicleValue).plus(rentalValue);
+  const totalNetWorth = portfolioValue.plus(vehicleValue).plus(rentalValue).plus(loansGivenValue);
   const netWorthAfterLiabilities = totalNetWorth.minus(totalLiabilities);
 
   return {

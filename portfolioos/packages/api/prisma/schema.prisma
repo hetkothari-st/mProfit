@@ -105,6 +105,7 @@ model User {
   documents Document[]
 
   loans        Loan[]
+  loansGiven   LoanGiven[]
   creditCards  CreditCard[]
   bankAccounts BankAccount[]
 
@@ -1357,6 +1358,7 @@ enum AlertType {
   FO_EXPIRY_SOON
   FO_MARGIN_CALL
   LOAN_EMI_DUE
+  LOAN_GIVEN_DUE
   CREDIT_CARD_DUE
   PROPERTY_TAX_DUE
   PROPERTY_POSSESSION_DUE
@@ -2555,10 +2557,66 @@ enum DocumentOwnerType {
   INSURANCE_POLICY
   PORTFOLIO
   OWNED_PROPERTY
+  LOAN_GIVEN
   OTHER
 }
 
 // ─── LOANS ────────────────────────────────────────────────────────
+
+/// Money the user has lent to someone else — a receivable, the mirror image
+/// of Loan (which is money owed). Kept separate from Loan on purpose: every
+/// reader of Loan (dashboard liabilities, cash-flow forecast, family view,
+/// reports, Tally export) treats a row as debt.
+///
+/// FLEXIBLE: repaid whenever, optional simple interest, optional due date.
+/// EMI: fixed instalments (emiAmount × tenureMonths from firstEmiDate).
+model LoanGiven {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  borrowerName    String
+  borrowerContact String?
+  relationship    String? // FRIEND | FAMILY | COLLEAGUE | BUSINESS | OTHER
+
+  principalAmount Decimal  @db.Decimal(14, 2)
+  lentOn          DateTime @db.Date
+  /// Annual simple interest %, 0 for interest-free.
+  interestRate    Decimal  @default(0) @db.Decimal(6, 4)
+  dueDate         DateTime? @db.Date
+
+  repaymentMode String    @default("FLEXIBLE") // FLEXIBLE | EMI
+  emiAmount     Decimal?  @db.Decimal(12, 2)
+  tenureMonths  Int?
+  firstEmiDate  DateTime? @db.Date
+
+  status    String    @default("ACTIVE") // ACTIVE | SETTLED | WRITTEN_OFF
+  closedOn  DateTime? @db.Date
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries LoanGivenEntry[]
+
+  @@index([userId, status])
+}
+
+/// One movement on a LoanGiven. No userId: reached only through its loan,
+/// whose ownership the service checks (same shape as LoanPayment).
+model LoanGivenEntry {
+  id     String    @id @default(cuid())
+  loanId String
+  loan   LoanGiven @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  /// REPAYMENT (principal back) | INTEREST_RECEIVED | ADDITIONAL_LENT | WAIVER (forgiven)
+  kind   String
+  amount Decimal  @db.Decimal(14, 2)
+  date   DateTime @db.Date
+  notes  String?
+  createdAt DateTime @default(now())
+
+  @@index([loanId, date])
+}
 
 model Loan {
   id          String  @id @default(cuid())

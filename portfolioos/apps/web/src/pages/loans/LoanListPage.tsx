@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -20,6 +20,8 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Decimal, formatINR } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { cn } from '@/lib/cn';
+import { LoansGivenTab } from './given/LoansGivenTab';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -637,7 +639,38 @@ function CreateLoanDialog({
 
 // ── Page ──────────────────────────────────────────────────────────────
 
+/** Taken (money you owe) vs Given (money owed to you), kept in the URL. */
+function LoanViewTabs({ view, onChange }: { view: 'taken' | 'given'; onChange: (v: 'taken' | 'given') => void }) {
+  const tabs = [
+    ['taken', 'Taken'],
+    ['given', 'Given'],
+  ] as const;
+  return (
+    <div role="tablist" aria-label="Loan type" className="mb-6 inline-flex rounded-lg border border-border p-1">
+      {tabs.map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          aria-selected={view === value}
+          onClick={() => onChange(value)}
+          className={cn(
+            'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+            view === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function LoanListPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get('view') === 'given' ? 'given' : 'taken';
+  const setView = (v: 'taken' | 'given') =>
+    setSearchParams(v === 'given' ? { view: 'given' } : {}, { replace: true });
   const [createOpen, setCreateOpen] = useState(false);
   const [editLoan, setEditLoan] = useState<LoanDTO | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -666,17 +699,24 @@ export function LoanListPage() {
     <div>
       <PageHeader
         title="Loans"
-        description="Track home, car, personal, and other loans"
-        actions={
+        description={
+          view === 'given'
+            ? 'Money you have lent to others — what they owe, repayments and interest'
+            : 'Track home, car, personal, and other loans'
+        }
+        actions={view === 'given' ? undefined : (
           <div className="flex gap-2">
             <DownloadReportButton type="loans" />
             <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
               <Plus className="h-4 w-4" /> Add loan
             </Button>
           </div>
-        }
+        )}
       />
 
+      <LoanViewTabs view={view} onChange={setView} />
+
+      {view === 'given' ? <LoansGivenTab /> : (<>
       {!isLoading && list.length > 0 && <SummaryStrip loans={list} />}
 
       {isLoading && (
@@ -774,6 +814,7 @@ export function LoanListPage() {
         onOpenChange={(v) => { setCreateOpen(v); if (!v) setEditLoan(null); }}
         initial={editLoan}
       />
+      </>)}
     </div>
   );
 }

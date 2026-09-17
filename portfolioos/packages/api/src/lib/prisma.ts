@@ -148,6 +148,7 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'VehicleValuationLog',
   'SipPlan',
   'Loan',
+  'LoanGiven',
   'CreditCard',
   'Income',
   'HealthScoreSnapshot',
