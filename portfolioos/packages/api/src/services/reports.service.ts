@@ -1,16 +1,15 @@
 import { Decimal } from 'decimal.js';
-import type { AssetClass, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { investmentIncome } from './investmentIncome.service.js';
 import {
   computePortfolioCapitalGains,
   computeUserCapitalGains,
   type CapitalGainRow,
-  financialYearOf,
 } from './capitalGains.service.js';
 import {
   computePortfolioXirr,
   computeRollingXirr,
+  computeUserRollingXirr,
   computeUserXirr,
 } from './xirr.service.js';
 import { priceAt } from './holdingsAsOf.service.js';
@@ -284,10 +283,10 @@ export async function portfolioSummary(portfolioId: string) {
       ]),
     ),
     xirr: {
-      overall: xirrOverall.xirr,
-      oneYear: xirr1y.xirr,
-      threeYear: xirr3y.xirr,
-      fiveYear: xirr5y.xirr,
+      overall: xirrOverall.reliable ? xirrOverall.xirr : null,
+      oneYear: xirr1y.reliable ? xirr1y.xirr : null,
+      threeYear: xirr3y.reliable ? xirr3y.xirr : null,
+      fiveYear: xirr5y.reliable ? xirr5y.xirr : null,
     },
   };
 }
@@ -454,40 +453,17 @@ export async function userSummary(userId: string) {
       ]),
     ),
     xirr: {
-      overall: xirrOverall.xirr,
-      oneYear: xirr1y.xirr,
-      threeYear: xirr3y.xirr,
-      fiveYear: xirr5y.xirr,
+      overall: xirrOverall.reliable ? xirrOverall.xirr : null,
+      oneYear: xirr1y.reliable ? xirr1y.xirr : null,
+      threeYear: xirr3y.reliable ? xirr3y.xirr : null,
+      fiveYear: xirr5y.reliable ? xirr5y.xirr : null,
     },
   };
 }
 
-// Rolling user-XIRR — mirrors computeRollingXirr() but at user scope.
+// Rolling user-XIRR solved on all portfolios' pooled cash flows (with the
+// holdings' value at the window start), the same figure /xirr shows.
 async function userRollingXirr(userId: string, years: 1 | 3 | 5) {
-  const to = new Date();
-  const from = new Date(to);
-  from.setUTCFullYear(from.getUTCFullYear() - years);
-  const ids = await listUserPortfolioIds(userId);
-  if (ids.length === 0) {
-    return { xirr: null as number | null };
-  }
-  const each = await Promise.all(ids.map((id) => computeRollingXirr(id, years)));
-  // Re-merge cashflows: each per-portfolio result already has summed terminal
-  // value within its window. We use a value-weighted average of the XIRRs by
-  // invested capital so a tiny side-portfolio doesn't skew the headline.
-  let weightedSum = 0;
-  let totalWeight = 0;
-  for (const e of each) {
-    if (e.xirr == null) continue;
-    const w = parseFloat(e.totalInvested);
-    if (!isFinite(w) || w <= 0) continue;
-    weightedSum += e.xirr * w;
-    totalWeight += w;
-  }
-  const blended = totalWeight > 0 ? weightedSum / totalWeight : null;
-  return {
-    xirr: blended,
-    from,
-    to,
-  };
+  const r = await computeUserRollingXirr(userId, years);
+  return { xirr: r.xirr, reliable: r.reliable };
 }

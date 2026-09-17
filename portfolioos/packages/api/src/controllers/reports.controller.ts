@@ -25,6 +25,7 @@ import {
 import {
   computePortfolioXirr,
   computeRollingXirr,
+  computeUserRollingXirr,
   computeUserXirr,
 } from '../services/xirr.service.js';
 import { persistCapitalGainsForPortfolio } from '../services/capitalGains.service.js';
@@ -272,17 +273,13 @@ export async function getUnrealised(req: Request, res: Response) {
 export async function getXirr(req: Request, res: Response) {
   const scope = await resolveScope(req);
   if (scope.kind === 'all') {
-    const overall = await computeUserXirr(scope.userId);
-    // Per-period XIRR across portfolios uses computeUserXirr-style aggregation
-    // by re-running with a windowed cashflow set; the simplest path is to
-    // expose only the headline number for "all" and leave 1/3/5Y rolling
-    // figures null. The Reports page already tolerates nulls (`fmtPct`).
-    ok(res, {
-      overall,
-      oneYear: { xirr: null, totalInvested: '0', terminalValue: '0', cashflowCount: 0 },
-      threeYear: { xirr: null, totalInvested: '0', terminalValue: '0', cashflowCount: 0 },
-      fiveYear: { xirr: null, totalInvested: '0', terminalValue: '0', cashflowCount: 0 },
-    });
+    const [overall, oneYear, threeYear, fiveYear] = await Promise.all([
+      computeUserXirr(scope.userId),
+      computeUserRollingXirr(scope.userId, 1),
+      computeUserRollingXirr(scope.userId, 3),
+      computeUserRollingXirr(scope.userId, 5),
+    ]);
+    ok(res, { overall, oneYear, threeYear, fiveYear });
     return;
   }
   const overall = await computePortfolioXirr(scope.portfolioId);

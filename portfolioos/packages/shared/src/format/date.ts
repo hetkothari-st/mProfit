@@ -26,10 +26,31 @@ export function toISODateString(input: Date | string): string {
   return d.toISOString().slice(0, 10);
 }
 
+const IST_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: IST_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+/**
+ * The calendar date in India (YYYY-MM-DD) for an instant. Date-only values
+ * stored as UTC midnight map to the same date; a timestamp late in the UTC day
+ * maps to the next Indian date, as an Indian user would read it — regardless
+ * of the server's own time zone.
+ */
+export function istCalendarDate(input: Date | string): string {
+  const d = typeof input === 'string' ? new Date(input) : input;
+  return IST_DATE.format(d);
+}
+
+/** Whole calendar days between two instants, counted on Indian dates. */
+export function calendarDaysBetweenIST(from: Date | string, to: Date | string): number {
+  const a = Date.parse(`${istCalendarDate(from)}T00:00:00Z`);
+  const b = Date.parse(`${istCalendarDate(to)}T00:00:00Z`);
+  return Math.round((b - a) / 86_400_000);
+}
+
 export function financialYearOf(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  const year = d.getFullYear();
-  const month = d.getMonth();
+  // Indian financial year of the Indian calendar date, independent of server time zone.
+  const [y, m] = istCalendarDate(date).split('-');
+  const year = Number.parseInt(y!, 10);
+  const month = Number.parseInt(m!, 10) - 1;
   if (month >= 3) {
     return `${year}-${String((year + 1) % 100).padStart(2, '0')}`;
   }

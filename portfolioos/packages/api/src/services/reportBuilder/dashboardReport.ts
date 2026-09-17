@@ -30,7 +30,7 @@ import ExcelJS from 'exceljs';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { fmtNum, fmtDate } from '../export.service.js';
-import { computePortfolioXirr } from '../xirr.service.js';
+import { computePortfolioXirr, computeUserXirr } from '../xirr.service.js';
 import { computePortfolioCapitalGains } from '../capitalGains.service.js';
 import { computePortfolioFoPnl } from '../foPnl.service.js';
 import { derivativePositionValue } from '../derivativePosition.service.js';
@@ -220,7 +220,10 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   let xirrPct: string | null = null;
   if (resolvedIds.length > 0) {
     try {
-      const x = await computePortfolioXirr(resolvedIds[0]!);
+      // One portfolio: its own XIRR; all portfolios: the pooled user XIRR.
+      const x = resolvedIds.length === 1
+        ? await computePortfolioXirr(resolvedIds[0]!)
+        : await computeUserXirr(params.userId);
       if (x.xirr != null) xirrPct = `${(x.xirr * 100).toFixed(2)}%`;
     } catch (err) {
       logger.warn({ err, portfolioId: resolvedIds[0] }, '[dashboardReport] XIRR omitted');

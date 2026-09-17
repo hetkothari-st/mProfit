@@ -57,6 +57,7 @@ import {
   ADVANCE_TAX_INSTALMENTS,
   CAPITAL_GAINS_KEY_DATES,
   CAPITAL_GAINS_RULE_SETS,
+  calendarDaysBetweenIST,
 } from '@everypaisa/shared';
 import {
   getTrialBalance,
@@ -1202,17 +1203,24 @@ export async function buildPerformanceLayout(userId: string): Promise<MprofitLay
   // per-portfolio breakdown plus the user roll-up in a single layout.
   const { computePortfolioXirr } = await import('../../xirr.service.js');
 
+  // Absolute return = current value + money received − money invested.
+  // XIRR under the minimum history is too volatile to show.
+  const xirrCell = (x: { xirr: number | null; reliable: boolean }) =>
+    x.xirr != null && x.reliable ? new Decimal(x.xirr).times(100).toFixed(2) : '—';
   const rows: BodyRowLite[] = [];
   let totalInvested = new Decimal(0);
   let totalValue = new Decimal(0);
+  let totalReceived = new Decimal(0);
   for (const p of portfolios) {
     const x = await computePortfolioXirr(p.id);
     const invested = new Decimal(x.totalInvested);
     const value = new Decimal(x.terminalValue);
-    const absRet = value.minus(invested);
+    const received = new Decimal(x.totalReceived);
+    const absRet = value.plus(received).minus(invested);
     const absPct = invested.greaterThan(0) ? absRet.dividedBy(invested).times(100) : new Decimal(0);
     totalInvested = totalInvested.plus(invested);
     totalValue = totalValue.plus(value);
+    totalReceived = totalReceived.plus(received);
     rows.push({
       cells: {
         name: p.name,
@@ -1221,13 +1229,13 @@ export async function buildPerformanceLayout(userId: string): Promise<MprofitLay
         value: value.toString(),
         absRet: absRet.toString(),
         absPct: absPct.toFixed(2),
-        xirr: x.xirr != null ? new Decimal(x.xirr).times(100).toFixed(2) : '—',
+        xirr: xirrCell(x),
       },
     });
   }
 
   const user = await computeUserXirr(userId);
-  const grandAbs = totalValue.minus(totalInvested);
+  const grandAbs = totalValue.plus(totalReceived).minus(totalInvested);
   const grandPct = totalInvested.greaterThan(0)
     ? grandAbs.dividedBy(totalInvested).times(100)
     : new Decimal(0);
@@ -1258,7 +1266,7 @@ export async function buildPerformanceLayout(userId: string): Promise<MprofitLay
         value: totalValue.toString(),
         absRet: grandAbs.toString(),
         absPct: grandPct.toFixed(2),
-        xirr: user.xirr != null ? new Decimal(user.xirr).times(100).toFixed(2) : '—',
+        xirr: xirrCell(user),
       },
     },
     filenameStem: `performance-xirr-${new Date().toISOString().slice(0, 10)}`,
@@ -4096,7 +4104,7 @@ export async function buildHoldingPeriodReturnLayout(
     const mv = h.currentValue != null ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
     const gl = mv.minus(cost);
     const buyDate = firstBuy.get(`${h.portfolioId}|${h.assetKey}`);
-    const days = buyDate ? Math.floor((cutoff.getTime() - buyDate.getTime()) / 86400000) : 0;
+    const days = buyDate ? calendarDaysBetweenIST(buyDate, cutoff) : 0;
     tQty = tQty.plus(qty);
     tAmt = tAmt.plus(cost);
     tMv = tMv.plus(mv);

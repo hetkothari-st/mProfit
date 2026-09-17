@@ -81,6 +81,8 @@ export interface XirrBlock {
   cashflowCount: number;
   // Money fields arrive as strings (§3.2); display via fmt() (Decimal-backed).
   totalInvested: string;
+  /** Sale/maturity proceeds, dividends and interest received. */
+  totalReceived?: string;
   terminalValue: string;
   spanDays?: number;
   reliable?: boolean;

@@ -53,7 +53,7 @@ export function isCurrent(asOf: Date | undefined | null): boolean {
 export async function holdingsAsOf(
   portfolioWhere: Prisma.PortfolioWhereInput,
   asOf?: Date | null,
-  extraWhere: { assetClass?: { in: AssetClass[] } } = {},
+  extraWhere: { assetClass?: AssetClass | { in: AssetClass[] }; stockId?: string; fundId?: string } = {},
 ): Promise<HoldingAsOf[]> {
   if (isCurrent(asOf)) {
     return prisma.holdingProjection.findMany({

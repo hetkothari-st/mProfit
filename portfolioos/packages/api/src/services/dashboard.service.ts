@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { financialYearOf, financialYearRange } from '@everypaisa/shared';
 import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@everypaisa/shared';
 import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
 import { outstandingLoansGiven } from './loansGiven.service.js';
@@ -37,9 +38,8 @@ function d(v: { toString(): string } | null | undefined): Decimal {
 }
 
 function fyStart(): Date {
-  const now = new Date();
-  const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-  return new Date(year, 3, 1); // April 1
+  // 1 April of the current Indian financial year, as a UTC date like stored trade dates.
+  return new Date(`${financialYearRange(financialYearOf(new Date())).from}T00:00:00Z`);
 }
 
 function daysUntil(date: Date): number {

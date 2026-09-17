@@ -21,7 +21,7 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
-import { Decimal } from '@everypaisa/shared';
+import { Decimal, istCalendarDate } from '@everypaisa/shared';
 import { pdfSafe } from '../charts/pdfCharts.js';
 import { DARK_THEME, LIGHT_THEME, hexToArgb, type ThemeName } from '../charts/pdfTheme.js';
 
@@ -175,9 +175,8 @@ export function fmtDateDDMMYYYY(v: unknown): string {
   const s = String(v);
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yy = d.getFullYear();
+  // Indian calendar date, so a stored date never shifts a day with the server time zone.
+  const [yy, mm, dd] = istCalendarDate(d).split('-');
   return `${dd}/${mm}/${yy}`;
 }
 
