@@ -189,11 +189,6 @@ export function LoginPage() {
         </div>
 
         <GoogleSignInButton text="signin_with" remember={watch('rememberMe') ?? true} />
-
-        <p className="text-xs text-center text-muted-foreground pt-2">
-          Demo credentials: <span className="font-mono">demo@everypaisa.in</span> /{' '}
-          <span className="font-mono">Demo@1234</span>
-        </p>
       </form>
     </AuthLayout>
   );
