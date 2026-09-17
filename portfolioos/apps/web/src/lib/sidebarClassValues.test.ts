@@ -10,7 +10,7 @@ function netWorth(partial: {
   }>;
   loans?: string;
   cards?: string;
-  cover?: string;
+  premium?: string;
 }): NetWorthResponse {
   return {
     allocationBreakdown: (partial.slices ?? []).map((s) => ({
@@ -25,7 +25,7 @@ function netWorth(partial: {
       totalOutstanding: partial.loans ?? '0',
       totalCreditCardOutstanding: partial.cards ?? '0',
     },
-    insurance: { totalSumAssured: partial.cover ?? '0' },
+    insurance: { annualPremiumTotal: partial.premium ?? '0' },
   } as unknown as NetWorthResponse;
 }
 
@@ -45,7 +45,7 @@ describe('computeSidebarValues', () => {
         ],
         loans: '2500000',
         cards: '35000.50',
-        cover: '10000000',
+        premium: '42000',
       }),
       bankBalances: ['120000', null, '30000'],
       ownedRealEstateValue: '9000000',
@@ -59,7 +59,7 @@ describe('computeSidebarValues', () => {
     expect(v.get('/bank-accounts')!.toString()).toBe('150000');
     expect(v.get('/loans')!.toString()).toBe('2500000');
     expect(v.get('/credit-cards')!.toString()).toBe('35000.5');
-    expect(v.get('/insurance')!.toString()).toBe('10000000');
+    expect(v.get('/insurance')!.toString()).toBe('42000');
   });
 
   it('counts a negative figure (e.g. F&O loss) by size', () => {
