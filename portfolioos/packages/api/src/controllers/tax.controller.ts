@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { ok } from '../lib/response.js';
 import { BadRequestError } from '../lib/errors.js';
+import { isValidFinancialYear } from '@everypaisa/shared';
 import { prisma } from '../lib/prisma.js';
 import {
   buildTaxSummary,
@@ -47,6 +48,7 @@ async function asSubject<T>(req: Request, fn: (userId: string) => Promise<T>): P
 function getFy(req: Request, required = false): string | undefined {
   const fy = (req.query.fy as string | undefined)?.trim();
   if (required && !fy) throw new BadRequestError('fy query param required (e.g. 2024-25)');
+  if (fy && !isValidFinancialYear(fy)) throw new BadRequestError(`Invalid financial year "${fy}" — expected consecutive years like 2025-26`);
   return fy || undefined;
 }
 

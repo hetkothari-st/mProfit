@@ -83,23 +83,51 @@ export async function buildProvidentFundStatement(
     },
   });
 
+  // Passbook rows land as canonical events (sourceRef = the account id), not
+  // as transactions, so the ledger and balance are read from there.
+  const events = accounts.length
+    ? await prisma.canonicalEvent.findMany({
+        where: {
+          userId,
+          sourceRef: { in: accounts.map((a) => a.id) },
+          eventType: { in: [...PF_EVENT_TYPES] },
+          status: { in: ['CONFIRMED', 'PROJECTED'] },
+        },
+        orderBy: { eventDate: 'asc' },
+        select: { sourceRef: true, eventType: true, eventDate: true, amount: true, metadata: true },
+      })
+    : [];
+  const eventsByAccount = new Map<string, typeof events>();
+  for (const e of events) {
+    const list = eventsByAccount.get(e.sourceRef) ?? [];
+    list.push(e);
+    eventsByAccount.set(e.sourceRef, list);
+  }
+
+  const balanceOf = (a: (typeof accounts)[number]): { balance: Decimal; asOf: Date | null } | null => {
+    if (a.currentBalance != null) return { balance: new Decimal(a.currentBalance.toString()), asOf: a.lastRefreshedAt };
+    const list = eventsByAccount.get(a.id) ?? [];
+    if (list.length === 0) return null;
+    return { balance: passbookBalance(list), asOf: list[list.length - 1]!.eventDate };
+  };
+  const balances = new Map(accounts.map((a) => [a.id, balanceOf(a)]));
+
   const rows = accounts.map((a) => ({
     type: TYPE_LABEL[a.type] ?? a.type,
     institution: a.institution.replace(/_/g, ' '),
     account: `••••${a.identifierLast4}`,
     holder: a.holderName,
     status: STATUS_LABEL[a.status] ?? a.status,
-    balance: a.currentBalance?.toString() ?? null,
-    // A never-refreshed account is not a zero balance; the column says so
-    // rather than showing a date that was never true.
-    asOf: a.lastRefreshedAt,
+    // No balance on file and no passbook rows: shown blank, never as zero.
+    balance: balances.get(a.id)?.balance.toString() ?? null,
+    asOf: balances.get(a.id)?.asOf ?? null,
   }));
 
-  const total = accounts.reduce(
-    (sum, a) => (a.currentBalance ? sum.plus(new Decimal(a.currentBalance.toString())) : sum),
-    new Decimal(0),
-  );
-  const unrefreshed = accounts.filter((a) => !a.lastRefreshedAt).length;
+  const total = accounts.reduce((sum, a) => {
+    const b = balances.get(a.id);
+    return b ? sum.plus(b.balance) : sum;
+  }, new Decimal(0));
+  const unrefreshed = accounts.filter((a) => !balances.get(a.id)).length;
 
   const sections: ExportSection[] = [];
 
@@ -128,48 +156,29 @@ export async function buildProvidentFundStatement(
     });
   }
 
-  // Contributions and interest, sourced from the canonical ledger the PF
-  // adapters project into — the same rows every other report reads, so a
-  // passbook here cannot disagree with the holdings statement.
-  const assetKeys = accounts.map((a) => a.assetKey);
-  if (assetKeys.length > 0) {
-    const movements = await prisma.transaction.findMany({
-      where: {
-        portfolio: { userId },
-        assetKey: { in: assetKeys },
-        ...(from || to
-          ? { tradeDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
-          : {}),
-      },
-      orderBy: { tradeDate: 'asc' },
-      select: {
-        tradeDate: true,
-        transactionType: true,
-        assetName: true,
-        netAmount: true,
-        narration: true,
-      },
+  // Contributions, interest and withdrawals from the passbook, in the period.
+  const accountLabel = new Map(accounts.map((a) => [a.id, `${a.type} ••••${a.identifierLast4}`]));
+  const inPeriod = events.filter(
+    (e) => (!from || e.eventDate >= from) && (!to || e.eventDate <= to),
+  );
+  if (inPeriod.length > 0) {
+    sections.push({
+      title: from || to ? 'Contributions and interest (selected period)' : 'Contributions and interest',
+      columns: [
+        { key: 'date', header: 'Date', width: 12, formatter: fmtDate },
+        { key: 'account', header: 'Account', width: 28 },
+        { key: 'kind', header: 'Type', width: 22 },
+        { key: 'amount', header: 'Amount', width: 16, formatter: (v) => fmtNum(v) },
+        { key: 'narration', header: 'Narration', width: 40 },
+      ],
+      rows: inPeriod.map((e) => ({
+        date: e.eventDate,
+        account: accountLabel.get(e.sourceRef) ?? '—',
+        kind: PF_EVENT_LABEL[e.eventType] ?? e.eventType,
+        amount: signedPfAmount(e.eventType, e.amount).toString(),
+        narration: (e.metadata as { notes?: string | null } | null)?.notes ?? '—',
+      })),
     });
-
-    if (movements.length > 0) {
-      sections.push({
-        title: from || to ? 'Contributions and interest (selected period)' : 'Contributions and interest',
-        columns: [
-          { key: 'date', header: 'Date', width: 12, formatter: fmtDate },
-          { key: 'account', header: 'Account', width: 28 },
-          { key: 'kind', header: 'Type', width: 16 },
-          { key: 'amount', header: 'Amount', width: 16, formatter: (v) => fmtNum(v) },
-          { key: 'narration', header: 'Narration', width: 40 },
-        ],
-        rows: movements.map((m) => ({
-          date: m.tradeDate,
-          account: m.assetName ?? '—',
-          kind: m.transactionType,
-          amount: m.netAmount.toString(),
-          narration: m.narration ?? '—',
-        })),
-      });
-    }
   }
 
   return {
@@ -192,10 +201,69 @@ export async function buildProvidentFundStatement(
       // Said plainly. A total that quietly omits accounts nobody has fetched
       // would read as complete when it is not.
       ...(unrefreshed > 0
-        ? { 'Never refreshed': `${unrefreshed} account(s) — balance not included` }
+        ? { 'No balance available': `${unrefreshed} account(s) — not included in the total` }
         : {}),
     },
     mainSectionLabel: 'Accounts',
     additionalSections: sections,
   };
+}
+
+const PF_EVENT_TYPES = [
+  'PF_OPENING_BALANCE',
+  'PF_EMPLOYEE_CONTRIBUTION',
+  'PF_EMPLOYER_CONTRIBUTION',
+  'PF_VPF_CONTRIBUTION',
+  'PF_INTEREST_CREDIT',
+  'PF_TRANSFER_IN',
+  'PF_TRANSFER_OUT',
+  'PF_WITHDRAWAL',
+] as const;
+
+const PF_EVENT_LABEL: Record<string, string> = {
+  PF_OPENING_BALANCE: 'Opening balance',
+  PF_EMPLOYEE_CONTRIBUTION: 'Employee contribution',
+  PF_EMPLOYER_CONTRIBUTION: 'Employer contribution',
+  PF_VPF_CONTRIBUTION: 'Voluntary contribution',
+  PF_INTEREST_CREDIT: 'Interest',
+  PF_TRANSFER_IN: 'Transfer in',
+  PF_TRANSFER_OUT: 'Transfer out',
+  PF_WITHDRAWAL: 'Withdrawal',
+};
+
+/** Money leaving the account is negative. */
+function signedPfAmount(type: string, amount: { toString(): string } | null): Decimal {
+  const value = new Decimal(amount?.toString() ?? '0').abs();
+  return type === 'PF_WITHDRAWAL' || type === 'PF_TRANSFER_OUT' ? value.negated() : value;
+}
+
+/**
+ * Balance from passbook rows. Each year's passbook restates the opening
+ * balance, so per member id (one per employer) the balance is its latest
+ * opening balance plus every movement from that date on — never a sum of
+ * every year's opening.
+ */
+export function passbookBalance(
+  events: Array<{ eventType: string; eventDate: Date; amount: { toString(): string } | null; metadata: unknown }>,
+): Decimal {
+  const byMember = new Map<string, typeof events>();
+  for (const e of events) {
+    const member = String((e.metadata as { memberIdLast4?: string | null } | null)?.memberIdLast4 ?? '');
+    const list = byMember.get(member) ?? [];
+    list.push(e);
+    byMember.set(member, list);
+  }
+  let total = new Decimal(0);
+  for (const list of byMember.values()) {
+    const openings = list.filter((e) => e.eventType === 'PF_OPENING_BALANCE');
+    const latest = openings[openings.length - 1];
+    const start = latest ? latest.eventDate.getTime() : Number.NEGATIVE_INFINITY;
+    let balance = latest ? signedPfAmount(latest.eventType, latest.amount) : new Decimal(0);
+    for (const e of list) {
+      if (e.eventType === 'PF_OPENING_BALANCE' || e.eventDate.getTime() < start) continue;
+      balance = balance.plus(signedPfAmount(e.eventType, e.amount));
+    }
+    total = total.plus(balance);
+  }
+  return total;
 }

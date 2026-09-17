@@ -65,10 +65,17 @@ export function financialYearOf(date: Date | string): string {
  * that in one place means a bundle and a single report can never disagree
  * about where a year starts.
  */
+/** True for a financial year written as consecutive years, e.g. "2025-26". */
+export function isValidFinancialYear(fy: string): boolean {
+  const match = /^(\d{4})-(\d{2})$/.exec(fy.trim());
+  if (!match) return false;
+  return Number.parseInt(match[2]!, 10) === (Number.parseInt(match[1]!, 10) + 1) % 100;
+}
+
 export function financialYearRange(fy: string): { from: string; to: string } {
   const match = /^(\d{4})-(\d{2})$/.exec(fy.trim());
-  if (!match) {
-    throw new Error(`Invalid financial year "${fy}" — expected the form 2025-26`);
+  if (!match || !isValidFinancialYear(fy)) {
+    throw new Error(`Invalid financial year "${fy}" — expected the form 2025-26 (consecutive years)`);
   }
   const startYear = Number.parseInt(match[1]!, 10);
   return { from: `${startYear}-04-01`, to: `${startYear + 1}-03-31` };

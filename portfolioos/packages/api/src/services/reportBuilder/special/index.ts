@@ -1449,16 +1449,16 @@ const EVENT_CASH_CATEGORY: Partial<Record<CanonicalEventType, string>> = {
 function describedCashCategory(dir: 'IN' | 'OUT', description: string | null): string {
   const d = (description ?? '').toLowerCase();
   if (dir === 'IN') {
-    if (/dividends?/.test(d)) return 'Dividend Received';
-    if (/interest/.test(d)) return 'Interest Received';
-    if (/rent(al)?/.test(d)) return 'Rental Income';
-    if (/maturity/.test(d)) return 'Maturity Proceeds';
+    if (/\bdividends?\b/.test(d)) return 'Dividend Received';
+    if (/\binterest\b/.test(d)) return 'Interest Received';
+    if (/\brent(al)?\b/.test(d)) return 'Rental Income';
+    if (/\bmaturity\b/.test(d)) return 'Maturity Proceeds';
     return 'Other Receipts';
   }
-  if (/premium/.test(d)) return 'Insurance Premium';
-  if (/(emi|loan)/.test(d)) return 'Loan / EMI';
-  if (/interest/.test(d)) return 'Interest Paid';
-  if (/rent/.test(d)) return 'Rent Paid';
+  if (/\bpremium\b/.test(d)) return 'Insurance Premium';
+  if (/\b(emi|loan)\b/.test(d)) return 'Loan / EMI';
+  if (/\binterest\b/.test(d)) return 'Interest Paid';
+  if (/\brent\b/.test(d)) return 'Rent Paid';
   return 'Other Payments';
 }
 

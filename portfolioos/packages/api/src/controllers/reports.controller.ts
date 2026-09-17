@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { ok } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { isValidFinancialYear } from '@everypaisa/shared';
 import {
   intradayReport,
   stcgReport,
@@ -88,8 +89,9 @@ async function resolveScope(req: Request, subjectUserId?: string): Promise<Repor
 }
 
 function getFy(req: Request): string | undefined {
-  const fy = req.query.fy as string | undefined;
-  return fy?.trim() || undefined;
+  const fy = (req.query.fy as string | undefined)?.trim() || undefined;
+  if (fy && !isValidFinancialYear(fy)) throw new BadRequestError(`Invalid financial year "${fy}" — expected consecutive years like 2025-26`);
+  return fy;
 }
 
 function getFormat(req: Request): 'json' | 'xlsx' | 'pdf' {
@@ -331,10 +333,12 @@ export async function getHoldingsExport(req: Request, res: Response) {
 
   // Verify ownership of every requested portfolio
   if (portfolioIds.length > 0) {
-    const owned = await prisma.portfolio.findMany({
-      where: { id: { in: portfolioIds }, userId },
-      select: { id: true },
-    });
+    const owned = await runForSubject(resolved.via, userId, () =>
+      prisma.portfolio.findMany({
+        where: { id: { in: portfolioIds }, userId },
+        select: { id: true },
+      }),
+    );
     const ownedSet = new Set(owned.map(p => p.id));
     for (const id of portfolioIds) {
       if (!ownedSet.has(id)) throw new ForbiddenError();
@@ -354,11 +358,14 @@ export async function getHoldingsExport(req: Request, res: Response) {
 
   const format = getFormat(req);
   const theme = parseThemeQuery(req.query.theme);
-  const { holdingsPayload, transactionsPayload, summaryTitle } = await buildHoldingsExport({
-    userId,
-    portfolioIds,
-    assetClasses,
-  });
+  // A family member's books are readable only as that member (RLS).
+  const { holdingsPayload, transactionsPayload, summaryTitle } = await runForSubject(resolved.via, userId, () =>
+    buildHoldingsExport({
+      userId,
+      portfolioIds,
+      assetClasses,
+    }),
+  );
   holdingsPayload.theme = theme;
   transactionsPayload.theme = theme;
 
@@ -469,13 +476,15 @@ export async function getDashboardExport(req: Request, res: Response) {
   const format = getFormat(req);
   const theme = parseThemeQuery(req.query.theme);
 
+  // A family member's books are readable only as that member (RLS), so the
+  // whole build runs in their context — not the caller's, which would see nothing.
   if (format === 'xlsx') {
-    await streamDashboardExcel(res, { userId, portfolioId, scope, theme });
+    await runForSubject(resolved.via, userId, () => streamDashboardExcel(res, { userId, portfolioId, scope, theme }));
     return;
   }
 
   // PDF (default)
-  await streamDashboardPdf(res, { userId, portfolioId, scope, theme });
+  await runForSubject(resolved.via, userId, () => streamDashboardPdf(res, { userId, portfolioId, scope, theme }));
 }
 
 // ─── Specialized section exports (Vehicles / Insurance / Loans / Credit Cards / Rental) ─────
@@ -1353,6 +1362,7 @@ export async function downloadProvidentFund(req: Request, res: Response) {
 export async function downloadFyBundle(req: Request, res: Response) {
   const fy = (req.query.fy as string | undefined)?.trim();
   if (!fy) throw new BadRequestError('fy query param required (e.g. 2025-26)');
+  if (fy && !isValidFinancialYear(fy)) throw new BadRequestError(`Invalid financial year "${fy}" — expected consecutive years like 2025-26`);
 
   const resolved = await resolveReportSubjects(req);
   const subject = requireSingleSubject(resolved, 'The financial-year bundle');

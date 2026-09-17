@@ -148,6 +148,11 @@ describe('cash flow statement', () => {
         data: { portfolioId: scope.portfolioId, date: new Date('2025-01-09'), type: 'OUTFLOW', amount: '1500', description: 'UPI to Torrent Power' },
       }),
     );
+    await runAsSystem(() =>
+      prisma.cashFlow.create({
+        data: { portfolioId: scope.portfolioId, date: new Date('2025-01-10'), type: 'INFLOW', amount: '25000', description: 'Rent for January' },
+      }),
+    );
     const layout = await runAsSystem(() => buildCashFlowStatementLayout(scope.userId, { from: '2025-01-01', to: '2025-01-31' }));
     const rows = allRows(layout);
     const inflow = (name: string) => rows.find((r) => r.cells['inParticulars'] === name)?.cells['inAmount'];
@@ -157,7 +162,8 @@ describe('cash flow statement', () => {
     expect(outflow('TO INVESTMENT PURCHASES')).toBe('80000');
     expect(outflow('TO OTHER PAYMENTS')).toBe('1500');
     expect(outflow('TO RENT PAID')).toBeUndefined();
-    expect(outflow('TO NET CASH SURPLUS C/F')).toBe('43500');
+    expect(inflow('BY RENTAL INCOME')).toBe('25000');
+    expect(outflow('TO NET CASH SURPLUS C/F')).toBe('68500');
   });
 });
 

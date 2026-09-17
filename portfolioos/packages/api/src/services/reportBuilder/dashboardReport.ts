@@ -25,6 +25,7 @@
 
 import { Decimal } from 'decimal.js';
 import type { Response } from 'express';
+import type { Transaction } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import { prisma } from '../../lib/prisma.js';
@@ -34,6 +35,7 @@ import { computePortfolioXirr, computeUserXirr } from '../xirr.service.js';
 import { computePortfolioCapitalGains } from '../capitalGains.service.js';
 import { computePortfolioFoPnl } from '../foPnl.service.js';
 import { derivativePositionValue } from '../derivativePosition.service.js';
+import { replayTransactions } from '../holdingsProjection.js';
 import { getDashboardNetWorth } from '../dashboard.service.js';
 import {
   drawPieChart,
@@ -232,9 +234,8 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
 
   // ─── Historical line (monthly cost basis) ───────────────────────────────────
   const allTxns = await prisma.transaction.findMany({
-    where: { portfolioId: { in: resolvedIds } },
+    where: { portfolioId: { in: resolvedIds }, assetClass: { notIn: ['FUTURES', 'OPTIONS'] } },
     orderBy: { tradeDate: 'asc' },
-    select: { tradeDate: true, netAmount: true, transactionType: true },
   });
   const historicalLine = buildHistoricalLine(allTxns);
 
@@ -375,7 +376,10 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     ...(foTotalValue.greaterThan(0) ? [{
       label: 'F&O Open Positions',
       value: foTotalValue.toString(),
-      percent: ((foTotalValue.toNumber() / (parseFloat(nw.totalNetWorth) + foTotalValue.toNumber())) * 100).toFixed(1),
+      percent: (() => {
+        const whole = new Decimal(nw.totalNetWorth).plus(foTotalValue);
+        return whole.isZero() ? '0.0' : foTotalValue.dividedBy(whole).times(100).toFixed(1);
+      })(),
       category: 'F&O',
     }] : []),
   ];
@@ -918,24 +922,37 @@ function drawTable(
   return cy + 8;
 }
 
-function buildHistoricalLine(
-  txns: { tradeDate: Date; netAmount: { toString(): string }; transactionType: string }[],
-): LineDatum[] {
+/**
+ * Cost of the holdings still held at each of the last 24 month-ends: every
+ * asset replayed through the holdings projection, so a sale removes the cost
+ * of what was sold (not its proceeds) and bonus/split units add none. F&O
+ * contracts are excluded — their notional is not money invested.
+ */
+function buildHistoricalLine(txns: Transaction[]): LineDatum[] {
   if (txns.length < 2) return [];
-  const BUY_TYPES = new Set(['BUY', 'SIP', 'SWITCH_IN', 'DEPOSIT', 'OPENING_BALANCE', 'BONUS', 'DIVIDEND_REINVEST']);
-  const SELL_TYPES = new Set(['SELL', 'REDEMPTION', 'SWITCH_OUT', 'MATURITY', 'WITHDRAWAL']);
-  const byMonth = new Map<string, Decimal>();
-  let running = new Decimal(0);
+  const byAsset = new Map<string, Transaction[]>();
   for (const t of txns) {
-    const key = t.tradeDate.toISOString().slice(0, 7);
-    const amt = d(t.netAmount).abs();
-    if (BUY_TYPES.has(t.transactionType))  running = running.plus(amt);
-    if (SELL_TYPES.has(t.transactionType)) running = Decimal.max(running.minus(amt), new Decimal(0));
-    byMonth.set(key, running);
+    const key = `${t.portfolioId}|${t.assetKey ?? t.assetName ?? ''}`;
+    const list = byAsset.get(key);
+    if (list) list.push(t);
+    else byAsset.set(key, [t]);
   }
-  return Array.from(byMonth.entries())
-    .slice(-24)
-    .map(([month, val]) => ({ label: month.slice(2), value: val.toNumber() }));
+  const first = txns[0]!.tradeDate;
+  const now = new Date();
+  const monthEnds: Date[] = [];
+  for (let i = 23; i >= 0; i--) {
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 0, 23, 59, 59, 999));
+    if (end >= new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), 1))) monthEnds.push(end);
+  }
+  return monthEnds.map((end) => {
+    let cost = new Decimal(0);
+    for (const list of byAsset.values()) {
+      const upTo = list.filter((t) => t.tradeDate <= end);
+      if (upTo.length > 0) cost = cost.plus(replayTransactions(upTo).totalCost);
+    }
+    // Chart axis only: the figure is drawn, not added up.
+    return { label: end.toISOString().slice(2, 7), value: cost.toNumber() };
+  });
 }
 
 async function validateScope(params: DashboardReportParams): Promise<void> {
