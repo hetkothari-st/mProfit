@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import type { AssetClass } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { investmentIncome } from './investmentIncome.service.js';
 import {
@@ -165,11 +166,36 @@ export interface HistoricalValuationPoint {
   cost: string;
   value: string;
   holdings: number;
+  /**
+   * Per-holding quantity and snapshot price. Only present when requested with
+   * `{ positions: true }`; used to derive per-asset-class returns without
+   * re-running the valuation.
+   */
+  positions?: HistoricalPosition[];
+  /**
+   * Holdings whose quantity changed by a corporate action (split, bonus,
+   * merger, demerger) since the previous snapshot. A period return computed
+   * across one of these would read the share-count change as a price move.
+   */
+  corporateActionKeys?: string[];
 }
+
+export interface HistoricalPosition {
+  key: string;
+  assetClass: AssetClass;
+  quantity: string;
+  /** Historical price at the snapshot, or null when no price feed covers it. */
+  price: string | null;
+}
+
+const CORPORATE_ACTION_TYPES = new Set([
+  'SPLIT', 'BONUS', 'MERGER_IN', 'MERGER_OUT', 'DEMERGER_IN', 'DEMERGER_OUT',
+]);
 
 export async function historicalValuation(
   portfolioId: string,
   granularity: 'MONTHLY' | 'QUARTERLY' = 'MONTHLY',
+  opts: { positions?: boolean } = {},
 ): Promise<{ points: HistoricalValuationPoint[] }> {
   const txs = await prisma.transaction.findMany({
     where: { portfolioId },
@@ -204,12 +230,18 @@ export async function historicalValuation(
   }
 
   const points: HistoricalValuationPoint[] = [];
+
+  // Tracked across snapshots so a corporate action is attributed to the period
+  // it happened in, not to every snapshot after it.
+  let previousSnap: Date | null = null;
   for (const snap of snapshotDates) {
     const endOfSnap = new Date(snap.getTime() + 86_400_000 - 1);
+    const positions: HistoricalPosition[] = [];
+    const corporateActionKeys = new Set<string>();
     let totalCost = new Decimal(0);
     let totalValue = new Decimal(0);
     let holdingCount = 0;
-    for (const list of byAsset.values()) {
+    for (const [key, list] of byAsset.entries()) {
       const upTo = list.filter((t) => t.tradeDate.getTime() <= endOfSnap.getTime());
       if (upTo.length === 0) continue;
       const agg = replayTransactions(upTo);
@@ -229,13 +261,32 @@ export async function historicalValuation(
       };
       const price = !foreign && agg.quantity.greaterThan(0) ? await priceAt(meta, endOfSnap) : null;
       totalValue = totalValue.plus(price ? agg.quantity.times(price) : agg.totalCost);
+
+      if (opts.positions && agg.quantity.greaterThan(0)) {
+        positions.push({
+          key,
+          assetClass: meta.assetClass,
+          quantity: agg.quantity.toString(),
+          price: price ? price.toString() : null,
+        });
+        // A split or bonus in this period changes the share count, which a
+        // period return would otherwise read as a price move.
+        const hadAction = upTo.some(
+          (t) =>
+            CORPORATE_ACTION_TYPES.has(t.transactionType) &&
+            (previousSnap === null || t.tradeDate > previousSnap),
+        );
+        if (hadAction) corporateActionKeys.add(key);
+      }
     }
     points.push({
       date: snap,
       cost: totalCost.toString(),
       value: totalValue.toString(),
       holdings: holdingCount,
+      ...(opts.positions && { positions, corporateActionKeys: [...corporateActionKeys] }),
     });
+    previousSnap = snap;
   }
 
   return { points };
