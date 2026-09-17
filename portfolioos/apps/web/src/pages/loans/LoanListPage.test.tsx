@@ -54,6 +54,8 @@ const SUMMARY: LoanSummaryDTO = {
   totalInterestPaid: '738000.00',
   nextEmiDate: '2026-10-05',
   nextEmiAmount: '43391.16',
+  paidEmiCount: 28,
+  scheduledEmiCount: 240,
   remainingEmiCount: 212,
   remainingTenureMonths: 212,
   totalInterestPayable: '5413878.40',
@@ -109,8 +111,18 @@ describe('Loan card', () => {
     const card = await findCard();
     expect(within(card).getByText('Outstanding')).toBeTruthy();
     expect(await within(card).findByText(/45,23,000\.12/)).toBeTruthy();
-    // 28 paid of 28 + 212 remaining.
+    // 28 of the 240 scheduled EMIs paid.
     expect(within(card).getByRole('img', { name: '12% repaid' })).toBeTruthy();
+  });
+
+  it('tracks a 20-year loan in yearly blocks with an instalments-done bar', async () => {
+    renderPage();
+    const card = await findCard();
+    await within(card).findByText(/45,23,000\.12/);
+    expect(within(card).getByRole('img', { name: '12% repaid' }).children).toHaveLength(20);
+    expect(within(card).getByText('Each block = 1 year')).toBeTruthy();
+    const bar = within(card).getByRole('progressbar', { name: 'Instalments done' });
+    expect(bar.getAttribute('aria-valuetext')).toBe('28 of 240 instalments done');
   });
 
   it('shows principal, tenure, EMI, next EMI, EMIs left and paid so far', async () => {

@@ -22,6 +22,7 @@ import { Decimal, formatINR } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/cn';
 import { LoansGivenTab } from './given/LoansGivenTab';
+import { InstallmentProgress, InstallmentTracker } from './InstallmentTracker';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -115,7 +116,6 @@ function SummaryStrip({ loans }: { loans: LoanDTO[] }) {
 // segmented bar that fills as EMIs are paid, and the terms.
 
 const LOAN_FALLBACK = '#475569'; // slate, for lenders outside the bank list
-const PAYOFF_SEGMENTS = 40;
 
 const LOAN_TYPE_ICONS: Record<string, LucideIcon> = {
   HOME: Home,
@@ -127,27 +127,6 @@ const LOAN_TYPE_ICONS: Record<string, LucideIcon> = {
   LAS: TrendingUp,
   OTHER: Landmark,
 };
-
-function PayoffBar({ pct, accent }: { pct: number; accent: string }) {
-  const p = Math.min(100, Math.max(0, pct));
-  const filled = Math.round((p / 100) * PAYOFF_SEGMENTS);
-  return (
-    <div
-      role="img"
-      aria-label={`${Math.round(p)}% repaid`}
-      title={`${Math.round(p)}% repaid`}
-      className="flex gap-[3px]"
-    >
-      {Array.from({ length: PAYOFF_SEGMENTS }, (_, i) => (
-        <span
-          key={i}
-          className={`h-2.5 flex-1 rounded-[2px] ${i < filled ? '' : 'bg-muted'}`}
-          style={i < filled ? { background: accent } : undefined}
-        />
-      ))}
-    </div>
-  );
-}
 
 const STUB_BUTTON =
   '-m-1 rounded p-1 text-white/65 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60';
@@ -175,10 +154,12 @@ function LoanCard({
     enabled: active,
   });
 
-  const emiCount = loan.payments.filter((p) => p.paymentType === 'EMI').length;
+  // The list only carries a loan's latest few payments, so the count of EMIs
+  // paid comes from the summary's schedule once it has loaded.
+  const emiCount = summary?.paidEmiCount ?? loan.payments.filter((p) => p.paymentType === 'EMI').length;
   const tenure = loan.tenureMonths;
   // A prepayment that reduces tenure shortens the plan; count against that.
-  const plan = summary ? emiCount + summary.remainingEmiCount : tenure;
+  const plan = summary?.scheduledEmiCount ?? tenure;
   const progress = active ? (plan > 0 ? Math.min(100, (emiCount / plan) * 100) : 0) : 100;
   const emisLeft = summary ? summary.remainingEmiCount : Math.max(0, tenure - emiCount);
 
@@ -298,7 +279,7 @@ function LoanCard({
           </div>
 
           <div>
-            <PayoffBar pct={progress} accent={accent} />
+            <InstallmentTracker done={active ? emiCount : plan} total={plan} accent={accent} />
             <div className="mt-2 flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
               <span>First EMI {formatDate(firstEmi)}</span>
               {lastEmi && <span>Last EMI {formatDate(lastEmi)}</span>}
@@ -335,6 +316,8 @@ function LoanCard({
               <span className="money-digits">{paidSoFar ? formatINR(paidSoFar.toString()) : '—'}</span>
             </Figure>
           </div>
+
+          <InstallmentProgress done={active ? emiCount : plan} total={plan} accent={accent} />
 
           <p className="truncate border-t border-dashed border-border/70 pt-3 text-xs text-muted-foreground">
             {owner}
