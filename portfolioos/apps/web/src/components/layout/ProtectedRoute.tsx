@@ -15,7 +15,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   // token but no user. That is a resuming session, not a signed-out one:
   // fetch the profile rather than bouncing to /login.
   const meQuery = useQuery({
-    queryKey: ['auth-me'],
+    // Keyed by the token: the answer is about *this* session. Without it, a
+    // 401 cached for an expired token outlived a later sign-in in the same
+    // page and wiped the new session the moment it reached this route.
+    queryKey: ['auth-me', accessToken],
     queryFn: () => authApi.me(),
     enabled: Boolean(accessToken) && !user,
     retry: false,
@@ -27,9 +30,11 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }, [meQuery.data, setUser]);
 
   useEffect(() => {
-    // A token /me rejects is not a token worth keeping.
-    if (meQuery.isError) clearSession();
-  }, [meQuery.isError, clearSession]);
+    // A token /me rejects is not a token worth keeping — but only while that
+    // token is still being resolved. A session that already has its profile
+    // (a fresh sign-in sets both) is never discarded on a /me error.
+    if (meQuery.isError && !user) clearSession();
+  }, [meQuery.isError, user, clearSession]);
 
   if (!accessToken) {
     return <Navigate to="/login" replace state={{ from: location }} />;
