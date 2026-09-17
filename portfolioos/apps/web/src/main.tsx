@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider, hashKey } from '@tanstack/react-query
 import { Toaster } from 'react-hot-toast';
 import { App } from './App';
 import { useFamilyScopeStore } from './stores/familyScope.store';
+import { bindSessionBoundary } from './lib/sessionBoundary';
 import './styles/globals.css';
 
 /**
@@ -46,6 +47,10 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Empty the cache whenever the signed-in account ends or changes, so no
+// screen can render another account's data. See lib/sessionBoundary.ts.
+bindSessionBoundary(queryClient);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
