@@ -12,7 +12,8 @@ import {
   computeRollingXirr,
   computeUserXirr,
 } from './xirr.service.js';
-import { getCryptoPriceAt } from '../priceFeeds/crypto.service.js';
+import { priceAt } from './holdingsAsOf.service.js';
+import { replayTransactions } from './holdingsProjection.js';
 import { grandfatheredCost } from './specialReports.service.js';
 import { listedEquityLtcgExemptionFor } from '@everypaisa/shared';
 import { computeCapitalGainsTax } from './taxComputation.js';
@@ -161,7 +162,8 @@ export async function unrealisedReport(portfolioId: string) {
   let totalValue = new Decimal(0);
   const rows = holdings.map((h) => {
     const cost = new Decimal(h.totalCost.toString());
-    const value = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+    // Unpriced holdings are carried at cost (as on the dashboard), not at 0.
+    const value = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
     totalCost = totalCost.plus(cost);
     totalValue = totalValue.plus(value);
     const pnl = value.minus(cost);
@@ -224,81 +226,44 @@ export async function historicalValuation(
     cursor.setUTCMonth(cursor.getUTCMonth() + step);
   }
 
-  // For each snapshot date, compute running quantity + cost per asset key.
-  // Value = qty * price at that date from historical feeds; falls back to cost.
-  const keyMap = new Map<
-    string,
-    { assetClass: AssetClass; stockId: string | null; fundId: string | null; isin: string | null }
-  >();
+  // Each snapshot replays every holding (keyed by its own assetKey) through
+  // the projection's replay, so cost is INR and splits, bonuses and exits match
+  // the live holdings. Value = quantity × stored price on that date, else cost.
+  const byAsset = new Map<string, typeof txs>();
   for (const t of txs) {
-    const k = valuationKeyOf(t);
-    if (!keyMap.has(k)) {
-      keyMap.set(k, {
-        assetClass: t.assetClass,
-        stockId: t.stockId,
-        fundId: t.fundId,
-        isin: t.isin,
-      });
-    }
+    const key = t.assetKey ?? `name:${t.assetName ?? ''}`;
+    const list = byAsset.get(key);
+    if (list) list.push(t);
+    else byAsset.set(key, [t]);
   }
 
   const points: HistoricalValuationPoint[] = [];
-
   for (const snap of snapshotDates) {
-    // Running totals by key
-    const qty = new Map<string, Decimal>();
-    const cost = new Map<string, Decimal>();
-    for (const t of txs) {
-      if (t.tradeDate > snap) break;
-      const k = valuationKeyOf(t);
-      const q = new Decimal(t.quantity.toString());
-      const n = new Decimal(t.netAmount.toString());
-      const curQ = qty.get(k) ?? new Decimal(0);
-      const curC = cost.get(k) ?? new Decimal(0);
-      // Must mirror BUY_TYPES / SELL_TYPES in holdingsProjection.ts. DEPOSIT
-      // covers FDs / EPF / insurance / salary imports — without it those
-      // holdings never enter `qty`/`cost` and the chart flatlines at zero
-      // even when the live projection shows them. BONUS adds qty only.
-      if (['BUY', 'SIP', 'SWITCH_IN', 'BONUS', 'MERGER_IN', 'DEMERGER_IN', 'RIGHTS_ISSUE', 'DIVIDEND_REINVEST', 'OPENING_BALANCE', 'DEPOSIT'].includes(t.transactionType)) {
-        qty.set(k, curQ.plus(q));
-        if (t.transactionType !== 'BONUS') {
-          cost.set(k, curC.plus(n));
-        }
-      } else if (['SELL', 'SWITCH_OUT', 'REDEMPTION', 'MATURITY', 'MERGER_OUT', 'DEMERGER_OUT', 'WITHDRAWAL'].includes(t.transactionType)) {
-        if (curQ.greaterThan(0)) {
-          const sellQ = Decimal.min(q, curQ);
-          const avg = curC.dividedBy(curQ);
-          const newQ = curQ.minus(sellQ);
-          const newC = curC.minus(avg.times(sellQ));
-          qty.set(k, newQ.isNegative() ? new Decimal(0) : newQ);
-          cost.set(k, newC.isNegative() ? new Decimal(0) : newC);
-        }
-      } else if (t.transactionType === 'SPLIT') {
-        qty.set(k, curQ.plus(q));
-      }
-    }
-
+    const endOfSnap = new Date(snap.getTime() + 86_400_000 - 1);
     let totalCost = new Decimal(0);
     let totalValue = new Decimal(0);
     let holdingCount = 0;
-    for (const [k, q] of qty) {
-      const c = cost.get(k) ?? new Decimal(0);
-      // Skip truly closed positions only. Non-tradable holdings (FDs, real
-      // estate, insurance) may have qty equal to principal AND no live price
-      // feed — the cost basis IS the value at any historical snapshot.
-      if (q.lessThanOrEqualTo(0) && c.lessThanOrEqualTo(0)) continue;
+    for (const list of byAsset.values()) {
+      const upTo = list.filter((t) => t.tradeDate.getTime() <= endOfSnap.getTime());
+      if (upTo.length === 0) continue;
+      const agg = replayTransactions(upTo);
+      // Closed positions drop out; cost-only holdings (FDs, property) stay.
+      if (agg.quantity.lessThanOrEqualTo(0) && agg.totalCost.lessThanOrEqualTo(0)) continue;
       holdingCount++;
-      totalCost = totalCost.plus(c);
-
-      const meta = keyMap.get(k)!;
-      const price = q.greaterThan(0) ? await priceAt(meta, snap) : null;
-      if (price) {
-        totalValue = totalValue.plus(q.times(price));
-      } else {
-        totalValue = totalValue.plus(c); // fallback to cost
-      }
+      totalCost = totalCost.plus(agg.totalCost);
+      const foreign = upTo.some((t) => {
+        const c = (t as typeof t & { currency?: string | null }).currency;
+        return !!c && c !== 'INR';
+      });
+      const meta = {
+        assetClass: upTo[0]!.assetClass,
+        stockId: upTo.find((t) => t.stockId)?.stockId ?? null,
+        fundId: upTo.find((t) => t.fundId)?.fundId ?? null,
+        isin: upTo.find((t) => t.isin)?.isin ?? null,
+      };
+      const price = !foreign && agg.quantity.greaterThan(0) ? await priceAt(meta, endOfSnap) : null;
+      totalValue = totalValue.plus(price ? agg.quantity.times(price) : agg.totalCost);
     }
-
     points.push({
       date: snap,
       cost: totalCost.toString(),
@@ -308,45 +273,6 @@ export async function historicalValuation(
   }
 
   return { points };
-}
-
-/**
- * Stable per-holding key for historical valuation. Stocks/funds key on their
- * master id; crypto (which has neither) keys on its CoinGecko slug stored in
- * `isin`, so distinct coins don't collapse into one bucket.
- */
-function valuationKeyOf(t: {
-  assetClass: AssetClass;
-  stockId: string | null;
-  fundId: string | null;
-  isin: string | null;
-}): string {
-  const cryptoSlug = !t.stockId && !t.fundId ? (t.isin ?? '') : '';
-  return `${t.assetClass}|${t.stockId ?? ''}|${t.fundId ?? ''}|${cryptoSlug}`;
-}
-
-async function priceAt(
-  meta: { assetClass: AssetClass; stockId: string | null; fundId: string | null; isin: string | null },
-  date: Date,
-): Promise<Decimal | null> {
-  if (meta.fundId) {
-    const row = await prisma.mFNav.findFirst({
-      where: { fundId: meta.fundId, date: { lte: date } },
-      orderBy: { date: 'desc' },
-    });
-    return row ? new Decimal(row.nav.toString()) : null;
-  }
-  if (meta.stockId) {
-    const row = await prisma.stockPrice.findFirst({
-      where: { stockId: meta.stockId, date: { lte: date } },
-      orderBy: { date: 'desc' },
-    });
-    return row ? new Decimal(row.close.toString()) : null;
-  }
-  if (meta.assetClass === 'CRYPTOCURRENCY' && meta.isin) {
-    return getCryptoPriceAt(meta.isin, date);
-  }
-  return null;
 }
 
 // ─── Portfolio summary ─────────────────────────────────────────────
@@ -488,7 +414,8 @@ export async function userUnrealisedReport(userId: string) {
   let totalValue = new Decimal(0);
   const rows = holdings.map((h) => {
     const cost = new Decimal(h.totalCost.toString());
-    const value = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+    // Unpriced holdings are carried at cost (as on the dashboard), not at 0.
+    const value = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(h.totalCost.toString());
     totalCost = totalCost.plus(cost);
     totalValue = totalValue.plus(value);
     const pnl = value.minus(cost);

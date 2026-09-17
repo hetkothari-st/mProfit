@@ -198,8 +198,8 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
       portfolioId: { in: resolvedIds },
       ...(classFilter ? { assetClass: { in: classFilter } } : {}),
     },
+    // Every transaction: income received below is built from this list too.
     orderBy: { tradeDate: 'desc' },
-    take: 2000,
   });
 
   const txnColumns: ExportColumn[] = [

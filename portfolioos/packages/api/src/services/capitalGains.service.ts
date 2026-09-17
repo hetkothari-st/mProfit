@@ -377,6 +377,8 @@ export interface OpenPosition {
   assetKey: string;
   assetClass: AssetClass;
   fundId: string | null;
+  isin: string | null;
+  assetName: string;
   lots: OpenLot[];
 }
 
@@ -392,6 +394,8 @@ export function computeOpenLots(
       assetKey: key.slice(g.portfolioId.length + 1),
       assetClass: g.assetClass,
       fundId: g.fundId,
+      isin: g.isin,
+      assetName: g.assetName,
       lots: g.lots
         .filter((l) => l.qty.greaterThan(0))
         .map((l) => ({ buyDate: l.buyDate, quantity: l.qty, costPerUnit: l.costPerUnit })),

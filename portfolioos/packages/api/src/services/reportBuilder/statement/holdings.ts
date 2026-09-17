@@ -11,6 +11,7 @@
  *   Market Value · Unrealised P&L · % of Portfolio
  */
 
+import { holdingsAsOf, sortHoldings } from '../../holdingsAsOf.service.js';
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
@@ -53,17 +54,19 @@ export async function buildHoldingsStatement(
   const portfolioIds = portfolios.map((p) => p.id);
   const portfolioName = new Map(portfolios.map((p) => [p.id, p.name] as const));
 
-  const holdings = await prisma.holdingProjection.findMany({
-    where: { portfolioId: { in: portfolioIds } },
-    orderBy: [{ portfolioId: 'asc' }, { assetClass: 'asc' }, { assetName: 'asc' }],
-  });
+  // Positions as they stood on the statement date, not today's.
+  const holdings = sortHoldings(
+    await holdingsAsOf({ id: { in: portfolioIds } }, params.asOf),
+    ['portfolioId', 'assetClass', 'assetName'],
+  );
 
   // Totals (used for percentage allocation + footer cards).
   let totalCost = new Decimal(0);
   let totalValue = new Decimal(0);
   for (const h of holdings) {
     totalCost = totalCost.plus(new Decimal(h.totalCost.toString()));
-    if (h.currentValue) totalValue = totalValue.plus(new Decimal(h.currentValue.toString()));
+    // Unpriced holdings at cost, so totals match the rows and the dashboard.
+    totalValue = totalValue.plus(new Decimal((h.currentValue ?? h.totalCost).toString()));
   }
   const totalPnl = totalValue.minus(totalCost);
 
@@ -103,7 +106,7 @@ export async function buildHoldingsStatement(
     let sectionValue = new Decimal(0);
     for (const h of rows) {
       const cost = new Decimal(h.totalCost.toString());
-      const val = h.currentValue ? new Decimal(h.currentValue.toString()) : new Decimal(0);
+      const val = new Decimal((h.currentValue ?? h.totalCost).toString());
       const pnl = val.minus(cost);
       sectionCost = sectionCost.plus(cost);
       sectionValue = sectionValue.plus(val);
@@ -115,9 +118,9 @@ export async function buildHoldingsStatement(
         avgCost: fmtNum(new Decimal(h.avgCostPrice.toString()).toFixed(4)),
         invested: fmtNum(cost.toFixed(2)),
         price: h.currentPrice ? fmtNum(new Decimal(h.currentPrice.toString()).toFixed(4)) : '—',
-        marketValue: h.currentValue ? fmtNum(val.toFixed(2)) : '—',
-        pnl: h.currentValue ? `${pnl.gte(0) ? '' : ''}${fmtNum(pnl.toFixed(2))}` : '—',
-        allocPct: totalValue.gt(0) && h.currentValue
+        marketValue: h.currentValue ? fmtNum(val.toFixed(2)) : `${fmtNum(val.toFixed(2))} (at cost)`,
+        pnl: h.currentValue ? fmtNum(pnl.toFixed(2)) : '—',
+        allocPct: totalValue.gt(0)
           ? `${val.div(totalValue).times(100).toFixed(2)}%`
           : '—',
       });
