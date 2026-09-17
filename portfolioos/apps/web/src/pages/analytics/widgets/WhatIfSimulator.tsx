@@ -8,6 +8,7 @@ import type { HoldingRow } from '@everypaisa/shared';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { analyticsApi } from '@/api/analytics.api';
 import { apiErrorMessage } from '@/api/client';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 /**
  * 3c — What-if sale simulator. Pick a holding, enter a hypothetical sell
@@ -43,7 +44,7 @@ export function WhatIfSimulator() {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Scenario</p>
-        <CardTitle className="flex items-center gap-2"><FlaskConical className="h-4 w-4" /> What-if: simulate a sale</CardTitle>
+        <CardTitle className="flex items-center gap-2"><FlaskConical className="h-4 w-4" /> What-if: simulate a sale<AnalyticsInfo k="whatIf" /></CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">

@@ -2,6 +2,7 @@ import { TrendingUp, Wallet, LineChart as LineChartIcon, Percent, ArrowDownToLin
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { formatINR, formatPercent, toDecimal } from '@everypaisa/shared';
 import type { KpiBlock } from '@/api/analytics.api';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 function pct(v: number | null, digits = 2): string {
   if (v == null) return '—';
@@ -19,12 +20,14 @@ export function KpiCards({ kpis }: { kpis: KpiBlock }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <MetricCard
         label="Current value"
+        info={<AnalyticsInfo k="currentValue" />}
         value={formatINR(kpis.currentValue)}
         icon={Wallet}
         hint={`Invested ${formatINR(kpis.totalCost)}`}
       />
       <MetricCard
         label="Unrealised P&L"
+        info={<AnalyticsInfo k="unrealisedPnl" />}
         value={formatINR(kpis.unrealisedPnL, { showSign: true })}
         icon={LineChartIcon}
         trend={{
@@ -34,6 +37,7 @@ export function KpiCards({ kpis }: { kpis: KpiBlock }) {
       />
       <MetricCard
         label="XIRR overall"
+        info={<AnalyticsInfo k="xirrOverall" />}
         // Only suppress when the API explicitly flags it unreliable. If the
         // field is absent (older API build / version skew) fall back to showing
         // the value rather than a bare "—".
@@ -51,6 +55,7 @@ export function KpiCards({ kpis }: { kpis: KpiBlock }) {
       />
       <MetricCard
         label="Realised P&L (FY)"
+        info={<AnalyticsInfo k="realisedPnlFy" />}
         value={formatINR(kpis.realisedYtd, { showSign: true })}
         icon={Percent}
         trend={{
@@ -60,12 +65,14 @@ export function KpiCards({ kpis }: { kpis: KpiBlock }) {
       />
       <MetricCard
         label="Income (FY)"
+        info={<AnalyticsInfo k="incomeFy" />}
         value={formatINR(kpis.incomeYtd)}
         icon={ArrowDownToLine}
         hint="Dividends + interest + maturity"
       />
       <MetricCard
         label="Total returns"
+        info={<AnalyticsInfo k="totalReturns" />}
         value={formatINR(unrealisedD.plus(realisedD).toFixed(4), { showSign: true })}
         icon={Receipt}
         hint="Unrealised + realised (FY)"

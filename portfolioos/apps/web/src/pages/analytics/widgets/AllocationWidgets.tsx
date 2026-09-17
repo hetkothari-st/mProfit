@@ -7,6 +7,7 @@ import type {
   SectorSlice,
 } from '@/api/analytics.api';
 import { CHART_COLORS, colorFor } from '../chartColors';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 const TOOLTIP_STYLE = {
   background: 'hsl(var(--popover))',
@@ -27,7 +28,7 @@ export function AllocationByClassPie({ slices }: ClassPieProps) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Composition</p>
-        <CardTitle>Allocation by class</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Allocation by class<AnalyticsInfo k="allocationByClass" /></CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -136,7 +137,7 @@ export function AllocationTreemap({ nodes }: TreemapProps) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Holdings</p>
-        <CardTitle>Allocation by holding</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Allocation by holding<AnalyticsInfo k="allocationByHolding" /></CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -181,7 +182,7 @@ export function SectorPie({ slices }: SectorPieProps) {
     <Card>
       <CardHeader className="pb-2">
         <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Equity exposure</p>
-        <CardTitle>Sector allocation</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Sector allocation<AnalyticsInfo k="sectorAllocation" /></CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
