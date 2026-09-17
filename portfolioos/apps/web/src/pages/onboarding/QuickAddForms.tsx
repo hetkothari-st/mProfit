@@ -23,7 +23,7 @@ import { creditCardsApi } from '@/api/creditCards.api';
 import { insuranceApi } from '@/api/insurance.api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { OnboardingItemId } from './onboardingItems';
-import { InstitutionField } from './InstitutionField';
+import { InstitutionField } from '@/components/common/InstitutionField';
 
 export interface QuickFormProps {
   portfolioId: string;

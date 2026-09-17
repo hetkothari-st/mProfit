@@ -337,9 +337,9 @@ export function LoanGivenDetailPage() {
       <div>
         <Link
           to="/loans?view=given"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4" /> Loans given
+          <ArrowLeft className="h-4 w-4" /> Back to loans
         </Link>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3.5">

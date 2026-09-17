@@ -24,6 +24,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { InstitutionField } from '@/components/common/InstitutionField';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -69,6 +70,18 @@ const PAYMENT_TYPE_COLORS: Record<string, string> = {
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/** Top-left way back to the loans list, where the eye looks first. */
+function BackToLoans() {
+  return (
+    <Link
+      to="/loans"
+      className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+    >
+      <ArrowLeft className="h-4 w-4" /> Back to loans
+    </Link>
+  );
 }
 
 // ── Summary metric card ───────────────────────────────────────────────
@@ -336,11 +349,16 @@ function EditLoanDialog({
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="col-span-2">
               <Label>Lender name *</Label>
-              <Input value={form.lenderName}
-                onChange={(e) => set('lenderName', e.target.value)}
-                className={errors['lenderName'] ? 'border-negative' : ''} />
+              <div className="mt-1">
+                <InstitutionField
+                  kind="lender"
+                  value={form.lenderName}
+                  onChange={(v) => set('lenderName', v)}
+                  placeholder="Search or pick your bank / lender"
+                />
+              </div>
               {errors['lenderName'] && <p className="text-xs text-negative mt-1">{errors['lenderName']}</p>}
             </div>
             <div>
@@ -1048,6 +1066,7 @@ export function LoanDetailPage() {
   if (loanLoading) {
     return (
       <div>
+        <BackToLoans />
         <PageHeader title="Loading…" />
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -1058,7 +1077,14 @@ export function LoanDetailPage() {
     );
   }
 
-  if (!loan) return <div className="p-8 text-muted-foreground">Loan not found.</div>;
+  if (!loan) {
+    return (
+      <div>
+        <BackToLoans />
+        <p className="p-8 text-muted-foreground">Loan not found.</p>
+      </div>
+    );
+  }
 
   // Progress calculations
   const emisPaid = loan.payments.filter((p) => p.paymentType === 'EMI').length;
@@ -1076,14 +1102,12 @@ export function LoanDetailPage() {
 
   return (
     <div>
+      <BackToLoans />
       <PageHeader
         title={loan.lenderName}
         description={`${LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType} loan · ${loan.borrowerName}${loan.accountNumber ? ` · ●●●● ${loan.accountNumber.slice(-4)}` : ''}`}
         actions={
           <div className="flex gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link to="/loans"><ArrowLeft className="h-4 w-4" /> Back</Link>
-            </Button>
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4" /> Edit
             </Button>
