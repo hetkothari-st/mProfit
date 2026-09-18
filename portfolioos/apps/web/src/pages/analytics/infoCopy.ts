@@ -170,6 +170,16 @@ export const ANALYTICS_INFO = {
     ],
   },
 
+  // ── Tax year ────────────────────────────────────────────────────────
+  advanceTax: {
+    title: "What you'll owe",
+    body: [
+      'Tax on the gains you have booked this year, and the dates it is due: 15% by 15 June, 45% by September, 75% by December and the rest by 15 March.',
+      'A gain only counts from the instalment after you booked it, so a March sale never makes June late. Missing a date costs 1% a month.',
+      'Covers investment income only — not salary, TDS or deductions.',
+    ],
+  },
+
   // ── Tax-loss harvesting ─────────────────────────────────────────────
   taxHarvest: {
     title: 'Cut your tax bill',

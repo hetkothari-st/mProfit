@@ -15,6 +15,8 @@ import { AllocationByClassPie, SectorPie } from './widgets/AllocationWidgets';
 import { PortfolioValueLine } from './widgets/PerformanceWidgets';
 import { BestAndWorst, ConcentrationCard, AssetClassXirrBar } from './widgets/ReturnsWidgets';
 import { CgByFyBar, IncomeTrendBar, TaxHarvestTable } from './widgets/TaxWidgets';
+import { AdvanceTaxCard, FinancialYearSelect } from './widgets/TaxYearWidgets';
+import { currentFy } from './financialYear';
 import { CashflowWaterfall } from './widgets/CashflowWidget';
 import { RiskMetricsCards, ReturnCorrelationGrid } from './widgets/RiskWidget';
 import { LiabilitiesVsAssetsCard } from './widgets/LiabilitiesWidget';
@@ -47,6 +49,10 @@ type View = 'overview' | 'detail';
 export function AnalyticsPage() {
   const [selectedId, setSelectedId] = useState<string>('ALL');
   const [period, setPeriod] = useState<Period>('1Y');
+  // The financial year drives the tax block only. Everything else on the page
+  // is "as of today" or follows the period selector, and pretending otherwise
+  // would be the same lie the period pills already tell.
+  const [fy, setFy] = useState<string>(() => currentFy());
   const [searchParams, setSearchParams] = useSearchParams();
   const view: View = searchParams.get('view') === 'detail' ? 'detail' : 'overview';
   const setView = (next: View) => {
@@ -184,8 +190,22 @@ export function AnalyticsPage() {
             losers={data.topWinnersLosers.losers}
           />
 
-          {/* What March will cost, and what to do before then */}
-          <TaxHarvestTable data={data.taxHarvest} />
+          {/* What the tax year costs, and what can still be done about it */}
+          <div className="flex items-center justify-between gap-3 flex-wrap pt-2">
+            <h2 className="font-display text-[20px] leading-none tracking-tight">Tax</h2>
+            <FinancialYearSelect fy={fy} onChange={setFy} className="w-36" />
+          </div>
+          <AdvanceTaxCard fy={fy} />
+          {fy === currentFy() ? (
+            <TaxHarvestTable data={data.taxHarvest} />
+          ) : (
+            <Card>
+              <CardContent className="py-6 text-sm text-muted-foreground">
+                Harvesting losses only helps for the year you are still in. Switch to FY {currentFy()} to see
+                what you could still do.
+              </CardContent>
+            </Card>
+          )}
         </>
       ) : (
         <>

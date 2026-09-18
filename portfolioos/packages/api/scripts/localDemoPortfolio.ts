@@ -117,6 +117,30 @@ async function main() {
     daysAgo: 30,
   });
 
+  // A short-term trade booked in this financial year, big enough to cross the
+  // ₹10,000 advance-tax threshold — otherwise the instalment schedule never
+  // renders and cannot be checked.
+  rows.push({
+    type: 'BUY',
+    assetClass: 'EQUITY',
+    assetName: bySymbol.get('TCS')!.name,
+    symbol: 'TCS',
+    stockId: bySymbol.get('TCS')!.id,
+    qty: 300,
+    price: 3200,
+    daysAgo: 150,
+  });
+  rows.push({
+    type: 'SELL',
+    assetClass: 'EQUITY',
+    assetName: bySymbol.get('TCS')!.name,
+    symbol: 'TCS',
+    stockId: bySymbol.get('TCS')!.id,
+    qty: 300,
+    price: 4150,
+    daysAgo: 100,
+  });
+
   // A fixed deposit, to prove deposits stay out of the harvest candidates.
   rows.push({
     type: 'DEPOSIT',

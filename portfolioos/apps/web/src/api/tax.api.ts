@@ -187,7 +187,46 @@ export interface FmvOverride {
   source: 'SEED' | 'USER';
 }
 
+export type InstalmentStatus = 'upcoming' | 'due' | 'met';
+
+export interface AdvanceTaxInstalment {
+  label: string;
+  dueDate: string;
+  cumulativePct: number;
+  cumulativeDue: string;
+  shortfall: string;
+  interest: string;
+  status: InstalmentStatus;
+}
+
+export interface AdvanceTaxReport {
+  financialYear: string;
+  instalments: AdvanceTaxInstalment[];
+  totalTax: string;
+  payableNow: string;
+  estimatedInterest: string;
+  /** Under the sec 208 threshold, so no advance tax is payable at all. */
+  belowThreshold: boolean;
+  /** Gains booked this year before exemptions — zero tax and zero gains differ. */
+  bookedGains: string;
+  slabPct: number;
+  slabIsEstimate: boolean;
+  components: {
+    stcgEquity: string;
+    ltcgEquity: string;
+    ltcgOther: string;
+    stcgOther: string;
+    intraday: string;
+    crypto: string;
+  };
+  asOf: string;
+}
+
 export const taxApi = {
+  advance: async (fy: string): Promise<AdvanceTaxReport> => {
+    const { data } = await api.get<ApiResponse<AdvanceTaxReport>>('/api/tax/advance' + qs({ fy }));
+    return unwrap(data);
+  },
   availableFys: async (): Promise<{ fys: string[] }> => {
     const { data } = await api.get<ApiResponse<{ fys: string[] }>>('/api/tax/available-fys');
     return unwrap(data);
