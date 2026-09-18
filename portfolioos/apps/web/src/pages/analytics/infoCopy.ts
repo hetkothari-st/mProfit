@@ -48,7 +48,10 @@ export const ANALYTICS_INFO = {
   },
   realisedPnlFy: {
     title: 'Realised P&L (FY)',
-    body: [`Profit or loss locked in by selling investments. ${FY}`],
+    body: [
+      `Profit or loss locked in by selling investments: sale value minus what you paid. ${FY}`,
+      'This is the book figure. The tax-harvesting card below shows the taxable figure, which can differ where grandfathering or indexation applies.',
+    ],
   },
   incomeFy: {
     title: 'Income (FY)',
@@ -199,6 +202,7 @@ export const ANALYTICS_INFO = {
     body: [
       'Return earned for each unit of risk taken, after subtracting a 6.5% risk-free rate (roughly the Indian 10-year government bond yield).',
       'Above 1 is strong, 0 to 1 is modest, and below 0 means a risk-free option would have done better.',
+      'Both halves are based on total value, so money you add counts as growth and flatters the ratio. Regular SIPs can make this look strong on their own — XIRR is the honest return measure.',
     ],
   },
   maxDrawdown: {
@@ -248,8 +252,11 @@ export const ANALYTICS_INFO = {
     ],
   },
   harvestRealisedFy: {
-    title: 'Realised gains (FY)',
-    body: [`Short- and long-term gains already booked — what harvested losses could offset. ${FY}`],
+    title: 'Taxable gains (FY)',
+    body: [
+      `Short- and long-term gains already booked, after grandfathering and indexation — what harvested losses could offset. ${FY}`,
+      'Being the taxable figure, it can differ from the book "Realised P&L (FY)" card at the top of the page.',
+    ],
   },
 
   // ── Scenario ────────────────────────────────────────────────────────

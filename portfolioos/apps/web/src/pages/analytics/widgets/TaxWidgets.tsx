@@ -156,7 +156,7 @@ export function TaxHarvestTable({ data }: { data: TaxHarvestSummary }) {
             <p className="text-base font-semibold mt-0.5">{formatINR(data.ltcgLossAvailable)}</p>
           </div>
           <div className="rounded-lg bg-muted/50 p-3">
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">Realised gains (FY)<AnalyticsInfo k="harvestRealisedFy" /></p>
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">Taxable gains (FY)<AnalyticsInfo k="harvestRealisedFy" /></p>
             <p className="text-base font-semibold mt-0.5">
               STCG {formatINR(data.realisedStcgInFy)} · LTCG {formatINR(data.realisedLtcgInFy)}
             </p>
