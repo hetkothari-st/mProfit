@@ -86,6 +86,23 @@ describe('capital gains cost', () => {
   });
 });
 
+describe('chart of accounts', () => {
+  it('seeds once when two requests race, instead of failing one of them', async () => {
+    const scope = await createTestScope('coa-race');
+    cleanups.push(scope.cleanup);
+    // Two page loads at the same moment: the accounts tree and a statement
+    // that projects the books first. Both seed the default chart.
+    const [a, b] = await runAsSystem(() =>
+      Promise.all([ensureDefaultAccounts(scope.userId), ensureDefaultAccounts(scope.userId)]),
+    );
+    expect(a.length + b.length).toBeGreaterThan(0);
+    const codes = await runAsSystem(() =>
+      prisma.account.groupBy({ by: ['code'], where: { userId: scope.userId }, _count: { code: true } }),
+    );
+    expect(codes.filter((c) => c._count.code > 1)).toEqual([]);
+  });
+});
+
 describe('auto vouchers', () => {
   it('closes a position to zero after a sale at a loss, with charges counted once', async () => {
     const scope = await newScope('acct-loss');
