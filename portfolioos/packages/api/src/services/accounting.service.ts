@@ -1011,7 +1011,11 @@ export async function generateVouchersFromActivity(
       entries: [{ debitAccountId: bankId, creditAccountId: loansLiabId, amount: dec(l.principalAmount), narration: 'Loan disbursed' }],
     });
   }
-  const loanPayments = await prisma.loanPayment.findMany({ where: { loan: { userId } } });
+  // By loan id, not through the relation: a child table with no policy of its
+  // own cannot be filtered through its parent's policy.
+  const loanPayments = loans.length
+    ? await prisma.loanPayment.findMany({ where: { loanId: { in: loans.map((l) => l.id) } } })
+    : [];
   for (const p of loanPayments) {
     const amount = dec(p.amount);
     const entries: VEntry[] = [];
