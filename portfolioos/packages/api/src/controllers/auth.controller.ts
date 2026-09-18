@@ -229,7 +229,7 @@ export async function google(req: Request, res: Response) {
 export const accountDeletionSchema = z.object({
   confirmText: z.string(),
   password: z.string().min(1).optional(),
-  code: z.string().trim().regex(/^d{6}$/, 'Enter the 6-digit code').optional(),
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code').optional(),
 });
 
 /** What would stop deletion right now (families with other members). */

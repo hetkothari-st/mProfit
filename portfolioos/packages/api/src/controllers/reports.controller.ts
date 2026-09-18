@@ -1207,8 +1207,7 @@ export async function downloadStt10Db(req: Request, res: Response) {
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  const fy = (req.query.fy as string | undefined)?.trim() || undefined;
-  if (fy && !/^d{4}-d{2}$/.test(fy)) throw new BadRequestError('Invalid `fy` (expected YYYY-YY)');
+  const fy = getFy(req);
   await emitForSubjects(req, res, (userId) => buildStt10DbLayout(userId, asOf, fy));
 }
 
