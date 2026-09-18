@@ -894,15 +894,10 @@ export async function generateVouchersFromActivity(
     const role = ACCOUNTING_ROLE[t.transactionType];
     const invCode = investmentAccountCode(t.assetClass);
     const investmentAcctId = invCode ? acctId(invCode) : undefined;
+    // What the bank actually moved, every charge included. STT is part of the
+    // cost of the investment here; sec 48 disallows it for capital gains only,
+    // and the tax reports carry that separate figure.
     const amount = transactionInrNet(t);
-    // STT is not part of cost or proceeds for capital gains (sec 48): it is
-    // booked as its own expense, keeping investments at the engine's cost.
-    const stt = dec(t.stt);
-    const sttId = acctId('5002');
-    const sttEntry = (): VEntry[] =>
-      stt.greaterThan(0) && sttId
-        ? [{ debitAccountId: sttId, creditAccountId: bankId, amount: stt, narration: 'Securities transaction tax', transactionId: t.id }]
-        : [];
     const name = (t.assetName ?? '').trim();
     const key = holdingKey(t);
 
@@ -910,7 +905,7 @@ export async function generateVouchersFromActivity(
       if (!investmentAcctId) continue;
       const creditId = role === 'PURCHASE' ? bankId : role === 'REINVEST' ? acctId('4001') : acctId('3001');
       if (!creditId) continue;
-      const cost = role === 'PURCHASE' && sttId ? amount.minus(stt) : amount;
+      const cost = amount;
       bookValue.set(key, (bookValue.get(key) ?? ZERO).plus(cost));
       const label = role === 'PURCHASE' ? 'Buy' : role === 'REINVEST' ? 'Dividend reinvested' : 'Opening balance';
       push({
@@ -920,7 +915,6 @@ export async function generateVouchersFromActivity(
         narration: `${label} ${name}`.trim(),
         entries: [
           { debitAccountId: investmentAcctId, creditAccountId: creditId, amount: cost, narration: `${label} ${name}`.trim(), transactionId: t.id },
-          ...(role === 'PURCHASE' ? sttEntry() : []),
         ],
       });
     } else if (role === 'SALE') {
@@ -928,14 +922,15 @@ export async function generateVouchersFromActivity(
       const entries: VEntry[] = [];
       const rows = gainsBySale.get(t.id) ?? [];
       if (rows.length > 0) {
-        // The engine's proceeds are before STT; the bank pays the STT back out below.
-        const proceeds = sttId ? amount.plus(stt) : amount;
-        entries.push(...sttEntry());
+        const proceeds = amount;
         // Units with no purchase on file come back from the engine at nil cost;
         // they are credited to the investment at sale value, not booked as gain.
         const matched = rows.filter((g) => g.buyTransactionId !== g.sellTransactionId);
+        // Book gain per bucket: money received less what those lots cost.
         const bucket = (type: string) =>
-          matched.filter((g) => g.capitalGainType === type).reduce((s, g) => s.plus(g.gainLoss), ZERO);
+          matched
+            .filter((g) => g.capitalGainType === type)
+            .reduce((s, g) => s.plus(g.bookSellAmount.minus(g.bookBuyAmount)), ZERO);
         const legs: Array<[Decimal, string, string, string]> = [
           [bucket('SHORT_TERM'), '4003', '5006', 'Short-term'],
           [bucket('LONG_TERM'), '4004', '5006', 'Long-term'],

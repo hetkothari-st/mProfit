@@ -10,7 +10,9 @@ import {
   getPnL,
   getTrialBalance,
 } from '../../src/services/accounting.service.js';
-import { computePortfolioCapitalGains } from '../../src/services/capitalGains.service.js';
+import { Decimal } from 'decimal.js';
+import { computeOpenLots, computePortfolioCapitalGains } from '../../src/services/capitalGains.service.js';
+import { replayTransactions } from '../../src/services/holdingsProjection.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -86,6 +88,41 @@ describe('capital gains cost', () => {
   });
 });
 
+describe('one cost basis', () => {
+  it('holdings, lots and the books agree, and only tax cost drops STT', async () => {
+    const scope = await newScope('cost-basis');
+    // Two lots, then a partial exit: weighted average and FIFO disagree here,
+    // and STT makes the tax cost differ from what was paid.
+    await addTxs(scope, [
+      { type: 'BUY', date: '2023-05-10', name: 'C', qty: '100', net: '140160', stt: '140', brokerage: '20' },
+      { type: 'BUY', date: '2024-06-10', name: 'C', qty: '50', net: '80095', stt: '80', brokerage: '15' },
+      { type: 'SELL', date: '2025-01-15', name: 'C', qty: '60', net: '113861', stt: '114' },
+    ]);
+    const txs = await runAsSystem(() =>
+      prisma.transaction.findMany({ where: { portfolioId: scope.portfolioId }, orderBy: { tradeDate: 'asc' } }),
+    );
+
+    // What the holding is carried at: the 40 units left of the first lot plus
+    // the whole second lot, each at the price paid for them.
+    const held = replayTransactions(txs);
+    expect(held.quantity.toString()).toBe('90');
+    expect(held.totalCost.toFixed(2)).toBe('136159.00');
+
+    // The lot engine's open lots carry the same figure.
+    const lots = computeOpenLots(txs).flatMap((p) => p.lots);
+    const lotBook = lots.reduce((s, l) => s.plus(l.quantity.times(l.bookCostPerUnit)), new Decimal(0));
+    expect(lotBook.toFixed(2)).toBe(held.totalCost.toFixed(2));
+
+    // Tax cost is lower by exactly the STT inside those lots (sec 48).
+    const lotTax = lots.reduce((s, l) => s.plus(l.quantity.times(l.costPerUnit)), new Decimal(0));
+    expect(lotBook.minus(lotTax).toFixed(2)).toBe('136.00');
+
+    // And the books carry the holding at the paid-in figure too.
+    await runAsSystem(() => generateVouchersFromActivity(scope.userId));
+    expect(await balanceOf(scope.userId, '1101')).toBe(held.totalCost.toFixed(4));
+  });
+});
+
 describe('chart of accounts', () => {
   it('seeds once when two requests race, instead of failing one of them', async () => {
     const scope = await createTestScope('coa-race');
@@ -111,10 +148,12 @@ describe('auto vouchers', () => {
       { type: 'SELL', date: '2024-06-01', name: 'L', qty: '10', net: '896', stt: '4' },
     ]);
     await runAsSystem(() => generateVouchersFromActivity(scope.userId));
+    // The holding is carried at what was paid (1,020, STT included) and leaves
+    // at that cost; the bank is out the 124 the round trip actually cost.
     expect(await balanceOf(scope.userId, '1101')).toBe('0.0000'); // Equity Holdings
     expect(await balanceOf(scope.userId, '1001')).toBe('-124.0000'); // −1020 + 896
-    expect(await balanceOf(scope.userId, '5006')).toBe('115.0000'); // loss: 900 − 1015
-    expect(await balanceOf(scope.userId, '5002')).toBe('9.0000'); // STT both legs
+    expect(await balanceOf(scope.userId, '5006')).toBe('124.0000'); // book loss: 896 − 1020
+    expect(await balanceOf(scope.userId, '5002')).toBe('0.0000'); // STT sits in cost, not expensed
     const pnl = await runAsSystem(() => getPnL(scope.userId, '2024-04-01', '2025-03-31'));
     expect(pnl.netProfit).toBe('-124.0000');
   });

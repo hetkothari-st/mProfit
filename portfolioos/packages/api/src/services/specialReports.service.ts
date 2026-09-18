@@ -436,7 +436,8 @@ export function residualLots(
       assetKey: p.assetKey,
       date: l.buyDate,
       qty: l.quantity,
-      rate: l.costPerUnit,
+      // What the units cost to buy, charges included — the holdings figure.
+      rate: l.bookCostPerUnit,
     })),
   );
 }

@@ -301,11 +301,12 @@ describe('cost and realised gains worked out from the trades', () => {
     expectBalanced(book);
   });
 
-  it('expenses STT on a purchase instead of adding it to cost', () => {
+  it('carries a purchase at what was paid, charges and STT included', () => {
+    // sec 48 disallows STT for capital gains only; the ledger still paid it.
     const book = bookOf([trade({ id: 'b1', gross: '1000', charges: '25', stt: '5' })]);
     const buy = allVouchers(book).find((v) => v.narration.startsWith('Buy'))!;
-    expect(lineOf(buy, 'Zed Ltd')).toBe('1020');
-    expect(lineOf(buy, 'Brokerage & Charges')).toBe('5');
+    expect(lineOf(buy, 'Zed Ltd')).toBe('1025');
+    expect(lineOf(buy, 'Brokerage & Charges')).toBeUndefined();
     expectBalanced(book);
   });
 

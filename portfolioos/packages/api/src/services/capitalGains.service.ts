@@ -133,6 +133,19 @@ function inrNetAmount(tx: Transaction): { value: Decimal; converted: boolean } {
   return { value: raw, converted: false };
 }
 
+/**
+ * What the trade actually moved through the bank, in INR: every charge
+ * included, STT among them. This is the cost a holding is carried at and the
+ * proceeds a sale is booked at — `inrNetAmount` is the same figure with STT
+ * taken back out, which only the tax computation may do (sec 48).
+ */
+function inrBookAmount(tx: Transaction): Decimal {
+  const stt = new Decimal((tx.stt ?? 0).toString());
+  const { value } = inrNetAmount(tx);
+  if (stt.isZero()) return value;
+  return SELL_TYPES.has(tx.transactionType) ? value.minus(stt) : value.plus(stt);
+}
+
 // ─── Tax treatment ──────────────────────────────────────────────────
 
 type MfOrientation = 'equity' | 'debt' | 'ambiguous' | 'unknown';
@@ -289,7 +302,10 @@ interface Lot {
   buyTxId: string;
   buyDate: Date;
   qty: Decimal;
-  costPerUnit: Decimal; // INR, net of charges
+  /** Cost of acquisition for tax: charges included, STT excluded (sec 48). */
+  costPerUnit: Decimal;
+  /** What was paid, STT included — the figure holdings and books carry. */
+  bookCostPerUnit: Decimal;
   note: string | null;
 }
 
@@ -298,6 +314,7 @@ interface CarriedLot {
   buyDate: Date;
   qty: Decimal;
   cost: Decimal;
+  bookCost: Decimal;
   outDate: Date;
 }
 
@@ -313,8 +330,14 @@ export interface CapitalGainRow {
   quantity: Decimal;
   buyPrice: Decimal;
   sellPrice: Decimal;
+  /** Cost of acquisition for tax: STT excluded (sec 48). */
   buyAmount: Decimal;
+  /** Sale consideration for tax: before STT. */
   sellAmount: Decimal;
+  /** Cost as paid, STT included — what the holding was carried at. */
+  bookBuyAmount: Decimal;
+  /** Money actually received, after STT and every other charge. */
+  bookSellAmount: Decimal;
   indexedCostOfAcquisition: Decimal | null;
   capitalGainType: CapitalGainType;
   gainLoss: Decimal;
@@ -376,7 +399,10 @@ export function computeFIFOGains(
 export interface OpenLot {
   buyDate: Date;
   quantity: Decimal;
+  /** Tax cost of acquisition per unit (STT excluded, sec 48). */
   costPerUnit: Decimal;
+  /** Cost per unit as paid, STT included — for valuation and the books. */
+  bookCostPerUnit: Decimal;
 }
 
 export interface OpenPosition {
@@ -405,7 +431,12 @@ export function computeOpenLots(
       assetName: g.assetName,
       lots: g.lots
         .filter((l) => l.qty.greaterThan(0))
-        .map((l) => ({ buyDate: l.buyDate, quantity: l.qty, costPerUnit: l.costPerUnit })),
+        .map((l) => ({
+          buyDate: l.buyDate,
+          quantity: l.qty,
+          costPerUnit: l.costPerUnit,
+          bookCostPerUnit: l.bookCostPerUnit,
+        })),
     }))
     .filter((p) => p.lots.length > 0);
 }
@@ -517,6 +548,7 @@ function runFifo(
         for (const lot of g.lots) {
           lot.qty = lot.qty.times(factor);
           lot.costPerUnit = lot.costPerUnit.dividedBy(factor);
+          lot.bookCostPerUnit = lot.bookCostPerUnit.dividedBy(factor);
         }
       }
       continue;
@@ -525,7 +557,8 @@ function runFifo(
     if (BUY_TYPES.has(type)) {
       // Bonus shares cost nil and are held from allotment (sec 55(2)(aa)).
       const costPerUnit = type === 'BONUS' ? new Decimal(0) : net.dividedBy(qty);
-      g.lots.push({ buyTxId: tx.id, buyDate: tx.tradeDate, qty, costPerUnit, note: fxNote });
+      const bookCostPerUnit = type === 'BONUS' ? new Decimal(0) : inrBookAmount(tx).dividedBy(qty);
+      g.lots.push({ buyTxId: tx.id, buyDate: tx.tradeDate, qty, costPerUnit, bookCostPerUnit, note: fxNote });
       continue;
     }
 
@@ -540,6 +573,7 @@ function runFifo(
           buyDate: lot.buyDate,
           qty: take,
           cost: lot.costPerUnit.times(take),
+          bookCost: lot.bookCostPerUnit.times(take),
           outDate: tx.tradeDate,
         });
         lot.qty = lot.qty.minus(take);
@@ -565,6 +599,7 @@ function runFifo(
             buyDate: c.buyDate,
             qty: newQty,
             costPerUnit: c.cost.dividedBy(newQty),
+            bookCostPerUnit: c.bookCost.dividedBy(newQty),
             note: fxNote,
           });
         }
@@ -578,6 +613,7 @@ function runFifo(
           buyDate: tx.tradeDate,
           qty,
           costPerUnit: net.dividedBy(qty),
+          bookCostPerUnit: inrBookAmount(tx).dividedBy(qty),
           note: joinNotes([
             fxNote,
             `${type === 'MERGER_IN' ? 'Merger' : 'Demerger'} units are not linked to the shares they replaced — cost and holding period should carry over from the original purchase (sec 49(2), 2(42A)); record the matching ${type === 'MERGER_IN' ? 'MERGER_OUT' : 'DEMERGER_OUT'} or edit the cost.`,
@@ -589,6 +625,7 @@ function runFifo(
 
     // ── Disposal ──
     const sellPricePerUnit = net.dividedBy(qty);
+    const bookSellPricePerUnit = inrBookAmount(tx).dividedBy(qty);
     const orientation = g.assetClass === 'MUTUAL_FUND' ? mfOrientation(g.fundId, fundCategoryMap) : 'equity';
 
     // An intraday square-off matches that day's purchases before older lots.
@@ -607,6 +644,9 @@ function runFifo(
       const costBasis = lot.costPerUnit.times(take);
       const proceeds = sellPricePerUnit.times(take);
       const gainLoss = proceeds.minus(costBasis);
+      // The same disposal in book terms: paid-in cost against money received.
+      const bookCostBasis = lot.bookCostPerUnit.times(take);
+      const bookProceeds = bookSellPricePerUnit.times(take);
       const treatment = taxTreatment(g.assetClass, lot.buyDate, tx.tradeDate, orientation);
       const notes: Array<string | null> = [lot.note, fxNote, treatment.note];
 
@@ -718,6 +758,8 @@ function runFifo(
         sellPrice: sellPricePerUnit,
         buyAmount: costBasis,
         sellAmount: proceeds,
+        bookBuyAmount: bookCostBasis,
+        bookSellAmount: bookProceeds,
         indexedCostOfAcquisition: indexed,
         capitalGainType: gainType,
         gainLoss,
@@ -752,6 +794,8 @@ function runFifo(
         sellPrice: sellPricePerUnit,
         buyAmount: new Decimal(0),
         sellAmount: proceeds,
+        bookBuyAmount: new Decimal(0),
+        bookSellAmount: bookSellPricePerUnit.times(remaining),
         indexedCostOfAcquisition: null,
         capitalGainType: 'SHORT_TERM',
         gainLoss: proceeds,
