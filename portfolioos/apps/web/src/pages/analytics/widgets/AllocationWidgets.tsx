@@ -1,11 +1,7 @@
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Treemap } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { formatINR, toDecimal } from '@everypaisa/shared';
-import type {
-  AllocationSlice,
-  TreemapNode,
-  SectorSlice,
-} from '@/api/analytics.api';
+import type { AllocationSlice, SectorSlice } from '@/api/analytics.api';
 import { CHART_COLORS, colorFor } from '../chartColors';
 import { AnalyticsInfo } from '../AnalyticsInfo';
 
@@ -77,95 +73,6 @@ export function AllocationByClassPie({ slices }: ClassPieProps) {
               ))}
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-interface TreemapProps {
-  nodes: TreemapNode[];
-}
-
-interface TreemapTickContent {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  name?: string;
-  pct?: number;
-  index?: number;
-}
-
-function TreemapContent(props: TreemapTickContent) {
-  const { x = 0, y = 0, width = 0, height = 0, name = '', pct = 0, index = 0 } = props;
-  if (width < 18 || height < 18) {
-    return (
-      <g>
-        <rect x={x} y={y} width={width} height={height} stroke="hsl(var(--background))" strokeWidth={1} fill={colorFor(index)} />
-      </g>
-    );
-  }
-  return (
-    <g>
-      <rect x={x} y={y} width={width} height={height} stroke="hsl(var(--background))" strokeWidth={1} fill={colorFor(index)} />
-      {width > 60 && height > 30 && (
-        <>
-          <text x={x + 6} y={y + 16} fill="#fff" fontSize={11} fontWeight={500} style={{ pointerEvents: 'none' }}>
-            {name.length > Math.floor(width / 7) ? name.slice(0, Math.floor(width / 7)) + '…' : name}
-          </text>
-          <text x={x + 6} y={y + 30} fill="rgba(255,255,255,0.85)" fontSize={10} style={{ pointerEvents: 'none' }}>
-            {pct.toFixed(1)}%
-          </text>
-        </>
-      )}
-    </g>
-  );
-}
-
-export function AllocationTreemap({ nodes }: TreemapProps) {
-  // Recharts treemap needs `{name, size}` shape.
-  const data = nodes
-    .map((n, i) => ({
-      name: n.assetName,
-      size: toDecimal(n.value).toNumber(),
-      pct: n.pct,
-      index: i,
-    }))
-    .filter((n) => n.size > 0);
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Holdings</p>
-        <CardTitle className="flex items-center gap-1.5">Allocation by holding<AnalyticsInfo k="allocationByHolding" /></CardTitle>
-      </CardHeader>
-      <CardContent>
-        {data.length === 0 ? (
-          <div className="h-56 grid place-items-center text-sm text-muted-foreground border border-dashed rounded-md">
-            No holdings yet
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <Treemap
-              data={data}
-              dataKey="size"
-              stroke="hsl(var(--background))"
-              fill="hsl(var(--accent))"
-              // Recharts' typed `content` prop is overly narrow — it accepts
-              // a render fn at runtime but TS rejects it. Casting unblocks.
-              content={((props: TreemapTickContent) => (
-                <TreemapContent {...props} />
-              )) as unknown as React.ReactElement}
-            >
-              <Tooltip
-                contentStyle={TOOLTIP_STYLE}
-                formatter={(v: number | string, _n: string, p: { payload?: { name?: string; pct?: number } }) => [
-                  `${formatINR(toDecimal(v).toFixed(4))} (${(p.payload?.pct ?? 0).toFixed(1)}%)`,
-                  p.payload?.name ?? '',
-                ]}
-              />
-            </Treemap>
-          </ResponsiveContainer>
         )}
       </CardContent>
     </Card>

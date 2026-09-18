@@ -14,6 +14,7 @@ import {
   getTaxHarvest,
   downloadSchedule112ACsv,
   getAvailableFys,
+  getAdvanceTax,
   downloadCapitalGainsTaxReport,
 } from '../controllers/tax.controller.js';
 import {
@@ -29,6 +30,7 @@ taxRouter.use(authenticate);
 
 taxRouter.get('/available-fys', asyncHandler(getAvailableFys));
 taxRouter.get('/summary', asyncHandler(getTaxSummary));
+taxRouter.get('/advance', asyncHandler(getAdvanceTax));
 taxRouter.get('/stcg', asyncHandler(getUserStcg));
 taxRouter.get('/ltcg', asyncHandler(getUserLtcg));
 taxRouter.get('/intraday', asyncHandler(getUserIntraday));

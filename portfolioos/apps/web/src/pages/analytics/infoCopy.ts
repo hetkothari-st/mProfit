@@ -33,14 +33,14 @@ export const ANALYTICS_INFO = {
     ],
   },
   unrealisedPnl: {
-    title: 'Unrealised P&L',
+    title: 'Profit if you sold today',
     body: [
       'Gain or loss on holdings you still own: current value minus what you paid. It only becomes real when you sell.',
       'The % is measured against the amount invested.',
     ],
   },
   xirrOverall: {
-    title: 'XIRR overall',
+    title: 'Annualised return (XIRR)',
     body: [
       'Your annualised return, taking into account when each rupee went in or came out — so money added recently isn’t treated as if it had been invested from the start.',
       'Shown after about 90 days of history; annualising a shorter period gives misleading numbers. 1Y / 3Y / 5Y are the same measure over those windows.',
@@ -58,13 +58,6 @@ export const ANALYTICS_INFO = {
     body: [
       'Dividends, interest and maturity payouts received, plus interest accrued on fixed deposits, NSC, RD and post-office schemes.',
       FY,
-    ],
-  },
-  totalReturns: {
-    title: 'Total returns',
-    body: [
-      'Unrealised P&L on what you hold today plus realised P&L from sales this financial year.',
-      'It combines two different time frames, so it isn’t your lifetime return — XIRR is the better measure of that.',
     ],
   },
 
@@ -85,26 +78,10 @@ export const ANALYTICS_INFO = {
       PERIOD,
     ],
   },
-  returnOnCapital: {
-    title: 'Return on invested capital',
-    body: [
-      'How far your portfolio’s market value is above or below what you invested, as a percentage, at each point in time: (value − invested) ÷ invested.',
-      PERIOD,
-    ],
-  },
-  benchmark: {
-    title: 'Portfolio vs NIFTY 50 / Sensex',
-    body: [
-      'Your portfolio and the two indices, each rescaled to start at 100 so their paths can be compared on one chart.',
-      'Your line tracks total value, so money you add or withdraw moves it as well — treat it as a rough comparison, not a pure returns race.',
-      PERIOD,
-    ],
-  },
   assetsVsLiabilities: {
-    title: 'Assets vs liabilities',
+    title: 'What you own and owe',
     body: [
-      'Everything you own against everything you owe. Net worth = assets − liabilities.',
-      'Debt-to-asset ratio = liabilities ÷ assets. Under 30% is shown as comfortable, 30–50% as moderate and above 50% as high leverage.',
+      'Everything you own against everything you owe. Net worth is what is left: what you own minus what you owe.',
     ],
   },
 
@@ -113,12 +90,6 @@ export const ANALYTICS_INFO = {
     title: 'Allocation by class',
     body: [
       'How your money is split across asset types — stocks, mutual funds, deposits, gold and so on — based on today’s value.',
-    ],
-  },
-  allocationByHolding: {
-    title: 'Allocation by holding',
-    body: [
-      'Each box is one holding, sized by its current value. The biggest boxes are where most of your money sits.',
     ],
   },
   sectorAllocation: {
@@ -130,6 +101,13 @@ export const ANALYTICS_INFO = {
   },
 
   // ── Returns & concentration ─────────────────────────────────────────
+  bestAndWorst: {
+    title: 'Best and worst holdings',
+    body: [
+      'Your biggest gains and losses in rupees, with the percentage alongside.',
+      'Ranked by rupees on purpose: a small holding down 40% matters less than a large one down 5%.',
+    ],
+  },
   concentration: {
     title: 'Concentration',
     body: [
@@ -142,27 +120,6 @@ export const ANALYTICS_INFO = {
     body: [
       'Annualised return (XIRR) for each asset type over the whole time you’ve held it. Green is a gain, red a loss.',
       'Across several portfolios it’s an average weighted by the amount invested in each.',
-    ],
-  },
-  realisedVsUnrealised: {
-    title: 'Realised vs unrealised',
-    body: [
-      'Realised: profit or loss from sales this financial year. Unrealised: paper gain or loss on everything you still hold.',
-      'Together they show how much of your result is already locked in and how much is still exposed to the market.',
-    ],
-  },
-  topWinners: {
-    title: 'Top 10 winners',
-    body: [
-      'Holdings you still own with the biggest percentage gain on what you paid.',
-      'Ranked by %, not by rupees, so a small holding can top the list.',
-    ],
-  },
-  topLosers: {
-    title: 'Top 10 losers',
-    body: [
-      'Holdings you still own with the biggest percentage loss on what you paid.',
-      'Ranked by %, not by rupees. These are also the natural candidates for tax-loss harvesting below.',
     ],
   },
 
@@ -181,42 +138,27 @@ export const ANALYTICS_INFO = {
     ],
   },
   netFlow: {
-    title: 'Net flow by month',
+    title: 'Money in and out',
     body: [
-      'Money moving between you and your investments. Inflow is cash coming back to you (sales, redemptions, dividends, interest, maturities); outflow is money you put in (buys, SIPs, deposits).',
-      'A green bar is a month where you took out more than you invested; red is a month where you invested more. Up to the last 12 months are shown.',
+      'Money moving between you and your investments: cash coming back to you (sales, dividends, interest, maturities) against money you put in (buys, SIPs, deposits).',
+      'Bars sit above the line when more came back than you put in, below it when you invested more. Neither is good or bad — investing steadily sits below. Last 12 months.',
       PERIOD,
     ],
   },
 
   // ── Risk ────────────────────────────────────────────────────────────
   volatility: {
-    title: 'Volatility (annualised)',
+    title: 'How much it swings',
     body: [
       'How much your portfolio’s value swings, annualised from its month-to-month changes. Higher means a bumpier ride.',
       'It’s based on total value, so adding or withdrawing money also shows up as a swing.',
     ],
   },
-  sharpe: {
-    title: 'Sharpe ratio',
-    body: [
-      'Return earned for each unit of risk taken, after subtracting a 6.5% risk-free rate (roughly the Indian 10-year government bond yield).',
-      'Above 1 is strong, 0 to 1 is modest, and below 0 means a risk-free option would have done better.',
-      'Both halves are based on total value, so money you add counts as growth and flatters the ratio. Regular SIPs can make this look strong on their own — XIRR is the honest return measure.',
-    ],
-  },
   maxDrawdown: {
-    title: 'Max drawdown',
+    title: 'Worst fall',
     body: [
       'The biggest fall from a peak to a later low in the selected period — the worst loss you would have had to sit through.',
       'It’s based on total value, so a large withdrawal can look like a drop.',
-    ],
-  },
-  beta: {
-    title: 'Beta vs NIFTY',
-    body: [
-      'How strongly your portfolio moves with the NIFTY 50. 1 means in step with the market, above 1 means bigger swings than the market, and below 0.5 is defensive.',
-      'Needs a few months of history to calculate.',
     ],
   },
   returnCorrelation: {
@@ -228,9 +170,19 @@ export const ANALYTICS_INFO = {
     ],
   },
 
+  // ── Tax year ────────────────────────────────────────────────────────
+  advanceTax: {
+    title: "What you'll owe",
+    body: [
+      'Tax on the gains you have booked this year, and the dates it is due: 15% by 15 June, 45% by September, 75% by December and the rest by 15 March.',
+      'A gain only counts from the instalment after you booked it, so a March sale never makes June late. Missing a date costs 1% a month.',
+      'Covers investment income only — not salary, TDS or deductions.',
+    ],
+  },
+
   // ── Tax-loss harvesting ─────────────────────────────────────────────
   taxHarvest: {
-    title: 'Tax-loss harvesting',
+    title: 'Cut your tax bill',
     body: [
       'Holdings currently at a loss that you could sell to book that loss and set it against capital gains this financial year, reducing your tax.',
       'These are estimates. Set-off rules and timing have conditions — check with a tax professional before acting.',

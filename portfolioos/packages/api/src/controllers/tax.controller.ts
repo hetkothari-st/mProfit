@@ -23,6 +23,7 @@ import {
   requireSingleSubject,
 } from '../services/reports/reportSubjects.js';
 import { runAsUser } from '../lib/requestContext.js';
+import { advanceTaxReport } from '../services/advanceTax.service.js';
 import { readPan } from '../services/piiAtRest.service.js';
 
 /**
@@ -55,6 +56,13 @@ function getFy(req: Request, required = false): string | undefined {
 export async function getTaxSummary(req: Request, res: Response) {
   const fy = getFy(req, true)!;
   const data = await asSubject(req, (userId) => buildTaxSummary(userId, fy));
+  ok(res, data);
+}
+
+/** What is owed, and by which instalment date, on gains booked so far. */
+export async function getAdvanceTax(req: Request, res: Response) {
+  const fy = getFy(req, true)!;
+  const data = await asSubject(req, (userId) => advanceTaxReport(userId, fy));
   ok(res, data);
 }
 

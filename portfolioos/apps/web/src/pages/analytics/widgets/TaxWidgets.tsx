@@ -1,12 +1,7 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { formatINR, toDecimal, ASSET_CLASS_LABELS } from '@everypaisa/shared';
-import type {
-  CgByFyRow,
-  IncomeMonthRow,
-  RealisedVsUnrealised,
-  TaxHarvestSummary,
-} from '@/api/analytics.api';
+import type { CgByFyRow, IncomeMonthRow, TaxHarvestSummary } from '@/api/analytics.api';
 import { CHART_COLORS, shortInr } from '../chartColors';
 import { AnalyticsInfo } from '../AnalyticsInfo';
 
@@ -19,6 +14,14 @@ const TOOLTIP_STYLE = {
   boxShadow: '0 12px 28px -16px hsl(var(--shadow-color) / 0.35)',
 };
 
+/**
+ * Realised gains per financial year, split by tax bucket.
+ *
+ * Grouped bars, not stacked. The three buckets are signed and independent — a
+ * year with LTCG +₹5L and STCG −₹2L stacked into a shape whose height meant
+ * nothing and whose total could not be read off the axis. Side by side, each
+ * bucket is readable and a loss simply sits below the zero line.
+ */
 export function CgByFyBar({ rows }: { rows: CgByFyRow[] }) {
   const data = rows.slice(-6).map((r) => ({
     fy: r.fy,
@@ -29,7 +32,6 @@ export function CgByFyBar({ rows }: { rows: CgByFyRow[] }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Realised</p>
         <CardTitle className="flex items-center gap-1.5">Capital gains by FY<AnalyticsInfo k="cgByFy" /></CardTitle>
       </CardHeader>
       <CardContent>
@@ -45,9 +47,10 @@ export function CgByFyBar({ rows }: { rows: CgByFyRow[] }) {
               <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={72} tickFormatter={shortInr} />
               <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => formatINR(v.toFixed(4))} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Intraday" stackId="cg" fill={CHART_COLORS[3]!} radius={[2, 2, 0, 0]} />
-              <Bar dataKey="STCG" stackId="cg" fill={CHART_COLORS[1]!} radius={[2, 2, 0, 0]} />
-              <Bar dataKey="LTCG" stackId="cg" fill={CHART_COLORS[0]!} radius={[2, 2, 0, 0]} />
+              <ReferenceLine y={0} stroke="hsl(var(--border))" />
+              <Bar dataKey="Intraday" fill={CHART_COLORS[3]!} radius={[2, 2, 0, 0]} />
+              <Bar dataKey="STCG" fill={CHART_COLORS[1]!} radius={[2, 2, 0, 0]} />
+              <Bar dataKey="LTCG" fill={CHART_COLORS[0]!} radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -66,7 +69,6 @@ export function IncomeTrendBar({ rows }: { rows: IncomeMonthRow[] }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Cashflow</p>
         <CardTitle className="flex items-center gap-1.5">Income by month<AnalyticsInfo k="incomeByMonth" /></CardTitle>
       </CardHeader>
       <CardContent>
@@ -93,55 +95,50 @@ export function IncomeTrendBar({ rows }: { rows: IncomeMonthRow[] }) {
   );
 }
 
-export function RealisedVsUnrealisedCard({ data }: { data: RealisedVsUnrealised }) {
-  const realised = toDecimal(data.realised);
-  const unrealised = toDecimal(data.unrealised);
-  const total = realised.plus(unrealised);
-  const chart = [
-    { label: 'P&L split', Realised: realised.toNumber(), Unrealised: unrealised.toNumber() },
-  ];
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">P&L split</p>
-        <CardTitle className="flex items-center gap-1.5">Realised vs unrealised<AnalyticsInfo k="realisedVsUnrealised" /></CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={120}>
-          <BarChart data={chart} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
-            <XAxis type="number" hide tickFormatter={shortInr} />
-            <YAxis dataKey="label" type="category" hide />
-            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => formatINR(v.toFixed(4))} />
-            <Bar dataKey="Realised" stackId="pnl" fill={CHART_COLORS[1]!} radius={[6, 0, 0, 6]} />
-            <Bar dataKey="Unrealised" stackId="pnl" fill={CHART_COLORS[0]!} radius={[0, 6, 6, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-        <div className="mt-2 flex justify-between text-xs">
-          <div>
-            <span className="inline-block h-2 w-2 rounded-full mr-1.5" style={{ background: CHART_COLORS[1] }} />
-            Realised: <span className="font-medium tabular-nums">{formatINR(data.realised, { showSign: true })}</span>
-          </div>
-          <div>
-            <span className="inline-block h-2 w-2 rounded-full mr-1.5" style={{ background: CHART_COLORS[0] }} />
-            Unrealised: <span className="font-medium tabular-nums">{formatINR(data.unrealised, { showSign: true })}</span>
-          </div>
-        </div>
-        <div className="mt-1.5 text-[11px] text-muted-foreground">
-          Total {formatINR(total.toFixed(4), { showSign: true })}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
+/**
+ * Tax-loss harvesting.
+ *
+ * Leads with one sentence and a rupee figure, because that is the only part
+ * most readers need: what selling your losers before 31 March would save. The
+ * four offset tiles below are the working, kept for anyone checking the sum
+ * rather than shown first and left to be decoded.
+ */
 export function TaxHarvestTable({ data }: { data: TaxHarvestSummary }) {
+  const taxSaved = toDecimal(data.savings?.taxSaved ?? '0');
+  // Gains actually booked this year. A harvest can be worth nothing for two
+  // different reasons — no gains at all, or gains that are already untaxed
+  // (long-term within the exemption) — and saying the wrong one contradicts
+  // the "Taxable gains (FY)" tile directly below.
+  const bookedGains = toDecimal(data.realisedStcgInFy).plus(data.realisedLtcgInFy);
   return (
     <Card>
       <CardHeader className="pb-2">
-        <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Tax-loss harvest</p>
-        <CardTitle className="flex items-center gap-1.5">Candidates to realise losses<AnalyticsInfo k="taxHarvest" /></CardTitle>
+        <CardTitle className="flex items-center gap-1.5">Cut your tax bill<AnalyticsInfo k="taxHarvest" /></CardTitle>
       </CardHeader>
       <CardContent>
+        <p className="mb-4 text-sm text-foreground">
+          {taxSaved.gt(0) ? (
+            <>
+              Selling the holdings below at a loss before 31 March could reduce this year&apos;s tax by about{' '}
+              <span className="font-semibold text-positive">{formatINR(data.savings.taxSaved)}</span>.
+            </>
+          ) : data.candidates.length > 0 && bookedGains.gt(0) ? (
+            <>
+              You hold {data.candidates.length}{' '}
+              {data.candidates.length === 1 ? 'investment' : 'investments'} worth less than you paid, but
+              booking those losses would not reduce this year&apos;s tax — the gains you have booked so far are
+              already untaxed.
+            </>
+          ) : data.candidates.length > 0 ? (
+            <>
+              You hold {data.candidates.length}{' '}
+              {data.candidates.length === 1 ? 'investment' : 'investments'} worth less than you paid. Selling
+              them would book those losses, but you have no gains this year for them to cancel out.
+            </>
+          ) : (
+            <>Nothing to harvest — none of your holdings is currently worth less than you paid.</>
+          )}
+        </p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div className="rounded-lg bg-muted/50 p-3">
             <p className="flex items-center gap-1 text-xs text-muted-foreground">Unrealised loss pool<AnalyticsInfo k="harvestLossPool" /></p>
@@ -162,20 +159,14 @@ export function TaxHarvestTable({ data }: { data: TaxHarvestSummary }) {
             </p>
           </div>
         </div>
-        {Number(data.savings?.taxSaved ?? 0) > 0 && (
-          <div className="rounded-lg border border-positive/30 bg-positive/5 p-3 mb-4">
-            <div className="flex items-baseline justify-between gap-3 flex-wrap">
-              <div>
-                <p className="text-xs text-muted-foreground">Potential tax offset by harvesting available losses</p>
-                <p className="text-lg font-semibold text-positive mt-0.5">{formatINR(data.savings.taxSaved)}</p>
-              </div>
-              <p className="text-[11px] text-muted-foreground tabular-nums">
-                Tax before {formatINR(data.savings.taxBefore)} → after {formatINR(data.savings.taxAfter)}
-                {' · '}STCG {data.savings.stcgRatePct}% · LTCG {data.savings.ltcgRatePct}% over {formatINR(data.savings.ltcgExemption)}
-              </p>
-            </div>
+        {taxSaved.gt(0) && (
+          <div className="rounded-lg border bg-muted/40 p-3 mb-4">
+            <p className="text-[11px] text-muted-foreground tabular-nums">
+              Tax before {formatINR(data.savings.taxBefore)} → after {formatINR(data.savings.taxAfter)}
+              {' · '}STCG {data.savings.stcgRatePct}% · LTCG {data.savings.ltcgRatePct}% over {formatINR(data.savings.ltcgExemption)}
+            </p>
             <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Informational estimate of capital-gains offset under current set-off rules — not advice. Loss set-off and timing have conditions; consult a tax professional.
+              An estimate under current set-off rules — not advice. Set-off and timing have conditions; consult a tax professional.
             </p>
           </div>
         )}

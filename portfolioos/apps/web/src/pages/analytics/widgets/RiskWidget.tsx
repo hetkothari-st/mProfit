@@ -1,4 +1,4 @@
-import { Activity, TrendingDown, Shield, Scale } from 'lucide-react';
+import { Activity, TrendingDown } from 'lucide-react';
 import { ASSET_CLASS_LABELS } from '@everypaisa/shared';
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -10,11 +10,25 @@ interface RiskProps {
   loading: boolean;
 }
 
+/**
+ * Two risk numbers, not four.
+ *
+ * Sharpe and beta are gone. Both are computed on TOTAL PORTFOLIO VALUE, so a
+ * regular SIP feeds contributions into them: Sharpe's return leg is the CAGR of
+ * total value, which means saving hard manufactures a "strong" score, and beta
+ * regresses that same contaminated series against NIFTY. Neither survived the
+ * question "what would a reader do differently because of this number?".
+ *
+ * Volatility and max drawdown carry the same contribution caveat, but they at
+ * least describe something a holder recognises — how bumpy it felt, and the
+ * worst fall — so they stay, on the detailed tab, with the caveat in their
+ * explanation.
+ */
 export function RiskMetricsCards({ metrics, loading }: RiskProps) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {Array.from({ length: 2 }).map((_, i) => (
           <Card key={i} className="h-28 animate-pulse bg-muted/60" />
         ))}
       </div>
@@ -22,72 +36,26 @@ export function RiskMetricsCards({ metrics, loading }: RiskProps) {
   }
   if (!metrics) return null;
   const fmt = (v: number | null, suffix = '%') => (v == null ? '—' : `${v.toFixed(2)}${suffix}`);
-  const sharpeBucket =
-    metrics.sharpe == null
-      ? 'flat'
-      : metrics.sharpe >= 1
-      ? 'up'
-      : metrics.sharpe < 0
-      ? 'down'
-      : 'flat';
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <MetricCard
-        label="Volatility (annualised)"
+        label="How much it swings"
         info={<AnalyticsInfo k="volatility" />}
         value={fmt(metrics.volatilityPct)}
         icon={Activity}
-        hint={`${metrics.observations} monthly returns`}
+        hint={`Annualised, from ${metrics.observations} monthly changes`}
       />
       <MetricCard
-        label="Sharpe ratio"
-        info={<AnalyticsInfo k="sharpe" />}
-        value={metrics.sharpe == null ? '—' : metrics.sharpe.toFixed(2)}
-        icon={Shield}
-        trend={{
-          direction: sharpeBucket as 'up' | 'down' | 'flat',
-          value: metrics.sharpe == null ? '' : metrics.sharpe >= 1 ? 'Strong' : metrics.sharpe >= 0 ? 'Modest' : 'Weak',
-        }}
-      />
-      <MetricCard
-        label="Max drawdown"
+        label="Worst fall"
         info={<AnalyticsInfo k="maxDrawdown" />}
         value={fmt(metrics.maxDrawdownPct == null ? null : -Math.abs(metrics.maxDrawdownPct))}
         icon={TrendingDown}
-        hint="Peak-to-trough"
-      />
-      <MetricCard
-        label="Beta vs NIFTY"
-        info={<AnalyticsInfo k="beta" />}
-        value={metrics.betaVsNifty == null ? '—' : metrics.betaVsNifty.toFixed(2)}
-        icon={Scale}
-        hint={
-          metrics.betaVsNifty == null
-            ? 'Need more history'
-            : metrics.betaVsNifty > 1
-            ? 'More volatile than market'
-            : metrics.betaVsNifty < 0.5
-            ? 'Defensive vs market'
-            : 'Tracks market'
-        }
+        hint="Peak to trough"
       />
     </div>
   );
 }
 
-/**
- * Correlation of monthly returns between asset classes.
- *
- * Replaces the "Asset class weight grid", which drew min(weight_i, weight_j)
- * in a correlation-matrix layout and so looked like something it wasn't.
- * These are real Pearson coefficients computed server-side
- * (analytics.risk.ts classMonthlyReturns / classCorrelationMatrix) from
- * start-of-month quantities × historical prices, so money added during a
- * month doesn't register as a return.
- *
- * Classes without price history (deposits, real estate…) have no return
- * series, so they're listed under the grid rather than shown as rows of dashes.
- */
 export function ReturnCorrelationGrid({
   correlation,
   loading,
