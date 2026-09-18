@@ -323,13 +323,28 @@ export const analyticsApi = {
   },
 };
 
+/** One term's share of a simulated sale (the matched lots of that term). */
+export interface WhatIfBucket {
+  quantity: string;
+  costBasis: string;
+  proceeds: string;
+  realisedPnL: string;
+  taxRatePct: number | null;
+  estTax: string;
+}
+
 export interface WhatIfResult {
   holding: { id: string; assetName: string | null; assetClass: string; quantityHeld: string; avgCost: string; currentPrice: string };
   input: { sellQty: string; sellPrice: string };
   sale: {
     proceeds: string; costBasis: string; realisedPnL: string;
-    term: 'SHORT' | 'LONG'; equityType: boolean; isLoss: boolean;
+    term: 'SHORT' | 'LONG' | 'MIXED'; equityType: boolean; isLoss: boolean;
     estTax: string; taxRatePct: number | null; taxIndicative: boolean;
+    /** Gain taxed at the slab rate rather than a capital-gains rate. */
+    slabTaxableGain: string;
+    slabRatePct: number | null; slabRateIsEstimate: boolean;
+    longTerm: WhatIfBucket; shortTerm: WhatIfBucket;
+    lotsMatched: number; oldestMatchedBuyDate: string | null; lotsIncomplete: boolean;
   };
   deltas: {
     proceeds: string; estTax: string; netCashAfterTax: string;

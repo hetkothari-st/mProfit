@@ -3,7 +3,7 @@ import { useQuery, useQueries, useMutation } from '@tanstack/react-query';
 import { FlaskConical, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { formatINR, formatPercent } from '@everypaisa/shared';
+import { formatINR, formatPercent, toDecimal } from '@everypaisa/shared';
 import type { HoldingRow } from '@everypaisa/shared';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { analyticsApi } from '@/api/analytics.api';
@@ -87,34 +87,80 @@ export function WhatIfSimulator() {
 
         {sim.isError && <p className="mt-3 text-sm text-negative">{apiErrorMessage(sim.error)}</p>}
 
-        {sim.data && (
+        {sim.data && (() => {
+          const sale = sim.data.sale;
+          // Part of this gain is taxed at the investor's slab rate rather than
+          // a capital-gains rate. It used to be reported as ₹0 tax; now it is
+          // priced, and the assumption behind the rate is named on screen.
+          const slabTaxed = toDecimal(sale.slabTaxableGain).greaterThan(0);
+          const termLabel =
+            sale.term === 'MIXED'
+              ? 'Realised gain (mixed)'
+              : sale.term === 'LONG'
+                ? 'Realised LTCG'
+                : 'Realised STCG';
+          return (
           <div className="mt-4 space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Stat label="Proceeds" value={formatINR(sim.data.deltas.proceeds)} />
               <Stat
-                label={`Realised ${sim.data.sale.term === 'LONG' ? 'LTCG' : 'STCG'}`}
-                value={formatINR(sim.data.sale.realisedPnL, { showSign: true })}
-                tone={sim.data.sale.isLoss ? 'neg' : 'pos'}
+                label={termLabel}
+                value={formatINR(sale.realisedPnL, { showSign: true })}
+                tone={sale.isLoss ? 'neg' : 'pos'}
               />
               <Stat
-                label={`Est. tax${sim.data.sale.taxRatePct != null ? ` (${sim.data.sale.taxRatePct}%)` : ''}`}
+                label={`Est. tax${sale.taxRatePct != null ? ` (${sale.taxRatePct}%)` : ''}`}
                 value={formatINR(sim.data.deltas.estTax)}
               />
               <Stat label="Net cash after tax" value={formatINR(sim.data.deltas.netCashAfterTax)} />
             </div>
+
+            {sale.term === 'MIXED' && (
+              <div className="rounded-lg border bg-muted/40 px-3 py-2 text-[12.5px] text-muted-foreground">
+                These units straddle the long-term threshold, so the two halves are taxed differently.{' '}
+                <span className="text-foreground">
+                  Long-term: {sale.longTerm.quantity} units, {formatINR(sale.longTerm.realisedPnL, { showSign: true })}
+                  {sale.longTerm.taxRatePct != null ? ` at ${sale.longTerm.taxRatePct}%` : ''}
+                </span>
+                {' · '}
+                <span className="text-foreground">
+                  Short-term: {sale.shortTerm.quantity} units, {formatINR(sale.shortTerm.realisedPnL, { showSign: true })}
+                  {sale.shortTerm.taxRatePct != null ? ` at ${sale.shortTerm.taxRatePct}%` : ' at your slab rate'}
+                </span>.
+              </div>
+            )}
+
+            {slabTaxed && (
+              <p className="text-[12px] text-amber-600 dark:text-amber-400">
+                {formatINR(sale.slabTaxableGain)} of this gain is short-term on a non-equity asset, so it is taxed
+                at your income-tax slab rate
+                {sale.slabRatePct != null ? `, taken here as ${sale.slabRatePct}%` : ''}.
+                {sale.slabRateIsEstimate && ' Record your slab in your risk profile for a figure based on your own rate.'}
+              </p>
+            )}
+
+            {sale.lotsMatched > 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                Matched {sale.lotsMatched} purchase {sale.lotsMatched === 1 ? 'lot' : 'lots'} oldest-first (FIFO)
+                {sale.oldestMatchedBuyDate ? `, from ${sale.oldestMatchedBuyDate}` : ''} · cost basis{' '}
+                {formatINR(sale.costBasis)}
+              </p>
+            )}
+
             <div className="text-sm text-muted-foreground">
               This holding: {formatPercent(sim.data.deltas.concentrationBeforePct, 1)} →{' '}
               <span className="text-foreground font-medium">{formatPercent(sim.data.deltas.concentrationAfterPct, 1)}</span> of portfolio
               {' · '}{sim.data.deltas.remainingQty} units left ({formatINR(sim.data.deltas.remainingValue)})
             </div>
-            {sim.data.sale.isLoss && (
+            {sale.isLoss && (
               <p className="text-[12px] text-amber-600 dark:text-amber-400">
                 This sale realises a loss — it may be set off against capital gains (see the tax-harvest card).
               </p>
             )}
             <p className="text-[11px] text-muted-foreground">{sim.data.disclaimer}</p>
           </div>
-        )}
+          );
+        })()}
       </CardContent>
     </Card>
   );
