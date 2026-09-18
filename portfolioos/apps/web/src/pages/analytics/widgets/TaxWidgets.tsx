@@ -105,6 +105,11 @@ export function IncomeTrendBar({ rows }: { rows: IncomeMonthRow[] }) {
  */
 export function TaxHarvestTable({ data }: { data: TaxHarvestSummary }) {
   const taxSaved = toDecimal(data.savings?.taxSaved ?? '0');
+  // Gains actually booked this year. A harvest can be worth nothing for two
+  // different reasons — no gains at all, or gains that are already untaxed
+  // (long-term within the exemption) — and saying the wrong one contradicts
+  // the "Taxable gains (FY)" tile directly below.
+  const bookedGains = toDecimal(data.realisedStcgInFy).plus(data.realisedLtcgInFy);
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -116,6 +121,13 @@ export function TaxHarvestTable({ data }: { data: TaxHarvestSummary }) {
             <>
               Selling the holdings below at a loss before 31 March could reduce this year&apos;s tax by about{' '}
               <span className="font-semibold text-positive">{formatINR(data.savings.taxSaved)}</span>.
+            </>
+          ) : data.candidates.length > 0 && bookedGains.gt(0) ? (
+            <>
+              You hold {data.candidates.length}{' '}
+              {data.candidates.length === 1 ? 'investment' : 'investments'} worth less than you paid, but
+              booking those losses would not reduce this year&apos;s tax — the gains you have booked so far are
+              already untaxed.
             </>
           ) : data.candidates.length > 0 ? (
             <>

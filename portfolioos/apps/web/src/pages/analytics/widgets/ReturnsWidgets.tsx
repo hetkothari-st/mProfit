@@ -108,11 +108,24 @@ export function ConcentrationCard({ rows }: { rows: ConcentrationRow[] }) {
           <div className="py-8 text-center text-sm text-muted-foreground">No holdings yet</div>
         ) : (
           <div className="space-y-2">
-            {/* The headline in words — the bars below are the detail behind it. */}
+            {/*
+              The headline in words. When the listed holdings ARE the whole
+              portfolio, "your top 8 are 100% of everything you own" is true and
+              useless, so lead with the largest single holding instead.
+            */}
             <p className="mb-3 text-sm text-foreground">
-              Your top {rows.length} holdings are{' '}
-              <span className="font-semibold">{rows[rows.length - 1]!.cumulativePct.toFixed(0)}%</span> of
-              everything you own.
+              {rows[rows.length - 1]!.cumulativePct >= 99.5 ? (
+                <>
+                  Your biggest holding is{' '}
+                  <span className="font-semibold">{rows[0]!.pct.toFixed(0)}%</span> of everything you own.
+                </>
+              ) : (
+                <>
+                  Your top {rows.length} holdings are{' '}
+                  <span className="font-semibold">{rows[rows.length - 1]!.cumulativePct.toFixed(0)}%</span> of
+                  everything you own.
+                </>
+              )}
             </p>
             {rows.map((r, i) => (
               <div key={`${r.assetName}-${i}`} className="space-y-1">

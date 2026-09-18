@@ -5,7 +5,6 @@ import { Sparkles, Loader2, RefreshCw, AlertTriangle, Info, AlertOctagon, Shield
 import toast from 'react-hot-toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { toDecimal } from '@everypaisa/shared';
 import { analyticsApi } from '@/api/analytics.api';
 import type {
   Period,
@@ -171,11 +170,7 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
       if (data.ok) {
         queryClient.setQueryData(['analytics', 'insights', portfolioId ?? 'all'], data);
         queryClient.invalidateQueries({ queryKey: ['analytics', 'insights-spend'] });
-        toast.success(
-          data.fromCache
-            ? 'Loaded cached insight (under 24h old).'
-            : `Generated · cost ₹${data.costInr}`,
-        );
+        toast.success(data.fromCache ? 'Loaded cached insight (under 24h old).' : 'Insights generated.');
       } else {
         toast.error(data.message ?? 'Generate failed');
       }
@@ -186,7 +181,6 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
   const latest = latestQuery.data;
   const spend = spendQuery.data;
   const capped = spend?.status === 'capped';
-  const warning = spend?.status === 'warn';
   const okPayload: InsightsResult | null | undefined =
     latest && latest.ok ? latest : null;
   const failedPayload = latest && !latest.ok ? latest : null;
@@ -221,14 +215,6 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
         </div>
         {open && (
           <div className="flex items-center gap-2 flex-wrap">
-            {spend && (
-              <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span>Budget</span>
-                <span className={`tabular-nums font-medium ${capped ? 'text-red-600 dark:text-red-400' : warning ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>
-                  ₹{toDecimal(spend.monthToDate).toFixed(2)} / ₹{toDecimal(spend.capInr).toFixed(0)}
-                </span>
-              </div>
-            )}
             <Button
               variant="outline"
               size="sm"
@@ -266,8 +252,7 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
             <div>
               <p className="font-medium text-red-700 dark:text-red-300">Monthly LLM budget reached</p>
               <p className="text-xs text-red-600/80 dark:text-red-400/80">
-                ₹{spend?.monthToDate} of ₹{spend?.capInr} spent this month. Insights generation paused
-                until next month or cap is raised in settings.
+                New insights are paused until next month, or until the cap is raised in settings.
               </p>
             </div>
           </div>
@@ -309,7 +294,7 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
                 ))}
             </div>
             <p className="text-[11px] text-muted-foreground border-t pt-3">
-              <span className="font-medium">Disclaimer.</span> {okPayload.disclaimer} Model: {okPayload.model}.
+              <span className="font-medium">Disclaimer.</span> {okPayload.disclaimer}
             </p>
           </div>
         )}
