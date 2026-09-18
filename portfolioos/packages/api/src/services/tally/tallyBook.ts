@@ -382,14 +382,13 @@ export function buildTallyBook(sources: TallySources, opts: { today?: string } =
     if (BUY_KINDS[t.kind]) {
       if (gross.plus(charges).isZero()) continue;
       const narration = `${BUY_KINDS[t.kind]} ${qty(t.quantity)} ${name} @ ${rs(t.price)}`;
-      // Purchase charges are part of the investment's cost — the cost the
-      // capital-gains figures use — except STT, which is an expense (sec 48).
-      const stt = dec(t.stt ?? '0');
-      const cost = gross.plus(charges).minus(stt);
+      // Every purchase charge is part of the investment's cost, STT included:
+      // sec 48 disallows STT for capital gains only, and that adjustment lives
+      // in the tax reports, not in the ledger.
+      const cost = gross.plus(charges);
       add(t.date, 'Journal', narration, [
         [holding(t), cost],
-        [fixed('charges'), stt],
-        [fixed('unallocated'), gross.plus(charges).negated()],
+        [fixed('unallocated'), cost.negated()],
       ]);
       addLot(t.holdingKey, quantity, cost);
     } else if (SELL_KINDS[t.kind]) {

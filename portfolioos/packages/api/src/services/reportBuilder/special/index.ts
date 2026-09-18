@@ -2090,7 +2090,7 @@ export async function buildScriptwiseQtywiseLayout(
       const bucket = buckets.get(p.assetKey);
       if (!bucket) continue;
       const qty = p.lots.reduce((acc, l) => acc.plus(l.quantity), zero());
-      const cost = p.lots.reduce((acc, l) => acc.plus(l.quantity.times(l.costPerUnit)), zero());
+      const cost = p.lots.reduce((acc, l) => acc.plus(l.quantity.times(l.bookCostPerUnit)), zero());
       set(bucket, qty, cost);
     }
   };
@@ -3197,7 +3197,7 @@ async function equityScriptBuckets(
       .reduce(
         (acc, l) => ({
           qty: acc.qty.plus(l.quantity),
-          value: acc.value.plus(l.costPerUnit.times(l.quantity)),
+          value: acc.value.plus(l.bookCostPerUnit.times(l.quantity)),
         }),
         { qty: new Decimal(0), value: new Decimal(0) },
       );
@@ -4250,7 +4250,7 @@ export async function buildScriptLedgerLayout(
     // Closing: the FIFO lots still held — the same lots the gains below were matched against.
     const open = computeOpenLots(stxs, fundCategoryMap).flatMap((p) => p.lots);
     const openQty = open.reduce((acc, l) => acc.plus(l.quantity), new Decimal(0));
-    const closingValue = open.reduce((acc, l) => acc.plus(l.quantity.times(l.costPerUnit)), new Decimal(0));
+    const closingValue = open.reduce((acc, l) => acc.plus(l.quantity.times(l.bookCostPerUnit)), new Decimal(0));
     const avgRate = openQty.greaterThan(0) ? closingValue.dividedBy(openQty) : new Decimal(0);
     rows.push({
       cells: { scriptName: '', date: '', settlement: '', description: 'Closing Values', debit: '', credit: closingValue.toString(), avgRate: avgRate.toString(), qty: openQty.toString() },
@@ -4260,9 +4260,10 @@ export async function buildScriptLedgerLayout(
     let st = new Decimal(0);
     let spec = new Decimal(0);
     for (const c of cgs) {
-      // Book gain = sale proceeds − actual cost of the lots sold, so the account
-      // balances; grandfathered and indexed cost are tax figures, not book ones.
-      const book = c.sellAmount.minus(c.buyAmount);
+      // Book gain = money received − what the lots cost to buy, so the account
+      // balances against the bank; grandfathered, indexed and STT-adjusted
+      // figures are tax ones and stay in the tax reports.
+      const book = c.bookSellAmount.minus(c.bookBuyAmount);
       if (c.capitalGainType === 'LONG_TERM') lt = lt.plus(book);
       else if (c.capitalGainType === 'SHORT_TERM') st = st.plus(book);
       else if (c.capitalGainType === 'INTRADAY') spec = spec.plus(book);

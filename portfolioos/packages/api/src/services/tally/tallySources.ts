@@ -56,6 +56,9 @@ export interface TradeRow {
     gainLoss: Num;
     capitalGainType: string;
     sellAmount?: Num;
+    /** Cost and proceeds as paid (STT included) — what the ledgers carry. */
+    bookBuyAmount?: Num;
+    bookSellAmount?: Num;
     quantity?: Num;
     unmatched?: boolean;
   }>;
@@ -91,6 +94,17 @@ export function mapTrade(t: TradeRow): { trade: TallySources['trades'][number] }
   const gains = foreign ? [] : t.capitalGains;
   const sumOf = (rows: typeof gains, pick: (g: (typeof gains)[number]) => Num) =>
     rows.reduce<Decimal>((s, g) => s.plus(d(pick(g))), new Decimal(0));
+  /** Money received less what the lots cost, both as paid. */
+  const bookGain = (rows: typeof gains) =>
+    rows.reduce<Decimal>((s, g) => {
+      // Rows from the live engine carry both figures; anything older only has
+      // the tax gain, which is the best available answer for it.
+      const book =
+        g.bookSellAmount !== undefined && g.bookBuyAmount !== undefined
+          ? d(g.bookSellAmount).minus(d(g.bookBuyAmount))
+          : d(g.gainLoss);
+      return s.plus(book);
+    }, new Decimal(0));
   const matched = gains.filter((g) => !g.unmatched);
   const unmatched = gains.filter((g) => g.unmatched);
   const longTerm = matched.filter((g) => g.capitalGainType === 'LONG_TERM');
@@ -111,11 +125,13 @@ export function mapTrade(t: TradeRow): { trade: TallySources['trades'][number] }
       gross: d(t.grossAmount).times(rate).toString(),
       charges: charges.times(rate).toString(),
       stt: d(t.stt).times(rate).toString(),
-      cost: gains.length > 0 ? sumOf(matched, (g) => g.buyAmount).toString() : null,
-      shortTermGain: sumOf(shortTerm, (g) => g.gainLoss).toString(),
-      longTermGain: sumOf(longTerm, (g) => g.gainLoss).toString(),
-      speculativeGain: sumOf(speculative, (g) => g.gainLoss).toString(),
-      unmatchedValue: sumOf(unmatched, (g) => g.sellAmount ?? g.gainLoss).toString(),
+      // Book figures: cost as paid and gain against it. The tax cost (STT
+       // excluded, sec 48) stays in the tax reports.
+      cost: gains.length > 0 ? sumOf(matched, (g) => g.bookBuyAmount ?? g.buyAmount).toString() : null,
+      shortTermGain: bookGain(shortTerm).toString(),
+      longTermGain: bookGain(longTerm).toString(),
+      speculativeGain: bookGain(speculative).toString(),
+      unmatchedValue: sumOf(unmatched, (g) => g.bookSellAmount ?? g.sellAmount ?? g.gainLoss).toString(),
       unmatchedQuantity: sumOf(unmatched, (g) => g.quantity ?? 0).toString(),
     },
   };
@@ -360,6 +376,8 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
       gainLoss: g.gainLoss,
       capitalGainType: g.capitalGainType,
       sellAmount: g.sellAmount,
+      bookBuyAmount: g.bookBuyAmount,
+      bookSellAmount: g.bookSellAmount,
       quantity: g.quantity,
       unmatched: g.buyTransactionId === g.sellTransactionId,
     });

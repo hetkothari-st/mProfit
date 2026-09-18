@@ -79,8 +79,8 @@ describe('mapTrade', () => {
       row({
         transactionType: 'SELL',
         capitalGains: [
-          { buyAmount: dec('3000'), gainLoss: dec('200'), capitalGainType: 'SHORT_TERM' },
-          { buyAmount: dec('2800'), gainLoss: dec('390'), capitalGainType: 'LONG_TERM' },
+          { buyAmount: dec('3000'), bookBuyAmount: dec('3000'), bookSellAmount: dec('3200'), gainLoss: dec('200'), capitalGainType: 'SHORT_TERM' },
+          { buyAmount: dec('2800'), bookBuyAmount: dec('2800'), bookSellAmount: dec('3190'), gainLoss: dec('390'), capitalGainType: 'LONG_TERM' },
         ],
       }),
     );
