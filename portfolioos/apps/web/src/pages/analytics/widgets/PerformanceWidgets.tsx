@@ -1,9 +1,9 @@
 import {
-  AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { formatINR, toDecimal } from '@everypaisa/shared';
-import type { ValuationPoint, CostValueDriftPoint, BenchmarkPoint } from '@/api/analytics.api';
+import type { ValuationPoint } from '@/api/analytics.api';
 import { shortInr } from '../chartColors';
 import { AnalyticsInfo } from '../AnalyticsInfo';
 
@@ -59,120 +59,6 @@ export function PortfolioValueLine({ points }: ValueLineProps) {
             </AreaChart>
           </ResponsiveContainer>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-interface DriftProps {
-  points: CostValueDriftPoint[];
-}
-
-export function CostVsValueDrift({ points }: DriftProps) {
-  const data = points.map((p) => ({
-    label: new Date(p.date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
-    drift: p.driftPct,
-  }));
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Drift</p>
-        <CardTitle className="flex items-center gap-1.5">Return on invested capital<AnalyticsInfo k="returnOnCapital" /></CardTitle>
-      </CardHeader>
-      <CardContent>
-        {data.length === 0 ? (
-          <div className="h-56 grid place-items-center text-sm text-muted-foreground border border-dashed rounded-md">
-            No history yet
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} minTickGap={48} />
-              <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={56} tickFormatter={(v: number) => `${v.toFixed(0)}%`} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [`${v.toFixed(2)}%`, 'Drift over cost']} />
-              <Line type="monotone" dataKey="drift" stroke="hsl(213 53% 22%)" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-interface BenchmarkProps {
-  portfolio: ValuationPoint[];
-  benchmark: BenchmarkPoint[];
-}
-
-export function BenchmarkOverlay({ portfolio, benchmark }: BenchmarkProps) {
-  // Rebase portfolio to 100 at first observation; align with benchmark by month.
-  if (portfolio.length === 0 || benchmark.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Benchmark</p>
-          <CardTitle className="flex items-center gap-1.5">Portfolio vs NIFTY 50 / Sensex<AnalyticsInfo k="benchmark" /></CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-56 grid place-items-center text-sm text-muted-foreground border border-dashed rounded-md">
-            Benchmark data unavailable for this period
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-  const pBase = toDecimal(portfolio[0]!.value).toNumber();
-  const portMap = new Map(
-    portfolio.map((p) => [
-      p.date.slice(0, 7),
-      pBase > 0 ? (toDecimal(p.value).toNumber() / pBase) * 100 : null,
-    ]),
-  );
-  // Pick a benchmark point per month-end and merge.
-  const benchByMonth = new Map<string, BenchmarkPoint>();
-  for (const b of benchmark) {
-    const m = b.date.slice(0, 7);
-    const prev = benchByMonth.get(m);
-    if (!prev || b.date > prev.date) benchByMonth.set(m, b);
-  }
-  const months = Array.from(new Set([...portMap.keys(), ...benchByMonth.keys()])).sort();
-  const data = months.map((m) => {
-    const b = benchByMonth.get(m);
-    return {
-      label: m,
-      portfolio: portMap.get(m) ?? null,
-      nifty: b?.niftyIdx ?? null,
-      sensex: b?.sensexIdx ?? null,
-    };
-  });
-  return (
-    <Card className="lg:col-span-2">
-      <CardHeader className="pb-2">
-        <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Benchmark</p>
-        <CardTitle className="flex items-center gap-1.5">Portfolio vs NIFTY 50 / Sensex (rebased to 100)<AnalyticsInfo k="benchmark" /></CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} minTickGap={48} />
-            <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={56} domain={['auto', 'auto']} tickFormatter={(v: number) => v.toFixed(0)} />
-            <Tooltip
-              contentStyle={TOOLTIP_STYLE}
-              formatter={(v: number | string, name: string) => [
-                v == null ? '—' : (typeof v === 'number' ? v : Number.parseFloat(v)).toFixed(1),
-                name === 'portfolio' ? 'Your portfolio' : name === 'nifty' ? 'NIFTY 50' : 'Sensex',
-              ]}
-            />
-            <Legend wrapperStyle={{ fontSize: 11 }} formatter={(name: string) =>
-              name === 'portfolio' ? 'Your portfolio' : name === 'nifty' ? 'NIFTY 50' : 'Sensex'
-            } />
-            <Line type="monotone" dataKey="portfolio" stroke="hsl(213 53% 22%)" strokeWidth={2.2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="nifty" stroke="hsl(36 60% 48%)" strokeWidth={1.5} strokeDasharray="3 3" dot={false} connectNulls />
-            <Line type="monotone" dataKey="sensex" stroke="hsl(260 28% 42%)" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls />
-          </LineChart>
-        </ResponsiveContainer>
       </CardContent>
     </Card>
   );

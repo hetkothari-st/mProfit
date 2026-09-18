@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, BarChart3 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -10,10 +11,10 @@ import { Link } from 'react-router-dom';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { analyticsApi, type Period } from '@/api/analytics.api';
 import { KpiCards } from './widgets/KpiCards';
-import { AllocationByClassPie, AllocationTreemap, SectorPie } from './widgets/AllocationWidgets';
-import { PortfolioValueLine, CostVsValueDrift, BenchmarkOverlay } from './widgets/PerformanceWidgets';
-import { WinnersLosers, ConcentrationCard, AssetClassXirrBar } from './widgets/ReturnsWidgets';
-import { CgByFyBar, IncomeTrendBar, RealisedVsUnrealisedCard, TaxHarvestTable } from './widgets/TaxWidgets';
+import { AllocationByClassPie, SectorPie } from './widgets/AllocationWidgets';
+import { PortfolioValueLine } from './widgets/PerformanceWidgets';
+import { BestAndWorst, ConcentrationCard, AssetClassXirrBar } from './widgets/ReturnsWidgets';
+import { CgByFyBar, IncomeTrendBar, TaxHarvestTable } from './widgets/TaxWidgets';
 import { CashflowWaterfall } from './widgets/CashflowWidget';
 import { RiskMetricsCards, ReturnCorrelationGrid } from './widgets/RiskWidget';
 import { LiabilitiesVsAssetsCard } from './widgets/LiabilitiesWidget';
@@ -31,9 +32,29 @@ const PERIOD_OPTIONS: { label: string; value: Period }[] = [
   { label: 'All', value: 'All' },
 ];
 
+/**
+ * Two views of the same data.
+ *
+ * Overview answers the four questions people actually open this page with:
+ * what is it worth, am I up or down, what is doing badly, and what will March
+ * cost me. Detail holds everything else — still one click away, never in the
+ * way of those four.
+ *
+ * The split is in the URL so a view can be linked and reloaded into.
+ */
+type View = 'overview' | 'detail';
+
 export function AnalyticsPage() {
   const [selectedId, setSelectedId] = useState<string>('ALL');
   const [period, setPeriod] = useState<Period>('1Y');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view: View = searchParams.get('view') === 'detail' ? 'detail' : 'overview';
+  const setView = (next: View) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'overview') params.delete('view');
+    else params.set('view', next);
+    setSearchParams(params, { replace: true });
+  };
 
   const portfoliosQuery = useQuery({
     queryKey: ['portfolios'],
@@ -50,17 +71,12 @@ export function AnalyticsPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const benchmarkQuery = useQuery({
-    queryKey: ['analytics', 'benchmark', period],
-    queryFn: () => analyticsApi.benchmark(period),
-    enabled: !!snapshotQuery.data,
-    staleTime: 15 * 60 * 1000,
-  });
-
+  // Risk and correlation only appear on the detail tab, so they are only
+  // fetched once someone opens it.
   const riskQuery = useQuery({
     queryKey: ['analytics', 'risk', selectedId, period],
     queryFn: () => analyticsApi.risk(scopeId, period),
-    enabled: !!snapshotQuery.data,
+    enabled: !!snapshotQuery.data && view === 'detail',
     staleTime: 15 * 60 * 1000,
   });
 
@@ -90,8 +106,7 @@ export function AnalyticsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Analytics"
-        title="Performance, risk and AI insights"
-        description="Every metric, every chart, every signal — across portfolios and asset classes."
+        title="Your money, in detail"
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Select
@@ -123,61 +138,72 @@ export function AnalyticsPage() {
         }
       />
 
+      <div className="flex gap-1 border-b border-border/70">
+        {([
+          { key: 'overview', label: 'Overview' },
+          { key: 'detail', label: 'Detail' },
+        ] as const).map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setView(t.key)}
+            aria-current={view === t.key ? 'page' : undefined}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              view === t.key
+                ? 'border-foreground text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {snapshotQuery.isLoading || !data ? (
         <AnalyticsSkeleton hidePageHeader />
-      ) : (
+      ) : view === 'overview' ? (
         <>
-          {/* KPI row */}
+          {/* What is it worth, and am I up or down */}
           <KpiCards kpis={data.kpis} />
 
-          {/* AI Insights — high on the page so users see it */}
+          {/* The one chart that tells the whole story */}
+          <PortfolioValueLine points={data.portfolioValueLine} />
+
           <LockedFeature requiredTier="PLUS" featureName="AI Insights">
             <InsightsPanel portfolioId={scopeId} period={period} />
           </LockedFeature>
 
-          {/* Performance row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <PortfolioValueLine points={data.portfolioValueLine} />
-            <CostVsValueDrift points={data.costValueDrift} />
-          </div>
-
-          {/* Benchmark overlay (full width) */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <BenchmarkOverlay
-              portfolio={data.portfolioValueLine}
-              benchmark={benchmarkQuery.data?.series ?? []}
-            />
-            <LiabilitiesVsAssetsCard data={data.liabilitiesVsAssets} />
-          </div>
-
-          {/* Allocation row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Where the money sits, and how much of it sits in one place */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <AllocationByClassPie slices={data.allocationByClass} />
-            <AllocationTreemap nodes={data.allocationTreemap} />
-            <SectorPie slices={data.sectorAllocation} />
-          </div>
-
-          {/* Concentration + Asset-class XIRR + Realised-vs-Unrealised */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <ConcentrationCard rows={data.concentrationRisk} />
-            <AssetClassXirrBar rows={data.assetClassXirr} />
-            <RealisedVsUnrealisedCard data={data.realisedVsUnrealised} />
           </div>
 
-          {/* Winners + Losers */}
-          <WinnersLosers
+          {/* What is doing badly — ranked by rupees, not percent */}
+          <BestAndWorst
             winners={data.topWinnersLosers.winners}
             losers={data.topWinnersLosers.losers}
           />
 
-          {/* Income + CG + Cashflow */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* What March will cost, and what to do before then */}
+          <TaxHarvestTable data={data.taxHarvest} />
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <CgByFyBar rows={data.cgByFy} />
             <IncomeTrendBar rows={data.incomeTrend} />
-            <CashflowWaterfall rows={data.cashflowWaterfall} />
           </div>
 
-          {/* Risk row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <SectorPie slices={data.sectorAllocation} />
+            <AssetClassXirrBar rows={data.assetClassXirr} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <CashflowWaterfall rows={data.cashflowWaterfall} />
+            <LiabilitiesVsAssetsCard data={data.liabilitiesVsAssets} />
+          </div>
+
           <RiskMetricsCards metrics={riskQuery.data} loading={riskQuery.isLoading} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -186,7 +212,6 @@ export function AnalyticsPage() {
               loading={riskQuery.isLoading}
               allocation={data.allocationByClass}
             />
-            <TaxHarvestTable data={data.taxHarvest} />
             <WhatIfSimulator />
           </div>
         </>

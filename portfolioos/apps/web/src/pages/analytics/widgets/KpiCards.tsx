@@ -1,9 +1,22 @@
-import { TrendingUp, Wallet, LineChart as LineChartIcon, Percent, ArrowDownToLine, Receipt } from 'lucide-react';
+import { TrendingUp, Wallet, LineChart as LineChartIcon } from 'lucide-react';
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { formatINR, formatPercent, toDecimal } from '@everypaisa/shared';
 import type { KpiBlock } from '@/api/analytics.api';
 import { AnalyticsInfo } from '../AnalyticsInfo';
 
+/**
+ * The three numbers this page exists to answer: what is it worth, am I up or
+ * down, and what return is that.
+ *
+ * It used to carry six. "Total returns" added lifetime unrealised to one
+ * financial year's realised, a sum that is neither — its own explanation had
+ * to say so, which is reason enough to delete a number rather than annotate
+ * it. Realised P&L and income are financial-year figures and now sit with the
+ * other tax numbers, where a reader is already thinking in financial years.
+ *
+ * The labels say what the number is rather than what it is called: "profit if
+ * you sold today" is the same figure as "unrealised P&L" without the homework.
+ */
 function pct(v: number | null, digits = 2): string {
   if (v == null) return '—';
   return formatPercent(v * 100, digits, true);
@@ -11,22 +24,21 @@ function pct(v: number | null, digits = 2): string {
 
 export function KpiCards({ kpis }: { kpis: KpiBlock }) {
   const unrealisedD = toDecimal(kpis.unrealisedPnL);
-  const realisedD = toDecimal(kpis.realisedYtd);
   const totalCostD = toDecimal(kpis.totalCost);
   const unrealisedPct = totalCostD.gt(0)
     ? unrealisedD.dividedBy(totalCostD).times(100).toNumber()
     : 0;
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <MetricCard
         label="Current value"
         info={<AnalyticsInfo k="currentValue" />}
         value={formatINR(kpis.currentValue)}
         icon={Wallet}
-        hint={`Invested ${formatINR(kpis.totalCost)}`}
+        hint={`You put in ${formatINR(kpis.totalCost)}`}
       />
       <MetricCard
-        label="Unrealised P&L"
+        label="Profit if you sold today"
         info={<AnalyticsInfo k="unrealisedPnl" />}
         value={formatINR(kpis.unrealisedPnL, { showSign: true })}
         icon={LineChartIcon}
@@ -36,7 +48,7 @@ export function KpiCards({ kpis }: { kpis: KpiBlock }) {
         }}
       />
       <MetricCard
-        label="XIRR overall"
+        label="Annualised return"
         info={<AnalyticsInfo k="xirrOverall" />}
         // Only suppress when the API explicitly flags it unreliable. If the
         // field is absent (older API build / version skew) fall back to showing
@@ -45,37 +57,13 @@ export function KpiCards({ kpis }: { kpis: KpiBlock }) {
         icon={TrendingUp}
         hint={
           kpis.xirrReliable === false
-            ? `Annualized return needs ${
+            ? `Needs ${
                 Number.isFinite(kpis.xirrSpanDays)
                   ? `${Math.max(0, 90 - kpis.xirrSpanDays)} more days`
                   : 'more history'
-              } · absolute ${formatPercent(unrealisedPct, 2, true)}`
-            : `1Y ${pct(kpis.xirr1y, 1)} · 3Y ${pct(kpis.xirr3y, 1)} · 5Y ${pct(kpis.xirr5y, 1)}`
+              } · so far ${formatPercent(unrealisedPct, 2, true)}`
+            : 'XIRR · counts when each rupee went in'
         }
-      />
-      <MetricCard
-        label="Realised P&L (FY)"
-        info={<AnalyticsInfo k="realisedPnlFy" />}
-        value={formatINR(kpis.realisedYtd, { showSign: true })}
-        icon={Percent}
-        trend={{
-          direction: realisedD.gt(0) ? 'up' : realisedD.isNegative() ? 'down' : 'flat',
-          value: '',
-        }}
-      />
-      <MetricCard
-        label="Income (FY)"
-        info={<AnalyticsInfo k="incomeFy" />}
-        value={formatINR(kpis.incomeYtd)}
-        icon={ArrowDownToLine}
-        hint="Dividends + interest + maturity"
-      />
-      <MetricCard
-        label="Total returns"
-        info={<AnalyticsInfo k="totalReturns" />}
-        value={formatINR(unrealisedD.plus(realisedD).toFixed(4), { showSign: true })}
-        icon={Receipt}
-        hint="Unrealised + realised (FY)"
       />
     </div>
   );
