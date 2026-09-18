@@ -148,6 +148,15 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'VehicleValuationLog',
   'SipPlan',
   'Loan',
+  // Children of a user-owned row. Their own tables have no policy, but a query
+  // that filters through the parent ("payments of my loans") runs a subquery
+  // against the parent's policy — with no context set that subquery matches
+  // nothing and the query silently returns zero rows. See
+  // test/invariants/rls-context-coverage.test.ts.
+  'LoanPayment',
+  'LoanGivenEntry',
+  'CreditCardStatement',
+  'TransactionPhoto',
   'LoanGiven',
   'CreditCard',
   'Income',
