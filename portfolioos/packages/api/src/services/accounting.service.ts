@@ -92,6 +92,11 @@ const DEFAULT_COA: Array<{
  * wrong for somebody else's, so the caller needs to know whether anything
  * happened in order to record it.
  */
+/** Prisma's "unique constraint failed" — the row is already there. */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
+}
+
 export async function ensureDefaultAccounts(
   userId: string,
   db: Db = defaultDb,
@@ -105,11 +110,22 @@ export async function ensureDefaultAccounts(
   for (const acct of DEFAULT_COA) {
     if (codeToId.has(acct.code)) continue;
     const parentId = acct.parentCode ? codeToId.get(acct.parentCode) : undefined;
-    const created = await db.account.create({
-      data: { userId, code: acct.code, name: acct.name, type: acct.type, parentId },
-    });
-    codeToId.set(acct.code, created.id);
-    createdCodes.push(acct.code);
+    try {
+      const created = await db.account.create({
+        data: { userId, code: acct.code, name: acct.name, type: acct.type, parentId },
+      });
+      codeToId.set(acct.code, created.id);
+      createdCodes.push(acct.code);
+    } catch (err) {
+      // Another request seeded this code between the read above and this
+      // write — two page loads, or a read that projects the books while the
+      // chart is being fetched. The row exists, which is all the caller
+      // needs; failing here turned an ordinary page load into a 409.
+      if (!isUniqueViolation(err)) throw err;
+      const raced = await db.account.findFirst({ where: { userId, code: acct.code }, select: { id: true } });
+      if (!raced) throw err;
+      codeToId.set(acct.code, raced.id);
+    }
   }
   return createdCodes;
 }
