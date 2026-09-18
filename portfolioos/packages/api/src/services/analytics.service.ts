@@ -18,6 +18,7 @@ import { getDashboardNetWorth } from './dashboard.service.js';
 import { taxHarvestReport } from './tax.service.js';
 import { yahooProfile } from '../priceFeeds/yahooClient.js';
 import { sectorFor } from '../data/nseSectors.js';
+import type { MonthlyPositions } from './analytics.risk.js';
 
 /**
  * Phase 5-Analytics — the snapshot service. Composes the existing per-
@@ -656,6 +657,27 @@ export async function getPortfolioValueLine(
   scope: AnalyticsScope,
   periodDays: number,
 ): Promise<ValuationPoint[]> {
+  return (await loadMonthlyValuation(scope, periodDays, false)).valueLine;
+}
+
+/**
+ * Value line plus per-holding month-end positions, from a single valuation
+ * pass. The risk card needs both — the value line for volatility, Sharpe,
+ * drawdown and beta, and the positions for return correlation between asset
+ * classes — and historical valuation is the expensive step, so it runs once.
+ */
+export async function getMonthlyValuationWithPositions(
+  scope: AnalyticsScope,
+  periodDays: number,
+): Promise<{ valueLine: ValuationPoint[]; months: MonthlyPositions[] }> {
+  return loadMonthlyValuation(scope, periodDays, true);
+}
+
+async function loadMonthlyValuation(
+  scope: AnalyticsScope,
+  periodDays: number,
+  withPositions: boolean,
+): Promise<{ valueLine: ValuationPoint[]; months: MonthlyPositions[] }> {
   const pids = await portfolioIdsFor(scope);
   // Backfill real historical prices (stocks/MF/crypto) over the displayed
   // window before valuing snapshots — otherwise past months fall back to
@@ -667,10 +689,22 @@ export async function getPortfolioValueLine(
     }),
   );
   const series = await Promise.all(
-    pids.map((pid) => historicalValuation(pid, 'MONTHLY').then((r) => r.points)),
+    pids.map((pid) =>
+      historicalValuation(pid, 'MONTHLY', { positions: withPositions }).then((r) => r.points),
+    ),
   );
-  // Merge by date
+  const cutoff = periodDays > 0
+    ? new Date(Date.now() - periodDays * 86_400_000).toISOString().slice(0, 10)
+    : '0000-00-00';
+
+  // Merge by date across portfolios.
   const merged = new Map<string, { cost: Decimal; value: Decimal }>();
+  // The same holding in two portfolios shares a key and a price; its
+  // quantities add.
+  const positionsByDate = new Map<
+    string,
+    { byKey: Map<string, { assetClass: string; quantity: Decimal; price: string | null }>; corporate: Set<string> }
+  >();
   for (const points of series) {
     for (const p of points) {
       const key = p.date.toISOString().slice(0, 10);
@@ -678,19 +712,56 @@ export async function getPortfolioValueLine(
       cur.cost = cur.cost.plus(p.cost);
       cur.value = cur.value.plus(p.value);
       merged.set(key, cur);
+
+      if (withPositions && p.positions) {
+        const slot = positionsByDate.get(key) ?? { byKey: new Map(), corporate: new Set<string>() };
+        for (const pos of p.positions) {
+          const existing = slot.byKey.get(pos.key);
+          if (existing) {
+            existing.quantity = existing.quantity.plus(pos.quantity);
+            existing.price ??= pos.price;
+          } else {
+            slot.byKey.set(pos.key, {
+              assetClass: pos.assetClass,
+              quantity: new Decimal(pos.quantity),
+              price: pos.price,
+            });
+          }
+        }
+        for (const k of p.corporateActionKeys ?? []) slot.corporate.add(k);
+        positionsByDate.set(key, slot);
+      }
     }
   }
-  const cutoff = periodDays > 0
-    ? new Date(Date.now() - periodDays * 86_400_000).toISOString().slice(0, 10)
-    : '0000-00-00';
-  return Array.from(merged.entries())
-    .filter(([date]) => date >= cutoff)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, v]) => ({
-      date,
-      cost: v.cost.toFixed(4),
-      value: v.value.toFixed(4),
-    }));
+
+  const dates = Array.from(merged.keys()).filter((date) => date >= cutoff).sort();
+  const valueLine = dates.map((date) => {
+    const v = merged.get(date)!;
+    return { date, cost: v.cost.toFixed(4), value: v.value.toFixed(4) };
+  });
+
+  const months: MonthlyPositions[] = withPositions
+    ? dates.map((date) => {
+        const slot = positionsByDate.get(date);
+        return {
+          date,
+          positions: slot
+            ? [...slot.byKey.entries()].map(([key, v]) => ({
+                key,
+                assetClass: v.assetClass,
+                // Statistical input only — see analytics.risk.ts header.
+                // eslint-disable-next-line everypaisa/no-money-coercion -- statistical computation, see analytics.risk.ts
+                quantity: v.quantity.toNumber(),
+                // eslint-disable-next-line everypaisa/no-money-coercion -- statistical computation, see analytics.risk.ts
+                price: v.price == null ? null : Number(v.price),
+              }))
+            : [],
+          corporateActionKeys: slot ? [...slot.corporate] : [],
+        };
+      })
+    : [];
+
+  return { valueLine, months };
 }
 
 // ─── Per-asset-class XIRR ──────────────────────────────────────────

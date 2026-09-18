@@ -15,7 +15,7 @@ import { PortfolioValueLine, CostVsValueDrift, BenchmarkOverlay } from './widget
 import { WinnersLosers, ConcentrationCard, AssetClassXirrBar } from './widgets/ReturnsWidgets';
 import { CgByFyBar, IncomeTrendBar, RealisedVsUnrealisedCard, TaxHarvestTable } from './widgets/TaxWidgets';
 import { CashflowWaterfall } from './widgets/CashflowWidget';
-import { RiskMetricsCards, AllocationCorrelationGrid } from './widgets/RiskWidget';
+import { RiskMetricsCards, ReturnCorrelationGrid } from './widgets/RiskWidget';
 import { LiabilitiesVsAssetsCard } from './widgets/LiabilitiesWidget';
 import { InsightsPanel } from './widgets/InsightsPanel';
 import { WhatIfSimulator } from './widgets/WhatIfSimulator';
@@ -181,9 +181,10 @@ export function AnalyticsPage() {
           <RiskMetricsCards metrics={riskQuery.data} loading={riskQuery.isLoading} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <AllocationCorrelationGrid
+            <ReturnCorrelationGrid
+              correlation={riskQuery.data?.classCorrelation}
+              loading={riskQuery.isLoading}
               allocation={data.allocationByClass}
-              valueLine={data.portfolioValueLine}
             />
             <TaxHarvestTable data={data.taxHarvest} />
             <WhatIfSimulator />

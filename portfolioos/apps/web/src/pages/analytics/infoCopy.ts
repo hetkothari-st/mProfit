@@ -6,8 +6,8 @@
  * touching the widgets. Each entry describes what the number ACTUALLY is, as
  * computed in packages/api/src/services/analytics.service.ts and
  * analytics.risk.ts — including where that differs from what the title might
- * suggest (the benchmark line includes money you add; the weight grid is not
- * a return correlation; "inflow" means cash coming back to you). Keep them in
+ * suggest (the benchmark line includes money you add; "inflow" means cash
+ * coming back to you). Keep them in
  * step if those calculations change.
  *
  * Time frames matter here: only some cards follow the period selector. The
@@ -219,11 +219,12 @@ export const ANALYTICS_INFO = {
       'Needs a few months of history to calculate.',
     ],
   },
-  weightGrid: {
-    title: 'Asset class weight grid',
+  returnCorrelation: {
+    title: 'Return correlation by asset class',
     body: [
-      'Each cell shows the smaller of two asset classes’ weights; the diagonal shows each class’s own share. Darker cells mean more of your money sits in that pair.',
-      'It shows where your money is concentrated, not whether those assets rise and fall together — it isn’t a return correlation.',
+      'How closely each pair of asset classes has moved month to month: +1 means they rise and fall together, 0 unrelated, −1 opposite. Lower numbers between your large holdings mean better diversification.',
+      'Uses price moves only, so money you add doesn’t count. Assets without price history, like deposits, aren’t shown.',
+      PERIOD,
     ],
   },
 

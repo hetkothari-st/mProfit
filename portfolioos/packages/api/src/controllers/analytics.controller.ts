@@ -4,12 +4,17 @@ import { ok } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import {
   getAnalyticsSnapshot,
-  getPortfolioValueLine,
+  getMonthlyValuationWithPositions,
   periodToDays,
   type AnalyticsScope,
   type Period,
 } from '../services/analytics.service.js';
-import { computeRiskMetrics, monthlyFromDaily } from '../services/analytics.risk.js';
+import {
+  classCorrelationMatrix,
+  classMonthlyReturns,
+  computeRiskMetrics,
+  monthlyFromDaily,
+} from '../services/analytics.risk.js';
 import { getBenchmarkSeries, getNiftyMonthlyCloses } from '../services/analytics.benchmark.js';
 import {
   getOrGenerateInsights,
@@ -95,8 +100,10 @@ export async function getRisk(req: Request, res: Response): Promise<void> {
       setTimeout(() => resolve([]), NIFTY_TIMEOUT_MS),
     ),
   ]);
-  const [valueLine, niftyMonthly] = await Promise.all([
-    getPortfolioValueLine(scope, days),
+  // One valuation pass feeds both the value-based metrics and the return
+  // correlation between asset classes.
+  const [{ valueLine, months }, niftyMonthly] = await Promise.all([
+    getMonthlyValuationWithPositions(scope, days),
     niftyOrTimeout,
   ]);
   // valueLine is already month-end (historicalValuation emits MONTHLY).
@@ -108,7 +115,8 @@ export async function getRisk(req: Request, res: Response): Promise<void> {
   );
   const benchmarkMonthly = niftyMonthly.map((p) => ({ date: p.date.slice(0, 7), value: p.close }));
   const metrics = computeRiskMetrics(portfolioMonthly, benchmarkMonthly);
-  ok(res, metrics);
+  const classCorrelation = classCorrelationMatrix(classMonthlyReturns(months));
+  ok(res, { ...metrics, classCorrelation });
 }
 
 export async function getInsightsLatest(req: Request, res: Response): Promise<void> {
