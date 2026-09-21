@@ -72,6 +72,47 @@ describe('USER_SCOPED_MODELS covers every RLS-protected table', () => {
     ).toEqual([]);
   }, 120_000);
 
+  it('has no registered model whose table is left unprotected', async () => {
+    // The other direction, and the one that let four child tables sit
+    // unprotected for months: they were registered in USER_SCOPED_MODELS, so
+    // the session variable was set and the app behaved, while the database
+    // enforced nothing. Registration is a claim of protection; this checks the
+    // claim is true.
+    const rows = await runAsSystem(() =>
+      prisma.$queryRawUnsafe<Array<{ tablename: string }>>(
+        `SELECT c.relname AS tablename
+           FROM pg_class c
+           JOIN pg_namespace ns ON ns.oid = c.relnamespace
+          WHERE ns.nspname = 'public' AND c.relkind = 'r'
+          ORDER BY 1`,
+      ),
+    );
+    const tables = new Set(rows.map((r) => r.tablename));
+    const unprotected = await runAsSystem(() =>
+      prisma.$queryRawUnsafe<Array<{ tablename: string }>>(
+        `SELECT c.relname AS tablename
+           FROM pg_class c
+           JOIN pg_namespace ns ON ns.oid = c.relnamespace
+          WHERE ns.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
+          ORDER BY 1`,
+      ),
+    );
+
+    const claimed = [...USER_SCOPED_MODELS]
+      // Only judge models whose table is actually in this database.
+      .filter((m) => tables.has(m))
+      .filter((m) => unprotected.some((r) => r.tablename === m));
+
+    expect(
+      claimed,
+      `These models are in USER_SCOPED_MODELS — so the app sets a session ` +
+        `variable for them and reads as if they were protected — but their ` +
+        `tables have no row-level security, so the database enforces nothing. ` +
+        `Add a policy (see 20260921120000_rls_child_tables for the child-table ` +
+        `shape) or remove them from the set.`,
+    ).toEqual([]);
+  }, 120_000);
+
   it('enforces FORCE ROW LEVEL SECURITY on every protected table', async () => {
     // Without FORCE, Postgres exempts the table owner. That is not academic:
     // this app connected as the owner until the runtime role was switched, so
