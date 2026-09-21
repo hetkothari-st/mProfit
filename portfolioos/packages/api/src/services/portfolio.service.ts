@@ -108,13 +108,32 @@ async function listPortfoliosWithScope(scope: EffectiveScope) {
         ),
       ),
     );
+    // Deliberately NOT portfolioReadableWhere: that asks for every readable
+    // member's personal rows, which the fan-out above has already fetched.
+    // Relying on row-level security to trim the overlap put the same portfolio
+    // in the list twice wherever policies do not bite — as on a connection
+    // that bypasses RLS, which is what production uses today.
     const own = await prisma.portfolio.findMany({
-      where: portfolioReadableWhere(scope),
+      where: {
+        OR: [
+          { userId: scope.callerId, familyId: null },
+          ...(scope.readableFamilyIds.length > 0
+            ? [{ familyId: { in: scope.readableFamilyIds } }]
+            : []),
+        ],
+      },
       include: {
         _count: { select: { holdingProjections: true, transactions: true } },
       },
     });
-    const all = [...own, ...perMember.flat()];
+    // One row per portfolio whatever the queries overlap on: two sources and
+    // a concatenation is exactly how the list grew duplicate cards before.
+    const seen = new Set<string>();
+    const all = [...own, ...perMember.flat()].filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
     return all.sort((a, b) => {
       if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
       return a.createdAt.getTime() - b.createdAt.getTime();
