@@ -27,6 +27,7 @@
 
 import crypto from 'node:crypto';
 import { prisma } from '../../lib/prisma.js';
+import { runAsSystem } from '../../lib/requestContext.js';
 import { logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
 
@@ -76,7 +77,14 @@ export async function handleConsentWebhook(payload: unknown) {
   const status = pickString(payload, 'status', 'consentStatus', 'ConsentStatus');
   if (!handle || !status) return { ok: false, reason: 'missing_fields' };
 
-  const consent = await prisma.aaConsent.findFirst({ where: { consentHandle: handle } });
+  // The event arrives from Finvu, not from a signed-in user, so there is no
+  // context for AaConsent's policy: unprivileged, every handle looks like
+  // "no matching row" and the consent silently never leaves PENDING. HMAC
+  // verification upstream is what authorises this, and the row is reached by
+  // a handle only the AA and this server know.
+  const consent = await runAsSystem(() =>
+    prisma.aaConsent.findFirst({ where: { consentHandle: handle } }),
+  );
   if (!consent) {
     logger.warn({ handle, status }, 'consent webhook: no matching AaConsent row');
     return { ok: false, reason: 'consent_not_found' };
@@ -93,7 +101,9 @@ export async function handleConsentWebhook(payload: unknown) {
     if (!Number.isNaN(d.getTime())) updates['expiresAt'] = d;
   }
 
-  await prisma.aaConsent.update({ where: { id: consent.id }, data: updates });
+  await runAsSystem(() =>
+    prisma.aaConsent.update({ where: { id: consent.id }, data: updates }),
+  );
   return { ok: true, consentId: consent.id, status };
 }
 
