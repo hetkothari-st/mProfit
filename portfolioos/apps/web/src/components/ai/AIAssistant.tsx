@@ -8,6 +8,8 @@ import {
   Loader2,
   History,
   SquarePen,
+  Maximize2,
+  Minimize2,
   ArrowLeft,
   Zap,
   Pencil,
@@ -68,9 +70,36 @@ interface Props {
   pendingPrompt?: string | null;
 }
 
+/**
+ * Expanded is remembered per browser: someone who works in the big window
+ * wants it big next time. Storage can be unavailable, so reads and writes are
+ * guarded and the docked size is the fallback.
+ */
+const EXPANDED_KEY = 'assistant_expanded';
+
+function readExpanded(): boolean {
+  try {
+    return localStorage.getItem(EXPANDED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** False when storage is blocked: the window still expands, it just isn't remembered. */
+function writeExpanded(expanded: boolean): boolean {
+  try {
+    if (expanded) localStorage.setItem(EXPANDED_KEY, '1');
+    else localStorage.removeItem(EXPANDED_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
   const [input, setInput] = useState('');
   const [view, setView] = useState<'chat' | 'sessions'>('chat');
+  const [expanded, setExpanded] = useState(readExpanded);
   const user = useAuthStore((s) => s.user);
   const {
     sessions,
@@ -102,12 +131,20 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      // One step at a time: leave the big window first, close the chat second.
+      // Escaping straight out of a long conversation is a nasty surprise.
+      if (expanded) {
+        writeExpanded(false);
+        setExpanded(false);
+        return;
+      }
+      onClose();
     };
     window.addEventListener('keydown', onKey);
     setTimeout(() => inputRef.current?.focus(), 60);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, onClose, expanded]);
 
   // When opened via a teaser bubble the parent passes a question to
   // pre-send. Wait for `historyLoaded` — otherwise the pending send
@@ -147,15 +184,39 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
     setInput('');
   };
 
+  const toggleExpanded = () => {
+    writeExpanded(!expanded);
+    setExpanded(!expanded);
+  };
+
+  // Docked: a column in the corner. Expanded: a wide window inset from every
+  // edge, so the page behind stays visible and the assistant reads as part of
+  // the app rather than a separate screen. The phone layout is full-bleed
+  // either way — there is no room to be clever about it.
+  const panelClass = expanded
+    ? 'fixed inset-0 sm:inset-6 lg:inset-y-8 lg:left-1/2 lg:right-auto lg:w-[min(1080px,92vw)] lg:-translate-x-1/2 z-50'
+    : 'fixed inset-0 sm:inset-auto sm:bottom-24 sm:right-6 z-40 w-full sm:w-[420px] md:w-[460px] h-full sm:h-[min(680px,calc(100vh-7.5rem))]';
+
   return (
     <>
+      {expanded && (
+        // Dims the page without hiding it, and clicking it steps back to the
+        // docked window rather than closing the conversation.
+        <div
+          className="fixed inset-0 z-40 hidden sm:block bg-foreground/20 backdrop-blur-[2px] animate-in fade-in duration-150"
+          onClick={toggleExpanded}
+          aria-hidden
+        />
+      )}
       <aside
         role="dialog"
         aria-label="EveryPaisa Assistant"
-        className="fixed inset-0 sm:inset-auto sm:bottom-24 sm:right-6 z-40 w-full sm:w-[420px] md:w-[460px] h-full sm:h-[min(680px,calc(100vh-7.5rem))] bg-background border border-border sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200"
+        className={`${panelClass} bg-background border border-border sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200`}
       >
         <AgentHeader
           onClose={onClose}
+          expanded={expanded}
+          onToggleExpanded={toggleExpanded}
           view={view}
           onToggleSessions={() => setView((v) => (v === 'sessions' ? 'chat' : 'sessions'))}
           onNewChat={handleNewChat}
@@ -188,6 +249,7 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
                 </div>
               ) : messages.length === 0 ? (
                 <EmptyState
+                  expanded={expanded}
                   firstName={firstName}
                   suggestedQuestions={suggestedQuestions}
                   disabled={isStreaming || capped || previewLocked}
@@ -196,7 +258,7 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
                   }}
                 />
               ) : (
-                <div className="px-4 py-5">
+                <div className={`px-4 py-5 w-full ${expanded ? 'max-w-3xl mx-auto' : ''}`}>
                   {messages.map((m) => (
                     <MessageBubble key={m.id} message={m} />
                   ))}
@@ -219,6 +281,7 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
             </div>
 
             <Composer
+              expanded={expanded}
               input={input}
               setInput={setInput}
               onSubmit={handleSubmit}
@@ -243,6 +306,8 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
 
 function AgentHeader({
   onClose,
+  expanded,
+  onToggleExpanded,
   view,
   onToggleSessions,
   onNewChat,
@@ -252,6 +317,8 @@ function AgentHeader({
   locked,
 }: {
   onClose: () => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
   view: 'chat' | 'sessions';
   onToggleSessions: () => void;
   onNewChat: () => void;
@@ -331,6 +398,20 @@ function AgentHeader({
             </button>
           </>
         )}
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-pressed={expanded}
+          className="hidden sm:inline-flex p-1.5 rounded hover:bg-muted/70 text-muted-foreground hover:text-foreground"
+          title={expanded ? 'Shrink to the corner (Esc)' : 'Open the big window'}
+        >
+          {expanded ? (
+            <Minimize2 className="h-4 w-4" strokeWidth={1.9} />
+          ) : (
+            <Maximize2 className="h-4 w-4" strokeWidth={1.9} />
+          )}
+          <span className="sr-only">{expanded ? 'Shrink the assistant' : 'Expand the assistant'}</span>
+        </button>
         <button
           type="button"
           onClick={onClose}
@@ -515,18 +596,24 @@ function SessionRow({
 }
 
 function EmptyState({
+  expanded,
   firstName,
   suggestedQuestions,
   disabled,
   onSelect,
 }: {
+  expanded: boolean;
   firstName: string;
   suggestedQuestions: Array<{ question: string; intent: string }>;
   disabled: boolean;
   onSelect: (q: string) => void;
 }) {
   return (
-    <div className="flex-1 flex flex-col justify-center px-5 py-8 gap-6">
+    <div
+      className={`flex-1 flex flex-col justify-center px-5 py-8 gap-6 w-full ${
+        expanded ? 'max-w-3xl mx-auto' : ''
+      }`}
+    >
       <div className="text-center space-y-2">
         <div className="mx-auto h-16 w-16 rounded-full bg-gradient-to-br from-accent/25 to-accent/10 flex items-center justify-center ring-1 ring-accent/20">
           <Sparkles className="h-7 w-7 text-accent" strokeWidth={1.7} />
@@ -570,6 +657,7 @@ function EmptyState({
 }
 
 function Composer({
+  expanded,
   input,
   setInput,
   onSubmit,
@@ -580,6 +668,7 @@ function Composer({
   quota,
   inputRef,
 }: {
+  expanded: boolean;
   input: string;
   setInput: (v: string) => void;
   onSubmit: (e?: React.FormEvent) => void;
@@ -593,7 +682,10 @@ function Composer({
   const disabled = isStreaming || capped || previewLocked;
   return (
     <div className="border-t border-border bg-card/40 backdrop-blur">
-      <form onSubmit={onSubmit} className="p-3 flex flex-col gap-1.5">
+      <form
+        onSubmit={onSubmit}
+        className={`p-3 flex flex-col gap-1.5 w-full ${expanded ? 'max-w-3xl mx-auto' : ''}`}
+      >
         <div className="flex items-center gap-2">
           <div className="flex-1 relative">
             <input
