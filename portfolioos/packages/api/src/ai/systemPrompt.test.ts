@@ -55,6 +55,29 @@ describe('assistant prompt — what it may and may not say', () => {
   });
 });
 
+// Each of these was a real failure in a production answer: a from-zero SIP
+// quoted to a client who already had a portfolio, a ₹28 lakh crypto trim
+// recommended with no mention of 30% tax, and a goal card reading ₹0.
+describe('assistant prompt — the three rigour rules', () => {
+  it('forbids quoting a SIP that ignores the existing corpus', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/NEVER quote a required SIP as if the client started from nothing/i);
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toContain('sipIfStartingFromZero');
+  });
+
+  it('requires the tax on any sale it recommends', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/NEVER recommend a sale without its tax/i);
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/Crypto is 30% flat/i);
+  });
+
+  it('forbids a placeholder zero in a data card', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/NEVER put a number you do not have into a data card/i);
+  });
+
+  it('requires one basis when quoting a position twice', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/One figure, one basis/i);
+  });
+});
+
 describe('advisor prose prompt stays stricter', () => {
   // The /advisor surface has a deterministic engine and a consistency guard
   // behind it; loosening it to match the assistant would remove both.
