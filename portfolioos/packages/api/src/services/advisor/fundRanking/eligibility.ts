@@ -22,7 +22,9 @@
  */
 
 import { bucketForScheme, isPassive } from './categoryMap.js';
+import { describeNavGap, largestNavGap } from './navGaps.js';
 import type {
+  DetailedExclusionReason,
   EligibilityResult,
   ExclusionReason,
   FundCandidate,
@@ -37,23 +39,40 @@ const DAYS_PER_YEAR = 365.25;
 /** AMFI scheme names carry the plan and option as words. This is the only
  *  place we have to read them from, so the parsing is deliberately strict:
  *  anything ambiguous returns UNKNOWN and the fund is excluded. */
-export function readTraits(candidate: FundCandidate, asOf: Date): FundTraits {
+const DEFAULT_MAX_NAV_GAP_TRADING_DAYS = 5;
+
+export function readTraits(
+  candidate: FundCandidate,
+  asOf: Date,
+  /**
+   * Every date the market published a NAV on, from `buildTradingCalendar`.
+   * Absent means "we were not given a calendar", and a gap cannot be measured
+   * without one — `navGap` is then null and the rule does not fire. It never
+   * falls back to calendar days, because that would fail funds over Diwali.
+   */
+  tradingDays: readonly string[] = [],
+): FundTraits {
   const name = candidate.schemeName.toLowerCase();
   const header = (candidate.subCategory ?? '').toLowerCase();
 
-  // "Direct" appears as "- Direct Plan -" or "(Direct)". "Regular" likewise.
-  // A name with neither is pre-2013 nomenclature or a feed oddity; either way
-  // we do not know which share class this is.
-  const plan: FundTraits['plan'] = /\bdirect\b/.test(name)
+  // AMFI publishes Plan and Option as their own columns now, so read those
+  // where we have them and fall back to the name only for rows loaded under
+  // the old six-column format. Reading a share class out of a scheme name was
+  // the weakest link in the gate that keeps commission-bearing regular plans
+  // out of advice; a column is not a guess.
+  const planSource = candidate.planType?.toLowerCase() ?? name;
+  const optionSource = candidate.optionType?.toLowerCase() ?? name;
+
+  const plan: FundTraits['plan'] = /\bdirect\b/.test(planSource)
     ? 'DIRECT'
-    : /\bregular\b/.test(name)
+    : /\bregular\b/.test(planSource)
       ? 'REGULAR'
       : 'UNKNOWN';
 
   // IDCW is the current name; "dividend", "payout" and "reinvestment" are the
   // older ones still present in AMFI's file.
-  const idcw = /\bidcw\b|\bdividend\b|\bpayout\b|\breinvest/.test(name);
-  const growth = /\bgrowth\b/.test(name);
+  const idcw = /\bidcw\b|\bdividend\b|\bpayout\b|\breinvest/.test(optionSource);
+  const growth = /\bgrowth\b/.test(optionSource);
   const option: FundTraits['option'] = idcw ? 'IDCW' : growth ? 'GROWTH' : 'UNKNOWN';
 
   const structure: FundTraits['structure'] = header.includes('open ended')
@@ -86,6 +105,9 @@ export function readTraits(candidate: FundCandidate, asOf: Date): FundTraits {
     segregatedPortfolio: /segregated\s*portfolio/i.test(candidate.schemeName),
     trackRecordYears,
     navAgeDays,
+    // Measured elsewhere when the caller could not hand us a full history
+    // (the release gate); computed here otherwise.
+    navGap: candidate.navGap ?? largestNavGap(sorted, tradingDays),
   };
 }
 
@@ -94,9 +116,12 @@ export function assessEligibility(
   bucket: AdvisorAssetBucketValue,
   config: MethodologyConfig,
   asOf: Date,
+  /** The market's own trading calendar; see `readTraits`. */
+  tradingDays: readonly string[] = [],
 ): EligibilityResult {
-  const traits = readTraits(candidate, asOf);
+  const traits = readTraits(candidate, asOf, tradingDays);
   const reasons: ExclusionReason[] = [];
+  const detailed: DetailedExclusionReason[] = [];
 
   // AMFI stops listing a scheme that has merged or wound up, and the nightly
   // universe refresh flips isActive. It is the closest thing we have to a
@@ -143,13 +168,39 @@ export function assessEligibility(
     reasons.push('nav_stale');
   }
 
-  // AUM is a gap today (DATA-INVENTORY.md). The floor is applied only when the
-  // figure exists: excluding every fund for want of an attribute we have never
-  // held would mean nobody is ever named a fund, which fails the client rather
-  // than protecting them. The absence is recorded as a data gap by the scorer.
-  if (candidate.aumInr != null && candidate.aumInr.lessThan(config.eligibility.minAumInr)) {
+  // A hole in the MIDDLE of the history. `nav_stale` catches a fund that
+  // stopped and never restarted; this one catches the fund that stopped and
+  // came back, which looks healthy at both ends while every metric computed
+  // across the hole is quietly wrong.
+  const maxGap = config.eligibility.maxNavGapTradingDays ?? DEFAULT_MAX_NAV_GAP_TRADING_DAYS;
+  if (traits.navGap && traits.navGap.tradingDaysMissing > maxGap) {
+    reasons.push('nav_history_gap');
+    detailed.push({ reason: 'nav_history_gap', ...traits.navGap });
+  }
+
+  // Size. v1 could only apply this when a figure happened to exist, because
+  // there was no AUM source at all; v2 has AMFI's scheme-wise AAUM, so a
+  // scheme we cannot size is one we cannot honestly rank — a fund whose size
+  // is unknown might be the one where a single redemption moves the portfolio.
+  if (candidate.aumInr == null) {
+    if (config.eligibility.requireAum) reasons.push('aum_unknown');
+  } else if (candidate.aumInr.lessThan(config.eligibility.minAumInr)) {
     reasons.push('aum_below_floor');
   }
 
-  return { eligible: reasons.length === 0, reasons, traits };
+  // The plain tokens, plus the evidence for any reason that carries some.
+  // `nav_history_gap` appears once, as the object: duplicating it as a bare
+  // token too would make it the only reason counted twice.
+  const withEvidence = new Set(detailed.map((d) => (typeof d === 'string' ? d : d.reason)));
+  const detailedReasons: DetailedExclusionReason[] = [
+    ...reasons.filter((r) => !withEvidence.has(r)),
+    ...detailed,
+  ];
+
+  return { eligible: reasons.length === 0, reasons, traits, detailedReasons };
+}
+
+/** For logs: "nav_history_gap 2026-03-04..2026-04-02 (18 trading days)". */
+export function describeReason(reason: DetailedExclusionReason): string {
+  return typeof reason === 'string' ? reason : `${reason.reason} ${describeNavGap(reason)}`;
 }

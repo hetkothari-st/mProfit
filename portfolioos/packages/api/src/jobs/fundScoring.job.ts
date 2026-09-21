@@ -23,7 +23,11 @@ import {
   currentMethodology,
   ensureSignedMethodology,
 } from '../services/advisor/fundRanking/methodology.service.js';
-import { runFundScoring } from '../services/advisor/fundRanking/scoringRun.service.js';
+import {
+  CalendarIntegrityError,
+  runFundScoring,
+} from '../services/advisor/fundRanking/scoringRun.service.js';
+import { refreshFundCostAndSize } from '../priceFeeds/amfiCostAndSize.service.js';
 
 const TZ = 'Asia/Kolkata';
 
@@ -53,6 +57,28 @@ export async function runFundScoringJob(asOf: Date = new Date()): Promise<void> 
         return;
       }
 
+      // Cost and size first: the scoring pass reads terPct and aumInr, and
+      // scoring yesterday's cost against today's NAVs would rank funds on a
+      // mixture of two days. A failure here is recorded and does not stop the
+      // scoring — yesterday's TER is worth more than no ranking at all, and
+      // the release gate is what stops coverage quietly rotting.
+      const costAndSize = await refreshFundCostAndSize();
+      logger.info(
+        {
+          terMatched: costAndSize.ter.matched,
+          terUnmatched: costAndSize.ter.unmatched,
+          terAsOf: costAndSize.ter.asOf,
+          aumMatched: costAndSize.aum.matched,
+          aumAmcs: costAndSize.aum.amcs,
+          aumAsOf: costAndSize.aum.asOf,
+          failures: costAndSize.failures.length,
+        },
+        '[fundScoring] AMFI cost and size refreshed',
+      );
+      for (const failure of costAndSize.failures.slice(0, 5)) {
+        logger.warn(failure, '[fundScoring] cost/size source failed');
+      }
+
       const result = await runFundScoring({
         methodologyVersionId: methodology.id,
         config: methodology.config,
@@ -71,10 +97,21 @@ export async function runFundScoringJob(asOf: Date = new Date()): Promise<void> 
       );
     });
   } catch (err) {
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      '[fundScoring] run failed — advice falls back to category level',
-    );
+    if (err instanceof CalendarIntegrityError) {
+      // Already recorded in ScoringRunLog, already sent to Sentry, already
+      // logged with the gap span. Logged once more here at warn, without the
+      // stack, so the job's own timeline reads straight: a refusal is a
+      // decision this job made, not an error it hit.
+      logger.warn(
+        { runId: err.runId, reason: err.reason, ms: Date.now() - startedAt },
+        '[fundScoring] refused to score — the previous snapshot stands until it ages out',
+      );
+    } else {
+      logger.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        '[fundScoring] run failed — advice falls back to category level',
+      );
+    }
   } finally {
     running = false;
   }

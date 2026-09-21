@@ -201,9 +201,28 @@ export async function loadAmfiNavToDb(): Promise<AmfiLoadResult> {
       category: r.category,
       subCategory: r.subCategory,
       isin: r.isin,
+      planType: r.planType,
+      optionType: r.optionType,
     })),
     skipDuplicates: true,
   });
+
+  // `createMany` leaves existing rows alone, so schemes we already knew about
+  // would never gain the plan and option AMFI now publishes. Backfilling them
+  // here matters because eligibility reads these columns: a fund whose plan is
+  // unknown is excluded, and every pre-existing row would stay that way.
+  let mastersEnriched = 0;
+  for (const r of masterByCode.values()) {
+    if (!r.planType && !r.optionType) continue;
+    const updated = await prisma.mutualFundMaster.updateMany({
+      where: {
+        schemeCode: r.schemeCode,
+        OR: [{ planType: null }, { optionType: null }, { planType: { not: r.planType } }],
+      },
+      data: { planType: r.planType, optionType: r.optionType, schemeName: r.schemeName },
+    });
+    mastersEnriched += updated.count;
+  }
 
   // 2. Resolve schemeCode → id map (in chunks to avoid huge IN clauses)
   const allCodes = Array.from(masterByCode.keys());

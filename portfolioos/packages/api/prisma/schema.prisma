@@ -570,12 +570,39 @@ enum Exchange {
 model MutualFundMaster {
   id          String     @id @default(cuid())
   schemeCode  String     @unique
+  /// AMFI's base scheme name, without the plan/option suffix — since the 2026
+  /// NAVAll format carries Plan and Option as their own columns. This is the
+  /// key AMFI's TER file joins on, because that file carries neither an AMFI
+  /// scheme code nor an ISIN.
   schemeName  String
   amcName     String
   category    MFCategory
   subCategory String?
   isin        String?
   isActive    Boolean    @default(true)
+  /// "Direct Plan" / "Regular Plan" as published, rather than guessed from the
+  /// scheme name. Null for rows loaded before the 8-column NAVAll format.
+  planType    String?
+  /// "Growth Option" / "IDCW ..." as published.
+  optionType  String?
+  /// Direct-plan total expense ratio, in percent, from AMFI's published TER
+  /// file. Null means we do not have it — never zero, which would rank an
+  /// unknown fund as the cheapest in its bucket.
+  terPct      Decimal?   @db.Decimal(8, 4)
+  terAsOf     DateTime?  @db.Date
+  /// How the last TER refresh resolved this scheme: MATCHED, UNMATCHED or
+  /// AMBIGUOUS. The TER file has no scheme code and no ISIN, so the join is
+  /// made on (AMC, scheme name) and can legitimately fail; recording HOW it
+  /// failed is what lets the ranking report a `ter_unmatched` gap instead of
+  /// a bare "no TER", which would read the same whether the file omitted the
+  /// scheme or the name turned out not to identify one. Set for the
+  /// direct-growth population only � nothing else is joined.
+  terJoinStatus String?
+  /// Average AUM in rupees, from AMFI's scheme-wise AAUM data (published in
+  /// lakh; converted on ingest so the column is in the same unit as money
+  /// everywhere else).
+  aumInr      Decimal?   @db.Decimal(20, 4)
+  aumAsOf     DateTime?  @db.Date
   updatedAt   DateTime   @updatedAt
 
   holdings                Holding[]
@@ -3813,6 +3840,37 @@ model RankingMethodologyVersion {
 /// Market-level reference data, not user-scoped. Ineligible funds are stored
 /// too, with their reasons: "why was this fund NOT recommended?" is as much a
 /// question we have to answer as "why was that one?".
+/// One row per fund-scoring run that refused to write, and why.
+///
+/// Same contract as the market-feed run log the price feeds keep: recorded,
+/// never swallowed, queryable (CONTEXT.md §3.5). Separate table because it
+/// describes a JOB rather than a FEED — a scoring run reads a dozen sources
+/// and writes snapshots, where a feed run fetches one file.
+///
+/// NOT user-scoped. It describes the market pass, not anyone's money, so no
+/// RLS policy and no USER_SCOPED_MODELS entry (§5) — like StockMaster,
+/// MFNav and FundScoreSnapshot itself.
+model ScoringRunLog {
+  id                   String   @id @default(cuid())
+  /// Which check refused, e.g. "calendar_integrity".
+  check                String
+  startedAt            DateTime @default(now())
+  status               String
+  methodologyVersionId String?
+  asOfDate             DateTime @db.Date
+  /// Trading days the universe reported for the window.
+  tradingDays          Int?
+  /// Longest run of weekdays nothing priced on.
+  gapWeekdays          Int?
+  gapFrom              DateTime? @db.Date
+  gapTo                DateTime? @db.Date
+  reason               String?
+  details              Json?
+
+  @@index([check, startedAt])
+  @@index([asOfDate])
+}
+
 model FundScoreSnapshot {
   id                   String                    @id @default(cuid())
   asOfDate             DateTime                  @db.Date
