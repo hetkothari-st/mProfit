@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import type { AssetClass, FamilyRole } from '@prisma/client';
 import { toDecimal, serializeMoney } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
-import { runAsUser } from '../lib/requestContext.js';
+import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 import {
   BadRequestError,
   ForbiddenError,
@@ -123,11 +123,23 @@ export async function updateFamily(
 /** Any active member (including CONTRIBUTOR/VIEWER) can list peers. */
 export async function listMembers(callerId: string, familyId: string) {
   await assertActiveMemberOf(callerId, familyId);
-  const rows = await prisma.familyMember.findMany({
-    where: { familyId },
-    include: { user: { select: { id: true, name: true, email: true } } },
-    orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
-  });
+  // Privileged read, for the same reason as the sibling lookup in
+  // `getEffectiveScope`: FamilyMember's policy shows a non-OWNER nothing but
+  // their own row, so an unprivileged read here returns a household of one to
+  // every CONTRIBUTOR and VIEWER — which is what the members page showed once
+  // the app stopped connecting as a superuser.
+  //
+  // Bounded the same way: membership on this exact family is already proven
+  // one line above, the query is pinned to that familyId, and it returns the
+  // roster the page exists to display. Reaching this before the membership
+  // check would turn it into a directory of every household in the product.
+  const rows = await runAsSystem(() =>
+    prisma.familyMember.findMany({
+      where: { familyId },
+      include: { user: { select: { id: true, name: true, email: true } } },
+      orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
+    }),
+  );
   return rows.map((r) => ({
     id: r.id,
     userId: r.userId,
@@ -571,13 +583,20 @@ export async function cancelInvitation(
  * family name and role being offered. Does NOT accept the invite.
  */
 export async function peekInvitation(token: string) {
-  const inv = await prisma.familyInvitation.findUnique({
-    where: { token },
-    include: {
-      family: { select: { name: true } },
-      invitedBy: { select: { name: true, email: true } },
-    },
-  });
+  // No session exists on this route by design — the token IS the credential —
+  // so there is no `app.current_user_id` for FamilyInvitation's policy to
+  // match and an unprivileged read returns nothing for every valid token.
+  // The 32-byte token is what authorises this; the response stays limited to
+  // what the accept page must render.
+  const inv = await runAsSystem(() =>
+    prisma.familyInvitation.findUnique({
+      where: { token },
+      include: {
+        family: { select: { name: true } },
+        invitedBy: { select: { name: true, email: true } },
+      },
+    }),
+  );
   if (!inv) throw new NotFoundError('Invitation not found or expired.');
   if (inv.acceptedAt) throw new BadRequestError('Invitation already accepted.');
   if (inv.expiresAt < new Date()) throw new BadRequestError('Invitation expired.');
@@ -604,53 +623,66 @@ export async function acceptInvitation(callerId: string, token: string) {
   });
   if (!caller) throw new NotFoundError('User not found.');
 
-  return runInTransaction(async (tx) => {
-    const inv = await tx.familyInvitation.findUnique({ where: { token } });
-    if (!inv) throw new NotFoundError('Invitation not found.');
-    if (inv.acceptedAt) throw new BadRequestError('Invitation already accepted.');
-    if (inv.expiresAt < new Date()) throw new BadRequestError('Invitation expired.');
-    if (inv.invitedEmail.toLowerCase() !== caller.email.toLowerCase()) {
-      throw new ForbiddenError(
-        'This invitation was sent to a different email address.',
+  // Privileged, and `runAsSystem` MUST wrap `runInTransaction` rather than sit
+  // inside it — `runInTransaction` reads the ambient identity once, before the
+  // transaction opens, and its `tx` client never passes through the hook that
+  // would notice a later change. This mirrors the CA accept flow, which broke
+  // in exactly this way.
+  //
+  // Why privileged at all: the invitee is neither the inviter nor an owner of
+  // the family, so FamilyInvitation's policy hides the row from the one person
+  // the token was issued to, and stamping `acceptedAt` is denied for the same
+  // reason. The token plus the email match below are the authorisation; both
+  // still run, and both still refuse.
+  return runAsSystem(() =>
+    runInTransaction(async (tx) => {
+      const inv = await tx.familyInvitation.findUnique({ where: { token } });
+      if (!inv) throw new NotFoundError('Invitation not found.');
+      if (inv.acceptedAt) throw new BadRequestError('Invitation already accepted.');
+      if (inv.expiresAt < new Date()) throw new BadRequestError('Invitation expired.');
+      if (inv.invitedEmail.toLowerCase() !== caller.email.toLowerCase()) {
+        throw new ForbiddenError(
+          'This invitation was sent to a different email address.',
+        );
+      }
+      // Reactivate a REVOKED prior membership instead of failing on the
+      // unique constraint. New membership if none exists.
+      const prior = await tx.familyMember.findUnique({
+        where: { familyId_userId: { familyId: inv.familyId, userId: callerId } },
+      });
+      const membership = prior
+        ? await tx.familyMember.update({
+            where: { familyId_userId: { familyId: inv.familyId, userId: callerId } },
+            data: {
+              role: inv.role,
+              status: 'ACTIVE',
+              visibleAssetClasses: inv.visibleAssetClasses,
+              visibleCategories: inv.visibleCategories,
+              invitedById: inv.invitedById,
+            },
+          })
+        : await tx.familyMember.create({
+            data: {
+              familyId: inv.familyId,
+              userId: callerId,
+              role: inv.role,
+              status: 'ACTIVE',
+              visibleAssetClasses: inv.visibleAssetClasses,
+              visibleCategories: inv.visibleCategories,
+              invitedById: inv.invitedById,
+            },
+          });
+      await tx.familyInvitation.update({
+        where: { id: inv.id },
+        data: { acceptedAt: new Date() },
+      });
+      logger.info(
+        { familyId: inv.familyId, userId: callerId },
+        '[family] invitation accepted',
       );
-    }
-    // Reactivate a REVOKED prior membership instead of failing on the
-    // unique constraint. New membership if none exists.
-    const prior = await tx.familyMember.findUnique({
-      where: { familyId_userId: { familyId: inv.familyId, userId: callerId } },
-    });
-    const membership = prior
-      ? await tx.familyMember.update({
-          where: { familyId_userId: { familyId: inv.familyId, userId: callerId } },
-          data: {
-            role: inv.role,
-            status: 'ACTIVE',
-            visibleAssetClasses: inv.visibleAssetClasses,
-            visibleCategories: inv.visibleCategories,
-            invitedById: inv.invitedById,
-          },
-        })
-      : await tx.familyMember.create({
-          data: {
-            familyId: inv.familyId,
-            userId: callerId,
-            role: inv.role,
-            status: 'ACTIVE',
-            visibleAssetClasses: inv.visibleAssetClasses,
-            visibleCategories: inv.visibleCategories,
-            invitedById: inv.invitedById,
-          },
-        });
-    await tx.familyInvitation.update({
-      where: { id: inv.id },
-      data: { acceptedAt: new Date() },
-    });
-    logger.info(
-      { familyId: inv.familyId, userId: callerId },
-      '[family] invitation accepted',
-    );
-    return membership;
-  });
+      return membership;
+    }),
+  );
 }
 
 // ─── Family portfolios ───────────────────────────────────────────────

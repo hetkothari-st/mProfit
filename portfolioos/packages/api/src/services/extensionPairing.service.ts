@@ -14,6 +14,8 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
+import { runAsSystem } from '../lib/requestContext.js';
+import { logger } from '../lib/logger.js';
 import type { ExtensionPairing } from '@prisma/client';
 
 // ---------------------------------------------------------------------------
@@ -78,9 +80,15 @@ export async function completePairing(code: string): Promise<{
   bearer: string;
   userId: string;
 }> {
-  const pairing = await prisma.extensionPairing.findUnique({
-    where: { pairingCode: code },
-  });
+  // The extension presents the code and nothing else — no cookie, no JWT — so
+  // there is no user context for ExtensionPairing's policy to match, and an
+  // unprivileged read finds no row for any code. The code is the credential;
+  // every check below still runs against the row it names.
+  const pairing = await runAsSystem(() =>
+    prisma.extensionPairing.findUnique({
+      where: { pairingCode: code },
+    }),
+  );
 
   if (!pairing) throw new PairingError('INVALID_CODE', 'Pairing code not found');
   if (pairing.revoked) throw new PairingError('REVOKED', 'Pairing has been revoked');
@@ -94,16 +102,18 @@ export async function completePairing(code: string): Promise<{
   const bearerHash = hashBearer(bearer);
   const bearerLast8 = bearer.slice(-8);
 
-  await prisma.extensionPairing.update({
-    where: { id: pairing.id },
-    data: {
-      bearerHash,
-      bearerLast8,
-      paired: true,
-      pairedAt: new Date(),
-      lastUsedAt: new Date(),
-    },
-  });
+  await runAsSystem(() =>
+    prisma.extensionPairing.update({
+      where: { id: pairing.id },
+      data: {
+        bearerHash,
+        bearerLast8,
+        paired: true,
+        pairedAt: new Date(),
+        lastUsedAt: new Date(),
+      },
+    }),
+  );
 
   return { bearer, userId: pairing.userId };
 }
@@ -114,18 +124,35 @@ export async function completePairing(code: string): Promise<{
  */
 export async function authenticateExtension(bearer: string): Promise<ExtensionPairing> {
   const bearerHash = hashBearer(bearer);
-  const pairing = await prisma.extensionPairing.findUnique({
-    where: { bearerHash },
-  });
+  // This IS the authentication step — it runs before any user context is
+  // entered, so it cannot depend on one. The lookup is by SHA-256 of the
+  // presented bearer: an attacker who cannot produce a bearer cannot name a
+  // row, and the caller learns only about the row their own token hashes to.
+  const pairing = await runAsSystem(() =>
+    prisma.extensionPairing.findUnique({
+      where: { bearerHash },
+    }),
+  );
 
   if (!pairing) throw new PairingError('INVALID_BEARER', 'Invalid bearer token');
   if (pairing.revoked) throw new PairingError('REVOKED', 'Extension has been disconnected');
   if (!pairing.paired) throw new PairingError('NOT_PAIRED', 'Extension not fully paired');
 
-  // Update lastUsedAt (fire-and-forget; don't block the request)
-  void prisma.extensionPairing.update({
-    where: { id: pairing.id },
-    data: { lastUsedAt: new Date() },
+  // Update lastUsedAt (fire-and-forget; don't block the request). Still
+  // ahead of `enterUserContext`, so it needs the same privileged frame as the
+  // lookup — otherwise the timestamp silently never moves.
+  //
+  // The rejection handler is not decoration: an unawaited Prisma promise that
+  // rejects — the row revoked and deleted between these two statements, say —
+  // is an unhandled rejection, which Node treats as fatal. A stamp nobody
+  // reads must not be able to take the process down.
+  void runAsSystem(() =>
+    prisma.extensionPairing.update({
+      where: { id: pairing.id },
+      data: { lastUsedAt: new Date() },
+    }),
+  ).catch((err: unknown) => {
+    logger.warn({ err, pairingId: pairing.id }, '[extension] lastUsedAt stamp failed');
   });
 
   return pairing;
