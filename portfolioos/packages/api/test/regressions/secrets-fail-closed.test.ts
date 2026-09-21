@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   collectProductionSecretProblems,
+  DEV_APP_ROLE_PASSWORD,
   PLACEHOLDER_ONLYOFFICE_SECRET,
 } from '../../src/config/env.js';
 
@@ -24,6 +25,8 @@ const GOOD = {
   SECRETS_KEY: 'x'.repeat(32),
   ONLYOFFICE_JWT_SECRET: 'a-real-onlyoffice-secret',
   FINFACTOR_WEBHOOK_SECRET: 'a-real-webhook-secret',
+  DATABASE_URL: 'postgresql://portfolioos_app:a-real-database-password@db.internal:5432/railway',
+  DIRECT_URL: 'postgresql://postgres:a-real-owner-password@db.internal:5432/railway',
 };
 
 describe('production secret configuration', () => {
@@ -38,6 +41,36 @@ describe('production secret configuration', () => {
     });
     expect(r.fatal).toHaveLength(1);
     expect(r.fatal[0]).toContain('ONLYOFFICE_JWT_SECRET');
+  });
+
+  it('refuses to boot on the database password committed in the app-role migration', () => {
+    // Production ran on this password, reachable through the database's public
+    // proxy, until 2026-09-21. The migration cannot be edited once applied, so
+    // the check lives here.
+    const r = collectProductionSecretProblems({
+      ...GOOD,
+      DATABASE_URL: `postgresql://portfolioos_app:${DEV_APP_ROLE_PASSWORD}@db.internal:5432/railway`,
+    });
+    expect(r.fatal).toHaveLength(1);
+    expect(r.fatal[0]).toContain('DATABASE_URL');
+  });
+
+  it('catches the same password on the migration connection', () => {
+    const r = collectProductionSecretProblems({
+      ...GOOD,
+      DIRECT_URL: `postgresql://portfolioos_app:${DEV_APP_ROLE_PASSWORD}@db.internal:5432/railway`,
+    });
+    expect(r.fatal).toHaveLength(1);
+    expect(r.fatal[0]).toContain('DIRECT_URL');
+  });
+
+  it('leaves a local database alone — the default is only dangerous where it is reachable', () => {
+    const r = collectProductionSecretProblems({
+      ...GOOD,
+      NODE_ENV: 'development',
+      DATABASE_URL: `postgresql://portfolioos_app:${DEV_APP_ROLE_PASSWORD}@localhost:5432/eptest`,
+    });
+    expect(r.fatal).toEqual([]);
   });
 
   it('refuses to boot without APP_ENCRYPTION_KEY', () => {

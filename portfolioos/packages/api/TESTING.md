@@ -36,6 +36,26 @@ DIRECT_URL=postgresql://postgres:test@localhost:55502/eptest \
   npm test
 ```
 
+### The app role's password is a local default
+
+`20260421150000_phase_4_5_rls_app_role` creates `portfolioos_app` with the
+password `portfolioos_app_dev`, which is fine for a database on your laptop and
+unsafe anywhere reachable — it is in this repository, so it is not a secret.
+Production ran on it, through the database's public proxy, until 2026-09-21.
+
+Any database that is reachable gets its own password, set by hand after the
+migrations run:
+
+```sql
+ALTER ROLE portfolioos_app WITH PASSWORD '<generated>';
+```
+
+…and `DATABASE_URL` updated to match. The API refuses to boot in production
+while either connection string still carries the committed default (see
+`collectProductionSecretProblems`), so this cannot be forgotten quietly. The
+migration cannot simply be changed: it has been applied, and editing an applied
+migration's checksum makes `prisma migrate deploy` refuse to run.
+
 ## 2. Redis
 
 The CA import-job test goes through the real ingestion path, which enqueues

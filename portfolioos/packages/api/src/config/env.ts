@@ -7,6 +7,17 @@ import { z } from 'zod';
  * rather than two copies that can drift apart.
  */
 export const PLACEHOLDER_ONLYOFFICE_SECRET = 'dev-onlyoffice-secret-change-me';
+/**
+ * The password `20260421150000_phase_4_5_rls_app_role` gives the app role when
+ * it creates it. Convenient for a local database and fatal anywhere reachable:
+ * it is in the repository, so it is not a secret. Production ran on it until
+ * 2026-09-21 — reachable through the database's public proxy — and it is
+ * checked here so no deployment can quietly do so again.
+ *
+ * The migration itself cannot be edited: it has been applied, and changing an
+ * applied migration's checksum makes `prisma migrate deploy` refuse to run.
+ */
+export const DEV_APP_ROLE_PASSWORD = 'portfolioos_app_dev';
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -115,6 +126,21 @@ const EnvSchema = z.object({
   // /api/families endpoints 404 and the frontend Settings section hides
   // itself. Rolls out per beta cohort without touching solo users.
   ENABLE_FAMILY: z.enum(['true', 'false']).default('true'),
+
+  // ─── Market-feed proportionality canary ───────────────────────
+  // A feed that returns a plausible-looking but much smaller file, or whose
+  // format shifts so most rows fail to parse, is the failure mode that hides:
+  // the job "succeeds", nothing throws, and the data quietly stops arriving.
+  // AMFI's NAVAll gained two columns in 2026 and the NAV sync imported zero
+  // rows for weeks while reporting success. These two numbers are what would
+  // have caught it on the first night.
+  /** Fail the run when more than this share of rows fail to parse. */
+  FEED_MAX_PARSE_FAILURE_PCT: z.coerce.number().min(0).max(100).default(2),
+  /** Fail the run when imported rows fall more than this far below the last
+   *  successful run. */
+  FEED_MAX_ROW_DROP_PCT: z.coerce.number().min(0).max(100).default(20),
+  /** How long a feed run row is kept. Failed runs are kept twice as long. */
+  FEED_RUN_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).default(90),
   // Named-fund advice. With this off the advisor engine and the assistant
   // still work, but they speak in categories ("a large-cap index fund")
   // instead of naming a scheme. It defaults OFF because naming a scheme is
@@ -216,6 +242,8 @@ export interface SecretProblems {
 
 export function collectProductionSecretProblems(e: {
   NODE_ENV: string;
+  DATABASE_URL?: string | undefined;
+  DIRECT_URL?: string | undefined;
   APP_ENCRYPTION_KEY?: string | undefined;
   SECRETS_KEY?: string | undefined;
   ONLYOFFICE_JWT_SECRET: string;
@@ -257,6 +285,24 @@ export function collectProductionSecretProblems(e: {
         'with it; without it they cannot be stored securely.',
     );
   }
+  for (const [name, url] of [
+    ['DATABASE_URL', e.DATABASE_URL],
+    ['DIRECT_URL', e.DIRECT_URL],
+  ] as const) {
+    // Match the credential, not the whole string: the role name and host vary,
+    // and it is the password that is public.
+    if (url && new RegExp(`://[^:@/]+:${DEV_APP_ROLE_PASSWORD}@`).test(url)) {
+      out.fatal.push(
+        `${name} still uses the database password committed in the app-role ` +
+          'migration. Anyone who has read this repository can connect to this ' +
+          'database directly, and row-level security does not stop them — the ' +
+          'policies trust a session variable the connection itself sets. Set a ' +
+          "password on the role (ALTER ROLE ... WITH PASSWORD) and update this " +
+          'variable.',
+      );
+    }
+  }
+
   if (e.ONLYOFFICE_JWT_SECRET === PLACEHOLDER_ONLYOFFICE_SECRET) {
     out.fatal.push(
       'ONLYOFFICE_JWT_SECRET is still the committed placeholder. Document ' +
