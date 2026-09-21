@@ -28,6 +28,9 @@ export interface NetWorthHistoryPoint {
   totalNetWorth: string;
   totalLiabilities: string;
   netWorthAfterLiabilities: string;
+  /** The prices behind this point were stale — show it as an estimate. */
+  estimated: boolean;
+  estimatedReason: string | null;
 }
 
 export interface NetWorthHistoryResponse {
@@ -36,6 +39,7 @@ export interface NetWorthHistoryResponse {
     changeAbsolute: string;
     changePct: number | null;
     periodLabel: NetWorthHistoryPeriod;
+    estimatedPointCount: number;
   };
 }
 

@@ -95,9 +95,27 @@ function classify(subject: string): {
   return { type: 'DIVIDEND', ratio: null, amount: null };
 }
 
+/**
+ * Counts alongside the rows, so the feed canary can tell "NSE published a
+ * quiet day" from "the CSV changed shape and we now read none of it". The
+ * NAVAll eight-column incident was exactly the second case wearing the
+ * first one's clothes.
+ */
+export interface CorpActionParseOutcome {
+  rows: CorpActionRow[];
+  /** Lines after the header. */
+  dataLines: number;
+  /** Data lines we could not read as a corporate action. */
+  parseFailures: number;
+}
+
 export function parseCorpActionsCsv(text: string): CorpActionRow[] {
+  return parseCorpActionsCsvWithCounts(text).rows;
+}
+
+export function parseCorpActionsCsvWithCounts(text: string): CorpActionParseOutcome {
   const lines = text.split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2) return [];
+  if (lines.length < 2) return { rows: [], dataLines: 0, parseFailures: 0 };
   const header = splitCsvLine(lines[0]!).map((h) => h.toUpperCase().replace(/[^A-Z0-9]/g, ''));
   const idx = (k: string) => header.findIndex((h) => h === k.replace(/[^A-Z0-9]/g, ''));
 
@@ -109,12 +127,16 @@ export function parseCorpActionsCsv(text: string): CorpActionRow[] {
   const iRecord = idx('RECORDDATE');
 
   const rows: CorpActionRow[] = [];
+  let parseFailures = 0;
   for (let i = 1; i < lines.length; i++) {
     const c = splitCsvLine(lines[i]!);
     const symbol = (c[iSymbol] ?? '').trim();
     const subject = (c[iSubject] ?? '').trim();
     const exDate = parseDdMmmYyyy(c[iExDate] ?? '');
-    if (!symbol || !subject || !exDate) continue;
+    if (!symbol || !subject || !exDate) {
+      parseFailures++;
+      continue;
+    }
     const cls = classify(subject);
     rows.push({
       symbol,
@@ -129,13 +151,18 @@ export function parseCorpActionsCsv(text: string): CorpActionRow[] {
       raw: subject,
     });
   }
-  return rows;
+  return { rows, dataLines: lines.length - 1, parseFailures };
 }
 
 export interface CorpActionLoadResult {
+  /** Rows the CSV gave us that we could read. */
   fetched: number;
   inserted: number;
   skipped: number;
+  /** Data lines in the CSV, readable or not. */
+  dataLines: number;
+  /** Data lines we could not read. */
+  parseFailures: number;
 }
 
 export async function loadNseCorporateActions(): Promise<CorpActionLoadResult> {
@@ -149,11 +176,15 @@ export async function loadNseCorporateActions(): Promise<CorpActionLoadResult> {
     text = await res.body.text();
   } catch (err) {
     logger.warn({ err }, '[CA] fetch failed');
-    return { fetched: 0, inserted: 0, skipped: 0 };
+    return { fetched: 0, inserted: 0, skipped: 0, dataLines: 0, parseFailures: 0 };
   }
 
-  const rows = parseCorpActionsCsv(text);
-  logger.info({ rowCount: rows.length }, '[CA] parsed corporate actions');
+  const parsed = parseCorpActionsCsvWithCounts(text);
+  const rows = parsed.rows;
+  logger.info(
+    { rowCount: rows.length, dataLines: parsed.dataLines, parseFailures: parsed.parseFailures },
+    '[CA] parsed corporate actions',
+  );
 
   let inserted = 0;
   let skipped = 0;
@@ -194,5 +225,11 @@ export async function loadNseCorporateActions(): Promise<CorpActionLoadResult> {
   }
 
   logger.info({ inserted, skipped }, '[CA] load complete');
-  return { fetched: rows.length, inserted, skipped };
+  return {
+    fetched: rows.length,
+    inserted,
+    skipped,
+    dataLines: parsed.dataLines,
+    parseFailures: parsed.parseFailures,
+  };
 }

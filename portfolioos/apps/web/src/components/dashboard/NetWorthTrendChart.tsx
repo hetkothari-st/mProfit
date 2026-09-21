@@ -7,6 +7,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { intelligenceApi, type NetWorthHistoryPeriod } from '@/api/intelligence.api';
 import { formatINR, toDecimal } from '@everypaisa/shared';
+import {
+  EstimatedChip,
+  EstimatedDataNotice,
+} from '@/pages/family/widgets/RestrictedNotice';
 
 const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
   { label: '1M', value: '1M' },
@@ -34,7 +38,17 @@ export function NetWorthTrendChart() {
   const chartData = points.map((p) => ({
     label: new Date(p.asOf).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }),
     value: toDecimal(p.netWorthAfterLiabilities).toNumber(),
+    estimated: p.estimated,
   }));
+
+  // Points whose prices were stale. They stay on the chart with the number we
+  // recorded — hiding them would be a different lie — but they are drawn
+  // hollow, called out above the chart, and named in the tooltip.
+  const estimatedCount = data?.summary.estimatedPointCount ?? 0;
+  const estimatedReason = points.find((p) => p.estimated)?.estimatedReason ?? null;
+  const changeIsEstimated =
+    estimatedCount > 0 &&
+    (points[0]?.estimated === true || points[points.length - 1]?.estimated === true);
 
   const changeAbsolute = data ? toDecimal(data.summary.changeAbsolute) : null;
   const changePct = data?.summary.changePct ?? null;
@@ -91,8 +105,18 @@ export function NetWorthTrendChart() {
               </span>
             )}
             <span className="text-muted-foreground">this {periodLabel}</span>
+            {/* The change is measured between the two ends of the window, so
+                an estimate at either end makes the change an estimate too. */}
+            {changeIsEstimated && <EstimatedChip />}
           </div>
         )}
+
+        <EstimatedDataNotice
+          estimatedCount={estimatedCount}
+          what="The trend below"
+          reason={estimatedReason}
+          className="mb-3"
+        />
 
         {isError ? (
           <div className="h-56 flex items-center justify-center text-sm text-negative">
@@ -153,7 +177,12 @@ export function NetWorthTrendChart() {
                   fontSize: 12,
                   padding: '10px 12px',
                 }}
-                formatter={(v: number) => [formatINR(v.toFixed(4)), 'Net worth']}
+                formatter={(v: number, _name, item) => [
+                  formatINR(v.toFixed(4)),
+                  (item?.payload as { estimated?: boolean } | undefined)?.estimated
+                    ? 'Net worth (estimate)'
+                    : 'Net worth',
+                ]}
                 labelStyle={{
                   color: 'hsl(var(--muted-foreground))',
                   marginBottom: 4,
@@ -168,7 +197,24 @@ export function NetWorthTrendChart() {
                 stroke="hsl(var(--foreground))"
                 strokeWidth={2}
                 fill="url(#gradNetWorthTrend)"
-                dot={chartData.length <= 10 ? { r: 2.5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 1.5 } : false}
+                dot={(props: { cx?: number; cy?: number; index?: number; payload?: { estimated?: boolean } }) => {
+                  const est = props.payload?.estimated === true;
+                  // An estimated point is always drawn, however dense the
+                  // series: it is the one the reader most needs to see.
+                  if (!est && chartData.length > 10) return <g key={props.index} />;
+                  return (
+                    <circle
+                      key={props.index}
+                      cx={props.cx}
+                      cy={props.cy}
+                      r={est ? 3.5 : 2.5}
+                      fill={est ? 'hsl(var(--card))' : 'hsl(var(--foreground))'}
+                      stroke={est ? 'rgb(217 119 6)' : 'hsl(var(--card))'}
+                      strokeWidth={est ? 1.8 : 1.5}
+                      strokeDasharray={est ? '2 1.5' : undefined}
+                    />
+                  );
+                }}
                 activeDot={{ r: 5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 2 }}
               />
             </AreaChart>

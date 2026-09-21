@@ -43,7 +43,10 @@ export interface BseUniverseLoadResult {
   fetchedRows: number;
   created: number;
   updated: number;
+  /** Rows we deliberately ignored — inactive, non-equity, already on NSE. */
   skipped: number;
+  /** Rows we meant to write and could not. The feed canary watches this one. */
+  failed: number;
 }
 
 export async function loadBseEquityUniverse(): Promise<BseUniverseLoadResult> {
@@ -54,6 +57,7 @@ export async function loadBseEquityUniverse(): Promise<BseUniverseLoadResult> {
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  let failed = 0;
 
   for (const row of rows) {
     if (!row.scrip_id || row.Status !== 'Active' || row.INSTRUMENT !== 'Equity') {
@@ -96,11 +100,12 @@ export async function loadBseEquityUniverse(): Promise<BseUniverseLoadResult> {
         });
         created++;
       } catch (err) {
-        skipped++;
+        logger.warn({ err, symbol }, '[BSE] create failed — likely duplicate ISIN');
+        failed++;
       }
     }
   }
 
-  logger.info({ created, updated, skipped }, '[BSE] equity universe load complete');
-  return { fetchedRows: rows.length, created, updated, skipped };
+  logger.info({ created, updated, skipped, failed }, '[BSE] equity universe load complete');
+  return { fetchedRows: rows.length, created, updated, skipped, failed };
 }

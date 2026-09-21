@@ -126,6 +126,21 @@ const EnvSchema = z.object({
   // /api/families endpoints 404 and the frontend Settings section hides
   // itself. Rolls out per beta cohort without touching solo users.
   ENABLE_FAMILY: z.enum(['true', 'false']).default('true'),
+
+  // ─── Market-feed proportionality canary ───────────────────────
+  // A feed that returns a plausible-looking but much smaller file, or whose
+  // format shifts so most rows fail to parse, is the failure mode that hides:
+  // the job "succeeds", nothing throws, and the data quietly stops arriving.
+  // AMFI's NAVAll gained two columns in 2026 and the NAV sync imported zero
+  // rows for weeks while reporting success. These two numbers are what would
+  // have caught it on the first night.
+  /** Fail the run when more than this share of rows fail to parse. */
+  FEED_MAX_PARSE_FAILURE_PCT: z.coerce.number().min(0).max(100).default(2),
+  /** Fail the run when imported rows fall more than this far below the last
+   *  successful run. */
+  FEED_MAX_ROW_DROP_PCT: z.coerce.number().min(0).max(100).default(20),
+  /** How long a feed run row is kept. Failed runs are kept twice as long. */
+  FEED_RUN_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).default(90),
   // Named-fund advice. With this off the advisor engine and the assistant
   // still work, but they speak in categories ("a large-cap index fund")
   // instead of naming a scheme. It defaults OFF because naming a scheme is
