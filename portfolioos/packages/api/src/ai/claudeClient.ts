@@ -20,7 +20,7 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { recordSpend } from '../ingestion/llm/client.js';
 import { AI_ASSISTANT_SYSTEM_PROMPT } from './systemPrompt.js';
-import { ADVISOR_TOOLS, runAdvisorTool, type ToolOutcome } from './advisorTools.js';
+import { ADVISOR_TOOLS, runAdvisorTool, type ToolContext, type ToolOutcome } from './advisorTools.js';
 import { knowledgeForPrompt, type KnowledgeHit } from './knowledge/search.js';
 import type { AssistantContext } from './contextBuilder.js';
 import type { AdvisorFacts } from '../services/advisor/types.js';
@@ -303,7 +303,14 @@ export async function* streamAssistantResponse(
   ]);
 
   const knowledgeIds = advisor.knowledge.map((h) => h.entry.id);
-  const toolCtx = { userId, facts: advisor.facts, financialYear: advisor.financialYear };
+  const toolCtx: ToolContext = {
+    userId,
+    facts: advisor.facts,
+    financialYear: advisor.financialYear,
+    // A profile already on file is not re-taken mid-chat: the record is
+    // append-only and redoing it belongs on the Advisor page, deliberately.
+    riskProfileSavedThisConversation: advisor.facts?.riskProfile?.category != null,
+  };
   let usage: TurnUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
   try {
