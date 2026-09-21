@@ -208,3 +208,42 @@ export async function retryIngestionFailure(
   // Unknown adapter
   throw new BadRequestError(`Retry not implemented for adapter "${adapter}".`);
 }
+
+/**
+ * Market-feed runs that failed, newest first.
+ *
+ * NOT user-scoped, and deliberately so. `FeedRunLog` describes a feed, not
+ * anyone's money: it has no `userId`, no RLS policy and no entry in
+ * `USER_SCOPED_MODELS` (CONTEXT.md §5), like `StockMaster` and `MFNav`. Every
+ * authenticated user sees the same rows, because a stale AMFI file is the same
+ * fact for all of them.
+ *
+ * There is no resolve and no retry. A feed failure is fixed upstream or in our
+ * parser, and "retry" means waiting for tomorrow's file — a button that did
+ * nothing would be worse than no button.
+ */
+export async function listFeedRunFailures(opts: { since?: Date; limit?: number } = {}) {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  const rows = await prisma.feedRunLog.findMany({
+    where: {
+      status: 'FAILED',
+      ...(opts.since ? { startedAt: { gte: opts.since } } : {}),
+    },
+    orderBy: { startedAt: 'desc' },
+    take: limit,
+  });
+  return {
+    items: rows.map((r) => ({
+      id: r.id,
+      feed: r.feed,
+      startedAt: r.startedAt.toISOString(),
+      finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+      status: r.status,
+      rowsParsed: r.rowsParsed,
+      rowsImported: r.rowsImported,
+      parseFailures: r.parseFailures,
+      previousImported: r.previousImported,
+      reason: r.reason,
+    })),
+  };
+}

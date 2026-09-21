@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   RotateCcw,
   Filter,
+  Radio,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -34,6 +35,7 @@ import type {
   IngestionFailureDTO,
   IngestionResolveAction,
 } from '@everypaisa/shared';
+import { feedLabel } from '@everypaisa/shared';
 import {
   INGESTION_RESOLVE_ACTIONS,
   INGESTION_RESOLVE_ACTION_LABELS,
@@ -172,9 +174,15 @@ export function FailuresPage() {
         </div>
       </div>
 
+      <FeedFailures />
+
       <Card>
         <CardHeader>
           <CardTitle>Dead-letter queue</CardTitle>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            Your own documents and emails. Each row has a payload you can
+            inspect and retry.
+          </p>
         </CardHeader>
         <CardContent className="p-0">
           {listQuery.isLoading && allRows.length === 0 ? (
@@ -402,5 +410,119 @@ function Field({
         {value}
       </div>
     </div>
+  );
+}
+
+/**
+ * Market-feed failures, above the user's own.
+ *
+ * Kept as its own card rather than merged into the dead-letter queue, because
+ * the two are different kinds of failure and want different reactions. A row
+ * in the queue below is one of YOUR documents that did not parse: it has a
+ * payload, an owner, and a Retry button that does something. A row here is a
+ * market feed that returned less than it should have — it belongs to nobody,
+ * there is nothing to retry by hand, and the fix is upstream or in our parser.
+ *
+ * Merging them would put a Retry button on a row where "retry" means waiting
+ * for tomorrow's AMFI file, which is worse than no button at all.
+ *
+ * It exists because a feed can fail in a way nobody notices: AMFI's NAV file
+ * gained two columns, the parser read a plan name where the NAV belonged, and
+ * the sync imported zero rows nightly while reporting success. The canary that
+ * now catches that writes here.
+ */
+function FeedFailures() {
+  const query = useQuery({
+    queryKey: ['ingestion-failures', 'feeds'],
+    queryFn: () => ingestionFailuresApi.listFeedFailures(25),
+  });
+
+  const items = query.data?.items ?? [];
+
+  // A page with no feed failures should not carry an empty card claiming
+  // there is a section here; silence is the correct rendering of "nothing has
+  // gone wrong". The loading and error states are still worth showing, so a
+  // failure to LOAD the failures is not mistaken for having none.
+  if (!query.isLoading && !query.isError && items.length === 0) return null;
+
+  return (
+    <Card className="mb-4 border-amber-300/70 dark:border-amber-900/60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Radio className="h-4 w-4 text-amber-600 dark:text-amber-400" strokeWidth={1.8} />
+          Market feed failures
+        </CardTitle>
+        <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+          Price and reference-data feeds that returned less than they should
+          have. These are not yours to fix — they affect every account, and
+          there is nothing to retry by hand. Listed so a quiet feed cannot go
+          unnoticed.
+        </p>
+      </CardHeader>
+      <CardContent className="p-0">
+        {query.isLoading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading feed runs…</div>
+        ) : query.isError ? (
+          <div className="p-6 text-sm text-negative">
+            Couldn&apos;t load market feed failures.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-[11px] uppercase tracking-kerned text-muted-foreground">
+                  <th className="px-4 py-2 font-medium">Feed</th>
+                  <th className="px-4 py-2 font-medium">When</th>
+                  <th className="px-4 py-2 font-medium">Imported</th>
+                  <th className="px-4 py-2 font-medium">What happened</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((row) => (
+                  <tr key={row.id} className="border-b last:border-0 align-top">
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium">{feedLabel(row.feed)}</div>
+                      <div className="font-mono text-[10.5px] text-muted-foreground">
+                        {row.feed}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground tabular-nums">
+                      {new Date(row.startedAt).toLocaleString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
+                      {/* The comparison IS the finding, so both numbers are
+                          shown rather than a single count that looks fine. */}
+                      {row.rowsImported === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <>
+                          <span className="font-medium">
+                            {row.rowsImported.toLocaleString('en-IN')}
+                          </span>
+                          {row.previousImported !== null && (
+                            <span className="text-muted-foreground">
+                              {' '}
+                              of {row.previousImported.toLocaleString('en-IN')}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {row.reason ?? 'The run failed without a reason recorded.'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
