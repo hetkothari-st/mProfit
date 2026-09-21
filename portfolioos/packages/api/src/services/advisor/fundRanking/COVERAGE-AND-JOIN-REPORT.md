@@ -316,3 +316,202 @@ the only thing that can turn "structurally hard to get wrong" into evidence.
 | `test/services/advisor/fundRanking/exitLoadAndGate.test.ts` | 5 new gate tests |
 
 `test/services/advisor test/priceFeeds test/adapters`: **870 passed, 33 files**.
+
+---
+
+# Follow-up: NAV gaps, and a committed brand map
+
+Two further changes, both replacing a rule that was right on average with one
+that is right every night.
+
+---
+
+## D. `nav_history_gap` — a hole in the middle of a track record
+
+### What was missing
+
+`maxNavStalenessDays` catches a fund that stopped pricing and never restarted.
+Nothing caught the fund that stopped and **came back**, which is the harder
+case precisely because it looks healthy at both ends: a current NAV, a
+five-year span, and a month-shaped hole somewhere in March.
+
+Every metric computed across that hole is wrong in a way the metric itself
+cannot report. A rolling-return window straddling the gap annualises a move
+that took a month as though it took a day. A Sortino from a month-end grid
+interpolates across it without saying so. A tracking error against a
+comparator that *did* publish reads as skill or as noise depending only on
+which way the market went while we were not looking.
+
+### The rule
+
+A fund is ineligible when the largest run of trading days missing from the
+interior of its own NAV history exceeds `maxNavGapTradingDays` — methodology
+config, **default 5**. The reason carries its evidence:
+
+```json
+["nav_history_gap"]
+[{"reason":"nav_history_gap","from":"2026-03-04","to":"2026-04-02","tradingDaysMissing":20}]
+```
+
+The first is the typed `EligibilityResult.reasons`; the second is what lands
+in `FundScoreSnapshot.exclusionReasons`.
+
+### Judgement call: the trading calendar is derived from AMFI's own file
+
+Counting **calendar** days makes every long weekend a three-day outage and
+every Diwali week a five-day one, so any threshold loose enough to survive the
+calendar is far too loose to catch a real gap. The question that matters is
+"how many days did the rest of the market price, and this fund did not".
+
+We hold no exchange holiday table, and writing one would be a maintenance
+burden that goes stale every year. We do not need one: **a day on which any
+scheme published a NAV was a day on which this fund should have.** The
+calendar is the set of distinct `MFNav.date` values across the whole universe,
+built once per scoring run and handed to every candidate.
+
+It is derived from the universe rather than per fund on purpose — one fund's
+own history cannot tell you which of its missing days were holidays, and that
+is exactly the information a gap hides.
+
+Consequence worth stating: **with no calendar, the rule does not fire.** It
+never falls back to calendar days. A caller that forgets to pass one gets no
+exclusions rather than wrong ones.
+
+### Judgement call: only the interior counts
+
+A fund that launched mid-window has no NAV before its launch. That is a short
+track record, which `minTrackRecordYears` already judges. A fund whose NAV
+stops at the end has stale prices, which `maxNavStalenessDays` judges.
+Counting either here would fail the same fund twice under two different names
+and make the exclusion reasons useless for diagnosis.
+
+### Judgement call: the release gate measures gaps in SQL
+
+`assessEligibility` is called from two places. The scoring run holds every
+observation and computes the gap in TypeScript. The release gate does not — it
+loads two dates per scheme, because reading every NAV for every fund at boot
+is tens of millions of rows — so it measures gaps in one SQL statement and
+passes the answer in on `FundCandidate.navGap`.
+
+Both read the same fact from the same data: the calendar is numbered in order
+and a gap is the difference between consecutive ordinals minus one. The SQL
+path runs in ~250 ms over the full master. Two implementations of one rule is
+a cost; loading 18 million rows at boot to avoid it is a worse one.
+
+### Judgement call: the persisted reason carries an object
+
+`FundScoreSnapshot.exclusionReasons` was a flat array of strings. Most reasons
+are complete in themselves — "regular_plan" says everything there is to say.
+`nav_history_gap` is not: "this fund has a hole" without "where, and how big"
+is not a finding, it is a rumour.
+
+So a reason that carries evidence is written as an object beside the plain
+tokens, rather than flattened into a string that would have to be parsed back:
+
+```json
+["track_record_too_short", {"reason":"nav_history_gap", "from":"...", "to":"...", "tradingDaysMissing":20}]
+```
+
+`reasons.includes('regular_plan')` keeps working for every other reason;
+`reasonTokens()` reads either shape. The typed `EligibilityResult.reasons`
+stays a clean `ExclusionReason[]` — only the persisted form is mixed.
+
+---
+
+## E. The AMC brand map is committed, not derived
+
+### What was wrong
+
+The previous change derived each AMC's brand at runtime, as the longest common
+leading word sequence of that AMC's own scheme names. It produced the right
+answer on the data in front of it, and that is the problem.
+
+The derivation is a *longest common prefix*. One oddly-named new scheme
+shortens its AMC's brand — a single "Kotak Mahindra Something Fund" among
+ninety-nine "Kotak …" funds would drag the brand from `kotak` to nothing — and
+funds that matched yesterday stop matching today, with nothing in any diff to
+explain it. **The input to a cost-weighted ranking should not change because a
+fund house launched a product.**
+
+### The rule
+
+`src/priceFeeds/amcBrandMap.ts` — 54 AMCs, generated once, committed, and
+reviewed like any other code. `joinTerToSchemes` reads it by default.
+
+An AMC absent from the map is a **miss**, not a guess: its schemes are set
+aside before the join, marked `terJoinStatus = 'UNMAPPED_AMC'`, and reported as
+`ter_unmapped_amc` in the score's `dataGaps`. Deliberately distinct from
+`ter_unmatched`: that one is AMFI omitting a scheme, this one is our map being
+out of date, and the two are fixed in completely different places.
+
+Setting them aside *before* the join also stops an unmapped AMC's scheme from
+colliding with a mapped one's key — a scheme from an unreviewed house can never
+make a reviewed house's name ambiguous.
+
+`src/scripts/generateAmcBrandMap.ts` regenerates it
+(`pnpm --filter @everypaisa/api amc-brands:generate`), and the map is
+reproducible: the join still reports **1,669 matched / 106 unmatched / 20
+ambiguous / 56 unknown-AMC** against the August 2026 file, exactly as it did
+with the runtime derivation.
+
+### The CI test
+
+`test/priceFeeds/amcBrandMap.test.ts` fails when any AMC in
+`MutualFundMaster` is absent from the map, and says what to run:
+
+```
+1 AMC(s) are in MutualFundMaster but not in amcBrandMap.ts:
+  IL&FS Mutual Fund (IDF)
+Their schemes will be recorded as ter_unmapped_amc and get no TER.
+Run: pnpm --filter @everypaisa/api amc-brands:generate — then read the diff.
+```
+
+That is not a hypothetical message — it is what the test printed on its first
+run, and it found a real omission.
+
+### Judgement call: brands are derived from every scheme, not just direct-growth
+
+The join only reads direct-growth schemes, so the first version of the
+generator only looked at those. The test then failed on `IL&FS Mutual Fund
+(IDF)`, which has no direct-growth scheme at all.
+
+A brand is a naming fact about a fund house, not a fact about a share class. An
+AMC with no direct-growth scheme today still has to be in the map before it
+launches its first — otherwise the test fails on the night that happens, for a
+fund nothing could have joined anyway. The generator now reads every scheme;
+the scheme counts in the comments stay direct-growth, because that is the
+population the join actually reads.
+
+### Judgement call: a single-scheme AMC contributes no derived brand
+
+With one scheme, the "longest common prefix" of that AMC's names is the whole
+scheme name. `'ask liquid fund'` appeared in the first generated map as a brand
+for ASK Mutual Fund. It would match exactly one row and tell us nothing, while
+looking — in a committed, reviewed file — like a considered decision. The
+generator now requires at least two distinct scheme names, and rejects a
+derived prefix that equals a scheme name outright.
+
+### The map
+
+Nine AMCs have more than one brand. In every one of these cases the registered
+name is not what AMFI writes on the fund, which is the whole reason the map
+exists:
+
+| Registered AMC | Brands | Direct-growth schemes |
+|---|---|---|
+| Aditya Birla Sun Life Mutual Fund | `aditya birla sun`, `aditya birla sun life` | 87 |
+| IL&FS Mutual Fund (IDF) | `il fs infrastructure`, `il fs mutual fund idf` | 0 |
+| Invesco Mutual Fund | `invesco`, `invesco india` | 48 |
+| Jio BlackRock Mutual Fund | `jio blackrock`, `jioblackrock` | 14 |
+| JM Financial Mutual Fund | `jm`, `jm financial` | 23 |
+| Kotak Mahindra Mutual Fund | `kotak`, `kotak mahindra` | 99 |
+| LIC Mutual Fund | `lic`, `lic mf` | 36 |
+| PPFAS Mutual Fund | `parag parikh`, `ppfas` | 7 |
+| Trust Mutual Fund | `trust`, `trustmf` | 12 |
+
+The remaining 45 AMCs have a single brand equal to their registered key. The
+longest match wins, so `aditya birla sun` — a three-word truncation artifact of
+the derivation — is harmless: any real scheme name also matches the four-word
+brand, which is longer.
+
+Full table in `src/priceFeeds/amcBrandMap.ts`, one commented row per AMC.

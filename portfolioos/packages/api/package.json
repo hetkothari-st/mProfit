@@ -19,7 +19,8 @@
     "fmv:coverage": "tsx src/scripts/fmvCoverage.ts",
     "mf-category:coverage": "tsx src/scripts/mfCategoryCoverage.ts",
     "backfill:net-worth-history": "tsx src/scripts/backfillNetWorthHistory.ts",
-    "ter:audit": "tsx src/scripts/terJoinAudit.ts"
+    "ter:audit": "tsx src/scripts/terJoinAudit.ts",
+    "amc-brands:generate": "tsx src/scripts/generateAmcBrandMap.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

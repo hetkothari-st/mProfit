@@ -35,6 +35,7 @@ import { assessEligibility } from './eligibility.js';
 import { bucketForScheme } from './categoryMap.js';
 import { ADVISOR_ASSET_BUCKETS, type AdvisorAssetBucketValue } from '../types.js';
 import type { ExclusionReason, FundCandidate, MethodologyConfig } from './types.js';
+import type { NavGap } from './navGaps.js';
 
 /** The exclusion reasons each measured field is responsible for. */
 const TER_REASONS: ExclusionReason[] = [];
@@ -92,6 +93,59 @@ async function navSpans(): Promise<Map<string, { first: Date; last: Date }>> {
 }
 
 /**
+ * The largest hole in each scheme's NAV history, in trading days, measured in
+ * SQL.
+ *
+ * The scoring run measures this in TypeScript because it already holds every
+ * observation. The gate does not and must not: loading every NAV for every
+ * fund at boot is tens of millions of rows to answer one question per scheme.
+ *
+ * The calendar is the set of dates on which ANY scheme priced — the same
+ * definition `buildTradingCalendar` uses — numbered in order, so a gap is
+ * simply the difference between two consecutive ordinals minus one. No
+ * exchange holiday table to maintain, and it cannot disagree with the
+ * TypeScript path because both read the same fact from the same data.
+ */
+async function navGaps(): Promise<Map<string, NavGap>> {
+  const rows = await prisma.$queryRaw<
+    { schemeCode: string; tradingDaysMissing: number; from: Date; to: Date }[]
+  >`
+    WITH cal AS (
+      SELECT "date", ROW_NUMBER() OVER (ORDER BY "date") AS ord
+      FROM (SELECT DISTINCT "date" FROM "MFNav") d
+    ),
+    n AS (
+      SELECT nav."fundId",
+             c.ord AS ord,
+             c."date" AS d,
+             LAG(c.ord) OVER (PARTITION BY nav."fundId" ORDER BY c.ord) AS prev_ord,
+             LAG(c."date") OVER (PARTITION BY nav."fundId" ORDER BY c.ord) AS prev_d
+      FROM "MFNav" nav
+      JOIN cal c ON c."date" = nav."date"
+    )
+    SELECT DISTINCT ON (m."schemeCode")
+           m."schemeCode" AS "schemeCode",
+           (n.ord - n.prev_ord - 1)::int AS "tradingDaysMissing",
+           n.prev_d AS "from",
+           n.d AS "to"
+    FROM n
+    JOIN "MutualFundMaster" m ON m."id" = n."fundId"
+    WHERE n.prev_ord IS NOT NULL
+    ORDER BY m."schemeCode", (n.ord - n.prev_ord - 1) DESC
+  `;
+  return new Map(
+    rows.map((r) => [
+      r.schemeCode,
+      {
+        from: r.from.toISOString().slice(0, 10),
+        to: r.to.toISOString().slice(0, 10),
+        tradingDaysMissing: r.tradingDaysMissing,
+      },
+    ]),
+  );
+}
+
+/**
  * Build the candidate rows eligibility reads, with a two-point NAV history
  * standing in for the full series.
  *
@@ -101,7 +155,7 @@ async function navSpans(): Promise<Map<string, { first: Date; last: Date }>> {
  * series. Scoring, which does need every point, loads its own.
  */
 async function loadEligibilityInputs(): Promise<FundCandidate[]> {
-  const [funds, spans] = await Promise.all([
+  const [funds, spans, gaps] = await Promise.all([
     prisma.mutualFundMaster.findMany({
       select: {
         schemeCode: true,
@@ -119,6 +173,7 @@ async function loadEligibilityInputs(): Promise<FundCandidate[]> {
       },
     }),
     navSpans(),
+    navGaps(),
   ]);
 
   return funds.map((f) => {
@@ -142,6 +197,7 @@ async function loadEligibilityInputs(): Promise<FundCandidate[]> {
       navHistory,
       terPct: f.terPct == null ? null : Number.parseFloat(f.terPct.toString()),
       terJoinStatus: f.terJoinStatus,
+      navGap: gaps.get(f.schemeCode) ?? null,
       aumInr: f.aumInr == null ? null : new Decimal(f.aumInr.toString()),
       managerTenureYears: null,
       benchmarkTri: null,

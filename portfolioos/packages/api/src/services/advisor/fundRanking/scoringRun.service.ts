@@ -15,9 +15,10 @@ import { logger } from '../../../lib/logger.js';
 import { ADVISOR_ASSET_BUCKETS } from '../types.js';
 import { bucketForScheme, isPassive, trackedIndexKey } from './categoryMap.js';
 import { assessEligibility } from './eligibility.js';
+import { buildTradingCalendar } from './navGaps.js';
 import { computeMetrics, median, monthlyReturnsPct, rollingReturnsPct } from './metrics.js';
 import { rankBucket, scoreBucket, type ScoringInput } from './scoring.js';
-import type { FundCandidate, MethodologyConfig } from './types.js';
+import type { DetailedExclusionReason, FundCandidate, MethodologyConfig } from './types.js';
 
 /** How much NAV history to load per scheme. Five years covers the three-year
  *  rolling windows with enough steps to say something about consistency,
@@ -156,6 +157,18 @@ export async function runFundScoring(args: {
   const asOfDate = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()));
   const candidates = await loadCandidates(asOf);
 
+  // The market's own trading calendar: every date on which ANY scheme priced.
+  // Built from the whole universe rather than per fund, because a single
+  // fund's history cannot tell you which of its missing days were holidays —
+  // that is exactly the information a gap hides.
+  const tradingDays = buildTradingCalendar(
+    candidates.flatMap((c) => c.navHistory.map((n) => n.date)),
+  );
+  logger.info(
+    { tradingDays: tradingDays.length, schemes: candidates.length },
+    '[fundScoring] trading calendar derived from the NAV universe',
+  );
+
   let snapshotsWritten = 0;
   let failures = 0;
 
@@ -178,12 +191,12 @@ export async function runFundScoring(args: {
     const scoringInputs: ScoringInput[] = [];
     const eligibilityByScheme = new Map<
       string,
-      { eligible: boolean; reasons: string[]; metrics: unknown }
+      { eligible: boolean; reasons: DetailedExclusionReason[]; metrics: unknown }
     >();
 
     for (const { candidate, passive } of members) {
       try {
-        const eligibility = assessEligibility(candidate, bucket, args.config, asOf);
+        const eligibility = assessEligibility(candidate, bucket, args.config, asOf, tradingDays);
         const indexKey = passive ? (trackedIndexKey(candidate.schemeName) ?? 'BUCKET') : 'BUCKET';
         const metrics = computeMetrics({
           navHistory: candidate.navHistory,
@@ -200,7 +213,9 @@ export async function runFundScoring(args: {
 
         eligibilityByScheme.set(candidate.schemeCode, {
           eligible: eligibility.eligible,
-          reasons: eligibility.reasons,
+          // The detailed form: `nav_history_gap` carries the span that is the
+          // whole content of the finding. Plain reasons stay plain strings.
+          reasons: eligibility.detailedReasons,
           metrics: {
             ...metrics,
             // The raw rolling series is long and not worth storing per scheme;
@@ -208,6 +223,7 @@ export async function runFundScoring(args: {
             rollingReturnsPct: undefined,
             rollingWindows: metrics.rollingReturnsPct.length,
             trackRecordYears: eligibility.traits.trackRecordYears,
+            navGapTradingDays: eligibility.traits.navGap?.tradingDaysMissing ?? 0,
             plan: eligibility.traits.plan,
             option: eligibility.traits.option,
           },

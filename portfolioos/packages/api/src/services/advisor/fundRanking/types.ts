@@ -10,6 +10,7 @@
 
 import type { Decimal } from 'decimal.js';
 import type { AdvisorAssetBucketValue } from '../types.js';
+import type { NavGap } from './navGaps.js';
 
 // ─── Inputs ──────────────────────────────────────────────────────
 
@@ -37,6 +38,17 @@ export interface FundCandidate {
   terPct: number | null;
   /** MATCHED | UNMATCHED | AMBIGUOUS from the last TER refresh; see terJoin.ts. */
   terJoinStatus: string | null;
+  /**
+   * The largest hole in this fund's NAV history, when the caller measured it
+   * somewhere other than from `navHistory`.
+   *
+   * The scoring run holds every observation and lets `readTraits` compute it.
+   * The release gate does not — it loads two dates per scheme, because
+   * loading every NAV for every fund at boot would read tens of millions of
+   * rows — so it measures gaps in SQL and passes the answer in. Absent means
+   * "not measured elsewhere, compute it from the history".
+   */
+  navGap?: NavGap | null;
   aumInr: Decimal | null;
   managerTenureYears: number | null;
   benchmarkTri: NavObservation[] | null;
@@ -63,6 +75,7 @@ export const EXCLUSION_REASONS = [
   'nfo_or_no_history',
   'track_record_too_short',
   'nav_stale',
+  'nav_history_gap',
   'aum_below_floor',
   'aum_unknown',
 ] as const;
@@ -73,6 +86,31 @@ export interface EligibilityResult {
   reasons: ExclusionReason[];
   /** What we decided the scheme is, from name and category. */
   traits: FundTraits;
+  /**
+   * The persisted form of `reasons`, as written to
+   * `FundScoreSnapshot.exclusionReasons`.
+   *
+   * Most reasons are complete in themselves — "regular_plan" says everything
+   * there is to say. `nav_history_gap` is not: "this fund has a hole" is
+   * useless without "where, and how big", and that span is the whole content
+   * of the finding. So a reason that carries evidence is written as an object
+   * beside the plain tokens rather than being flattened into one.
+   *
+   * Readers that ask `reasons.includes('regular_plan')` keep working; a
+   * reader that wants the span asks for the object. `reasonTokens()` reads
+   * either shape.
+   */
+  detailedReasons: DetailedExclusionReason[];
+}
+
+/** A plain reason, or one carrying the evidence behind it. */
+export type DetailedExclusionReason =
+  | ExclusionReason
+  | { reason: 'nav_history_gap'; from: string; to: string; tradingDaysMissing: number };
+
+/** The reason tokens from either shape, for callers that only want the set. */
+export function reasonTokens(reasons: readonly DetailedExclusionReason[]): ExclusionReason[] {
+  return reasons.map((r) => (typeof r === 'string' ? r : r.reason));
 }
 
 export interface FundTraits {
@@ -84,6 +122,8 @@ export interface FundTraits {
   segregatedPortfolio: boolean;
   trackRecordYears: number | null;
   navAgeDays: number | null;
+  /** The biggest hole inside the fund's own NAV history; see navGaps.ts. */
+  navGap: NavGap | null;
 }
 
 // ─── Metrics ─────────────────────────────────────────────────────
@@ -169,6 +209,14 @@ export interface MethodologyConfig {
     requireGrowthOption: boolean;
     requireOpenEnded: boolean;
     maxNavStalenessDays: number;
+    /**
+     * The longest run of TRADING days a fund may miss inside its own NAV
+     * history before it is excluded. Trading days, not calendar days: a
+     * calendar threshold loose enough to survive Diwali is too loose to
+     * catch a real outage. Default 5 when absent — a fund that has not
+     * priced for a week is not one to rank, let alone recommend.
+     */
+    maxNavGapTradingDays?: number;
   };
   metrics: {
     rollingReturnYears: number;

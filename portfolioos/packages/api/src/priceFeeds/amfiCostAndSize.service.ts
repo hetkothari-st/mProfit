@@ -53,6 +53,8 @@ export interface CostSizeRefreshResult {
     ambiguous: number;
     /** TER rows whose scheme name begins with no AMC we hold. */
     unknownAmc: number;
+    /** Our schemes whose AMC is absent from the committed brand map. */
+    unmappedAmc: number;
     asOf: string | null;
   };
   aum: { fetched: number; matched: number; unmatched: number; amcs: number; asOf: string | null };
@@ -118,13 +120,13 @@ export async function refreshAmfiTer(
     }
     if (rows.length === 0) {
       failures.push({ source: 'amfi_ter', reason: 'parsed_zero_rows' });
-      return { fetched: 0, matched: 0, unmatched: 0, ambiguous: 0, unknownAmc: 0, asOf: null, failures };
+      return { fetched: 0, matched: 0, unmatched: 0, ambiguous: 0, unknownAmc: 0, unmappedAmc: 0, asOf: null, failures };
     }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     logger.error({ err: reason, url }, '[amfiTer] fetch failed');
     failures.push({ source: 'amfi_ter', reason });
-    return { fetched: 0, matched: 0, unmatched: 0, ambiguous: 0, unknownAmc: 0, asOf: null, failures };
+    return { fetched: 0, matched: 0, unmatched: 0, ambiguous: 0, unknownAmc: 0, unmappedAmc: 0, asOf: null, failures };
   }
 
   const latest = latestTerByScheme(rows);
@@ -155,6 +157,23 @@ export async function refreshAmfiTer(
       { ambiguous: join.ambiguous.slice(0, 5), total: join.ambiguous.length },
       '[amfiTer] scheme names that are not identifiers — no TER written',
     );
+  }
+  if (join.unmappedAmc.length > 0) {
+    // Our gap, not AMFI's: a fund house appeared that the committed brand map
+    // does not know. Regenerate and review it — see
+    // src/scripts/generateAmcBrandMap.ts. Logged at error because the fix is
+    // a code change somebody has to make, not a data condition to watch.
+    logger.error(
+      {
+        amcs: [...new Set(join.unmappedAmc.map((s) => s.amcName))].slice(0, 10),
+        schemes: join.unmappedAmc.length,
+      },
+      '[amfiTer] AMCs missing from the committed brand map — no TER joined',
+    );
+    await prisma.mutualFundMaster.updateMany({
+      where: { schemeCode: { in: join.unmappedAmc.map((s) => s.schemeCode) } },
+      data: { terJoinStatus: 'UNMAPPED_AMC' },
+    });
   }
   if (join.unknownAmc.length > 0) {
     logger.warn(
@@ -201,6 +220,7 @@ export async function refreshAmfiTer(
     unmatched: join.unmatched.length,
     ambiguous: join.ambiguous.length,
     unknownAmc: join.unknownAmc.length,
+    unmappedAmc: join.unmappedAmc.length,
     asOf: asOf ? asOf.toISOString().slice(0, 10) : null,
     failures,
   };
@@ -300,6 +320,7 @@ export async function refreshFundCostAndSize(): Promise<CostSizeRefreshResult> {
       unmatched: ter.unmatched,
       ambiguous: ter.ambiguous,
       unknownAmc: ter.unknownAmc,
+      unmappedAmc: ter.unmappedAmc,
       asOf: ter.asOf,
     },
     aum: { fetched: aum.fetched, matched: aum.matched, unmatched: aum.unmatched, amcs: aum.amcs, asOf: aum.asOf },

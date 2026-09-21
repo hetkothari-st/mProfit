@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { amcForTerName, amcKey, joinTerToSchemes, type JoinScheme, type JoinTerRow } from '../../src/priceFeeds/terJoin.js';
+import {
+  amcForTerName,
+  amcKey,
+  deriveAmcBrands,
+  joinTerToSchemes,
+  type JoinScheme,
+  type JoinTerRow,
+} from '../../src/priceFeeds/terJoin.js';
 import { normaliseSchemeName } from '../../src/priceFeeds/amfiTer.parse.js';
 
 /**
@@ -16,6 +23,19 @@ const scheme = (schemeCode: string, schemeName: string, amcName: string): JoinSc
   schemeName,
   amcName,
 });
+
+/**
+ * These fixtures use invented AMCs, which the COMMITTED brand map correctly
+ * refuses to join — that is the point of the map. So each test states its own
+ * vocabulary, derived from its own schemes, and the map-is-authoritative
+ * behaviour is asserted separately below.
+ */
+function join(schemes: JoinScheme[], rows: JoinTerRow[]) {
+  const brands = deriveAmcBrands(schemes);
+  return joinTerToSchemes(schemes, rows, brands, (key) =>
+    schemes.some((s) => amcKey(s.amcName) === key),
+  );
+}
 
 const ter = (schemeName: string, directTerPct: number | null, asOf = new Date('2026-08-01')): JoinTerRow => ({
   schemeName,
@@ -59,7 +79,7 @@ describe('amcForTerName', () => {
 
 describe('joinTerToSchemes', () => {
   it('matches a scheme when the AMC and the name both agree', () => {
-    const r = joinTerToSchemes(
+    const r = join(
       [scheme('120503', 'Axis Bluechip Fund', 'Axis Mutual Fund')],
       [ter('Axis Bluechip Fund', 0.62)],
     );
@@ -90,7 +110,7 @@ describe('joinTerToSchemes', () => {
       ter('Alpha Nifty 50 Index Fund', 0.1),
       ter('Beta Nifty 50 Index Fund', 0.85),
     ];
-    const r = joinTerToSchemes(schemes, rows);
+    const r = join(schemes, rows);
     expect(r.matches).toHaveLength(2);
     const byCode = new Map(r.matches.map((m) => [m.schemeCode, m.terPct]));
     expect(byCode.get('A1')).toBe(0.1);
@@ -107,7 +127,7 @@ describe('joinTerToSchemes', () => {
       scheme('A1', 'Nifty 50 Index Fund', 'Alpha Mutual Fund'),
       scheme('B1', 'Nifty 50 Index Fund', 'Beta Mutual Fund'),
     ];
-    const r = joinTerToSchemes(schemes, [ter('Nifty 50 Index Fund', 0.1)]);
+    const r = join(schemes, [ter('Nifty 50 Index Fund', 0.1)]);
     expect(r.matches).toEqual([]);
     expect(r.unknownAmc).toEqual(['Nifty 50 Index Fund']);
     expect(r.unmatched.map((s) => s.schemeCode).sort()).toEqual(['A1', 'B1']);
@@ -120,7 +140,7 @@ describe('joinTerToSchemes', () => {
       scheme('A1', 'Alpha Large Cap Fund', 'Alpha Mutual Fund'),
       scheme('A2', 'Alpha Large Cap Fund', 'Alpha Mutual Fund'),
     ];
-    const r = joinTerToSchemes(schemes, [ter('Alpha Large Cap Fund', 0.4)]);
+    const r = join(schemes, [ter('Alpha Large Cap Fund', 0.4)]);
     expect(r.matches).toEqual([]);
     expect(r.ambiguous).toEqual([
       { key: 'alpha::alpha large cap fund', reason: 'multiple_schemes', count: 2 },
@@ -131,7 +151,7 @@ describe('joinTerToSchemes', () => {
   });
 
   it('refuses a key claimed by two TER rows that disagree', () => {
-    const r = joinTerToSchemes(
+    const r = join(
       [scheme('A1', 'Alpha Large Cap Fund', 'Alpha Mutual Fund')],
       [ter('Alpha Large Cap Fund', 0.4), ter('Alpha Large Cap Fund', 1.2)],
     );
@@ -141,7 +161,7 @@ describe('joinTerToSchemes', () => {
 
   // Two rows that agree are one answer written twice — not a collision.
   it('accepts duplicate TER rows that agree, taking the latest date', () => {
-    const r = joinTerToSchemes(
+    const r = join(
       [scheme('A1', 'Alpha Large Cap Fund', 'Alpha Mutual Fund')],
       [
         ter('Alpha Large Cap Fund', 0.4, new Date('2026-08-01')),
@@ -154,7 +174,7 @@ describe('joinTerToSchemes', () => {
   });
 
   it('reports a scheme no TER row claimed as unmatched', () => {
-    const r = joinTerToSchemes(
+    const r = join(
       [scheme('A1', 'Alpha Small Cap Fund', 'Alpha Mutual Fund')],
       [ter('Alpha Large Cap Fund', 0.4)],
     );
@@ -165,7 +185,7 @@ describe('joinTerToSchemes', () => {
   // A blank direct-TER cell is not a claim on the key, so it must not make an
   // otherwise-clean match ambiguous.
   it('ignores a TER row with no direct-plan figure', () => {
-    const r = joinTerToSchemes(
+    const r = join(
       [scheme('A1', 'Alpha Large Cap Fund', 'Alpha Mutual Fund')],
       [ter('Alpha Large Cap Fund', null), ter('Alpha Large Cap Fund', 0.4)],
     );
@@ -174,7 +194,7 @@ describe('joinTerToSchemes', () => {
   });
 
   it('matches through punctuation and casing differences between the two files', () => {
-    const r = joinTerToSchemes(
+    const r = join(
       [scheme('A1', "Axis Children's Fund", 'Axis Mutual Fund')],
       [ter('AXIS CHILDRENS FUND', 0.71)],
     );
@@ -182,8 +202,79 @@ describe('joinTerToSchemes', () => {
   });
 
   it('handles an empty TER file without claiming anything matched', () => {
-    const r = joinTerToSchemes([scheme('A1', 'Alpha Fund', 'Alpha Mutual Fund')], []);
+    const r = join([scheme('A1', 'Alpha Fund', 'Alpha Mutual Fund')], []);
     expect(r.matches).toEqual([]);
     expect(r.unmatched).toHaveLength(1);
+  });
+});
+
+/**
+ * The committed map is the authority, not the data in front of us. This is
+ * what changed when brand derivation moved out of the runtime: an AMC nobody
+ * has reviewed cannot join, however obvious its name looks.
+ */
+describe('joinTerToSchemes against the committed brand map', () => {
+  const unknownHouse = [scheme('X1', 'Newhouse Large Cap Fund', 'Newhouse Mutual Fund')];
+
+  it('refuses to join an AMC that is not in the map', () => {
+    const r = joinTerToSchemes(unknownHouse, [ter('Newhouse Large Cap Fund', 0.4)]);
+    expect(r.matches).toEqual([]);
+    expect(r.unmappedAmc.map((s) => s.schemeCode)).toEqual(['X1']);
+    // Not UNMATCHED: this is our mapping gap, not AMFI omitting the scheme,
+    // and the two are fixed in completely different places.
+    expect(r.unmatched).toEqual([]);
+  });
+
+  it('joins an AMC that is in the map', () => {
+    // Kotak is the case that proves the map carries brands the registered
+    // name does not: "Kotak Mahindra Mutual Fund" names its funds "Kotak …".
+    const kotak = [scheme('K1', 'Kotak Bluechip Fund', 'Kotak Mahindra Mutual Fund')];
+    const r = joinTerToSchemes(kotak, [ter('Kotak Bluechip Fund', 0.63)]);
+    expect(r.matches).toHaveLength(1);
+    expect(r.matches[0]!.terPct).toBe(0.63);
+    expect(r.unmappedAmc).toEqual([]);
+  });
+
+  it('keeps an unmapped AMC out of another AMC\u2019s key space', () => {
+    // Both schemes share a product name. The mapped one must still match, and
+    // the unmapped one must not make it ambiguous.
+    const mixed = [
+      scheme('K1', 'Kotak Liquid Fund', 'Kotak Mahindra Mutual Fund'),
+      scheme('X1', 'Kotak Liquid Fund', 'Newhouse Mutual Fund'),
+    ];
+    const r = joinTerToSchemes(mixed, [ter('Kotak Liquid Fund', 0.2)]);
+    expect(r.matches.map((m) => m.schemeCode)).toEqual(['K1']);
+    expect(r.unmappedAmc.map((s) => s.schemeCode)).toEqual(['X1']);
+    expect(r.ambiguous).toEqual([]);
+  });
+});
+
+describe('deriveAmcBrands', () => {
+  // The generator's own rule. A single-scheme AMC must not contribute that
+  // scheme's whole name as a "brand" — it would match exactly one row and
+  // look, in a committed file, like a considered decision.
+  it('does not turn a lone scheme name into a brand', () => {
+    const brands = deriveAmcBrands([scheme('A1', 'Solo Capital Liquid Fund', 'Solo Mutual Fund')]);
+    expect([...brands.keys()]).toEqual(['solo']);
+  });
+
+  it('derives the brand an AMC actually uses, not its registered name', () => {
+    const brands = deriveAmcBrands([
+      scheme('K1', 'Kotak Bluechip Fund', 'Kotak Mahindra Mutual Fund'),
+      scheme('K2', 'Kotak Liquid Fund', 'Kotak Mahindra Mutual Fund'),
+    ]);
+    expect(brands.get('kotak')).toBe('kotak mahindra');
+    expect(brands.get('kotak mahindra')).toBe('kotak mahindra');
+  });
+
+  it('drops a brand two AMCs both claim', () => {
+    const brands = deriveAmcBrands([
+      scheme('A1', 'Shared Alpha Fund', 'Shared Mutual Fund'),
+      scheme('A2', 'Shared Beta Fund', 'Shared Mutual Fund'),
+      scheme('B1', 'Shared Gamma Fund', 'Shared Capital Mutual Fund'),
+      scheme('B2', 'Shared Delta Fund', 'Shared Capital Mutual Fund'),
+    ]);
+    // "shared" is the derived prefix of both houses, so it identifies neither.
+    expect(brands.has('shared')).toBe(false);
   });
 });

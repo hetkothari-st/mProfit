@@ -98,6 +98,9 @@ function gapReason(metric: string, input?: ScoringInput): string {
       // The join refused to guess, and says so rather than reporting the same
       // gap it would report for a blank cell.
       if (input?.terJoinStatus === 'UNMATCHED') return 'ter_unmatched';
+      // Our mapping gap rather than AMFI's omission: the AMC is not in the
+      // committed brand map, so no TER row could be attributed to it.
+      if (input?.terJoinStatus === 'UNMAPPED_AMC') return 'ter_unmapped_amc';
       if (input?.terJoinStatus === 'AMBIGUOUS') return 'ter_unmatched_ambiguous_name';
       return 'ter_unavailable';
     case 'aum':

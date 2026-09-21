@@ -116,7 +116,22 @@ describe('runFundScoring', () => {
       const row = await prisma.rankingMethodologyVersion.findUniqueOrThrow({
         where: { id: methodologyId },
       });
-      return row.config as unknown as MethodologyConfig;
+      const config = row.config as unknown as MethodologyConfig;
+      // These fixtures publish ONE NAV A MONTH — 48 points is what makes four
+      // years of rolling returns cheap to build in a test. The market they
+      // share this database with publishes daily, and the trading calendar is
+      // derived from the whole universe, so `nav_history_gap` correctly reads
+      // a monthly fund as one with a twenty-day hole between every pair of
+      // observations.
+      //
+      // That is the rule working, not a bug in it, and it is covered properly
+      // in navGaps.test.ts against a fixture with a real calendar. Here it
+      // would exclude every fixture before scoring ran, so the rule is turned
+      // off for this test and only this test.
+      return {
+        ...config,
+        eligibility: { ...config.eligibility, maxNavGapTradingDays: 100_000 },
+      } as MethodologyConfig;
     });
 
     await runAsSystem(() =>

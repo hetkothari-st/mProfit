@@ -66,7 +66,8 @@ VALUES (
         "requireDirectPlan": true,
         "requireGrowthOption": true,
         "requireOpenEnded": true,
-        "maxNavStalenessDays": 10
+        "maxNavStalenessDays": 10,
+        "maxNavGapTradingDays": 5
       },
       "metrics": {
         "rollingReturnYears": 3,

@@ -15,10 +15,15 @@
  *
  * So a match is accepted only when BOTH hold:
  *
- *   1. **The AMC matches.** The TER file has no AMC column, but AMFI writes
- *      the AMC's brand at the front of every scheme name in both files, and
- *      that is the only AMC signal the source gives us. A TER row whose name
- *      begins with no AMC we know is unmatched, not guessed.
+ *   1. **The AMC matches**, against the COMMITTED brand map in
+ *      `amcBrandMap.ts`. The TER file has no AMC column, but AMFI writes the
+ *      AMC's brand at the front of every scheme name in both files, and that
+ *      is the only AMC signal the source gives us. The brands used to be
+ *      derived at runtime; they are now generated once, committed and
+ *      reviewed, because a runtime derivation changes its answer when a fund
+ *      house launches an oddly-named scheme and silently drops funds that
+ *      matched yesterday. An AMC absent from the map is `ter_unmapped_amc` —
+ *      never a runtime guess.
  *
  *   2. **The match is one-to-one in the direct-growth population.** That
  *      population is the only one the ranking can recommend from, and within
@@ -34,6 +39,7 @@
  */
 
 import { normaliseSchemeName } from './amfiTer.parse.js';
+import { BRAND_TO_AMC, isMappedAmc } from './amcBrandMap.js';
 
 /** How a scheme's TER join came out on the last refresh. */
 export type TerJoinStatus =
@@ -41,6 +47,12 @@ export type TerJoinStatus =
   | 'MATCHED'
   /** No TER row claimed this scheme. */
   | 'UNMATCHED'
+  /**
+   * This scheme's AMC is not in the committed brand map, so its TER rows
+   * cannot be attributed to it. Distinct from UNMATCHED on purpose: this is
+   * OUR gap, fixed by regenerating and reviewing the map, not AMFI's.
+   */
+  | 'UNMAPPED_AMC'
   /** The key resolved to more than one scheme, or more than one TER row
    *  claimed it. Deliberately distinct from UNMATCHED: this is a name that
    *  is not an identifier, which is a different problem from a missing row. */
@@ -76,8 +88,10 @@ export interface TerJoinResult {
   unmatched: JoinScheme[];
   /** Keys that were not identifiers, with why. */
   ambiguous: Array<{ key: string; reason: 'multiple_schemes' | 'multiple_ter_rows'; count: number }>;
-  /** TER rows whose name begins with no AMC we hold. */
+  /** TER rows whose name begins with no brand in the committed map. */
   unknownAmc: string[];
+  /** Our schemes whose AMC is absent from the committed brand map. */
+  unmappedAmc: JoinScheme[];
 }
 
 /**
@@ -145,11 +159,15 @@ export function deriveAmcBrands(schemes: JoinScheme[]): Map<string, string> {
 
   for (const [amc, names] of byAmc) {
     claim(amc, amc);
-    // Capped at three words: an AMC with a single scheme would otherwise
-    // contribute that scheme's whole name as its "brand", which would match
-    // exactly one row and tell us nothing.
-    const derived = commonWordPrefix(names, 3);
-    if (derived && derived !== amc) claim(derived, amc);
+    // Capped at three words, and only from an AMC with more than one distinct
+    // scheme name. With a single scheme the "common prefix" is that scheme's
+    // whole name, which is not a brand: it would match exactly one row and
+    // tell us nothing, while looking in a committed map like a considered
+    // decision.
+    const distinct = [...new Set(names)];
+    if (distinct.length < 2) continue;
+    const derived = commonWordPrefix(distinct, 3);
+    if (derived && derived !== amc && !distinct.includes(derived)) claim(derived, amc);
   }
 
   const brands = new Map<string, string>();
@@ -168,10 +186,10 @@ export function deriveAmcBrands(schemes: JoinScheme[]): Map<string, string> {
  */
 export function amcForTerName(
   nameKey: string,
-  brands: Map<string, string> | Iterable<string>,
+  brands: ReadonlyMap<string, string> | Iterable<string>,
 ): string | null {
   const entries: Array<[string, string]> =
-    brands instanceof Map ? [...brands] : [...brands].map((b) => [b, b]);
+    brands instanceof Map ? [...brands] : [...(brands as Iterable<string>)].map((b) => [b, b]);
   let bestBrand: string | null = null;
   let bestAmc: string | null = null;
   for (const [brand, amc] of entries) {
@@ -197,12 +215,27 @@ const joinKey = (amc: string, name: string) => `${amc}::${name}`;
 export function joinTerToSchemes(
   schemes: JoinScheme[],
   terRows: JoinTerRow[],
+  /**
+   * Brand → amcKey. Defaults to the COMMITTED map, which is the whole point:
+   * the brands used to be derived at runtime from whatever was in the master
+   * that night, so one oddly-named new scheme could shorten its AMC's brand
+   * and silently drop funds that matched the day before. Injectable only so
+   * tests can state a vocabulary explicitly.
+   */
+  brands: ReadonlyMap<string, string> = BRAND_TO_AMC,
+  /** Whether an AMC is in the map at all; paired with `brands`. */
+  mapped: (amcKey: string) => boolean = isMappedAmc,
 ): TerJoinResult {
-  const brands = deriveAmcBrands(schemes);
+  // An AMC we hold no brands for cannot be joined at all. It is set aside
+  // BEFORE the join rather than falling through it, so its schemes are
+  // reported as our own mapping gap instead of looking like AMFI omitted
+  // them — and so they can never be matched by another AMC's brand.
+  const unmappedAmc = schemes.filter((s) => !mapped(amcKey(s.amcName)));
+  const joinable = unmappedAmc.length === 0 ? schemes : schemes.filter((s) => mapped(amcKey(s.amcName)));
 
   // Our side, keyed by (AMC, scheme name).
   const schemesByKey = new Map<string, JoinScheme[]>();
-  for (const s of schemes) {
+  for (const s of joinable) {
     const key = joinKey(amcKey(s.amcName), normaliseSchemeName(s.schemeName));
     const list = schemesByKey.get(key);
     if (list) list.push(s);
@@ -264,13 +297,13 @@ export function joinTerToSchemes(
   }
 
   const ambiguousKeys = new Set(ambiguous.map((a) => a.key));
-  const unmatched = schemes.filter((s) => {
+  const unmatched = joinable.filter((s) => {
     if (matchedCodes.has(s.schemeCode)) return false;
     const key = joinKey(amcKey(s.amcName), normaliseSchemeName(s.schemeName));
     return !ambiguousKeys.has(key);
   });
 
-  return { matches, unmatched, ambiguous, unknownAmc };
+  return { matches, unmatched, ambiguous, unknownAmc, unmappedAmc };
 }
 
 /** Schemes caught by an ambiguous key — they get AMBIGUOUS, not UNMATCHED. */
@@ -283,3 +316,7 @@ export function ambiguousSchemes(
     keys.has(joinKey(amcKey(s.amcName), normaliseSchemeName(s.schemeName))),
   );
 }
+
+/** Re-exported so the brand-map test can assert brands survive normalisation
+ *  without reaching into the TER parser for it. */
+export { normaliseSchemeName as normaliseSchemeNameForTest };
