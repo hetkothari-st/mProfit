@@ -643,13 +643,18 @@ describe('CA access boundary', () => {
       'OwnedProperty',
     ];
 
+    // Any of the CA helpers counts. The category-scoped tables ask
+    // `app_ca_may_see_category` rather than `app_is_active_ca_for`, because a
+    // grant can now be narrowed; both answer the same question when nothing is
+    // narrowed. Pinning this to one function name would fail the next time a
+    // dimension is added, instead of the next time a grant goes missing.
     const granted = await runAsSystem(() =>
       prisma.$queryRawUnsafe<Array<{ tablename: string }>>(
         `SELECT DISTINCT tablename
            FROM pg_policies
           WHERE schemaname = 'public'
             AND tablename = ANY($1)
-            AND COALESCE(qual, '') LIKE '%app_is_active_ca_for%'`,
+            AND COALESCE(qual, '') ~ 'app_is_active_ca_for|app_ca_may_see_'`,
         required,
       ),
     );

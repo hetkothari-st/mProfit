@@ -305,7 +305,12 @@ export function ClientBooksPage() {
               icon: ScrollText,
               title: 'No vouchers yet',
               description:
-                'Vouchers are the double-entry record behind the trial balance, P&L and balance sheet. They are derived from what this client has recorded — trades, loan payments, rent, premiums — so there is nothing to derive them from yet.',
+                client?.kind === 'SHADOW'
+                  ? // Worth saying outright: a managed record is its own empty
+                    // ledger, and an advisor looking at their own populated
+                    // books in another tab will otherwise read this as a bug.
+                    'These are the books of a record you created, not of any existing account. It starts empty — nothing carries over from your own portfolios or from a client who signs in separately. Add transactions or import a statement, and the vouchers follow.'
+                  : 'Vouchers are the double-entry record behind the trial balance, P&L and balance sheet. They are derived from what this client has recorded — trades, loan payments, rent, premiums — so there is nothing to derive them from yet.',
               action: generateButton,
             }}
             columns={['No.', 'Type', 'Date', 'Narration']}

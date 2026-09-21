@@ -169,6 +169,10 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   // reads zero rows.
   'Client',
   'CaAuditLog',
+  // ClientPortfolioScope narrows a grant to named portfolios; its policies are
+  // in 20260923090000_ca_grant_scope. Unregistered, the client's scope picker
+  // would read as "no portfolios selected" and saving one would fail 42501.
+  'ClientPortfolioScope',
   // Owner policies in 20260910180000_property_photos_and_location and
   // 20260913100000_insurance_extras. Unregistered, property photos read as
   // empty and uploads failed 42501; dismissed premium suggestions never stuck.
