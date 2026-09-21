@@ -1,0 +1,262 @@
+/**
+ * Repair the window where the AMFI NAV sync imported nothing.
+ *
+ * AMFI added Plan and Option columns to NAVAll.txt. The parser read "Direct
+ * Plan" where the NAV belonged, every row failed `isNaN(Number(nav))`, and the
+ * job reported success while writing zero rows. MFNav simply stopped growing,
+ * and every mutual-fund valuation in that period was carried at a stale NAV.
+ *
+ * This script does three things, in order, and prints what it found:
+ *
+ *   1. DETECT  — reads MFNav day counts (and FeedRunLog, where it exists) to
+ *                find the first date the sync went quiet and the last one.
+ *   2. BACKFILL — pulls AMFI's historical NAV report for that window, month by
+ *                month, and upserts MFNav. Idempotent: the unique key is
+ *                (fundId, date), so a second run writes the same rows.
+ *   3. FLAG    — marks NetWorthSnapshot rows in the window as ESTIMATED.
+ *                It does NOT recompute them, and it never touches the stored
+ *                totals. getDashboardNetWorth() reads live HoldingProjection
+ *                and takes no asOf, so there is no way to recompute what a
+ *                past day was worth; overwriting those numbers with today's
+ *                would be inventing history. See §"Never silently overwrite".
+ *
+ * Usage
+ *   pnpm --filter @everypaisa/api tsx src/scripts/backfillAmfiNavGap.ts
+ *   ... --from 2026-08-01 --to 2026-09-17   # explicit window
+ *   ... --dry-run                           # detect and report, write nothing
+ *   ... --detect-only                       # just the gap report
+ *
+ * Connects as the DIRECT_URL superuser for its writes, the same pattern as
+ * seedFmv.ts and backfillNetWorthHistory.ts: MFNav is market data with no
+ * owner, and NetWorthSnapshot rows span every user, so there is no single
+ * user context this could run under.
+ */
+
+import 'dotenv/config';
+import { PrismaClient, Prisma } from '@prisma/client';
+import {
+  fetchAmfiNavHistory,
+  parseAmfiNavHistoryText,
+} from '../priceFeeds/amfiNavHistory.js';
+import { findNavGap, monthWindows, type DayCount } from '../priceFeeds/amfiNavGap.js';
+
+const prisma = new PrismaClient({
+  datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '' } },
+});
+
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+const utcDay = (s: string) => new Date(`${s}T00:00:00.000Z`);
+
+async function readDayCounts(): Promise<DayCount[]> {
+  const rows = await prisma.$queryRaw<{ date: Date; funds: bigint }[]>`
+    SELECT "date", COUNT(DISTINCT "fundId") AS funds
+    FROM "MFNav"
+    GROUP BY "date"
+    ORDER BY "date" ASC
+  `;
+  // eslint-disable-next-line everypaisa/no-money-coercion -- a COUNT(*), not money
+  return rows.map((r) => ({ date: r.date, funds: Number(r.funds) }));
+}
+
+/**
+ * What the run log says, when there is one. FeedRunLog only starts recording
+ * from the deploy that introduced it, so on a database that predates the
+ * canary this returns nothing — the MFNav day counts are the evidence that
+ * goes back far enough.
+ */
+async function readFeedLogEvidence(): Promise<string> {
+  const zeroRuns = await prisma.feedRunLog.findMany({
+    where: { feed: 'amfi_nav', rowsImported: 0 },
+    orderBy: { startedAt: 'asc' },
+    take: 1,
+  });
+  if (zeroRuns.length === 0) {
+    return 'FeedRunLog has no zero-import amfi_nav run (the table postdates the outage)';
+  }
+  return `FeedRunLog: first zero-import amfi_nav run at ${zeroRuns[0]!.startedAt.toISOString()}`;
+}
+
+// ─── 2. Backfill ────────────────────────────────────────────────────
+
+export interface BackfillResult {
+  monthsFetched: number;
+  rowsParsed: number;
+  parseFailures: number;
+  navsWritten: number;
+  unknownSchemeCodes: Set<string>;
+  datesCovered: Set<string>;
+}
+
+async function backfillWindow(from: Date, to: Date, dryRun: boolean): Promise<BackfillResult> {
+  const result: BackfillResult = {
+    monthsFetched: 0,
+    rowsParsed: 0,
+    parseFailures: 0,
+    navsWritten: 0,
+    unknownSchemeCodes: new Set(),
+    datesCovered: new Set(),
+  };
+
+  // schemeCode → MutualFundMaster.id. A code we have never seen is not
+  // created here: this script repairs NAV history, it does not invent funds.
+  const masters = await prisma.mutualFundMaster.findMany({
+    select: { id: true, schemeCode: true },
+  });
+  const idByCode = new Map(masters.map((m) => [m.schemeCode, m.id]));
+  console.log(`[backfill] ${idByCode.size} known scheme codes`);
+
+  for (const w of monthWindows(from, to)) {
+    console.log(`[backfill] fetching ${iso(w.from)} → ${iso(w.to)}`);
+    const text = await fetchAmfiNavHistory(w.from, w.to);
+    const parsed = parseAmfiNavHistoryText(text);
+    result.monthsFetched++;
+    result.rowsParsed += parsed.rows.length;
+    result.parseFailures += parsed.parseFailures;
+    console.log(
+      `[backfill]   ${parsed.rows.length} rows, ${parsed.parseFailures} unreadable ` +
+        `of ${parsed.dataLines} data lines`,
+    );
+
+    // A month's report is one row per scheme per day. Keep only the dates
+    // inside the requested window and the schemes we actually track.
+    const writes: { fundId: string; date: Date; nav: Prisma.Decimal }[] = [];
+    for (const row of parsed.rows) {
+      if (row.date < from || row.date > to) continue;
+      const fundId = idByCode.get(row.schemeCode);
+      if (!fundId) {
+        result.unknownSchemeCodes.add(row.schemeCode);
+        continue;
+      }
+      result.datesCovered.add(iso(row.date));
+      writes.push({ fundId, date: row.date, nav: new Prisma.Decimal(row.nav) });
+    }
+
+    if (dryRun) {
+      console.log(`[backfill]   dry run — would write ${writes.length} NAV rows`);
+      result.navsWritten += writes.length;
+      continue;
+    }
+
+    // Idempotent by construction: (fundId, date) is unique, and a re-run
+    // updates the same row to the same value. Chunked so one bad month does
+    // not become one enormous statement.
+    const CHUNK = 1000;
+    for (let i = 0; i < writes.length; i += CHUNK) {
+      const slice = writes.slice(i, i + CHUNK);
+      await prisma.$transaction(
+        slice.map((w2) =>
+          prisma.mFNav.upsert({
+            where: { fundId_date: { fundId: w2.fundId, date: w2.date } },
+            create: w2,
+            update: { nav: w2.nav },
+          }),
+        ),
+      );
+      result.navsWritten += slice.length;
+    }
+    console.log(`[backfill]   wrote ${writes.length} NAV rows`);
+  }
+
+  return result;
+}
+
+// ─── 3. Flag ────────────────────────────────────────────────────────
+
+const FLAG_REASON =
+  'Mutual fund NAVs did not reach us on this date, so this figure was ' +
+  'calculated from the last prices we had. Treat it as an estimate.';
+
+async function flagSnapshots(from: Date, to: Date, dryRun: boolean) {
+  const where = {
+    asOf: { gte: from, lte: to },
+    // Never re-stamp a row that is already flagged: dataQualityAt is the
+    // audit trail of when we first knew, and moving it loses that.
+    dataQuality: 'OK',
+  };
+  const affected = await prisma.netWorthSnapshot.findMany({
+    where,
+    select: { id: true, userId: true, asOf: true },
+  });
+  if (dryRun) {
+    console.log(`[flag] dry run — would flag ${affected.length} snapshots as ESTIMATED`);
+    return affected;
+  }
+  // Only the three quality columns are written. The totals are left exactly
+  // as they were recorded: they are the record of what the user was shown.
+  const { count } = await prisma.netWorthSnapshot.updateMany({
+    where,
+    data: {
+      dataQuality: 'ESTIMATED',
+      dataQualityReason: FLAG_REASON,
+      dataQualityAt: new Date(),
+    },
+  });
+  console.log(`[flag] flagged ${count} snapshots as ESTIMATED (totals untouched)`);
+  return affected;
+}
+
+// ─── main ───────────────────────────────────────────────────────────
+
+function arg(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i === -1 ? undefined : process.argv[i + 1];
+}
+const hasFlag = (name: string) => process.argv.includes(`--${name}`);
+
+async function main() {
+  const dryRun = hasFlag('dry-run');
+  const detectOnly = hasFlag('detect-only');
+
+  console.log('─── AMFI NAV gap ───────────────────────────────────');
+  console.log(await readFeedLogEvidence());
+
+  const days = await readDayCounts();
+  const detected = findNavGap(days);
+  console.log(`MFNav evidence: ${detected.basis}`);
+  if (detected.start && detected.end) {
+    console.log(
+      `Gap: ${iso(detected.start)} → ${iso(detected.end)} ` +
+        `(${detected.emptyDays} empty days, ${detected.thinDays} thin days)`,
+    );
+  } else {
+    console.log('No gap detected from MFNav day counts.');
+  }
+
+  const fromArg = arg('from');
+  const toArg = arg('to');
+  const from = fromArg ? utcDay(fromArg) : detected.start;
+  const to = toArg ? utcDay(toArg) : detected.end;
+
+  if (detectOnly) return;
+  if (!from || !to) {
+    console.log('Nothing to backfill. Pass --from/--to to force a window.');
+    return;
+  }
+
+  console.log(`\n─── Backfill ${iso(from)} → ${iso(to)} ${dryRun ? '(dry run)' : ''} ───`);
+  const backfilled = await backfillWindow(from, to, dryRun);
+  console.log(
+    `\nBackfilled ${backfilled.navsWritten} NAV rows across ${backfilled.datesCovered.size} dates ` +
+      `from ${backfilled.monthsFetched} monthly reports ` +
+      `(${backfilled.parseFailures} unreadable lines, ` +
+      `${backfilled.unknownSchemeCodes.size} scheme codes we do not track).`,
+  );
+
+  console.log(`\n─── Snapshots ───`);
+  const affected = await flagSnapshots(from, to, dryRun);
+  const users = new Set(affected.map((a) => a.userId));
+  console.log(
+    `${affected.length} NetWorthSnapshot rows across ${users.size} users fall in the window.`,
+  );
+  console.log(
+    'They are flagged, not recomputed: getDashboardNetWorth() has no asOf, so a ' +
+      'past day cannot be revalued without stamping today onto it.',
+  );
+}
+
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

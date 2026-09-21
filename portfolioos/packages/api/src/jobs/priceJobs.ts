@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { loadAmfiNavToDb } from '../priceFeeds/amfi.service.js';
+import { pruneFeedRunLogs, runFeedWithCanary } from '../priceFeeds/feedCanary.js';
 import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
 import { refreshAllHoldingPrices } from '../services/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
@@ -63,15 +64,25 @@ async function runGuarded<K extends keyof typeof running>(
 
 async function runAmfiJob(): Promise<void> {
   await runGuarded('amfi', 'AMFI NAV sync', async () => {
-    const r = await loadAmfiNavToDb();
+    // The canary runs BEFORE holdings are repriced: repricing every holding
+    // from a NAV table that just lost most of its rows would push the damage
+    // into user-visible valuations, which is what made the eight-column
+    // change so expensive to miss.
+    const r = await runFeedWithCanary('amfi_nav', () => loadAmfiNavToDb(), (x) => x);
     await refreshAllHoldingPrices();
+    // Once a day is often enough to keep the run table from growing forever.
+    await pruneFeedRunLogs();
     return r;
   });
 }
 
 async function runStockEODJob(): Promise<void> {
   await runGuarded('stocks', 'Stock EOD refresh', async () => {
-    const r = await updateStockPricesFromYahoo();
+    const r = await runFeedWithCanary(
+      'yahoo_stock_eod',
+      () => updateStockPricesFromYahoo(),
+      (x) => ({ rowsParsed: x.updated + x.failed, rowsImported: x.updated, parseFailures: x.failed }),
+    );
     await refreshAllHoldingPrices();
     return r;
   });
@@ -79,7 +90,13 @@ async function runStockEODJob(): Promise<void> {
 
 async function runStockIntradayJob(): Promise<void> {
   await runGuarded('stocks', 'Stock intraday (held)', async () => {
-    const r = await updateStockPricesFromYahoo({ onlyHeld: true });
+    // Separate feed key: this run covers only held symbols, so its row count
+    // moves with the user base and must not be compared against the EOD run.
+    const r = await runFeedWithCanary(
+      'yahoo_stock_intraday',
+      () => updateStockPricesFromYahoo({ onlyHeld: true }),
+      (x) => ({ rowsParsed: x.updated + x.failed, rowsImported: x.updated, parseFailures: x.failed }),
+    );
     await refreshAllHoldingPrices();
     return r;
   });
@@ -87,16 +104,52 @@ async function runStockIntradayJob(): Promise<void> {
 
 async function runUniverseSync(): Promise<void> {
   await runGuarded('universe', 'NSE/BSE universe sync', async () => {
-    const nse = await loadNseEquityUniverse();
-    const etf = await loadNseEtfUniverse();
-    const bse = await loadBseEquityUniverse();
+    // `skipped` is deliberate filtering (wrong series, inactive scrip), so it
+    // is not a parse failure; `failed` is a row we meant to write and could
+    // not. Imported is created+updated — the number that should hold steady.
+    const universeCounts = (x: {
+      fetchedRows: number;
+      created: number;
+      updated: number;
+      failed: number;
+    }) => ({
+      rowsParsed: x.fetchedRows,
+      rowsImported: x.created + x.updated,
+      parseFailures: x.failed,
+    });
+    const nse = await runFeedWithCanary(
+      'nse_equity_universe',
+      () => loadNseEquityUniverse(),
+      universeCounts,
+    );
+    const etf = await runFeedWithCanary(
+      'nse_etf_universe',
+      () => loadNseEtfUniverse(),
+      universeCounts,
+    );
+    const bse = await runFeedWithCanary(
+      'bse_equity_universe',
+      () => loadBseEquityUniverse(),
+      universeCounts,
+    );
     return { nse, etf, bse };
   });
 }
 
 async function runCorpActionsJob(): Promise<void> {
   await runGuarded('corpActions', 'Corporate actions sync', async () => {
-    const fetched = await loadNseCorporateActions();
+    // Measured at the CSV, not at the insert: corporate actions are deduped
+    // by design, so a healthy re-run inserts almost nothing. `fetched` is the
+    // count of rows we could read, which is the feed's actual output.
+    const fetched = await runFeedWithCanary(
+      'nse_corporate_actions',
+      () => loadNseCorporateActions(),
+      (x) => ({
+        rowsParsed: x.dataLines,
+        rowsImported: x.fetched,
+        parseFailures: x.parseFailures,
+      }),
+    );
     // Fold newly-fetched splits/bonuses into holdings (idempotent).
     const applied = await runCorporateActionApplyAll();
     return { fetched, applied };
@@ -105,7 +158,15 @@ async function runCorpActionsJob(): Promise<void> {
 
 async function runCommoditiesJob(): Promise<void> {
   await runGuarded('commodities', 'Commodities sync', async () => {
-    const r = await syncAllCommodities();
+    const r = await runFeedWithCanary(
+      'commodity_prices',
+      () => syncAllCommodities(),
+      (x) => ({
+        rowsParsed: x.length,
+        rowsImported: x.filter((c) => c.stored).length,
+        parseFailures: x.filter((c) => !c.stored).length,
+      }),
+    );
     await refreshAllHoldingPrices();
     return r;
   });
@@ -113,14 +174,30 @@ async function runCommoditiesJob(): Promise<void> {
 
 async function runCryptoJob(): Promise<void> {
   await runGuarded('crypto', 'Crypto sync', async () => {
-    const r = await syncCryptoPrices();
+    const r = await runFeedWithCanary(
+      'crypto_prices',
+      () => syncCryptoPrices(),
+      (x) => ({
+        rowsParsed: x.updated + x.skipped,
+        rowsImported: x.updated,
+        // A coin we asked CoinGecko about and got no INR price back for.
+        parseFailures: x.skipped,
+      }),
+    );
     await refreshAllHoldingPrices();
     return r;
   });
 }
 
 async function runFxJob(): Promise<void> {
-  await runGuarded('fx', 'FX sync', syncFxRates);
+  await runGuarded('fx', 'FX sync', () =>
+    runFeedWithCanary('fx_rates', () => syncFxRates(), (x) => ({
+      rowsParsed: x.updated + x.skipped,
+      rowsImported: x.updated,
+      parseFailures: x.skipped,
+      details: x.bySource,
+    })),
+  );
 }
 
 async function runBenchmarkJob(): Promise<void> {
@@ -128,12 +205,28 @@ async function runBenchmarkJob(): Promise<void> {
 }
 
 async function runFoMasterJob(): Promise<void> {
-  await runGuarded('foMaster', 'NSE F&O master sync', loadNseFoMaster);
+  await runGuarded('foMaster', 'NSE F&O master sync', () =>
+    runFeedWithCanary('nse_fo_master', () => loadNseFoMaster(), (x) => ({
+      rowsParsed: x.rows,
+      rowsImported: x.instruments,
+    })),
+  );
 }
 
 async function runFoBhavcopyJob(): Promise<void> {
   await runGuarded('foBhavcopy', 'NSE F&O bhavcopy', async () => {
-    const r = await loadNseFoBhavcopy();
+    const r = await runFeedWithCanary(
+      'nse_fo_bhavcopy',
+      () => loadNseFoBhavcopy(),
+      (x) => ({
+        rowsParsed: x.rowsParsed,
+        rowsImported: x.upserted,
+        parseFailures: x.skipped,
+        // A trading holiday is not a shrinking feed.
+        sourceEmpty: !x.available,
+        details: { date: x.date },
+      }),
+    );
     await refreshAllDerivativePositionPrices();
     return r;
   });
@@ -146,7 +239,12 @@ async function runFoLiveJob(): Promise<void> {
 }
 
 async function runFuelJob(): Promise<void> {
-  await runGuarded('fuel', 'Fuel prices sync', () => syncFuelPrices());
+  await runGuarded('fuel', 'Fuel prices sync', () =>
+    runFeedWithCanary('fuel_prices', () => syncFuelPrices(), (x) => ({
+      rowsParsed: x.rows,
+      rowsImported: x.rows,
+    })),
+  );
 }
 
 export function startPriceJobs(): void {

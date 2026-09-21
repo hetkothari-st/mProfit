@@ -1,0 +1,26 @@
+Scheme Code;NAV Name;Plan;Option;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Net Asset Value;Date
+
+Open Ended Schemes ( Money Market )
+
+
+Taurus Mutual Fund
+139619;Taurus Investor Education Pool - Unclaimed Dividend - Growth;;;;;10.0000;15-Sep-2026
+139619;Taurus Investor Education Pool - Unclaimed Dividend - Growth;;;;;10.0000;16-Sep-2026
+139618;Taurus Investor Education Pool - Unclaimed Redemption - Growth;;Growth;;;10.0000;15-Sep-2026
+139618;Taurus Investor Education Pool - Unclaimed Redemption - Growth;;Growth;;;10.0000;16-Sep-2026
+139617;Taurus Unclaimed Redemption - Growth;;Growth;;;17.7597;15-Sep-2026
+139617;Taurus Unclaimed Redemption - Growth;;Growth;;;17.7596;16-Sep-2026
+
+Open Ended Schemes ( Equity Scheme - Multi Cap Fund )
+
+
+Aditya Birla Sun Life Mutual Fund
+148921;Aditya Birla Sun Life Multi-Cap Fund-Direct Growth;Direct Plan;GROWTH;INF209KB1Y49;;22.43;15-Sep-2026
+148921;Aditya Birla Sun Life Multi-Cap Fund-Direct Growth;Direct Plan;GROWTH;INF209KB1Y49;;22.45;16-Sep-2026
+148920;Aditya Birla Sun Life Multi-Cap Fund-Direct IDCW Payout;Direct Plan;IDCW Payout;INF209KB1Y56;;18.45;15-Sep-2026
+148920;Aditya Birla Sun Life Multi-Cap Fund-Direct IDCW Payout;Direct Plan;IDCW Payout;INF209KB1Y56;;18.47;16-Sep-2026
+148918;Aditya Birla Sun Life Multi-Cap Fund-Regular Growth;Regular Plan;GROWTH;INF209KB1Y23;;20.88;15-Sep-2026
+148918;Aditya Birla Sun Life Multi-Cap Fund-Regular Growth;Regular Plan;GROWTH;INF209KB1Y23;;20.89;16-Sep-2026
+148919;Aditya Birla Sun Life Multi-Cap Fund-Regular-IDCW Payout;Regular Plan;IDCW Payout;INF209KB1Y31;;17.18;15-Sep-2026
+148919;Aditya Birla Sun Life Multi-Cap Fund-Regular-IDCW Payout;Regular Plan;IDCW Payout;INF209KB1Y31;;17.20;16-Sep-2026
+

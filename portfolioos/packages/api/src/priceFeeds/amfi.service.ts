@@ -11,6 +11,11 @@ export interface AmfiNavRow {
   isin: string | null;
   isinReinvest: string | null;
   schemeName: string;
+  /** "Direct Plan" / "Regular Plan" as AMFI publishes it, or null on the
+   *  legacy six-column layout where the plan was only inside the name. */
+  planType: string | null;
+  /** "Growth Option" / "IDCW ..." as published, or null on the legacy layout. */
+  optionType: string | null;
   nav: string;
   date: string;
   amcName: string;
@@ -64,8 +69,25 @@ export async function fetchAmfiNavText(): Promise<string> {
   return await res.body.text();
 }
 
+export interface AmfiParseOutcome {
+  rows: AmfiNavRow[];
+  /** Data lines the file contained — the denominator for the parse-failure
+   *  rate. Section headers and blanks are not data and are not counted. */
+  dataLines: number;
+  /** Data lines we could not read. A rate above the configured limit fails the
+   *  run: it is how a column change announces itself. */
+  parseFailures: number;
+}
+
+/** Back-compatible shape: callers that only want the rows still get them. */
 export function parseAmfiNavText(text: string): AmfiNavRow[] {
+  return parseAmfiNavTextWithCounts(text).rows;
+}
+
+export function parseAmfiNavTextWithCounts(text: string): AmfiParseOutcome {
   const rows: AmfiNavRow[] = [];
+  let dataLines = 0;
+  let parseFailures = 0;
   const lines = text.split(/\r?\n/);
   let currentAmc = '';
   let currentBucket = '';
@@ -85,12 +107,48 @@ export function parseAmfiNavText(text: string): AmfiNavRow[] {
     }
 
     const parts = line.split(';');
-    if (parts.length < 6) continue;
-    const [schemeCode, isin, isinReinvest, schemeName, navStr, dateStr] = parts;
-    if (!schemeCode || !/^\d+$/.test(schemeCode.trim())) continue;
-    if (!schemeName || !dateStr) continue;
+    dataLines += 1;
+    if (parts.length < 6) {
+      parseFailures += 1;
+      continue;
+    }
+
+    // AMFI added Plan and Option as their own columns, taking NAVAll from six
+    // fields to eight:
+    //   code;isin;isinReinvest;name;NAV;date                        (legacy)
+    //   code;isin;isinReinvest;name;Plan;Option;NAV;date            (current)
+    // Reading the current file with the legacy offsets puts "Direct Plan"
+    // where the NAV belongs, every row fails the numeric check, and the sync
+    // silently imports nothing — which is exactly what was happening. Both
+    // layouts are handled so a rollback on AMFI's side is not an outage here.
+    const eightColumn = parts.length >= 8;
+    const schemeCode = parts[0];
+    const isin = parts[1];
+    const isinReinvest = parts[2];
+    const schemeName = parts[3];
+    const planRaw = eightColumn ? parts[4] : undefined;
+    const optionRaw = eightColumn ? parts[5] : undefined;
+    const navStr = eightColumn ? parts[6] : parts[4];
+    const dateStr = eightColumn ? parts[7] : parts[5];
+
+    if (!schemeCode || !/^\d+$/.test(schemeCode.trim())) {
+      // Not a data row at all (a stray header); not counted as a failure.
+      dataLines -= 1;
+      continue;
+    }
+    if (!schemeName || !dateStr) {
+      parseFailures += 1;
+      continue;
+    }
     const nav = navStr?.trim();
-    if (!nav || nav === 'N.A.' || isNaN(Number(nav))) continue;
+    // "N.A." is AMFI saying a scheme has no NAV today — a real answer, not a
+    // parse failure. Anything else non-numeric IS one, and that is the check
+    // the eight-column change tripped on every row.
+    if (!nav || nav === 'N.A.') continue;
+    if (isNaN(Number(nav))) {
+      parseFailures += 1;
+      continue;
+    }
 
     const { category, subCategory } = inferCategory(currentBucket || '');
     rows.push({
@@ -98,6 +156,8 @@ export function parseAmfiNavText(text: string): AmfiNavRow[] {
       isin: isin?.trim() || null,
       isinReinvest: isinReinvest?.trim() || null,
       schemeName: schemeName.trim(),
+      planType: planRaw?.trim() || null,
+      optionType: optionRaw?.trim() || null,
       nav: nav,
       date: dateStr.trim(),
       amcName: currentAmc || 'Unknown',
@@ -105,10 +165,15 @@ export function parseAmfiNavText(text: string): AmfiNavRow[] {
       subCategory,
     });
   }
-  return rows;
+  return { rows, dataLines, parseFailures };
 }
 
 export interface AmfiLoadResult {
+  /** Canary contract: what the source offered, what landed, what we could not
+   *  read. See feedCanary.ts. */
+  rowsParsed: number;
+  rowsImported: number;
+  parseFailures: number;
   fetchedRows: number;
   mastersCreated: number;
   mastersUpdated: number;
@@ -120,8 +185,8 @@ const NAV_CHUNK = 500;
 export async function loadAmfiNavToDb(): Promise<AmfiLoadResult> {
   logger.info('Fetching AMFI NAV file…');
   const text = await fetchAmfiNavText();
-  const rows = parseAmfiNavText(text);
-  logger.info({ rowCount: rows.length }, 'AMFI NAV parsed');
+  const { rows, dataLines, parseFailures } = parseAmfiNavTextWithCounts(text);
+  logger.info({ rowCount: rows.length, dataLines, parseFailures }, 'AMFI NAV parsed');
 
   // De-duplicate master rows by schemeCode (keep last occurrence)
   const masterByCode = new Map<string, AmfiNavRow>();
@@ -179,6 +244,9 @@ export async function loadAmfiNavToDb(): Promise<AmfiLoadResult> {
   }
 
   const result = {
+    rowsParsed: dataLines,
+    rowsImported: navsUpserted,
+    parseFailures,
     fetchedRows: rows.length,
     mastersCreated: mastersCreated.count,
     mastersUpdated: 0,

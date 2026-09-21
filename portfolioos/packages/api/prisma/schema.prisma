@@ -1550,6 +1550,40 @@ enum InstitutionKind {
 // Parse failures never crash the job (§3.5, BUG-006). Raw payload is
 // redacted per §15.9 before being stored here.
 
+/// One run of one market data feed, and whether it looked sane.
+///
+/// Market-level reference data like StockMaster and MFNav: it describes a feed,
+/// not a user's money, so no RLS policy and no USER_SCOPED_MODELS entry
+/// (CONTEXT.md §5).
+///
+/// It exists because `IngestionFailure` — the DLQ every other failure goes to —
+/// is user-scoped and REQUIRES a userId. A market feed has no user, so a feed
+/// failure has nowhere to go there. This is the same contract in the same
+/// spirit: recorded, never swallowed, and queryable afterwards.
+///
+/// It also carries the baseline the proportionality canary compares against:
+/// "20% fewer rows than last time" needs a last time.
+model FeedRunLog {
+  id         String   @id @default(cuid())
+  /// Feed identity, e.g. "amfi_nav", "nse_universe".
+  feed       String
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  /// OK | FAILED — FAILED covers both a thrown error and a canary trip.
+  status     String
+  rowsParsed   Int?
+  rowsImported Int?
+  parseFailures Int?
+  /// Imported rows on the previous OK run, for the drop check.
+  previousImported Int?
+  /// Why it failed, in one human sentence.
+  reason     String?
+  details    Json?
+
+  @@index([feed, startedAt])
+  @@index([feed, status, startedAt])
+}
+
 model IngestionFailure {
   id             String    @id @default(cuid())
   userId         String
@@ -3579,6 +3613,23 @@ model NetWorthSnapshot {
   // Snapshot of getDashboardNetWorth().allocationBreakdown at asOf — lets a
   // future stacked-by-asset-class chart render without widening this schema.
   breakdownJson            Json
+  // Whether this snapshot was computed from complete price data.
+  //
+  // "OK" means the prices behind it were current. "ESTIMATED" means they were
+  // not: the AMFI NAV sync imported zero rows for a stretch in 2026, so
+  // mutual-fund holdings were carried at stale NAVs and the total is a figure
+  // of unknown accuracy.
+  //
+  // These rows are NEVER recomputed in place. getDashboardNetWorth() reads
+  // live HoldingProjection and takes no asOf, so "recomputing" a past date
+  // would stamp today's prices onto last month and destroy the only record of
+  // what the user was actually shown. The flag is the honest alternative:
+  // keep the number, say what it is worth.
+  dataQuality              String    @default("OK")
+  // Plain-English reason, shown to the user. Null when dataQuality is OK.
+  dataQualityReason        String?
+  // When the flag was applied, so a backfill run can be audited.
+  dataQualityAt            DateTime?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 

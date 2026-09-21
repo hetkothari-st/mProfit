@@ -146,12 +146,20 @@ function parseBhavCsv(csv: string): BhavRow[] {
   return rows;
 }
 
-export async function loadNseFoBhavcopy(date?: Date): Promise<{
+export interface FoBhavcopyLoadResult {
   date: string;
   rowsParsed: number;
   upserted: number;
   skipped: number;
-}> {
+  /**
+   * False when NSE has not published a file for this date — a trading
+   * holiday, or the cron beating the 16:30 publication. The feed canary
+   * reads this to tell "nothing to load" from "we loaded nothing".
+   */
+  available: boolean;
+}
+
+export async function loadNseFoBhavcopy(date?: Date): Promise<FoBhavcopyLoadResult> {
   const target = date ?? mostRecentWeekday();
   const url = bhavcopyUrl(target);
   logger.info({ url }, '[nseFoBhavcopy] fetching');
@@ -163,6 +171,7 @@ export async function loadNseFoBhavcopy(date?: Date): Promise<{
       rowsParsed: 0,
       upserted: 0,
       skipped: 0,
+      available: false,
     };
   }
 
@@ -230,6 +239,7 @@ export async function loadNseFoBhavcopy(date?: Date): Promise<{
     rowsParsed: rows.length,
     upserted,
     skipped,
+    available: true,
   };
 }
 

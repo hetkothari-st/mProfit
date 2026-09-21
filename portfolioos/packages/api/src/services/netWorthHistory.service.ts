@@ -16,12 +16,27 @@ export interface NetWorthHistoryPoint {
   totalNetWorth: string;
   totalLiabilities: string;
   netWorthAfterLiabilities: string;
+  /**
+   * True when the prices behind this point were not current — the AMFI NAV
+   * sync went quiet and mutual funds were carried at stale NAVs. The point is
+   * still shown, with the number we actually recorded; the chart says what it
+   * is worth rather than quietly presenting it as measured.
+   */
+  estimated: boolean;
+  /** Why, in words the user can read. Null unless `estimated`. */
+  estimatedReason: string | null;
 }
 
 export interface NetWorthHistorySummary {
   changeAbsolute: string;
   changePct: number | null;
   periodLabel: NetWorthHistoryPeriod;
+  /**
+   * How many points in this window are estimates. The change figure is
+   * computed across the whole window, so if either end of it is an estimate
+   * the change is too — which is why the count travels with the summary.
+   */
+  estimatedPointCount: number;
 }
 
 export interface NetWorthHistoryResult {
@@ -45,7 +60,14 @@ export async function getNetWorthHistory(
   const rows = await prisma.netWorthSnapshot.findMany({
     where,
     orderBy: { asOf: 'asc' },
-    select: { asOf: true, totalNetWorth: true, totalLiabilities: true, netWorthAfterLiabilities: true },
+    select: {
+      asOf: true,
+      totalNetWorth: true,
+      totalLiabilities: true,
+      netWorthAfterLiabilities: true,
+      dataQuality: true,
+      dataQualityReason: true,
+    },
   });
 
   const points: NetWorthHistoryPoint[] = rows.map((r) => ({
@@ -53,6 +75,8 @@ export async function getNetWorthHistory(
     totalNetWorth: serializeMoney(r.totalNetWorth),
     totalLiabilities: serializeMoney(r.totalLiabilities),
     netWorthAfterLiabilities: serializeMoney(r.netWorthAfterLiabilities),
+    estimated: r.dataQuality !== 'OK',
+    estimatedReason: r.dataQuality === 'OK' ? null : r.dataQualityReason,
   }));
 
   let changeAbsolute = toDecimal(0);
@@ -70,6 +94,7 @@ export async function getNetWorthHistory(
       changeAbsolute: serializeMoney(changeAbsolute),
       changePct,
       periodLabel: period,
+      estimatedPointCount: points.filter((p) => p.estimated).length,
     },
   };
 }
