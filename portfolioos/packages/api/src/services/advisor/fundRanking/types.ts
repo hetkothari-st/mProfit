@@ -1,0 +1,168 @@
+/**
+ * The fund-ranking contract.
+ *
+ * Everything in this folder is pure: plain inputs, plain outputs, no Prisma, no
+ * clock, no randomness. That is not a style preference — a ranking that cannot
+ * be unit-tested without a database is a ranking whose output cannot be
+ * defended to the person who acted on it, which is the same reason
+ * `AdvisorFacts` exists (see ../types.ts).
+ */
+
+import type { Decimal } from 'decimal.js';
+import type { AdvisorAssetBucketValue } from '../types.js';
+
+// ─── Inputs ──────────────────────────────────────────────────────
+
+/** One scheme, as the ranking sees it. Everything optional is genuinely
+ *  optional: `null` means "we do not hold this", never zero. */
+export interface FundCandidate {
+  schemeCode: string;
+  schemeName: string;
+  amcName: string;
+  /** MutualFundMaster.category — EQUITY, DEBT, INDEX_FUND, ETF, … */
+  category: string;
+  /** The raw AMFI header line; carries the SEBI category and open/close-ended. */
+  subCategory: string | null;
+  isin: string | null;
+  isActive: boolean;
+  /** Ascending by date. The only history we actually have. */
+  navHistory: NavObservation[];
+  /** Not held today — see DATA-INVENTORY.md. Present so the methodology can
+   *  use them the day a verified source exists, without a rewrite. */
+  terPct: number | null;
+  aumInr: Decimal | null;
+  managerTenureYears: number | null;
+  benchmarkTri: NavObservation[] | null;
+}
+
+export interface NavObservation {
+  /** ISO date (YYYY-MM-DD). */
+  date: string;
+  nav: number;
+}
+
+// ─── Eligibility ─────────────────────────────────────────────────
+
+export const EXCLUSION_REASONS = [
+  'inactive',
+  'regular_plan',
+  'plan_unknown',
+  'not_growth_option',
+  'option_unknown',
+  'category_unknown',
+  'category_not_in_bucket',
+  'close_ended',
+  'segregated_portfolio',
+  'nfo_or_no_history',
+  'track_record_too_short',
+  'nav_stale',
+  'aum_below_floor',
+] as const;
+export type ExclusionReason = (typeof EXCLUSION_REASONS)[number];
+
+export interface EligibilityResult {
+  eligible: boolean;
+  reasons: ExclusionReason[];
+  /** What we decided the scheme is, from name and category. */
+  traits: FundTraits;
+}
+
+export interface FundTraits {
+  plan: 'DIRECT' | 'REGULAR' | 'UNKNOWN';
+  option: 'GROWTH' | 'IDCW' | 'UNKNOWN';
+  structure: 'OPEN_ENDED' | 'CLOSE_ENDED' | 'UNKNOWN';
+  /** Index funds and ETFs are scored on cost and tracking, never on returns. */
+  passive: boolean;
+  segregatedPortfolio: boolean;
+  trackRecordYears: number | null;
+  navAgeDays: number | null;
+}
+
+// ─── Metrics ─────────────────────────────────────────────────────
+
+export interface FundMetrics {
+  /** Rolling N-year returns, stepped monthly, annualised, in percent. */
+  rollingReturnsPct: number[];
+  /** Share of rolling windows that beat the category median, 0–100. */
+  outperformanceConsistencyPct: number | null;
+  /** Share of the peer/benchmark downside the fund captured, in percent.
+   *  Lower is better; 100 means it fell exactly as much as its comparator. */
+  downsideCapturePct: number | null;
+  sortino: number | null;
+  maxDrawdownPct: number | null;
+  /** Passive only. Annualised NAV return minus comparator return. */
+  trackingDifferencePct: number | null;
+  /** Passive only. Annualised standard deviation of the return difference. */
+  trackingErrorPct: number | null;
+  /** True when tracking numbers are measured against the median of same-index
+   *  peers rather than the real benchmark TRI, because we have no TRI. */
+  trackingIsPeerRelative: boolean;
+  observations: number;
+}
+
+// ─── Scoring ─────────────────────────────────────────────────────
+
+/** A metric that could not be computed, and the weight it gave up. The weight
+ *  is redistributed across the metrics that survived — never treated as zero,
+ *  which would silently rank a fund as the worst rather than as unknown. */
+export interface DataGap {
+  metric: string;
+  reason: string;
+  weightReleased: number;
+}
+
+export interface FundScore {
+  schemeCode: string;
+  bucket: AdvisorAssetBucketValue;
+  /** 0–100, percentile-normalised within the bucket. Null when nothing could
+   *  be scored at all. */
+  score: number | null;
+  /** Each scored component, already percentile-normalised, with its weight. */
+  components: ScoreComponent[];
+  dataGaps: DataGap[];
+  model: 'PASSIVE' | 'ACTIVE';
+}
+
+export interface ScoreComponent {
+  metric: string;
+  /** The raw metric value, for the evidence trail. */
+  raw: number;
+  /** 0–100 within the bucket, already oriented so higher is better. */
+  percentile: number;
+  weight: number;
+}
+
+// ─── Methodology config ──────────────────────────────────────────
+
+/** The per-client selection parameters. Named separately because selection is
+ *  pure and travels to the rules on its own, without the scoring weights. */
+export interface SelectionConfig {
+  incumbentRankBand: number;
+  hysteresisMarginPct: number;
+  hysteresisSnapshots: number;
+  maxAmcSharePct: number;
+  overlapPenaltyPerPct: number;
+  maxOverlapPct: number;
+}
+
+export interface MethodologyConfig {
+  eligibility: {
+    minTrackRecordYearsActive: number;
+    minTrackRecordYearsPassive: number;
+    minAumInr: number;
+    requireDirectPlan: boolean;
+    requireGrowthOption: boolean;
+    requireOpenEnded: boolean;
+    maxNavStalenessDays: number;
+  };
+  metrics: {
+    rollingReturnYears: number;
+    rollingStepMonths: number;
+    minRollingWindows: number;
+    riskFreeRatePct: number;
+  };
+  scoringActive: Record<string, number>;
+  scoringPassive: Record<string, number>;
+  selection: SelectionConfig;
+  snapshotMaxAgeDays: number;
+}

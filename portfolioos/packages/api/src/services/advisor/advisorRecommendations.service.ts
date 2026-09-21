@@ -8,6 +8,7 @@
  */
 
 import type { Prisma } from '@prisma/client';
+import type { FundSelectionEvidence } from '@everypaisa/shared';
 import { serializeMoney } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
@@ -47,6 +48,11 @@ export interface RecommendationView {
   modelPortfolioVersionId: string | null;
   provenance: ProvenanceValue;
   provenanceRef: Omit<DraftProvenance, 'kind'> | null;
+  /** Set when the methodology named a scheme: the code, the version that
+   *  chose it, and the evidence behind the choice. */
+  namedSchemeCode: string | null;
+  methodologyVersionId: string | null;
+  selectionEvidence: FundSelectionEvidence | null;
   dedupeKey: string;
   supersededById: string | null;
   status: AdvisorRecommendationStatusValue;
@@ -86,6 +92,9 @@ interface RawRecommendation {
   modelPortfolioVersionId: string | null;
   provenance: string;
   provenanceRef: unknown;
+  namedSchemeCode: string | null;
+  methodologyVersionId: string | null;
+  selectionEvidence: unknown;
   dedupeKey: string;
   supersededById: string | null;
   status: string;
@@ -114,6 +123,9 @@ function toView(r: RawRecommendation): RecommendationView {
     modelPortfolioVersionId: r.modelPortfolioVersionId,
     provenance: r.provenance as ProvenanceValue,
     provenanceRef: (r.provenanceRef ?? null) as Omit<DraftProvenance, 'kind'> | null,
+    namedSchemeCode: r.namedSchemeCode,
+    methodologyVersionId: r.methodologyVersionId,
+    selectionEvidence: (r.selectionEvidence ?? null) as FundSelectionEvidence | null,
     dedupeKey: r.dedupeKey,
     supersededById: r.supersededById,
     status: r.status as AdvisorRecommendationStatusValue,

@@ -40,6 +40,18 @@ import type {
 import { getCurrentRiskProfile, userAgeFromDob } from './riskProfile.service.js';
 import { approvedProductFactsByBucket } from './approvedProducts.service.js';
 import { getFallbackRanking } from './fallbackRanking.service.js';
+import { env } from '../../config/env.js';
+import {
+  currentMethodology,
+  latestSnapshotDate,
+  snapshotIsFresh,
+} from './fundRanking/methodology.service.js';
+import {
+  emptyUniverse,
+  loadIncumbents,
+  loadRankedUniverse,
+} from './fundRanking/candidates.service.js';
+import { schemeOverlapPct } from './fundRanking/overlap.js';
 
 const ZERO = new Decimal(0);
 
@@ -110,10 +122,12 @@ export async function buildAdvisorFacts(userId: string, asOf: Date = new Date())
   const funds = fundIds.length
     ? await prisma.mutualFundMaster.findMany({
         where: { id: { in: fundIds } },
-        select: { id: true, category: true },
+        select: { id: true, category: true, schemeCode: true, amcName: true },
       })
     : [];
   const categoryByFundId = new Map(funds.map((f) => [f.id, f.category as string]));
+  const schemeCodeByFundId = new Map(funds.map((f) => [f.id, f.schemeCode]));
+  const amcByFundId = new Map(funds.map((f) => [f.id, f.amcName]));
 
   const holdings: AdvisorHoldingFact[] = projections.map((h) => {
     const value = holdingValue(h);
@@ -279,6 +293,88 @@ export async function buildAdvisorFacts(userId: string, asOf: Date = new Date())
     fallbackRankings[bucket] = rankings[i] ?? [];
   });
 
+  // ── Named-fund universe ───────────────────────────────────────
+  //
+  // Three gates, each recorded rather than inferred: the flag, a signed
+  // methodology with a fresh snapshot, and a risk profile on file. Any one of
+  // them closed means category-level advice and a reason on the run — never a
+  // silent downgrade (CONTEXT.md §3.5 in spirit: a degraded service is an
+  // event, not an absence).
+  let fundRanking: AdvisorFacts['fundRanking'] = {
+    available: false,
+    fallbackReason: 'flag_disabled',
+    methodologyVersionId: null,
+    methodologyVersion: null,
+    asOfDate: null,
+    candidates: emptyUniverse(),
+    incumbents: {},
+    selectionConfig: null,
+  };
+
+  if (env.RIA_VERDICTS_ENABLED === 'true') {
+    const methodology = await currentMethodology();
+    if (!methodology) {
+      fundRanking = { ...fundRanking, fallbackReason: 'no_signed_methodology' };
+    } else {
+      const asOfDate = await latestSnapshotDate(methodology.id);
+      if (!snapshotIsFresh(asOfDate, methodology.config, asOf)) {
+        fundRanking = {
+          ...fundRanking,
+          fallbackReason: 'snapshot_stale',
+          methodologyVersionId: methodology.id,
+          methodologyVersion: methodology.version,
+          asOfDate,
+        };
+      } else if (!riskProfile?.assessmentId) {
+        // Suitability first: naming a scheme to someone whose risk we have
+        // never assessed is the one thing an RIA may not do, however good the
+        // ranking is.
+        fundRanking = {
+          ...fundRanking,
+          fallbackReason: 'no_risk_profile',
+          methodologyVersionId: methodology.id,
+          methodologyVersion: methodology.version,
+          asOfDate,
+        };
+      } else {
+        const [universe, incumbents] = await Promise.all([
+          loadRankedUniverse(methodology.id, asOfDate!),
+          loadIncumbents(userId, methodology.id, methodology.config),
+        ]);
+        // Overlap is a per-client number, so it is attached here rather than
+        // in the market-wide snapshot.
+        const heldFundIds = new Set(
+          projections.map((p) => p.fundId).filter((id): id is string => id != null),
+        );
+        for (const bucket of ADVISOR_ASSET_BUCKETS) {
+          universe[bucket] = universe[bucket].map((c) => ({
+            ...c,
+            overlapPct: schemeOverlapPct(c.fundId, heldFundIds),
+          }));
+        }
+        fundRanking = {
+          available: true,
+          fallbackReason: null,
+          methodologyVersionId: methodology.id,
+          methodologyVersion: methodology.version,
+          asOfDate,
+          candidates: universe,
+          incumbents,
+          selectionConfig: methodology.config.selection,
+        };
+      }
+    }
+  }
+
+  // Exposure per AMC, for the concentration cap. Only fund holdings carry an
+  // AMC; everything else is irrelevant to the cap and stays out of the total.
+  const valueByAmc: Record<string, Decimal> = {};
+  for (const h of projections) {
+    const amc = h.fundId ? amcByFundId.get(h.fundId) : null;
+    if (!amc) continue;
+    valueByAmc[amc] = (valueByAmc[amc] ?? new Decimal(0)).plus(holdingValue(h));
+  }
+
   // ── Liquidity ─────────────────────────────────────────────────
   //
   // Straight from healthScore.getEmergencyFundInputs — the same numbers the
@@ -320,6 +416,8 @@ export async function buildAdvisorFacts(userId: string, asOf: Date = new Date())
     harvestCandidates,
     approvedProducts,
     fallbackRankings,
+    fundRanking,
+    valueByAmc,
     liquidity,
     capitalGainsRates: {
       stcgEquityPct: statutoryRates.stcgEquityPct,

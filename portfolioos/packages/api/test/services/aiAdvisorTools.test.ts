@@ -76,14 +76,15 @@ describe('advisor tools', () => {
       [
         'compute_sip_for_goal',
         'get_advisor_recommendations',
-        'get_approved_products',
         'get_capital_gains_summary',
         'get_goal_projection',
         'get_health_score',
         'get_holdings',
         'get_insurance_overview',
+        'get_recommended_funds',
         'get_tax_harvest_candidates',
         'plan_passive_income',
+        'save_risk_profile',
         'search_knowledge',
       ].sort(),
     );
@@ -115,10 +116,50 @@ describe('advisor tools', () => {
     expect(bad.ok).toBe(false);
   });
 
-  it('only ever names products from the approved list', async () => {
-    const out = await runAdvisorTool('get_approved_products', {}, ctx);
-    expect(out.result).toMatchObject({ byBucket: { EQUITY_DOMESTIC: ['Nifty 50 Index Fund — Direct'] } });
-    expect(JSON.stringify(out.result)).not.toMatch(/score/);
+  it('names the adviser-approved override when one exists', async () => {
+    const withRanking = {
+      ...ctx,
+      facts: {
+        ...facts,
+        fundRanking: {
+          available: true,
+          fallbackReason: null,
+          methodologyVersionId: 'rmv1',
+          methodologyVersion: 1,
+          asOfDate: new Date('2026-09-20T00:00:00Z'),
+          candidates: { ...EMPTY },
+          incumbents: {},
+          selectionConfig: null,
+        },
+        valueByAmc: {},
+      } as unknown as AdvisorFacts,
+    };
+    const out = await runAdvisorTool('get_recommended_funds', {}, withRanking);
+    expect(out.result).toMatchObject({
+      fallback: false,
+      byBucket: {
+        EQUITY_DOMESTIC: {
+          schemeName: 'Nifty 50 Index Fund — Direct',
+          source: 'APPROVED_LIST',
+        },
+      },
+    });
+  });
+
+  // The gate, not an error: no risk profile means category-level advice, and
+  // the reason has to travel so the assistant can say which one closed.
+  it('names nothing, with a reason, when the ranking is gated', async () => {
+    const gated = {
+      ...ctx,
+      facts: {
+        ...facts,
+        approvedProducts: { ...EMPTY },
+        fundRanking: { available: false, fallbackReason: 'no_risk_profile' },
+      } as unknown as AdvisorFacts,
+    };
+    const out = await runAdvisorTool('get_recommended_funds', {}, gated);
+    expect(out.result).toMatchObject({ fallback: true, reason: 'no_risk_profile' });
+    expect((out.result as { explanation: string }).explanation).toMatch(/risk profile/i);
   });
 
   it('summarises open recommendations', async () => {
@@ -161,10 +202,18 @@ describe('advisor tools', () => {
     expect(Number.parseFloat(s.monthlyIncomeThen)).toBeLessThan(90000);
     expect(Number.parseFloat(s.corpusNeeded)).toBeGreaterThan(26_000_000);
     expect(Number.parseFloat(s.corpusNeeded)).toBeLessThan(27_500_000);
-    // ₹2.69 Cr in 10 years at 12% a year: roughly ₹1.17 L a month.
-    const sip = Number.parseFloat(s.sipByReturn[0]!.monthlySip);
-    expect(sip).toBeGreaterThan(110_000);
-    expect(sip).toBeLessThan(125_000);
+    // The from-zero figure is still ~₹1.17 L a month for ₹2.69 Cr at 12%...
+    const row = s.sipByReturn[0]! as { monthlySip: string; sipIfStartingFromZero: string };
+    const fromZero = Number.parseFloat(row.sipIfStartingFromZero);
+    expect(fromZero).toBeGreaterThan(110_000);
+    expect(fromZero).toBeLessThan(125_000);
+    // ...but this client already holds ₹10 L, which compounds to about ₹31 L
+    // over the same decade, so the SIP they actually need is materially lower.
+    // Quoting the from-zero number to someone with a portfolio is the bug this
+    // behaviour exists to prevent.
+    const sip = Number.parseFloat(row.monthlySip);
+    expect(sip).toBeLessThan(fromZero);
+    expect(sip).toBeGreaterThan(0);
   });
 
   it('counts money already saved towards the corpus, and refuses a nonsense income', async () => {

@@ -23,6 +23,7 @@ import { startPiiAtRestJobs } from './jobs/piiAtRestJobs.js';
 import { startSecretRotationJobs } from './jobs/secretRotationJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
+import { startFundScoringJob } from './jobs/fundScoring.job.js';
 import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
@@ -138,6 +139,9 @@ app.use(errorHandler);
 const server = app.listen(env.PORT, '::', () => {
   logger.info(`EveryPaisa API listening on http://localhost:${env.PORT}`);
   startPriceJobs();
+  // After the AMFI NAV sync it schedules itself against; no-ops unless
+  // named-fund advice is switched on.
+  startFundScoringJob();
   startImportWorker();
   registerGmailScanWorker();
   startMailboxPoller();

@@ -3733,6 +3733,59 @@ enum AdvisorRunTrigger {
 /// One row per engine execution. Exists so that "why did no rule flag X" is as
 /// answerable as "why was Y recommended": ruleVersionsSnapshot records every
 /// rule that ran, including the ones that emitted nothing.
+/// The fund-ranking methodology, versioned and signed off by a person.
+///
+/// Firm-level reference data, like StockMaster or MFNav: it describes the
+/// market and the firm's method, not any one user's money, so it carries no
+/// userId, no RLS policy and no USER_SCOPED_MODELS entry. Every threshold and
+/// weight lives in `config` rather than in code so that "why was this fund
+/// picked in March?" is answered by reading the row that was in force, not by
+/// reading a git history of constants.
+///
+/// A row with signedOffAt null must never be used for advice.
+model RankingMethodologyVersion {
+  id          String   @id @default(cuid())
+  version     Int      @unique
+  /// Thresholds, weights, hysteresis parameters, category→bucket map.
+  config      Json
+  description String   @db.Text
+  signedOffBy String?
+  signedOffAt DateTime?
+  createdAt   DateTime @default(now())
+
+  snapshots       FundScoreSnapshot[]
+  recommendations AdvisorRecommendation[]
+}
+
+/// One scheme's score in one bucket on one day under one methodology.
+///
+/// Market-level reference data, not user-scoped. Ineligible funds are stored
+/// too, with their reasons: "why was this fund NOT recommended?" is as much a
+/// question we have to answer as "why was that one?".
+model FundScoreSnapshot {
+  id                   String                    @id @default(cuid())
+  asOfDate             DateTime                  @db.Date
+  methodologyVersionId String
+  methodologyVersion   RankingMethodologyVersion @relation(fields: [methodologyVersionId], references: [id], onDelete: Cascade)
+  schemeCode           String
+  bucket               AdvisorAssetBucket
+  eligible             Boolean
+  /// Typed reasons, e.g. ["regular_plan", "track_record_too_short"].
+  exclusionReasons     Json
+  /// The computed metrics behind the score, each with the window it used.
+  metrics              Json
+  score                Decimal?                  @db.Decimal(10, 4)
+  rankInBucket         Int?
+  /// Metrics excluded for want of data, and the weight each one gave up.
+  dataGaps             Json
+
+  createdAt DateTime @default(now())
+
+  @@unique([asOfDate, methodologyVersionId, schemeCode, bucket])
+  @@index([asOfDate, bucket, rankInBucket])
+  @@index([schemeCode])
+}
+
 model AdvisorRun {
   id                      String            @id @default(cuid())
   userId                  String
@@ -3745,6 +3798,9 @@ model AdvisorRun {
   /// { [ruleId]: message } — a throwing rule is recorded and skipped, never
   /// allowed to fail the run or block the other rules.
   ruleErrors              Json?
+  /// Whether this run could name funds, and which gate closed if not:
+  /// flag_disabled | no_signed_methodology | snapshot_stale | no_risk_profile.
+  namedFundGate           Json?
   riskProfileAssessmentId String?
   recommendationCount     Int               @default(0)
   startedAt               DateTime          @default(now())
@@ -3775,6 +3831,8 @@ enum AdvisorRecommendationStatus {
 
 enum AdvisorProvenance {
   APPROVED_LIST
+  /// Chosen by the signed-off ranking methodology, narrowed to this client.
+  RANKED_UNIVERSE
   FALLBACK_RANKING
   NONE
 }
@@ -3817,6 +3875,19 @@ model AdvisorRecommendation {
 
   provenance    AdvisorProvenance @default(NONE)
   provenanceRef Json?
+
+  /// Which signed-off ranking methodology chose the named scheme. Null on
+  /// category-level advice. Kept as an FK so a recommendation made under v1
+  /// stays explainable after v2 ships.
+  methodologyVersionId String?
+  methodologyVersion   RankingMethodologyVersion? @relation(fields: [methodologyVersionId], references: [id])
+  /// AMFI scheme code of the fund this recommendation names, if any.
+  namedSchemeCode      String?
+  /// Why this scheme and not the runner-up: score, rank, the metrics behind
+  /// it, data gaps, portfolio-fit adjustments and whether hysteresis held an
+  /// incumbent. Frozen at generation time like inputsSnapshot — the figures a
+  /// user was shown are never edited.
+  selectionEvidence    Json?
 
   /// Stable per-issue identity within a ruleId. Lets a re-run supersede an
   /// existing recommendation instead of duplicating it.

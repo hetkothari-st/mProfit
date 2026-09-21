@@ -123,6 +123,9 @@ export function extractNumericTokens(text: string): string[] {
 export function assertProseConsistency(
   rationale: string,
   prose: string,
+  /** Scheme names the engine actually chose. Prose may name these and no
+   *  others; omit for advice that names no fund, which then permits none. */
+  allowedSchemeNames: string[] = [],
 ): { ok: boolean; offending: string[] } {
   const allowed = new Set(extractNumericTokens(rationale));
   const offending: string[] = [];
@@ -135,5 +138,52 @@ export function assertProseConsistency(
     offending.push(token.surface);
   }
 
+  for (const name of unevidencedSchemeNames(prose, rationale, allowedSchemeNames)) {
+    if (reported.has(name)) continue;
+    reported.add(name);
+    offending.push(name);
+  }
+
   return { ok: offending.length === 0, offending };
+}
+
+/**
+ * Scheme names in the prose that nothing authorised.
+ *
+ * A fabricated fund name is worse than a fabricated number: the client can act
+ * on it in one click, and "HDFC Flexi Cap Fund" reads exactly as authoritative
+ * whether the engine chose it or the model remembered it from training data.
+ * The numbers guard above cannot catch it, because a fund name contains no
+ * digits.
+ *
+ * Detection is deliberately coarse — an AMC name followed by "Fund", "Scheme"
+ * or "ETF" — because the failure mode being guarded is a model naming a real
+ * scheme it was never given, and real schemes are named exactly that way.
+ */
+function unevidencedSchemeNames(
+  prose: string,
+  rationale: string,
+  allowedSchemeNames: string[],
+): string[] {
+  const permitted = [rationale, ...allowedSchemeNames]
+    .filter((t) => typeof t === 'string')
+    .map((t) => t.toLowerCase());
+  const isPermitted = (candidate: string): boolean =>
+    permitted.some((source) => source.includes(candidate.toLowerCase()));
+
+  const out: string[] = [];
+  // "<Words> Fund/Scheme/ETF", the shape every Indian scheme name takes.
+  const re = /\b([A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){0,5}\s+(?:Fund|Scheme|ETF|Plan))\b/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(prose)) !== null) {
+    const candidate = match[1]!.trim();
+    // Generic category talk ("an index fund", "a flexi cap fund") is allowed:
+    // it names nothing the client could buy by mistake.
+    if (/^(the|a|an|this|that|your|index|equity|debt|hybrid|liquid|mutual)\b/i.test(candidate)) {
+      continue;
+    }
+    if (isPermitted(candidate)) continue;
+    out.push(candidate);
+  }
+  return out;
 }

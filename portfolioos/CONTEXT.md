@@ -443,7 +443,7 @@ Grouped by purpose. Full definitions in `packages/api/prisma/schema.prisma`.
 
 **Advisor engine** — `RiskProfileAssessment`, `ModelPortfolio`,
 `ModelPortfolioVersion`, `AdvisorApprovedProduct`, `AdvisorRun`,
-`AdvisorRecommendation`.
+`AdvisorRecommendation`, `RankingMethodologyVersion`, `FundScoreSnapshot`.
 
 `AssetClass` enum (39 values) spans equity, F&O, funds, bonds, deposits, NPS/PPF/EPF,
 PMS/AIF, REIT/InvIT, gold/silver, ULIP/insurance, real estate, PE, crypto, art,
@@ -621,8 +621,28 @@ writes prose.**
      inputs refreshed; a materially changed one gets a **new row** with the old
      row's `supersededById` pointed at it. Figures a user was shown are never
      edited.
-- Buy-side universe: a curated `AdvisorApprovedProduct` list, with NAV-based
-  ranking (`fallbackRankingMath.ts`) as fallback.
+- Buy-side universe, in precedence order:
+  1. `AdvisorApprovedProduct` — an OPTIONAL per-adviser override. Empty means
+     "no override", which is the normal case; it is not a prerequisite.
+  2. `services/advisor/fundRanking/` — the deterministic, versioned methodology
+     that names funds for everyone. Eligibility (direct plan, growth option,
+     open-ended, track record) → metrics from NAV history → separate scoring
+     models for index and active funds → percentile rank within the bucket,
+     written nightly to `FundScoreSnapshot` by `jobs/fundScoring.job.ts`.
+     `selection.ts` then fits the ranking to one client: prefer a held fund in
+     band, penalise overlap, cap AMC concentration, and apply hysteresis so a
+     nightly NAV wobble cannot churn the recommendation. Every pick stores
+     `namedSchemeCode`, `methodologyVersionId` and `selectionEvidence`.
+  3. NAV-based `fallbackRankingMath.ts` — past performance only, for buckets
+     the methodology cannot rank.
+- Named funds require ALL of: `RIA_VERDICTS_ENABLED=true`, a signed-off
+  `RankingMethodologyVersion` with a snapshot no older than its configured
+  window, and a current `RiskProfileAssessment`. Any gate closed means
+  category-level advice and a reason recorded on `AdvisorRun.namedFundGate` —
+  never a silent downgrade.
+- **The LLM never selects a fund.** Rules select; the prose guard
+  (`proseConsistency.ts`) rejects any scheme name or figure the engine did not
+  produce.
 - `proseConsistency.ts` — verifies the generated prose agrees with the numbers.
 - Risk profile → `ModelPortfolio` / `ModelPortfolioVersion` target allocation.
 - Constraints in `constants.ts`: `MAX_SINGLE_TRADE_PCT = 25`,
@@ -856,6 +876,23 @@ at boot with a ✅/⚠️ log line).
   by design, but it needs a human-facing follow-up path.
 - Credit cards, bonds/G-Sec, post office and property have no consent-based data
   source in India; all are manual entry or statement parsing.
+- **Fund ranking runs without TER, AUM, benchmark TRI, inception date, manager
+  tenure or exit load** — AMFI's NAV file is the only machine-readable fund feed
+  ingested and carries none of them (see
+  `services/advisor/fundRanking/DATA-INVENTORY.md`). Consequences: index funds
+  are scored on tracking fidelity alone with cost weight redistributed; the AUM
+  floor in the methodology config cannot bite; tracking figures are
+  **peer-relative** (median of same-index peers), not measured against a real
+  benchmark; and switch recommendations assume a **zero exit load**, which
+  understates the cost of switching. Every one of these is recorded per fund in
+  `FundScoreSnapshot.dataGaps` rather than defaulted to a number.
+- Portfolio overlap between a candidate and the client's holdings is only known
+  for a fund they already hold; constituent data for the wider universe is not
+  ingested, so `fundRanking/overlap.ts` returns null (unknown, not zero) for
+  everything else.
+- `AdvisorApprovedProduct` is still scoped per user. As an override that is
+  harmless — an empty table means "no override" — but a firm-wide house list
+  would need re-scoping to an admin or firm entity.
 
 ---
 
