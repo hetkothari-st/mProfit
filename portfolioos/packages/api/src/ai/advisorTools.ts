@@ -18,11 +18,27 @@ import type { AdvisorAssetBucketValue, AdvisorFacts } from '../services/advisor/
 import { buildInsuranceData } from './contextBuilder.js';
 import { QueryIntent } from './queryClassifier.js';
 import { searchKnowledge } from './knowledge/search.js';
+import { submitQuestionnaire, userAgeFromDob } from '../services/advisor/riskProfile.service.js';
+import type {
+  RiskAnswers,
+  HorizonAnswer,
+  DrawdownAnswer,
+  CapacityAnswer,
+  ObjectiveAnswer,
+  TaxSlabAnswer,
+} from '../services/riskProfileMath.js';
 
 export interface ToolContext {
   userId: string;
   facts: AdvisorFacts | null;
   financialYear: string;
+  /**
+   * Set once `save_risk_profile` has written in this conversation. Profiling
+   * is a one-shot: without it a model that re-reads its own transcript can
+   * ask the five questions again and write a second assessment per turn, and
+   * the record is append-only by design.
+   */
+  riskProfileSavedThisConversation?: boolean;
 }
 
 export interface ToolOutcome {
@@ -95,6 +111,48 @@ export const ADVISOR_TOOLS: Anthropic.Tool[] = [
     description:
       'The products the firm has approved, by asset bucket. The ONLY specific products you may name. Empty means speak in categories only.',
     input_schema: obj({ bucket: { type: 'string', enum: BUCKETS } }),
+  },
+  {
+    name: 'save_risk_profile',
+    description:
+      "Record the client's risk profile from answers they gave IN THIS CONVERSATION, so suitability is on file and " +
+      'product-level advice becomes possible. Ask all five questions first and use their actual answers — never ' +
+      'guess, never infer from their portfolio. Call once per conversation. Scores on the same questionnaire the ' +
+      'Advisor page uses, so the result matches what they would get there.',
+    input_schema: obj(
+      {
+        horizon: {
+          type: 'string',
+          enum: ['LT_3Y', 'Y3_7', 'Y7_15', 'GT_15Y'],
+          description: 'When they need most of this money: under 3 years, 3-7, 7-15, over 15.',
+        },
+        drawdownReaction: {
+          type: 'string',
+          enum: ['SELL_ALL', 'SELL_SOME', 'HOLD', 'BUY_MORE'],
+          description: 'What they would do if the portfolio fell 20% in a few months.',
+        },
+        investableShareOfIncome: {
+          type: 'string',
+          enum: ['LT_10', 'PCT_10_20', 'PCT_20_35', 'GT_35'],
+          description: 'Share of income they can invest each month.',
+        },
+        objective: {
+          type: 'string',
+          enum: ['PRESERVE', 'INCOME', 'BALANCED_GROWTH', 'MAX_GROWTH'],
+          description: 'What this money is mainly for.',
+        },
+        hasEmergencyFund: {
+          type: 'boolean',
+          description: 'Whether about 6 months of expenses is already set aside.',
+        },
+        taxSlab: {
+          type: 'string',
+          enum: ['PCT_5', 'PCT_20', 'PCT_30', 'UNSURE'],
+          description: 'Their income-tax slab. UNSURE is a valid answer.',
+        },
+      },
+      ['horizon', 'drawdownReaction', 'investableShareOfIncome', 'objective', 'hasEmergencyFund', 'taxSlab'],
+    ),
   },
   {
     name: 'get_health_score',
@@ -278,6 +336,45 @@ const EXECUTORS: Record<string, Executor> = {
         actions: r.action.map((a) => ({ direction: a.direction, instrument: a.instrumentName, amountInr: a.amountInr })),
         createdAt: r.createdAt,
       })),
+    };
+  },
+
+  /**
+   * The one tool that writes. Everything else here reads.
+   *
+   * Suitability is the basis for advising at all, so the alternative to this
+   * was the assistant repeatedly telling clients to go and fill in a form —
+   * which is what made it feel evasive. It writes through the same service as
+   * the Advisor page: same scoring, same age guardrails, same append-only row.
+   */
+  async save_risk_profile(input, ctx) {
+    if (ctx.riskProfileSavedThisConversation) {
+      return {
+        saved: false,
+        reason: 'A risk profile was already recorded in this conversation. Use it; do not ask again.',
+      };
+    }
+    const answers: RiskAnswers = {
+      age: await userAgeFromDob(ctx.userId),
+      horizon: input['horizon'] as HorizonAnswer,
+      drawdownReaction: input['drawdownReaction'] as DrawdownAnswer,
+      investableShareOfIncome: input['investableShareOfIncome'] as CapacityAnswer,
+      objective: input['objective'] as ObjectiveAnswer,
+      hasEmergencyFund: input['hasEmergencyFund'] === true,
+      taxSlab: input['taxSlab'] as TaxSlabAnswer,
+    };
+    const result = await submitQuestionnaire(ctx.userId, answers);
+    ctx.riskProfileSavedThisConversation = true;
+    return {
+      saved: true,
+      category: result.category,
+      score: result.score,
+      taxSlabPct: result.taxSlabPct,
+      // An age cap can move the verdict below what the answers alone scored;
+      // the client should hear that from the adviser, not discover it later.
+      overrides: result.overrides,
+      targetAllocation: result.modelPortfolio?.targets ?? null,
+      assessedAt: result.assessedAt,
     };
   },
 
