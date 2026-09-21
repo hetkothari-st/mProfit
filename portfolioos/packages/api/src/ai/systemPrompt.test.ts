@@ -19,8 +19,21 @@ describe('assistant prompt — suitability', () => {
     expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/never infer one from their portfolio/i);
   });
 
-  it('keeps products to the approved list', () => {
-    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/ONLY names on the approved product list/);
+  // Fund names now come from the ranking methodology through one tool. The
+  // rule that matters is unchanged in spirit: the model may not name a fund
+  // nobody authorised, whether from an approved list or from its own memory.
+  it('allows only funds the engine returned this turn', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/ONLY schemes returned by get_recommended_funds/);
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/Never name a fund from your own knowledge/i);
+  });
+
+  it('requires the direct plan to be stated, and the disclosure at the end', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/direct plan, growth option/i);
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/SEBI registration number/i);
+  });
+
+  it('names nothing when the tool reports a fallback', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/fallback:true, name nothing/i);
   });
 });
 
