@@ -70,7 +70,14 @@ async function runGuarded<K extends keyof typeof running>(
     // A tripped canary has already reported itself with the run id and the
     // verdict; reporting it again here would double every feed alert.
     if (!(err instanceof FeedCanaryError)) {
-      captureFeedFailure(err, { feed: name, runId: null, verdict: null, counts: null });
+      captureFeedFailure(err, {
+        kind: 'FEED',
+        subject: name,
+        check: 'job',
+        runId: null,
+        reason: err instanceof Error ? err.message : String(err),
+        outcome: 'threw',
+      });
     }
   } finally {
     running[name] = false;

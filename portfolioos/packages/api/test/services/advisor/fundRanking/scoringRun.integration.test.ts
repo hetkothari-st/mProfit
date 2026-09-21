@@ -130,11 +130,26 @@ describe('runFundScoring', () => {
       // off for this test and only this test.
       //
       // The calendar-integrity check is turned off here for a related but
-      // distinct reason: it is judged against the WHOLE universe, and the
-      // database this suite shares holds sparse seeded history with weekday
-      // holes twenty-two days long. On a production database of real daily
-      // NAVs it passes; here it would refuse every run before scoring
-      // started. Its own coverage is in calendarIntegrity.test.ts and
+      // distinct reason, and the exact number is recorded so nobody has to
+      // re-measure it to decide whether the relaxation is still earned:
+      //
+      //   Measured 2026-09-21 against the shared development database —
+      //   191 trading days across the five-year scoring window, with a
+      //   99-consecutive-weekday hole from 2023-09-14 to 2024-02-01.
+      //
+      // That hole is under-population, not fabrication: nothing seeds MFNav,
+      // so the dev database only holds the days a real AMFI sync happened to
+      // run. Closing it means loading roughly sixty monthly AMFI historical
+      // reports (~1.4 GB, ~11 million rows), which is not something a test
+      // fixture can arrange. The recent window has been backfilled with real
+      // AMFI history; the 2023–24 hole remains.
+      //
+      // PRODUCTION HAS THE SAME HOLE. Measured the same day: 314 trading
+      // days, the same 99-weekday span. So this is not a dev-only artefact
+      // to be waved away — it is the reason the calendar check currently
+      // refuses to score in production, which is the check working.
+      //
+      // Its own coverage is in calendarIntegrity.test.ts and
       // calendarRefusal.integration.test.ts.
       return {
         ...config,

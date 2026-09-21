@@ -450,13 +450,13 @@ function FeedFailures() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Radio className="h-4 w-4 text-amber-600 dark:text-amber-400" strokeWidth={1.8} />
-          Market feed failures
+          Market data & scoring failures
         </CardTitle>
         <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-          Price and reference-data feeds that returned less than they should
-          have. These are not yours to fix — they affect every account, and
-          there is nothing to retry by hand. Listed so a quiet feed cannot go
-          unnoticed.
+          Price feeds that returned less than they should have, and fund-scoring
+          runs that declined to rank on data they did not trust. These are not
+          yours to fix — they affect every account, and there is nothing to
+          retry by hand. Listed so a quiet feed cannot go unnoticed.
         </p>
       </CardHeader>
       <CardContent className="p-0">
@@ -471,7 +471,7 @@ function FeedFailures() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-[11px] uppercase tracking-kerned text-muted-foreground">
-                  <th className="px-4 py-2 font-medium">Feed</th>
+                  <th className="px-4 py-2 font-medium">Source</th>
                   <th className="px-4 py-2 font-medium">When</th>
                   <th className="px-4 py-2 font-medium">Imported</th>
                   <th className="px-4 py-2 font-medium">What happened</th>
@@ -481,9 +481,20 @@ function FeedFailures() {
                 {items.map((row) => (
                   <tr key={row.id} className="border-b last:border-0 align-top">
                     <td className="px-4 py-2.5">
-                      <div className="font-medium">{feedLabel(row.feed)}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium">{feedLabel(row.feed)}</span>
+                        {/* A scoring refusal is a different animal from a thin
+                            feed and is fixed somewhere else, so it says so
+                            rather than blending into the list. */}
+                        {row.kind === 'SCORING' && (
+                          <span className="rounded-full border border-amber-400/50 bg-amber-400/10 px-1.5 py-px text-[9.5px] font-medium uppercase tracking-kerned text-amber-700 dark:text-amber-300">
+                            Scoring
+                          </span>
+                        )}
+                      </div>
                       <div className="font-mono text-[10.5px] text-muted-foreground">
                         {row.feed}
+                        {row.check ? ` · ${row.check}` : ''}
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground tabular-nums">
@@ -496,8 +507,16 @@ function FeedFailures() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
                       {/* The comparison IS the finding, so both numbers are
-                          shown rather than a single count that looks fine. */}
-                      {row.rowsImported === null ? (
+                          shown rather than a single count that looks fine. A
+                          scoring refusal has no row counts; its finding is the
+                          gap that caused it. */}
+                      {row.kind === 'SCORING' ? (
+                        <span className="text-muted-foreground">
+                          {row.gapWeekdays === null
+                            ? 'refused'
+                            : `${row.gapWeekdays}-weekday gap`}
+                        </span>
+                      ) : row.rowsImported === null ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
                         <>

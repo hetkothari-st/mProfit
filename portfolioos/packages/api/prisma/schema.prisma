@@ -1592,11 +1592,20 @@ enum InstitutionKind {
 /// "20% fewer rows than last time" needs a last time.
 model FeedRunLog {
   id         String   @id @default(cuid())
-  /// Feed identity, e.g. "amfi_nav", "nse_universe".
+  /// FEED | SCORING. One table because both answer the same question — did a
+  /// scheduled run produce what it should have — and splitting them meant two
+  /// tables, two Sentry helpers and an ops page that only knew about one.
+  kind       String   @default("FEED")
+  /// The subject: a feed key like "amfi_nav", or "fund_scoring" for a
+  /// scoring run.
   feed       String
+  /// Which check reported, e.g. "canary" or "calendar_integrity". Null on
+  /// rows written before the checks were named.
+  check      String?
   startedAt  DateTime @default(now())
   finishedAt DateTime?
-  /// OK | FAILED — FAILED covers both a thrown error and a canary trip.
+  /// OK | FAILED | SKIPPED | REFUSED. FAILED covers a thrown error and a
+  /// canary trip; REFUSED is a run that declined to write on purpose.
   status     String
   rowsParsed   Int?
   rowsImported Int?
@@ -1609,6 +1618,8 @@ model FeedRunLog {
 
   @@index([feed, startedAt])
   @@index([feed, status, startedAt])
+  /// The ops page reads failures newest-first across both kinds.
+  @@index([kind, status, startedAt])
 }
 
 model IngestionFailure {
@@ -3840,37 +3851,6 @@ model RankingMethodologyVersion {
 /// Market-level reference data, not user-scoped. Ineligible funds are stored
 /// too, with their reasons: "why was this fund NOT recommended?" is as much a
 /// question we have to answer as "why was that one?".
-/// One row per fund-scoring run that refused to write, and why.
-///
-/// Same contract as the market-feed run log the price feeds keep: recorded,
-/// never swallowed, queryable (CONTEXT.md §3.5). Separate table because it
-/// describes a JOB rather than a FEED — a scoring run reads a dozen sources
-/// and writes snapshots, where a feed run fetches one file.
-///
-/// NOT user-scoped. It describes the market pass, not anyone's money, so no
-/// RLS policy and no USER_SCOPED_MODELS entry (§5) — like StockMaster,
-/// MFNav and FundScoreSnapshot itself.
-model ScoringRunLog {
-  id                   String   @id @default(cuid())
-  /// Which check refused, e.g. "calendar_integrity".
-  check                String
-  startedAt            DateTime @default(now())
-  status               String
-  methodologyVersionId String?
-  asOfDate             DateTime @db.Date
-  /// Trading days the universe reported for the window.
-  tradingDays          Int?
-  /// Longest run of weekdays nothing priced on.
-  gapWeekdays          Int?
-  gapFrom              DateTime? @db.Date
-  gapTo                DateTime? @db.Date
-  reason               String?
-  details              Json?
-
-  @@index([check, startedAt])
-  @@index([asOfDate])
-}
-
 model FundScoreSnapshot {
   id                   String                    @id @default(cuid())
   asOfDate             DateTime                  @db.Date

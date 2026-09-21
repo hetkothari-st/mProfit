@@ -24,6 +24,7 @@ vi.mock('../../src/lib/sentry.js', () => ({
 }));
 
 const { FeedCanaryError, runFeedWithCanary } = await import('../../src/priceFeeds/feedCanary.js');
+const { captureFeedFailure } = await import('../../src/lib/runAlerting.js');
 const { listFeedRunFailures } = await import('../../src/services/ingestionFailures.service.js');
 const { prisma } = await import('../../src/lib/prisma.js');
 const { runAsSystem } = await import('../../src/lib/requestContext.js');
@@ -213,5 +214,106 @@ describe('listFeedRunFailures', () => {
     );
     const mine = items.filter((i) => i.feed === feed);
     expect(mine.map((m) => m.reason)).toEqual(['recent']);
+  });
+});
+
+/**
+ * One helper, two kinds.
+ *
+ * `captureFeedFailure` and `captureJobFailure` were written on branches that
+ * could not see each other and ended up with the same tag vocabulary and the
+ * same fingerprint strategy. They are one function now, and the thing worth
+ * pinning down is that merging them did NOT merge the two incidents: "AMFI
+ * came back thin" and "we declined to rank on a calendar we do not trust" are
+ * fixed in different places and must not group into one Sentry issue.
+ */
+describe('the unified failure helper', () => {
+  it('fingerprints a feed trip by feed and failure mode', () => {
+    captureFeedFailure(new Error('x'), {
+      kind: 'FEED',
+      subject: 'amfi_nav',
+      check: 'canary',
+      runId: 'run-1',
+      reason: 'a 99% drop',
+      outcome: 'tripped',
+    });
+    const [, opts] = sentryMock.captureException.mock.calls[0]!;
+    expect(opts.tags.run_kind).toBe('FEED');
+    expect(opts.tags.feed).toBe('amfi_nav');
+    expect(opts.fingerprint).toEqual(['feed-canary', 'amfi_nav', 'tripped']);
+  });
+
+  it('gives a scoring refusal its own fingerprint', () => {
+    captureFeedFailure(new Error('x'), {
+      kind: 'SCORING',
+      subject: 'fund_scoring',
+      check: 'calendar_integrity',
+      runId: 'run-2',
+      reason: '99 consecutive weekdays',
+      outcome: 'refused',
+    });
+    const [, opts] = sentryMock.captureException.mock.calls[0]!;
+    expect(opts.tags.run_kind).toBe('SCORING');
+    expect(opts.tags.run_check).toBe('calendar_integrity');
+    expect(opts.fingerprint).toEqual(['job-refused', 'fund_scoring', 'calendar_integrity']);
+  });
+
+  // A feed trip and a scoring refusal must never land in the same issue.
+  it('keeps the two kinds in different Sentry issues', () => {
+    captureFeedFailure(new Error('a'), {
+      kind: 'FEED', subject: 'amfi_nav', check: 'canary',
+      runId: null, reason: null, outcome: 'tripped',
+    });
+    captureFeedFailure(new Error('b'), {
+      kind: 'SCORING', subject: 'fund_scoring', check: 'calendar_integrity',
+      runId: null, reason: null, outcome: 'refused',
+    });
+    const [[, a], [, b]] = sentryMock.captureException.mock.calls;
+    expect(a.fingerprint).not.toEqual(b.fingerprint);
+  });
+
+  // The tag is still called `feed` for both kinds on purpose: existing saved
+  // searches and alert rules are keyed on it, and renaming would orphan them.
+  it('keeps the feed tag name for scoring rows too', () => {
+    captureFeedFailure(new Error('x'), {
+      kind: 'SCORING', subject: 'fund_scoring', check: 'calendar_integrity',
+      runId: null, reason: null, outcome: 'refused',
+    });
+    const [, opts] = sentryMock.captureException.mock.calls[0]!;
+    expect(opts.tags.feed).toBe('fund_scoring');
+    expect(opts.contexts.feed_run.kind).toBe('SCORING');
+  });
+});
+
+describe('a scoring refusal on the ops page', () => {
+  it('is listed beside feed failures, marked SCORING', async () => {
+    const feed = 'fund_scoring';
+    const row = await runAsSystem(() =>
+      prisma.feedRunLog.create({
+        data: {
+          kind: 'SCORING',
+          feed,
+          check: 'calendar_integrity',
+          status: 'REFUSED',
+          reason: 'no scheme in the market priced on 99 consecutive weekdays',
+          details: { gapWeekdays: 99, gapFrom: '2023-09-14', gapTo: '2024-02-01' },
+        },
+      }),
+    );
+    feeds.push(feed);
+
+    const { items } = await runAsSystem(() => listFeedRunFailures({ limit: 200 }));
+    const listed = items.find((i) => i.id === row.id);
+    expect(listed).toBeTruthy();
+    expect(listed!.kind).toBe('SCORING');
+    expect(listed!.check).toBe('calendar_integrity');
+    // REFUSED counts as a failure for the page: the consequence for whoever
+    // is looking is the same — today's ranking is not there.
+    expect(listed!.status).toBe('REFUSED');
+    // A refusal has no row counts; its finding is the gap.
+    expect(listed!.rowsImported).toBeNull();
+    expect(listed!.gapWeekdays).toBe(99);
+
+    await runAsSystem(() => prisma.feedRunLog.delete({ where: { id: row.id } }));
   });
 });
