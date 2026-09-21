@@ -2,7 +2,12 @@ import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { loadAmfiNavToDb } from '../priceFeeds/amfi.service.js';
-import { pruneFeedRunLogs, runFeedWithCanary } from '../priceFeeds/feedCanary.js';
+import {
+  FeedCanaryError,
+  captureFeedFailure,
+  pruneFeedRunLogs,
+  runFeedWithCanary,
+} from '../priceFeeds/feedCanary.js';
 import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
 import { refreshAllHoldingPrices } from '../services/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
@@ -57,6 +62,16 @@ async function runGuarded<K extends keyof typeof running>(
     logger.info({ r, ms: Date.now() - t0 }, `[cron] ${label} done`);
   } catch (err) {
     logger.error({ err }, `[cron] ${label} failed`);
+    // These are node-cron jobs, not Bull jobs: nothing downstream sees the
+    // throw, and `Sentry.setupExpressErrorHandler` only covers requests. A
+    // failure here reached the log and stopped, which is how the AMFI sync
+    // managed to be broken for weeks.
+    //
+    // A tripped canary has already reported itself with the run id and the
+    // verdict; reporting it again here would double every feed alert.
+    if (!(err instanceof FeedCanaryError)) {
+      captureFeedFailure(err, { feed: name, runId: null, verdict: null, counts: null });
+    }
   } finally {
     running[name] = false;
   }

@@ -29,6 +29,7 @@
 
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { Sentry } from '../lib/sentry.js';
 import { env } from '../config/env.js';
 
 /** What a feed has to report for its run to be judged. */
@@ -67,10 +68,62 @@ export class FeedCanaryError extends Error {
   constructor(
     readonly feed: string,
     readonly verdict: CanaryVerdict,
+    /** The FeedRunLog row this trip wrote, so an alert can be traced to it. */
+    readonly runId: string | null = null,
   ) {
     super(`[${feed}] ${verdict.reason ?? 'feed canary tripped'}`);
     this.name = 'FeedCanaryError';
   }
+}
+
+/**
+ * Tell Sentry.
+ *
+ * Verified before writing this: nothing did. `Sentry.setupExpressErrorHandler`
+ * covers request handlers, and the Bull queues log their `failed` events
+ * without capturing them — but the AMFI sync is a `node-cron` job whose
+ * `runGuarded` wrapper catches, logs and swallows. A tripped canary produced a
+ * `logger.error` line and no alert of any kind, which for a feed that had
+ * already been silently broken for weeks is most of the problem again.
+ *
+ * Tags rather than extras for feed, status and reason: tags are searchable and
+ * groupable in Sentry, so "every amfi_nav trip this month" is a query. The
+ * counts go in `contexts`, where they are readable without being indexed.
+ */
+export function captureFeedFailure(
+  err: unknown,
+  meta: {
+    feed: string;
+    runId: string | null;
+    verdict?: CanaryVerdict | null;
+    counts?: FeedRunCounts | null;
+  },
+): void {
+  Sentry.captureException(err, {
+    level: 'error',
+    tags: {
+      feed: meta.feed,
+      feed_run_id: meta.runId ?? 'unwritten',
+      canary_verdict: meta.verdict ? (meta.verdict.ok ? 'ok' : 'tripped') : 'threw',
+      canary_reason: meta.verdict?.reason ?? 'feed run threw before judgement',
+    },
+    contexts: {
+      feed_run: {
+        feed: meta.feed,
+        runId: meta.runId,
+        rowsParsed: meta.counts?.rowsParsed ?? null,
+        rowsImported: meta.counts?.rowsImported ?? null,
+        parseFailures: meta.counts?.parseFailures ?? null,
+        previousImported: meta.verdict?.previousImported ?? null,
+        parseFailureRatePct: meta.verdict?.parseFailureRatePct ?? null,
+        rowDropPct: meta.verdict?.rowDropPct ?? null,
+      },
+    },
+    // One Sentry issue per feed per failure mode, rather than one per night:
+    // a feed that has been broken for a week should be one issue with seven
+    // events, which is what makes "how long has this been failing" answerable.
+    fingerprint: ['feed-canary', meta.feed, meta.verdict?.ok === false ? 'tripped' : 'threw'],
+  });
 }
 
 /**
@@ -218,16 +271,17 @@ export async function runFeedWithCanary<T>(
     result = await fn();
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    await prisma.feedRunLog.create({
+    const row = await prisma.feedRunLog.create({
       data: { feed, startedAt, finishedAt: new Date(), status: 'FAILED', previousImported, reason },
     });
-    logger.error({ feed, err: reason }, '[feedCanary] feed run threw');
+    logger.error({ feed, runId: row.id, err: reason }, '[feedCanary] feed run threw');
+    captureFeedFailure(err, { feed, runId: row.id, verdict: null, counts: null });
     throw err;
   }
 
   const counts = toCounts(result);
   const verdict = judgeFeedRun(counts, previousImported, thresholds);
-  await prisma.feedRunLog.create({
+  const row = await prisma.feedRunLog.create({
     data: {
       feed,
       startedAt,
@@ -246,6 +300,7 @@ export async function runFeedWithCanary<T>(
     logger.error(
       {
         feed,
+        runId: row.id,
         rowsParsed: counts.rowsParsed,
         rowsImported: counts.rowsImported,
         parseFailures: counts.parseFailures ?? 0,
@@ -255,7 +310,9 @@ export async function runFeedWithCanary<T>(
       },
       `[feedCanary] ${verdict.reason}`,
     );
-    throw new FeedCanaryError(feed, verdict);
+    const tripped = new FeedCanaryError(feed, verdict, row.id);
+    captureFeedFailure(tripped, { feed, runId: row.id, verdict, counts });
+    throw tripped;
   }
 
   logger.info(

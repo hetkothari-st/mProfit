@@ -1,6 +1,7 @@
 import { api } from './client';
 import type {
   ApiResponse,
+  FeedRunFailureDTO,
   IngestionFailureDTO,
   IngestionResolveAction,
 } from '@everypaisa/shared';
@@ -28,7 +29,23 @@ export interface RetryIngestionFailureResult {
   error?: string;
 }
 
+export interface ListFeedRunFailuresResult {
+  items: FeedRunFailureDTO[];
+}
+
 export const ingestionFailuresApi = {
+  /**
+   * Market-feed runs that failed. Not user-scoped — a stale AMFI file is the
+   * same fact for everyone — and there is nothing to retry by hand.
+   */
+  async listFeedFailures(limit = 25): Promise<ListFeedRunFailuresResult> {
+    const { data } = await api.get<ApiResponse<ListFeedRunFailuresResult>>(
+      '/api/ingestion-failures/feeds',
+      { params: { limit: String(limit) } },
+    );
+    return unwrap(data);
+  },
+
   async list(params: ListIngestionFailuresParams = {}): Promise<ListIngestionFailuresResult> {
     const query: Record<string, string> = {};
     if (params.resolved !== undefined) query.resolved = String(params.resolved);
