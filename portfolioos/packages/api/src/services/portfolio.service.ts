@@ -20,7 +20,7 @@ import {
   portfolioReadableWhere,
   type EffectiveScope,
 } from './familyScope.service.js';
-import { runAsUser } from '../lib/requestContext.js';
+import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 import { computePortfolioXirr, computeHoldingXirrs } from './xirr.service.js';
 
 function toPortfolioDTO(p: Portfolio) {
@@ -199,8 +199,25 @@ export async function getPortfolio(userId: string, id: string) {
   return toPortfolioDTO(p);
 }
 
+/**
+ * The row an access check is about to judge, read as the system identity.
+ *
+ * Row-level security hides another member's personal portfolio from the
+ * caller, so reading it in the caller's context returns null and the checks
+ * below never get to run: a portfolio the caller is allowed to see comes back
+ * "not found". That is what family pages did the moment the app stopped
+ * connecting as a superuser — every peer portfolio 404'd.
+ *
+ * Reading it here decides nothing. `ensureReadable` and `ensureOwnership`
+ * still have to accept the row, and both throw when they do not; this only
+ * lets them see what they are judging.
+ */
+function loadPortfolioForAccessCheck(id: string) {
+  return runAsSystem(() => prisma.portfolio.findUnique({ where: { id } }));
+}
+
 async function ensureOwnership(userId: string, id: string) {
-  const p = await prisma.portfolio.findUnique({ where: { id } });
+  const p = await loadPortfolioForAccessCheck(id);
   if (!p) throw new NotFoundError('Portfolio not found');
   if (p.userId === userId) return p;
   // Family-shared portfolios: any ACTIVE OWNER (or the CONTRIBUTOR
@@ -232,7 +249,7 @@ async function ensureOwnership(userId: string, id: string) {
  * flows, etc.).
  */
 export async function ensureReadable(userId: string, id: string) {
-  const p = await prisma.portfolio.findUnique({ where: { id } });
+  const p = await loadPortfolioForAccessCheck(id);
   if (!p) throw new NotFoundError('Portfolio not found');
   if (p.userId === userId) return p;
 
