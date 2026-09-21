@@ -7,6 +7,17 @@ import { z } from 'zod';
  * rather than two copies that can drift apart.
  */
 export const PLACEHOLDER_ONLYOFFICE_SECRET = 'dev-onlyoffice-secret-change-me';
+/**
+ * The password `20260421150000_phase_4_5_rls_app_role` gives the app role when
+ * it creates it. Convenient for a local database and fatal anywhere reachable:
+ * it is in the repository, so it is not a secret. Production ran on it until
+ * 2026-09-21 — reachable through the database's public proxy — and it is
+ * checked here so no deployment can quietly do so again.
+ *
+ * The migration itself cannot be edited: it has been applied, and changing an
+ * applied migration's checksum makes `prisma migrate deploy` refuse to run.
+ */
+export const DEV_APP_ROLE_PASSWORD = 'portfolioos_app_dev';
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -216,6 +227,8 @@ export interface SecretProblems {
 
 export function collectProductionSecretProblems(e: {
   NODE_ENV: string;
+  DATABASE_URL?: string | undefined;
+  DIRECT_URL?: string | undefined;
   APP_ENCRYPTION_KEY?: string | undefined;
   SECRETS_KEY?: string | undefined;
   ONLYOFFICE_JWT_SECRET: string;
@@ -257,6 +270,24 @@ export function collectProductionSecretProblems(e: {
         'with it; without it they cannot be stored securely.',
     );
   }
+  for (const [name, url] of [
+    ['DATABASE_URL', e.DATABASE_URL],
+    ['DIRECT_URL', e.DIRECT_URL],
+  ] as const) {
+    // Match the credential, not the whole string: the role name and host vary,
+    // and it is the password that is public.
+    if (url && new RegExp(`://[^:@/]+:${DEV_APP_ROLE_PASSWORD}@`).test(url)) {
+      out.fatal.push(
+        `${name} still uses the database password committed in the app-role ` +
+          'migration. Anyone who has read this repository can connect to this ' +
+          'database directly, and row-level security does not stop them — the ' +
+          'policies trust a session variable the connection itself sets. Set a ' +
+          "password on the role (ALTER ROLE ... WITH PASSWORD) and update this " +
+          'variable.',
+      );
+    }
+  }
+
   if (e.ONLYOFFICE_JWT_SECRET === PLACEHOLDER_ONLYOFFICE_SECRET) {
     out.fatal.push(
       'ONLYOFFICE_JWT_SECRET is still the committed placeholder. Document ' +
