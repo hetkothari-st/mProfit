@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpenCheck, ChevronRight, ChevronDown, Plus, Trash2,
   FileText, Scale, TrendingDown, Landmark, Sparkles, Loader2,
+  Eye, Download, FolderDown, Sheet,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -356,6 +357,38 @@ function VouchersTab() {
     queryFn: () => accountingApi.listVouchers({ type: filterType || undefined, page, limit: 50 }),
   });
 
+  // Receipts. `view` opens the PDF in a tab, `download` saves it; the bundle
+  // buttons take whatever the type filter is currently showing, so the file
+  // matches the screen.
+  const [bundling, setBundling] = useState<'zip' | 'xlsx' | null>(null);
+
+  const receipt = async (action: 'view' | 'download', v: VoucherDTO) => {
+    try {
+      if (action === 'view') {
+        await accountingApi.viewReceipt(v.id);
+      } else {
+        await accountingApi.downloadReceipt(v.id, `${v.date}-${v.voucherNo}.pdf`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not produce that receipt');
+    }
+  };
+
+  const bundle = async (format: 'zip' | 'xlsx') => {
+    setBundling(format);
+    try {
+      await accountingApi.downloadReceiptBundle(format, {
+        ...(filterType ? { type: filterType as VoucherType } : {}),
+      });
+    } catch (e) {
+      // A 404 here means the range genuinely holds no receipts, which is worth
+      // saying plainly rather than handing over an empty archive.
+      toast.error(e instanceof Error ? e.message : 'Could not build that download');
+    } finally {
+      setBundling(null);
+    }
+  };
+
   const deleteMut = useMutation({
     mutationFn: (id: string) => accountingApi.deleteVoucher(id),
     onSuccess: () => { toast.success('Deleted'); qc.invalidateQueries({ queryKey: ['vouchers'] }); },
@@ -391,6 +424,26 @@ function VouchersTab() {
           {VOUCHER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </Select>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => bundle('zip')}
+            disabled={bundling !== null}
+            title="Every rent, premium and loan receipt in view, one PDF each, as a ZIP"
+          >
+            {bundling === 'zip' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderDown className="h-4 w-4" />}
+            Receipts (ZIP)
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => bundle('xlsx')}
+            disabled={bundling !== null}
+            title="The same receipts as one spreadsheet, totalled"
+          >
+            {bundling === 'xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sheet className="h-4 w-4" />}
+            Receipts (Excel)
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -441,9 +494,30 @@ function VouchersTab() {
                       <td data-label="Amount" className="px-4 py-3 text-right tabular-nums font-medium">{formatINR(total.toFixed(4))}</td>
                       <td data-label="Entries" className="px-4 py-3 text-muted-foreground text-xs hidden sm:table-cell">{v.entries.length} entr{v.entries.length === 1 ? 'y' : 'ies'}</td>
                       <td data-label="" className="px-4 py-3">
-                        <button type="button" onClick={() => { if (confirm('Delete this voucher?')) deleteMut.mutate(v.id); }} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2.5">
+                          {/* Rent, premiums and loan instalments are the ones
+                              people actually need on paper; every voucher can
+                              still produce one, it is just plainer. */}
+                          <button
+                            type="button"
+                            title="View receipt"
+                            onClick={() => receipt('view', v)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Download receipt (PDF)"
+                            onClick={() => receipt('download', v)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </button>
+                          <button type="button" title="Delete voucher" onClick={() => { if (confirm('Delete this voucher?')) deleteMut.mutate(v.id); }} className="text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

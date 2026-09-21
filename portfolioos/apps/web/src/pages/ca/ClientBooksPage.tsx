@@ -14,6 +14,10 @@ import {
   Upload,
   FileClock,
   RefreshCw,
+  Eye,
+  Download,
+  FolderDown,
+  Sheet,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -24,6 +28,7 @@ import { cn } from '@/lib/cn';
 import { formatINR, toDecimal } from '@everypaisa/shared';
 import {
   caApi,
+  caReceiptsApi,
   type CaAccountRow,
   type CaTransactionRow,
   type CaFmvRow,
@@ -294,6 +299,30 @@ export function ClientBooksPage() {
       {tab === 'vouchers' && (
         <>
           <div className="mb-3 flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                caReceiptsApi
+                  .bundle(clientId, 'zip')
+                  .catch((e) => toast.error(apiErrorMessage(e, 'Could not build that download')))
+              }
+              title="Every rent, premium and loan receipt in these books, one PDF each"
+            >
+              <FolderDown className="h-4 w-4" /> Receipts (ZIP)
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                caReceiptsApi
+                  .bundle(clientId, 'xlsx')
+                  .catch((e) => toast.error(apiErrorMessage(e, 'Could not build that download')))
+              }
+              title="The same receipts as one spreadsheet, totalled"
+            >
+              <Sheet className="h-4 w-4" /> Receipts (Excel)
+            </Button>
             {generateButton}
             <Button size="sm" onClick={() => setVoucherOpen(true)}>
               <Plus className="h-4 w-4" /> Post voucher
@@ -328,14 +357,34 @@ export function ClientBooksPage() {
               const v = (vouchers.data?.vouchers ?? [])[i];
               if (!v) return null;
               return (
-                <RowButton
-                  label={`Delete voucher ${v.voucherNo}`}
-                  danger
-                  disabled={removeVoucher.isPending}
-                  onClick={() => removeVoucher.mutate(v.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </RowButton>
+                <div className="flex items-center gap-1.5">
+                  <RowButton
+                    label={`View receipt ${v.voucherNo}`}
+                    onClick={() => caReceiptsApi.view(clientId, v.id).catch((e) =>
+                      toast.error(apiErrorMessage(e, 'Could not produce that receipt')),
+                    )}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                  </RowButton>
+                  <RowButton
+                    label={`Download receipt ${v.voucherNo}`}
+                    onClick={() =>
+                      caReceiptsApi
+                        .download(clientId, v.id, `${v.date}-${v.voucherNo}.pdf`)
+                        .catch((e) => toast.error(apiErrorMessage(e, 'Could not download that receipt')))
+                    }
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </RowButton>
+                  <RowButton
+                    label={`Delete voucher ${v.voucherNo}`}
+                    danger
+                    disabled={removeVoucher.isPending}
+                    onClick={() => removeVoucher.mutate(v.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </RowButton>
+                </div>
               );
             }}
           />

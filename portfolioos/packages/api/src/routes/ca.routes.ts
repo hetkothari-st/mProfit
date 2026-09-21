@@ -41,6 +41,9 @@ import {
   caListFmv,
   caSetFmv,
   caDeleteFmv,
+  caReceiptPdf,
+  caReceiptsZip,
+  caReceiptsWorkbook,
 } from '../controllers/caAccounting.controller.js';
 
 /**
@@ -88,6 +91,12 @@ caRouter.delete('/clients/:clientId/vouchers/:id', asyncHandler(caDeleteVoucher)
 // this on open; this is for catching up without a reload after the client has
 // added something.
 caRouter.post('/clients/:clientId/vouchers/generate', asyncHandler(caGenerateFromActivity));
+
+// Receipts for the client's books. Declared before `/vouchers/:id` for the
+// same reason as on the client's own router: these names are not voucher ids.
+caRouter.get('/clients/:clientId/receipts.zip', asyncHandler(caReceiptsZip));
+caRouter.get('/clients/:clientId/receipts.xlsx', asyncHandler(caReceiptsWorkbook));
+caRouter.get('/clients/:clientId/vouchers/:id/receipt.pdf', asyncHandler(caReceiptPdf));
 
 // A CA may add a transaction and correct one, but never delete one — there
 // is deliberately no DELETE route here and no RLS policy that would satisfy
