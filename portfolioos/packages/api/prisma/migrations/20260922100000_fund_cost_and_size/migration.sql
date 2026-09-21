@@ -67,7 +67,8 @@ VALUES (
         "requireGrowthOption": true,
         "requireOpenEnded": true,
         "maxNavStalenessDays": 10,
-        "maxNavGapTradingDays": 5
+        "maxNavGapTradingDays": 5,
+        "maxCalendarGapWeekdays": 4
       },
       "metrics": {
         "rollingReturnYears": 3,
@@ -107,3 +108,46 @@ VALUES (
     'v2 — cost and size restored. TER (AMFI published, direct plan) is scored again for both models; a scheme with no AUM is ineligible rather than scored without it. Switch recommendations are suppressed for lots held under 365 days while no exit-load source exists, since the cost of leaving cannot be stated.',
     CURRENT_TIMESTAMP
 );
+
+-- ─── Scoring run log ─────────────────────────────────────────────
+--
+-- One row per fund-scoring run that refused to write, and why.
+--
+-- Same contract as the market-feed run log the price feeds keep: recorded,
+-- never swallowed, queryable (CONTEXT.md §3.5). A separate table because it
+-- describes a JOB rather than a FEED — a scoring run reads a dozen sources
+-- and writes snapshots, where a feed run fetches one file.
+--
+-- NOT user-scoped. It describes the market pass, not anyone's money, so no
+-- RLS policy and no USER_SCOPED_MODELS entry (§5) — like StockMaster, MFNav
+-- and FundScoreSnapshot itself.
+CREATE TABLE "ScoringRunLog" (
+    "id" TEXT NOT NULL,
+    "check" TEXT NOT NULL,
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "status" TEXT NOT NULL,
+    "methodologyVersionId" TEXT,
+    "asOfDate" DATE NOT NULL,
+    "tradingDays" INTEGER,
+    "gapWeekdays" INTEGER,
+    "gapFrom" DATE,
+    "gapTo" DATE,
+    "reason" TEXT,
+    "details" JSONB,
+
+    CONSTRAINT "ScoringRunLog_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX "ScoringRunLog_check_startedAt_idx" ON "ScoringRunLog"("check", "startedAt");
+CREATE INDEX "ScoringRunLog_asOfDate_idx" ON "ScoringRunLog"("asOfDate");
+
+-- Skip GRANT when running on a managed DB that doesn't have the
+-- portfolioos_app role (e.g. Neon). Default privileges from the earlier
+-- ALTER DEFAULT PRIVILEGES would have covered it anyway.
+DO $do$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'portfolioos_app') THEN
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON "ScoringRunLog" TO portfolioos_app';
+  END IF;
+END
+$do$;

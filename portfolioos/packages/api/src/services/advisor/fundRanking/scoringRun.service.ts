@@ -16,6 +16,12 @@ import { ADVISOR_ASSET_BUCKETS } from '../types.js';
 import { bucketForScheme, isPassive, trackedIndexKey } from './categoryMap.js';
 import { assessEligibility } from './eligibility.js';
 import { buildTradingCalendar } from './navGaps.js';
+import {
+  DEFAULT_MAX_CALENDAR_GAP_WEEKDAYS,
+  describeCalendarGap,
+  judgeCalendar,
+} from './calendarIntegrity.js';
+import { captureJobFailure } from '../../../lib/jobAlerting.js';
 import { computeMetrics, median, monthlyReturnsPct, rollingReturnsPct } from './metrics.js';
 import { rankBucket, scoreBucket, type ScoringInput } from './scoring.js';
 import type { DetailedExclusionReason, FundCandidate, MethodologyConfig } from './types.js';
@@ -169,6 +175,24 @@ export async function runFundScoring(args: {
     '[fundScoring] trading calendar derived from the NAV universe',
   );
 
+  // Is the calendar itself trustworthy?
+  //
+  // Every gap rule below measures a fund AGAINST this calendar, and the
+  // calendar comes from the same feed the funds do. If the feed stops, the
+  // calendar stops with it: three weeks of missing NAVs do not look like
+  // three weeks of gaps in 14,000 funds, they look like three weeks that
+  // were not trading days, and every fund passes unanimously. The
+  // measurement and the thing measured fail together, in agreement.
+  //
+  // So the calendar is checked against something the feed cannot influence:
+  // the weekday. See calendarIntegrity.ts.
+  await assertCalendarIsTrustworthy({
+    tradingDays,
+    asOfDate,
+    config: args.config,
+    methodologyVersionId: args.methodologyVersionId,
+  });
+
   let snapshotsWritten = 0;
   let failures = 0;
 
@@ -305,4 +329,100 @@ export async function runFundScoring(args: {
     snapshotsWritten,
     failures,
   };
+}
+
+/**
+ * Thrown when the trading calendar cannot be trusted. The scoring run stops
+ * before writing anything, so yesterday's snapshot stays in force and the
+ * existing staleness gate (`snapshotMaxAgeDays`, default 3) drops advice back
+ * to category level on its own once that snapshot ages out.
+ *
+ * That fallback is the point: a stale ranking that says so is a degraded
+ * service, and a fresh ranking computed over a market we stopped watching is
+ * a wrong answer delivered confidently.
+ */
+export class CalendarIntegrityError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly runId: string | null,
+  ) {
+    super(`[fundScoring] ${reason}`);
+    this.name = 'CalendarIntegrityError';
+  }
+}
+
+async function assertCalendarIsTrustworthy(args: {
+  tradingDays: readonly string[];
+  asOfDate: Date;
+  config: MethodologyConfig;
+  methodologyVersionId: string;
+}): Promise<void> {
+  const max =
+    args.config.eligibility.maxCalendarGapWeekdays ?? DEFAULT_MAX_CALENDAR_GAP_WEEKDAYS;
+  const verdict = judgeCalendar(
+    args.tradingDays,
+    args.asOfDate.toISOString().slice(0, 10),
+    max,
+  );
+
+  if (verdict.ok) {
+    logger.info(
+      {
+        tradingDays: args.tradingDays.length,
+        longestGapWeekdays: verdict.gap?.weekdays ?? 0,
+        maxCalendarGapWeekdays: max,
+      },
+      '[fundScoring] trading calendar looks like a market that was open',
+    );
+    return;
+  }
+
+  const gap = verdict.gap!;
+  // Written BEFORE the throw. A refusal that fails to record itself leaves
+  // exactly the silence this check exists to break (CONTEXT.md §3.5).
+  const row = await prisma.scoringRunLog.create({
+    data: {
+      check: 'calendar_integrity',
+      status: 'REFUSED',
+      methodologyVersionId: args.methodologyVersionId,
+      asOfDate: args.asOfDate,
+      tradingDays: args.tradingDays.length,
+      gapWeekdays: gap.weekdays,
+      gapFrom: new Date(`${gap.from}T00:00:00.000Z`),
+      gapTo: new Date(`${gap.to}T00:00:00.000Z`),
+      reason: verdict.reason,
+      details: { missingWeekdays: gap.missing, maxCalendarGapWeekdays: max },
+    },
+  });
+
+  logger.error(
+    {
+      runId: row.id,
+      gap: describeCalendarGap(gap),
+      gapFrom: gap.from,
+      gapTo: gap.to,
+      gapWeekdays: gap.weekdays,
+      maxCalendarGapWeekdays: max,
+      tradingDays: args.tradingDays.length,
+      missingWeekdays: gap.missing,
+    },
+    `[fundScoring] refusing to score: ${verdict.reason}`,
+  );
+
+  const err = new CalendarIntegrityError(verdict.reason!, row.id);
+  captureJobFailure(err, {
+    job: 'fund_scoring',
+    check: 'calendar_integrity',
+    runId: row.id,
+    reason: verdict.reason,
+    context: {
+      asOfDate: args.asOfDate.toISOString().slice(0, 10),
+      tradingDays: args.tradingDays.length,
+      gapFrom: gap.from,
+      gapTo: gap.to,
+      gapWeekdays: gap.weekdays,
+      maxCalendarGapWeekdays: max,
+    },
+  });
+  throw err;
 }

@@ -515,3 +515,159 @@ the derivation — is harmless: any real scheme name also matches the four-word
 brand, which is longer.
 
 Full table in `src/priceFeeds/amcBrandMap.ts`, one commented row per AMC.
+
+---
+
+# F. Calendar integrity — checking the ruler
+
+## The circularity
+
+`nav_history_gap` (D) measures each fund against a trading calendar derived
+from the NAV universe. That is the right definition of a trading calendar, and
+it has one blind spot that matters enormously:
+
+**If the whole feed stops, the calendar stops with it.**
+
+Three weeks of missing NAVs do not appear as three weeks of gaps in fourteen
+thousand funds. They appear as three weeks that simply *were not trading
+days*, and every fund passes the gap check unanimously. The measurement and
+the thing being measured fail together, silently, and in agreement with each
+other.
+
+That is the AMFI outage again, one level up. The first version of that bug was
+a parser reading a plan name where a NAV belonged. This version would be a
+ranking computed over a market we had stopped watching — and unlike a parse
+failure, it produces output that looks exactly as confident as the real thing.
+
+## The check
+
+The only reference the feed cannot influence is **the weekday**. Inside the
+scoring window, `longestWeekdayGap` finds the longest run of consecutive
+Mon–Fri dates absent from the calendar. If it exceeds
+`maxCalendarGapWeekdays` — config, **default 4** — the scoring run refuses:
+
+- a `ScoringRunLog` row (`check: 'calendar_integrity'`, `status: 'REFUSED'`)
+  with the span, the threshold and the missing weekdays, written **before** the
+  throw;
+- a Sentry capture through `captureJobFailure`, the same tag-and-fingerprint
+  shape the feed canary uses;
+- a `logger.error` carrying `2026-03-02..2026-03-23 (15 weekdays)`;
+- `CalendarIntegrityError`, thrown **before a single snapshot is written**.
+
+## Judgement call: the threshold is loose on purpose
+
+Four weekdays is not a tight bound on real market holidays. The Indian market
+closes for weekends and for clusters that reach three weekdays at the outside —
+Diwali's Laxmi Pujan beside Balipratipada, a midweek Holi, an election day
+against a weekend.
+
+The threshold sits just *above* that, deliberately:
+
+- a **false positive** fails an entire scoring run and drops every client to
+  category advice for a day;
+- a **false negative** lets one more holiday-length hole through, which the
+  per-fund gap rule would catch anyway once the feed resumed.
+
+The check is not trying to detect holidays. It is trying to detect *us*. A
+fortnight with no NAV from any scheme in the country is not a market event.
+
+## Judgement call: nothing is written, not even a best effort
+
+A partial set of scores would be the worst outcome available. Some funds would
+rank, others would not, and the result would carry no mark distinguishing it
+from a complete pass. `FundScoreSnapshot` has no "degraded" flag and should not
+grow one for this: the honest representation of "we could not score today" is
+*no rows for today*.
+
+## Judgement call: the fallback already existed
+
+The refusal leans on machinery already in place rather than adding more. With
+no rows written, `latestSnapshotDate` keeps returning yesterday's date, and
+`snapshotIsFresh` (`snapshotMaxAgeDays`, default 3) keeps returning true — so
+yesterday's ranking stays in force for three days. After that the advisor
+builder sets `fallbackReason: 'snapshot_stale'` and every client gets category
+advice until the feed recovers.
+
+Nothing was built for this. It is asserted in a test so a future change to
+staleness handling cannot quietly remove the fallback that a refusal depends
+on.
+
+## Judgement call: an empty calendar does not fire
+
+A universe with no NAV dates at all is a different failure with a different
+name, and reporting it as an infinite calendar gap would be both true and
+useless — it would also fail every run on a fresh database before the first
+NAV sync. `longestWeekdayGap` returns null for an empty calendar, matching the
+existing no-fire behaviour of the per-fund gap rule when no calendar is
+supplied.
+
+## Judgement call: the leading edge is not a gap, the trailing edge is
+
+The window runs from the calendar's own first day to `asOf`, not from the start
+of the scoring window to the calendar's last day.
+
+- **Leading**: "we hold no NAVs from 2021" is an absence of history, which the
+  track-record rules judge. Counting it here would fail every fund on a young
+  database.
+- **Trailing**: a feed that died three weeks ago shows up *only* as a trailing
+  hole, with no "next trading day" to bound it. Stopping at the calendar's last
+  day — the obvious implementation — would find nothing in exactly the case
+  that matters most. There is a test for this.
+
+## Judgement call: a new table, not `FeedRunLog`
+
+The spec asked for a FeedRunLog-style record. `FeedRunLog` does not exist on
+this branch: it arrives with the AMFI hotfix (#135), which is not on `main`
+yet. Adding a second migration that creates the same table would make whichever
+PR merged second fail to apply.
+
+`ScoringRunLog` is therefore a sibling rather than a copy, and the distinction
+is real: a **feed** run fetches one file, a **scoring** run reads a dozen
+sources and writes snapshots. Same contract — recorded, never swallowed,
+market-level, no RLS, no `USER_SCOPED_MODELS` entry (§5) — different subject.
+
+Same reasoning for `captureJobFailure` in `lib/jobAlerting.ts`, which mirrors
+`captureFeedFailure` from #135/#136. Both use tags for the identifying fields
+and a fingerprint of (subject, check) so a week of nightly failures is one
+Sentry issue rather than seven. **When #135 lands, these two should collapse
+into one helper, and `lib/jobAlerting.ts` is where it should live.** Until
+then the duplication is two small functions, which is cheaper than either
+branch waiting on the other.
+
+## Interaction with the AMFI backfill (#135)
+
+These two changes touch the same data from opposite ends, and the order they
+run in matters.
+
+`backfill:amfi-nav-gap` repairs `MFNav` for the window the sync missed, by
+pulling AMFI's historical NAV report. **That backfill is what makes this check
+pass again.** Until it runs, the outage window is permanently absent from the
+trading calendar, and every scoring run whose window still contains it will
+keep refusing — correctly, because the history really does have a hole in it.
+
+Three consequences worth stating plainly:
+
+1. **Fix the feed first, then backfill, then expect scoring to resume.**
+   Restarting the NAV sync alone is not enough. New NAVs arrive from today
+   forward; the hole stays in the middle of the five-year window and the
+   calendar check keeps firing on it. The refusal is not a bug to work around
+   by raising the threshold — it is the check correctly reporting that the
+   backfill has not been run.
+
+2. **The window is five years, so the hole ages out slowly.** A three-week
+   outage in March 2026 sits inside the scoring window until March 2031. There
+   is no "wait it out" option on any useful timescale.
+
+3. **A partial backfill still fails, and should.** AMFI's historical report is
+   fetched month by month; if one month fails and the others succeed, the
+   calendar still has a month-shaped hole and the check still refuses. The
+   backfill script reports rows written per month for exactly this reason —
+   its output is what tells you whether scoring will resume.
+
+The reverse interaction is also worth noting: once the backfill has run,
+`nav_history_gap` (D) becomes meaningful again for individual funds inside
+that window. Before the backfill every fund looks equally healthy there,
+because the calendar has no days for them to have missed. Restoring the
+calendar restores the per-fund rule's ability to tell funds apart — the two
+checks are the same measurement at two scales, and the backfill is what makes
+either of them true.

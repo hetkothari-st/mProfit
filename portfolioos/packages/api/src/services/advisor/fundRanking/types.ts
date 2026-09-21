@@ -217,6 +217,17 @@ export interface MethodologyConfig {
      * priced for a week is not one to rank, let alone recommend.
      */
     maxNavGapTradingDays?: number;
+    /**
+     * The longest run of consecutive WEEKDAYS the universe-derived trading
+     * calendar may be missing before the scoring run refuses to write.
+     *
+     * Not a bound on real holidays — it sits just above the longest cluster
+     * the Indian market can legitimately close for (three weekdays at the
+     * outside), because the calendar is derived from the same feed the funds
+     * are, so a dead feed makes every fund look healthy against a calendar
+     * that stopped with it. Default 4 when absent.
+     */
+    maxCalendarGapWeekdays?: number;
   };
   metrics: {
     rollingReturnYears: number;

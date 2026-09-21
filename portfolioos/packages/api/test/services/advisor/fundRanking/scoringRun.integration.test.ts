@@ -128,9 +128,21 @@ describe('runFundScoring', () => {
       // in navGaps.test.ts against a fixture with a real calendar. Here it
       // would exclude every fixture before scoring ran, so the rule is turned
       // off for this test and only this test.
+      //
+      // The calendar-integrity check is turned off here for a related but
+      // distinct reason: it is judged against the WHOLE universe, and the
+      // database this suite shares holds sparse seeded history with weekday
+      // holes twenty-two days long. On a production database of real daily
+      // NAVs it passes; here it would refuse every run before scoring
+      // started. Its own coverage is in calendarIntegrity.test.ts and
+      // calendarRefusal.integration.test.ts.
       return {
         ...config,
-        eligibility: { ...config.eligibility, maxNavGapTradingDays: 100_000 },
+        eligibility: {
+          ...config.eligibility,
+          maxNavGapTradingDays: 100_000,
+          maxCalendarGapWeekdays: 100_000,
+        },
       } as MethodologyConfig;
     });
 
@@ -167,7 +179,16 @@ describe('runFundScoring', () => {
       const row = await prisma.rankingMethodologyVersion.findUniqueOrThrow({
         where: { id: methodologyId },
       });
-      return row.config as unknown as MethodologyConfig;
+      // Same two relaxations, and for the same reasons, as the test above.
+      const base = row.config as unknown as MethodologyConfig;
+      return {
+        ...base,
+        eligibility: {
+          ...base.eligibility,
+          maxNavGapTradingDays: 100_000,
+          maxCalendarGapWeekdays: 100_000,
+        },
+      } as MethodologyConfig;
     });
 
     const countBefore = await runAsSystem(() =>
