@@ -26,6 +26,7 @@ import {
   advisorKeys,
   bucketLabel,
   type AdvisorProvenance,
+  type FundSelectionEvidence,
   type Recommendation,
   type RecommendationStatus,
   type TradeAction,
@@ -72,12 +73,106 @@ function priorityTone(priority: number): { label: string; className: string } {
 }
 
 /**
- * Adviser-approved picks come off a human-curated product list; everything else
- * was ranked by the scoring model. The distinction matters enough to show it on
- * every card rather than bury it in "Why this".
+ * Where the instrument came from, shown on every card rather than buried in
+ * "Why this". A client is entitled to know whether a human picked this fund,
+ * the firm's methodology did, or it came off a NAV ranking with nothing behind
+ * it — those are three different levels of evidence.
  */
 function isAdviserApproved(provenance: AdvisorProvenance): boolean {
   return provenance === 'APPROVED_LIST';
+}
+
+function provenanceLabel(provenance: AdvisorProvenance): string {
+  switch (provenance) {
+    case 'APPROVED_LIST':
+      return 'Adviser-approved product';
+    case 'RANKED_UNIVERSE':
+      return 'House methodology';
+    case 'FALLBACK_RANKING':
+      return 'Algorithmically ranked';
+    default:
+      return 'No product named';
+  }
+}
+
+/**
+ * The case for the fund, in the client's view.
+ *
+ * Shown rather than hidden behind a tooltip because "why this fund?" is the
+ * question a named recommendation raises, and an answer that has to be asked
+ * for is not really an answer. The data gaps are shown too: what the score
+ * could NOT take into account is part of how much weight it deserves.
+ */
+function NamedFundEvidence({
+  evidence,
+  schemeCode,
+}: {
+  evidence: FundSelectionEvidence | null;
+  schemeCode: string | null;
+}) {
+  if (!evidence) return null;
+  const metrics = evidence.metrics ?? {};
+  const figures: Array<[string, string]> = [];
+  const num = (key: string, label: string, suffix = '%') => {
+    const raw = metrics[key];
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      figures.push([label, `${raw.toFixed(2)}${suffix}`]);
+    }
+  };
+  num('trackingDifferencePct', 'Tracking difference');
+  num('trackingErrorPct', 'Tracking error');
+  num('outperformanceConsistencyPct', 'Beat its peers in');
+  num('downsideCapturePct', 'Downside captured');
+  num('sortino', 'Sortino', '');
+
+  return (
+    <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-[11px] font-medium text-foreground">
+          Rank #{evidence.rankInBucket} of its bucket
+        </span>
+        {schemeCode && (
+          <span className="text-[11px] text-muted-foreground">Scheme {schemeCode}</span>
+        )}
+        <span className="text-[11px] text-muted-foreground">
+          Methodology v{evidence.methodologyVersion ?? '—'}
+          {evidence.asOfDate ? ` · scored ${evidence.asOfDate}` : ''}
+        </span>
+      </div>
+
+      {figures.length > 0 && (
+        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:grid-cols-3">
+          {figures.map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="font-medium tabular-nums text-foreground">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      {evidence.adjustments.length > 0 && (
+        <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
+          {evidence.adjustments.map((a) => (
+            <li key={`${a.kind}-${a.schemeCode}`}>{a.detail}</li>
+          ))}
+        </ul>
+      )}
+
+      {evidence.runnerUp && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Runner-up: {evidence.runnerUp.schemeName} — {evidence.runnerUp.whyItLost ?? 'ranked lower'}.
+        </p>
+      )}
+
+      {evidence.dataGaps.length > 0 && (
+        <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+          Not scored on {evidence.dataGaps.map((g) => g.metric).join(', ')} — we do not hold that data,
+          so its weight went to the metrics we do.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function titleCase(s: string): string {
@@ -290,7 +385,7 @@ export function RecommendationCard({ rec, llmEnabled }: RecommendationCardProps)
           title={`Provenance: ${rec.provenance}`}
         >
           {approved ? <BadgeCheck className="h-3.5 w-3.5" /> : <Cpu className="h-3.5 w-3.5" />}
-          {approved ? 'Adviser-approved product' : 'Algorithmically ranked'}
+          {provenanceLabel(rec.provenance)}
         </span>
       </div>
 
@@ -379,9 +474,12 @@ export function RecommendationCard({ rec, llmEnabled }: RecommendationCardProps)
               <p className="mt-2.5 text-[11px] text-muted-foreground">
                 {rec.provenance === 'APPROVED_LIST'
                   ? 'Instrument taken from your approved product list.'
-                  : 'Instrument ranked from NAV history, not from your approved list.'}
+                  : rec.provenance === 'RANKED_UNIVERSE'
+                    ? 'Chosen by the house ranking methodology, then fitted to this portfolio.'
+                    : 'Instrument ranked from NAV history, not from your approved list.'}
               </p>
             )}
+            <NamedFundEvidence evidence={rec.selectionEvidence} schemeCode={rec.namedSchemeCode} />
           </div>
         )}
       </div>

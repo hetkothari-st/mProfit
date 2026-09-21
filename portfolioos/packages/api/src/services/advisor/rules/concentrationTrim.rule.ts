@@ -28,6 +28,7 @@ import {
   MIN_TRADE_INR,
 } from '../constants.js';
 import { unitsFor } from '../allocationMath.js';
+import { resolveProduct } from '../productResolution.js';
 import type {
   AdvisorFacts,
   AdvisorHoldingFact,
@@ -125,6 +126,29 @@ function buildDraft(
     amountInr: money(m.amount),
   };
 
+  // Where the proceeds should go. Telling someone to sell without saying what
+  // to buy leaves the money in cash, which is its own mis-allocation — so the
+  // trim now names the destination the same way a rebalance does. The sell leg
+  // is unchanged; the buy leg is additive and only appears when the ranked
+  // universe (or the adviser's list) actually has a candidate.
+  const destination = resolveProduct(holding.bucket, facts);
+  const buy: TradeAction | null = destination
+    ? {
+        direction: 'BUY',
+        bucket: holding.bucket,
+        portfolioId: holding.portfolioId,
+        instrumentName: destination.product.label,
+        fundId: destination.product.fundId,
+        stockId: destination.product.stockId,
+        isin: null,
+        holdingKey: null,
+        // No unit count: the destination's price is not in facts, and a
+        // confidently wrong unit count is worse than an amount.
+        units: null,
+        amountInr: money(m.amount),
+      }
+    : null;
+
   const unitClause = sell.units
     ? ` — about ${sell.units} units`
     : ' — we are withholding a unit count because the last price we have for it is stale';
@@ -146,8 +170,8 @@ function buildDraft(
     ruleVersion: concentrationTrimRule.version,
     category: 'CONCENTRATION_TRIM',
     priority: BASE_PRIORITY + materialityOffset(m.amount, m.total),
-    action: [sell],
-    rationale,
+    action: buy ? [sell, buy] : [sell],
+    rationale: buy ? `${rationale} Put the proceeds into ${destination!.product.label}.` : rationale,
     inputsUsed: {
       asOf: facts.asOf?.toISOString() ?? null,
       totalPortfolioValue: m.total.toString(),
@@ -175,7 +199,7 @@ function buildDraft(
       },
     },
     // Sell-only: nothing is being bought, so there is no product to attribute.
-    provenance: { kind: 'NONE' },
+    provenance: destination ? destination.provenance : { kind: 'NONE' },
     dedupeKey: `CONCENTRATION_TRIM:${holding.holdingKey}`,
   };
 }

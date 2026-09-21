@@ -12,6 +12,7 @@
 
 import type { Decimal } from 'decimal.js';
 import type { RiskCategoryValue } from '../riskProfileMath.js';
+import type { SelectionConfig } from './fundRanking/types.js';
 
 export const ADVISOR_ASSET_BUCKETS = [
   'EQUITY_DOMESTIC',
@@ -109,6 +110,45 @@ export interface AdvisorTargetFact {
   targetPct: number;
 }
 
+/** Why a run could not name funds. Recorded rather than inferred, so "it just
+ *  gave categories" is always answerable. */
+export type NamedFundFallbackReason =
+  | 'flag_disabled'
+  | 'no_signed_methodology'
+  | 'snapshot_stale'
+  | 'no_risk_profile';
+
+/** The ranked universe and the audit trail that goes with it. Present on every
+ *  run: when `available` is false, `fallbackReason` says which gate closed. */
+export interface AdvisorFundRankingFact {
+  available: boolean;
+  fallbackReason: NamedFundFallbackReason | null;
+  methodologyVersionId: string | null;
+  methodologyVersion: number | null;
+  asOfDate: Date | null;
+  /** Rank-ordered eligible candidates per bucket, best first. */
+  candidates: Record<AdvisorAssetBucketValue, RankedCandidateLike[]>;
+  /** The standing pick per bucket and how long it has been challenged. */
+  incumbents: Record<string, { schemeCode: string | null; challengerStreak: number }>;
+  /** The methodology's selection parameters, so rules apply the same ones the
+   *  snapshot was built under rather than a compiled-in copy. */
+  selectionConfig: SelectionConfig | null;
+}
+
+/** Structural shape of a ranked candidate. Kept here rather than imported from
+ *  fundRanking/ so this contract file stays free of the ranking internals. */
+export interface RankedCandidateLike {
+  schemeCode: string;
+  schemeName: string;
+  amcName: string;
+  fundId: string | null;
+  score: number;
+  rankInBucket: number;
+  overlapPct: number | null;
+  metrics: Record<string, unknown>;
+  dataGaps: Array<{ metric: string; reason: string; weightReleased: number }>;
+}
+
 export interface AdvisorFacts {
   userId: string;
   /** Every time-dependent rule reads this instead of Date.now(), so a rule's
@@ -134,8 +174,13 @@ export interface AdvisorFacts {
   harvestCandidates: AdvisorHarvestCandidateFact[];
   /** Rank-ordered, adviser-curated. Empty bucket = nothing approved yet. */
   approvedProducts: Record<AdvisorAssetBucketValue, AdvisorProductFact[]>;
-  /** Rank-ordered, NAV-derived. Only consulted when the approved list is empty. */
+  /** Rank-ordered, NAV-derived. The last resort, below the ranked universe:
+   *  past performance only, kept for buckets the methodology cannot rank. */
   fallbackRankings: Record<AdvisorAssetBucketValue, AdvisorProductFact[]>;
+  /** The deterministic, versioned fund ranking — the source of named funds. */
+  fundRanking: AdvisorFundRankingFact;
+  /** Value held per AMC, for the concentration cap in selection. */
+  valueByAmc: Record<string, Decimal>;
   liquidity: {
     liquidAssets: Decimal;
     monthlyExpenses: Decimal | null;
@@ -179,13 +224,18 @@ export interface TradeAction {
   amountInr: string;
 }
 
-export type ProvenanceValue = 'APPROVED_LIST' | 'FALLBACK_RANKING' | 'NONE';
+export type ProvenanceValue = 'APPROVED_LIST' | 'RANKED_UNIVERSE' | 'FALLBACK_RANKING' | 'NONE';
 
 export interface DraftProvenance {
   kind: ProvenanceValue;
   approvedProductId?: string;
   candidateLabel?: string;
   score?: number;
+  /** Set when the pick came from the ranked universe: everything needed to
+   *  reconstruct the choice years later. */
+  namedSchemeCode?: string;
+  methodologyVersionId?: string;
+  selectionEvidence?: Record<string, unknown>;
 }
 
 export interface RecommendationDraft {

@@ -52,7 +52,11 @@ export type TaxSlab = 'PCT_5' | 'PCT_20' | 'PCT_30' | 'UNSURE';
  * one misrepresents who stands behind the recommendation, so this is a union
  * rather than a string the UI pattern-matches on.
  */
-export type AdvisorProvenance = 'APPROVED_LIST' | 'FALLBACK_RANKING' | 'NONE';
+// Imported and re-exported, not re-declared: a local copy is how this page
+// drifted from the API once already (CONTEXT.md §11).
+import type { AdvisorProvenance, FundSelectionEvidence } from '@everypaisa/shared';
+
+export type { AdvisorProvenance, FundSelectionEvidence };
 
 /**
  * A deterministic rule that moved the raw questionnaire score into a
@@ -225,6 +229,10 @@ export interface Recommendation {
   modelPortfolioVersionId: string | null;
   provenance: AdvisorProvenance;
   provenanceRef: Record<string, unknown> | null;
+  /** Set when the house methodology named a scheme. */
+  namedSchemeCode: string | null;
+  methodologyVersionId: string | null;
+  selectionEvidence: FundSelectionEvidence | null;
   dedupeKey: string;
   supersededById: string | null;
   status: RecommendationStatus;

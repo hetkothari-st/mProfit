@@ -52,8 +52,12 @@ export interface AdvisorRunResult {
   completedAt: string | null;
 }
 
-const PROVENANCE_TO_DB: Record<ProvenanceValue, 'APPROVED_LIST' | 'FALLBACK_RANKING' | 'NONE'> = {
+const PROVENANCE_TO_DB: Record<
+  ProvenanceValue,
+  'APPROVED_LIST' | 'RANKED_UNIVERSE' | 'FALLBACK_RANKING' | 'NONE'
+> = {
   APPROVED_LIST: 'APPROVED_LIST',
+  RANKED_UNIVERSE: 'RANKED_UNIVERSE',
   FALLBACK_RANKING: 'FALLBACK_RANKING',
   NONE: 'NONE',
 };
@@ -124,7 +128,12 @@ function draftToCreateData(
   facts: AdvisorFacts,
   draft: RecommendationDraft,
 ): Prisma.AdvisorRecommendationUncheckedCreateInput {
-  const { kind, ...provenanceRef } = draft.provenance;
+  // The ranked-universe fields are promoted out of provenanceRef into their
+  // own columns: "which fund, chosen by which methodology, and on what
+  // evidence" is the question an audit asks, and answering it should not
+  // require digging through a JSON blob.
+  const { kind, namedSchemeCode, methodologyVersionId, selectionEvidence, ...provenanceRef } =
+    draft.provenance;
   return {
     userId,
     generationRunId: runId,
@@ -141,6 +150,12 @@ function draftToCreateData(
     provenanceRef:
       Object.keys(provenanceRef).length > 0
         ? (provenanceRef as unknown as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
+    methodologyVersionId: methodologyVersionId ?? null,
+    namedSchemeCode: namedSchemeCode ?? null,
+    selectionEvidence:
+      selectionEvidence != null
+        ? (selectionEvidence as unknown as Prisma.InputJsonValue)
         : Prisma.JsonNull,
     dedupeKey: draft.dedupeKey,
     status: 'OPEN',
@@ -173,6 +188,19 @@ export async function runAdvisorEngine(
       status: 'RUNNING',
       engineVersion: ADVISOR_ENGINE_VERSION,
       ruleVersionsSnapshot: ruleVersions as unknown as Prisma.InputJsonValue,
+      // Why this run could or could not name funds. Its own column rather than
+      // folded into ruleVersionsSnapshot, whose shape other code and tests
+      // already depend on: "it only gave me categories" must be answerable
+      // from the run without breaking the rule inventory to say so.
+      namedFundGate: {
+        available: facts.fundRanking.available,
+        fallbackReason: facts.fundRanking.fallbackReason,
+        methodologyVersionId: facts.fundRanking.methodologyVersionId,
+        methodologyVersion: facts.fundRanking.methodologyVersion,
+        snapshotAsOf: facts.fundRanking.asOfDate
+          ? facts.fundRanking.asOfDate.toISOString().slice(0, 10)
+          : null,
+      } as unknown as Prisma.InputJsonValue,
       riskProfileAssessmentId: facts.riskProfile.assessmentId,
     },
   });

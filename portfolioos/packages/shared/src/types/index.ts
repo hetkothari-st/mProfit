@@ -6,6 +6,7 @@ export * from './enums.js';
 export * from './imports.js';
 export * from './ingestionFailures.js';
 export * from './documents.js';
+export * from './advisorFunds.js';
 export * from './realEstate.js';
 export * from './gmailIngestion.js';
 export * from './preferences.js';

@@ -115,6 +115,20 @@ const EnvSchema = z.object({
   // /api/families endpoints 404 and the frontend Settings section hides
   // itself. Rolls out per beta cohort without touching solo users.
   ENABLE_FAMILY: z.enum(['true', 'false']).default('true'),
+  // Named-fund advice. With this off the advisor engine and the assistant
+  // still work, but they speak in categories ("a large-cap index fund")
+  // instead of naming a scheme. It defaults OFF because naming a scheme is
+  // regulated advice: it requires a signed-off ranking methodology and a
+  // registered adviser standing behind it, which the two variables below
+  // record. Turning it on without them is a configuration error, not a
+  // degraded mode — see collectProductionSecretProblems.
+  RIA_VERDICTS_ENABLED: z.enum(['true', 'false']).default('false'),
+  // The individual who signed off the fund-ranking methodology. Stamped onto
+  // RankingMethodologyVersion.signedOffBy, so "who decided these weights?"
+  // has an answer years later.
+  RIA_PRINCIPAL_OFFICER: z.string().optional(),
+  // SEBI registration number, disclosed at the end of any named-fund advice.
+  RIA_REGISTRATION_NUMBER: z.string().optional(),
   // Per §13: Anthropic zero-retention is an account-level setting, not a
   // per-request header. This env var is advisory — if set to 'true' we
   // log the assumption so ops can double-check the Anthropic console.
@@ -207,8 +221,33 @@ export function collectProductionSecretProblems(e: {
   ONLYOFFICE_JWT_SECRET: string;
   FINFACTOR_WEBHOOK_SECRET?: string | undefined;
   FINFACTOR_DEMO_MODE?: string | undefined;
+  RIA_VERDICTS_ENABLED?: string | undefined;
+  RIA_PRINCIPAL_OFFICER?: string | undefined;
+  RIA_REGISTRATION_NUMBER?: string | undefined;
 }): SecretProblems {
   const out: SecretProblems = { fatal: [], warnings: [] };
+
+  // Checked in every environment, not only production: naming schemes to a
+  // client without a named signatory or a registration number to disclose is
+  // exactly the configuration that must never boot, and a staging deployment
+  // that does it is already talking to someone.
+  if (e.RIA_VERDICTS_ENABLED === 'true') {
+    if (!e.RIA_PRINCIPAL_OFFICER?.trim()) {
+      out.fatal.push(
+        'RIA_VERDICTS_ENABLED is true but RIA_PRINCIPAL_OFFICER is not set. ' +
+          'Named-fund advice is signed off by a person; the ranking methodology ' +
+          'cannot record who approved it.',
+      );
+    }
+    if (!e.RIA_REGISTRATION_NUMBER?.trim()) {
+      out.fatal.push(
+        'RIA_VERDICTS_ENABLED is true but RIA_REGISTRATION_NUMBER is not set. ' +
+          'Every named-fund recommendation must disclose the adviser registration ' +
+          'number it is made under.',
+      );
+    }
+  }
+
   if (e.NODE_ENV !== 'production') return out;
 
   if (!e.APP_ENCRYPTION_KEY) {

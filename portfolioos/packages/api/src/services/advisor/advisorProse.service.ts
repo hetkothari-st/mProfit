@@ -288,7 +288,17 @@ export async function generateProseForRecommendation(
   // the deterministic rationale means the model invented a number about the
   // user's money, and nothing is written. Rejections are logged loudly because
   // a rising rate here is a signal that the prompt or the model needs work.
-  const consistency = assertProseConsistency(rec.rationale, prose);
+  // The scheme the engine actually chose is the only fund name the prose may
+  // use. Everything else — including a real fund the model happens to know —
+  // is a fabrication as far as this recommendation is concerned.
+  const allowedSchemeNames = [
+    ...new Set(
+      (Array.isArray(rec.action) ? (rec.action as Array<Record<string, unknown>>) : [])
+        .map((a) => a?.['instrumentName'])
+        .filter((n): n is string => typeof n === 'string' && n.trim() !== ''),
+    ),
+  ];
+  const consistency = assertProseConsistency(rec.rationale, prose, allowedSchemeNames);
   if (!consistency.ok) {
     logger.warn(
       { userId, recommendationId, model, offending: consistency.offending },

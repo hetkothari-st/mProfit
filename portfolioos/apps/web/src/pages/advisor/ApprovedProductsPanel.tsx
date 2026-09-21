@@ -141,13 +141,14 @@ export function ApprovedProductsPanel() {
           </span>
           <div className="min-w-0">
             <p className="text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85">
-              Your shortlist
+              Optional
             </p>
-            <CardTitle className="mt-1">Approved products</CardTitle>
+            <CardTitle className="mt-1">Override list</CardTitle>
             <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-              Instruments the advisor is allowed to recommend, grouped by bucket. Order matters —
-              the top-ranked product in each bucket is picked first. Leave a bucket empty and the
-              engine falls back to its own ranking.
+              You do not need to fill this in. Leave a bucket empty and the house methodology picks
+              the fund — scored nightly, the same way for every client, with the evidence shown on
+              each recommendation. Add instruments here only to override that for a bucket: your
+              choices then take precedence, in the order you set.
             </p>
           </div>
         </div>
@@ -222,8 +223,8 @@ export function ApprovedProductsPanel() {
         {!isLoading && !isError && grouped.length === 0 && (
           <EmptyState
             icon={ListChecks}
-            title="No approved products yet"
-            description="Add the funds and stocks you're happy to be recommended. Until then, every pick is algorithmically ranked."
+            title="No overrides — the house methodology applies"
+            description="Every bucket is picked by the signed-off ranking methodology. Add an instrument here only if you want to override it for that bucket."
           />
         )}
 

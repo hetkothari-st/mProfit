@@ -17,6 +17,7 @@ import { formatINR } from '@everypaisa/shared';
 import { bucketForAssetClass } from '../assetBuckets.js';
 import { CATEGORY_BASE_PRIORITY, MIN_HARVEST_LOSS_INR } from '../constants.js';
 import { unitsFor } from '../allocationMath.js';
+import { resolveProduct } from '../productResolution.js';
 import type {
   AdvisorFacts,
   AdvisorHarvestCandidateFact,
@@ -203,17 +204,41 @@ function buildDraft(
       ? `Set off against ${m.offset.label}, that loss is worth roughly ${inr(taxSaved)} in tax saved at ${m.offset.pct}%, provided you have matching gains to set it against.`
       : 'We do not have your tax slab on file, so we are not putting a number on the tax saved — complete the risk questionnaire and we will.';
 
+  // Re-entry. Harvesting sells the loser; without naming where the proceeds go
+  // the client books the loss and then sits in cash, which costs them the
+  // recovery they were harvesting around. The destination is a DIFFERENT fund
+  // in the same bucket, chosen by the same methodology as any other buy.
+  const reentry = resolveProduct(bucket, facts);
+  const buy: TradeAction | null = reentry
+    ? {
+        direction: 'BUY',
+        bucket,
+        portfolioId: candidate.portfolioId,
+        instrumentName: reentry.product.label,
+        fundId: reentry.product.fundId,
+        stockId: reentry.product.stockId,
+        isin: null,
+        holdingKey: null,
+        units: null,
+        amountInr: money(m.proceeds),
+      }
+    : null;
+
+  const reentryClause = buy
+    ? ` Put the ${inr(m.proceeds)} straight into ${reentry!.product.label} so the money stays invested while the loss is booked.`
+    : '';
+
   const rationale =
     `${candidate.assetName} is down ${inr(m.loss)} and the ${m.fy} financial year closes on 31 March. ` +
     `Sell ${unitClause} for about ${inr(m.proceeds)} to realise that ${inr(m.loss)} as a ${term} capital loss. ` +
-    `${taxClause} After 31 March this loss stops being available for this year's set-off.`;
+    `${taxClause} After 31 March this loss stops being available for this year's set-off.${reentryClause}`;
 
   return {
     ruleId: taxLossHarvestRule.id,
     ruleVersion: taxLossHarvestRule.version,
     category: 'TAX_HARVEST',
     priority: BASE_PRIORITY + materialityOffset(m.loss, m.total),
-    action: [sell],
+    action: buy ? [sell, buy] : [sell],
     rationale,
     inputsUsed: {
       asOf: facts.asOf.toISOString(),
@@ -241,7 +266,7 @@ function buildDraft(
       },
     },
     // Sell-only: no product is being recommended for purchase.
-    provenance: { kind: 'NONE' },
+    provenance: reentry ? reentry.provenance : { kind: 'NONE' },
     dedupeKey: `TAX_LOSS_HARVEST:${candidate.portfolioId}:${candidate.isin ?? candidate.assetName}`,
   };
 }

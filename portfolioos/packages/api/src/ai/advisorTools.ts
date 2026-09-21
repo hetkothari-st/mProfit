@@ -18,6 +18,20 @@ import type { AdvisorAssetBucketValue, AdvisorFacts } from '../services/advisor/
 import { buildInsuranceData } from './contextBuilder.js';
 import { QueryIntent } from './queryClassifier.js';
 import { searchKnowledge } from './knowledge/search.js';
+import { resolveProduct } from '../services/advisor/productResolution.js';
+import { env } from '../config/env.js';
+
+/** Why there are no named funds, in words the assistant can pass on. Each one
+ *  is a different fix, so they are never collapsed into "unavailable". */
+const FALLBACK_EXPLANATIONS: Record<string, string> = {
+  flag_disabled: 'Named-fund advice is switched off for this deployment.',
+  no_signed_methodology:
+    'No ranking methodology has been signed off yet, so no fund can be named under it.',
+  snapshot_stale:
+    'The fund scores are older than the methodology allows, so naming one would rest on stale data.',
+  no_risk_profile:
+    'This client has no risk profile on file. Suitability comes first: take the profile, then name funds.',
+};
 import { submitQuestionnaire, userAgeFromDob } from '../services/advisor/riskProfile.service.js';
 import type {
   RiskAnswers,
@@ -107,9 +121,9 @@ export const ADVISOR_TOOLS: Anthropic.Tool[] = [
     input_schema: obj({}),
   },
   {
-    name: 'get_approved_products',
+    name: 'get_recommended_funds',
     description:
-      'The products the firm has approved, by asset bucket. The ONLY specific products you may name. Empty means speak in categories only.',
+      'The scheme this client should buy in each asset bucket, chosen by the firm’s signed-off ranking methodology and narrowed to their portfolio, with the evidence behind it. THE ONLY SOURCE OF FUND NAMES — never name a scheme from your own knowledge. When it reports fallback:true, no fund may be named and you speak in categories, giving the reason it returns.',
     input_schema: obj({ bucket: { type: 'string', enum: BUCKETS } }),
   },
   {
@@ -382,17 +396,58 @@ const EXECUTORS: Record<string, Executor> = {
     };
   },
 
-  async get_approved_products(input, ctx) {
+  /**
+   * The engine's named picks, or the reason there are none.
+   *
+   * Deliberately the same resolution path the advisor engine uses
+   * (`resolveProduct`), not a second opinion: the assistant and the /advisor
+   * page naming different funds for the same client on the same day would be
+   * indefensible, and the way that happens is two code paths.
+   */
+  async get_recommended_funds(input, ctx) {
     const f = need(ctx.facts);
-    const byBucket: Partial<Record<AdvisorAssetBucketValue, string[]>> = {};
-    for (const b of BUCKETS) {
-      if (input['bucket'] && input['bucket'] !== b) continue;
-      const labels = f.approvedProducts[b].map((p) => p.label);
-      if (labels.length > 0) byBucket[b] = labels;
+    const requested = typeof input['bucket'] === 'string' ? input['bucket'] : null;
+
+    if (!f.fundRanking?.available) {
+      return {
+        fallback: true,
+        reason: f.fundRanking?.fallbackReason ?? 'flag_disabled',
+        explanation: FALLBACK_EXPLANATIONS[f.fundRanking?.fallbackReason ?? 'flag_disabled'],
+        byBucket: {},
+      };
     }
-    return Object.keys(byBucket).length > 0
-      ? { byBucket }
-      : { byBucket, note: 'No approved products are on file — speak in categories only.' };
+
+    const byBucket: Record<string, unknown> = {};
+    for (const b of BUCKETS) {
+      if (requested && requested !== b) continue;
+      const resolved = resolveProduct(b, f);
+      if (!resolved || resolved.provenance.kind === 'NONE') continue;
+      const evidence = resolved.provenance.selectionEvidence as
+        | Record<string, unknown>
+        | undefined;
+      byBucket[b] = {
+        schemeName: resolved.product.label,
+        schemeCode: resolved.provenance.namedSchemeCode ?? null,
+        // The share class is part of the advice, not a detail: a regular plan
+        // is the same fund with commission taken out of the client's return.
+        plan: 'Direct plan, growth option',
+        source: resolved.provenance.kind,
+        score: resolved.product.score,
+        rankInBucket: evidence?.['rankInBucket'] ?? null,
+        metrics: evidence?.['metrics'] ?? null,
+        dataGaps: evidence?.['dataGaps'] ?? [],
+        runnerUp: evidence?.['runnerUp'] ?? null,
+        hysteresisHeldIncumbent: evidence?.['hysteresisHeldIncumbent'] ?? false,
+      };
+    }
+
+    return {
+      fallback: false,
+      methodologyVersion: f.fundRanking.methodologyVersion,
+      asOfDate: f.fundRanking.asOfDate ? f.fundRanking.asOfDate.toISOString().slice(0, 10) : null,
+      registrationNumber: env.RIA_REGISTRATION_NUMBER ?? null,
+      byBucket,
+    };
   },
 
   async get_health_score(_input, ctx) {

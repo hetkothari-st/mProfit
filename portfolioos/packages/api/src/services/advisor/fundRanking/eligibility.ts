@@ -1,0 +1,155 @@
+/**
+ * Who is allowed into the ranking at all.
+ *
+ * Eligibility is a gate, not a score. A fund that fails any check is out with
+ * a typed reason — it does not get a low score and a chance to win anyway.
+ * Two of these are absolute regardless of how good the numbers look:
+ *
+ *   - REGULAR PLANS ARE NEVER ELIGIBLE. A regular plan is the same portfolio
+ *     as its direct twin with commission deducted from the investor's return.
+ *     Recommending one as a SEBI-registered adviser, who is paid by the client
+ *     rather than by the AMC, is indefensible.
+ *   - IDCW OPTIONS ARE NEVER ELIGIBLE. An IDCW payout is the investor's own
+ *     capital returned and taxed at slab. For a goal-linked plan it is strictly
+ *     worse than growth.
+ *
+ * Where an attribute is missing, the rule is the one in DATA-INVENTORY.md: if
+ * eligibility depends on it (plan, option, category, structure), the fund is
+ * excluded rather than admitted on an assumption. If only a metric depends on
+ * it, the metric degrades and the fund stays in.
+ *
+ * Pure: no DB, no clock — `asOf` is passed in.
+ */
+
+import { bucketForScheme, isPassive } from './categoryMap.js';
+import type {
+  EligibilityResult,
+  ExclusionReason,
+  FundCandidate,
+  FundTraits,
+  MethodologyConfig,
+} from './types.js';
+import type { AdvisorAssetBucketValue } from '../types.js';
+
+const MS_PER_DAY = 86_400_000;
+const DAYS_PER_YEAR = 365.25;
+
+/** AMFI scheme names carry the plan and option as words. This is the only
+ *  place we have to read them from, so the parsing is deliberately strict:
+ *  anything ambiguous returns UNKNOWN and the fund is excluded. */
+export function readTraits(candidate: FundCandidate, asOf: Date): FundTraits {
+  const name = candidate.schemeName.toLowerCase();
+  const header = (candidate.subCategory ?? '').toLowerCase();
+
+  // "Direct" appears as "- Direct Plan -" or "(Direct)". "Regular" likewise.
+  // A name with neither is pre-2013 nomenclature or a feed oddity; either way
+  // we do not know which share class this is.
+  const plan: FundTraits['plan'] = /\bdirect\b/.test(name)
+    ? 'DIRECT'
+    : /\bregular\b/.test(name)
+      ? 'REGULAR'
+      : 'UNKNOWN';
+
+  // IDCW is the current name; "dividend", "payout" and "reinvestment" are the
+  // older ones still present in AMFI's file.
+  const idcw = /\bidcw\b|\bdividend\b|\bpayout\b|\breinvest/.test(name);
+  const growth = /\bgrowth\b/.test(name);
+  const option: FundTraits['option'] = idcw ? 'IDCW' : growth ? 'GROWTH' : 'UNKNOWN';
+
+  const structure: FundTraits['structure'] = header.includes('open ended')
+    ? 'OPEN_ENDED'
+    : header.includes('close ended') || header.includes('closed ended')
+      ? 'CLOSE_ENDED'
+      : header.includes('interval')
+        ? 'CLOSE_ENDED'
+        : 'UNKNOWN';
+
+  const sorted = [...candidate.navHistory]
+    .filter((p) => p && typeof p.date === 'string' && Number.isFinite(p.nav) && p.nav > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+
+  const trackRecordYears =
+    first && last
+      ? (new Date(last.date).getTime() - new Date(first.date).getTime()) / MS_PER_DAY / DAYS_PER_YEAR
+      : null;
+  const navAgeDays = last
+    ? Math.floor((asOf.getTime() - new Date(last.date).getTime()) / MS_PER_DAY)
+    : null;
+
+  return {
+    plan,
+    option,
+    structure,
+    passive: isPassive(candidate.category, candidate.schemeName, candidate.subCategory),
+    segregatedPortfolio: /segregated\s*portfolio/i.test(candidate.schemeName),
+    trackRecordYears,
+    navAgeDays,
+  };
+}
+
+export function assessEligibility(
+  candidate: FundCandidate,
+  bucket: AdvisorAssetBucketValue,
+  config: MethodologyConfig,
+  asOf: Date,
+): EligibilityResult {
+  const traits = readTraits(candidate, asOf);
+  const reasons: ExclusionReason[] = [];
+
+  // AMFI stops listing a scheme that has merged or wound up, and the nightly
+  // universe refresh flips isActive. It is the closest thing we have to a
+  // merger flag; see DATA-INVENTORY.md.
+  if (!candidate.isActive) reasons.push('inactive');
+
+  if (config.eligibility.requireDirectPlan) {
+    if (traits.plan === 'REGULAR') reasons.push('regular_plan');
+    else if (traits.plan === 'UNKNOWN') reasons.push('plan_unknown');
+  }
+
+  if (config.eligibility.requireGrowthOption) {
+    if (traits.option === 'IDCW') reasons.push('not_growth_option');
+    else if (traits.option === 'UNKNOWN') reasons.push('option_unknown');
+  }
+
+  const mapped = bucketForScheme(candidate.category, candidate.subCategory, candidate.schemeName);
+  if (mapped == null) reasons.push('category_unknown');
+  else if (mapped !== bucket) reasons.push('category_not_in_bucket');
+
+  // A close-ended scheme cannot be bought today and cannot take a SIP, so
+  // recommending one is advice nobody can act on.
+  if (config.eligibility.requireOpenEnded && traits.structure === 'CLOSE_ENDED') {
+    reasons.push('close_ended');
+  }
+
+  if (traits.segregatedPortfolio) reasons.push('segregated_portfolio');
+
+  if (traits.trackRecordYears == null) {
+    // No NAV history at all: either an NFO or a scheme we have never priced.
+    // Both mean there is nothing to rank.
+    reasons.push('nfo_or_no_history');
+  } else {
+    const required = traits.passive
+      ? config.eligibility.minTrackRecordYearsPassive
+      : config.eligibility.minTrackRecordYearsActive;
+    if (traits.trackRecordYears < required) reasons.push('track_record_too_short');
+  }
+
+  // A scheme whose NAV stopped updating is usually one that merged away
+  // before our universe refresh noticed. Sizing a trade against a stale NAV
+  // is the same mistake `priceStale` guards against for holdings.
+  if (traits.navAgeDays != null && traits.navAgeDays > config.eligibility.maxNavStalenessDays) {
+    reasons.push('nav_stale');
+  }
+
+  // AUM is a gap today (DATA-INVENTORY.md). The floor is applied only when the
+  // figure exists: excluding every fund for want of an attribute we have never
+  // held would mean nobody is ever named a fund, which fails the client rather
+  // than protecting them. The absence is recorded as a data gap by the scorer.
+  if (candidate.aumInr != null && candidate.aumInr.lessThan(config.eligibility.minAumInr)) {
+    reasons.push('aum_below_floor');
+  }
+
+  return { eligible: reasons.length === 0, reasons, traits };
+}
