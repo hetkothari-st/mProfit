@@ -11,6 +11,11 @@ export interface AmfiNavRow {
   isin: string | null;
   isinReinvest: string | null;
   schemeName: string;
+  /** "Direct Plan" / "Regular Plan" as AMFI publishes it, or null on the
+   *  legacy six-column layout where the plan was only inside the name. */
+  planType: string | null;
+  /** "Growth Option" / "IDCW ..." as published, or null on the legacy layout. */
+  optionType: string | null;
   nav: string;
   date: string;
   amcName: string;
@@ -86,7 +91,25 @@ export function parseAmfiNavText(text: string): AmfiNavRow[] {
 
     const parts = line.split(';');
     if (parts.length < 6) continue;
-    const [schemeCode, isin, isinReinvest, schemeName, navStr, dateStr] = parts;
+
+    // AMFI added Plan and Option as their own columns, taking NAVAll from six
+    // fields to eight:
+    //   code;isin;isinReinvest;name;NAV;date                        (legacy)
+    //   code;isin;isinReinvest;name;Plan;Option;NAV;date            (current)
+    // Reading the current file with the legacy offsets puts "Direct Plan"
+    // where the NAV belongs, every row fails the numeric check, and the sync
+    // silently imports nothing — which is exactly what was happening. Both
+    // layouts are handled so a rollback on AMFI's side is not an outage here.
+    const eightColumn = parts.length >= 8;
+    const schemeCode = parts[0];
+    const isin = parts[1];
+    const isinReinvest = parts[2];
+    const schemeName = parts[3];
+    const planRaw = eightColumn ? parts[4] : undefined;
+    const optionRaw = eightColumn ? parts[5] : undefined;
+    const navStr = eightColumn ? parts[6] : parts[4];
+    const dateStr = eightColumn ? parts[7] : parts[5];
+
     if (!schemeCode || !/^\d+$/.test(schemeCode.trim())) continue;
     if (!schemeName || !dateStr) continue;
     const nav = navStr?.trim();
@@ -98,6 +121,8 @@ export function parseAmfiNavText(text: string): AmfiNavRow[] {
       isin: isin?.trim() || null,
       isinReinvest: isinReinvest?.trim() || null,
       schemeName: schemeName.trim(),
+      planType: planRaw?.trim() || null,
+      optionType: optionRaw?.trim() || null,
       nav: nav,
       date: dateStr.trim(),
       amcName: currentAmc || 'Unknown',
@@ -136,9 +161,28 @@ export async function loadAmfiNavToDb(): Promise<AmfiLoadResult> {
       category: r.category,
       subCategory: r.subCategory,
       isin: r.isin,
+      planType: r.planType,
+      optionType: r.optionType,
     })),
     skipDuplicates: true,
   });
+
+  // `createMany` leaves existing rows alone, so schemes we already knew about
+  // would never gain the plan and option AMFI now publishes. Backfilling them
+  // here matters because eligibility reads these columns: a fund whose plan is
+  // unknown is excluded, and every pre-existing row would stay that way.
+  let mastersEnriched = 0;
+  for (const r of masterByCode.values()) {
+    if (!r.planType && !r.optionType) continue;
+    const updated = await prisma.mutualFundMaster.updateMany({
+      where: {
+        schemeCode: r.schemeCode,
+        OR: [{ planType: null }, { optionType: null }, { planType: { not: r.planType } }],
+      },
+      data: { planType: r.planType, optionType: r.optionType, schemeName: r.schemeName },
+    });
+    mastersEnriched += updated.count;
+  }
 
   // 2. Resolve schemeCode → id map (in chunks to avoid huge IN clauses)
   const allCodes = Array.from(masterByCode.keys());

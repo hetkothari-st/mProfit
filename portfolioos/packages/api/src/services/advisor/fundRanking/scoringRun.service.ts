@@ -45,6 +45,10 @@ async function loadCandidates(asOf: Date): Promise<FundCandidate[]> {
       subCategory: true,
       isin: true,
       isActive: true,
+      planType: true,
+      optionType: true,
+      terPct: true,
+      aumInr: true,
       navHistory: {
         where: { date: { gte: since, lte: asOf } },
         orderBy: { date: 'asc' },
@@ -61,6 +65,8 @@ async function loadCandidates(asOf: Date): Promise<FundCandidate[]> {
     subCategory: f.subCategory,
     isin: f.isin,
     isActive: f.isActive,
+    planType: f.planType,
+    optionType: f.optionType,
     navHistory: f.navHistory.map((n) => ({
       date: n.date.toISOString().slice(0, 10),
       // NAV is a price, not a money total: it is only ever used to compute
@@ -68,9 +74,12 @@ async function loadCandidates(asOf: Date): Promise<FundCandidate[]> {
       // happens once, at this boundary, and is documented in metrics.ts.
       nav: Number.parseFloat(n.nav.toString()),
     })),
-    // Genuinely absent — see DATA-INVENTORY.md. Never defaulted to a number.
-    terPct: null,
-    aumInr: null,
+    // Real, from AMFI's published files (priceFeeds/amfiCostAndSize.service).
+    // Null still means UNKNOWN and is handled as a data gap or an exclusion —
+    // it is never defaulted to a number.
+    terPct: f.terPct == null ? null : Number.parseFloat(f.terPct.toString()),
+    aumInr: f.aumInr == null ? null : new Decimal(f.aumInr.toString()),
+    // Still absent: no verified source. See DATA-INVENTORY.md.
     managerTenureYears: null,
     benchmarkTri: null,
   }));

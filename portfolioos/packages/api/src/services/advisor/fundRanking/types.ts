@@ -25,10 +25,15 @@ export interface FundCandidate {
   subCategory: string | null;
   isin: string | null;
   isActive: boolean;
+  /** AMFI's published Plan / Option columns. Preferred over reading the scheme
+   *  name: the name was the weakest link in the gate that keeps regular plans
+   *  out of advice. Null on rows loaded before the 8-column NAVAll format. */
+  planType: string | null;
+  optionType: string | null;
   /** Ascending by date. The only history we actually have. */
   navHistory: NavObservation[];
-  /** Not held today — see DATA-INVENTORY.md. Present so the methodology can
-   *  use them the day a verified source exists, without a rewrite. */
+  /** Direct-plan TER from AMFI's published file. Null means unknown — never
+   *  zero, which would rank an unpriced fund as the cheapest in its bucket. */
   terPct: number | null;
   aumInr: Decimal | null;
   managerTenureYears: number | null;
@@ -57,6 +62,7 @@ export const EXCLUSION_REASONS = [
   'track_record_too_short',
   'nav_stale',
   'aum_below_floor',
+  'aum_unknown',
 ] as const;
 export type ExclusionReason = (typeof EXCLUSION_REASONS)[number];
 
@@ -143,6 +149,9 @@ export interface SelectionConfig {
   maxAmcSharePct: number;
   overlapPenaltyPerPct: number;
   maxOverlapPct: number;
+  /** Below this many days held, a switch is suppressed: exit load is unknown,
+   *  and most equity funds charge one inside a year. See selection.ts. */
+  minHoldingDaysForSwitch?: number;
 }
 
 export interface MethodologyConfig {
@@ -150,6 +159,10 @@ export interface MethodologyConfig {
     minTrackRecordYearsActive: number;
     minTrackRecordYearsPassive: number;
     minAumInr: number;
+    /** v2: a scheme we cannot size is ineligible rather than scored without
+     *  its size. With no AUM source at all (v1) this had to be false, or the
+     *  universe would have been empty. */
+    requireAum?: boolean;
     requireDirectPlan: boolean;
     requireGrowthOption: boolean;
     requireOpenEnded: boolean;
@@ -164,5 +177,8 @@ export interface MethodologyConfig {
   scoringActive: Record<string, number>;
   scoringPassive: Record<string, number>;
   selection: SelectionConfig;
+  /** Release-gate thresholds: the share of otherwise-eligible schemes that
+   *  must have each figure before named-fund advice may boot. */
+  coverage?: { minTerCoveragePct: number; minAumCoveragePct: number };
   snapshotMaxAgeDays: number;
 }

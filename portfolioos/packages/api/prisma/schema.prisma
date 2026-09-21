@@ -570,12 +570,31 @@ enum Exchange {
 model MutualFundMaster {
   id          String     @id @default(cuid())
   schemeCode  String     @unique
+  /// AMFI's base scheme name, without the plan/option suffix — since the 2026
+  /// NAVAll format carries Plan and Option as their own columns. This is the
+  /// key AMFI's TER file joins on, because that file carries neither an AMFI
+  /// scheme code nor an ISIN.
   schemeName  String
   amcName     String
   category    MFCategory
   subCategory String?
   isin        String?
   isActive    Boolean    @default(true)
+  /// "Direct Plan" / "Regular Plan" as published, rather than guessed from the
+  /// scheme name. Null for rows loaded before the 8-column NAVAll format.
+  planType    String?
+  /// "Growth Option" / "IDCW ..." as published.
+  optionType  String?
+  /// Direct-plan total expense ratio, in percent, from AMFI's published TER
+  /// file. Null means we do not have it — never zero, which would rank an
+  /// unknown fund as the cheapest in its bucket.
+  terPct      Decimal?   @db.Decimal(8, 4)
+  terAsOf     DateTime?  @db.Date
+  /// Average AUM in rupees, from AMFI's scheme-wise AAUM data (published in
+  /// lakh; converted on ingest so the column is in the same unit as money
+  /// everywhere else).
+  aumInr      Decimal?   @db.Decimal(20, 4)
+  aumAsOf     DateTime?  @db.Date
   updatedAt   DateTime   @updatedAt
 
   holdings                Holding[]

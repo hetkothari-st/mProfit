@@ -24,6 +24,7 @@ import { startSecretRotationJobs } from './jobs/secretRotationJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startFundScoringJob } from './jobs/fundScoring.job.js';
+import { assertNamedFundReleaseGate } from './services/advisor/fundRanking/releaseGate.js';
 import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
@@ -139,6 +140,20 @@ app.use(errorHandler);
 const server = app.listen(env.PORT, '::', () => {
   logger.info(`EveryPaisa API listening on http://localhost:${env.PORT}`);
   startPriceJobs();
+  // Named-fund advice must be able to run honestly before it runs at all: the
+  // gate checks TER and AUM coverage and that the signed methodology is the
+  // newest one. It logs the figures either way and throws only when the
+  // feature is on and the data cannot support it.
+  void assertNamedFundReleaseGate().catch((err: unknown) => {
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      '[fundRanking] refusing to serve named-fund advice',
+    );
+    // Exiting rather than limping: a deployment configured to name funds but
+    // unable to do so would otherwise serve category-level advice silently,
+    // and nobody would notice for weeks.
+    process.exit(1);
+  });
   // After the AMFI NAV sync it schedules itself against; no-ops unless
   // named-fund advice is switched on.
   startFundScoringJob();

@@ -41,19 +41,24 @@ export function readTraits(candidate: FundCandidate, asOf: Date): FundTraits {
   const name = candidate.schemeName.toLowerCase();
   const header = (candidate.subCategory ?? '').toLowerCase();
 
-  // "Direct" appears as "- Direct Plan -" or "(Direct)". "Regular" likewise.
-  // A name with neither is pre-2013 nomenclature or a feed oddity; either way
-  // we do not know which share class this is.
-  const plan: FundTraits['plan'] = /\bdirect\b/.test(name)
+  // AMFI publishes Plan and Option as their own columns now, so read those
+  // where we have them and fall back to the name only for rows loaded under
+  // the old six-column format. Reading a share class out of a scheme name was
+  // the weakest link in the gate that keeps commission-bearing regular plans
+  // out of advice; a column is not a guess.
+  const planSource = candidate.planType?.toLowerCase() ?? name;
+  const optionSource = candidate.optionType?.toLowerCase() ?? name;
+
+  const plan: FundTraits['plan'] = /\bdirect\b/.test(planSource)
     ? 'DIRECT'
-    : /\bregular\b/.test(name)
+    : /\bregular\b/.test(planSource)
       ? 'REGULAR'
       : 'UNKNOWN';
 
   // IDCW is the current name; "dividend", "payout" and "reinvestment" are the
   // older ones still present in AMFI's file.
-  const idcw = /\bidcw\b|\bdividend\b|\bpayout\b|\breinvest/.test(name);
-  const growth = /\bgrowth\b/.test(name);
+  const idcw = /\bidcw\b|\bdividend\b|\bpayout\b|\breinvest/.test(optionSource);
+  const growth = /\bgrowth\b/.test(optionSource);
   const option: FundTraits['option'] = idcw ? 'IDCW' : growth ? 'GROWTH' : 'UNKNOWN';
 
   const structure: FundTraits['structure'] = header.includes('open ended')
@@ -143,11 +148,13 @@ export function assessEligibility(
     reasons.push('nav_stale');
   }
 
-  // AUM is a gap today (DATA-INVENTORY.md). The floor is applied only when the
-  // figure exists: excluding every fund for want of an attribute we have never
-  // held would mean nobody is ever named a fund, which fails the client rather
-  // than protecting them. The absence is recorded as a data gap by the scorer.
-  if (candidate.aumInr != null && candidate.aumInr.lessThan(config.eligibility.minAumInr)) {
+  // Size. v1 could only apply this when a figure happened to exist, because
+  // there was no AUM source at all; v2 has AMFI's scheme-wise AAUM, so a
+  // scheme we cannot size is one we cannot honestly rank — a fund whose size
+  // is unknown might be the one where a single redemption moves the portfolio.
+  if (candidate.aumInr == null) {
+    if (config.eligibility.requireAum) reasons.push('aum_unknown');
+  } else if (candidate.aumInr.lessThan(config.eligibility.minAumInr)) {
     reasons.push('aum_below_floor');
   }
 

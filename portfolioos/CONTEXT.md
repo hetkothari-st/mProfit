@@ -640,6 +640,21 @@ writes prose.**
   window, and a current `RiskProfileAssessment`. Any gate closed means
   category-level advice and a reason recorded on `AdvisorRun.namedFundGate` —
   never a silent downgrade.
+- **Release gate (boot).** With the flag on, `assertNamedFundReleaseGate()`
+  refuses to start the process unless TER and AUM coverage each clear the
+  methodology's threshold (default 95% of active direct-growth schemes) and the
+  signed methodology is the newest version that exists. Coverage is logged on
+  every boot either way. A deployment that cannot name funds honestly must not
+  start and quietly serve something else.
+- **Cost and size** come from AMFI and are refreshed nightly, before scoring, by
+  `priceFeeds/amfiCostAndSize.service.ts`: scheme-wise AAUM joins on **AMFI
+  scheme code** (exact); the TER workbook carries no AMFI code and no ISIN, so
+  it joins on a normalised **base scheme name** (96.7% of direct-growth schemes,
+  effectively unique — measured, see `V2-METHODOLOGY-REPORT.md`).
+- **v2 of the methodology** scores TER again for both models and makes a scheme
+  with no AUM ineligible (`aum_unknown`) rather than scoring it without size.
+  Switch recommendations are suppressed for lots held under 365 days while no
+  exit-load source exists.
 - **The LLM never selects a fund.** Rules select; the prose guard
   (`proseConsistency.ts`) rejects any scheme name or figure the engine did not
   produce.
@@ -876,16 +891,20 @@ at boot with a ✅/⚠️ log line).
   by design, but it needs a human-facing follow-up path.
 - Credit cards, bonds/G-Sec, post office and property have no consent-based data
   source in India; all are manual entry or statement parsing.
-- **Fund ranking runs without TER, AUM, benchmark TRI, inception date, manager
-  tenure or exit load** — AMFI's NAV file is the only machine-readable fund feed
-  ingested and carries none of them (see
-  `services/advisor/fundRanking/DATA-INVENTORY.md`). Consequences: index funds
-  are scored on tracking fidelity alone with cost weight redistributed; the AUM
-  floor in the methodology config cannot bite; tracking figures are
-  **peer-relative** (median of same-index peers), not measured against a real
-  benchmark; and switch recommendations assume a **zero exit load**, which
-  understates the cost of switching. Every one of these is recorded per fund in
-  `FundScoreSnapshot.dataGaps` rather than defaulted to a number.
+- **TER and AUM are now ingested from AMFI** (96.4% / 94.6% coverage of active
+  direct-growth schemes, measured 21 Sept 2026). AUM currently sits **below the
+  95% release gate**, so enabling named-fund advice would refuse to boot until
+  the next quarterly AAUM publication closes the gap — by design, not a defect.
+- **Still missing: benchmark TRI, inception date, manager tenure and exit
+  load.** Consequences: tracking figures are **peer-relative** (median of
+  same-index peers) rather than measured against a real benchmark; track record
+  is measured from the first NAV we hold; manager tenure's weight is
+  redistributed; and switch recommendations still assume a **zero exit load**,
+  which is why they are suppressed entirely for lots held under 12 months. Each
+  is recorded per fund in `FundScoreSnapshot.dataGaps` rather than defaulted.
+- **AMFI's TER file has no AMFI scheme code and no ISIN**, so that join is on a
+  normalised base scheme name. Deterministic and measured, but weaker than the
+  exact code join AUM gets.
 - Portfolio overlap between a candidate and the client's holdings is only known
   for a fund they already hold; constituent data for the wider universe is not
   ingested, so `fundRanking/overlap.ts` returns null (unknown, not zero) for

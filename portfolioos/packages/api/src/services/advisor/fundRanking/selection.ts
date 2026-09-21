@@ -231,7 +231,19 @@ export function switchIsWorthIt(args: {
   /** Expected annual advantage of the challenger, in percentage points. */
   expectedAnnualAdvantagePct: number;
   materialityTolerance: number;
-}): { worthIt: boolean; costInr: Decimal; annualBenefitInr: Decimal; exitLoadAssumedZero: boolean } {
+  /** How long the lot being switched has been held. Null when unknown, which
+   *  is treated the same as "recent" — see below. */
+  holdingDays?: number | null;
+  /** Below this many days held, a switch is suppressed outright while no exit
+   *  load source exists. Default 365. */
+  minHoldingDaysForSwitch?: number;
+}): {
+  worthIt: boolean;
+  costInr: Decimal;
+  annualBenefitInr: Decimal;
+  exitLoadAssumedZero: boolean;
+  suppressedReason: string | null;
+} {
   const gain = args.unrealisedGain.greaterThan(0) ? args.unrealisedGain : new Decimal(0);
   const taxCost = gain.times(args.capitalGainsRatePct).dividedBy(100);
 
@@ -251,9 +263,29 @@ export function switchIsWorthIt(args: {
   // One year of advantage must clear the one-off cost by more than the
   // materiality band. A switch that pays for itself in five years is a switch
   // whose thesis will not survive five years.
-  const worthIt = annualBenefitInr
+  const clearsCost = annualBenefitInr
     .minus(costInr)
     .greaterThan(costInr.times(args.materialityTolerance));
 
-  return { worthIt, costInr, annualBenefitInr, exitLoadAssumedZero };
+  // ── The exit-load blind spot ───────────────────────────────────
+  // We hold no exit-load schedules, and most equity funds charge around 1% on
+  // units redeemed inside a year. Recommending a switch out of a young lot
+  // therefore quotes a cost that is missing its largest component, and the
+  // client pays the difference. Until a verified source exists, those switches
+  // are suppressed rather than priced optimistically. Lots past the window
+  // proceed, with the gap still flagged, because a load is unlikely there.
+  const minDays = args.minHoldingDaysForSwitch ?? 365;
+  const days = args.holdingDays ?? null;
+  const withinExitLoadWindow = exitLoadAssumedZero && (days == null || days < minDays);
+  const suppressedReason = withinExitLoadWindow
+    ? 'exit load unknown, lot within 12 months'
+    : null;
+
+  return {
+    worthIt: clearsCost && !withinExitLoadWindow,
+    costInr,
+    annualBenefitInr,
+    exitLoadAssumedZero,
+    suppressedReason,
+  };
 }

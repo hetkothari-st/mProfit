@@ -24,6 +24,7 @@ import {
   ensureSignedMethodology,
 } from '../services/advisor/fundRanking/methodology.service.js';
 import { runFundScoring } from '../services/advisor/fundRanking/scoringRun.service.js';
+import { refreshFundCostAndSize } from '../priceFeeds/amfiCostAndSize.service.js';
 
 const TZ = 'Asia/Kolkata';
 
@@ -51,6 +52,28 @@ export async function runFundScoringJob(asOf: Date = new Date()): Promise<void> 
           '[fundScoring] no signed methodology — skipping. Named-fund advice stays off until one is signed.',
         );
         return;
+      }
+
+      // Cost and size first: the scoring pass reads terPct and aumInr, and
+      // scoring yesterday's cost against today's NAVs would rank funds on a
+      // mixture of two days. A failure here is recorded and does not stop the
+      // scoring — yesterday's TER is worth more than no ranking at all, and
+      // the release gate is what stops coverage quietly rotting.
+      const costAndSize = await refreshFundCostAndSize();
+      logger.info(
+        {
+          terMatched: costAndSize.ter.matched,
+          terUnmatched: costAndSize.ter.unmatched,
+          terAsOf: costAndSize.ter.asOf,
+          aumMatched: costAndSize.aum.matched,
+          aumAmcs: costAndSize.aum.amcs,
+          aumAsOf: costAndSize.aum.asOf,
+          failures: costAndSize.failures.length,
+        },
+        '[fundScoring] AMFI cost and size refreshed',
+      );
+      for (const failure of costAndSize.failures.slice(0, 5)) {
+        logger.warn(failure, '[fundScoring] cost/size source failed');
       }
 
       const result = await runFundScoring({

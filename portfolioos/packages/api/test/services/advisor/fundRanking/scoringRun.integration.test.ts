@@ -37,7 +37,13 @@ function monthlyNavs(months: number, monthlyPct: number, start = 100) {
   return out;
 }
 
-async function makeFund(label: string, name: string, category: 'EQUITY' | 'INDEX_FUND', growthPct: number) {
+async function makeFund(
+  label: string,
+  name: string,
+  category: 'EQUITY' | 'INDEX_FUND',
+  growthPct: number,
+  opts: { plan?: string; option?: string; aumInr?: string | null; terPct?: string | null } = {},
+) {
   const schemeCode = `TEST${label}${SUFFIX}`;
   const fund = await prisma.mutualFundMaster.create({
     data: {
@@ -47,6 +53,12 @@ async function makeFund(label: string, name: string, category: 'EQUITY' | 'INDEX
       category,
       subCategory: 'Open Ended Schemes(Equity Scheme - Flexi Cap Fund)',
       isActive: true,
+      planType: opts.plan ?? 'Direct Plan',
+      optionType: opts.option ?? 'Growth Option',
+      // v2 requires a size: a scheme we cannot size is ineligible, so the
+      // fixtures that are meant to be scored carry one.
+      aumInr: opts.aumInr === undefined ? '50000000000' : opts.aumInr,
+      terPct: opts.terPct === undefined ? '0.5000' : opts.terPct,
       navHistory: { create: monthlyNavs(48, growthPct) },
     },
   });
@@ -77,10 +89,13 @@ beforeAll(async () => {
       methodologyId = created.id;
     }
 
-    await makeFund('A', `Alpha Flexi Cap Fund ${SUFFIX} - Direct Plan - Growth Option`, 'EQUITY', 1.2);
-    await makeFund('B', `Beta Flexi Cap Fund ${SUFFIX} - Direct Plan - Growth Option`, 'EQUITY', 0.6);
+    await makeFund('A', `Alpha Flexi Cap Fund ${SUFFIX}`, 'EQUITY', 1.2);
+    await makeFund('B', `Beta Flexi Cap Fund ${SUFFIX}`, 'EQUITY', 0.6);
     // A regular plan, which must never be scored however well it performed.
-    await makeFund('C', `Gamma Flexi Cap Fund ${SUFFIX} - Regular Plan - Growth Option`, 'EQUITY', 2.0);
+    await makeFund('C', `Gamma Flexi Cap Fund ${SUFFIX}`, 'EQUITY', 2.0, { plan: 'Regular Plan' });
+    // No AUM: ineligible under v2, where a scheme we cannot size is one we
+    // cannot honestly rank.
+    await makeFund('D', `Delta Flexi Cap Fund ${SUFFIX}`, 'EQUITY', 1.0, { aumInr: null });
   });
 }, 120_000);
 
@@ -119,6 +134,10 @@ describe('runFundScoring', () => {
     expect(regular?.exclusionReasons).toContain('regular_plan');
     // Ineligible means unscored: a score would imply it was a candidate.
     expect(regular?.score).toBeNull();
+
+    const unsized = rows.find((r) => r.schemeCode === `TESTD${SUFFIX}`);
+    expect(unsized?.eligible).toBe(false);
+    expect(unsized?.exclusionReasons).toContain('aum_unknown');
 
     const direct = rows.filter((r) => r.eligible);
     expect(direct.length).toBeGreaterThanOrEqual(2);
