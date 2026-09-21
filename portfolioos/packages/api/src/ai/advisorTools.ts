@@ -176,7 +176,11 @@ export const ADVISOR_TOOLS: Anthropic.Tool[] = [
         annualReturnPct: { type: 'array', items: { type: 'number' }, description: 'Assumed yearly returns while building.' },
         withdrawalRatePct: { type: 'number', description: 'Share of the corpus drawn each year (default 4).' },
         inflationPct: { type: 'number', description: 'Yearly inflation (default 6).' },
-        currentCorpus: { type: 'string', description: 'Rupees already set aside for this goal.' },
+        currentCorpus: {
+          type: 'string',
+          description:
+            'Rupees already invested that back this goal. LEAVE IT OUT to use the whole portfolio, which is the right default for a retirement question. Pass 0 only if they are genuinely starting from nothing.',
+        },
       },
       ['monthlyIncome'],
     ),
@@ -407,7 +411,7 @@ const EXECUTORS: Record<string, Executor> = {
     });
   },
 
-  async plan_passive_income(input) {
+  async plan_passive_income(input, ctx) {
     const monthly = decimalFrom(input['monthlyIncome']);
     if (!monthly || monthly.lessThanOrEqualTo(0)) throw new Error("Give the monthly income wanted, in today's rupees.");
     const numbers = (v: unknown, fallback: number[], min: number, max: number): number[] => {
@@ -419,7 +423,20 @@ const EXECUTORS: Record<string, Executor> = {
     const returns = numbers(input['annualReturnPct'], [10, 12], 0, 20);
     const withdrawal = numbers(input['withdrawalRatePct'], [4], 2, 10)[0]!;
     const inflation = numbers(input['inflationPct'], [6], 0, 15)[0]!;
-    const current = decimalFrom(input['currentCorpus']) ?? new Decimal(0);
+    // Existing investments are most of the answer for anyone who already has
+    // a portfolio: a client with ₹56 lakh invested does NOT need the SIP of
+    // someone starting from zero, and quoting that number tells them a
+    // reachable goal is hopeless. The model used to leave this out and the
+    // tool silently assumed nothing was on file, so the default now comes from
+    // their actual portfolio and the source is reported for the model to state.
+    const given = decimalFrom(input['currentCorpus']);
+    const portfolio = ctx.facts?.totalPortfolioValue ?? null;
+    const current = given ?? portfolio ?? new Decimal(0);
+    const currentCorpusSource = given
+      ? 'given'
+      : portfolio
+        ? 'the whole portfolio on file — say so, since part of it may be earmarked for other goals'
+        : 'nothing on file';
 
     const rupees = (x: Decimal) => x.toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toString();
     const corpusFor = (income: Decimal) => income.times(12).dividedBy(new Decimal(withdrawal).dividedBy(100));
@@ -432,6 +449,7 @@ const EXECUTORS: Record<string, Executor> = {
       monthlyIncomeToday: rupees(monthly),
       corpusIfStartingNow: rupees(corpusFor(monthly)),
       currentCorpus: rupees(current),
+      currentCorpusSource,
       scenarios: horizons.map((years) => {
         const incomeThen = monthly.times(new Decimal(1).plus(new Decimal(inflation).dividedBy(100)).pow(years));
         const corpus = corpusFor(incomeThen);
@@ -442,7 +460,19 @@ const EXECUTORS: Record<string, Executor> = {
           sipByReturn: returns.map((r) => {
             const grown = current.times(new Decimal(1).plus(new Decimal(r).dividedBy(1200)).pow(Math.round(years * 12)));
             const sip = requiredMonthlySip(corpus.minus(grown), years, r);
-            return { annualReturnPct: r, monthlySip: sip ? sip.toDecimalPlaces(0, Decimal.ROUND_UP).toString() : '0' };
+            const fromZero = requiredMonthlySip(corpus, years, r);
+            return {
+              annualReturnPct: r,
+              // What they must add, given what they already hold. THIS is the
+              // number to quote.
+              monthlySip: sip ? sip.toDecimalPlaces(0, Decimal.ROUND_UP).toString() : '0',
+              // What their existing corpus grows to by then, and what the SIP
+              // would have been without it — context, never the answer.
+              existingCorpusGrowsTo: rupees(grown),
+              sipIfStartingFromZero: fromZero ? fromZero.toDecimalPlaces(0, Decimal.ROUND_UP).toString() : '0',
+              // True when the existing corpus alone covers the target.
+              alreadyCovered: sip === null,
+            };
           }),
         };
       }),
