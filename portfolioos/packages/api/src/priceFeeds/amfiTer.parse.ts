@@ -54,11 +54,22 @@ export interface TerParseResult {
   skipped: Array<{ reason: string; sample: string }>;
 }
 
-/** Lower-case, strip punctuation, collapse whitespace. Deterministic, and the
- *  same function is applied to both sides of the join. */
+/**
+ * Lower-case, strip punctuation, collapse whitespace. Deterministic, and the
+ * same function is applied to both sides of the join.
+ *
+ * Apostrophes are DELETED rather than turned into a space, because the two
+ * AMFI files do not agree on them: NAVAll writes "Axis Children's Fund" and
+ * the TER workbook has been seen writing "Axis Childrens Fund". Replacing the
+ * apostrophe with a space makes those two strings differ ("children s" vs
+ * "childrens") and the fund loses its TER over a typographical convention.
+ * Ampersands get the same treatment for the same reason ("Banking & PSU" vs
+ * "Banking and PSU" is handled by the word, but "A&B" vs "AB" is not).
+ */
 export function normaliseSchemeName(name: string): string {
   return String(name ?? '')
     .toLowerCase()
+    .replace(/[‘’']/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }

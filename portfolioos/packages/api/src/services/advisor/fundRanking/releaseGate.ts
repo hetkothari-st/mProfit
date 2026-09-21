@@ -22,22 +22,23 @@
 import { prisma } from '../../../lib/prisma.js';
 import { logger } from '../../../lib/logger.js';
 import { env } from '../../../config/env.js';
-import { fundDataCoverage } from '../../../priceFeeds/amfiCostAndSize.service.js';
+import { fundDataCoverage, type FundDataCoverage } from './coverage.js';
 import { currentMethodology } from './methodology.service.js';
 import type { MethodologyConfig } from './types.js';
 
 const DEFAULT_MIN_COVERAGE_PCT = 95;
+/** A bucket with fewer eligible schemes than this is not being ranked. */
+const DEFAULT_MIN_CANDIDATES_PER_BUCKET = 5;
 
 export interface ReleaseGateResult {
   ok: boolean;
   /** Empty when ok. Each entry is a sentence a human can act on. */
   problems: string[];
-  coverage: { eligibleSchemes: number; terCoveragePct: number; aumCoveragePct: number };
+  coverage: FundDataCoverage;
   methodology: { inUse: number | null; latest: number | null; signed: boolean };
 }
 
 export async function evaluateNamedFundReleaseGate(): Promise<ReleaseGateResult> {
-  const coverage = await fundDataCoverage();
   const signed = await currentMethodology();
   const latestRow = await prisma.rankingMethodologyVersion.findFirst({
     orderBy: { version: 'desc' },
@@ -47,6 +48,22 @@ export async function evaluateNamedFundReleaseGate(): Promise<ReleaseGateResult>
   const config = signed?.config as MethodologyConfig | undefined;
   const minTer = config?.coverage?.minTerCoveragePct ?? DEFAULT_MIN_COVERAGE_PCT;
   const minAum = config?.coverage?.minAumCoveragePct ?? DEFAULT_MIN_COVERAGE_PCT;
+  const minPerBucket =
+    config?.coverage?.minCandidatesPerBucket ?? DEFAULT_MIN_CANDIDATES_PER_BUCKET;
+
+  // Coverage is measured through the real eligibility rules, which need a
+  // methodology to read them from. With none signed there is nothing to
+  // measure against, and the missing signature is already the first problem.
+  const coverage = config
+    ? await fundDataCoverage(config)
+    : {
+        eligibleSchemes: 0,
+        terCoveragePct: 0,
+        aumEligibleSchemes: 0,
+        aumCoveragePct: 0,
+        missingAum: [],
+        buckets: [],
+      };
 
   const problems: string[] = [];
   if (!signed) {
@@ -60,16 +77,30 @@ export async function evaluateNamedFundReleaseGate(): Promise<ReleaseGateResult>
         'Advice must run on the newest approved method, not a superseded one.',
     );
   }
-  if (coverage.terCoveragePct < minTer) {
+  if (signed && coverage.terCoveragePct < minTer) {
     problems.push(
       `TER coverage is ${coverage.terCoveragePct}% of ${coverage.eligibleSchemes} eligible schemes, below the ${minTer}% required. ` +
         'Run the AMFI cost-and-size refresh before naming funds on a cost-weighted ranking.',
     );
   }
-  if (coverage.aumCoveragePct < minAum) {
+  if (signed && coverage.aumCoveragePct < minAum) {
     problems.push(
-      `AUM coverage is ${coverage.aumCoveragePct}% of ${coverage.eligibleSchemes} eligible schemes, below the ${minAum}% required. ` +
+      `AUM coverage is ${coverage.aumCoveragePct}% of ${coverage.aumEligibleSchemes} eligible schemes, below the ${minAum}% required. ` +
         'Without it most of the universe is ineligible and the ranking is drawn from whatever happens to have data.',
+    );
+  }
+
+  // Depth, not just coverage. A bucket can have 100% TER coverage across
+  // three schemes and still be a bucket where "the ranking" names the only
+  // fund that qualifies. Checked for buckets an active ModelPortfolio
+  // actually allocates to — a bucket nothing invests in needs no candidates.
+  for (const b of coverage.buckets) {
+    if (!b.used) continue;
+    if (b.eligible >= minPerBucket) continue;
+    problems.push(
+      `Bucket ${b.bucket} has ${b.eligible} eligible ${b.eligible === 1 ? 'scheme' : 'schemes'}, ` +
+        `below the ${minPerBucket} required, and a model portfolio allocates to it. ` +
+        'Naming a fund from a bucket that thin is picking the only option, not ranking.',
     );
   }
 
@@ -101,13 +132,30 @@ export async function assertNamedFundReleaseGate(): Promise<ReleaseGateResult> {
   logger.info(
     {
       enabled: env.RIA_VERDICTS_ENABLED === 'true',
-      eligibleSchemes: result.coverage.eligibleSchemes,
+      // Two denominators, not one: each excludes only the rule that depends
+      // on the field it measures, so they are not the same population.
+      terEligibleSchemes: result.coverage.eligibleSchemes,
       terCoveragePct: result.coverage.terCoveragePct,
+      aumEligibleSchemes: result.coverage.aumEligibleSchemes,
       aumCoveragePct: result.coverage.aumCoveragePct,
+      missingAumCount: result.coverage.missingAum.length,
       methodologyInUse: result.methodology.inUse,
       methodologyLatest: result.methodology.latest,
     },
     '[fundRanking] named-fund data coverage',
+  );
+
+  // Depth per bucket, logged beside coverage because a healthy percentage
+  // over a thin bucket is the failure this pair is meant to make visible.
+  logger.info(
+    {
+      buckets: result.coverage.buckets.map((b) => ({
+        bucket: b.bucket,
+        eligible: b.eligible,
+        usedByModelPortfolio: b.used,
+      })),
+    },
+    '[fundRanking] eligible candidates per bucket',
   );
 
   if (env.RIA_VERDICTS_ENABLED !== 'true') return result;

@@ -17,6 +17,13 @@ ALTER TABLE "MutualFundMaster"
     ADD COLUMN "optionType" TEXT,
     ADD COLUMN "terPct" DECIMAL(8,4),
     ADD COLUMN "terAsOf" DATE,
+    -- MATCHED | UNMATCHED | AMBIGUOUS, for the direct-growth population only.
+    -- The TER file carries no scheme code and no ISIN, so the join is made on
+    -- (AMC, scheme name) and can legitimately fail. Recording how it failed is
+    -- what lets the ranking report a `ter_unmatched` gap rather than a bare
+    -- "no TER", which reads identically whether AMFI omitted the scheme or the
+    -- name turned out not to identify one.
+    ADD COLUMN "terJoinStatus" TEXT,
     ADD COLUMN "aumInr" DECIMAL(20,4),
     ADD COLUMN "aumAsOf" DATE;
 
@@ -27,6 +34,10 @@ CREATE INDEX "MutualFundMaster_planType_optionType_idx"
 -- AMFI's TER file carries no AMFI scheme code and no ISIN — only a base scheme
 -- name — so that name is the join key and is looked up on every TER refresh.
 CREATE INDEX "MutualFundMaster_schemeName_idx" ON "MutualFundMaster"("schemeName");
+
+-- The join is (AMC, scheme name), so the AMC is half the key.
+CREATE INDEX "MutualFundMaster_amcName_schemeName_idx"
+    ON "MutualFundMaster"("amcName", "schemeName");
 
 -- ─── Methodology v2 ──────────────────────────────────────────────
 -- Seeded unsigned, exactly as v1 was: `ensureSignedMethodology` stamps the
@@ -87,7 +98,8 @@ VALUES (
       },
       "coverage": {
         "minTerCoveragePct": 95,
-        "minAumCoveragePct": 95
+        "minAumCoveragePct": 95,
+        "minCandidatesPerBucket": 5
       },
       "snapshotMaxAgeDays": 3
     }'::jsonb,

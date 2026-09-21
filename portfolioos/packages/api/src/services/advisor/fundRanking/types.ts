@@ -35,6 +35,8 @@ export interface FundCandidate {
   /** Direct-plan TER from AMFI's published file. Null means unknown — never
    *  zero, which would rank an unpriced fund as the cheapest in its bucket. */
   terPct: number | null;
+  /** MATCHED | UNMATCHED | AMBIGUOUS from the last TER refresh; see terJoin.ts. */
+  terJoinStatus: string | null;
   aumInr: Decimal | null;
   managerTenureYears: number | null;
   benchmarkTri: NavObservation[] | null;
@@ -179,6 +181,19 @@ export interface MethodologyConfig {
   selection: SelectionConfig;
   /** Release-gate thresholds: the share of otherwise-eligible schemes that
    *  must have each figure before named-fund advice may boot. */
-  coverage?: { minTerCoveragePct: number; minAumCoveragePct: number };
+  coverage?: {
+    minTerCoveragePct: number;
+    minAumCoveragePct: number;
+    /**
+     * The fewest eligible candidates a bucket may have before naming funds
+     * from it is a pretence. A bucket with two eligible schemes is not being
+     * ranked — whichever one wins, the client gets the only real option and
+     * the AMC cap and hysteresis rules have nothing to work with.
+     *
+     * Only buckets an active ModelPortfolio actually allocates to are
+     * checked; a bucket nothing invests in needs no depth.
+     */
+    minCandidatesPerBucket?: number;
+  };
   snapshotMaxAgeDays: number;
 }

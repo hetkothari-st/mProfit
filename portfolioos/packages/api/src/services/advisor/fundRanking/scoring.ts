@@ -44,6 +44,14 @@ export interface ScoringInput {
   terPct: number | null;
   aumInr: number | null;
   managerTenureYears: number | null;
+  /**
+   * How the last TER refresh resolved this scheme. Carried into the gap
+   * reason so "no TER" can say WHY: AMFI's file has no scheme code and no
+   * ISIN, so a fund can be missing a TER because the file omitted it, or
+   * because its name turned out not to identify one scheme. Those are
+   * different problems and a single `ter_unavailable` hides the difference.
+   */
+  terJoinStatus?: string | null;
 }
 
 /** Which way is "good" for each metric. */
@@ -84,9 +92,13 @@ function rawValue(input: ScoringInput, metric: string): number | null {
   }
 }
 
-function gapReason(metric: string): string {
+function gapReason(metric: string, input?: ScoringInput): string {
   switch (metric) {
     case 'ter':
+      // The join refused to guess, and says so rather than reporting the same
+      // gap it would report for a blank cell.
+      if (input?.terJoinStatus === 'UNMATCHED') return 'ter_unmatched';
+      if (input?.terJoinStatus === 'AMBIGUOUS') return 'ter_unmatched_ambiguous_name';
       return 'ter_unavailable';
     case 'aum':
       return 'aum_unavailable';
@@ -143,7 +155,7 @@ export function scoreBucket(
     for (const [metric, weight] of Object.entries(weights)) {
       const value = rawValue(input, metric);
       if (value == null || !Number.isFinite(value)) {
-        dataGaps.push({ metric, reason: gapReason(metric), weightReleased: weight });
+        dataGaps.push({ metric, reason: gapReason(metric, input), weightReleased: weight });
         continue;
       }
       const values = population

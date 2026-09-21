@@ -590,6 +590,14 @@ model MutualFundMaster {
   /// unknown fund as the cheapest in its bucket.
   terPct      Decimal?   @db.Decimal(8, 4)
   terAsOf     DateTime?  @db.Date
+  /// How the last TER refresh resolved this scheme: MATCHED, UNMATCHED or
+  /// AMBIGUOUS. The TER file has no scheme code and no ISIN, so the join is
+  /// made on (AMC, scheme name) and can legitimately fail; recording HOW it
+  /// failed is what lets the ranking report a `ter_unmatched` gap instead of
+  /// a bare "no TER", which would read the same whether the file omitted the
+  /// scheme or the name turned out not to identify one. Set for the
+  /// direct-growth population only � nothing else is joined.
+  terJoinStatus String?
   /// Average AUM in rupees, from AMFI's scheme-wise AAUM data (published in
   /// lakh; converted on ingest so the column is in the same unit as money
   /// everywhere else).

@@ -71,7 +71,7 @@ const gateMocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   env: { RIA_VERDICTS_ENABLED: 'true' },
 }));
-vi.mock('../../../../src/priceFeeds/amfiCostAndSize.service.js', () => ({
+vi.mock('../../../../src/services/advisor/fundRanking/coverage.js', () => ({
   fundDataCoverage: gateMocks.coverage,
 }));
 vi.mock('../../../../src/services/advisor/fundRanking/methodology.service.js', () => ({
@@ -86,16 +86,33 @@ const { assertNamedFundReleaseGate, evaluateNamedFundReleaseGate } = await impor
   '../../../../src/services/advisor/fundRanking/releaseGate.js'
 );
 
-const CONFIG = { coverage: { minTerCoveragePct: 95, minAumCoveragePct: 95 } };
+const CONFIG = {
+  coverage: { minTerCoveragePct: 95, minAumCoveragePct: 95, minCandidatesPerBucket: 5 },
+};
+
+/** A bucket list where every bucket a portfolio uses is comfortably deep. */
+const HEALTHY_BUCKETS = [
+  { bucket: 'EQUITY_DOMESTIC', eligible: 420, used: true },
+  { bucket: 'DEBT', eligible: 260, used: true },
+  { bucket: 'GOLD', eligible: 11, used: true },
+  // Nothing allocates to this one, so its depth is not the gate's business.
+  { bucket: 'EQUITY_INTERNATIONAL', eligible: 1, used: false },
+];
+
+const coverageResult = (over: Record<string, unknown> = {}) => ({
+  eligibleSchemes: 1800,
+  terCoveragePct: 97,
+  aumEligibleSchemes: 1790,
+  aumCoveragePct: 96,
+  missingAum: [],
+  buckets: HEALTHY_BUCKETS,
+  ...over,
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   gateMocks.env.RIA_VERDICTS_ENABLED = 'true';
-  gateMocks.coverage.mockResolvedValue({
-    eligibleSchemes: 1800,
-    terCoveragePct: 97,
-    aumCoveragePct: 96,
-  });
+  gateMocks.coverage.mockResolvedValue(coverageResult());
   gateMocks.methodology.mockResolvedValue({ id: 'm2', version: 2, config: CONFIG });
   gateMocks.findFirst.mockResolvedValue({ version: 2 });
 });
@@ -111,11 +128,7 @@ describe('named-fund release gate', () => {
   // The failure this prevents: a cost-weighted ranking deciding on whichever
   // funds happen to have a TER, which is not a random sample.
   it('fails on thin TER coverage, and says what to do about it', async () => {
-    gateMocks.coverage.mockResolvedValue({
-      eligibleSchemes: 1800,
-      terCoveragePct: 61,
-      aumCoveragePct: 96,
-    });
+    gateMocks.coverage.mockResolvedValue(coverageResult({ terCoveragePct: 61 }));
     const r = await evaluateNamedFundReleaseGate();
     expect(r.ok).toBe(false);
     expect(r.problems.join(' ')).toMatch(/TER coverage is 61%/);
@@ -123,11 +136,9 @@ describe('named-fund release gate', () => {
   });
 
   it('fails on thin AUM coverage', async () => {
-    gateMocks.coverage.mockResolvedValue({
-      eligibleSchemes: 1800,
-      terCoveragePct: 99,
-      aumCoveragePct: 40,
-    });
+    gateMocks.coverage.mockResolvedValue(
+      coverageResult({ terCoveragePct: 99, aumCoveragePct: 40 }),
+    );
     const r = await evaluateNamedFundReleaseGate();
     expect(r.ok).toBe(false);
     expect(r.problems.join(' ')).toMatch(/AUM coverage is 40%/);
@@ -150,15 +161,77 @@ describe('named-fund release gate', () => {
     expect(r.problems.join(' ')).toMatch(/No signed-off ranking methodology/);
   });
 
+  // Depth, not just coverage. 100% TER coverage across three schemes is a
+  // bucket where the "ranking" names the only fund that qualifies.
+  it('fails when a bucket a model portfolio uses has too few eligible candidates', async () => {
+    gateMocks.coverage.mockResolvedValue(
+      coverageResult({
+        buckets: [
+          { bucket: 'EQUITY_DOMESTIC', eligible: 420, used: true },
+          { bucket: 'GOLD', eligible: 2, used: true },
+        ],
+      }),
+    );
+    const r = await evaluateNamedFundReleaseGate();
+    expect(r.ok).toBe(false);
+    expect(r.problems.join(' ')).toMatch(/Bucket GOLD has 2 eligible schemes, below the 5 required/);
+    await expect(assertNamedFundReleaseGate()).rejects.toThrow(/release gate failed/i);
+  });
+
+  it('ignores a thin bucket no model portfolio allocates to', async () => {
+    gateMocks.coverage.mockResolvedValue(
+      coverageResult({
+        buckets: [
+          { bucket: 'EQUITY_DOMESTIC', eligible: 420, used: true },
+          { bucket: 'OTHER_ALT', eligible: 0, used: false },
+        ],
+      }),
+    );
+    const r = await evaluateNamedFundReleaseGate();
+    expect(r.ok).toBe(true);
+  });
+
+  it('uses the methodology minimum over the default when one is configured', async () => {
+    gateMocks.methodology.mockResolvedValue({
+      id: 'm2',
+      version: 2,
+      config: { coverage: { ...CONFIG.coverage, minCandidatesPerBucket: 12 } },
+    });
+    gateMocks.coverage.mockResolvedValue(
+      coverageResult({ buckets: [{ bucket: 'GOLD', eligible: 11, used: true }] }),
+    );
+    const r = await evaluateNamedFundReleaseGate();
+    expect(r.ok).toBe(false);
+    expect(r.problems.join(' ')).toMatch(/below the 12 required/);
+  });
+
+  // The singular, because "has 1 eligible schemes" reads as a bug.
+  it('says "scheme" when a bucket has exactly one', async () => {
+    gateMocks.coverage.mockResolvedValue(
+      coverageResult({ buckets: [{ bucket: 'GOLD', eligible: 1, used: true }] }),
+    );
+    const r = await evaluateNamedFundReleaseGate();
+    expect(r.problems.join(' ')).toMatch(/has 1 eligible scheme,/);
+  });
+
+  // With nothing signed there is no methodology to read eligibility rules
+  // from, so coverage is not measured — and must not be reported as 0%,
+  // which would read as a data problem rather than a missing signature.
+  it('does not add a coverage complaint when nothing is signed', async () => {
+    gateMocks.methodology.mockResolvedValue(null);
+    const r = await evaluateNamedFundReleaseGate();
+    expect(r.problems).toHaveLength(1);
+    expect(r.problems[0]).toMatch(/No signed-off ranking methodology/);
+    expect(gateMocks.coverage).not.toHaveBeenCalled();
+  });
+
   // With the feature off the figures are still logged, but a thin dataset is
   // not a reason to refuse to boot.
   it('does not block boot when named-fund advice is switched off', async () => {
     gateMocks.env.RIA_VERDICTS_ENABLED = 'false';
-    gateMocks.coverage.mockResolvedValue({
-      eligibleSchemes: 1800,
-      terCoveragePct: 3,
-      aumCoveragePct: 1,
-    });
+    gateMocks.coverage.mockResolvedValue(
+      coverageResult({ terCoveragePct: 3, aumCoveragePct: 1 }),
+    );
     await expect(assertNamedFundReleaseGate()).resolves.toMatchObject({ ok: false });
   });
 });

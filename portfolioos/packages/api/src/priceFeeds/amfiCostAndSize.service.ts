@@ -15,11 +15,14 @@
  * the source. The join is therefore on a normalised base name.
  *
  * That was measured before it was built, against the live files on 21 Sept
- * 2026: 96.7% of direct-growth schemes in NAVAll matched a TER base name, and
- * exactly one TER base name mapped to more than one NSDL code (the blank row),
- * so the key is effectively unique. A name that matches more than one of our
- * schemes is left unmatched rather than guessed — the fund keeps a TER gap,
- * which the methodology already knows how to handle.
+ * 2026: 96.7% of direct-growth schemes in NAVAll matched a TER base name. A
+ * high match rate is not the same as a safe join, though: two AMCs can use
+ * the same product name, and a name-only join would hand one AMC's cost to
+ * another AMC's fund. So the join also requires the AMC to match and the key
+ * to be one-to-one within the direct-growth population — see `terJoin.ts`,
+ * which holds the rule and its reasoning. Anything else is recorded as
+ * `ter_unmatched` and the fund keeps a TER gap, which the methodology already
+ * knows how to handle.
  *
  * Both fetchers follow the conventions the other feeds in this folder set:
  * a failure is recorded and returned, never swallowed (CONTEXT.md §3.5), and a
@@ -31,12 +34,8 @@ import { Decimal } from 'decimal.js';
 import { request } from 'undici';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import {
-  latestTerByScheme,
-  normaliseSchemeName,
-  parseTerWorkbook,
-  type TerRow,
-} from './amfiTer.parse.js';
+import { latestTerByScheme, parseTerWorkbook, type TerRow } from './amfiTer.parse.js';
+import { ambiguousSchemes, joinTerToSchemes, type JoinScheme } from './terJoin.js';
 import { parseFundWiseAmcNames, parseSchemeWiseAum } from './amfiAum.parse.js';
 
 const AMFI_BASE = 'https://www.amfiindia.com';
@@ -47,7 +46,15 @@ const AUM_REFERER = `${AMFI_BASE}/aum-data/average-aum`;
 const HEADERS = { 'user-agent': 'EveryPaisa/1.0 (+portfolio analytics)', accept: 'application/json' };
 
 export interface CostSizeRefreshResult {
-  ter: { fetched: number; matched: number; unmatched: number; ambiguous: number; asOf: string | null };
+  ter: {
+    fetched: number;
+    matched: number;
+    unmatched: number;
+    ambiguous: number;
+    /** TER rows whose scheme name begins with no AMC we hold. */
+    unknownAmc: number;
+    asOf: string | null;
+  };
   aum: { fetched: number; matched: number; unmatched: number; amcs: number; asOf: string | null };
   failures: Array<{ source: string; reason: string }>;
 }
@@ -111,61 +118,89 @@ export async function refreshAmfiTer(
     }
     if (rows.length === 0) {
       failures.push({ source: 'amfi_ter', reason: 'parsed_zero_rows' });
-      return { fetched: 0, matched: 0, unmatched: 0, ambiguous: 0, asOf: null, failures };
+      return { fetched: 0, matched: 0, unmatched: 0, ambiguous: 0, unknownAmc: 0, asOf: null, failures };
     }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     logger.error({ err: reason, url }, '[amfiTer] fetch failed');
     failures.push({ source: 'amfi_ter', reason });
-    return { fetched: 0, matched: 0, unmatched: 0, ambiguous: 0, asOf: null, failures };
+    return { fetched: 0, matched: 0, unmatched: 0, ambiguous: 0, unknownAmc: 0, asOf: null, failures };
   }
 
   const latest = latestTerByScheme(rows);
 
-  // Our side of the join: direct-plan schemes, grouped by normalised base name.
-  // A name that resolves to more than one scheme is dropped rather than
-  // guessed — the wrong TER is worse than no TER.
+  // Our side of the join is the DIRECT-GROWTH population only. That is the
+  // one the ranking can recommend from, and it is the population the
+  // one-to-one requirement is defined over: including every plan and option
+  // variant would make each scheme name ambiguous eight ways over.
   const funds = await prisma.mutualFundMaster.findMany({
-    select: { id: true, schemeName: true, planType: true },
+    select: { schemeCode: true, schemeName: true, amcName: true, planType: true, optionType: true },
   });
-  const byName = new Map<string, string[]>();
-  for (const f of funds) {
-    if (f.planType && !/direct/i.test(f.planType)) continue;
-    const key = normaliseSchemeName(f.schemeName);
-    if (!byName.has(key)) byName.set(key, []);
-    byName.get(key)!.push(f.id);
+  const directGrowth: JoinScheme[] = funds
+    .filter(
+      (f) =>
+        f.planType != null &&
+        /direct/i.test(f.planType) &&
+        f.optionType != null &&
+        /growth/i.test(f.optionType),
+    )
+    .map((f) => ({ schemeCode: f.schemeCode, schemeName: f.schemeName, amcName: f.amcName }));
+
+  const join = joinTerToSchemes(directGrowth, [...latest.values()]);
+
+  if (join.ambiguous.length > 0) {
+    // Not an error: the join refused to guess and said so. It is logged
+    // because a rising count is how a naming change at AMFI announces itself.
+    logger.warn(
+      { ambiguous: join.ambiguous.slice(0, 5), total: join.ambiguous.length },
+      '[amfiTer] scheme names that are not identifiers — no TER written',
+    );
+  }
+  if (join.unknownAmc.length > 0) {
+    logger.warn(
+      { sample: join.unknownAmc.slice(0, 5), total: join.unknownAmc.length },
+      '[amfiTer] TER rows whose scheme name begins with no AMC we hold',
+    );
   }
 
-  let matched = 0;
-  let ambiguous = 0;
   let asOf: Date | null = null;
-
-  for (const [key, row] of latest) {
-    const ids = byName.get(key);
-    if (!ids || ids.length === 0) continue;
-    if (row.directTerPct == null) continue;
-    // Several of our rows (plan/option variants) can share one base name; that
-    // is expected and they all take the same direct-plan TER. What is NOT
-    // acceptable is a name matching two different schemes, which the source
-    // measurement showed does not happen — if it starts to, this is where it
-    // would show up as an inflated `ambiguous` count.
-    if (ids.length > 12) {
-      ambiguous += 1;
-      continue;
-    }
+  for (const m of join.matches) {
     await prisma.mutualFundMaster.updateMany({
-      where: { id: { in: ids } },
-      data: { terPct: new Decimal(row.directTerPct).toFixed(4), terAsOf: row.asOf },
+      where: { schemeCode: m.schemeCode },
+      data: {
+        terPct: new Decimal(m.terPct).toFixed(4),
+        terAsOf: m.asOf,
+        terJoinStatus: 'MATCHED',
+      },
     });
-    matched += ids.length;
-    if (!asOf || row.asOf > asOf) asOf = row.asOf;
+    if (!asOf || m.asOf > asOf) asOf = m.asOf;
+  }
+
+  // Status is rewritten for the whole direct-growth population every run, so
+  // a scheme that stops matching stops claiming it matched. `terPct` is NOT
+  // cleared: last month's figure is better evidence than none, and `terAsOf`
+  // already says how old it is.
+  const ambiguousCodes = ambiguousSchemes(directGrowth, join.ambiguous).map((s) => s.schemeCode);
+  if (ambiguousCodes.length > 0) {
+    await prisma.mutualFundMaster.updateMany({
+      where: { schemeCode: { in: ambiguousCodes } },
+      data: { terJoinStatus: 'AMBIGUOUS' },
+    });
+  }
+  const unmatchedCodes = join.unmatched.map((s) => s.schemeCode);
+  for (let i = 0; i < unmatchedCodes.length; i += 1000) {
+    await prisma.mutualFundMaster.updateMany({
+      where: { schemeCode: { in: unmatchedCodes.slice(i, i + 1000) } },
+      data: { terJoinStatus: 'UNMATCHED' },
+    });
   }
 
   return {
     fetched: latest.size,
-    matched,
-    unmatched: Math.max(0, latest.size - matched),
-    ambiguous,
+    matched: join.matches.length,
+    unmatched: join.unmatched.length,
+    ambiguous: join.ambiguous.length,
+    unknownAmc: join.unknownAmc.length,
     asOf: asOf ? asOf.toISOString().slice(0, 10) : null,
     failures,
   };
@@ -259,39 +294,29 @@ export async function refreshFundCostAndSize(): Promise<CostSizeRefreshResult> {
   const ter = await refreshAmfiTer();
   const aum = await refreshAmfiAum();
   return {
-    ter: { fetched: ter.fetched, matched: ter.matched, unmatched: ter.unmatched, ambiguous: ter.ambiguous, asOf: ter.asOf },
+    ter: {
+      fetched: ter.fetched,
+      matched: ter.matched,
+      unmatched: ter.unmatched,
+      ambiguous: ter.ambiguous,
+      unknownAmc: ter.unknownAmc,
+      asOf: ter.asOf,
+    },
     aum: { fetched: aum.fetched, matched: aum.matched, unmatched: aum.unmatched, amcs: aum.amcs, asOf: aum.asOf },
     failures: [...ter.failures, ...aum.failures],
   };
 }
 
 /**
- * What share of otherwise-eligible schemes we actually hold each figure for.
+ * Coverage lives in `services/advisor/fundRanking/coverage.ts`.
  *
- * This is the number the release gate reads: a methodology that scores on cost
- * and size is only as good as its coverage, and 60% coverage would mean the
- * ranking is mostly deciding on which funds happen to have data.
+ * It used to be here, counting active + direct + growth. That is three of the
+ * eight eligibility rules, so the denominator included NFOs with no history,
+ * schemes whose NAV had gone stale, segregated side-pockets and close-ended
+ * schemes — none of which can be recommended whatever their TER is. Measuring
+ * coverage against them understated it against the population the ranking
+ * actually sees.
+ *
+ * The replacement runs the real `assessEligibility`, which belongs beside the
+ * rules it calls rather than in the feed that fetches the raw figures.
  */
-export async function fundDataCoverage(): Promise<{
-  eligibleSchemes: number;
-  terCoveragePct: number;
-  aumCoveragePct: number;
-}> {
-  // "Otherwise eligible" = active, direct plan, growth option. Anything else is
-  // excluded by eligibility before cost or size is ever consulted, so counting
-  // it would understate coverage against a population the ranking never sees:
-  // the market has roughly eight rows per scheme once plans and options are
-  // counted, and only one of them can be recommended.
-  const where = {
-    isActive: true,
-    planType: { contains: 'Direct', mode: 'insensitive' as const },
-    optionType: { contains: 'Growth', mode: 'insensitive' as const },
-  };
-  const [total, withTer, withAum] = await Promise.all([
-    prisma.mutualFundMaster.count({ where }),
-    prisma.mutualFundMaster.count({ where: { ...where, terPct: { not: null } } }),
-    prisma.mutualFundMaster.count({ where: { ...where, aumInr: { not: null } } }),
-  ]);
-  const pct = (n: number) => (total === 0 ? 0 : Math.round((n / total) * 1000) / 10);
-  return { eligibleSchemes: total, terCoveragePct: pct(withTer), aumCoveragePct: pct(withAum) };
-}

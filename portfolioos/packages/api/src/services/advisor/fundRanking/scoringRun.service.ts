@@ -48,6 +48,7 @@ async function loadCandidates(asOf: Date): Promise<FundCandidate[]> {
       planType: true,
       optionType: true,
       terPct: true,
+      terJoinStatus: true,
       aumInr: true,
       navHistory: {
         where: { date: { gte: since, lte: asOf } },
@@ -78,6 +79,7 @@ async function loadCandidates(asOf: Date): Promise<FundCandidate[]> {
     // Null still means UNKNOWN and is handled as a data gap or an exclusion —
     // it is never defaulted to a number.
     terPct: f.terPct == null ? null : Number.parseFloat(f.terPct.toString()),
+    terJoinStatus: f.terJoinStatus,
     aumInr: f.aumInr == null ? null : new Decimal(f.aumInr.toString()),
     // Still absent: no verified source. See DATA-INVENTORY.md.
     managerTenureYears: null,
@@ -219,6 +221,7 @@ export async function runFundScoring(args: {
             metrics,
             passive,
             terPct: candidate.terPct,
+            terJoinStatus: candidate.terJoinStatus,
             aumInr: candidate.aumInr == null ? null : Number.parseFloat(candidate.aumInr.toString()),
             managerTenureYears: candidate.managerTenureYears,
           });

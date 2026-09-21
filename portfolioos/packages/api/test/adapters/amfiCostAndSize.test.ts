@@ -85,7 +85,11 @@ describe('AMFI TER workbook', () => {
 
   it('normalises names the same way on both sides of the join', () => {
     expect(normaliseSchemeName('HDFC Index Fund-NIFTY 50 Plan')).toBe('hdfc index fund nifty 50 plan');
-    expect(normaliseSchemeName("Axis Children's Fund")).toBe('axis children s fund');
+    // The apostrophe is deleted, not spaced: NAVAll writes "Children's" and
+    // the TER workbook has been seen writing "Childrens", and a fund should
+    // not lose its TER over a typographical convention.
+    expect(normaliseSchemeName("Axis Children's Fund")).toBe('axis childrens fund');
+    expect(normaliseSchemeName('AXIS CHILDRENS FUND')).toBe('axis childrens fund');
   });
 });
 
