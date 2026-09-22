@@ -21,7 +21,8 @@
     "backfill:net-worth-history": "tsx src/scripts/backfillNetWorthHistory.ts",
     "backfill:amfi-nav-gap": "tsx src/scripts/backfillAmfiNavGap.ts",
     "ter:audit": "tsx src/scripts/terJoinAudit.ts",
-    "amc-brands:generate": "tsx src/scripts/generateAmcBrandMap.ts"
+    "amc-brands:generate": "tsx src/scripts/generateAmcBrandMap.ts",
+    "methodology:sign": "tsx src/scripts/signMethodology.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

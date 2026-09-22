@@ -13,21 +13,22 @@
  * Never throws into the scheduler. A scoring failure means the engine falls
  * back to category-level advice — which is a degraded service, not an
  * outage — so it is logged and the process stays up.
+ *
+ * It does NOT sign anything, and it does NOT refresh TER/AUM. Signing is an
+ * explicit operation a human triggers (`signMethodology`); the cost-and-size
+ * refresh is its own nightly feed job with its own canary. This job reads
+ * what they left behind and scores it.
  */
 
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { env } from '../config/env.js';
-import {
-  currentMethodology,
-  ensureSignedMethodology,
-} from '../services/advisor/fundRanking/methodology.service.js';
+import { latestMethodology } from '../services/advisor/fundRanking/methodology.service.js';
 import {
   CalendarIntegrityError,
   runFundScoring,
 } from '../services/advisor/fundRanking/scoringRun.service.js';
-import { refreshFundCostAndSize } from '../priceFeeds/amfiCostAndSize.service.js';
 
 const TZ = 'Asia/Kolkata';
 
@@ -45,38 +46,21 @@ export async function runFundScoringJob(asOf: Date = new Date()): Promise<void> 
   const startedAt = Date.now();
   try {
     await runAsSystem(async () => {
-      await ensureSignedMethodology();
-      const methodology = await currentMethodology();
+      // The LATEST version, signed or not.
+      //
+      // Scoring used to sign the methodology first, which coupled two
+      // unrelated things: computing numbers, and a human taking
+      // responsibility for the method behind them. An unlicensed deployment
+      // could therefore not compute a single snapshot without also signing —
+      // so nobody could look at what production would recommend before
+      // deciding whether to stand behind it. Exactly backwards.
+      //
+      // Computing is a measurement. Only ADVICE needs a signature, and that
+      // is enforced where advice is read (advisorFacts.builder), not here.
+      const methodology = await latestMethodology();
       if (!methodology) {
-        // Expected on any deployment that has not turned named-fund advice on.
-        // Recorded rather than silent so "why are there no scores?" is
-        // answerable from the logs.
-        logger.info(
-          '[fundScoring] no signed methodology — skipping. Named-fund advice stays off until one is signed.',
-        );
+        logger.info('[fundScoring] no methodology version exists — nothing to score under');
         return;
-      }
-
-      // Cost and size first: the scoring pass reads terPct and aumInr, and
-      // scoring yesterday's cost against today's NAVs would rank funds on a
-      // mixture of two days. A failure here is recorded and does not stop the
-      // scoring — yesterday's TER is worth more than no ranking at all, and
-      // the release gate is what stops coverage quietly rotting.
-      const costAndSize = await refreshFundCostAndSize();
-      logger.info(
-        {
-          terMatched: costAndSize.ter.matched,
-          terUnmatched: costAndSize.ter.unmatched,
-          terAsOf: costAndSize.ter.asOf,
-          aumMatched: costAndSize.aum.matched,
-          aumAmcs: costAndSize.aum.amcs,
-          aumAsOf: costAndSize.aum.asOf,
-          failures: costAndSize.failures.length,
-        },
-        '[fundScoring] AMFI cost and size refreshed',
-      );
-      for (const failure of costAndSize.failures.slice(0, 5)) {
-        logger.warn(failure, '[fundScoring] cost/size source failed');
       }
 
       const result = await runFundScoring({
@@ -88,6 +72,7 @@ export async function runFundScoringJob(asOf: Date = new Date()): Promise<void> 
         {
           asOfDate: result.asOfDate.toISOString().slice(0, 10),
           methodologyVersion: methodology.version,
+          methodologySigned: methodology.signed,
           schemesConsidered: result.schemesConsidered,
           snapshotsWritten: result.snapshotsWritten,
           failures: result.failures,
@@ -118,11 +103,20 @@ export async function runFundScoringJob(asOf: Date = new Date()): Promise<void> 
 }
 
 export function startFundScoringJob(): void {
-  if (env.RIA_VERDICTS_ENABLED !== 'true') {
-    logger.info('[fundScoring] RIA_VERDICTS_ENABLED is off — nightly scoring not scheduled');
+  if (env.ENABLE_FUND_SCORING === 'false') {
+    logger.info('[fundScoring] disabled via ENABLE_FUND_SCORING=false');
     return;
   }
-  // 22:30 IST: after AMFI NAV (22:00), before the net-worth snapshot (23:45).
-  cron.schedule('30 22 * * *', () => void runFundScoringJob(), { timezone: TZ });
-  logger.info('[fundScoring] nightly scoring scheduled for 22:30 IST');
+  // Scheduled whether or not named-fund advice is switched on. Scores are a
+  // measurement of the market, and a deployment that is not licensed to give
+  // named advice still wants to see what its own engine would say — which is
+  // impossible if the only way to compute a snapshot is to sign for it.
+  //
+  // 22:45 IST: after the AMFI NAV sync (22:00) and the TER/AUM refresh
+  // (22:30), before the net-worth snapshot (23:45).
+  cron.schedule('45 22 * * *', () => void runFundScoringJob(), { timezone: TZ });
+  logger.info(
+    { adviceEnabled: env.RIA_VERDICTS_ENABLED === 'true' },
+    '[fundScoring] nightly scoring scheduled for 22:45 IST (advice still requires a signed methodology)',
+  );
 }

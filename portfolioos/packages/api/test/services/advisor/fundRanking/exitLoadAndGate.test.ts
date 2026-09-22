@@ -67,12 +67,16 @@ describe('exit-load suppression', () => {
 
 const gateMocks = vi.hoisted(() => ({
   coverage: vi.fn(),
+  modelPortfolios: vi.fn(),
   methodology: vi.fn(),
   findFirst: vi.fn(),
   env: { RIA_VERDICTS_ENABLED: 'true' },
 }));
 vi.mock('../../../../src/services/advisor/fundRanking/coverage.js', () => ({
   fundDataCoverage: gateMocks.coverage,
+  // The gate reads this too now: a model portfolio that allocates to nothing
+  // is its own problem, separate from a bucket that is merely thin.
+  modelPortfolioBuckets: gateMocks.modelPortfolios,
 }));
 vi.mock('../../../../src/services/advisor/fundRanking/methodology.service.js', () => ({
   currentMethodology: gateMocks.methodology,
@@ -99,6 +103,20 @@ const HEALTHY_BUCKETS = [
   { bucket: 'EQUITY_INTERNATIONAL', eligible: 1, used: false },
 ];
 
+/** Four production-shaped portfolios, each allocating to real buckets. */
+const HEALTHY_MODEL_PORTFOLIOS = [
+  {
+    id: 'mp1',
+    name: 'Aggressive',
+    riskCategory: 'AGGRESSIVE',
+    weights: [
+      { bucket: 'EQUITY_DOMESTIC', targetPct: 72 },
+      { bucket: 'DEBT', targetPct: 12 },
+      { bucket: 'GOLD', targetPct: 3 },
+    ],
+  },
+];
+
 const coverageResult = (over: Record<string, unknown> = {}) => ({
   eligibleSchemes: 1800,
   terCoveragePct: 97,
@@ -106,6 +124,7 @@ const coverageResult = (over: Record<string, unknown> = {}) => ({
   aumCoveragePct: 96,
   missingAum: [],
   buckets: HEALTHY_BUCKETS,
+  modelPortfolios: HEALTHY_MODEL_PORTFOLIOS,
   ...over,
 });
 
@@ -113,6 +132,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   gateMocks.env.RIA_VERDICTS_ENABLED = 'true';
   gateMocks.coverage.mockResolvedValue(coverageResult());
+  gateMocks.modelPortfolios.mockResolvedValue(HEALTHY_MODEL_PORTFOLIOS);
   gateMocks.methodology.mockResolvedValue({ id: 'm2', version: 2, config: CONFIG });
   gateMocks.findFirst.mockResolvedValue({ version: 2 });
 });

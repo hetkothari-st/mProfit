@@ -22,7 +22,11 @@
 import { prisma } from '../../../lib/prisma.js';
 import { logger } from '../../../lib/logger.js';
 import { env } from '../../../config/env.js';
-import { fundDataCoverage, type FundDataCoverage } from './coverage.js';
+import {
+  fundDataCoverage,
+  modelPortfolioBuckets,
+  type FundDataCoverage,
+} from './coverage.js';
 import { currentMethodology } from './methodology.service.js';
 import type { MethodologyConfig } from './types.js';
 
@@ -63,6 +67,7 @@ export async function evaluateNamedFundReleaseGate(): Promise<ReleaseGateResult>
         aumCoveragePct: 0,
         missingAum: [],
         buckets: [],
+        modelPortfolios: await modelPortfolioBuckets(),
       };
 
   const problems: string[] = [];
@@ -87,6 +92,18 @@ export async function evaluateNamedFundReleaseGate(): Promise<ReleaseGateResult>
     problems.push(
       `AUM coverage is ${coverage.aumCoveragePct}% of ${coverage.aumEligibleSchemes} eligible schemes, below the ${minAum}% required. ` +
         'Without it most of the universe is ineligible and the ranking is drawn from whatever happens to have data.',
+    );
+  }
+
+  // A model portfolio that allocates to nothing cannot be rebalanced towards,
+  // so a client assigned to it gets no advice at all — silently, because
+  // every other check passes. This is the shape the RLS bug produced: four
+  // portfolios that read as empty.
+  for (const mp of coverage.modelPortfolios) {
+    if (mp.weights.length > 0) continue;
+    problems.push(
+      `Model portfolio "${mp.name}" (${mp.riskCategory}) has no bucket with a positive ` +
+        'target weight. A client assigned to it would be rebalanced towards nothing.',
     );
   }
 
@@ -143,6 +160,21 @@ export async function assertNamedFundReleaseGate(): Promise<ReleaseGateResult> {
       methodologyLatest: result.methodology.latest,
     },
     '[fundRanking] named-fund data coverage',
+  );
+
+  // Every model portfolio and what it actually allocates to. Logged at boot
+  // because the failure this replaces was invisible: the query returned an
+  // empty set under RLS and the check passed on nothing. A list with names
+  // and weights in it cannot fail that way unnoticed.
+  logger.info(
+    {
+      modelPortfolios: result.coverage.modelPortfolios.map((mp) => ({
+        name: mp.name,
+        riskCategory: mp.riskCategory,
+        buckets: mp.weights.map((w) => `${w.bucket}:${w.targetPct}`),
+      })),
+    },
+    '[fundRanking] model portfolio bucket weights',
   );
 
   // Depth per bucket, logged beside coverage because a healthy percentage

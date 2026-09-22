@@ -19,12 +19,10 @@
 import 'dotenv/config';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { opsPrisma } from '../lib/opsDatabase.js';
 import { amcKey, deriveAmcBrands, type JoinScheme } from '../priceFeeds/terJoin.js';
 
-const prisma = new PrismaClient({
-  datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '' } },
-});
+const { prisma: prisma, disconnect } = opsPrisma();
 
 const TARGET = join(process.cwd(), 'src', 'priceFeeds', 'amcBrandMap.ts');
 
@@ -189,4 +187,4 @@ main()
     process.exitCode = 1;
     process.stderr.write(`${err instanceof Error ? err.stack : String(err)}\n`);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => disconnect());

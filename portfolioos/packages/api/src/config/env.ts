@@ -141,6 +141,13 @@ const EnvSchema = z.object({
   FEED_MAX_ROW_DROP_PCT: z.coerce.number().min(0).max(100).default(20),
   /** How long a feed run row is kept. Failed runs are kept twice as long. */
   FEED_RUN_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).default(90),
+  // Fund scoring and the cost/size refresh that feeds it. Both run whether or
+  // not named-fund advice is switched on: a deployment that is not licensed
+  // to name a scheme still wants to see what its own engine would say, and
+  // that is impossible if computing a snapshot requires signing for it.
+  // Advice remains gated on RIA_VERDICTS_ENABLED plus a signed methodology.
+  ENABLE_FUND_SCORING: z.enum(['true', 'false']).default('true'),
+  ENABLE_COST_SIZE_REFRESH: z.enum(['true', 'false']).default('true'),
   // Named-fund advice. With this off the advisor engine and the assistant
   // still work, but they speak in categories ("a large-cap index fund")
   // instead of naming a scheme. It defaults OFF because naming a scheme is

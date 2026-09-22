@@ -26,23 +26,30 @@
  *   ... --dry-run                           # detect and report, write nothing
  *   ... --detect-only                       # just the gap report
  *
- * Connects as the DIRECT_URL superuser for its writes, the same pattern as
- * seedFmv.ts and backfillNetWorthHistory.ts: MFNav is market data with no
- * owner, and NetWorthSnapshot rows span every user, so there is no single
- * user context this could run under.
+ * Connects as the APPLICATION role by default (see lib/opsDatabase.ts). MFNav
+ * is market data with no owner and needs nothing more. The NetWorthSnapshot
+ * flagging DOES span every user, so that step runs inside `runAsSystem`
+ * explicitly rather than relying on the connection's privileges — which is
+ * what silently made this a superuser script before.
  */
 
 import 'dotenv/config';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { opsPrisma } from '../lib/opsDatabase.js';
+import { runAsSystem } from '../lib/requestContext.js';
 import {
   fetchAmfiNavHistory,
   parseAmfiNavHistoryText,
 } from '../priceFeeds/amfiNavHistory.js';
 import { findNavGap, monthWindows, type DayCount } from '../priceFeeds/amfiNavGap.js';
+import { buildTradingCalendar } from '../services/advisor/fundRanking/navGaps.js';
+import { judgeCalendar } from '../services/advisor/fundRanking/calendarIntegrity.js';
 
-const prisma = new PrismaClient({
-  datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '' } },
-});
+/** The window the fund-scoring engine reads. Kept in step with
+ *  scoringRun.service.ts's NAV_LOOKBACK_YEARS. */
+const NAV_SCORING_WINDOW_YEARS = 5;
+
+const { prisma: prisma, disconnect } = opsPrisma();
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const utcDay = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -79,22 +86,39 @@ async function readFeedLogEvidence(): Promise<string> {
 // ─── 2. Backfill ────────────────────────────────────────────────────
 
 export interface BackfillResult {
+  /** Tags every row this run INSERTS. Reversal is a delete by this id. */
+  batchId: string;
   monthsFetched: number;
   rowsParsed: number;
   parseFailures: number;
+  /** Rows actually inserted. Existing rows are left untouched. */
   navsWritten: number;
+  /** Rows the report carried that were already in the table. */
+  rowsAlreadyPresent: number;
   unknownSchemeCodes: Set<string>;
   datesCovered: Set<string>;
+  /** Months that failed twice. The rest of the run continued. */
+  failedMonths: Array<{ month: string; reason: string }>;
 }
+
+/** Pause between write chunks, so a long backfill does not crowd out the
+ *  live app's request traffic. */
+const CHUNK_PAUSE_MS = 120;
+const MONTH_PAUSE_MS = 1_000;
+const RETRY_PAUSE_MS = 5_000;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function backfillWindow(from: Date, to: Date, dryRun: boolean): Promise<BackfillResult> {
   const result: BackfillResult = {
+    batchId: `amfi-hist-${new Date().toISOString().replace(/[:.]/g, '-')}`,
     monthsFetched: 0,
     rowsParsed: 0,
     parseFailures: 0,
     navsWritten: 0,
+    rowsAlreadyPresent: 0,
     unknownSchemeCodes: new Set(),
     datesCovered: new Set(),
+    failedMonths: [],
   };
 
   // schemeCode → MutualFundMaster.id. A code we have never seen is not
@@ -105,10 +129,59 @@ async function backfillWindow(from: Date, to: Date, dryRun: boolean): Promise<Ba
   const idByCode = new Map(masters.map((m) => [m.schemeCode, m.id]));
   console.log(`[backfill] ${idByCode.size} known scheme codes`);
 
+  const batchId = result.batchId;
+  console.log(`[backfill] batch id ${batchId}`);
+
   for (const w of monthWindows(from, to)) {
-    console.log(`[backfill] fetching ${iso(w.from)} → ${iso(w.to)}`);
-    const text = await fetchAmfiNavHistory(w.from, w.to);
-    const parsed = parseAmfiNavHistoryText(text);
+    const label = `${iso(w.from)}..${iso(w.to)}`;
+    const startedAt = new Date();
+
+    // One FeedRunLog row per month, so progress and failure are visible from
+    // the ops page while this is still running — a backfill that takes hours
+    // and reports only at the end is a backfill nobody can supervise.
+    const runRow = dryRun
+      ? null
+      : await prisma.feedRunLog.create({
+          data: {
+            feed: 'amfi_nav_backfill',
+            startedAt,
+            status: 'RUNNING',
+            reason: `month ${label}`,
+            details: { batchId, month: label },
+          },
+        });
+
+    let parsed: ReturnType<typeof parseAmfiNavHistoryText> | null = null;
+    // Fetch, and retry ONCE. A month that fails twice is recorded and the
+    // rest continue: one unreadable month should not cost the other sixty.
+    for (let attempt = 1; attempt <= 2 && parsed === null; attempt++) {
+      try {
+        console.log(`[backfill] fetching ${label}${attempt > 1 ? ` (retry ${attempt - 1})` : ''}`);
+        const text = await fetchAmfiNavHistory(w.from, w.to);
+        const p = parseAmfiNavHistoryText(text);
+        if (p.rows.length === 0 && p.dataLines > 0) {
+          throw new Error(`parsed 0 of ${p.dataLines} data lines`);
+        }
+        parsed = p;
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        if (attempt === 2) {
+          result.failedMonths.push({ month: label, reason });
+          console.log(`[backfill]   FAILED ${label}: ${reason}`);
+          if (runRow) {
+            await prisma.feedRunLog.update({
+              where: { id: runRow.id },
+              data: { status: 'FAILED', finishedAt: new Date(), reason },
+            });
+          }
+        } else {
+          console.log(`[backfill]   ${label} failed (${reason}) — retrying once`);
+          await sleep(RETRY_PAUSE_MS);
+        }
+      }
+    }
+    if (parsed === null) continue;
+
     result.monthsFetched++;
     result.rowsParsed += parsed.rows.length;
     result.parseFailures += parsed.parseFailures;
@@ -132,29 +205,57 @@ async function backfillWindow(from: Date, to: Date, dryRun: boolean): Promise<Ba
     }
 
     if (dryRun) {
-      console.log(`[backfill]   dry run — would write ${writes.length} NAV rows`);
+      console.log(`[backfill]   dry run — would insert up to ${writes.length} NAV rows`);
       result.navsWritten += writes.length;
       continue;
     }
 
-    // Idempotent by construction: (fundId, date) is unique, and a re-run
-    // updates the same row to the same value. Chunked so one bad month does
-    // not become one enormous statement.
-    const CHUNK = 1000;
+    // INSERT ONLY, never overwrite.
+    //
+    // `createMany({ skipDuplicates: true })` leaves an existing (fundId,date)
+    // exactly as it is. That matters for two reasons: a NAV already recorded
+    // by the nightly sync is the one that was actually published that day and
+    // must not be restated from a historical report, and a row the backfill
+    // did not create must never carry this batch id — otherwise reversing the
+    // batch would delete data the backfill never added.
+    const CHUNK = 2000;
+    let inserted = 0;
     for (let i = 0; i < writes.length; i += CHUNK) {
       const slice = writes.slice(i, i + CHUNK);
-      await prisma.$transaction(
-        slice.map((w2) =>
-          prisma.mFNav.upsert({
-            where: { fundId_date: { fundId: w2.fundId, date: w2.date } },
-            create: w2,
-            update: { nav: w2.nav },
-          }),
-        ),
-      );
-      result.navsWritten += slice.length;
+      const res = await prisma.mFNav.createMany({
+        data: slice.map((x) => ({ ...x, backfillBatchId: batchId })),
+        skipDuplicates: true,
+      });
+      inserted += res.count;
+      result.navsWritten += res.count;
+      result.rowsAlreadyPresent += slice.length - res.count;
+      // Throttle: this runs against the live database while people are using
+      // the app. A short pause between chunks keeps the write load from
+      // crowding out request traffic.
+      await sleep(CHUNK_PAUSE_MS);
     }
-    console.log(`[backfill]   wrote ${writes.length} NAV rows`);
+    console.log(
+      `[backfill]   inserted ${inserted}, already present ${writes.length - inserted}`,
+    );
+    if (runRow) {
+      await prisma.feedRunLog.update({
+        where: { id: runRow.id },
+        data: {
+          status: 'OK',
+          finishedAt: new Date(),
+          rowsParsed: parsed.dataLines,
+          rowsImported: inserted,
+          parseFailures: parsed.parseFailures,
+          reason: null,
+          details: {
+            batchId,
+            month: label,
+            alreadyPresent: writes.length - inserted,
+          },
+        },
+      });
+    }
+    await sleep(MONTH_PAUSE_MS);
   }
 
   return result;
@@ -166,7 +267,20 @@ const FLAG_REASON =
   'Mutual fund NAVs did not reach us on this date, so this figure was ' +
   'calculated from the last prices we had. Treat it as an estimate.';
 
+/**
+ * Flag the snapshots in the window.
+ *
+ * Wrapped in `runAsSystem` because `NetWorthSnapshot` is user-scoped and this
+ * crosses every tenant. It used to work only because the connection happened
+ * to be the owner role — which meant a read-only sizing check on the app role
+ * reported ZERO rows in the same window this then modified 303 of. Saying so
+ * explicitly is the difference between a decision and an accident.
+ */
 async function flagSnapshots(from: Date, to: Date, dryRun: boolean) {
+  return runAsSystem(() => flagSnapshotsInner(from, to, dryRun));
+}
+
+async function flagSnapshotsInner(from: Date, to: Date, dryRun: boolean) {
   const where = {
     asOf: { gte: from, lte: to },
     // Never re-stamp a row that is already flagged: dataQualityAt is the
@@ -224,8 +338,28 @@ async function main() {
 
   const fromArg = arg('from');
   const toArg = arg('to');
-  const from = fromArg ? utcDay(fromArg) : detected.start;
-  const to = toArg ? utcDay(toArg) : detected.end;
+
+  // The whole scoring window plus a buffer, for a database whose NAV history
+  // is too sparse for the gap detector to bound anything — which is the state
+  // production was in: 314 trading days across five years, so "the gap" was
+  // most of the history and there was no healthy day on either side of it.
+  const fullHistory = hasFlag('full-history');
+  const bufferMonths = Number.parseInt(arg('buffer-months') ?? '3', 10);
+  let from = fromArg ? utcDay(fromArg) : detected.start;
+  let to = toArg ? utcDay(toArg) : detected.end;
+  if (fullHistory) {
+    const end = new Date();
+    const start = new Date(end);
+    start.setUTCFullYear(start.getUTCFullYear() - NAV_SCORING_WINDOW_YEARS);
+    start.setUTCMonth(start.getUTCMonth() - bufferMonths);
+    from = start;
+    to = end;
+    console.log(
+      `
+Full history requested: ${NAV_SCORING_WINDOW_YEARS} year scoring window ` +
+        `plus ${bufferMonths} months of buffer.`,
+    );
+  }
 
   if (detectOnly) return;
   if (!from || !to) {
@@ -259,4 +393,4 @@ main()
     console.error(err);
     process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => disconnect());

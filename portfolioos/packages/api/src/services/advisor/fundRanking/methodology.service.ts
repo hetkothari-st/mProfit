@@ -23,42 +23,86 @@ export interface SignedMethodology {
 }
 
 /**
- * Stamp the seeded methodology with the configured principal officer.
+ * Sign a methodology version. EXPLICIT ONLY — nothing calls this implicitly.
  *
- * The migration seeds v1 unsigned on purpose — SQL cannot read the env var,
- * and writing a signatory the deployment never named would make the audit
- * trail a fiction. This runs at job start and signs the highest unsigned
- * version, but only when named-fund advice is actually switched on.
+ * It used to run at the head of the nightly scoring job, which coupled two
+ * unrelated things: computing scores, and a human taking responsibility for
+ * the method that produced them. The practical cost was that an unlicensed
+ * deployment could not compute a single snapshot without also signing —
+ * so production could not even look at what it would recommend.
  *
- * Idempotent: a version already signed is left exactly as it was, because
- * re-stamping would rewrite who approved advice that has already gone out.
+ * They are separate now. Scoring runs under the latest version whether it is
+ * signed or not; only ADVICE requires a signature, and that is checked when
+ * the advice is read, not when the numbers are computed.
+ *
+ * Throws when `RIA_PRINCIPAL_OFFICER` is unset. A signature needs a name: a
+ * regulator asking who approved this will not accept "the repository", and
+ * signing with a placeholder would make the audit trail a fiction. Refusing
+ * is the safe half of that failure.
+ *
+ * Idempotent per version: a version already signed is left exactly as it was,
+ * because re-stamping rewrites who approved advice that has already gone out.
  */
-export async function ensureSignedMethodology(): Promise<void> {
-  if (env.RIA_VERDICTS_ENABLED !== 'true') return;
+export async function signMethodology(opts: { version?: number } = {}): Promise<{
+  signed: boolean;
+  version: number | null;
+  signedOffBy: string | null;
+}> {
   const officer = env.RIA_PRINCIPAL_OFFICER?.trim();
   if (!officer) {
-    // env.ts makes this fatal at boot; if we somehow get here, refusing to
-    // sign is the safe half of the failure.
-    logger.warn(
-      '[fundRanking] RIA_VERDICTS_ENABLED is on but RIA_PRINCIPAL_OFFICER is empty — methodology stays unsigned, advice stays category-level',
+    throw new Error(
+      'Refusing to sign a ranking methodology: RIA_PRINCIPAL_OFFICER is not set. ' +
+        'A signature records who approved the method; it cannot be anonymous.',
     );
-    return;
   }
 
-  const unsigned = await prisma.rankingMethodologyVersion.findFirst({
-    where: { signedOffAt: null },
+  const target = await prisma.rankingMethodologyVersion.findFirst({
+    where: {
+      signedOffAt: null,
+      ...(opts.version === undefined ? {} : { version: opts.version }),
+    },
     orderBy: { version: 'desc' },
   });
-  if (!unsigned) return;
+  if (!target) {
+    logger.info('[fundRanking] nothing to sign — no unsigned methodology version');
+    return { signed: false, version: null, signedOffBy: null };
+  }
 
   await prisma.rankingMethodologyVersion.update({
-    where: { id: unsigned.id },
+    where: { id: target.id },
     data: { signedOffBy: officer, signedOffAt: new Date() },
   });
   logger.info(
-    { version: unsigned.version, signedOffBy: officer },
+    { version: target.version, signedOffBy: officer },
     '[fundRanking] methodology signed off',
   );
+  return { signed: true, version: target.version, signedOffBy: officer };
+}
+
+/**
+ * The newest methodology version, signed or not.
+ *
+ * This is what SCORING runs under. Computing a snapshot is a measurement, and
+ * a measurement does not need a signature — it needs the newest agreed
+ * method. Whether anyone may be ADVISED from that snapshot is a separate
+ * question, answered by `currentMethodology()` at read time.
+ */
+export async function latestMethodology(): Promise<{
+  id: string;
+  version: number;
+  config: MethodologyConfig;
+  signed: boolean;
+} | null> {
+  const row = await prisma.rankingMethodologyVersion.findFirst({
+    orderBy: { version: 'desc' },
+  });
+  if (!row) return null;
+  return {
+    id: row.id,
+    version: row.version,
+    config: row.config as unknown as MethodologyConfig,
+    signed: Boolean(row.signedOffAt && row.signedOffBy),
+  };
 }
 
 /** The newest signed methodology, or null when none is signed. Null is a

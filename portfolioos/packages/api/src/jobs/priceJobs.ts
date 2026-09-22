@@ -1,7 +1,9 @@
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
+import { env } from '../config/env.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { loadAmfiNavToDb } from '../priceFeeds/amfi.service.js';
+import { refreshFundCostAndSize } from '../priceFeeds/amfiCostAndSize.service.js';
 import {
   FeedCanaryError,
   captureFeedFailure,
@@ -41,6 +43,7 @@ const running = {
   foBhavcopy: false,
   foLive: false,
   fuel: false,
+  costSize: false,
 };
 
 async function runGuarded<K extends keyof typeof running>(
@@ -96,6 +99,50 @@ async function runAmfiJob(): Promise<void> {
     await pruneFeedRunLogs();
     return r;
   });
+}
+
+/**
+ * AMFI TER and scheme-wise AUM.
+ *
+ * Its own job rather than the first step of fund scoring, which is where it
+ * used to live. Two reasons that mattered in production:
+ *
+ *   - It was gated on named-fund advice being switched on, so an unlicensed
+ *     deployment held `terPct` and `aumInr` null on all 14,673 schemes and
+ *     the release gate reported 0% coverage — of nothing, because there was
+ *     nothing to measure.
+ *   - A fetch failure was swallowed inside a scoring run, where it showed up
+ *     as thinner coverage rather than as a feed that did not arrive.
+ *
+ * It is a feed, so it goes through the canary like every other feed. Runs at
+ * 22:30, between the NAV sync (22:00) and scoring (22:45), because scoring
+ * reads what this leaves behind.
+ */
+async function runCostSizeJob(): Promise<void> {
+  await runGuarded('costSize', 'AMFI cost and size refresh', () =>
+    runFeedWithCanary(
+      'amfi_cost_size',
+      () => refreshFundCostAndSize(),
+      (x) => ({
+        // Measured at the TER join, which is the half that can silently stop
+        // identifying schemes. AUM joins on an exact AMFI code and either
+        // works or does not.
+        rowsParsed: x.ter.fetched,
+        rowsImported: x.ter.matched,
+        parseFailures: x.ter.ambiguous + x.ter.unmappedAmc,
+        details: {
+          terUnmatched: x.ter.unmatched,
+          terAmbiguous: x.ter.ambiguous,
+          terUnmappedAmc: x.ter.unmappedAmc,
+          terAsOf: x.ter.asOf,
+          aumMatched: x.aum.matched,
+          aumAmcs: x.aum.amcs,
+          aumAsOf: x.aum.asOf,
+          sourceFailures: x.failures.length,
+        },
+      }),
+    ),
+  );
 }
 
 async function runStockEODJob(): Promise<void> {
@@ -278,6 +325,11 @@ export function startPriceJobs(): void {
   // AMFI NAV at 10:00 PM IST every day
   cron.schedule('0 22 * * *', runAmfiJob, { timezone: TZ });
 
+  // TER and AUM at 10:30 PM IST, between the NAV sync and fund scoring.
+  if (env.ENABLE_COST_SIZE_REFRESH !== 'false') {
+    cron.schedule('30 22 * * *', runCostSizeJob, { timezone: TZ });
+  }
+
   // Stock EOD at 4:30 PM IST Mon–Fri
   cron.schedule('30 16 * * 1-5', runStockEODJob, { timezone: TZ });
 
@@ -329,6 +381,7 @@ export function startPriceJobs(): void {
 
 export {
   runAmfiJob,
+  runCostSizeJob,
   runStockEODJob,
   runStockIntradayJob,
   runUniverseSync,

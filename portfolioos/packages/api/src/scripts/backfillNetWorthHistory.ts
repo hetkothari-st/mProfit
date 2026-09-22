@@ -17,13 +17,11 @@
  * correctly scoped to each user.
  */
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { opsPrisma } from '../lib/opsDatabase.js';
 import { runAsUser } from '../lib/requestContext.js';
 import { getDashboardNetWorth } from '../services/dashboard.service.js';
 
-const directPrisma = new PrismaClient({
-  datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '' } },
-});
+const { prisma: directPrisma, disconnect } = opsPrisma();
 
 function todayAsOf(): Date {
   const now = new Date();
@@ -72,5 +70,5 @@ backfill()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await directPrisma.$disconnect();
+    await disconnect();
   });
