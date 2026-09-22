@@ -38,6 +38,7 @@ import {
 import { listPolicies } from '../services/insurance.service.js';
 import { Decimal, HELP_TOPICS, matchHelpTopics } from '@everypaisa/shared';
 import { QueryIntent, type ClassifiedQuery } from './queryClassifier.js';
+import { effectivePlan } from '../lib/effectivePlan.js';
 
 export interface AssistantContext {
   queryIntent: string;
@@ -86,6 +87,7 @@ async function buildUserProfile(
       email: true,
       dob: true,
       plan: true,
+      planExpiresAt: true,
       role: true,
     },
   });
@@ -119,7 +121,7 @@ async function buildUserProfile(
     fullName: user?.name ?? null,
     email: user?.email ?? null,
     age,
-    subscriptionTier: user?.plan ?? 'FREE',
+    subscriptionTier: user ? effectivePlan(user) : 'FREE',
     userRole: user?.role ?? 'INVESTOR',
     totalNetWorth: netWorth,
     totalLiabilities: liabilities,
