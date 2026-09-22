@@ -26,6 +26,15 @@ export interface CaClient {
   consentBasis: CaConsentBasis | null;
   consentNote: string | null;
   createdAt: string;
+  /**
+   * What this grant permits changing. The client decides; the policies
+   * enforce. Present here so the workspace can stop offering buttons that are
+   * certain to be refused — which is a courtesy, not the boundary.
+   */
+  canEditBooks: boolean;
+  canEditTransactions: boolean;
+  canEditImports: boolean;
+  canEditFmv: boolean;
 }
 
 export interface CaAuditEntry {
