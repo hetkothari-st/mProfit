@@ -25,6 +25,10 @@ import {
   CA_SCOPE_CATEGORIES,
 } from '../services/ca/caAccess.service.js';
 import { AssetClass } from '@prisma/client';
+import {
+  buildInviteEmail,
+  sendInviteEmail,
+} from '../services/ca/caInviteEmail.service.js';
 
 const managedClientSchema = z.object({
   name: z.string().min(1).max(200),
@@ -129,4 +133,26 @@ export async function updateMyGrantScopeHandler(req: Request, res: Response) {
 export async function reinstateGrantHandler(req: Request, res: Response) {
   await reinstateGrant(req.user!.id, req.params.clientId!, req);
   noContent(res);
+}
+
+// ─── Emailing an invitation ───────────────────────────────────────────
+//
+// Preview and send take the SAME body and run through the same builder, so
+// what the advisor approved on screen is what leaves the server. A preview
+// produced by a second code path is a preview that can lie.
+
+const inviteEmailSchema = z.object({
+  subject: z.string().max(200).optional(),
+  message: z.string().max(5000).optional(),
+});
+
+/** The draft, rendered with whatever edits were sent (none on first open). */
+export async function previewInviteEmailHandler(req: Request, res: Response) {
+  const edits = inviteEmailSchema.parse(req.body ?? {});
+  ok(res, await buildInviteEmail(req.user!.id, req.params.clientId!, edits));
+}
+
+export async function sendInviteEmailHandler(req: Request, res: Response) {
+  const edits = inviteEmailSchema.parse(req.body ?? {});
+  ok(res, await sendInviteEmail(req.user!.id, req.params.clientId!, edits, req));
 }
