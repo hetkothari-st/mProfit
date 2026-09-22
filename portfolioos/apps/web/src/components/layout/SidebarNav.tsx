@@ -8,6 +8,7 @@ import { AssetClassSectionList } from './AssetClassSectionList';
 import { FamilyNavTree } from './FamilyNavTree';
 import { NavSection, OVERVIEW_ITEMS, ASSET_CLASS_ITEMS, NAV_SECTIONS } from './navItems';
 import { Briefcase, ShieldCheck } from 'lucide-react';
+import { LIVE_QUERY } from '@/lib/liveQuery';
 import { useQuery } from '@tanstack/react-query';
 import { caApi } from '@/api/ca.api';
 
@@ -52,7 +53,10 @@ export function SidebarNav({
     queryKey: ['ca', 'clients', 'count'],
     queryFn: async () => (await caApi.listClients()).length,
     // Follows a grant appearing or being withdrawn in someone else's session.
-    refetchInterval: 60_000,
+    // Refetched on focus like the other live views; polled more slowly because
+    // it only decides whether a sidebar entry exists.
+    ...LIVE_QUERY,
+    refetchInterval: 30_000,
     retry: false,
   });
 

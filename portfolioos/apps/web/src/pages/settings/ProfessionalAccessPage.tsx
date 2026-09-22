@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ShieldCheck,
@@ -61,21 +62,20 @@ export function ProfessionalAccessPage() {
   const [resending, setResending] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
 
-  // The professional accepts from their own browser, so there is no event to
-  // listen for here. Polled instead: quickly while an invitation is waiting,
-  // slowly otherwise, and not at all in a background tab.
+  // The professional accepts, and acts, from their own browser, so these are
+  // live queries: see LIVE_QUERY for why polling alone did not keep up.
   const { data: grants, isLoading } = useQuery({
     queryKey: ['professional-access', 'grants'],
     queryFn: () => professionalAccessApi.grants(),
-    refetchInterval: (query) =>
-      query.state.data?.some((g) => g.status === 'PENDING') ? 5_000 : 30_000,
-    refetchOnWindowFocus: true,
+    ...LIVE_QUERY,
+    refetchInterval: LIVE_INTERVAL_MS,
   });
 
   const { data: activity } = useQuery({
     queryKey: ['professional-access', 'activity'],
     queryFn: () => professionalAccessApi.activity(),
-    refetchInterval: 30_000,
+    ...LIVE_QUERY,
+    refetchInterval: LIVE_INTERVAL_MS * 2,
   });
 
   useAnnounceAcceptances(grants);

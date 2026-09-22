@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -80,15 +81,13 @@ export function ClientBooksPage() {
   const { clientId = '' } = useParams();
   const qc = useQueryClient();
 
-  // Polled, because the account holder changes this from a different session
-  // and there is no push channel between two people's browsers. Twenty seconds
-  // is quick enough that a permission granted on a phone call shows up before
-  // the call ends, and it pauses in a background tab.
+  // The account holder changes this from a different session, so it is a
+  // live query: see LIVE_QUERY for why polling alone did not keep up.
   const { data: clients } = useQuery({
     queryKey: ['ca', 'clients'],
     queryFn: () => caApi.listClients(),
-    refetchInterval: 20_000,
-    refetchOnWindowFocus: true,
+    ...LIVE_QUERY,
+    refetchInterval: LIVE_INTERVAL_MS,
   });
   const client = (clients ?? []).find((c) => c.id === clientId) ?? null;
 
