@@ -15,6 +15,7 @@ import { FamilyPage } from './pages/family/FamilyPage';
 import { CaWorkspacePage } from './pages/ca/CaWorkspacePage';
 import { ClientBooksPage } from './pages/ca/ClientBooksPage';
 import { AcceptCaInvitationPage } from './pages/ca/AcceptCaInvitationPage';
+import { AcceptProfessionalInvitePage } from './pages/ca/AcceptProfessionalInvitePage';
 import { ProfessionalAccessPage } from './pages/settings/ProfessionalAccessPage';
 import { FamilyMemberPage } from './pages/family/FamilyMemberPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
@@ -90,6 +91,13 @@ export function App() {
       <Route
         path="/families/invitations/:token/accept"
         element={<AcceptInvitationPage />}
+      />
+      {/* Outside the protected tree on purpose: a professional opening this
+          link may not have an account yet, and has to be told who is asking
+          before being asked to make one. */}
+      <Route
+        path="/professional-invitations/:token"
+        element={<AcceptProfessionalInvitePage />}
       />
       <Route
         path="/onboarding"

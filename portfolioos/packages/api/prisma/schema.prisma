@@ -380,8 +380,12 @@ model PendingRegistration {
 /// — there is nothing for a CA to escalate into.
 model Client {
   id        String   @id @default(cuid())
-  advisorId String
-  advisor   User     @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+  /// Null while a CLIENT-initiated invitation is still open: the account
+  /// holder has named an email, and nobody has accepted it yet. Every CA
+  /// policy keys off `advisorId = app_current_user_id()`, and null matches
+  /// nobody, so an unaccepted invitation grants nothing to anyone.
+  advisorId String?
+  advisor   User?    @relation(fields: [advisorId], references: [id], onDelete: Cascade)
   name      String
   email     String?
   pan       String?
@@ -401,6 +405,14 @@ model Client {
 
   kind   ClientKind   @default(SHADOW)
   status ClientStatus @default(PENDING)
+
+  /// Who asked. CLIENT is the ordinary path — an account holder inviting
+  /// their accountant — and is free for the professional who accepts.
+  /// ADVISOR is a practice onboarding its own client, which is a paid
+  /// feature. The distinction decides the gate, the wording of the email and
+  /// which side may reinstate a revoked grant, so it is recorded rather than
+  /// inferred from whether `advisorId` happened to be set first.
+  initiatedBy ClientInitiator @default(ADVISOR)
 
   // Consent flow (INVITED only). Shaped like FamilyInvitation's token/expiry
   // rather than a second table: there is at most one pending invite per row,
@@ -432,6 +444,15 @@ model Client {
   /// the matching list an allowlist, and an empty list then denies everything:
   /// the same contract as `FamilyMember.visibleAssetClasses`, chosen so the
   /// two cannot be read as meaning opposite things.
+  /// What they may CHANGE, as opposed to see. All false for a new grant: a
+  /// professional reads until the account holder decides otherwise. Grants
+  /// that existed before this was added were backfilled to true, because that
+  /// is what they already had.
+  canEditBooks        Boolean @default(false)
+  canEditTransactions Boolean @default(false)
+  canEditImports      Boolean @default(false)
+  canEditFmv          Boolean @default(false)
+
   scopeAllPortfolios   Boolean      @default(true)
   scopeAllAssetClasses Boolean      @default(true)
   scopeAllCategories   Boolean      @default(true)
@@ -461,8 +482,15 @@ model ClientPortfolioScope {
 }
 
 enum ClientKind {
+  /// Books kept for someone with no login. No longer creatable — existing
+  /// rows stay readable so a practice does not lose work already done.
   SHADOW
   INVITED
+}
+
+enum ClientInitiator {
+  ADVISOR
+  CLIENT
 }
 
 enum ClientStatus {

@@ -11,6 +11,11 @@ import {
   acceptInvitationHandler,
   revokeGrantHandler,
   listMyProfessionalsHandler,
+  listMyGrantsHandler,
+  inviteProfessionalHandler,
+  cancelProfessionalInvitationHandler,
+  peekProfessionalInvitationHandler,
+  acceptProfessionalInvitationHandler,
   getMyGrantHandler,
   updateMyGrantScopeHandler,
   reinstateGrantHandler,
@@ -59,16 +64,29 @@ import {
  */
 export const caRouter = Router();
 caRouter.use(authenticate);
-caRouter.use(requireFeature('CA_WORKSPACE'));
+
+/**
+ * The plan gate moved off the whole router and onto the routes that earn it.
+ *
+ * Acting for a client who INVITED you is free: the account holder is the
+ * customer, and their accountant being told to subscribe before they can read
+ * the books they were just given would make the invitation worthless. What the
+ * advisor plan buys is a practice of your own — onboarding your own clients.
+ *
+ * Reading a client's books is therefore ungated here and gated by the GRANT,
+ * resolved per request by `getCaScope`. Two different questions: "may you use
+ * this feature" and "may you act for this person".
+ */
+const requireAdvisorPlan = requireFeature('CA_WORKSPACE');
 
 // Grants
 caRouter.get('/clients', asyncHandler(listClientsHandler));
-caRouter.post('/clients', asyncHandler(createManagedClientHandler));
+caRouter.post('/clients', requireAdvisorPlan, asyncHandler(createManagedClientHandler));
 // Returns the invitation token to the caller rather than emailing it. Delivery
 // is deliberately left to the caller for now: wiring it to the mailer without
 // a template, a bounce path and a rate limit would be worse than an explicit
 // gap, and the token is useless without the invitee's own login anyway.
-caRouter.post('/clients/invite', asyncHandler(inviteClientHandler));
+caRouter.post('/clients/invite', requireAdvisorPlan, asyncHandler(inviteClientHandler));
 // Preview is a POST because it carries the advisor's current edits; it reads
 // nothing else and changes nothing.
 caRouter.post('/clients/:clientId/invite-email/preview', asyncHandler(previewInviteEmailHandler));
@@ -153,11 +171,35 @@ caRouter.get('/clients/:clientId/balance-sheet', asyncHandler(caGetBalanceSheet)
 export const professionalAccessRouter = Router();
 professionalAccessRouter.use(authenticate);
 professionalAccessRouter.get('/', asyncHandler(listMyProfessionalsHandler));
+// Everything on the Account Access page, invitations nobody has accepted
+// included — which is what `/` deliberately omits.
+professionalAccessRouter.get('/grants', asyncHandler(listMyGrantsHandler));
+professionalAccessRouter.post('/invite', asyncHandler(inviteProfessionalHandler));
 professionalAccessRouter.get('/activity', asyncHandler(listCaActivityHandler));
 // `/invitations/...` is declared before `/:clientId/...` so a token is never
 // mistaken for a client id.
 professionalAccessRouter.post('/invitations/:token/accept', asyncHandler(acceptInvitationHandler));
 professionalAccessRouter.get('/:clientId', asyncHandler(getMyGrantHandler));
 professionalAccessRouter.patch('/:clientId/scope', asyncHandler(updateMyGrantScopeHandler));
+professionalAccessRouter.post('/:clientId/cancel', asyncHandler(cancelProfessionalInvitationHandler));
 professionalAccessRouter.post('/:clientId/revoke', asyncHandler(revokeGrantHandler));
 professionalAccessRouter.post('/:clientId/reinstate', asyncHandler(reinstateGrantHandler));
+
+/**
+ * The professional's side of a CLIENT-initiated invitation.
+ *
+ * Its own router because the peek must work signed out — someone who has never
+ * heard of this product is being asked to make an account, and "who is asking
+ * and for what" has to be answerable before they do. Accepting needs a session,
+ * because accepting is what names them on the grant.
+ *
+ * No plan gate. Acting for a client who invited you is free; the advisor plan
+ * is for running a practice of your own.
+ */
+export const professionalInviteRouter = Router();
+professionalInviteRouter.get('/:token', asyncHandler(peekProfessionalInvitationHandler));
+professionalInviteRouter.post(
+  '/:token/accept',
+  authenticate,
+  asyncHandler(acceptProfessionalInvitationHandler),
+);

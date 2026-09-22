@@ -19,6 +19,11 @@ import {
   listMyProfessionals,
   listCaActivity,
   getCaScope,
+  inviteProfessional,
+  acceptProfessionalInvitation,
+  peekProfessionalInvitation,
+  cancelProfessionalInvitation,
+  listMyProfessionalGrants,
   getGrantForSubject,
   updateGrantScope,
   reinstateGrant,
@@ -112,6 +117,16 @@ const ASSET_CLASSES = Object.values(AssetClass) as [AssetClass, ...AssetClass[]]
  * access to all portfolios again" unexpressible.
  */
 const grantScopeSchema = z.object({
+  // Any subset. Absent means untouched, which is what lets the Advanced panel
+  // send one switch without restating the other three.
+  edit: z
+    .object({
+      books: z.boolean().optional(),
+      transactions: z.boolean().optional(),
+      imports: z.boolean().optional(),
+      fmv: z.boolean().optional(),
+    })
+    .optional(),
   portfolioIds: z.array(z.string().min(1)).max(200).nullable().optional(),
   assetClasses: z.array(z.enum(ASSET_CLASSES)).nullable().optional(),
   categories: z.array(z.enum(CA_SCOPE_CATEGORIES)).nullable().optional(),
@@ -155,4 +170,45 @@ export async function previewInviteEmailHandler(req: Request, res: Response) {
 export async function sendInviteEmailHandler(req: Request, res: Response) {
   const edits = inviteEmailSchema.parse(req.body ?? {});
   ok(res, await sendInviteEmail(req.user!.id, req.params.clientId!, edits, req));
+}
+
+// ─── The ordinary direction: a client brings in their professional ───
+
+const inviteProfessionalSchema = z.object({
+  name: z.string().min(1).max(200),
+  email: z.string().email(),
+});
+
+export async function inviteProfessionalHandler(req: Request, res: Response) {
+  const input = inviteProfessionalSchema.parse(req.body);
+  const { client, token } = await inviteProfessional(req.user!.id, input, req);
+  created(res, { client, token });
+}
+
+export async function listMyGrantsHandler(req: Request, res: Response) {
+  ok(res, await listMyProfessionalGrants(req.user!.id));
+}
+
+export async function cancelProfessionalInvitationHandler(req: Request, res: Response) {
+  await cancelProfessionalInvitation(req.user!.id, req.params.clientId!, req);
+  noContent(res);
+}
+
+/**
+ * Unauthenticated on purpose: a professional who has never used the product
+ * needs to see who is asking before deciding whether to create an account.
+ * The token is the credential, and the reply carries a name and nothing else.
+ */
+export async function peekProfessionalInvitationHandler(req: Request, res: Response) {
+  ok(res, await peekProfessionalInvitation(req.params.token!));
+}
+
+export async function acceptProfessionalInvitationHandler(req: Request, res: Response) {
+  const client = await acceptProfessionalInvitation(
+    req.user!.id,
+    req.user!.email,
+    req.params.token!,
+    req,
+  );
+  ok(res, client);
 }

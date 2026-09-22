@@ -31,7 +31,7 @@ import { ok, created, noContent } from '../lib/response.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { getCaScope, type CaScope } from '../services/ca/caAccess.service.js';
+import { getCaScope, assertCaMayEdit, type CaScope } from '../services/ca/caAccess.service.js';
 import { recordCaAudit } from '../services/ca/caAudit.service.js';
 import { projectBooks } from '../services/ca/caProjection.service.js';
 import {
@@ -183,6 +183,17 @@ async function ensureDefaultPortfolio(scope: CaScope, req: Request) {
  * asked for it is owed the reason it did not work.
  */
 async function ensureBooksProjected(scope: CaScope, req: Request): Promise<void> {
+  // Opening a books tab is a read to the professional and a WRITE to the
+  // client: it seeds the chart of accounts and derives vouchers from their
+  // activity. A view-only grant may do neither, so this is skipped rather than
+  // attempted — the alternative is a policy refusal on every page open, logged
+  // as an error and swallowed, which makes a boundary doing its job look like
+  // a fault.
+  //
+  // The tab then shows whatever the client's own books hold, which is exactly
+  // what a view-only observer should be looking at.
+  if (!scope.edit.books) return;
+
   await ensureChartAudited(scope, req);
   try {
     await projectBooks(scope.subjectUserId, auditCtx(scope, req));
@@ -203,6 +214,7 @@ async function ensureBooksProjected(scope: CaScope, req: Request): Promise<void>
  */
 export async function caGenerateFromActivity(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'books');
   await ensureChartAudited(scope, req);
   ok(res, await projectBooks(scope.subjectUserId, auditCtx(scope, req)));
 }
@@ -223,6 +235,7 @@ export async function caListAccountsFlat(req: Request, res: Response) {
 
 export async function caCreateAccount(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'books');
   const body = createAccountSchema.parse(req.body);
   const account = await runInTransaction(async (tx) => {
     const created_ = await createAccount(
@@ -244,6 +257,7 @@ export async function caCreateAccount(req: Request, res: Response) {
 
 export async function caUpdateAccount(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'books');
   const id = req.params.id!;
   // Read the prior state first: an audit trail that records only the new value
   // cannot answer "what did this used to say", which is most of its purpose.
@@ -273,6 +287,7 @@ export async function caUpdateAccount(req: Request, res: Response) {
 
 export async function caDeleteAccount(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'books');
   const id = req.params.id!;
   const before = (await listAccountsFlat(scope.subjectUserId)).find((a) => a.id === id);
   if (!before) throw new NotFoundError('Account not found');
@@ -320,6 +335,7 @@ export async function caNextVoucherNo(req: Request, res: Response) {
 
 export async function caCreateVoucher(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'books');
   const body = createVoucherSchema.parse(req.body);
   const voucher = await runInTransaction(async (tx) => {
     const posted = await createVoucher(
@@ -341,6 +357,7 @@ export async function caCreateVoucher(req: Request, res: Response) {
 
 export async function caUpdateVoucher(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'books');
   const id = req.params.id!;
   const before = await getVoucher(scope.subjectUserId, id);
   const body = updateVoucherSchema.parse(req.body);
@@ -366,6 +383,7 @@ export async function caUpdateVoucher(req: Request, res: Response) {
 
 export async function caDeleteVoucher(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'books');
   const id = req.params.id!;
   const before = await getVoucher(scope.subjectUserId, id);
   await runInTransaction(async (tx) => {
@@ -460,6 +478,7 @@ const caCreateTransactionSchema = baseTransactionSchema.omit({ portfolioId: true
  */
 export async function caCreateTransaction(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'transactions');
   const body = caCreateTransactionSchema.parse(req.body);
   const portfolio = await ensureDefaultPortfolio(scope, req);
 
@@ -506,6 +525,7 @@ export async function caCreateTransaction(req: Request, res: Response) {
  */
 export async function caCorrectTransaction(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'transactions');
   const id = req.params.id!;
   const body = correctTransactionSchema.parse(req.body);
 
@@ -623,6 +643,7 @@ export async function caListFmv(req: Request, res: Response) {
 
 export async function caSetFmv(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'fmv');
   const isin = (req.params.isin ?? '').trim().toUpperCase();
   if (!isin) throw new BadRequestError('isin required');
   const body = setFmvSchema.parse(req.body);
@@ -654,6 +675,7 @@ export async function caSetFmv(req: Request, res: Response) {
 
 export async function caDeleteFmv(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'fmv');
   const isin = (req.params.isin ?? '').trim().toUpperCase();
   if (!isin) throw new BadRequestError('isin required');
 
@@ -724,6 +746,7 @@ export async function caListTransactions(req: Request, res: Response) {
 
 export async function caCreateImport(req: Request, res: Response) {
   const scope = await scopeOf(req);
+  assertCaMayEdit(scope, 'imports');
   if (!req.file) throw new BadRequestError('No file uploaded — field name must be "file"');
 
   const regulatoryReason = isRegulatoryDoc(req.file.originalname);
