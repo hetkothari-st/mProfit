@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Mail, ArrowUpRight } from 'lucide-react';
+import { Briefcase, Mail, BookOpen, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +19,10 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
 import { cn } from '@/lib/cn';
-import { caApi, CONSENT_BASIS_LABEL, type CaClient } from '@/api/ca.api';
+import { caApi, type CaClient } from '@/api/ca.api';
+import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
+import { Initials, ClientAccessStrip } from '@/components/ca/AccessParts';
+import { fmtDate } from '@/components/ca/accessModel';
 
 /**
  * A CA's client list.
@@ -33,28 +35,22 @@ import { caApi, CONSENT_BASIS_LABEL, type CaClient } from '@/api/ca.api';
  * whether the person they are working for can see what they are doing.
  */
 
-const KIND_LABEL: Record<CaClient['kind'], string> = {
-  SHADOW: 'Managed record',
-  INVITED: 'Consented client',
-};
-
-function statusTone(status: CaClient['status']): string {
-  if (status === 'ACTIVE') return 'text-positive';
-  if (status === 'PENDING') return 'text-warning';
-  return 'text-muted-foreground';
-}
-
 export function CaWorkspacePage() {
   const qc = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
   // Inviting a client of your OWN is what the advisor plan is for. Someone who
   // is here only because a client invited them keeps the workspace for free,
   // and is shown the way to the plan instead of a button the server refuses.
   const canInvite = useEntitlement('CA_WORKSPACE').allowed;
 
+  // Live for the same reason as the books page: the client changes what this
+  // list says (reach, edit rights, withdrawal) from their own session.
   const { data: clients, isLoading } = useQuery({
     queryKey: ['ca', 'clients'],
     queryFn: () => caApi.listClients(),
+    ...LIVE_QUERY,
+    refetchInterval: LIVE_INTERVAL_MS,
   });
 
   const revoke = useMutation({
@@ -72,7 +68,7 @@ export function CaWorkspacePage() {
   const closed = rows.filter((c) => c.status === 'REVOKED');
 
   return (
-    <div>
+    <div className="mx-auto max-w-4xl">
       <PageHeader
         eyebrow="Practice"
         title="Clients"
@@ -93,14 +89,11 @@ export function CaWorkspacePage() {
       />
 
       {isLoading ? (
-        <Card className="overflow-hidden">
-          <div className="divide-y divide-border/50">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-[72px] animate-pulse bg-muted/30" />
-            ))}
-          </div>
-        </Card>
-      ) : rows.length === 0 ? (
+        <div className="space-y-3">
+          <div className="h-[132px] animate-pulse rounded-xl border border-border/60 bg-muted/20" />
+          <div className="h-[132px] animate-pulse rounded-xl border border-border/60 bg-muted/10" />
+        </div>
+      ) : active.length + pending.length === 0 && closed.length === 0 ? (
         <EmptyState
           icon={Briefcase}
           title="No clients yet"
@@ -118,25 +111,67 @@ export function CaWorkspacePage() {
           }
         />
       ) : (
-        <div className="space-y-5">
-          <ClientGroup
-            label="Active"
-            rows={active}
-            onRevoke={(id) => revoke.mutate(id)}
-            revoking={revoke.isPending}
-          />
-          <ClientGroup
-            label="Awaiting acceptance"
-            caption="These clients have been invited but have not accepted yet. You cannot see their books until they do."
-            rows={pending}
-            onRevoke={(id) => revoke.mutate(id)}
-            revoking={revoke.isPending}
-          />
-          <ClientGroup
-            label="Closed"
-            caption="Kept as history. What was done under these engagements stays on the record."
-            rows={closed}
-          />
+        <div className="space-y-8">
+          {active.length > 0 && (
+            <Group
+              title="Your clients"
+              count={active.length}
+              hint="Open someone's books to work in them. What you can change is theirs to decide."
+            >
+              {active.map((c) => (
+                <ActiveClient
+                  key={c.id}
+                  client={c}
+                  onClose={() => revoke.mutate(c.id)}
+                  closing={revoke.isPending}
+                />
+              ))}
+            </Group>
+          )}
+
+          {pending.length > 0 && (
+            <Group
+              title="Waiting to accept"
+              count={pending.length}
+              hint="Invited, not yet accepted. Their books stay closed to you until they do."
+            >
+              {pending.map((c) => (
+                <PendingClient key={c.id} client={c} />
+              ))}
+            </Group>
+          )}
+
+          {closed.length > 0 && (
+            <section>
+              <button
+                type="button"
+                onClick={() => setShowClosed((v) => !v)}
+                aria-expanded={showClosed}
+                className="focus-ring inline-flex items-center gap-1.5 rounded text-[13px] text-muted-foreground hover:text-foreground"
+              >
+                <ChevronDown
+                  className={cn('h-4 w-4 transition-transform', showClosed && 'rotate-180')}
+                />
+                Past engagements ({closed.length})
+              </button>
+              {showClosed && (
+                <ul className="mt-3 divide-y divide-border/50 rounded-xl border border-border/60">
+                  {closed.map((c) => (
+                    <li key={c.id} className="flex items-center gap-3 px-4 py-3">
+                      <Initials name={c.displayName} tone="muted" />
+                      <div className="min-w-0">
+                        <p className="truncate text-[13.5px] text-foreground">{c.displayName}</p>
+                        <p className="truncate text-[12px] text-muted-foreground">
+                          {c.revokedAt ? `Ended ${fmtDate(c.revokedAt)}` : 'Ended'}. What was
+                          done stays on the record.
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
         </div>
       )}
 
@@ -145,94 +180,122 @@ export function CaWorkspacePage() {
   );
 }
 
-function ClientGroup({
-  label,
-  caption,
-  rows,
-  onRevoke,
-  revoking,
+function Group({
+  title,
+  count,
+  hint,
+  children,
 }: {
-  label: string;
-  caption?: string;
-  rows: CaClient[];
-  onRevoke?: (clientId: string) => void;
-  revoking?: boolean;
+  title: string;
+  count: number;
+  hint: string;
+  children: ReactNode;
 }) {
-  if (rows.length === 0) return null;
   return (
     <section>
-      <div className="mb-2 flex items-baseline gap-3">
-        <h2 className="text-[10px] font-medium uppercase tracking-kerned text-foreground/70">
-          {label}
+      <div className="mb-3">
+        <h2 className="text-[15px] font-medium text-foreground">
+          {title} <span className="text-muted-foreground">{count}</span>
         </h2>
-        <span className="numeric tabular-nums text-[11px] text-muted-foreground">
-          {rows.length}
-        </span>
+        <p className="mt-0.5 text-[12.5px] text-muted-foreground">{hint}</p>
       </div>
-      {caption && (
-        <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">{caption}</p>
-      )}
-      <Card className="overflow-hidden">
-        <CardContent className="p-0">
-          {rows.map((c) => (
-            <div
-              key={c.id}
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-border/50 px-4 py-3 last:border-0 transition-colors hover:bg-muted/25"
-            >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-[14px] font-medium text-foreground">{c.displayName}</p>
-                  <span className="text-[9.5px] uppercase tracking-kerned text-muted-foreground/80">
-                    {KIND_LABEL[c.kind]}
-                  </span>
-                  <span
-                    className={cn('text-[9.5px] uppercase tracking-kerned', statusTone(c.status))}
-                  >
-                    {c.status.toLowerCase()}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  {/* A client who invited you is identified by their own address; one you
-                      invited, by the address you sent it to. */}
-                  {(c.initiatedBy === 'CLIENT'
-                    ? c.displayEmail
-                    : (c.displayEmail ?? c.invitedEmail)) ?? '—'}
-                  {c.pan && <span className="ml-2">PAN {c.pan}</span>}
-                </p>
-                {c.kind === 'SHADOW' && c.consentBasis && (
-                  <p className="mt-1 text-[11px] text-muted-foreground/80">
-                    Basis: {CONSENT_BASIS_LABEL[c.consentBasis]}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                {c.status === 'ACTIVE' && (
-                  <>
-                    <Button asChild variant="outline" size="sm">
-                      <Link to={`/ca/clients/${c.id}`}>
-                        Open books <ArrowUpRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
-                    {onRevoke && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={revoking}
-                        onClick={() => onRevoke(c.id)}
-                        className="text-muted-foreground hover:text-negative"
-                      >
-                        Close
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <ul className="space-y-3">{children}</ul>
     </section>
+  );
+}
+
+/** How the professional should see who these books belong to. */
+function clientEmail(c: CaClient): string | null {
+  // A client who invited you is identified by their own address; one you
+  // invited, by the address you sent it to.
+  return c.initiatedBy === 'CLIENT' ? c.displayEmail : (c.displayEmail ?? c.invitedEmail);
+}
+
+function ActiveClient({
+  client: c,
+  onClose,
+  closing,
+}: {
+  client: CaClient;
+  onClose: () => void;
+  closing: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <li className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="flex flex-wrap items-start justify-between gap-4 px-5 pt-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Initials name={c.displayName} tone="active" />
+          <div className="min-w-0">
+            <p className="truncate font-display text-[17px] leading-tight text-foreground">
+              {c.displayName}
+            </p>
+            <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
+              {clientEmail(c) ?? 'No email on record'}
+              {c.acceptedAt && <span className="ml-2">Client since {fmtDate(c.acceptedAt)}</span>}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {confirming ? (
+            <>
+              <span className="text-[12.5px] text-muted-foreground">Close this engagement?</span>
+              <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+                Keep
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={closing}
+                onClick={onClose}
+                className="border-negative/40 text-negative hover:bg-negative/10"
+              >
+                Close engagement
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button asChild size="sm">
+                <Link to={`/ca/clients/${c.id}`}>
+                  <BookOpen className="h-3.5 w-3.5" /> Open books
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirming(true)}
+                className="text-muted-foreground hover:text-negative"
+              >
+                Close
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <ClientAccessStrip client={c} className="mt-4" />
+    </li>
+  );
+}
+
+function PendingClient({ client: c }: { client: CaClient }) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-dashed border-border px-5 py-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <Initials name={c.displayName} tone="invited" />
+        <div className="min-w-0">
+          <p className="truncate text-[15px] text-foreground">{c.displayName}</p>
+          <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
+            {clientEmail(c) ?? 'No email on record'}
+            {c.inviteExpiresAt && (
+              <span className="ml-2 text-warning">Link expires {fmtDate(c.inviteExpiresAt)}</span>
+            )}
+          </p>
+        </div>
+      </div>
+    </li>
   );
 }
 

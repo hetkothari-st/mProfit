@@ -44,6 +44,11 @@ export interface CaClient {
   canEditTransactions: boolean;
   canEditImports: boolean;
   canEditFmv: boolean;
+  /** The window and reach the client set. Shown to the professional so they know their limits. */
+  accessUntil: string | null;
+  scopeAllPortfolios: boolean;
+  scopeAllCategories: boolean;
+  scopeAllAssetClasses: boolean;
 }
 
 export interface CaAuditEntry {
