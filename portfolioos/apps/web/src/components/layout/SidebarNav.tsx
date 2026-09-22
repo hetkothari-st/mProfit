@@ -7,8 +7,10 @@ import { UpgradeSidebarCard } from './UpgradeSidebarCard';
 import { AssetClassSectionList } from './AssetClassSectionList';
 import { FamilyNavTree } from './FamilyNavTree';
 import { NavSection, OVERVIEW_ITEMS, ASSET_CLASS_ITEMS, NAV_SECTIONS } from './navItems';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, ShieldCheck } from 'lucide-react';
 import { useEntitlement } from '@/hooks/useEntitlement';
+import { useQuery } from '@tanstack/react-query';
+import { caApi } from '@/api/ca.api';
 
 /**
  * Where each nav list was scrolled to, keyed by `scrollKey`.
@@ -45,6 +47,15 @@ export function SidebarNav({
   // upsell in the primary nav is worse than a nav without it. The Pricing
   // page is where the pitch belongs.
   const caWorkspace = useEntitlement('CA_WORKSPACE');
+  // A professional who was invited by a client holds grants without holding
+  // the plan; the workspace entry has to follow the grants, not the billing.
+  // Cheap, cached, and returns an empty list for everyone else.
+  const { data: clientCount } = useQuery({
+    queryKey: ['ca', 'clients', 'count'],
+    queryFn: async () => (await caApi.listClients()).length,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
 
   // Layout effect, not effect: the restore has to land before the browser
   // paints, or the drawer visibly opens at the top and then jumps.
@@ -120,12 +131,24 @@ export function SidebarNav({
             path, so an entry added to ASSET_CLASS_ITEMS with no matching
             preference simply would not appear — and being reorderable and
             hideable is wrong for a workspace holding other people's books. */}
-        {caWorkspace.allowed && (
-          <NavSection
-            section={{ items: [{ label: 'Account Access', to: '/ca', icon: Briefcase }] }}
-            collapsed={collapsed}
-          />
-        )}
+        {/* Two different roles, two entries, and they were previously one.
+            "Account Access" is the account holder's own page — who may see
+            their books — and belongs to everyone. "Client books" is the
+            professional's workspace, and appears only for someone who
+            actually holds a client grant or pays for the advisor plan. Having
+            the single "Account Access" item open the CA workspace is why a
+            user looking for their own controls found somebody else's. */}
+        <NavSection
+          section={{
+            items: [
+              { label: 'Account Access', to: '/settings/professional-access', icon: ShieldCheck },
+              ...(caWorkspace.allowed || (clientCount ?? 0) > 0
+                ? [{ label: 'Client books', to: '/ca', icon: Briefcase }]
+                : []),
+            ],
+          }}
+          collapsed={collapsed}
+        />
 
         {/* Inbox + Tools */}
         {NAV_SECTIONS.map((section, i) => (

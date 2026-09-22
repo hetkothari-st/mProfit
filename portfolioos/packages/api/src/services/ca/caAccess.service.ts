@@ -146,7 +146,9 @@ export async function listMyProfessionals(callerId: string) {
     include: { portfolioScopes: { select: { portfolioId: true } } },
     orderBy: [{ status: 'asc' }, { acceptedAt: 'desc' }],
   });
-  const advisorIds = [...new Set(rows.map((r) => r.advisorId))];
+  // Null advisors are invitations nobody has accepted; they have no identity
+  // to look up yet.
+  const advisorIds = [...new Set(rows.map((r) => r.advisorId).filter((id): id is string => !!id))];
   // The advisor is a different user, so their name is not readable under the
   // client's own RLS context. This is a bounded authorisation-adjacent lookup:
   // membership is already proven by the row, and it selects nothing but the
@@ -161,7 +163,7 @@ export async function listMyProfessionals(callerId: string) {
   return rows.map((r) => ({
     clientId: r.id,
     grantedAt: r.acceptedAt,
-    advisor: byId.get(r.advisorId) ?? null,
+    advisor: r.advisorId ? (byId.get(r.advisorId) ?? null) : null,
     status: r.status,
     revokedAt: r.revokedAt,
     accessFrom: r.accessFrom,
@@ -204,6 +206,18 @@ export async function createManagedClient(
   input: CreateManagedClientInput,
   req?: Request,
 ): Promise<Client> {
+  // Closed to new records.
+  //
+  // A shadow client is books about a real person who never agreed to anything
+  // in this product — the one path where a set of books exists without the
+  // subject's consent. Existing rows stay readable so a practice does not lose
+  // work already done, but the way in now is an invitation the person accepts.
+  throw new BadRequestError(
+    'Records for clients without a login are no longer created. Invite them instead — they accept from their own account, and can see and limit what you do.',
+  );
+
+  // eslint-disable-next-line no-unreachable -- kept so existing shadow rows'
+  // creation logic stays legible next to the policy that now forbids it.
   const name = input.name.trim();
   if (!name) throw new BadRequestError('A client name is required.');
 
@@ -513,12 +527,16 @@ export async function getGrantForSubject(callerId: string, clientId: string) {
     throw new ForbiddenError('That grant is not yours to manage.');
   }
 
-  const advisor = await runAsSystem(() =>
-    prisma.user.findUnique({
-      where: { id: client.advisorId },
-      select: { id: true, name: true, email: true },
-    }),
-  );
+  // Null while a client-initiated invitation is still open: there is nobody
+  // holding this grant yet, and the page says so rather than inventing a name.
+  const advisor = client.advisorId
+    ? await runAsSystem(() =>
+        prisma.user.findUnique({
+          where: { id: client.advisorId! },
+          select: { id: true, name: true, email: true },
+        }),
+      )
+    : null;
 
   const portfolios = await prisma.portfolio.findMany({
     where: { userId: callerId },
@@ -750,4 +768,274 @@ function describeScopeChange(patch: GrantScopePatch): string {
   return parts.length > 0
     ? `You changed what your CA can see: ${parts.join(', ')}.`
     : 'You reviewed what your CA can see.';
+}
+
+// ─── The ordinary direction: a client brings in their professional ───
+//
+// The account holder names someone, we email them, and they accept from their
+// own account. Nothing of the client's is readable until that acceptance: the
+// row carries no `advisorId` until then, and every policy compares that column
+// to the caller.
+//
+// This is free for the professional who accepts. Their own portfolios, and
+// inviting clients of their own, are what the advisor plan is for.
+
+export interface InviteProfessionalInput {
+  /** What to call them on the invitation. */
+  name: string;
+  email: string;
+}
+
+/**
+ * Open an invitation to a professional.
+ *
+ * Refuses a second open invitation to the same address, and refuses one to an
+ * address that already holds access — both would leave the client with two
+ * rows meaning one relationship, and no way to tell which of them a revoke
+ * applied to.
+ */
+export async function inviteProfessional(
+  callerId: string,
+  input: InviteProfessionalInput,
+  req?: Request,
+): Promise<{ client: Client; token: string }> {
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  if (!name) throw new BadRequestError('A name is required.');
+  if (!email.includes('@')) throw new BadRequestError('A valid email address is required.');
+
+  const caller = await prisma.user.findUnique({
+    where: { id: callerId },
+    select: { email: true },
+  });
+  if (caller?.email.toLowerCase() === email) {
+    throw new BadRequestError('That is your own address — invite the professional you work with.');
+  }
+
+  const existing = await prisma.client.findFirst({
+    where: {
+      userId: callerId,
+      status: { in: ['PENDING', 'ACTIVE'] },
+      OR: [{ invitedEmail: email }, { advisor: { email } }],
+    },
+  });
+  if (existing) {
+    throw new BadRequestError(
+      existing.status === 'ACTIVE'
+        ? `${email} already has access to your books.`
+        : `You have already invited ${email}. Cancel that invitation first, or send it again.`,
+    );
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+
+  const client = await runInTransaction(async (tx) => {
+    const created = await tx.client.create({
+      data: {
+        // No advisor yet: this is an offer, not a grant.
+        advisorId: null,
+        userId: callerId,
+        initiatedBy: 'CLIENT',
+        name,
+        email,
+        kind: 'INVITED',
+        status: 'PENDING',
+        invitedEmail: email,
+        inviteToken: token,
+        inviteExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
+        // Nothing is shared by default beyond what the client picks later; the
+        // scope columns keep their permissive defaults so an accepted invite
+        // behaves like the grants that came before it until narrowed.
+      },
+    });
+    await recordCaAudit(
+      tx,
+      { actorUserId: callerId, subjectUserId: callerId, clientId: created.id, req },
+      {
+        action: 'CLIENT_INVITED',
+        resourceType: 'Client',
+        resourceId: created.id,
+        summary: `You invited ${name} (${email}) to see your books.`,
+      },
+    );
+    return created;
+  });
+
+  return { client, token };
+}
+
+/**
+ * What an invitation says about itself before anyone signs in.
+ *
+ * Read privileged and answered narrowly: the token is the credential, and the
+ * reply carries the inviter's name and nothing else of theirs. A professional
+ * deciding whether to create an account deserves to know who is asking.
+ */
+export async function peekProfessionalInvitation(token: string) {
+  const client = await runAsSystem(() =>
+    prisma.client.findUnique({
+      where: { inviteToken: token },
+      include: { clientUser: { select: { name: true, email: true } } },
+    }),
+  );
+  if (!client || client.initiatedBy !== 'CLIENT') {
+    throw new NotFoundError('Invitation not found.');
+  }
+  if (client.acceptedAt) throw new BadRequestError('That invitation has already been used.');
+  if (client.status === 'REVOKED') throw new BadRequestError('That invitation was withdrawn.');
+  if (!client.inviteExpiresAt || client.inviteExpiresAt < new Date()) {
+    throw new BadRequestError('That invitation has expired. Ask them to send a new one.');
+  }
+
+  return {
+    invitedBy: client.clientUser?.name || client.clientUser?.email || 'An EveryPaisa user',
+    invitedEmail: client.invitedEmail,
+    expiresAt: client.inviteExpiresAt,
+  };
+}
+
+/**
+ * Accept, becoming the professional on that grant.
+ *
+ * `runAsSystem` wraps `runInTransaction`, not the other way round, for the
+ * reason spelled out on the CA-side accept: the transaction reads the ambient
+ * identity once, before it opens. Privileged because the accepting user is
+ * nobody on this row yet — `advisorId` is null and `userId` is the client, so
+ * their own policies show them nothing. The token and the email match are the
+ * authorisation, and both still run.
+ */
+export async function acceptProfessionalInvitation(
+  callerId: string,
+  callerEmail: string,
+  token: string,
+  req?: Request,
+): Promise<Client> {
+  return runAsSystem(() =>
+    runInTransaction(async (tx) => {
+      const client = await tx.client.findUnique({ where: { inviteToken: token } });
+      if (!client || client.initiatedBy !== 'CLIENT') {
+        throw new NotFoundError('Invitation not found.');
+      }
+      if (client.acceptedAt) throw new BadRequestError('That invitation has already been used.');
+      if (client.status === 'REVOKED') {
+        throw new ForbiddenError('That invitation is no longer valid.');
+      }
+      if (!client.inviteExpiresAt || client.inviteExpiresAt < new Date()) {
+        throw new BadRequestError('That invitation has expired. Ask them to send a new one.');
+      }
+      if ((client.invitedEmail ?? '').toLowerCase() !== callerEmail.toLowerCase()) {
+        throw new ForbiddenError('That invitation was sent to a different email address.');
+      }
+      if (client.userId === callerId) {
+        throw new BadRequestError('You cannot accept your own invitation.');
+      }
+
+      const updated = await tx.client.update({
+        where: { id: client.id },
+        data: {
+          advisorId: callerId,
+          status: 'ACTIVE',
+          acceptedAt: new Date(),
+          inviteToken: null,
+        },
+      });
+
+      await recordCaAudit(
+        tx,
+        {
+          actorUserId: callerId,
+          subjectUserId: client.userId!,
+          clientId: client.id,
+          req,
+        },
+        {
+          action: 'GRANT_ACCEPTED',
+          resourceType: 'Client',
+          resourceId: client.id,
+          summary: 'Your professional accepted your invitation and can now see your books.',
+        },
+      );
+
+      return updated;
+    }),
+  );
+}
+
+/** Withdraw an invitation that nobody has accepted. Client side only. */
+export async function cancelProfessionalInvitation(
+  callerId: string,
+  clientId: string,
+  req?: Request,
+): Promise<void> {
+  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  if (!client || client.userId !== callerId) {
+    throw new ForbiddenError('That invitation is not yours.');
+  }
+  if (client.acceptedAt) {
+    throw new BadRequestError('That invitation was accepted — withdraw the access instead.');
+  }
+
+  await runInTransaction(async (tx) => {
+    await tx.client.update({
+      where: { id: clientId },
+      data: { status: 'REVOKED', revokedAt: new Date(), revokedByUserId: callerId, inviteToken: null },
+    });
+    await recordCaAudit(
+      tx,
+      { actorUserId: callerId, subjectUserId: callerId, clientId, req },
+      {
+        action: 'GRANT_REVOKED',
+        resourceType: 'Client',
+        resourceId: clientId,
+        summary: `You cancelled the invitation to ${client.invitedEmail ?? client.name}.`,
+      },
+    );
+  });
+}
+
+/**
+ * Everything the account holder has open or granted, invitations included.
+ *
+ * `listMyProfessionals` answers "who can see my books" and deliberately says
+ * nothing about invitations nobody has accepted; this answers the question the
+ * Account Access page actually asks, which includes the ones still in flight.
+ */
+export async function listMyProfessionalGrants(callerId: string) {
+  const rows = await prisma.client.findMany({
+    where: { userId: callerId },
+    include: { portfolioScopes: { select: { portfolioId: true } } },
+    orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+  });
+
+  const advisorIds = [...new Set(rows.map((r) => r.advisorId).filter((id): id is string => !!id))];
+  const advisors = advisorIds.length
+    ? await runAsSystem(() =>
+        prisma.user.findMany({
+          where: { id: { in: advisorIds } },
+          select: { id: true, name: true, email: true },
+        }),
+      )
+    : [];
+  const byId = new Map(advisors.map((a) => [a.id, a]));
+
+  return rows.map((r) => ({
+    clientId: r.id,
+    name: r.name,
+    status: r.status,
+    initiatedBy: r.initiatedBy,
+    invitedEmail: r.invitedEmail,
+    /** Null while an invitation is still open — nobody holds it yet. */
+    advisor: r.advisorId ? (byId.get(r.advisorId) ?? null) : null,
+    grantedAt: r.acceptedAt,
+    revokedAt: r.revokedAt,
+    inviteExpiresAt: r.inviteExpiresAt,
+    accessFrom: r.accessFrom,
+    accessUntil: r.accessUntil,
+    scopeAllPortfolios: r.scopeAllPortfolios,
+    scopeAllAssetClasses: r.scopeAllAssetClasses,
+    scopeAllCategories: r.scopeAllCategories,
+    portfolioCount: r.portfolioScopes.length,
+    assetClassCount: r.visibleAssetClasses.length,
+    categoryCount: r.visibleCategories.length,
+  }));
 }

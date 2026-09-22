@@ -605,6 +605,53 @@ export const caInviteEmailApi = {
   },
 };
 
+
+/** A row on the Account Access page: an open invitation, or a live grant. */
+export interface MyProfessionalGrant {
+  clientId: string;
+  name: string;
+  status: ClientStatus;
+  initiatedBy: 'ADVISOR' | 'CLIENT';
+  invitedEmail: string | null;
+  /** Null while nobody has accepted — an invitation holds nothing yet. */
+  advisor: { id: string; name: string; email: string } | null;
+  grantedAt: string | null;
+  revokedAt: string | null;
+  inviteExpiresAt: string | null;
+  accessFrom: string | null;
+  accessUntil: string | null;
+  scopeAllPortfolios: boolean;
+  scopeAllAssetClasses: boolean;
+  scopeAllCategories: boolean;
+  portfolioCount: number;
+  assetClassCount: number;
+  categoryCount: number;
+}
+
+/** What a signed-out professional is told before deciding to sign up. */
+export interface ProfessionalInvitePreview {
+  invitedBy: string;
+  invitedEmail: string | null;
+  expiresAt: string;
+}
+
+export const professionalInviteApi = {
+  /** Works signed out: someone new to the product is being asked to join it. */
+  async peek(token: string): Promise<ProfessionalInvitePreview> {
+    const { data } = await api.get<ApiResponse<ProfessionalInvitePreview>>(
+      `/api/professional-invitations/${token}`,
+    );
+    return unwrap(data);
+  },
+
+  async accept(token: string): Promise<CaClient> {
+    const { data } = await api.post<ApiResponse<CaClient>>(
+      `/api/professional-invitations/${token}/accept`,
+    );
+    return unwrap(data);
+  },
+};
+
 /**
  * A client's receipts, from the CA's side. Same three shapes as the client's
  * own downloads, reached through the grant — a narrowed grant produces a
@@ -665,6 +712,27 @@ export const professionalAccessApi = {
       '/api/me/professional-access/activity',
     );
     return unwrap(data);
+  },
+
+  /** Everything, invitations nobody has accepted included. */
+  async grants(): Promise<MyProfessionalGrant[]> {
+    const { data } = await api.get<ApiResponse<MyProfessionalGrant[]>>(
+      '/api/me/professional-access/grants',
+    );
+    return unwrap(data);
+  },
+
+  async invite(payload: { name: string; email: string }): Promise<{ client: CaClient; token: string }> {
+    const { data } = await api.post<ApiResponse<{ client: CaClient; token: string }>>(
+      '/api/me/professional-access/invite',
+      payload,
+    );
+    return unwrap(data);
+  },
+
+  /** Withdraw an invitation nobody has accepted. Different from revoking. */
+  async cancelInvitation(clientId: string): Promise<void> {
+    await api.post(`/api/me/professional-access/${clientId}/cancel`);
   },
 
   async revoke(clientId: string): Promise<void> {

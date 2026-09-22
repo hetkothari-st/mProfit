@@ -35,12 +35,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../src/lib/prisma.js';
-import { runAsSystem } from '../../src/lib/requestContext.js';
+import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import {
   getCaScope,
   createManagedClient,
   inviteClient,
   acceptInvitation,
+  inviteProfessional,
+  acceptProfessionalInvitation,
 } from '../../src/services/ca/caAccess.service.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 
@@ -95,6 +97,48 @@ function fakeResponse(): Response & { statusCode: number; body: unknown } {
   };
   return res as unknown as Response & { statusCode: number; body: unknown };
 }
+
+/**
+ * A client who has accepted this CA and owns no portfolio yet.
+ *
+ * Replaces the shadow-client fixture the bootstrap tests used to build.
+ * Records for people with no login are no longer created, but the situation
+ * `portfolio_ca_bootstrap_insert` exists for is unchanged and now arrives the
+ * ordinary way: someone invites their accountant before adding anything
+ * themselves.
+ */
+async function invitedClientWithNoPortfolio(
+  label: string,
+): Promise<{ clientId: string; subjectId: string; cleanup: () => Promise<void> }> {
+  const subject = await createTestScope(label);
+  // createTestScope seeds a default portfolio; this client has not made one.
+  await runAsSystem(() => prisma.portfolio.deleteMany({ where: { userId: subject.userId } }));
+
+  const caEmail = await runAsSystem(() =>
+    prisma.user
+      .findUniqueOrThrow({ where: { id: ca.userId }, select: { email: true } })
+      .then((u) => u.email),
+  );
+
+  const { client: row, token } = await runAsUser(subject.userId, () =>
+    inviteProfessional(subject.userId, { name: 'Their CA', email: caEmail }),
+  );
+  await runAsUser(ca.userId, () => acceptProfessionalInvitation(ca.userId, caEmail, token));
+
+  return {
+    clientId: row.id,
+    subjectId: subject.userId,
+    cleanup: async () => {
+      await runAsSystem(async () => {
+        await prisma.portfolio.deleteMany({ where: { userId: subject.userId } });
+        await prisma.caAuditLog.deleteMany({ where: { clientId: row.id } });
+        await prisma.client.deleteMany({ where: { id: row.id } });
+      });
+      await subject.cleanup();
+    },
+  };
+}
+
 /**
  * A real transaction and a real credential belonging to the client.
  *
@@ -104,6 +148,9 @@ function fakeResponse(): Response & { statusCode: number; body: unknown } {
  * createTestScope seeds only a user, a portfolio and stock masters.
  */
 let clientTransactionId: string;
+
+/** Fixtures built inside one test, torn down with the file. */
+const cleanups: Array<() => Promise<void>> = [];
 
 beforeAll(async () => {
   ca = await createTestScope('ca-user');
@@ -155,6 +202,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
+  while (cleanups.length) await cleanups.pop()!();
   await runAsSystem(async () => {
     await prisma.caAuditLog.deleteMany({ where: { actorUserId: ca.userId } });
     await prisma.client.deleteMany({ where: { advisorId: ca.userId } });
@@ -739,42 +787,29 @@ describe('CA access boundary', () => {
     expect(after).toBe(1);
   });
 
-  it('provisions a managed client that cannot log in', async () => {
-    const managed = await ca.runAs(() =>
-      createManagedClient(ca.userId, {
-        name: 'No-Login Client',
-        consentBasis: 'ENGAGEMENT_LETTER',
-      }),
-    );
-
-    const shadow = await runAsSystem(() =>
-      prisma.user.findUnique({ where: { id: managed.userId! } }),
-    );
-    expect(shadow?.isShadowClient).toBe(true);
-    // RFC 2606 reserved — cannot resolve, so nothing can ever be mailed to it.
-    expect(shadow?.email).toMatch(/@ca-client\.invalid$/);
-
-    await runAsSystem(async () => {
-      await prisma.caAuditLog.deleteMany({ where: { clientId: managed.id } });
-      await prisma.client.delete({ where: { id: managed.id } });
-      await prisma.user.delete({ where: { id: managed.userId! } });
-    });
+  it('no longer provisions a client who cannot log in', async () => {
+    // The one path where books about a person could exist without that person
+    // agreeing to anything. Closed: the way in is now an invitation they
+    // accept. Existing rows keep working, which is why the enum value and the
+    // shadow-user lock both remain.
+    await expect(
+      ca.runAs(() =>
+        createManagedClient(ca.userId, {
+          name: 'No-Login Client',
+          consentBasis: 'ENGAGEMENT_LETTER',
+        }),
+      ),
+    ).rejects.toThrow(/no longer created/i);
   });
 
-  // ─── Portfolio bootstrap: exactly one, never a second ─────────────────
-
-  it('lets a CA bootstrap the one portfolio a portfolio-less shadow client needs, and never a second', async () => {
+  it('lets a CA bootstrap the one portfolio a portfolio-less client needs, and never a second', async () => {
     // `portfolio_ca_bootstrap_insert` is deliberately narrower than the CA's
     // ordinary grant shape — see the migration comment. This is the positive
     // half; `cannot create a portfolio for the client` above (unmodified) is
     // the negative half for a client who already has one.
-    const managed = await ca.runAs(() =>
-      createManagedClient(ca.userId, {
-        name: 'Bootstrap Client',
-        consentBasis: 'ENGAGEMENT_LETTER',
-      }),
-    );
-    const subjectId = managed.userId!;
+    const managed = await invitedClientWithNoPortfolio('ca-bootstrap-subject');
+    cleanups.push(managed.cleanup);
+    const subjectId = managed.subjectId;
 
     const zero = await runAsSystem(() =>
       prisma.portfolio.count({ where: { userId: subjectId } }),
@@ -798,12 +833,6 @@ describe('CA access boundary', () => {
       ),
     ).rejects.toThrow();
 
-    await runAsSystem(async () => {
-      await prisma.portfolio.deleteMany({ where: { userId: subjectId } });
-      await prisma.caAuditLog.deleteMany({ where: { clientId: managed.id } });
-      await prisma.client.delete({ where: { id: managed.id } });
-      await prisma.user.delete({ where: { id: subjectId } });
-    });
   });
 
   it('bootstraps a portfolio and records a transaction for a client who starts with neither', async () => {
@@ -814,15 +843,11 @@ describe('CA access boundary', () => {
       '../../src/controllers/caAccounting.controller.js'
     );
 
-    const managed = await ca.runAs(() =>
-      createManagedClient(ca.userId, {
-        name: 'Fresh Client',
-        consentBasis: 'ENGAGEMENT_LETTER',
-      }),
-    );
-    const subjectId = managed.userId!;
+    const managed = await invitedClientWithNoPortfolio('ca-firsttrade-subject');
+    cleanups.push(managed.cleanup);
+    const subjectId = managed.subjectId;
 
-    const req = fakeCaRequest(ca.userId, managed.id, {
+    const req = fakeCaRequest(ca.userId, managed.clientId, {
       transactionType: 'BUY',
       assetClass: 'EQUITY',
       assetName: 'First ever holding',
@@ -851,7 +876,7 @@ describe('CA access boundary', () => {
 
     const auditActions = await runAsSystem(() =>
       prisma.caAuditLog.findMany({
-        where: { clientId: managed.id },
+        where: { clientId: managed.clientId },
         select: { action: true },
       }),
     );
@@ -859,14 +884,12 @@ describe('CA access boundary', () => {
       expect.arrayContaining(['PORTFOLIO_CREATED', 'TRANSACTION_CREATED']),
     );
 
+    // The rows this test created inside the bootstrapped portfolio; the client
+    // record, the portfolio and the user go with the fixture's own cleanup.
     await runAsSystem(async () => {
       await prisma.capitalGain.deleteMany({ where: { portfolioId: body.data.portfolioId } });
       await prisma.holdingProjection.deleteMany({ where: { portfolioId: body.data.portfolioId } });
       await prisma.transaction.deleteMany({ where: { portfolioId: body.data.portfolioId } });
-      await prisma.caAuditLog.deleteMany({ where: { clientId: managed.id } });
-      await prisma.portfolio.delete({ where: { id: body.data.portfolioId } });
-      await prisma.client.delete({ where: { id: managed.id } });
-      await prisma.user.delete({ where: { id: subjectId } });
     });
   });
 

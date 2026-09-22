@@ -32,6 +32,7 @@ import {
   renderCaInviteEmail,
   defaultInviteMessage,
   defaultInviteSubject,
+  type InviteDirection,
 } from '../notifications/caInviteEmail.template.js';
 import { recordCaAudit } from './caAudit.service.js';
 
@@ -49,6 +50,7 @@ export interface InviteEmailEdits {
 }
 
 export interface InviteEmailDraft {
+  direction: InviteDirection;
   to: string;
   recipientName: string;
   subject: string;
@@ -80,7 +82,12 @@ function prettyDate(d: Date): string {
  */
 async function loadInvitation(callerId: string, clientId: string) {
   const client = await prisma.client.findUnique({ where: { id: clientId } });
-  if (!client || client.advisorId !== callerId) {
+  // Either side may be the sender, depending on who opened the relationship:
+  // an advisor onboarding a client, or — the ordinary case — an account holder
+  // bringing in their accountant. Whoever it is must be ON this row.
+  const isAdvisorSide = !!client && client.advisorId === callerId;
+  const isClientSide = !!client && client.userId === callerId && client.initiatedBy === 'CLIENT';
+  if (!client || (!isAdvisorSide && !isClientSide)) {
     throw new ForbiddenError('That client is not yours.');
   }
   if (client.kind !== 'INVITED') {
@@ -103,7 +110,7 @@ async function loadInvitation(callerId: string, clientId: string) {
   return client;
 }
 
-/** The advisor's own name and address. Their own row, so no privilege needed. */
+/** The sender's own name and address. Their own row, so no privilege needed. */
 async function loadAdvisor(callerId: string) {
   const user = await prisma.user.findUnique({
     where: { id: callerId },
@@ -140,11 +147,13 @@ async function sendCounts(callerId: string, clientId: string) {
 /** Trim and bound the advisor's edits, or fall back to the defaults. */
 function applyEdits(
   edits: InviteEmailEdits,
-  advisorName: string,
+  direction: InviteDirection,
+  senderName: string,
   recipientName: string,
 ): { subject: string; message: string } {
-  const subject = (edits.subject ?? '').trim() || defaultInviteSubject(advisorName);
-  const message = (edits.message ?? '').trim() || defaultInviteMessage(advisorName, recipientName);
+  const subject = (edits.subject ?? '').trim() || defaultInviteSubject(direction, senderName);
+  const message =
+    (edits.message ?? '').trim() || defaultInviteMessage(direction, senderName, recipientName);
 
   if (subject.length > SUBJECT_MAX) {
     throw new BadRequestError(`Subject is too long (max ${SUBJECT_MAX} characters).`);
@@ -173,12 +182,15 @@ export async function buildInviteEmail(
 ): Promise<InviteEmailDraft> {
   const client = await loadInvitation(callerId, clientId);
   const advisor = await loadAdvisor(callerId);
-  const { subject, message } = applyEdits(edits, advisor.name, client.name);
+  const direction: InviteDirection =
+    client.initiatedBy === 'CLIENT' ? 'CLIENT_TO_ADVISOR' : 'ADVISOR_TO_CLIENT';
+  const { subject, message } = applyEdits(edits, direction, advisor.name, client.name);
 
   const acceptUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/ca/invitations/${client.inviteToken}/accept`;
   const expiresOn = prettyDate(client.inviteExpiresAt ?? new Date());
 
   const { html } = renderCaInviteEmail({
+    direction,
     recipientName: client.name,
     advisorName: advisor.name,
     advisorEmail: advisor.email,
@@ -190,6 +202,7 @@ export async function buildInviteEmail(
   const counts = await sendCounts(callerId, clientId);
 
   return {
+    direction,
     to: client.invitedEmail!,
     recipientName: client.name,
     subject,
@@ -250,6 +263,7 @@ export async function sendInviteEmail(
   }
 
   const { text } = renderCaInviteEmail({
+    direction: draft.direction,
     recipientName: draft.recipientName,
     advisorName: draft.advisorName,
     advisorEmail: draft.advisorEmail,
