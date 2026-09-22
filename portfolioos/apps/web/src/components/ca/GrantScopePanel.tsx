@@ -11,6 +11,7 @@ import {
   CA_SCOPE_CATEGORY_LABEL,
   type CaScopeCategory,
   type GrantScopePatch,
+  type GrantEditRights,
 } from '@/api/ca.api';
 import { apiErrorMessage } from '@/api/client';
 
@@ -48,6 +49,8 @@ export function GrantScopePanel({ clientId, onClose }: Props) {
   const [assetClasses, setAssetClasses] = useState<string[] | null | undefined>();
   const [from, setFrom] = useState<string | undefined>();
   const [until, setUntil] = useState<string | undefined>();
+  const [edit, setEdit] = useState<GrantEditRights | undefined>();
+  const [advanced, setAdvanced] = useState(false);
 
   const save = useMutation({
     mutationFn: (patch: GrantScopePatch) => professionalAccessApi.updateScope(clientId, patch),
@@ -59,6 +62,7 @@ export function GrantScopePanel({ clientId, onClose }: Props) {
       setAssetClasses(undefined);
       setFrom(undefined);
       setUntil(undefined);
+      setEdit(undefined);
     },
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not update access')),
   });
@@ -85,6 +89,9 @@ export function GrantScopePanel({ clientId, onClose }: Props) {
       : grant.scopeAllAssetClasses
         ? null
         : grant.assetClasses;
+  const currentEdit: GrantEditRights = edit ?? grant.edit;
+  const anyEdit =
+    currentEdit.books || currentEdit.transactions || currentEdit.imports || currentEdit.fmv;
   const currentFrom = from !== undefined ? from : dateOnly(grant.accessFrom);
   const currentUntil = until !== undefined ? until : dateOnly(grant.accessUntil);
 
@@ -93,7 +100,8 @@ export function GrantScopePanel({ clientId, onClose }: Props) {
     categories !== undefined ||
     assetClasses !== undefined ||
     from !== undefined ||
-    until !== undefined;
+    until !== undefined ||
+    edit !== undefined;
 
   const submit = () => {
     const patch: GrantScopePatch = {};
@@ -102,11 +110,69 @@ export function GrantScopePanel({ clientId, onClose }: Props) {
     if (assetClasses !== undefined) patch.assetClasses = assetClasses;
     if (from !== undefined) patch.accessFrom = from || null;
     if (until !== undefined) patch.accessUntil = until || null;
+    if (edit !== undefined) patch.edit = edit;
     save.mutate(patch);
   };
 
   return (
     <div className="space-y-5 border-t border-border/50 bg-muted/20 px-4 py-4">
+      <div>
+        <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground">
+          What they can do
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <Choice
+            label="View only"
+            on={!anyEdit}
+            onClick={() =>
+              setEdit({ books: false, transactions: false, imports: false, fmv: false })
+            }
+          />
+          <Choice
+            label="May also keep my books"
+            on={anyEdit}
+            onClick={() =>
+              setEdit({ books: true, transactions: true, imports: true, fmv: true })
+            }
+          />
+        </div>
+        <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
+          {anyEdit
+            ? 'They can post entries, correct transactions, upload statements and set fair market values.'
+            : 'They can read everything in scope and download reports, and change nothing.'}
+        </p>
+
+        {/* The four are what the database actually stores; the pair above just
+            sets all of them. Anyone who wants the difference can have it. */}
+        <button
+          type="button"
+          onClick={() => setAdvanced((v) => !v)}
+          className="mt-2 text-[11.5px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          {advanced ? 'Hide advanced' : 'Advanced — choose each one'}
+        </button>
+
+        {advanced && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(
+              [
+                ['books', 'Keep my books'],
+                ['transactions', 'Add and correct transactions'],
+                ['imports', 'Upload statements'],
+                ['fmv', 'Set fair market values'],
+              ] as Array<[keyof GrantEditRights, string]>
+            ).map(([key, label]) => (
+              <Toggle
+                key={key}
+                label={label}
+                on={currentEdit[key]}
+                onClick={() => setEdit({ ...currentEdit, [key]: !currentEdit[key] })}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
       <Section
         title="Portfolios"
         all={currentPortfolios === null}

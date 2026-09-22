@@ -43,6 +43,7 @@ import {
   acceptInvitation,
   inviteProfessional,
   acceptProfessionalInvitation,
+  updateGrantScope,
 } from '../../src/services/ca/caAccess.service.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 
@@ -124,6 +125,11 @@ async function invitedClientWithNoPortfolio(
     inviteProfessional(subject.userId, { name: 'Their CA', email: caEmail }),
   );
   await runAsUser(ca.userId, () => acceptProfessionalInvitation(ca.userId, caEmail, token));
+  // The bootstrap cases are about a CA putting a client's FIRST portfolio and
+  // trade in place, which is a write; the client has to have permitted it.
+  await runAsUser(subject.userId, () =>
+    updateGrantScope(subject.userId, row.id, { edit: { transactions: true, books: true } }),
+  );
 
   return {
     clientId: row.id,
@@ -195,6 +201,15 @@ beforeAll(async () => {
         kind: 'INVITED',
         status: 'ACTIVE',
         acceptedAt: new Date(),
+        // This file is about the WRITE allow-list: what a CA may and may not
+        // change once permitted. A grant now arrives view-only, so the fixture
+        // states the permissions explicitly rather than relying on defaults
+        // that would make every positive case vacuous.
+        // `ca-edit-rights.test.ts` covers the view-only side.
+        canEditBooks: true,
+        canEditTransactions: true,
+        canEditImports: true,
+        canEditFmv: true,
       },
     });
     return row.id;

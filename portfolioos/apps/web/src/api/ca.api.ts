@@ -82,7 +82,15 @@ export const CA_SCOPE_CATEGORY_LABEL: Record<CaScopeCategory, string> = {
 };
 
 /** One grant in full: what it covers now, and everything it could cover. */
+export interface GrantEditRights {
+  books: boolean;
+  transactions: boolean;
+  imports: boolean;
+  fmv: boolean;
+}
+
 export interface GrantDetail {
+  edit: GrantEditRights;
   clientId: string;
   kind: ClientKind;
   status: ClientStatus;
@@ -107,6 +115,8 @@ export interface GrantDetail {
  * all the way to the server.
  */
 export interface GrantScopePatch {
+  /** Any subset; anything left out is untouched. */
+  edit?: Partial<GrantEditRights>;
   portfolioIds?: string[] | null;
   assetClasses?: string[] | null;
   categories?: CaScopeCategory[] | null;
@@ -626,6 +636,8 @@ export interface MyProfessionalGrant {
   portfolioCount: number;
   assetClassCount: number;
   categoryCount: number;
+  /** True when ANY of the four write switches is on. */
+  canEdit: boolean;
 }
 
 /** What a signed-out professional is told before deciding to sign up. */

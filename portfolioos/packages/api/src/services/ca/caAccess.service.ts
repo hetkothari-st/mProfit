@@ -70,6 +70,48 @@ export interface CaScope {
   /** The grant's window, for display. Expiry itself is enforced in SQL. */
   accessFrom: Date | null;
   accessUntil: Date | null;
+  /**
+   * What may be CHANGED, as opposed to seen. Default for a new grant is
+   * nothing: a professional reads until the account holder says otherwise.
+   *
+   * As with the read caps, these are not the enforcement — the write policies
+   * ask `app_ca_may_edit` themselves. They are here so a handler can refuse
+   * with a sentence instead of letting Postgres return a bare 42501 that the
+   * user reads as a bug.
+   */
+  edit: CaEditRights;
+}
+
+/** The four write surfaces a grant can cover, each a genuinely different job. */
+export interface CaEditRights {
+  books: boolean;
+  transactions: boolean;
+  imports: boolean;
+  fmv: boolean;
+}
+
+export type CaEditSection = keyof CaEditRights;
+
+const EDIT_SECTION_LABEL: Record<CaEditSection, string> = {
+  books: 'keep your client’s books',
+  transactions: 'add or correct transactions',
+  imports: 'upload statements',
+  fmv: 'set fair market values',
+};
+
+/**
+ * Refuse a write the grant does not permit, in words.
+ *
+ * The policy would refuse it anyway — that is the guarantee — but Postgres
+ * says "new row violates row-level security policy", which reads as a broken
+ * feature rather than a boundary working. Callers use this so the answer names
+ * the missing permission and who can grant it.
+ */
+export function assertCaMayEdit(scope: CaScope, section: CaEditSection): void {
+  if (scope.edit[section]) return;
+  throw new ForbiddenError(
+    `${scope.subjectLabel} has given you view-only access, so you cannot ${EDIT_SECTION_LABEL[section]}. They can change that from Account Access.`,
+  );
 }
 
 /**
@@ -125,6 +167,12 @@ export async function getCaScope(callerId: string, clientId: string): Promise<Ca
     allowedCategories: client.scopeAllCategories ? null : client.visibleCategories,
     accessFrom: client.accessFrom,
     accessUntil: client.accessUntil,
+    edit: {
+      books: client.canEditBooks,
+      transactions: client.canEditTransactions,
+      imports: client.canEditImports,
+      fmv: client.canEditFmv,
+    },
   };
 }
 
@@ -176,6 +224,8 @@ export async function listMyProfessionals(callerId: string) {
     portfolioCount: r.portfolioScopes.length,
     assetClassCount: r.visibleAssetClasses.length,
     categoryCount: r.visibleCategories.length,
+    // One bit for the card; the manage panel asks for the four.
+    canEdit: r.canEditBooks || r.canEditTransactions || r.canEditImports || r.canEditFmv,
   }));
 }
 
@@ -500,6 +550,8 @@ export const CA_SCOPE_CATEGORIES = [
 export type CaScopeCategory = (typeof CA_SCOPE_CATEGORIES)[number];
 
 export interface GrantScopePatch {
+  /** Any subset; anything left out is untouched. */
+  edit?: Partial<{ books: boolean; transactions: boolean; imports: boolean; fmv: boolean }>;
   /** `null` restores "all portfolios"; an array is the allowlist. */
   portfolioIds?: string[] | null;
   assetClasses?: AssetClass[] | null;
@@ -557,6 +609,12 @@ export async function getGrantForSubject(callerId: string, clientId: string) {
     scopeAllPortfolios: client.scopeAllPortfolios,
     scopeAllAssetClasses: client.scopeAllAssetClasses,
     scopeAllCategories: client.scopeAllCategories,
+    edit: {
+      books: client.canEditBooks,
+      transactions: client.canEditTransactions,
+      imports: client.canEditImports,
+      fmv: client.canEditFmv,
+    },
     portfolioIds: client.portfolioScopes.map((s) => s.portfolioId),
     assetClasses: client.visibleAssetClasses,
     categories: client.visibleCategories,
@@ -633,6 +691,12 @@ export async function updateGrantScope(
               visibleCategories: patch.categories ?? [],
             }
           : {}),
+        ...(patch.edit?.books !== undefined ? { canEditBooks: patch.edit.books } : {}),
+        ...(patch.edit?.transactions !== undefined
+          ? { canEditTransactions: patch.edit.transactions }
+          : {}),
+        ...(patch.edit?.imports !== undefined ? { canEditImports: patch.edit.imports } : {}),
+        ...(patch.edit?.fmv !== undefined ? { canEditFmv: patch.edit.fmv } : {}),
       },
     });
 
@@ -761,6 +825,12 @@ function describeScopeChange(patch: GrantScopePatch): string {
   }
   if (patch.accessFrom !== undefined) {
     parts.push(patch.accessFrom ? `access from ${patch.accessFrom}` : 'no start date');
+  }
+  if (patch.edit) {
+    const on = Object.entries(patch.edit)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+    parts.push(on.length === 0 ? 'view only' : `may change ${on.join(', ')}`);
   }
   if (patch.accessUntil !== undefined) {
     parts.push(patch.accessUntil ? `access until ${patch.accessUntil}` : 'no end date');
@@ -1037,5 +1107,7 @@ export async function listMyProfessionalGrants(callerId: string) {
     portfolioCount: r.portfolioScopes.length,
     assetClassCount: r.visibleAssetClasses.length,
     categoryCount: r.visibleCategories.length,
+    // One bit for the card; the manage panel asks for the four.
+    canEdit: r.canEditBooks || r.canEditTransactions || r.canEditImports || r.canEditFmv,
   }));
 }

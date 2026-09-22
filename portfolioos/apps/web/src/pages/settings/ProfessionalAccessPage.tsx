@@ -354,8 +354,9 @@ function describeScope(g: MyProfessionalGrant): string {
   }
 
   const window = g.accessUntil ? ` Ends ${fmtDate(g.accessUntil)}.` : '';
+  const doing = g.canEdit ? 'and can change them' : 'and can change nothing';
 
   return limits.length === 0
-    ? `Can see your complete financial position and edit your books.${window}`
-    : `Limited to ${limits.join(', ')}, and can edit your books.${window}`;
+    ? `Can see your complete financial position, ${doing}.${window}`
+    : `Limited to ${limits.join(', ')}, ${doing}.${window}`;
 }

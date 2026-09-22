@@ -117,6 +117,16 @@ const ASSET_CLASSES = Object.values(AssetClass) as [AssetClass, ...AssetClass[]]
  * access to all portfolios again" unexpressible.
  */
 const grantScopeSchema = z.object({
+  // Any subset. Absent means untouched, which is what lets the Advanced panel
+  // send one switch without restating the other three.
+  edit: z
+    .object({
+      books: z.boolean().optional(),
+      transactions: z.boolean().optional(),
+      imports: z.boolean().optional(),
+      fmv: z.boolean().optional(),
+    })
+    .optional(),
   portfolioIds: z.array(z.string().min(1)).max(200).nullable().optional(),
   assetClasses: z.array(z.enum(ASSET_CLASSES)).nullable().optional(),
   categories: z.array(z.enum(CA_SCOPE_CATEGORIES)).nullable().optional(),
