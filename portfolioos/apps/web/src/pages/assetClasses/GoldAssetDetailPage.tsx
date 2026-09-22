@@ -27,6 +27,7 @@ import { api, apiErrorMessage } from '@/api/client';
 import { NEUTRAL_COLOR, POS_COLOR, NEG_COLOR } from '../analytics/chartColors';
 import { INR_COMPACT, TOOLTIP_STYLE, TOOLTIP_LABEL_STYLE, formatDate } from '@/lib/depositMath';
 import { GoldFormDialog } from './GoldFormDialog';
+import { MetalIngot } from './GoldSilverTopBar';
 
 const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
   PHYSICAL_GOLD: 'Physical Gold',
@@ -734,7 +735,7 @@ export function GoldAssetDetailPage() {
                           ${accent === 'gold'
                             ? 'bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-amber-950/30'
                             : 'bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-800/40 dark:to-slate-900/30'}`}>
-                          {accent === 'silver' ? '🥈' : '🪙'}
+                          <MetalIngot metal={accent === 'silver' ? 'SILVER' : 'GOLD'} />
                         </div>
                       )}
 

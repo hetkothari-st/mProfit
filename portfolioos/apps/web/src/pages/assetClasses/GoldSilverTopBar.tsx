@@ -76,7 +76,7 @@ const INGOT: Record<Metal, { top: [string, string]; face: [string, string, strin
 };
 
 /** A cast bar of the metal: lit top face, shaded front, one glint. */
-function MetalIngot({ metal }: { metal: Metal }) {
+export function MetalIngot({ metal }: { metal: Metal }) {
   const id = useId().replace(/:/g, '');
   const c = INGOT[metal];
   return (
