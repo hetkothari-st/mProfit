@@ -29,7 +29,13 @@ export interface FamilyMemberRow {
   id: string;
   userId: string;
   name: string;
-  email: string;
+  /** Null for a managed member: their address is a placeholder. */
+  email: string | null;
+  /** Someone without an email or login, kept by another member. */
+  managed: boolean;
+  managedBy: { id: string; name: string } | null;
+  /** "Grandfather", "Wife" — the family's own words. */
+  relation: string | null;
   role: FamilyRole;
   status: FamilyMemberStatus;
   visibleAssetClasses: string[];
@@ -75,6 +81,17 @@ export interface SeatPaymentRequiredResult {
 
 export type InviteOutcome = InviteResult | SeatPaymentRequiredResult;
 
+export interface ManagedMemberResult {
+  status: 'managed_added';
+  userId: string;
+  name: string;
+  familyName: string;
+  seatNumber: number;
+  includedSeats: number;
+}
+
+export type ManagedOutcome = ManagedMemberResult | SeatPaymentRequiredResult;
+
 export interface FamilyTreeNodePos {
   userId: string;
   x: number;
@@ -88,6 +105,8 @@ export interface FamilyTreeLink {
 export interface FamilyTreeLayout {
   nodes?: FamilyTreeNodePos[];
   links?: FamilyTreeLink[];
+  /** child userId → parent userId, or null for someone at the top of the tree. */
+  parents?: Record<string, string | null>;
 }
 
 export interface InvitationPeek {
@@ -132,6 +151,7 @@ export const familiesApi = {
       role?: FamilyRole;
       visibleAssetClasses?: string[];
       visibleCategories?: NonAcCategory[];
+      relation?: string | null;
     },
   ) {
     const { data } = await api.patch<ApiResponse<FamilyMemberRow>>(
@@ -182,12 +202,26 @@ export const familiesApi = {
       razorpayPaymentId: string;
       razorpaySignature: string;
     },
-  ): Promise<InviteResult> {
-    const { data } = await api.post<ApiResponse<InviteResult>>(
+  ): Promise<InviteResult | ManagedMemberResult> {
+    const { data } = await api.post<ApiResponse<InviteResult | ManagedMemberResult>>(
       `/api/families/${familyId}/members/invite/verify-payment`,
       payload,
     );
     return unwrap(data);
+  },
+  /** Add someone with no email or login, kept by `managerId` (default: you). */
+  async addManagedMember(
+    familyId: string,
+    input: { name: string; relation?: string; managerId?: string },
+  ): Promise<ManagedOutcome> {
+    const { data } = await api.post<ApiResponse<ManagedOutcome>>(
+      `/api/families/${familyId}/members/managed`,
+      input,
+    );
+    return unwrap(data);
+  },
+  async setManager(familyId: string, memberUserId: string, managerId: string): Promise<void> {
+    await api.patch(`/api/families/${familyId}/members/${memberUserId}/manager`, { managerId });
   },
   async cancelInvitation(familyId: string, invitationId: string): Promise<void> {
     await api.delete(`/api/families/${familyId}/invitations/${invitationId}`);

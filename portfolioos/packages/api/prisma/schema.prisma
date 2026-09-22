@@ -43,6 +43,16 @@ model User {
   /// "deactivated account" in ~60 places and would silently drag this into
   /// gates it was never meant to affect.
   isShadowClient        Boolean   @default(false)
+  /// Set on a MANAGED family profile: someone without an email or login (a
+  /// grandparent, a child) whose finances a family member keeps for them.
+  /// Always paired with `isShadowClient = true`, so every sign-in path refuses
+  /// it. The manager enters it with the `X-Act-As` header, which
+  /// `authenticate` honours only for this user's manager, while both are
+  /// active members of a shared family. Kept on the profile rather than the
+  /// membership so the profile can later be handed over to its own email.
+  managedById           String?
+  managedBy             User?     @relation("ManagedProfiles", fields: [managedById], references: [id])
+  managedProfiles       User[]    @relation("ManagedProfiles")
   /// Account deletion (30-day grace). While `deletionScheduledFor` is set the
   /// account cannot sign in without explicitly restoring it, and the purge job
   /// erases everything once the date passes. See accountDeletion.service.ts.
@@ -164,6 +174,7 @@ model User {
   familyInvitesReceived       FamilyMember[]        @relation("FamilyMemberInvitedBy")
   familyInvitationsSent       FamilyInvitation[]    @relation("FamilyInvitationInviter")
   pendingFamilyInvitesCreated PendingFamilyInvite[] @relation("PendingFamilyInviteCreator")
+  pendingManagedMembers       PendingFamilyInvite[] @relation("PendingFamilyInviteManager")
 
   // AI Assistant — conversational Q&A over the user's portfolio, grouped
   // into ChatGPT-style sessions. History capped at 50 rows per user;
@@ -193,6 +204,7 @@ model User {
   clientRecords Client[] @relation("ClientSubject")
 
   @@index([deletionScheduledFor])
+  @@index([managedById])
 }
 
 model UserNotificationConfig {
@@ -3525,6 +3537,9 @@ model FamilyMember {
 
   invitedById String?
   invitedBy   User?    @relation("FamilyMemberInvitedBy", fields: [invitedById], references: [id])
+  /// How this person is related, in the family's own words ("Grandfather").
+  /// Shown on the tree; free text because families name themselves.
+  relation    String?
   joinedAt    DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -3570,8 +3585,15 @@ model PendingFamilyInvite {
   id                  String       @id @default(cuid())
   familyId            String
   family              Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  invitedEmail        String
+  /// INVITE: an email invitation waiting on its seat payment.
+  /// MANAGED: a managed profile (no email) waiting on its seat payment —
+  /// `invitedEmail` is then null and `managedById` names its manager.
+  kind                String       @default("INVITE")
+  invitedEmail        String?
   invitedName         String?
+  relation            String?
+  managedById         String?
+  managedBy           User?        @relation("PendingFamilyInviteManager", fields: [managedById], references: [id])
   role                FamilyRole   @default(CONTRIBUTOR)
   visibleAssetClasses AssetClass[] @default([])
   visibleCategories   String[]     @default([])

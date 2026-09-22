@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogOut, User, ChevronDown, Sun, Moon, Bell, Eye, EyeOff, Menu, Sparkles } from 'lucide-react';
+import { LogOut, User, ChevronDown, Sun, Moon, Bell, Eye, EyeOff, Menu, Sparkles, UserCog, ArrowLeftRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
@@ -9,6 +9,9 @@ import { authApi } from '@/api/auth.api';
 import { alertsApi } from '@/api/alerts.api';
 import { cn } from '@/lib/cn';
 import { FamilyScopeSwitcher } from '@/components/family/FamilyScopeSwitcher';
+import { managedProfilesApi } from '@/api/managedProfiles.api';
+import { useActingAsStore } from '@/stores/actingAs.store';
+import { useManageProfile } from '@/hooks/useManageProfile';
 
 export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -23,6 +26,17 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
     clearSession();
     navigate('/login', { replace: true });
   };
+
+  // Family members without a login whose accounts you keep. Asked as you,
+  // never as the profile being managed (an account route; see actingAs.store).
+  const { data: managedProfiles = [] } = useQuery({
+    queryKey: ['managed-profiles'],
+    queryFn: () => managedProfilesApi.list(),
+    enabled: Boolean(user),
+    staleTime: 60_000,
+  });
+  const acting = useActingAsStore((s) => s.profile);
+  const { enter: manage, leave: stopManaging } = useManageProfile();
 
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['alerts-unread'],
@@ -175,6 +189,38 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
                 >
                   <User className="h-4 w-4" strokeWidth={1.7} /> Profile & Settings
                 </button>
+                {acting && (
+                  <button
+                    type="button"
+                    onClick={() => { setOpen(false); stopManaging(); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/70"
+                  >
+                    <ArrowLeftRight className="h-4 w-4" strokeWidth={1.7} /> Back to my account
+                  </button>
+                )}
+                {managedProfiles.length > 0 && (
+                  <>
+                    <div className="border-t border-border/60 my-1" />
+                    <div className="px-3 pt-1.5 pb-1 text-[11px] text-muted-foreground">
+                      Accounts you manage
+                    </div>
+                    {managedProfiles.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        disabled={acting?.id === p.id}
+                        onClick={() => { setOpen(false); void manage(p); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/70 disabled:opacity-60"
+                      >
+                        <UserCog className="h-4 w-4" strokeWidth={1.7} />
+                        <span className="truncate">{p.name}</span>
+                        {p.relation && (
+                          <span className="ml-auto text-[11px] text-muted-foreground">{p.relation}</span>
+                        )}
+                      </button>
+                    ))}
+                  </>
+                )}
                 <div className="border-t border-border/60 my-1" />
                 <button
                   type="button"

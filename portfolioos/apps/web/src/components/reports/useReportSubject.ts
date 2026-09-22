@@ -107,7 +107,7 @@ export function useReportSubject(): UseReportSubject {
       { value: 'family', label: 'Whole family (one section per member)' },
       ...members
         .filter((m) => m.userId !== currentUserId)
-        .map((m) => ({ value: m.userId, label: m.name || m.email }))
+        .map((m) => ({ value: m.userId, label: m.name || m.email || 'Member' }))
         .sort((a, b) => a.label.localeCompare(b.label)),
     ];
   }, [familyId, members, currentUserId, capped]);

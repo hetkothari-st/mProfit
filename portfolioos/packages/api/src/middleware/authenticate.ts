@@ -1,8 +1,13 @@
 import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../services/jwt.service.js';
-import { UnauthorizedError } from '../lib/errors.js';
+import { ForbiddenError, UnauthorizedError } from '../lib/errors.js';
 import { enterUserContext } from '../lib/requestContext.js';
 import type { UserRole, PlanTier } from '@prisma/client';
+import {
+  ACT_AS_HEADER,
+  isAccountRoute,
+  resolveActAs,
+} from '../services/family/managedProfile.service.js';
 
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
   try {
@@ -27,7 +32,28 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
     // `enterWith` sets the store on this async resource and every descendant,
     // which matches the lifetime of the HTTP request.
     enterUserContext(payload.sub);
-    next();
+
+    // Acting for a managed family profile (see managedProfile.service). The
+    // header is checked against the database on every request — a revoked
+    // membership ends the manager's access on their very next click.
+    const actAs = req.header(ACT_AS_HEADER)?.trim();
+    if (!actAs || actAs === payload.sub) {
+      next();
+      return;
+    }
+    if (isAccountRoute(req.originalUrl)) {
+      throw new ForbiddenError('Switch back to your own account to do this.');
+    }
+    const manager = req.user;
+    resolveActAs(manager, actAs)
+      .then((profile) => {
+        req.actor = manager;
+        req.user = profile;
+        // Rebinds RLS to the profile for everything downstream.
+        enterUserContext(profile.id);
+        next();
+      })
+      .catch(next);
   } catch (err) {
     next(err);
   }

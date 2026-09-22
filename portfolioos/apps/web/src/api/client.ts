@@ -2,6 +2,7 @@ import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig 
 import type { ApiResponse } from '@everypaisa/shared';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
+import { useActingAsStore, isAccountRoute } from '@/stores/actingAs.store';
 import { getApiBaseUrl } from './baseUrl';
 
 const baseURL = getApiBaseUrl();
@@ -21,6 +22,12 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const familyId = useFamilyScopeStore.getState().viewingAsFamilyId;
   if (familyId) {
     config.headers.set('X-Viewing-As-Family', familyId);
+  }
+  // Managing a family member's account: data requests run as them. The
+  // server re-checks every one; account routes always run as you.
+  const acting = useActingAsStore.getState().profile;
+  if (acting && !isAccountRoute(config.url ?? '')) {
+    config.headers.set('X-Act-As', acting.id);
   }
   return config;
 });

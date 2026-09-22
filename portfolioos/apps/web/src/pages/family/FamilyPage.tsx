@@ -25,7 +25,9 @@ import {
   type FamilyMemberRow,
   type FamilyRole,
   type NonAcCategory,
+  type SeatPaymentRequiredResult,
 } from '@/api/families.api';
+import { useManageProfile } from '@/hooks/useManageProfile';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
@@ -267,6 +269,7 @@ function FamilyWorkspace({
 
   const [editingMember, setEditingMember] = useState<FamilyMemberRow | null>(null);
   const [inviting, setInviting] = useState(false);
+  const { enter: manageProfile } = useManageProfile();
   const [creatingPortfolio, setCreatingPortfolio] = useState(false);
   const [sharingExisting, setSharingExisting] = useState(false);
   const [tab, setTab] = useState<'overview' | 'members'>('overview');
@@ -348,7 +351,7 @@ function FamilyWorkspace({
                 {isOwner && (
                   <Button size="sm" onClick={() => setInviting(true)}>
                     <UserPlus className="h-4 w-4" strokeWidth={1.9} />
-                    <span className="ml-1">Invite</span>
+                    <span className="ml-1">Add member</span>
                   </Button>
                 )}
               </div>
@@ -365,8 +368,9 @@ function FamilyWorkspace({
                   currentUserId={currentUserId}
                   isOwner={isOwner}
                   onEdit={(m) => setEditingMember(m)}
+                  onManage={(m) => void manageProfile({ id: m.userId, name: m.name })}
                   onRevoke={(m) => {
-                    if (confirm(`Revoke ${m.name}'s access?`))
+                    if (confirm(m.managed ? `Remove ${m.name} from the family? Their records are kept.` : `Revoke ${m.name}'s access?`))
                       revokeMutation.mutate(m.userId);
                   }}
                 />
@@ -454,14 +458,29 @@ function FamilyWorkspace({
 
       {/* Dialogs */}
       {editingMember && (
-        <EditMemberDialog
-          familyId={family.id}
-          member={editingMember}
-          onClose={() => setEditingMember(null)}
-        />
+        editingMember.managed ? (
+          <EditManagedMemberDialog
+            familyId={family.id}
+            member={editingMember}
+            members={members}
+            currentUserId={currentUserId}
+            onClose={() => setEditingMember(null)}
+          />
+        ) : (
+          <EditMemberDialog
+            familyId={family.id}
+            member={editingMember}
+            onClose={() => setEditingMember(null)}
+          />
+        )
       )}
       {inviting && isOwner && (
-        <InviteDialog familyId={family.id} onClose={() => setInviting(false)} />
+        <AddMemberDialog
+          familyId={family.id}
+          members={members}
+          currentUserId={currentUserId}
+          onClose={() => setInviting(false)}
+        />
       )}
       {creatingPortfolio && (isOwner || family.role === 'CONTRIBUTOR') && (
         <CreateFamilyPortfolioDialog
@@ -715,7 +734,257 @@ function PendingInvitationsList({
 
 // ─── Invite dialog ───────────────────────────────────────────────────
 
-function InviteDialog({
+/**
+ * Pay for one extra family seat when a new member would exceed the included
+ * ones. Shared by both ways of adding someone: the member does not exist until
+ * this payment verifies, so nobody is ever added "on credit".
+ */
+async function payForSeat(familyId: string, outcome: SeatPaymentRequiredResult) {
+  toast(outcome.message, { icon: '💳', duration: 6000 });
+  const payment = await openRazorpayCheckout({
+    key: outcome.keyId,
+    amount: outcome.amount,
+    currency: outcome.currency,
+    name: 'EveryPaisa',
+    description: 'Extra family seat',
+    order_id: outcome.orderId,
+  });
+  return familiesApi.verifySeatPayment(familyId, {
+    pendingInviteId: outcome.pendingInviteId,
+    razorpayOrderId: payment.razorpay_order_id,
+    razorpayPaymentId: payment.razorpay_payment_id,
+    razorpaySignature: payment.razorpay_signature,
+  });
+}
+
+const RELATION_SUGGESTIONS = [
+  'Father',
+  'Mother',
+  'Grandfather',
+  'Grandmother',
+  'Spouse',
+  'Son',
+  'Daughter',
+  'Brother',
+  'Sister',
+  'Father-in-law',
+  'Mother-in-law',
+];
+
+/**
+ * Add a member, one of two ways. Someone with an email is invited and signs
+ * in themselves. Someone without one — a grandparent, a child — becomes a
+ * managed member: a family member keeps their books for them, and can invite
+ * them to take over once they have an email.
+ */
+function AddMemberDialog({
+  familyId,
+  members,
+  currentUserId,
+  onClose,
+}: {
+  familyId: string;
+  members: FamilyMemberRow[];
+  currentUserId: string | undefined;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<'email' | 'managed'>('email');
+  return (
+    <ModalShell title="Add a family member" onClose={onClose}>
+      <div
+        role="radiogroup"
+        aria-label="How to add them"
+        className="mb-4 grid grid-cols-2 gap-2"
+      >
+        {(
+          [
+            ['email', 'They have an email', 'They sign in and see what you allow.'],
+            ['managed', 'No email', 'Someone in the family keeps their books.'],
+          ] as const
+        ).map(([key, title, hint]) => (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={mode === key}
+            onClick={() => setMode(key)}
+            className={`rounded-lg border px-3 py-2.5 text-left transition-colors focus-ring ${
+              mode === key
+                ? 'border-accent bg-accent/10'
+                : 'border-border hover:bg-muted/50'
+            }`}
+          >
+            <span className="block text-sm font-medium text-foreground">{title}</span>
+            <span className="mt-0.5 block text-[11.5px] text-muted-foreground">{hint}</span>
+          </button>
+        ))}
+      </div>
+      {mode === 'email' ? (
+        <InviteForm familyId={familyId} onClose={onClose} />
+      ) : (
+        <ManagedMemberForm
+          familyId={familyId}
+          members={members}
+          currentUserId={currentUserId}
+          onClose={onClose}
+        />
+      )}
+    </ModalShell>
+  );
+}
+
+function ManagedMemberForm({
+  familyId,
+  members,
+  currentUserId,
+  onClose,
+}: {
+  familyId: string;
+  members: FamilyMemberRow[];
+  currentUserId: string | undefined;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { enter } = useManageProfile();
+  const [name, setName] = useState('');
+  const [relation, setRelation] = useState('');
+  const [managerId, setManagerId] = useState(currentUserId ?? '');
+  const [added, setAdded] = useState<{ userId: string; name: string; managerId: string } | null>(
+    null,
+  );
+
+  // Anyone who can sign in may keep the books: a spouse, a sibling, you.
+  const managers = members.filter((m) => m.status === 'ACTIVE' && !m.managed);
+
+  const addMutation = useMutation({
+    mutationFn: async () => {
+      const outcome = await familiesApi.addManagedMember(familyId, {
+        name: name.trim(),
+        relation: relation.trim() || undefined,
+        managerId: managerId || undefined,
+      });
+      if (outcome.status === 'managed_added') return outcome;
+      const paid = await payForSeat(familyId, outcome);
+      if (paid.status !== 'managed_added') throw new Error('Unexpected seat result');
+      return paid;
+    },
+    onSuccess: (res) => {
+      toast.success(`${res.name} added to the family`);
+      setAdded({ userId: res.userId, name: res.name, managerId });
+      queryClient.invalidateQueries({ queryKey: ['families', familyId, 'members'] });
+      queryClient.invalidateQueries({ queryKey: ['managed-profiles'] });
+    },
+    onError: (err) => {
+      if (err instanceof Error && err.message === 'dismissed') return; // Razorpay modal closed
+      toast.error(apiErrorMessage(err, 'Could not add them'));
+    },
+  });
+
+  if (added) {
+    const iManage = added.managerId === currentUserId;
+    const managerName = managers.find((m) => m.userId === added.managerId)?.name;
+    return (
+      <>
+        <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 px-4 py-3">
+          <p className="text-sm font-medium text-foreground">{added.name} is on the tree.</p>
+          <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+            {iManage
+              ? 'Open their account to add their FDs, pension, insurance and anything else they hold. It stays theirs, separate from yours.'
+              : `${managerName ?? 'Their manager'} can open their account from the menu at the top right and keep their books.`}
+          </p>
+        </div>
+        <ModalFooter>
+          <Button variant="outline" onClick={onClose}>
+            Done
+          </Button>
+          {iManage && (
+            <Button
+              onClick={() => {
+                onClose();
+                void enter({ id: added.userId, name: added.name });
+              }}
+            >
+              Open {added.name}’s account
+            </Button>
+          )}
+        </ModalFooter>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="managed-name">Their name</Label>
+          <Input
+            id="managed-name"
+            autoFocus
+            placeholder="e.g. Ramesh Kothari"
+            value={name}
+            maxLength={80}
+            onChange={(e) => setName(e.target.value)}
+            disabled={addMutation.isPending}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="managed-relation">How they are related</Label>
+          <Input
+            id="managed-relation"
+            list="relation-suggestions"
+            placeholder="e.g. Grandfather"
+            value={relation}
+            maxLength={40}
+            onChange={(e) => setRelation(e.target.value)}
+            disabled={addMutation.isPending}
+          />
+          <datalist id="relation-suggestions">
+            {RELATION_SUGGESTIONS.map((r) => (
+              <option key={r} value={r} />
+            ))}
+          </datalist>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="managed-manager">Who keeps their books</Label>
+          <select
+            id="managed-manager"
+            className="w-full h-9 rounded-md border border-border bg-background text-sm px-2"
+            value={managerId}
+            onChange={(e) => setManagerId(e.target.value)}
+            disabled={addMutation.isPending}
+          >
+            {managers.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.userId === currentUserId ? `${m.name} (you)` : m.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+            Only this person can open their account. You can hand it to someone else later, and
+            invite them to take it over once they have an email.
+          </p>
+        </div>
+        <p className="rounded-md bg-muted/40 px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+          They take a family seat, the same as someone you invite.
+        </p>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={addMutation.isPending}>
+          Cancel
+        </Button>
+        <Button
+          onClick={() => addMutation.mutate()}
+          disabled={!name.trim() || !managerId || addMutation.isPending}
+        >
+          {addMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+          Add to family
+        </Button>
+      </ModalFooter>
+    </>
+  );
+}
+
+function InviteForm({
   familyId,
   onClose,
 }: {
@@ -742,24 +1011,9 @@ function InviteDialog({
       if (outcome.status === 'invited') return outcome;
 
       // Seat-overage: this family is already at its included-seat cap.
-      // Pay for the extra seat now — the invitation itself doesn't exist
-      // until this payment verifies, so a member never gets added "on
-      // credit" against a future bill.
-      toast(outcome.message, { icon: '💳', duration: 6000 });
-      const payment = await openRazorpayCheckout({
-        key: outcome.keyId,
-        amount: outcome.amount,
-        currency: outcome.currency,
-        name: 'EveryPaisa',
-        description: 'Extra family seat',
-        order_id: outcome.orderId,
-      });
-      return familiesApi.verifySeatPayment(familyId, {
-        pendingInviteId: outcome.pendingInviteId,
-        razorpayOrderId: payment.razorpay_order_id,
-        razorpayPaymentId: payment.razorpay_payment_id,
-        razorpaySignature: payment.razorpay_signature,
-      });
+      const paid = await payForSeat(familyId, outcome);
+      if (paid.status !== 'invited') throw new Error('Unexpected seat result');
+      return paid;
     },
     onSuccess: (res) => {
       toast.success('Invitation created');
@@ -779,7 +1033,7 @@ function InviteDialog({
   };
 
   return (
-    <ModalShell title="Invite a member" onClose={onClose}>
+    <>
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="invite-email">Email</Label>
@@ -845,6 +1099,106 @@ function InviteDialog({
           </Button>
         )}
       </ModalFooter>
+    </>
+  );
+}
+
+// ─── Edit a managed member ───────────────────────────────────────────
+
+/**
+ * A managed member never signs in, so roles and visibility filters mean
+ * nothing for them. What an owner can change is how they are described and
+ * who keeps their books — when the son who set it up moves abroad, say, and
+ * his sister takes over.
+ */
+function EditManagedMemberDialog({
+  familyId,
+  member,
+  members,
+  currentUserId,
+  onClose,
+}: {
+  familyId: string;
+  member: FamilyMemberRow;
+  members: FamilyMemberRow[];
+  currentUserId: string | undefined;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [relation, setRelation] = useState(member.relation ?? '');
+  const [managerId, setManagerId] = useState(member.managedBy?.id ?? '');
+  const managers = members.filter((m) => m.status === 'ACTIVE' && !m.managed);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if ((member.relation ?? '') !== relation.trim()) {
+        await familiesApi.updateMemberPermissions(familyId, member.userId, {
+          relation: relation.trim() || null,
+        });
+      }
+      if (managerId && managerId !== member.managedBy?.id) {
+        await familiesApi.setManager(familyId, member.userId, managerId);
+      }
+    },
+    onSuccess: () => {
+      toast.success('Saved');
+      queryClient.invalidateQueries({ queryKey: ['families', familyId, 'members'] });
+      queryClient.invalidateQueries({ queryKey: ['managed-profiles'] });
+      onClose();
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Update failed')),
+  });
+
+  return (
+    <ModalShell
+      title={`Edit ${member.name}`}
+      subtitle={`Managed by ${member.managedBy?.name ?? 'nobody'}`}
+      onClose={onClose}
+    >
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-relation">How they are related</Label>
+          <Input
+            id="edit-relation"
+            list="relation-suggestions-edit"
+            value={relation}
+            maxLength={40}
+            onChange={(e) => setRelation(e.target.value)}
+          />
+          <datalist id="relation-suggestions-edit">
+            {RELATION_SUGGESTIONS.map((r) => (
+              <option key={r} value={r} />
+            ))}
+          </datalist>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-manager">Who keeps their books</Label>
+          <select
+            id="edit-manager"
+            className="w-full h-9 rounded-md border border-border bg-background text-sm px-2"
+            value={managerId}
+            onChange={(e) => setManagerId(e.target.value)}
+          >
+            {managers.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.userId === currentUserId ? `${m.name} (you)` : m.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+            Only this person can open their account. Changing it takes effect immediately.
+          </p>
+        </div>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={saveMutation.isPending}>
+          Cancel
+        </Button>
+        <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+          {saveMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+          Save
+        </Button>
+      </ModalFooter>
     </ModalShell>
   );
 }
@@ -888,7 +1242,7 @@ function EditMemberDialog({
   return (
     <ModalShell
       title={`Edit ${member.name}`}
-      subtitle={member.email}
+      subtitle={member.email ?? undefined}
       onClose={onClose}
     >
       <div className="space-y-4">

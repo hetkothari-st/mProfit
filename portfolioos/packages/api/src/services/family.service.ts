@@ -15,6 +15,8 @@ import {
 } from './familyScope.service.js';
 import { logger } from '../lib/logger.js';
 import { env } from '../config/env.js';
+import { hashPassword } from './password.service.js';
+import { managedPlaceholderEmail } from './family/managedProfile.service.js';
 import {
   assertValidSignature,
   createOrder,
@@ -136,28 +138,46 @@ export async function listMembers(callerId: string, familyId: string) {
   const rows = await runAsSystem(() =>
     prisma.familyMember.findMany({
       where: { familyId },
-      include: { user: { select: { id: true, name: true, email: true } } },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            isShadowClient: true,
+            managedBy: { select: { id: true, name: true } },
+          },
+        },
+      },
       orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
     }),
   );
-  return rows.map((r) => ({
-    id: r.id,
-    userId: r.userId,
-    name: r.user.name,
-    email: r.user.email,
-    role: r.role,
-    status: r.status,
-    visibleAssetClasses: r.visibleAssetClasses,
-    visibleCategories: filterKnownCategories(r.visibleCategories),
-    joinedAt: r.joinedAt.toISOString(),
-    invitedById: r.invitedById,
-  }));
+  return rows.map((r) => {
+    const managed = r.user.isShadowClient && r.user.managedBy !== null;
+    return {
+      id: r.id,
+      userId: r.userId,
+      name: r.user.name,
+      // A managed profile's address is a placeholder nobody should see.
+      email: managed ? null : r.user.email,
+      managed,
+      managedBy: managed ? r.user.managedBy : null,
+      relation: r.relation,
+      role: r.role,
+      status: r.status,
+      visibleAssetClasses: r.visibleAssetClasses,
+      visibleCategories: filterKnownCategories(r.visibleCategories),
+      joinedAt: r.joinedAt.toISOString(),
+      invitedById: r.invitedById,
+    };
+  });
 }
 
 export interface UpdateMemberInput {
   role?: FamilyRole;
   visibleAssetClasses?: AssetClass[];
   visibleCategories?: NonAcCategory[];
+  relation?: string | null;
 }
 
 /**
@@ -176,6 +196,18 @@ export async function updateMemberPermissions(
     where: { familyId_userId: { familyId, userId: memberUserId } },
   });
   if (!target) throw new NotFoundError('Member not found in family.');
+
+  if (patch.role === 'OWNER') {
+    // A managed profile can never sign in, so as an OWNER it could become
+    // the family's last one and leave nobody able to run it.
+    const user = await prisma.user.findUnique({
+      where: { id: memberUserId },
+      select: { isShadowClient: true },
+    });
+    if (user?.isShadowClient) {
+      throw new BadRequestError('A managed member cannot be an owner; they cannot sign in.');
+    }
+  }
 
   if (patch.role !== undefined && target.role === 'OWNER' && patch.role !== 'OWNER') {
     // About to demote an OWNER — ensure at least one OWNER remains.
@@ -201,6 +233,9 @@ export async function updateMemberPermissions(
         : {}),
       ...(patch.visibleCategories !== undefined
         ? { visibleCategories: patch.visibleCategories }
+        : {}),
+      ...(patch.relation !== undefined
+        ? { relation: patch.relation?.trim().slice(0, 40) || null }
         : {}),
     },
   });
@@ -345,19 +380,7 @@ export async function inviteMember(
     throw new BadRequestError(`${invitedEmail} is already a member of this family.`);
   }
 
-  const family = await prisma.family.findUniqueOrThrow({
-    where: { id: familyId },
-    select: { name: true, includedSeats: true, extraSeatPriceInr: true },
-  });
-  // Seats already spoken for: ACTIVE members + still-pending, unexpired
-  // invitations. The invite about to be created takes the next seat.
-  const [activeMemberCount, pendingInviteCount] = await Promise.all([
-    prisma.familyMember.count({ where: { familyId, status: 'ACTIVE' } }),
-    prisma.familyInvitation.count({
-      where: { familyId, acceptedAt: null, expiresAt: { gt: new Date() } },
-    }),
-  ]);
-  const seatNumber = activeMemberCount + pendingInviteCount + 1;
+  const { family, seatNumber } = await nextSeat(familyId);
 
   if (seatNumber > family.includedSeats) {
     if (!isRazorpayConfigured()) {
@@ -374,6 +397,7 @@ export async function inviteMember(
     const pending = await prisma.pendingFamilyInvite.create({
       data: {
         familyId,
+        kind: 'INVITE',
         invitedEmail,
         invitedName: input.invitedName?.trim() || null,
         role: input.role ?? 'CONTRIBUTOR',
@@ -453,7 +477,7 @@ export async function verifySeatPaymentAndInvite(
     razorpayPaymentId: string;
     razorpaySignature: string;
   },
-): Promise<InviteResult> {
+): Promise<InviteResult | ManagedMemberResult> {
   await assertOwnerOf(callerId, familyId);
 
   const pending = await prisma.pendingFamilyInvite.findUnique({
@@ -481,8 +505,49 @@ export async function verifySeatPaymentAndInvite(
     throw new ForbiddenError('This payment does not match this seat request.');
   }
 
+  if (pending.kind === 'MANAGED') {
+    // The paid seat holds a managed profile, not an invitation. Created in
+    // the same transaction as the seat increment and the pending row's
+    // removal, for the same reason as the invitation below.
+    const passwordHash = await unusablePasswordHash();
+    const { family, profile } = await runAsSystem(() =>
+      runInTransaction(async (tx) => {
+        const family = await tx.family.update({
+          where: { id: familyId },
+          data: { includedSeats: { increment: 1 } },
+          select: { name: true, includedSeats: true },
+        });
+        const profile = await createManagedProfileTx(tx, {
+          familyId,
+          name: pending.invitedName ?? 'Family member',
+          relation: pending.relation,
+          managerId: pending.managedById ?? pending.createdById,
+          addedById: pending.createdById,
+          passwordHash,
+        });
+        await tx.pendingFamilyInvite.delete({ where: { id: pending.id } });
+        return { family, profile };
+      }),
+    );
+    logger.info(
+      { familyId, profileId: profile.id, pendingInviteId: pending.id },
+      '[family] seat paid, managed member added',
+    );
+    return {
+      status: 'managed_added',
+      userId: profile.id,
+      name: profile.name,
+      familyName: family.name,
+      seatNumber: family.includedSeats,
+      includedSeats: family.includedSeats,
+    };
+  }
+
   const token = crypto.randomBytes(INVITE_TOKEN_BYTES).toString('base64url');
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000);
+  // Only a MANAGED seat has no address, and that one returned above.
+  const pendingEmail = pending.invitedEmail;
+  if (!pendingEmail) throw new BadRequestError('This seat request has no invitee.');
 
   // Callback form so the seat increment, the invitation and the removal of the
   // pending row commit or fail together. The pendingFamilyInvite delete used to
@@ -497,7 +562,7 @@ export async function verifySeatPaymentAndInvite(
     const invitation = await tx.familyInvitation.create({
       data: {
         familyId,
-        invitedEmail: pending.invitedEmail,
+        invitedEmail: pendingEmail,
         invitedName: pending.invitedName,
         role: pending.role,
         visibleAssetClasses: pending.visibleAssetClasses,
@@ -528,6 +593,220 @@ export async function verifySeatPaymentAndInvite(
     seatNumber: family.includedSeats,
     includedSeats: family.includedSeats,
   };
+}
+
+// ─── Seats ───────────────────────────────────────────────────────────
+
+/**
+ * The seat the next member would take. Seats already spoken for: ACTIVE
+ * members (managed profiles included — a grandparent is a member like anyone
+ * else) plus still-pending, unexpired invitations.
+ */
+async function nextSeat(familyId: string) {
+  const family = await prisma.family.findUniqueOrThrow({
+    where: { id: familyId },
+    select: { name: true, includedSeats: true, extraSeatPriceInr: true },
+  });
+  const [activeMemberCount, pendingInviteCount] = await Promise.all([
+    prisma.familyMember.count({ where: { familyId, status: 'ACTIVE' } }),
+    prisma.familyInvitation.count({
+      where: { familyId, acceptedAt: null, expiresAt: { gt: new Date() } },
+    }),
+  ]);
+  return { family, seatNumber: activeMemberCount + pendingInviteCount + 1 };
+}
+
+// ─── Managed members ─────────────────────────────────────────────────
+
+export interface AddManagedMemberInput {
+  name: string;
+  relation?: string;
+  /** Who keeps this person's books: any active, non-managed member. Defaults to the caller. */
+  managerId?: string;
+}
+
+export interface ManagedMemberResult {
+  status: 'managed_added';
+  userId: string;
+  name: string;
+  familyName: string;
+  seatNumber: number;
+  includedSeats: number;
+}
+
+/** A hash of a secret nobody ever sees: nothing typed will ever match it. */
+function unusablePasswordHash(): Promise<string> {
+  return hashPassword(crypto.randomBytes(48).toString('base64url'));
+}
+
+type Tx = Parameters<Parameters<typeof runInTransaction>[0]>[0];
+
+async function createManagedProfileTx(
+  tx: Tx,
+  input: {
+    familyId: string;
+    name: string;
+    relation: string | null;
+    managerId: string;
+    addedById: string;
+    passwordHash: string;
+  },
+) {
+  const profile = await tx.user.create({
+    data: {
+      email: managedPlaceholderEmail(),
+      name: input.name,
+      passwordHash: input.passwordHash,
+      role: 'INVESTOR',
+      plan: 'FREE',
+      // The lock every sign-in path checks. See managedProfile.service.
+      isShadowClient: true,
+      managedById: input.managerId,
+    },
+    select: { id: true, name: true },
+  });
+  await tx.familyMember.create({
+    data: {
+      familyId: input.familyId,
+      userId: profile.id,
+      // They never sign in, so the role only places them in the family;
+      // VIEWER grants nothing that matters.
+      role: 'VIEWER',
+      status: 'ACTIVE',
+      invitedById: input.addedById,
+      relation: input.relation,
+    },
+  });
+  return profile;
+}
+
+/** The manager must be a real, active member of this family — not another managed profile. */
+async function assertValidManager(familyId: string, managerId: string): Promise<void> {
+  const row = await runAsSystem(() =>
+    prisma.familyMember.findUnique({
+      where: { familyId_userId: { familyId, userId: managerId } },
+      select: { status: true, user: { select: { isShadowClient: true } } },
+    }),
+  );
+  if (!row || row.status !== 'ACTIVE') {
+    throw new BadRequestError('The manager must be an active member of this family.');
+  }
+  if (row.user.isShadowClient) {
+    throw new BadRequestError('A managed profile cannot manage another one.');
+  }
+}
+
+/**
+ * OWNER-only. Add someone with no email or login (a grandparent, a child) as
+ * a managed profile, kept by `managerId`. Takes a seat exactly as an invite
+ * does, and past the included seats goes through the same seat payment.
+ */
+export async function addManagedMember(
+  callerId: string,
+  familyId: string,
+  input: AddManagedMemberInput,
+): Promise<ManagedMemberResult | SeatPaymentRequiredResult> {
+  await assertOwnerOf(callerId, familyId);
+  const name = input.name.trim();
+  if (!name) throw new BadRequestError('Their name is required.');
+  if (name.length > 80) throw new BadRequestError('That name is too long.');
+  const relation = input.relation?.trim().slice(0, 40) || null;
+  const managerId = input.managerId ?? callerId;
+  await assertValidManager(familyId, managerId);
+
+  const { family, seatNumber } = await nextSeat(familyId);
+
+  if (seatNumber > family.includedSeats) {
+    if (!isRazorpayConfigured()) {
+      throw new BadRequestError(
+        'Adding another family member exceeds your included seats, and payments are not configured on this server.',
+      );
+    }
+    const amountPaise = toDecimal(family.extraSeatPriceInr).mul(100).toNumber();
+    const order = await createOrder({
+      amountPaise,
+      receiptLabel: 'family_seat',
+      notes: { type: 'family_seat', familyId, callerId },
+    });
+    const pending = await prisma.pendingFamilyInvite.create({
+      data: {
+        familyId,
+        kind: 'MANAGED',
+        invitedEmail: null,
+        invitedName: name,
+        relation,
+        managedById: managerId,
+        role: 'VIEWER',
+        createdById: callerId,
+        razorpayOrderId: order.orderId,
+        expiresAt: new Date(Date.now() + PENDING_SEAT_INVITE_TTL_MIN * 60_000),
+      },
+    });
+    return {
+      status: 'seat_payment_required',
+      pendingInviteId: pending.id,
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: env.RAZORPAY_KEY_ID!,
+      extraSeatPriceInr: serializeMoney(toDecimal(family.extraSeatPriceInr)),
+      seatNumber,
+      includedSeats: family.includedSeats,
+      message: `This is your ${ordinal(seatNumber)} family member; it exceeds your included ${family.includedSeats} seats. Pay ₹${toDecimal(family.extraSeatPriceInr).toString()} to add this seat.`,
+    };
+  }
+
+  const passwordHash = await unusablePasswordHash();
+  // Privileged: the new FamilyMember row belongs to a user who is not the
+  // caller, which its policy refuses. Ownership was proven above.
+  const profile = await runAsSystem(() =>
+    runInTransaction((tx) =>
+      createManagedProfileTx(tx, {
+        familyId,
+        name,
+        relation,
+        managerId,
+        addedById: callerId,
+        passwordHash,
+      }),
+    ),
+  );
+  logger.info({ familyId, profileId: profile.id, managerId }, '[family] managed member added');
+  return {
+    status: 'managed_added',
+    userId: profile.id,
+    name: profile.name,
+    familyName: family.name,
+    seatNumber,
+    includedSeats: family.includedSeats,
+  };
+}
+
+/**
+ * OWNER-only. Hand a managed profile to another member to keep — when the
+ * son who set it up moves abroad, say, and his sister takes over.
+ */
+export async function setManagedMemberManager(
+  callerId: string,
+  familyId: string,
+  profileId: string,
+  managerId: string,
+): Promise<void> {
+  await assertOwnerOf(callerId, familyId);
+  await assertValidManager(familyId, managerId);
+  const target = await runAsSystem(() =>
+    prisma.familyMember.findUnique({
+      where: { familyId_userId: { familyId, userId: profileId } },
+      select: { user: { select: { isShadowClient: true, managedById: true } } },
+    }),
+  );
+  if (!target || !target.user.isShadowClient || !target.user.managedById) {
+    throw new NotFoundError('Managed member not found in this family.');
+  }
+  await runAsSystem(() =>
+    prisma.user.update({ where: { id: profileId }, data: { managedById: managerId } }),
+  );
+  logger.info({ familyId, profileId, managerId }, '[family] managed member manager changed');
 }
 
 function ordinal(n: number): string {
@@ -698,6 +977,41 @@ export async function acceptInvitation(callerId: string, token: string) {
 export interface FamilyTreeLayout {
   nodes?: Array<{ userId: string; x: number; y: number }>;
   links?: Array<{ fromUserId: string; toUserId: string; label?: string | null }>;
+  /**
+   * Who sits under whom, as the family arranged it: child userId → parent
+   * userId, or null for someone placed at the top. Overrides the "who
+   * invited whom" chain, which put whoever set the family up at the top — a
+   * son running the account for his father is not the head of the tree.
+   */
+  parents?: Record<string, string | null>;
+}
+
+/**
+ * Keep only parent links that point at another listed person and do not
+ * loop back on themselves. A cycle would leave the tree without a top.
+ */
+function sanitizeParents(raw: unknown): Record<string, string | null> {
+  if (!raw || typeof raw !== 'object') return {};
+  const parents: Record<string, string | null> = {};
+  for (const [child, parent] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof child !== 'string' || child.length === 0 || child.length > 64) continue;
+    if (parent === null) parents[child] = null;
+    else if (typeof parent === 'string' && parent !== child && parent.length <= 64) {
+      parents[child] = parent;
+    }
+  }
+  for (const start of Object.keys(parents)) {
+    const seen = new Set<string>([start]);
+    let at = parents[start];
+    while (typeof at === 'string') {
+      if (seen.has(at)) {
+        throw new BadRequestError('That arrangement puts someone under themselves.');
+      }
+      seen.add(at);
+      at = parents[at];
+    }
+  }
+  return parents;
 }
 
 /**
@@ -757,6 +1071,7 @@ export async function updateFamilyTreeLayout(
             label: l.label ?? null,
           }))
       : [],
+    parents: sanitizeParents(layout.parents),
   };
   await prisma.family.update({
     where: { id: familyId },
