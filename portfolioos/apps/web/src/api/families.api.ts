@@ -1,3 +1,4 @@
+import type { InviteEmailDraft } from './ca.api';
 import { api, unwrap } from './client';
 import type { ApiResponse } from '@everypaisa/shared';
 
@@ -34,8 +35,10 @@ export interface FamilyMemberRow {
   /** Someone without an email or login, kept by another member. */
   managed: boolean;
   managedBy: { id: string; name: string } | null;
-  /** "Grandfather", "Wife" — the family's own words. */
+  /** "Father", "Wife" — of `relatedTo`. */
   relation: string | null;
+  /** Who `relation` is measured against, while they are still in the family. */
+  relatedTo: { id: string; name: string } | null;
   role: FamilyRole;
   status: FamilyMemberStatus;
   visibleAssetClasses: string[];
@@ -152,6 +155,7 @@ export const familiesApi = {
       visibleAssetClasses?: string[];
       visibleCategories?: NonAcCategory[];
       relation?: string | null;
+      relatedToId?: string | null;
     },
   ) {
     const { data } = await api.patch<ApiResponse<FamilyMemberRow>>(
@@ -184,6 +188,8 @@ export const familiesApi = {
       role?: FamilyRole;
       visibleAssetClasses?: string[];
       visibleCategories?: NonAcCategory[];
+      relation?: string;
+      relatedToId?: string;
     },
   ): Promise<InviteOutcome> {
     const { data } = await api.post<ApiResponse<InviteOutcome>>(
@@ -212,7 +218,7 @@ export const familiesApi = {
   /** Add someone with no email or login, kept by `managerId` (default: you). */
   async addManagedMember(
     familyId: string,
-    input: { name: string; relation?: string; managerId?: string },
+    input: { name: string; relation?: string; relatedToId?: string; managerId?: string },
   ): Promise<ManagedOutcome> {
     const { data } = await api.post<ApiResponse<ManagedOutcome>>(
       `/api/families/${familyId}/members/managed`,
@@ -277,6 +283,31 @@ export const familiesApi = {
       `/api/families/${familyId}/portfolios`,
       input,
     );
+    return unwrap(data);
+  },
+};
+
+/** The family invitation email: drafted and sent by the server, edited here. */
+export const familyInviteEmailApi = {
+  async preview(
+    familyId: string,
+    invitationId: string,
+    edits: { subject?: string; message?: string } = {},
+  ): Promise<InviteEmailDraft> {
+    const { data } = await api.post<ApiResponse<InviteEmailDraft>>(
+      `/api/families/${familyId}/invitations/${invitationId}/email/preview`,
+      edits,
+    );
+    return unwrap(data);
+  },
+  async send(
+    familyId: string,
+    invitationId: string,
+    edits: { subject?: string; message?: string },
+  ): Promise<{ sent: boolean; to: string; sendsRemaining: number; reason?: string }> {
+    const { data } = await api.post<
+      ApiResponse<{ sent: boolean; to: string; sendsRemaining: number; reason?: string }>
+    >(`/api/families/${familyId}/invitations/${invitationId}/email/send`, edits);
     return unwrap(data);
   },
 };

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { AssetClass, FamilyRole } from '@prisma/client';
-import { toDecimal, serializeMoney } from '@everypaisa/shared';
+import { toDecimal, serializeMoney, placeRelative, hasCycle } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 import {
@@ -17,6 +17,7 @@ import { logger } from '../lib/logger.js';
 import { env } from '../config/env.js';
 import { hashPassword } from './password.service.js';
 import { managedPlaceholderEmail } from './family/managedProfile.service.js';
+import { purgeUser } from './accountDeletion.service.js';
 import {
   assertValidSignature,
   createOrder,
@@ -152,8 +153,11 @@ export async function listMembers(callerId: string, familyId: string) {
       orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
     }),
   );
-  return rows.map((r) => {
-    const managed = r.user.isShadowClient && r.user.managedBy !== null;
+  // Removed members are gone from the family, not greyed out in it.
+  const current = rows.filter((r) => r.status !== 'REVOKED');
+  const nameOf = new Map(current.map((r) => [r.userId, r.user.name]));
+  return current.map((r) => {
+    const managed = r.user.isShadowClient;
     return {
       id: r.id,
       userId: r.userId,
@@ -163,6 +167,11 @@ export async function listMembers(callerId: string, familyId: string) {
       managed,
       managedBy: managed ? r.user.managedBy : null,
       relation: r.relation,
+      // Who the relation is measured against, while they are still here.
+      relatedTo:
+        r.relatedToId && nameOf.has(r.relatedToId)
+          ? { id: r.relatedToId, name: nameOf.get(r.relatedToId)! }
+          : null,
       role: r.role,
       status: r.status,
       visibleAssetClasses: r.visibleAssetClasses,
@@ -178,6 +187,8 @@ export interface UpdateMemberInput {
   visibleAssetClasses?: AssetClass[];
   visibleCategories?: NonAcCategory[];
   relation?: string | null;
+  /** The member `relation` is measured against. */
+  relatedToId?: string | null;
 }
 
 /**
@@ -224,21 +235,39 @@ export async function updateMemberPermissions(
     }
   }
 
-  return prisma.familyMember.update({
-    where: { familyId_userId: { familyId, userId: memberUserId } },
-    data: {
-      ...(patch.role !== undefined ? { role: patch.role } : {}),
-      ...(patch.visibleAssetClasses !== undefined
-        ? { visibleAssetClasses: patch.visibleAssetClasses }
-        : {}),
-      ...(patch.visibleCategories !== undefined
-        ? { visibleCategories: patch.visibleCategories }
-        : {}),
-      ...(patch.relation !== undefined
-        ? { relation: patch.relation?.trim().slice(0, 40) || null }
-        : {}),
-    },
-  });
+  // A new relation re-places them on the tree, so check it first: it must
+  // point at an active member other than themselves, and must not loop.
+  const relationChanged = patch.relation !== undefined || patch.relatedToId !== undefined;
+  let kin: { relation: string | null; relatedToId: string | null } | null = null;
+  if (relationChanged) {
+    if (patch.relatedToId === memberUserId) {
+      throw new BadRequestError('Someone cannot be related to themselves.');
+    }
+    kin = await validRelative(
+      familyId,
+      patch.relation !== undefined ? patch.relation : target.relation,
+      patch.relatedToId !== undefined ? patch.relatedToId : target.relatedToId,
+    );
+    await placeInTree(familyId, memberUserId, kin.relatedToId, kin.relation, { strict: true });
+  }
+
+  // Privileged: FamilyMember's policy lets an owner read the roster but not
+  // update another member's row. Ownership was proven above.
+  return runAsSystem(() =>
+    prisma.familyMember.update({
+      where: { familyId_userId: { familyId, userId: memberUserId } },
+      data: {
+        ...(patch.role !== undefined ? { role: patch.role } : {}),
+        ...(patch.visibleAssetClasses !== undefined
+          ? { visibleAssetClasses: patch.visibleAssetClasses }
+          : {}),
+        ...(patch.visibleCategories !== undefined
+          ? { visibleCategories: patch.visibleCategories }
+          : {}),
+        ...(kin ? { relation: kin.relation, relatedToId: kin.relatedToId } : {}),
+      },
+    }),
+  );
 }
 
 /**
@@ -246,22 +275,38 @@ export async function updateMemberPermissions(
  * destructive: FamilyMember row stays for audit, member keeps User
  * row + personal portfolios. Cannot revoke the last OWNER.
  */
+/**
+ * OWNER-only. Remove a member from the family completely — not a greyed-out
+ * "revoked" card that stays on the tree.
+ *
+ * - Someone with their own login leaves the family: their membership row is
+ *   deleted, and their own account and data are untouched (they are theirs).
+ * - A managed member is deleted outright, with everything recorded for them.
+ *   Nobody could ever reach that profile again — it has no login, and its
+ *   manager's access came only through this family — so keeping it would
+ *   only keep someone's finances somewhere no one can see or erase them.
+ *
+ * Either way, anyone placed under them on the tree moves up into their place,
+ * and any managed members they were keeping pass to the owner removing them.
+ */
 export async function revokeMember(
   callerId: string,
   familyId: string,
   memberUserId: string,
-) {
+): Promise<void> {
   await assertOwnerOf(callerId, familyId);
   if (memberUserId === callerId) {
     throw new BadRequestError('Use "leave family" to revoke your own access.');
   }
-  const target = await prisma.familyMember.findUnique({
-    where: { familyId_userId: { familyId, userId: memberUserId } },
-  });
+  const target = await runAsSystem(() =>
+    prisma.familyMember.findUnique({
+      where: { familyId_userId: { familyId, userId: memberUserId } },
+      select: { role: true, status: true, user: { select: { isShadowClient: true } } },
+    }),
+  );
   if (!target) throw new NotFoundError('Member not found in family.');
-  if (target.status === 'REVOKED') return target;
 
-  if (target.role === 'OWNER') {
+  if (target.role === 'OWNER' && target.status === 'ACTIVE') {
     const otherOwners = await prisma.familyMember.count({
       where: {
         familyId,
@@ -275,9 +320,69 @@ export async function revokeMember(
     }
   }
 
-  return prisma.familyMember.update({
-    where: { familyId_userId: { familyId, userId: memberUserId } },
-    data: { status: 'REVOKED' },
+  await detachFromTree(familyId, memberUserId);
+
+  // Profiles this person was keeping must not be stranded with nobody able
+  // to open them.
+  // Looked up from the FamilyMember side: `User` is not RLS-scoped, so a
+  // nested membership filter on a user query matches nothing.
+  await runAsSystem(async () => {
+    const kept = await prisma.familyMember.findMany({
+      where: { familyId, user: { managedById: memberUserId, isShadowClient: true } },
+      select: { userId: true },
+    });
+    if (kept.length === 0) return;
+    await prisma.user.updateMany({
+      where: { id: { in: kept.map((k) => k.userId) } },
+      data: { managedById: callerId },
+    });
+  });
+
+  if (target.user.isShadowClient) {
+    // Privileged: the profile's rows belong to it, not to the caller.
+    // Ownership of the family was proven above.
+    await runAsSystem(() => purgeUser(memberUserId));
+    logger.info({ familyId, profileId: memberUserId }, '[family] managed member deleted');
+    return;
+  }
+
+  await runAsSystem(() =>
+    prisma.familyMember.delete({
+      where: { familyId_userId: { familyId, userId: memberUserId } },
+    }),
+  );
+  logger.info({ familyId, userId: memberUserId }, '[family] member removed');
+}
+
+/**
+ * Take someone off the tree: anyone under them moves up to their parent, so
+ * removing a father does not strand his children in a floating branch.
+ */
+async function detachFromTree(familyId: string, userId: string): Promise<void> {
+  await runAsSystem(async () => {
+    const family = await prisma.family.findUniqueOrThrow({
+      where: { id: familyId },
+      select: { treeLayout: true, members: { select: { userId: true, invitedById: true } } },
+    });
+    const layout = (family.treeLayout as FamilyTreeLayout | null) ?? {};
+    const parents: Record<string, string | null> = { ...(layout.parents ?? {}) };
+    const invitedBy = new Map(family.members.map((m) => [m.userId, m.invitedById]));
+    const parentOf = (id: string) => (id in parents ? (parents[id] ?? null) : (invitedBy.get(id) ?? null));
+    const theirParent = parentOf(userId);
+    for (const m of family.members) {
+      if (m.userId !== userId && parentOf(m.userId) === userId) parents[m.userId] = theirParent;
+    }
+    delete parents[userId];
+    await prisma.family.update({
+      where: { id: familyId },
+      data: {
+        treeLayout: {
+          nodes: (layout.nodes ?? []).filter((n) => n.userId !== userId),
+          links: (layout.links ?? []).filter((l) => l.fromUserId !== userId && l.toUserId !== userId),
+          parents,
+        } as unknown as object,
+      },
+    });
   });
 }
 
@@ -318,6 +423,9 @@ export interface InviteInput {
   role?: FamilyRole;
   visibleAssetClasses?: AssetClass[];
   visibleCategories?: NonAcCategory[];
+  /** "Wife", "Son" … of `relatedToId`; places them on the tree when they accept. */
+  relation?: string;
+  relatedToId?: string;
 }
 
 export interface InviteResult {
@@ -379,6 +487,7 @@ export async function inviteMember(
   if (existing) {
     throw new BadRequestError(`${invitedEmail} is already a member of this family.`);
   }
+  const kin = await validRelative(familyId, input.relation, input.relatedToId);
 
   const { family, seatNumber } = await nextSeat(familyId);
 
@@ -400,6 +509,8 @@ export async function inviteMember(
         kind: 'INVITE',
         invitedEmail,
         invitedName: input.invitedName?.trim() || null,
+        relation: kin.relation,
+        relatedToId: kin.relatedToId,
         role: input.role ?? 'CONTRIBUTOR',
         visibleAssetClasses: input.visibleAssetClasses ?? [],
         visibleCategories: input.visibleCategories ?? [],
@@ -434,6 +545,8 @@ export async function inviteMember(
       familyId,
       invitedEmail,
       invitedName: input.invitedName?.trim() || null,
+      relation: kin.relation,
+      relatedToId: kin.relatedToId,
       role: input.role ?? 'CONTRIBUTOR',
       visibleAssetClasses: input.visibleAssetClasses ?? [],
       visibleCategories: input.visibleCategories ?? [],
@@ -521,6 +634,7 @@ export async function verifySeatPaymentAndInvite(
           familyId,
           name: pending.invitedName ?? 'Family member',
           relation: pending.relation,
+          relatedToId: pending.relatedToId,
           managerId: pending.managedById ?? pending.createdById,
           addedById: pending.createdById,
           passwordHash,
@@ -529,6 +643,7 @@ export async function verifySeatPaymentAndInvite(
         return { family, profile };
       }),
     );
+    await placeInTree(familyId, profile.id, pending.relatedToId, pending.relation);
     logger.info(
       { familyId, profileId: profile.id, pendingInviteId: pending.id },
       '[family] seat paid, managed member added',
@@ -564,6 +679,8 @@ export async function verifySeatPaymentAndInvite(
         familyId,
         invitedEmail: pendingEmail,
         invitedName: pending.invitedName,
+        relation: pending.relation,
+        relatedToId: pending.relatedToId,
         role: pending.role,
         visibleAssetClasses: pending.visibleAssetClasses,
         visibleCategories: pending.visibleCategories,
@@ -620,7 +737,9 @@ async function nextSeat(familyId: string) {
 
 export interface AddManagedMemberInput {
   name: string;
+  /** "Father", "Wife" … of `relatedToId`. */
   relation?: string;
+  relatedToId?: string;
   /** Who keeps this person's books: any active, non-managed member. Defaults to the caller. */
   managerId?: string;
 }
@@ -647,6 +766,7 @@ async function createManagedProfileTx(
     familyId: string;
     name: string;
     relation: string | null;
+    relatedToId: string | null;
     managerId: string;
     addedById: string;
     passwordHash: string;
@@ -675,9 +795,84 @@ async function createManagedProfileTx(
       status: 'ACTIVE',
       invitedById: input.addedById,
       relation: input.relation,
+      relatedToId: input.relatedToId,
     },
   });
   return profile;
+}
+
+/**
+ * Check a relation's anchor: the person it is measured against must be an
+ * active member of this family. Returns what to store — nothing, when no
+ * anchor was given, because a relation with nobody to relate to is noise.
+ */
+async function validRelative(
+  familyId: string,
+  relation: string | undefined | null,
+  relatedToId: string | undefined | null,
+): Promise<{ relation: string | null; relatedToId: string | null }> {
+  const label = relation?.trim().slice(0, 40) || null;
+  if (!relatedToId) return { relation: label, relatedToId: null };
+  const row = await runAsSystem(() =>
+    prisma.familyMember.findUnique({
+      where: { familyId_userId: { familyId, userId: relatedToId } },
+      select: { status: true },
+    }),
+  );
+  if (!row || row.status !== 'ACTIVE') {
+    throw new BadRequestError('They must be related to an active member of this family.');
+  }
+  return { relation: label, relatedToId };
+}
+
+/**
+ * Put a new member where their relation says: a father above the person he
+ * is father of, a wife beside her husband, a son below. Saved card positions
+ * are cleared so the new shape lays itself out. Any failure here must not
+ * undo adding the member — they are simply left where the tree would put
+ * them anyway, and can be moved with "Place".
+ */
+async function placeInTree(
+  familyId: string,
+  newUserId: string,
+  relatedToId: string | null,
+  relation: string | null,
+  opts: { strict?: boolean } = {},
+): Promise<void> {
+  if (!relatedToId) return;
+  try {
+    await runAsSystem(async () => {
+      const family = await prisma.family.findUniqueOrThrow({
+        where: { id: familyId },
+        select: { treeLayout: true, members: { select: { userId: true, invitedById: true } } },
+      });
+      const layout = (family.treeLayout as FamilyTreeLayout | null) ?? {};
+      const invitedBy = new Map(family.members.map((m) => [m.userId, m.invitedById]));
+      const parents = placeRelative(
+        layout.parents ?? {},
+        (id) => invitedBy.get(id) ?? null,
+        newUserId,
+        relatedToId,
+        relation,
+      );
+      if (hasCycle(parents, (id) => invitedBy.get(id) ?? null)) {
+        throw new BadRequestError(
+          'That relation would put someone under their own descendant on the tree.',
+        );
+      }
+      await prisma.family.update({
+        where: { id: familyId },
+        data: {
+          treeLayout: { nodes: [], links: layout.links ?? [], parents } as unknown as object,
+        },
+      });
+    });
+  } catch (err) {
+    // Editing a relation should say why the tree did not follow; adding
+    // someone must still succeed and leaves them where they already are.
+    if (opts.strict) throw err;
+    logger.warn({ err, familyId, newUserId }, '[family] could not place new member on the tree');
+  }
 }
 
 /** The manager must be a real, active member of this family — not another managed profile. */
@@ -710,7 +905,7 @@ export async function addManagedMember(
   const name = input.name.trim();
   if (!name) throw new BadRequestError('Their name is required.');
   if (name.length > 80) throw new BadRequestError('That name is too long.');
-  const relation = input.relation?.trim().slice(0, 40) || null;
+  const { relation, relatedToId } = await validRelative(familyId, input.relation, input.relatedToId);
   const managerId = input.managerId ?? callerId;
   await assertValidManager(familyId, managerId);
 
@@ -735,6 +930,7 @@ export async function addManagedMember(
         invitedEmail: null,
         invitedName: name,
         relation,
+        relatedToId,
         managedById: managerId,
         role: 'VIEWER',
         createdById: callerId,
@@ -765,12 +961,14 @@ export async function addManagedMember(
         familyId,
         name,
         relation,
+        relatedToId,
         managerId,
         addedById: callerId,
         passwordHash,
       }),
     ),
   );
+  await placeInTree(familyId, profile.id, relatedToId, relation);
   logger.info({ familyId, profileId: profile.id, managerId }, '[family] managed member added');
   return {
     status: 'managed_added',
@@ -783,8 +981,9 @@ export async function addManagedMember(
 }
 
 /**
- * OWNER-only. Hand a managed profile to another member to keep — when the
- * son who set it up moves abroad, say, and his sister takes over.
+ * Hand a managed profile to another member to keep — when the son who set it
+ * up moves abroad, say, and his sister takes over. Open to the current
+ * manager and to owners.
  */
 export async function setManagedMemberManager(
   callerId: string,
@@ -792,7 +991,6 @@ export async function setManagedMemberManager(
   profileId: string,
   managerId: string,
 ): Promise<void> {
-  await assertOwnerOf(callerId, familyId);
   await assertValidManager(familyId, managerId);
   const target = await runAsSystem(() =>
     prisma.familyMember.findUnique({
@@ -800,8 +998,13 @@ export async function setManagedMemberManager(
       select: { user: { select: { isShadowClient: true, managedById: true } } },
     }),
   );
-  if (!target || !target.user.isShadowClient || !target.user.managedById) {
+  if (!target || !target.user.isShadowClient) {
     throw new NotFoundError('Managed member not found in this family.');
+  }
+  // The person keeping the books can hand them over themselves — they need
+  // not be an owner. Anyone else must be one.
+  if (target.user.managedById !== callerId) {
+    await assertOwnerOf(callerId, familyId);
   }
   await runAsSystem(() =>
     prisma.user.update({ where: { id: profileId }, data: { managedById: managerId } }),
@@ -913,7 +1116,7 @@ export async function acceptInvitation(callerId: string, token: string) {
   // the token was issued to, and stamping `acceptedAt` is denied for the same
   // reason. The token plus the email match below are the authorisation; both
   // still run, and both still refuse.
-  return runAsSystem(() =>
+  const membership = await runAsSystem(() =>
     runInTransaction(async (tx) => {
       const inv = await tx.familyInvitation.findUnique({ where: { token } });
       if (!inv) throw new NotFoundError('Invitation not found.');
@@ -938,6 +1141,8 @@ export async function acceptInvitation(callerId: string, token: string) {
               visibleAssetClasses: inv.visibleAssetClasses,
               visibleCategories: inv.visibleCategories,
               invitedById: inv.invitedById,
+              relation: inv.relation,
+              relatedToId: inv.relatedToId,
             },
           })
         : await tx.familyMember.create({
@@ -949,6 +1154,8 @@ export async function acceptInvitation(callerId: string, token: string) {
               visibleAssetClasses: inv.visibleAssetClasses,
               visibleCategories: inv.visibleCategories,
               invitedById: inv.invitedById,
+              relation: inv.relation,
+              relatedToId: inv.relatedToId,
             },
           });
       await tx.familyInvitation.update({
@@ -962,6 +1169,10 @@ export async function acceptInvitation(callerId: string, token: string) {
       return membership;
     }),
   );
+  // Outside the transaction: placing them is a courtesy that must never
+  // undo their joining.
+  await placeInTree(membership.familyId, callerId, membership.relatedToId, membership.relation);
+  return membership;
 }
 
 // ─── Family portfolios ───────────────────────────────────────────────

@@ -3537,9 +3537,12 @@ model FamilyMember {
 
   invitedById String?
   invitedBy   User?    @relation("FamilyMemberInvitedBy", fields: [invitedById], references: [id])
-  /// How this person is related, in the family's own words ("Grandfather").
+  /// How this person is related to `relatedToId` ("Father" of Akshay).
   /// Shown on the tree; free text because families name themselves.
   relation    String?
+  /// The member `relation` is measured against. Not a foreign key: a
+  /// relation outlives the person leaving, and the label just drops the name.
+  relatedToId String?
   joinedAt    DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -3557,6 +3560,10 @@ model FamilyInvitation {
   role                FamilyRole   @default(CONTRIBUTOR)
   visibleAssetClasses AssetClass[] @default([])
   visibleCategories   String[]     @default([])
+  /// Carried onto the membership, and used to place them on the tree, when
+  /// the invitation is accepted.
+  relation            String?
+  relatedToId         String?
   invitedById         String
   invitedBy           User         @relation("FamilyInvitationInviter", fields: [invitedById], references: [id])
 
@@ -3592,6 +3599,7 @@ model PendingFamilyInvite {
   invitedEmail        String?
   invitedName         String?
   relation            String?
+  relatedToId         String?
   managedById         String?
   managedBy           User?        @relation("PendingFamilyInviteManager", fields: [managedById], references: [id])
   role                FamilyRole   @default(CONTRIBUTOR)

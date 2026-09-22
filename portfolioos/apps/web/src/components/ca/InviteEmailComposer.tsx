@@ -24,12 +24,33 @@ import { apiErrorMessage } from '@/api/client';
  * when the address was wrong, or when the client wants it over WhatsApp.
  */
 
+/**
+ * Where an invitation's email comes from. A professional invitation and a
+ * family invitation are drafted and sent by different endpoints, but they are
+ * read, edited and sent here the same way.
+ */
+export interface InviteEmailSource {
+  key: readonly unknown[];
+  preview: (edits: { subject?: string; message?: string }) => Promise<InviteEmailDraft>;
+  send: (edits: {
+    subject?: string;
+    message?: string;
+  }) => Promise<{ sent: boolean; to: string; sendsRemaining: number; reason?: string }>;
+}
+
 interface Props {
-  clientId: string;
+  /** A professional invitation; or pass `source` for any other kind. */
+  clientId?: string;
+  source?: InviteEmailSource;
   onDone: () => void;
 }
 
-export function InviteEmailComposer({ clientId, onDone }: Props) {
+export function InviteEmailComposer({ clientId, source: given, onDone }: Props) {
+  const source: InviteEmailSource = given ?? {
+    key: ['ca', 'invite-email', clientId],
+    preview: (edits) => caInviteEmailApi.preview(clientId!, edits),
+    send: (edits) => caInviteEmailApi.send(clientId!, edits),
+  };
   const [subject, setSubject] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   // Debounced copies, so every keystroke does not become a request.
@@ -50,8 +71,8 @@ export function InviteEmailComposer({ clientId, onDone }: Props) {
   }, [subject, message]);
 
   const draft = useQuery<InviteEmailDraft>({
-    queryKey: ['ca', 'invite-email', clientId, debounced],
-    queryFn: () => caInviteEmailApi.preview(clientId, debounced),
+    queryKey: [...source.key, debounced],
+    queryFn: () => source.preview(debounced),
   });
 
   // Seed the fields from the server's defaults, once.
@@ -64,7 +85,7 @@ export function InviteEmailComposer({ clientId, onDone }: Props) {
 
   const send = useMutation({
     mutationFn: () =>
-      caInviteEmailApi.send(clientId, {
+      source.send({
         ...(subject !== null ? { subject } : {}),
         ...(message !== null ? { message } : {}),
       }),
@@ -135,7 +156,7 @@ export function InviteEmailComposer({ clientId, onDone }: Props) {
         />
         <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
           The accept link, the expiry date and your name are added below your message and cannot be
-          removed — that is what lets your client tell this apart from a phishing mail.
+          removed — that is what lets them tell this apart from a phishing mail.
         </p>
       </div>
 
