@@ -134,6 +134,50 @@ describe('the draft', () => {
   });
 });
 
+describe('the accept link', () => {
+  it('sends a professional to the page that can actually accept', async () => {
+    // Two directions, two pages, and they are not interchangeable: each posts
+    // to its own endpoint and checks a different side of the row. Sent to the
+    // wrong one, a valid invitation fails at accept with "not found", which
+    // reads as a broken link rather than the wrong one.
+    const ca = await advisor('invite-link-client');
+    const client = await pendingInvite(ca.userId);
+    await runAsSystem(() =>
+      prisma.client.update({
+        where: { id: client.id },
+        data: { initiatedBy: 'CLIENT', userId: ca.userId },
+      }),
+    );
+
+    const draft = await runAsUser(ca.userId, () => buildInviteEmail(ca.userId, client.id));
+    expect(draft.direction).toBe('CLIENT_TO_ADVISOR');
+    expect(draft.acceptUrl).toContain(`/professional-invitations/${client.inviteToken}`);
+    expect(draft.acceptUrl).not.toContain('/ca/invitations/');
+  });
+
+  it('keeps the CA-side page for an invitation a practice sent', async () => {
+    const ca = await advisor('invite-link-ca');
+    const client = await pendingInvite(ca.userId);
+
+    const draft = await runAsUser(ca.userId, () => buildInviteEmail(ca.userId, client.id));
+    expect(draft.direction).toBe('ADVISOR_TO_CLIENT');
+    expect(draft.acceptUrl).toContain(`/ca/invitations/${client.inviteToken}/accept`);
+  });
+});
+
+describe('the header', () => {
+  it('carries the mark as an absolute image, with the wordmark still text', async () => {
+    const ca = await advisor('invite-logo-ca');
+    const client = await pendingInvite(ca.userId);
+
+    const draft = await runAsUser(ca.userId, () => buildInviteEmail(ca.userId, client.id));
+    // Absolute: a mail client has no origin to resolve a relative path against.
+    expect(draft.html).toMatch(/<img src="https?:\/\/[^"]*\/brand\/everypaisa-mark\.png"/);
+    // And the name survives an image-blocking client, which most are by default.
+    expect(draft.html).toContain('>EveryPaisa</td>');
+  });
+});
+
 describe('sending', () => {
   it('sends what the preview showed, replying to the advisor', async () => {
     const ca = await advisor('invite-send-ca');
