@@ -296,7 +296,8 @@ export function SimpleAssetPage({
       {!isLoading && allHoldings.length === 0 && allTransactions.length === 0 && (
         <EmptyState
           icon={Icon}
-          title={`No ${title.toLowerCase()} yet`}
+          // Acronym titles (NPS) stay as written; "No nps yet" read as a typo.
+          title={`No ${title === title.toUpperCase() ? title : title.toLowerCase()} yet`}
           description="Add a transaction to start tracking this asset class."
           action={
             <Button onClick={() => openAdd()}>

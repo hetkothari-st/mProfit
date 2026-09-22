@@ -3,6 +3,7 @@ import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/c
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';
 import { getLatestFxRate } from '../priceFeeds/fx.service.js';
+import { istCalendarDate } from '@everypaisa/shared';
 import { assetKeyFromTransaction } from './assetKey.js';
 import { resolveMutualFundId, resolveStockMasterId } from './masterData.service.js';
 
@@ -47,13 +48,23 @@ const FREQ_PERIODS_PER_YEAR: Record<string, number> = {
 };
 
 /**
+ * Accrual runs to the start of today's Indian calendar date, not "now". With
+ * a millisecond clock every recompute produced a slightly different value, so
+ * the dashboard, portfolio page and reports (computed moments apart) showed
+ * figures a few paise apart for the same deposit.
+ */
+function accrualValuationDay(): Date {
+  return new Date(`${istCalendarDate(new Date())}T00:00:00Z`);
+}
+
+/**
  * FDs and similar bank-deposit assets: compound each DEPOSIT row independently
  * using its own interestRate + interestFrequency. Falls back to null (caller
  * uses totalCost) when no rates are recorded so the column never shows blank
  * for legacy entries.
  */
 function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
-  const today = new Date();
+  const today = accrualValuationDay();
   const deposits = txs.filter(
     (t) =>
       ['DEPOSIT', 'BUY', 'OPENING_BALANCE'].includes(t.transactionType) &&
@@ -93,7 +104,7 @@ function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
  * Returns null if no interest rates are recorded (will show invested only).
  */
 function computePoAccruedValue(txs: Transaction[], assetClass: AssetClass): Decimal | null {
-  const today = new Date();
+  const today = accrualValuationDay();
   const deposits = txs.filter(
     (t) =>
       ['DEPOSIT', 'BUY', 'OPENING_BALANCE'].includes(t.transactionType) &&

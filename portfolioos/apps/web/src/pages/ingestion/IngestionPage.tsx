@@ -192,6 +192,8 @@ export function IngestionPage() {
       <div className="space-y-6 mt-6">
         <ConnectStep mailboxes={gmailMailboxes} loading={mailboxesQuery.isLoading} />
 
+        {!hasGmail && !mailboxesQuery.isLoading && <SendersStepLocked />}
+
         {hasGmail && (
           <SendersStep
             gmailMailboxes={gmailMailboxes}
@@ -264,15 +266,19 @@ function StatusStrip({
           hasSenders ? `${senderCount} sender${senderCount === 1 ? '' : 's'}` : 'Add senders'
         }
       />
-      <StatusChip
-        done={pendingCount === 0 && hasSenders}
-        label={
-          pendingCount > 0
-            ? `${pendingCount} event${pendingCount === 1 ? '' : 's'} to review`
-            : 'Inbox clear'
-        }
-        tone={pendingCount > 0 ? 'attention' : 'done'}
-      />
+      {/* A green "Inbox clear" before anything is connected claimed a state
+          that doesn't exist yet — only show review status once polling can run. */}
+      {hasGmail && hasSenders && (
+        <StatusChip
+          done={pendingCount === 0}
+          label={
+            pendingCount > 0
+              ? `${pendingCount} event${pendingCount === 1 ? '' : 's'} to review`
+              : 'Inbox clear'
+          }
+          tone={pendingCount > 0 ? 'attention' : 'done'}
+        />
+      )}
       <div className="ml-auto">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/ingestion/senders">
@@ -306,6 +312,26 @@ function StatusChip({
       <Icon className="h-3 w-3" />
       {label}
     </span>
+  );
+}
+
+/** Keeps the numbering 1 → 2 → 3 before Gmail is connected, instead of jumping 1 → 3. */
+function SendersStepLocked() {
+  return (
+    <Card className="opacity-60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground text-xs font-bold">
+            2
+          </span>
+          Senders to monitor
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Available once Gmail is connected — you&apos;ll pick which bank, broker and
+          insurer addresses we watch.
+        </p>
+      </CardHeader>
+    </Card>
   );
 }
 
