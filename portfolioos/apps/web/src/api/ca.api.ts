@@ -557,6 +557,54 @@ export interface CaTrialBalanceRow {
  * whose books these are must be able to see and end access whatever plan they
  * are on. A revoke button that needed a subscription would not be one.
  */
+
+/** The invitation email: what would be sent, and sending it. */
+export interface InviteEmailDraft {
+  to: string;
+  recipientName: string;
+  subject: string;
+  message: string;
+  /** Exactly what would be sent, with the current edits applied. */
+  html: string;
+  acceptUrl: string;
+  expiresOn: string;
+  advisorName: string;
+  advisorEmail: string;
+  sendsRemaining: number;
+  /** False when the server has no mailer — the UI then offers the link only. */
+  canSend: boolean;
+}
+
+export interface InviteEmailEdits {
+  subject?: string;
+  message?: string;
+}
+
+export const caInviteEmailApi = {
+  /**
+   * A POST that reads: it carries the advisor's current edits so the preview
+   * is rendered by the same builder that will send, rather than a second one
+   * on this side that could drift.
+   */
+  async preview(clientId: string, edits: InviteEmailEdits = {}): Promise<InviteEmailDraft> {
+    const { data } = await api.post<ApiResponse<InviteEmailDraft>>(
+      `/api/ca/clients/${clientId}/invite-email/preview`,
+      edits,
+    );
+    return unwrap(data);
+  },
+
+  async send(
+    clientId: string,
+    edits: InviteEmailEdits,
+  ): Promise<{ sent: boolean; to: string; sendsRemaining: number; reason?: string }> {
+    const { data } = await api.post<
+      ApiResponse<{ sent: boolean; to: string; sendsRemaining: number; reason?: string }>
+    >(`/api/ca/clients/${clientId}/invite-email/send`, edits);
+    return unwrap(data);
+  },
+};
+
 /**
  * A client's receipts, from the CA's side. Same three shapes as the client's
  * own downloads, reached through the grant — a narrowed grant produces a

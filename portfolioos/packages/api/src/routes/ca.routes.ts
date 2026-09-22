@@ -14,6 +14,8 @@ import {
   getMyGrantHandler,
   updateMyGrantScopeHandler,
   reinstateGrantHandler,
+  previewInviteEmailHandler,
+  sendInviteEmailHandler,
   listCaActivityHandler,
 } from '../controllers/ca.controller.js';
 import {
@@ -67,6 +69,10 @@ caRouter.post('/clients', asyncHandler(createManagedClientHandler));
 // a template, a bounce path and a rate limit would be worse than an explicit
 // gap, and the token is useless without the invitee's own login anyway.
 caRouter.post('/clients/invite', asyncHandler(inviteClientHandler));
+// Preview is a POST because it carries the advisor's current edits; it reads
+// nothing else and changes nothing.
+caRouter.post('/clients/:clientId/invite-email/preview', asyncHandler(previewInviteEmailHandler));
+caRouter.post('/clients/:clientId/invite-email/send', asyncHandler(sendInviteEmailHandler));
 caRouter.post('/clients/:clientId/revoke', asyncHandler(revokeGrantHandler));
 // Only for a SHADOW record the CA keeps themselves — `reinstateGrant` refuses
 // when a real client was the one who withdrew.

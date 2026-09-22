@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Plus, Mail, ArrowUpRight, Copy, Check } from 'lucide-react';
+import { Briefcase, Plus, Mail, ArrowUpRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
+import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
 import { cn } from '@/lib/cn';
 import { caApi, CONSENT_BASIS_LABEL, type CaClient, type CaConsentBasis } from '@/api/ca.api';
 
@@ -352,14 +353,16 @@ function InviteClientDialog({
   const qc = useQueryClient();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [link, setLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // The invitation exists as soon as it is created; the email is a second,
+  // optional step on top of it. Keeping the client id (not just the link) is
+  // what lets the composer ask the server for the draft.
+  const [createdClientId, setCreatedClientId] = useState<string | null>(null);
 
   const invite = useMutation({
     mutationFn: () => caApi.inviteClient({ name, email }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['ca', 'clients'] });
-      setLink(`${window.location.origin}/ca/invitations/${res.token}/accept`);
+      setCreatedClientId(res.client.id);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -368,45 +371,23 @@ function InviteClientDialog({
     onOpenChange(false);
     setName('');
     setEmail('');
-    setLink(null);
-    setCopied(false);
+    setCreatedClientId(null);
   }
 
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(true) : close())}>
-      <DialogContent className="max-w-md">
+      <DialogContent className={createdClientId ? 'max-w-xl' : 'max-w-md'}>
         <DialogHeader>
-          <DialogTitle>{link ? 'Send this to your client' : 'Invite a client'}</DialogTitle>
+          <DialogTitle>{createdClientId ? 'Send the invitation' : 'Invite a client'}</DialogTitle>
           <DialogDescription>
-            {link
-              ? 'The link works once and expires in 14 days.'
+            {createdClientId
+              ? 'Read it, change anything you want to say, then send. The link works once and expires in 14 days.'
               : 'They keep their own account and can withdraw access at any time.'}
           </DialogDescription>
         </DialogHeader>
 
-        {link ? (
-          <div className="space-y-3">
-            <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-              We don&apos;t email this yet — send it yourself. It works once, expires in 14 days,
-              and only for the address you entered.
-            </p>
-            <div className="flex items-center gap-2">
-              <Input readOnly value={link} className="text-[12px]" />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  void navigator.clipboard.writeText(link);
-                  setCopied(true);
-                }}
-              >
-                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              </Button>
-            </div>
-            <Button onClick={close} className="w-full">
-              Done
-            </Button>
-          </div>
+        {createdClientId ? (
+          <InviteEmailComposer clientId={createdClientId} onDone={close} />
         ) : (
           <>
             <div className="space-y-3">
