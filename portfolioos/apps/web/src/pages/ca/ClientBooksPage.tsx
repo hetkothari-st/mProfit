@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -19,17 +19,21 @@ import {
   Download,
   FolderDown,
   Sheet,
+  FileBarChart,
+  FolderOpen,
+  History,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/cn';
 import { formatINR, toDecimal } from '@everypaisa/shared';
 import {
   caApi,
   caReceiptsApi,
+  type CaClient,
   type CaAccountRow,
   type CaTransactionRow,
   type CaFmvRow,
@@ -44,16 +48,17 @@ import { AddTransactionDialog } from '@/components/ca/AddTransactionDialog';
 import { FmvFormDialog } from '@/components/ca/FmvFormDialog';
 import { ClientReportsTab } from '@/components/ca/ClientReportsTab';
 import { ClientDocumentsTab } from '@/components/ca/ClientDocumentsTab';
+import { Initials, ClientAccessStrip } from '@/components/ca/AccessParts';
+import { editModeOfClient, EDIT_MODE_LABEL, type EditMode } from '@/components/ca/accessModel';
 import { IMPORT_STATUS_LABELS, type ImportStatus } from '@everypaisa/shared';
 
 /**
  * One client's books, as kept by their CA.
  *
- * The header states which kind of client this is, and that is load-bearing
- * rather than decorative. Everything here belongs to somebody else; for a
- * consented client they can read every change and end the arrangement, and
- * for a managed record nobody but the CA can see any of it. A CA should never
- * have to guess which, so the page says so instead of implying it.
+ * The band at the top says whose books these are and what the professional
+ * was given, using the same strip the client sees on their Account Access
+ * page. Everything here belongs to somebody else, who can read every change
+ * and end the arrangement; the page says so instead of implying it.
  */
 
 type Tab =
@@ -66,16 +71,36 @@ type Tab =
   | 'documents'
   | 'activity';
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'accounts', label: 'Chart of accounts' },
-  { key: 'vouchers', label: 'Vouchers' },
-  { key: 'transactions', label: 'Transactions' },
-  { key: 'fmv', label: 'FMV (31 Jan 2018)' },
-  { key: 'trial-balance', label: 'Trial balance' },
-  { key: 'reports', label: 'Reports' },
-  { key: 'documents', label: 'Documents' },
-  { key: 'activity', label: 'Activity' },
+/**
+ * Tabs in the groups a CA works in: the ledger, the client's recorded
+ * portfolio, what gets handed over, and the log. The dividers between groups
+ * carry that; eight equal tabs in a row did not.
+ */
+const TAB_GROUPS: { key: Tab; label: string; icon: typeof BookOpen }[][] = [
+  [
+    { key: 'accounts', label: 'Chart of accounts', icon: BookOpen },
+    { key: 'vouchers', label: 'Vouchers', icon: ScrollText },
+    { key: 'trial-balance', label: 'Trial balance', icon: Scale },
+  ],
+  [
+    { key: 'transactions', label: 'Transactions', icon: Receipt },
+    { key: 'fmv', label: 'FMV (31 Jan 2018)', icon: Landmark },
+  ],
+  [
+    { key: 'reports', label: 'Reports', icon: FileBarChart },
+    { key: 'documents', label: 'Documents', icon: FolderOpen },
+  ],
+  [{ key: 'activity', label: 'Activity', icon: History }],
 ];
+
+const fmtDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+/** "COMPLETED_WITH_ERRORS" → "Completed with errors". */
+const sentence = (s: string) => {
+  const t = s.replace(/_/g, ' ').toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
 
 export function ClientBooksPage() {
   const { clientId = '' } = useParams();
@@ -201,7 +226,6 @@ export function ClientBooksPage() {
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not delete the voucher')),
   });
 
-
   const accounts = useQuery({
     queryKey: ['ca', clientId, 'accounts'],
     queryFn: () => caApi.accountsFlat(clientId),
@@ -260,59 +284,70 @@ export function ClientBooksPage() {
     enabled: tab === 'activity' && !!clientId,
   });
 
+  const downloadBundle = (format: 'zip' | 'xlsx') =>
+    caReceiptsApi
+      .bundle(clientId, format)
+      .catch((e) => toast.error(apiErrorMessage(e, 'Could not build that download')));
+
   return (
-    <div>
+    <div className="mx-auto max-w-6xl">
       <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2 text-muted-foreground">
         <Link to="/ca">
           <ArrowLeft className="h-3.5 w-3.5" /> All clients
         </Link>
       </Button>
 
-      <PageHeader
-        eyebrow="Client books"
-        title={client?.displayName ?? 'Client'}
-        description={
-          client?.kind === 'INVITED'
-            ? 'This client granted you access from their own account. They can see everything you do here, and withdraw access at any time.'
-            : 'A record you manage. This client has no account of their own, so nobody but you can see these books.'
-        }
-      />
-
-      {readOnly && client && (
-        <div className="mb-4 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-[12.5px] leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground">View only.</span> {client.displayName} has shared
-          these books without edit access, so you can read everything here and download reports, but
-          not post entries or change transactions. They can widen it from their Account Access page.
-        </div>
+      {client ? (
+        <ClientBand client={client} readOnly={readOnly} />
+      ) : (
+        <div className="mb-6 h-[150px] animate-pulse rounded-xl border border-border/60 bg-muted/20" />
       )}
 
-      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-border scrollbar-none">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={cn(
-              'shrink-0 border-b-2 px-3 py-2 text-[13px] transition-colors focus-ring',
-              tab === t.key
-                ? 'border-accent text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t.label}
-          </button>
+      <nav
+        aria-label="Sections of these books"
+        className="mb-6 flex items-center gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/30 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {TAB_GROUPS.map((group, gi) => (
+          <Fragment key={gi}>
+            {gi > 0 && <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />}
+            {group.map((t) => {
+              const Icon = t.icon;
+              const current = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  aria-current={current ? 'page' : undefined}
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] transition-colors focus-ring',
+                    current
+                      ? 'bg-card font-medium text-foreground shadow-sm ring-1 ring-border/60'
+                      : 'text-muted-foreground hover:bg-card/60 hover:text-foreground',
+                  )}
+                >
+                  <Icon className={cn('h-3.5 w-3.5', current && 'text-accent-ink')} />
+                  {t.label}
+                </button>
+              );
+            })}
+          </Fragment>
         ))}
-      </div>
+      </nav>
 
       {tab === 'accounts' && (
         <>
-          {may.books && (
-            <div className="mb-3 flex justify-end">
+          <SectionBar
+            title="Chart of accounts"
+            count={accounts.data?.length}
+            hint="The ledger heads every voucher posts to."
+          >
+            {may.books && (
               <Button size="sm" onClick={() => setAccountDialog({ open: true, account: null })}>
                 <Plus className="h-4 w-4" /> New account
               </Button>
-            </div>
-          )}
+            )}
+          </SectionBar>
           <LedgerTable
             loading={accounts.isLoading}
             empty={{
@@ -321,7 +356,11 @@ export function ClientBooksPage() {
               description: 'A default chart is created the first time these books are opened.',
             }}
             columns={['Code', 'Account', 'Type']}
-            rows={(accounts.data ?? []).map((a) => [a.code, a.name, a.type])}
+            rows={(accounts.data ?? []).map((a) => [
+              <span className="numeric tabular-nums text-muted-foreground">{a.code}</span>,
+              <span className="font-medium">{a.name}</span>,
+              <Pill>{sentence(a.type)}</Pill>,
+            ])}
             rowActions={(i) => {
               const a = (accounts.data ?? [])[i];
               if (!a || !may.books) return null;
@@ -350,38 +389,37 @@ export function ClientBooksPage() {
 
       {tab === 'vouchers' && (
         <>
-          <div className="mb-3 flex justify-end gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                caReceiptsApi
-                  .bundle(clientId, 'zip')
-                  .catch((e) => toast.error(apiErrorMessage(e, 'Could not build that download')))
-              }
-              title="Every rent, premium and loan receipt in these books, one PDF each"
-            >
-              <FolderDown className="h-4 w-4" /> Receipts (ZIP)
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                caReceiptsApi
-                  .bundle(clientId, 'xlsx')
-                  .catch((e) => toast.error(apiErrorMessage(e, 'Could not build that download')))
-              }
-              title="The same receipts as one spreadsheet, totalled"
-            >
-              <Sheet className="h-4 w-4" /> Receipts (Excel)
-            </Button>
+          <SectionBar
+            title="Vouchers"
+            count={vouchers.data?.vouchers.length}
+            hint="The double-entry record behind the trial balance, P&L and balance sheet."
+          >
+            <div className="inline-flex overflow-hidden rounded-md border border-input">
+              <button
+                type="button"
+                onClick={() => downloadBundle('zip')}
+                title="Every rent, premium and loan receipt in these books, one PDF each"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12.5px] text-foreground transition-colors hover:bg-muted focus-ring"
+              >
+                <FolderDown className="h-3.5 w-3.5" /> Receipts ZIP
+              </button>
+              <span aria-hidden className="w-px bg-input" />
+              <button
+                type="button"
+                onClick={() => downloadBundle('xlsx')}
+                title="The same receipts as one spreadsheet, totalled"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12.5px] text-foreground transition-colors hover:bg-muted focus-ring"
+              >
+                <Sheet className="h-3.5 w-3.5" /> Excel
+              </button>
+            </div>
             {generateButton}
             {may.books && (
               <Button size="sm" onClick={() => setVoucherOpen(true)}>
                 <Plus className="h-4 w-4" /> Post voucher
               </Button>
             )}
-          </div>
+          </SectionBar>
           <LedgerTable
             loading={vouchers.isLoading}
             empty={{
@@ -393,30 +431,34 @@ export function ClientBooksPage() {
                     // ledger, and an advisor looking at their own populated
                     // books in another tab will otherwise read this as a bug.
                     'These are the books of a record you created, not of any existing account. It starts empty — nothing carries over from your own portfolios or from a client who signs in separately. Add transactions or import a statement, and the vouchers follow.'
-                  : 'Vouchers are the double-entry record behind the trial balance, P&L and balance sheet. They are derived from what this client has recorded — trades, loan payments, rent, premiums — so there is nothing to derive them from yet.',
+                  : 'Vouchers are derived from what this client has recorded — trades, loan payments, rent, premiums — so there is nothing to derive them from yet.',
               action: generateButton,
             }}
             columns={['No.', 'Type', 'Date', 'Narration']}
             rows={(vouchers.data?.vouchers ?? []).map((v) => [
-              v.voucherNo,
-              v.type,
-              new Date(v.date).toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              }),
-              v.narration ?? '—',
+              <span className="numeric tabular-nums font-medium">{v.voucherNo}</span>,
+              <Pill tone={v.type === 'RECEIPT' ? 'positive' : v.type === 'PAYMENT' ? 'negative' : 'neutral'}>
+                {sentence(v.type)}
+              </Pill>,
+              <span className="whitespace-nowrap text-muted-foreground">{fmtDay(v.date)}</span>,
+              v.narration ? (
+                <span className="line-clamp-1">{v.narration}</span>
+              ) : null,
             ])}
             rowActions={(i) => {
               const v = (vouchers.data?.vouchers ?? [])[i];
               if (!v) return null;
               return (
-                <div className="flex items-center gap-1.5">
+                <>
                   <RowButton
                     label={`View receipt ${v.voucherNo}`}
-                    onClick={() => caReceiptsApi.view(clientId, v.id).catch((e) =>
-                      toast.error(apiErrorMessage(e, 'Could not produce that receipt')),
-                    )}
+                    onClick={() =>
+                      caReceiptsApi
+                        .view(clientId, v.id)
+                        .catch((e) =>
+                          toast.error(apiErrorMessage(e, 'Could not produce that receipt')),
+                        )
+                    }
                   >
                     <Eye className="h-3.5 w-3.5" />
                   </RowButton>
@@ -425,7 +467,9 @@ export function ClientBooksPage() {
                     onClick={() =>
                       caReceiptsApi
                         .download(clientId, v.id, `${v.date}-${v.voucherNo}.pdf`)
-                        .catch((e) => toast.error(apiErrorMessage(e, 'Could not download that receipt')))
+                        .catch((e) =>
+                          toast.error(apiErrorMessage(e, 'Could not download that receipt')),
+                        )
                     }
                   >
                     <Download className="h-3.5 w-3.5" />
@@ -440,7 +484,7 @@ export function ClientBooksPage() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </RowButton>
                   )}
-                </div>
+                </>
               );
             }}
           />
@@ -449,18 +493,22 @@ export function ClientBooksPage() {
 
       {tab === 'transactions' && (
         <>
-          <div className="mb-3 flex justify-end gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.csv,.tsv,.xlsx,.xls,.html,.htm"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = '';
-                if (file) uploadImport.mutate(file);
-              }}
-            />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.csv,.tsv,.xlsx,.xls,.html,.htm"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) uploadImport.mutate(file);
+            }}
+          />
+          <SectionBar
+            title="Transactions"
+            count={transactions.data?.length}
+            hint="Trades as this client recorded them. Corrections here flow into the vouchers."
+          >
             {may.imports && (
               <Button
                 size="sm"
@@ -477,7 +525,7 @@ export function ClientBooksPage() {
                 <Plus className="h-4 w-4" /> Add transaction
               </Button>
             )}
-          </div>
+          </SectionBar>
 
           <LedgerTable
             loading={transactions.isLoading}
@@ -489,16 +537,22 @@ export function ClientBooksPage() {
             columns={['Date', 'Asset', 'Type', 'Qty', 'Price', 'Net']}
             numericFrom={3}
             rows={(transactions.data ?? []).map((t) => [
-              new Date(t.tradeDate).toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              }),
-              t.assetName ?? t.isin ?? '—',
-              t.transactionType,
-              t.quantity,
-              t.price,
-              t.netAmount,
+              <span className="whitespace-nowrap text-muted-foreground">{fmtDay(t.tradeDate)}</span>,
+              <span className="font-medium">{t.assetName ?? t.isin ?? '—'}</span>,
+              <Pill
+                tone={
+                  t.transactionType === 'BUY'
+                    ? 'positive'
+                    : t.transactionType === 'SELL'
+                      ? 'negative'
+                      : 'neutral'
+                }
+              >
+                {sentence(t.transactionType)}
+              </Pill>,
+              toDecimal(t.quantity).toString(),
+              formatINR(t.price),
+              <span className="font-medium">{formatINR(t.netAmount)}</span>,
             ])}
             rowActions={(i) => {
               const t = (transactions.data ?? [])[i];
@@ -515,30 +569,30 @@ export function ClientBooksPage() {
           />
 
           {(imports.data ?? []).length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-2 text-[11px] font-medium uppercase tracking-kerned text-muted-foreground">
-                Recent imports
-              </h3>
+            <div className="mt-8">
+              <SectionBar
+                title="Recent imports"
+                count={imports.data?.length}
+                hint="Statements uploaded into these books, and how each one parsed."
+              />
               <LedgerTable
                 loading={imports.isLoading}
-                empty={{
-                  icon: FileClock,
-                  title: 'No imports yet',
-                  description: '',
-                }}
+                empty={{ icon: FileClock, title: 'No imports yet', description: '' }}
                 columns={['File', 'Type', 'Status', 'Rows', 'Uploaded']}
                 rows={(imports.data ?? []).map((j) => [
-                  j.fileName,
-                  j.type.replace(/_/g, ' '),
-                  IMPORT_STATUS_LABELS[j.status as ImportStatus] ?? j.status,
-                  j.successRows !== null && j.totalRows !== null
-                    ? `${j.successRows} / ${j.totalRows}`
-                    : '—',
-                  new Date(j.createdAt).toLocaleDateString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  }),
+                  <span className="line-clamp-1 font-medium">{j.fileName}</span>,
+                  <span className="text-muted-foreground">{sentence(j.type)}</span>,
+                  <Pill tone={importTone(j.status)}>
+                    {IMPORT_STATUS_LABELS[j.status as ImportStatus] ?? j.status}
+                  </Pill>,
+                  j.successRows !== null && j.totalRows !== null ? (
+                    <span className="numeric tabular-nums">
+                      {j.successRows} / {j.totalRows}
+                    </span>
+                  ) : null,
+                  <span className="whitespace-nowrap text-muted-foreground">
+                    {fmtDay(j.createdAt)}
+                  </span>,
                 ])}
               />
             </div>
@@ -548,13 +602,17 @@ export function ClientBooksPage() {
 
       {tab === 'fmv' && (
         <>
-          {may.fmv && (
-            <div className="mb-3 flex justify-end">
+          <SectionBar
+            title="Fair market value on 31 Jan 2018"
+            count={fmv.data?.length}
+            hint="Grandfathers long-term gains under Section 55(2)(ac). Reference values are shared; values set here are this client's own."
+          >
+            {may.fmv && (
               <Button size="sm" onClick={() => setFmvDialog({ open: true, row: null })}>
                 <Plus className="h-4 w-4" /> Set a value
               </Button>
-            </div>
-          )}
+            )}
+          </SectionBar>
           <LedgerTable
             loading={fmv.isLoading}
             empty={{
@@ -563,9 +621,16 @@ export function ClientBooksPage() {
               description:
                 'Set the 31-Jan-2018 fair market value for a scrip to grandfather its long-term gains under Section 55(2)(ac).',
             }}
-            columns={['ISIN', 'Scrip', 'FMV per unit', 'Source']}
-            numericFrom={2}
-            rows={(fmv.data ?? []).map((f) => [f.isin, f.scripName ?? '—', f.fmvPerUnit, f.source])}
+            columns={['ISIN', 'Scrip', 'Source', 'FMV per unit']}
+            numericFrom={3}
+            rows={(fmv.data ?? []).map((f) => [
+              <span className="numeric tabular-nums text-muted-foreground">{f.isin}</span>,
+              <span className="font-medium">{f.scripName ?? '—'}</span>,
+              <Pill tone={f.source === 'USER' ? 'accent' : 'neutral'}>
+                {f.source === 'USER' ? 'Set here' : 'Reference'}
+              </Pill>,
+              <span className="font-medium">{formatINR(f.fmvPerUnit)}</span>,
+            ])}
             rowActions={(i) => {
               const f = (fmv.data ?? [])[i];
               // Seeded values are reference data, not this client's own
@@ -638,6 +703,126 @@ export function ClientBooksPage() {
   );
 }
 
+const MODE_TONE: Record<EditMode, string> = {
+  FULL: 'bg-positive/10 text-positive ring-positive/25',
+  PARTIAL: 'bg-warning/10 text-warning ring-warning/25',
+  VIEW: 'bg-muted text-muted-foreground ring-border',
+};
+
+/**
+ * Whose books these are, and what their owner gave the professional —
+ * the same three answers the owner sees about them on Account Access.
+ */
+function ClientBand({ client, readOnly }: { client: CaClient; readOnly: boolean }) {
+  const mode = editModeOfClient(client);
+  const email =
+    client.initiatedBy === 'CLIENT'
+      ? client.displayEmail
+      : (client.displayEmail ?? client.invitedEmail);
+
+  return (
+    <section className="mb-6 overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5">
+        <div className="flex min-w-0 items-center gap-4">
+          <Initials name={client.displayName} tone="active" size="lg" />
+          <div className="min-w-0">
+            <p className="text-[12px] text-muted-foreground">Client books</p>
+            <h1 className="truncate font-display text-[26px] leading-tight text-foreground">
+              {client.displayName}
+            </h1>
+            {email && <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">{email}</p>}
+          </div>
+        </div>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-medium ring-1 ring-inset',
+            MODE_TONE[mode],
+          )}
+        >
+          {mode === 'VIEW' ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+          {EDIT_MODE_LABEL[mode]}
+        </span>
+      </div>
+
+      <ClientAccessStrip client={client} />
+
+      <p className="border-t border-border/60 bg-muted/25 px-5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
+        {readOnly ? (
+          <>
+            <span className="font-medium text-foreground">View only.</span> You can read everything
+            here and download reports, but not post entries or change transactions.{' '}
+            {client.displayName} can widen this from their Account Access page.
+          </>
+        ) : client.kind === 'INVITED' ? (
+          <>
+            {client.displayName} can see every change you make here, and can withdraw access at any
+            time.
+          </>
+        ) : (
+          <>A record you manage. This client has no account, so nobody but you can see these books.</>
+        )}
+      </p>
+    </section>
+  );
+}
+
+/** A tab's title, what it holds, and the actions that belong to it. */
+function SectionBar({
+  title,
+  count,
+  hint,
+  children,
+}: {
+  title: string;
+  count?: number;
+  hint: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="text-[15px] font-medium text-foreground">
+          {title}
+          {count !== undefined && count > 0 && (
+            <span className="ml-1.5 numeric tabular-nums text-muted-foreground">{count}</span>
+          )}
+        </h2>
+        <p className="mt-0.5 max-w-prose text-[12.5px] text-muted-foreground">{hint}</p>
+      </div>
+      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
+    </div>
+  );
+}
+
+type PillTone = 'neutral' | 'positive' | 'negative' | 'warning' | 'accent';
+
+const PILL_TONE: Record<PillTone, string> = {
+  neutral: 'bg-muted text-foreground/75',
+  positive: 'bg-positive/10 text-positive',
+  negative: 'bg-negative/10 text-negative',
+  warning: 'bg-warning/10 text-warning',
+  accent: 'bg-accent/15 text-accent-ink',
+};
+
+function Pill({ tone = 'neutral', children }: { tone?: PillTone; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11.5px] font-medium',
+        PILL_TONE[tone],
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function importTone(status: string): PillTone {
+  if (status === 'COMPLETED') return 'positive';
+  if (status === 'FAILED') return 'negative';
+  return 'warning';
+}
+
 /** A small icon button for a table row. */
 function RowButton({
   label,
@@ -648,7 +833,7 @@ function RowButton({
 }: {
   label: string;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   danger?: boolean;
   disabled?: boolean;
 }) {
@@ -691,7 +876,7 @@ function TrialBalanceTab({
 }: {
   loading: boolean;
   rows: CaTrialBalanceRow[];
-  action: React.ReactNode;
+  action: ReactNode;
 }) {
   // Decimal, not floats: these are the two figures a CA compares to decide
   // whether the books balance, and a rounding artefact in the last paisa is
@@ -701,19 +886,33 @@ function TrialBalanceTab({
   const totalCredit = rows.reduce((sum, r) => sum.plus(toDecimal(r.totalCredit)), toDecimal(0));
   const difference = totalDebit.minus(totalCredit);
   const posted = rows.some((r) => nz(r.totalDebit) || nz(r.totalCredit) || nz(r.openingBalance));
+  const balanced = difference.isZero();
 
   return (
-    <div className="space-y-3">
-      {posted && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[12px] text-muted-foreground">
-            {difference.isZero()
-              ? 'Debits and credits agree.'
-              : `Out of balance by ${formatINR(difference.abs().toFixed(4))}.`}
-          </p>
-          {action}
-        </div>
-      )}
+    <>
+      <SectionBar
+        title="Trial balance"
+        hint="Every account's opening, movement and closing balance. The two totals must agree."
+      >
+        {posted && (
+          <span
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-medium',
+              balanced ? 'bg-positive/10 text-positive' : 'bg-negative/10 text-negative',
+            )}
+          >
+            {balanced ? (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            ) : (
+              <AlertTriangle className="h-3.5 w-3.5" />
+            )}
+            {balanced
+              ? 'Debits and credits agree'
+              : `Out of balance by ${formatINR(difference.abs().toFixed(4))}`}
+          </span>
+        )}
+        {posted && action}
+      </SectionBar>
       <LedgerTable
         loading={loading}
         empty={{
@@ -728,12 +927,12 @@ function TrialBalanceTab({
         rows={
           posted
             ? rows.map((r) => [
-                r.code,
-                r.name,
+                <span className="numeric tabular-nums text-muted-foreground">{r.code}</span>,
+                <span className="font-medium">{r.name}</span>,
                 formatINR(r.openingBalance),
                 nz(r.totalDebit) ? formatINR(r.totalDebit) : null,
                 nz(r.totalCredit) ? formatINR(r.totalCredit) : null,
-                formatINR(r.closingBalance),
+                <span className="font-medium">{formatINR(r.closingBalance)}</span>,
               ])
             : []
         }
@@ -750,7 +949,7 @@ function TrialBalanceTab({
             : undefined
         }
       />
-    </div>
+    </>
   );
 }
 
@@ -765,13 +964,13 @@ function LedgerTable({
 }: {
   loading: boolean;
   columns: string[];
-  rows: Array<Array<string | null>>;
+  rows: ReactNode[][];
   empty: {
     icon: typeof BookOpen;
     title: string;
     description: string;
     /** Offered inside the empty state, for the thing that would fill it. */
-    action?: React.ReactNode;
+    action?: ReactNode;
   };
   /** A totals line, rendered in the same columns. Omitted when absent. */
   footer?: Array<string | null>;
@@ -781,17 +980,20 @@ function LedgerTable({
    * Actions for row `i`. Rendered in a trailing column that only exists when
    * this is supplied, so read-only tables keep their full width.
    */
-  rowActions?: (index: number) => React.ReactNode;
+  rowActions?: (index: number) => ReactNode;
 }) {
+  const isNumeric = (i: number) => numericFrom !== undefined && i >= numericFrom;
+
   if (loading) {
     return (
-      <Card className="overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+        <div className="h-9 border-b border-border/60 bg-muted/40" />
         <div className="divide-y divide-border/50">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-[44px] animate-pulse bg-muted/30" />
+            <div key={i} className="h-[46px] animate-pulse bg-muted/20" />
           ))}
         </div>
-      </Card>
+      </div>
     );
   }
 
@@ -807,69 +1009,77 @@ function LedgerTable({
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="overflow-x-auto p-0">
-        <table className="w-full min-w-[520px]">
+    <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="relative overflow-x-auto">
+        <table className="w-full min-w-[560px]">
           <thead>
             <tr className="border-b border-border/60 bg-muted/40">
               {columns.map((c, i) => (
                 <th
                   key={c}
+                  scope="col"
                   className={cn(
-                    'px-4 py-2 text-[10px] font-medium uppercase tracking-kerned text-foreground/70',
-                    numericFrom !== undefined && i >= numericFrom ? 'text-right' : 'text-left',
+                    'px-4 py-2.5 text-[11.5px] font-medium text-muted-foreground',
+                    isNumeric(i) ? 'text-right' : 'text-left',
                   )}
                 >
                   {c}
                 </th>
               ))}
-              {rowActions && <th className="w-[88px] px-4 py-2" />}
+              {rowActions && (
+                <th scope="col" className="w-[104px] px-4 py-2.5">
+                  <span className="sr-only">Actions</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {rows.map((r, ri) => (
-              <tr key={ri} className="border-b border-border/50 last:border-0 hover:bg-muted/25">
+              <tr
+                key={ri}
+                className="group border-b border-border/50 transition-colors last:border-0 hover:bg-muted/25"
+              >
                 {r.map((cell, ci) => (
                   <td
                     key={ci}
                     className={cn(
-                      'px-4 py-2.5 text-[13px] text-foreground',
-                      numericFrom !== undefined && ci >= numericFrom
-                        ? 'numeric tabular-nums text-right'
-                        : 'text-left',
+                      'px-4 py-3 text-[13px] text-foreground',
+                      isNumeric(ci) ? 'numeric tabular-nums text-right' : 'text-left',
                     )}
                   >
-                    {cell ?? '—'}
+                    {cell ?? <span className="text-muted-foreground/60">—</span>}
                   </td>
                 ))}
                 {rowActions && (
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center justify-end gap-0.5">{rowActions(ri)}</div>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center justify-end gap-0.5 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                      {rowActions(ri)}
+                    </div>
                   </td>
                 )}
               </tr>
             ))}
-            {footer && (
-              <tr className="border-t-2 border-border bg-muted/40 font-semibold">
+          </tbody>
+          {footer && (
+            <tfoot>
+              <tr className="border-t-2 border-border bg-muted/40">
                 {footer.map((cell, ci) => (
                   <td
                     key={ci}
                     className={cn(
-                      'px-4 py-2.5 text-[13px] text-foreground',
-                      numericFrom !== undefined && ci >= numericFrom
-                        ? 'numeric tabular-nums text-right'
-                        : 'text-left',
+                      'px-4 py-3 text-[13px] font-semibold text-foreground',
+                      isNumeric(ci) ? 'numeric tabular-nums text-right' : 'text-left',
                     )}
                   >
                     {cell ?? ''}
                   </td>
                 ))}
-                {rowActions && <td className="px-4 py-2.5" />}
+                {rowActions && <td className="px-4 py-3" />}
               </tr>
-            )}
-          </tbody>
+            </tfoot>
+          )}
         </table>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

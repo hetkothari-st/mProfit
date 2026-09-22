@@ -31,6 +31,8 @@ import { useEntitlement } from '@/hooks/useEntitlement';
 import { CaActivityFeed } from '@/components/ca/CaActivityFeed';
 import { GrantScopePanel } from '@/components/ca/GrantScopePanel';
 import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
+import { Initials, AccessStrip, AccessCell } from '@/components/ca/AccessParts';
+import { fmtDate } from '@/components/ca/accessModel';
 
 /**
  * Account Access — the account holder's page.
@@ -49,11 +51,6 @@ import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
  * Not behind any plan gate. Whoever can reach someone's financial position,
  * the person it belongs to must be able to see it and stop it.
  */
-
-const fmtDate = (iso: string | null): string =>
-  iso
-    ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-    : '';
 
 export function ProfessionalAccessPage() {
   const qc = useQueryClient();
@@ -298,30 +295,6 @@ function Group({
   );
 }
 
-/** Two letters in a disc, tinted by what the row means. */
-function Initials({ name, tone }: { name: string; tone: 'active' | 'invited' | 'muted' }) {
-  const letters =
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0]!.toUpperCase())
-      .join('') || '?';
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-medium',
-        tone === 'active' && 'bg-positive/15 text-positive',
-        tone === 'invited' && 'bg-warning/15 text-warning',
-        tone === 'muted' && 'bg-muted text-muted-foreground',
-      )}
-    >
-      {letters}
-    </span>
-  );
-}
-
 function ActiveGrant({
   grant: g,
   managing,
@@ -423,30 +396,21 @@ function Reach({ grant: g }: { grant: MyProfessionalGrant }) {
   }
 
   return (
-    <dl className="mt-4 grid grid-cols-1 border-t border-border/60 sm:grid-cols-3">
-      <ReachCell term="Sees">
+    <AccessStrip className="mt-4">
+      <AccessCell term="Sees">
         {seesAll ? 'Everything' : limits.join(', ')}
-      </ReachCell>
-      <ReachCell term="Can">
+      </AccessCell>
+      <AccessCell term="Can">
         {g.editMode === 'FULL'
           ? 'Keep your books'
           : g.editMode === 'PARTIAL'
             ? 'Make some changes'
             : 'View only'}
-      </ReachCell>
-      <ReachCell term="Until">
+      </AccessCell>
+      <AccessCell term="Until">
         {g.accessUntil ? fmtDate(g.accessUntil) : 'No end date'}
-      </ReachCell>
-    </dl>
-  );
-}
-
-function ReachCell({ term, children }: { term: string; children: ReactNode }) {
-  return (
-    <div className="border-b border-border/60 px-5 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
-      <dt className="text-[11.5px] text-muted-foreground">{term}</dt>
-      <dd className="mt-0.5 text-[13.5px] text-foreground">{children}</dd>
-    </div>
+      </AccessCell>
+    </AccessStrip>
   );
 }
 
