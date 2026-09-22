@@ -11,6 +11,9 @@ import {
   acceptInvitationHandler,
   revokeGrantHandler,
   listMyProfessionalsHandler,
+  getMyGrantHandler,
+  updateMyGrantScopeHandler,
+  reinstateGrantHandler,
   listCaActivityHandler,
 } from '../controllers/ca.controller.js';
 import {
@@ -38,6 +41,9 @@ import {
   caListFmv,
   caSetFmv,
   caDeleteFmv,
+  caReceiptPdf,
+  caReceiptsZip,
+  caReceiptsWorkbook,
 } from '../controllers/caAccounting.controller.js';
 
 /**
@@ -62,6 +68,9 @@ caRouter.post('/clients', asyncHandler(createManagedClientHandler));
 // gap, and the token is useless without the invitee's own login anyway.
 caRouter.post('/clients/invite', asyncHandler(inviteClientHandler));
 caRouter.post('/clients/:clientId/revoke', asyncHandler(revokeGrantHandler));
+// Only for a SHADOW record the CA keeps themselves — `reinstateGrant` refuses
+// when a real client was the one who withdrew.
+caRouter.post('/clients/:clientId/reinstate', asyncHandler(reinstateGrantHandler));
 caRouter.get('/activity', asyncHandler(listCaActivityHandler));
 
 // A client's books. Every one of these resolves the grant first.
@@ -82,6 +91,12 @@ caRouter.delete('/clients/:clientId/vouchers/:id', asyncHandler(caDeleteVoucher)
 // this on open; this is for catching up without a reload after the client has
 // added something.
 caRouter.post('/clients/:clientId/vouchers/generate', asyncHandler(caGenerateFromActivity));
+
+// Receipts for the client's books. Declared before `/vouchers/:id` for the
+// same reason as on the client's own router: these names are not voucher ids.
+caRouter.get('/clients/:clientId/receipts.zip', asyncHandler(caReceiptsZip));
+caRouter.get('/clients/:clientId/receipts.xlsx', asyncHandler(caReceiptsWorkbook));
+caRouter.get('/clients/:clientId/vouchers/:id/receipt.pdf', asyncHandler(caReceiptPdf));
 
 // A CA may add a transaction and correct one, but never delete one — there
 // is deliberately no DELETE route here and no RLS policy that would satisfy
@@ -133,5 +148,10 @@ export const professionalAccessRouter = Router();
 professionalAccessRouter.use(authenticate);
 professionalAccessRouter.get('/', asyncHandler(listMyProfessionalsHandler));
 professionalAccessRouter.get('/activity', asyncHandler(listCaActivityHandler));
-professionalAccessRouter.post('/:clientId/revoke', asyncHandler(revokeGrantHandler));
+// `/invitations/...` is declared before `/:clientId/...` so a token is never
+// mistaken for a client id.
 professionalAccessRouter.post('/invitations/:token/accept', asyncHandler(acceptInvitationHandler));
+professionalAccessRouter.get('/:clientId', asyncHandler(getMyGrantHandler));
+professionalAccessRouter.patch('/:clientId/scope', asyncHandler(updateMyGrantScopeHandler));
+professionalAccessRouter.post('/:clientId/revoke', asyncHandler(revokeGrantHandler));
+professionalAccessRouter.post('/:clientId/reinstate', asyncHandler(reinstateGrantHandler));

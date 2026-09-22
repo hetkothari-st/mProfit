@@ -421,10 +421,43 @@ model Client {
   consentBasis CaConsentBasis?
   consentNote  String?
 
-  portfolios Portfolio[]
+  /// The window the grant is usable in. Null on either side means unbounded
+  /// there. Enforced inside `app_is_active_ca_for`, so an expired grant stops
+  /// reading at the database rather than relying on every caller to check.
+  accessFrom  DateTime?
+  accessUntil DateTime?
+
+  /// What the grant covers. `scopeAll*` true — the default, and what every
+  /// grant made before this existed keeps — means unrestricted. False makes
+  /// the matching list an allowlist, and an empty list then denies everything:
+  /// the same contract as `FamilyMember.visibleAssetClasses`, chosen so the
+  /// two cannot be read as meaning opposite things.
+  scopeAllPortfolios   Boolean      @default(true)
+  scopeAllAssetClasses Boolean      @default(true)
+  scopeAllCategories   Boolean      @default(true)
+  visibleAssetClasses  AssetClass[]
+  visibleCategories    String[]
+
+  portfolios      Portfolio[]
+  portfolioScopes ClientPortfolioScope[]
 
   @@index([advisorId, status])
   @@index([userId, status])
+}
+
+/// One portfolio a CA grant is allowed to reach, when the grant is not set to
+/// cover all of them. Rows only ever narrow: with `scopeAllPortfolios` true
+/// they are ignored entirely.
+model ClientPortfolioScope {
+  id          String    @id @default(cuid())
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([clientId, portfolioId])
+  @@index([portfolioId])
 }
 
 enum ClientKind {
@@ -458,6 +491,9 @@ model Portfolio {
   family      Family?       @relation(fields: [familyId], references: [id])
   clientId    String?
   client      Client?       @relation(fields: [clientId], references: [id])
+  /// Grants that have been narrowed to include this portfolio. Unrelated to
+  /// `clientId`, which records the engagement a portfolio was created under.
+  caScopes    ClientPortfolioScope[]
   name        String
   description String?
   type        PortfolioType @default(INVESTMENT)
@@ -4090,4 +4126,6 @@ enum CaAuditAction {
   TRANSACTION_CREATED
   IMPORT_JOB_CREATED
   PORTFOLIO_CREATED
+  GRANT_SCOPE_CHANGED
+  GRANT_REINSTATED
 }

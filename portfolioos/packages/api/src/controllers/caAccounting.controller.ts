@@ -80,6 +80,12 @@ import {
   inferTypeFromFileName,
 } from './imports.controller.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
+import {
+  getReceiptPdf,
+  viewReceiptPdf,
+  getReceiptsZip,
+  getReceiptsWorkbook,
+} from './accounting.controller.js';
 
 /** Resolve the grant named in the URL, or refuse. */
 async function scopeOf(req: Request): Promise<CaScope> {
@@ -780,4 +786,36 @@ export async function caCreateImport(req: Request, res: Response) {
 export async function caListImports(req: Request, res: Response) {
   const scope = await scopeOf(req);
   ok(res, await listImportJobs(scope.subjectUserId));
+}
+
+// ─── Receipts, for a client's books ───────────────────────────────────
+//
+// Same three shapes as the client's own routes, and the SAME handlers under
+// them — only the identity of the books differs. Duplicating the rendering
+// here is how the CA's copy of a rent receipt would come to differ from the
+// client's; there is one renderer, and it is told whose books to read.
+//
+// Reads are not audited. The activity trail records what a professional DID
+// to a client's books, and filling it with every document they looked at
+// would bury the entries it exists to surface.
+
+export async function caReceiptPdf(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  if (req.query.inline === 'true') {
+    await viewReceiptPdf(scope.subjectUserId, req.params.id!, res);
+    return;
+  }
+  await getReceiptPdf(scope.subjectUserId, req.params.id!, res);
+}
+
+export async function caReceiptsZip(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  await ensureBooksProjected(scope, req);
+  await getReceiptsZip(scope.subjectUserId, req, res);
+}
+
+export async function caReceiptsWorkbook(req: Request, res: Response) {
+  const scope = await scopeOf(req);
+  await ensureBooksProjected(scope, req);
+  await getReceiptsWorkbook(scope.subjectUserId, req, res);
 }

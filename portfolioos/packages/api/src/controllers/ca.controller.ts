@@ -19,7 +19,12 @@ import {
   listMyProfessionals,
   listCaActivity,
   getCaScope,
+  getGrantForSubject,
+  updateGrantScope,
+  reinstateGrant,
+  CA_SCOPE_CATEGORIES,
 } from '../services/ca/caAccess.service.js';
+import { AssetClass } from '@prisma/client';
 
 const managedClientSchema = z.object({
   name: z.string().min(1).max(200),
@@ -90,4 +95,38 @@ export async function listCaActivityHandler(req: Request, res: Response) {
     await getCaScope(req.user!.id, clientId);
   }
   ok(res, await listCaActivity(req.user!.id, { clientId }));
+}
+
+// ─── The client's controls over a grant ──────────────────────────────
+
+const ASSET_CLASSES = Object.values(AssetClass) as [AssetClass, ...AssetClass[]];
+
+/**
+ * `null` and "absent" mean different things here, so the schema keeps them
+ * apart: a field left out is untouched, and an explicit `null` widens that
+ * dimension back to everything. Collapsing the two would make "give them
+ * access to all portfolios again" unexpressible.
+ */
+const grantScopeSchema = z.object({
+  portfolioIds: z.array(z.string().min(1)).max(200).nullable().optional(),
+  assetClasses: z.array(z.enum(ASSET_CLASSES)).nullable().optional(),
+  categories: z.array(z.enum(CA_SCOPE_CATEGORIES)).nullable().optional(),
+  accessFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  accessUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+});
+
+/** One grant in full, for the client's manage-access panel. */
+export async function getMyGrantHandler(req: Request, res: Response) {
+  ok(res, await getGrantForSubject(req.user!.id, req.params.clientId!));
+}
+
+export async function updateMyGrantScopeHandler(req: Request, res: Response) {
+  const patch = grantScopeSchema.parse(req.body);
+  await updateGrantScope(req.user!.id, req.params.clientId!, patch, req);
+  ok(res, await getGrantForSubject(req.user!.id, req.params.clientId!));
+}
+
+export async function reinstateGrantHandler(req: Request, res: Response) {
+  await reinstateGrant(req.user!.id, req.params.clientId!, req);
+  noContent(res);
 }

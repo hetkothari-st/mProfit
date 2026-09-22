@@ -45,6 +45,73 @@ export interface MyProfessional {
   clientId: string;
   grantedAt: string | null;
   advisor: { id: string; name: string; email: string } | null;
+  status: ClientStatus;
+  revokedAt: string | null;
+  accessFrom: string | null;
+  accessUntil: string | null;
+  scopeAllPortfolios: boolean;
+  scopeAllAssetClasses: boolean;
+  scopeAllCategories: boolean;
+  portfolioCount: number;
+  assetClassCount: number;
+  categoryCount: number;
+}
+
+/** The categories a grant can be narrowed by, and how they read on screen. */
+export const CA_SCOPE_CATEGORIES = [
+  'VEHICLE',
+  'RENTAL',
+  'INSURANCE',
+  'LOAN',
+  'CREDIT_CARD',
+  'BANK_ACCOUNT',
+  'OWNED_PROPERTY',
+  'GOAL',
+] as const;
+export type CaScopeCategory = (typeof CA_SCOPE_CATEGORIES)[number];
+
+export const CA_SCOPE_CATEGORY_LABEL: Record<CaScopeCategory, string> = {
+  VEHICLE: 'Vehicles',
+  RENTAL: 'Rental property',
+  INSURANCE: 'Insurance',
+  LOAN: 'Loans',
+  CREDIT_CARD: 'Credit cards',
+  BANK_ACCOUNT: 'Bank accounts',
+  OWNED_PROPERTY: 'Property owned',
+  GOAL: 'Goals',
+};
+
+/** One grant in full: what it covers now, and everything it could cover. */
+export interface GrantDetail {
+  clientId: string;
+  kind: ClientKind;
+  status: ClientStatus;
+  name: string;
+  advisor: { id: string; name: string; email: string } | null;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  accessFrom: string | null;
+  accessUntil: string | null;
+  scopeAllPortfolios: boolean;
+  scopeAllAssetClasses: boolean;
+  scopeAllCategories: boolean;
+  portfolioIds: string[];
+  assetClasses: string[];
+  categories: string[];
+  availablePortfolios: Array<{ id: string; name: string; type: string; familyId: string | null }>;
+}
+
+/**
+ * A field left out is untouched; an explicit `null` widens that dimension back
+ * to everything. The two are different requests, so they stay distinguishable
+ * all the way to the server.
+ */
+export interface GrantScopePatch {
+  portfolioIds?: string[] | null;
+  assetClasses?: string[] | null;
+  categories?: CaScopeCategory[] | null;
+  accessFrom?: string | null;
+  accessUntil?: string | null;
 }
 
 export const CONSENT_BASIS_LABEL: Record<CaConsentBasis, string> = {
@@ -490,6 +557,55 @@ export interface CaTrialBalanceRow {
  * whose books these are must be able to see and end access whatever plan they
  * are on. A revoke button that needed a subscription would not be one.
  */
+/**
+ * A client's receipts, from the CA's side. Same three shapes as the client's
+ * own downloads, reached through the grant — a narrowed grant produces a
+ * narrower set, because the server builds them from what the CA could read.
+ */
+export const caReceiptsApi = {
+  async view(clientId: string, voucherId: string): Promise<void> {
+    const res = await api.get(
+      `/api/ca/clients/${clientId}/vouchers/${voucherId}/receipt.pdf`,
+      { params: { inline: 'true' }, responseType: 'blob' },
+    );
+    const url = URL.createObjectURL(res.data as Blob);
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
+
+  async download(clientId: string, voucherId: string, fileName: string): Promise<void> {
+    const res = await api.get(
+      `/api/ca/clients/${clientId}/vouchers/${voucherId}/receipt.pdf`,
+      { responseType: 'blob' },
+    );
+    saveCaBlob(res.data as Blob, fileName);
+  },
+
+  async bundle(
+    clientId: string,
+    format: 'zip' | 'xlsx',
+    params: { from?: string; to?: string } = {},
+  ): Promise<void> {
+    const res = await api.get(`/api/ca/clients/${clientId}/receipts.${format}`, {
+      params,
+      responseType: 'blob',
+    });
+    saveCaBlob(res.data as Blob, `receipts.${format}`);
+  },
+};
+
+function saveCaBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export const professionalAccessApi = {
   async list(): Promise<MyProfessional[]> {
     const { data } = await api.get<ApiResponse<MyProfessional[]>>('/api/me/professional-access');
@@ -505,6 +621,25 @@ export const professionalAccessApi = {
 
   async revoke(clientId: string): Promise<void> {
     await api.post(`/api/me/professional-access/${clientId}/revoke`);
+  },
+
+  async reinstate(clientId: string): Promise<void> {
+    await api.post(`/api/me/professional-access/${clientId}/reinstate`);
+  },
+
+  async grant(clientId: string): Promise<GrantDetail> {
+    const { data } = await api.get<ApiResponse<GrantDetail>>(
+      `/api/me/professional-access/${clientId}`,
+    );
+    return unwrap(data);
+  },
+
+  async updateScope(clientId: string, patch: GrantScopePatch): Promise<GrantDetail> {
+    const { data } = await api.patch<ApiResponse<GrantDetail>>(
+      `/api/me/professional-access/${clientId}/scope`,
+      patch,
+    );
+    return unwrap(data);
   },
 
   async acceptInvitation(token: string): Promise<CaClient> {

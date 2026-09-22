@@ -24,7 +24,7 @@
  */
 
 import crypto from 'node:crypto';
-import type { Client } from '@prisma/client';
+import type { AssetClass, Client } from '@prisma/client';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
@@ -53,6 +53,23 @@ export interface CaScope {
   subjectUserId: string;
   kind: 'SHADOW' | 'INVITED';
   subjectLabel: string;
+  /**
+   * What the client narrowed the grant to. `null` means unrestricted, matching
+   * `EffectiveScope`'s contract — and, as there, an EMPTY array means deny-all
+   * rather than "anything".
+   *
+   * These exist so a caller can say what it is showing, and refuse to produce
+   * an artefact it cannot filter. They are NOT the enforcement: the policies
+   * ask `app_ca_may_see_portfolio` / `_category` / `_asset_class` themselves,
+   * so a service that forgets to consult these still reads nothing it should
+   * not.
+   */
+  allowedPortfolioIds: string[] | null;
+  allowedAssetClasses: AssetClass[] | null;
+  allowedCategories: string[] | null;
+  /** The grant's window, for display. Expiry itself is enforced in SQL. */
+  accessFrom: Date | null;
+  accessUntil: Date | null;
 }
 
 /**
@@ -65,7 +82,10 @@ export interface CaScope {
  * uses for a forged family header.
  */
 export async function getCaScope(callerId: string, clientId: string): Promise<CaScope> {
-  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    include: { portfolioScopes: { select: { portfolioId: true } } },
+  });
 
   if (!client || client.advisorId !== callerId) {
     // Same message for "not yours" and "does not exist" — a distinct one would
@@ -78,6 +98,19 @@ export async function getCaScope(callerId: string, clientId: string): Promise<Ca
   if (client.status === 'PENDING' || !client.userId) {
     throw new ForbiddenError('That client has not accepted your invitation yet.');
   }
+  const now = new Date();
+  if (client.accessFrom && client.accessFrom > now) {
+    throw new ForbiddenError(
+      `This access starts on ${client.accessFrom.toISOString().slice(0, 10)}.`,
+    );
+  }
+  if (client.accessUntil && client.accessUntil < now) {
+    // Said plainly, because the CA can do nothing about it themselves: the
+    // client sets the window and only the client can extend it.
+    throw new ForbiddenError(
+      `This access ended on ${client.accessUntil.toISOString().slice(0, 10)}. Ask the client to extend it.`,
+    );
+  }
 
   return {
     callerId,
@@ -85,6 +118,13 @@ export async function getCaScope(callerId: string, clientId: string): Promise<Ca
     subjectUserId: client.userId,
     kind: client.kind,
     subjectLabel: client.name,
+    allowedPortfolioIds: client.scopeAllPortfolios
+      ? null
+      : client.portfolioScopes.map((s) => s.portfolioId),
+    allowedAssetClasses: client.scopeAllAssetClasses ? null : client.visibleAssetClasses,
+    allowedCategories: client.scopeAllCategories ? null : client.visibleCategories,
+    accessFrom: client.accessFrom,
+    accessUntil: client.accessUntil,
   };
 }
 
@@ -98,9 +138,13 @@ export async function listClients(callerId: string): Promise<Client[]> {
 
 /** The client's own view: every professional who can currently see their books. */
 export async function listMyProfessionals(callerId: string) {
+  // Revoked grants stay in the list. They are the client's own history of who
+  // they let in, and the only way back to one they ended by accident — a page
+  // that hid them would make `reinstateGrant` unreachable from the UI.
   const rows = await prisma.client.findMany({
-    where: { userId: callerId, status: 'ACTIVE' },
-    orderBy: { acceptedAt: 'desc' },
+    where: { userId: callerId, status: { in: ['ACTIVE', 'REVOKED'] } },
+    include: { portfolioScopes: { select: { portfolioId: true } } },
+    orderBy: [{ status: 'asc' }, { acceptedAt: 'desc' }],
   });
   const advisorIds = [...new Set(rows.map((r) => r.advisorId))];
   // The advisor is a different user, so their name is not readable under the
@@ -118,6 +162,18 @@ export async function listMyProfessionals(callerId: string) {
     clientId: r.id,
     grantedAt: r.acceptedAt,
     advisor: byId.get(r.advisorId) ?? null,
+    status: r.status,
+    revokedAt: r.revokedAt,
+    accessFrom: r.accessFrom,
+    accessUntil: r.accessUntil,
+    // Enough for the card to say what this grant covers without a second
+    // request per row; the manage panel fetches the full picture.
+    scopeAllPortfolios: r.scopeAllPortfolios,
+    scopeAllAssetClasses: r.scopeAllAssetClasses,
+    scopeAllCategories: r.scopeAllCategories,
+    portfolioCount: r.portfolioScopes.length,
+    assetClassCount: r.visibleAssetClasses.length,
+    categoryCount: r.visibleCategories.length,
   }));
 }
 
@@ -406,4 +462,292 @@ export async function listCaActivity(callerId: string, opts: { clientId?: string
     orderBy: { createdAt: 'desc' },
     take: Math.min(opts.limit ?? 100, 500),
   });
+}
+
+// ─── What the client controls ────────────────────────────────────────
+//
+// Everything below is the SUBJECT's side of a grant: the person whose books
+// these are decides which portfolios a professional may open, which asset
+// classes and categories of their life are included, and between which dates
+// any of it works. A CA can read their own scope and nothing else — a
+// professional who could widen their own access has no scope at all.
+
+/** Categories a grant can be narrowed to. Mirrors `NON_AC_CATEGORIES`. */
+export const CA_SCOPE_CATEGORIES = [
+  'VEHICLE',
+  'RENTAL',
+  'INSURANCE',
+  'LOAN',
+  'CREDIT_CARD',
+  'BANK_ACCOUNT',
+  'OWNED_PROPERTY',
+  'GOAL',
+] as const;
+export type CaScopeCategory = (typeof CA_SCOPE_CATEGORIES)[number];
+
+export interface GrantScopePatch {
+  /** `null` restores "all portfolios"; an array is the allowlist. */
+  portfolioIds?: string[] | null;
+  assetClasses?: AssetClass[] | null;
+  categories?: CaScopeCategory[] | null;
+  /** `null` clears that end of the window. Dates are YYYY-MM-DD. */
+  accessFrom?: string | null;
+  accessUntil?: string | null;
+}
+
+/**
+ * One grant as the client sees it: who holds it, what it currently covers, and
+ * the portfolios they could put in or out of it.
+ *
+ * The advisor's name needs a privileged read for the same reason
+ * `listMyProfessionals` does — they are a different user, invisible under the
+ * client's own policies — and is bounded to the identity the page must render.
+ */
+export async function getGrantForSubject(callerId: string, clientId: string) {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    include: { portfolioScopes: { select: { portfolioId: true } } },
+  });
+  if (!client) throw new NotFoundError('Grant not found.');
+  if (client.userId !== callerId) {
+    throw new ForbiddenError('That grant is not yours to manage.');
+  }
+
+  const advisor = await runAsSystem(() =>
+    prisma.user.findUnique({
+      where: { id: client.advisorId },
+      select: { id: true, name: true, email: true },
+    }),
+  );
+
+  const portfolios = await prisma.portfolio.findMany({
+    where: { userId: callerId },
+    select: { id: true, name: true, type: true, familyId: true },
+    orderBy: { name: 'asc' },
+  });
+
+  return {
+    clientId: client.id,
+    kind: client.kind,
+    status: client.status,
+    name: client.name,
+    advisor,
+    acceptedAt: client.acceptedAt,
+    revokedAt: client.revokedAt,
+    accessFrom: client.accessFrom,
+    accessUntil: client.accessUntil,
+    scopeAllPortfolios: client.scopeAllPortfolios,
+    scopeAllAssetClasses: client.scopeAllAssetClasses,
+    scopeAllCategories: client.scopeAllCategories,
+    portfolioIds: client.portfolioScopes.map((s) => s.portfolioId),
+    assetClasses: client.visibleAssetClasses,
+    categories: client.visibleCategories,
+    /** Everything the client could include — the picker's universe. */
+    availablePortfolios: portfolios,
+  };
+}
+
+/**
+ * Narrow or widen a grant. Subject only.
+ *
+ * The whole scope and its audit entry are written in one transaction, because
+ * a half-applied scope is a grant nobody can describe: portfolio rows saying
+ * one thing and the flags another is exactly the state the client would never
+ * be shown and could never correct.
+ *
+ * Portfolio ids are checked against the caller's own portfolios rather than
+ * trusted. Passing someone else's id would otherwise write a scope row that
+ * `app_ca_may_see_portfolio` ignores — harmless to security, and a lie on the
+ * screen that lists what the CA can see.
+ */
+export async function updateGrantScope(
+  callerId: string,
+  clientId: string,
+  patch: GrantScopePatch,
+  req?: Request,
+): Promise<void> {
+  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  if (!client) throw new NotFoundError('Grant not found.');
+  if (client.userId !== callerId) {
+    throw new ForbiddenError('That grant is not yours to manage.');
+  }
+
+  const from = parseScopeDate(patch.accessFrom, 'accessFrom');
+  const until = parseScopeDate(patch.accessUntil, 'accessUntil');
+  const nextFrom = patch.accessFrom === undefined ? client.accessFrom : from;
+  const nextUntil = patch.accessUntil === undefined ? client.accessUntil : until;
+  if (nextFrom && nextUntil && nextFrom > nextUntil) {
+    throw new BadRequestError('Access cannot end before it starts.');
+  }
+
+  let portfolioIds: string[] | null | undefined;
+  if (patch.portfolioIds !== undefined) {
+    if (patch.portfolioIds === null) {
+      portfolioIds = null;
+    } else {
+      const owned = await prisma.portfolio.findMany({
+        where: { id: { in: patch.portfolioIds }, userId: callerId },
+        select: { id: true },
+      });
+      if (owned.length !== new Set(patch.portfolioIds).size) {
+        throw new BadRequestError('One of those portfolios is not yours.');
+      }
+      portfolioIds = owned.map((p) => p.id);
+    }
+  }
+
+  await runInTransaction(async (tx) => {
+    await tx.client.update({
+      where: { id: clientId },
+      data: {
+        ...(patch.accessFrom !== undefined ? { accessFrom: from } : {}),
+        ...(patch.accessUntil !== undefined ? { accessUntil: until } : {}),
+        ...(portfolioIds !== undefined ? { scopeAllPortfolios: portfolioIds === null } : {}),
+        ...(patch.assetClasses !== undefined
+          ? {
+              scopeAllAssetClasses: patch.assetClasses === null,
+              visibleAssetClasses: patch.assetClasses ?? [],
+            }
+          : {}),
+        ...(patch.categories !== undefined
+          ? {
+              scopeAllCategories: patch.categories === null,
+              visibleCategories: patch.categories ?? [],
+            }
+          : {}),
+      },
+    });
+
+    if (portfolioIds !== undefined) {
+      await tx.clientPortfolioScope.deleteMany({ where: { clientId } });
+      if (portfolioIds !== null && portfolioIds.length > 0) {
+        await tx.clientPortfolioScope.createMany({
+          data: portfolioIds.map((portfolioId) => ({ clientId, portfolioId })),
+        });
+      }
+    }
+
+    await recordCaAudit(
+      tx,
+      { actorUserId: callerId, subjectUserId: callerId, clientId, req },
+      {
+        action: 'GRANT_SCOPE_CHANGED',
+        resourceType: 'Client',
+        resourceId: clientId,
+        summary: describeScopeChange(patch),
+        before: {
+          scopeAllPortfolios: client.scopeAllPortfolios,
+          scopeAllAssetClasses: client.scopeAllAssetClasses,
+          scopeAllCategories: client.scopeAllCategories,
+          accessFrom: client.accessFrom?.toISOString() ?? null,
+          accessUntil: client.accessUntil?.toISOString() ?? null,
+        },
+        after: {
+          portfolioIds: portfolioIds ?? 'all',
+          assetClasses: patch.assetClasses ?? 'all',
+          categories: patch.categories ?? 'all',
+          accessFrom: nextFrom?.toISOString() ?? null,
+          accessUntil: nextUntil?.toISOString() ?? null,
+        },
+      },
+    );
+  });
+}
+
+/**
+ * Put a revoked grant back.
+ *
+ * The client may always reinstate their own — withdrawing consent should never
+ * be a one-way door they need support to reopen. A CA may only reinstate a
+ * SHADOW record, which is their own bookkeeping and has no other party; if a
+ * real client revoked, only that client can undo it, or the CA invites them
+ * again and they accept.
+ */
+export async function reinstateGrant(
+  callerId: string,
+  clientId: string,
+  req?: Request,
+): Promise<void> {
+  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  if (!client) throw new NotFoundError('Grant not found.');
+
+  const isSubject = client.userId === callerId;
+  const isAdvisor = client.advisorId === callerId;
+  if (!isSubject && !(isAdvisor && client.kind === 'SHADOW')) {
+    throw new ForbiddenError(
+      'Only the client can restore this access. Ask them, or send a fresh invitation.',
+    );
+  }
+  if (client.status === 'ACTIVE') return;
+  if (!client.userId) {
+    throw new BadRequestError(
+      'That invitation was never accepted, so there is nothing to restore — send a new one.',
+    );
+  }
+
+  const subjectUserId = client.userId;
+  await runInTransaction(async (tx) => {
+    await tx.client.update({
+      where: { id: clientId },
+      data: { status: 'ACTIVE', revokedAt: null, revokedByUserId: null },
+    });
+    await recordCaAudit(
+      tx,
+      { actorUserId: callerId, subjectUserId, clientId, req },
+      {
+        action: 'GRANT_REINSTATED',
+        resourceType: 'Client',
+        resourceId: clientId,
+        summary: isSubject
+          ? 'You restored your CA’s access to your books.'
+          : `Your CA reopened the engagement for ${client.name}.`,
+      },
+    );
+  });
+}
+
+/** `YYYY-MM-DD` at the start of that day, or null. Anything else is refused. */
+function parseScopeDate(value: string | null | undefined, field: string): Date | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new BadRequestError(`${field} must be a date in YYYY-MM-DD form.`);
+  }
+  const d = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) throw new BadRequestError(`${field} is not a real date.`);
+  return d;
+}
+
+/** One line a person would actually recognise on their own activity feed. */
+function describeScopeChange(patch: GrantScopePatch): string {
+  const parts: string[] = [];
+  if (patch.portfolioIds !== undefined) {
+    parts.push(
+      patch.portfolioIds === null
+        ? 'all portfolios'
+        : `${patch.portfolioIds.length} portfolio${patch.portfolioIds.length === 1 ? '' : 's'}`,
+    );
+  }
+  if (patch.assetClasses !== undefined) {
+    parts.push(
+      patch.assetClasses === null
+        ? 'all asset classes'
+        : `${patch.assetClasses.length} asset class${patch.assetClasses.length === 1 ? '' : 'es'}`,
+    );
+  }
+  if (patch.categories !== undefined) {
+    parts.push(
+      patch.categories === null
+        ? 'all categories'
+        : `${patch.categories.length} categor${patch.categories.length === 1 ? 'y' : 'ies'}`,
+    );
+  }
+  if (patch.accessFrom !== undefined) {
+    parts.push(patch.accessFrom ? `access from ${patch.accessFrom}` : 'no start date');
+  }
+  if (patch.accessUntil !== undefined) {
+    parts.push(patch.accessUntil ? `access until ${patch.accessUntil}` : 'no end date');
+  }
+  return parts.length > 0
+    ? `You changed what your CA can see: ${parts.join(', ')}.`
+    : 'You reviewed what your CA can see.';
 }
