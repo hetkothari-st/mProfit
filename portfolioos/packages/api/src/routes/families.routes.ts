@@ -37,6 +37,10 @@ import {
   setManagedMemberManager,
 } from '../services/family.service.js';
 import { NON_AC_CATEGORIES } from '../services/familyScope.service.js';
+import {
+  buildFamilyInviteEmail,
+  sendFamilyInviteEmail,
+} from '../services/family/familyInviteEmail.service.js';
 
 /**
  * Family / HOF HTTP surface. Mounted at `/api/families`.
@@ -82,6 +86,8 @@ const inviteSchema = z.object({
   role: familyRoleEnum.optional(),
   visibleAssetClasses: z.array(assetClassEnum).optional(),
   visibleCategories: z.array(categoryEnum).optional(),
+  relation: z.string().max(40).optional(),
+  relatedToId: z.string().min(1).optional(),
 });
 
 const permissionsSchema = z.object({
@@ -89,11 +95,13 @@ const permissionsSchema = z.object({
   visibleAssetClasses: z.array(assetClassEnum).optional(),
   visibleCategories: z.array(categoryEnum).optional(),
   relation: z.string().max(40).nullable().optional(),
+  relatedToId: z.string().min(1).nullable().optional(),
 });
 
 const managedMemberSchema = z.object({
   name: z.string().min(1).max(80),
   relation: z.string().max(40).optional(),
+  relatedToId: z.string().min(1).optional(),
   managerId: z.string().min(1).optional(),
 });
 
@@ -228,6 +236,41 @@ familiesRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const data = verifySeatPaymentSchema.parse(req.body);
     ok(res, await verifySeatPaymentAndInvite(callerId(req), req.params.familyId!, data));
+  }),
+);
+
+const inviteEmailSchema = z.object({
+  subject: z.string().max(200).optional(),
+  message: z.string().max(5000).optional(),
+});
+
+// The invitation email, exactly as it will go out — the owner can edit the
+// subject and note before sending. Link and expiry are fixed by the template.
+familiesRouter.post(
+  '/:familyId/invitations/:invitationId/email/preview',
+  asyncHandler(async (req: Request, res: Response) => {
+    const edits = inviteEmailSchema.parse(req.body ?? {});
+    ok(
+      res,
+      await buildFamilyInviteEmail(callerId(req), req.params.familyId!, req.params.invitationId!, edits),
+    );
+  }),
+);
+
+familiesRouter.post(
+  '/:familyId/invitations/:invitationId/email/send',
+  asyncHandler(async (req: Request, res: Response) => {
+    const edits = inviteEmailSchema.parse(req.body ?? {});
+    ok(
+      res,
+      await sendFamilyInviteEmail(
+        callerId(req),
+        req.params.familyId!,
+        req.params.invitationId!,
+        edits,
+        req,
+      ),
+    );
   }),
 );
 

@@ -15,6 +15,9 @@ import {
   X,
   ListTree,
   UserCog,
+  UserPlus,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import {
   familiesApi,
@@ -171,7 +174,14 @@ interface Props {
   onRevoke: (m: FamilyMemberRow) => void;
   /** Open a managed member's account; offered only to their manager. */
   onManage?: (m: FamilyMemberRow) => void;
+  /** Add someone related to this member (owners). */
+  onAddRelative?: (m: FamilyMemberRow) => void;
 }
+
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 1.6;
+const ZOOM_STEP = 0.1;
+const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
 
 /** True if `ancestor` sits somewhere above `id` under `parents`. */
 function isAbove(
@@ -200,7 +210,11 @@ export function FamilyTreeCanvas({
   onEdit,
   onRevoke,
   onManage,
+  onAddRelative,
 }: Props) {
+  // Zoom scales the whole board; the scroll area grows with it so every card
+  // stays reachable. Ctrl/⌘ + scroll zooms too, like a map.
+  const [zoom, setZoom] = useState(1);
   const queryClient = useQueryClient();
 
   const layoutQuery = useQuery({
@@ -480,18 +494,67 @@ export function FamilyTreeCanvas({
             <X className="h-3 w-3" strokeWidth={2} /> Delete link
           </button>
         )}
+        <div
+          className="ml-auto inline-flex items-center overflow-hidden rounded-md border border-border text-xs"
+          role="group"
+          aria-label="Zoom"
+        >
+          <button
+            type="button"
+            onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
+            disabled={zoom <= ZOOM_MIN}
+            aria-label="Zoom out"
+            title="Zoom out"
+            className="px-2 py-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-40"
+          >
+            <ZoomOut className="h-3.5 w-3.5" strokeWidth={1.9} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom(1)}
+            title="Reset to 100%"
+            className="min-w-[3.25rem] border-x border-border px-2 py-1 tabular-nums text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
+            disabled={zoom >= ZOOM_MAX}
+            aria-label="Zoom in"
+            title="Zoom in"
+            className="px-2 py-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-40"
+          >
+            <ZoomIn className="h-3.5 w-3.5" strokeWidth={1.9} />
+          </button>
+        </div>
       </div>
 
       {/* Canvas */}
       <div
         className="relative overflow-auto rounded-lg border border-border bg-gradient-to-br from-muted/20 to-transparent"
         style={{ maxHeight: 640 }}
+        onWheel={(e) => {
+          if (!e.ctrlKey && !e.metaKey) return;
+          e.preventDefault();
+          setZoom((z) => clampZoom(z + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)));
+        }}
       >
+        {/* The outer box takes the scaled size so the scroll area matches
+            what is drawn; the inner board is scaled from its top-left. */}
+        <div
+          style={{
+            width: Math.max(canvasSize.w, 800) * zoom,
+            height: Math.max(canvasSize.h, 400) * zoom,
+          }}
+        >
         <div
           className="relative"
           style={{
             width: Math.max(canvasSize.w, 800),
             height: Math.max(canvasSize.h, 400),
+            transform: `scale(${zoom})`,
+            transformOrigin: '0 0',
           }}
         >
           {/* Edges layer */}
@@ -582,8 +645,10 @@ export function FamilyTreeCanvas({
                 onClick={() => handleNodeClick(m.userId)}
                 onEdit={() => onEdit(m)}
                 onRevoke={() => onRevoke(m)}
+                zoom={zoom}
                 canManage={Boolean(onManage) && m.managed && m.managedBy?.id === currentUserId}
                 onManage={() => onManage?.(m)}
+                onAddRelative={onAddRelative ? () => onAddRelative(m) : undefined}
                 arrange={
                   isOwner && m.status === 'ACTIVE'
                     ? {
@@ -603,6 +668,7 @@ export function FamilyTreeCanvas({
               />
             );
           })}
+        </div>
         </div>
       </div>
     </div>
@@ -647,8 +713,10 @@ function DraggableNode({
   onClick,
   onEdit,
   onRevoke,
+  zoom,
   canManage,
   onManage,
+  onAddRelative,
   arrange,
 }: {
   member: FamilyMemberRow;
@@ -662,8 +730,10 @@ function DraggableNode({
   onClick: () => void;
   onEdit: () => void;
   onRevoke: () => void;
+  zoom: number;
   canManage: boolean;
   onManage: () => void;
+  onAddRelative?: () => void;
   arrange?: {
     isHead: boolean;
     candidates: FamilyMemberRow[];
@@ -691,8 +761,9 @@ function DraggableNode({
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!startRef.current) return;
-    const dx = e.clientX - startRef.current.x;
-    const dy = e.clientY - startRef.current.y;
+    // Screen pixels to board units: at 50% zoom a 10px drag moves a card 20.
+    const dx = (e.clientX - startRef.current.x) / zoom;
+    const dy = (e.clientY - startRef.current.y) / zoom;
     if (Math.abs(dx) + Math.abs(dy) > 3) movedRef.current = true;
     setPos({
       x: Math.max(0, startRef.current.ox + dx),
@@ -713,6 +784,16 @@ function DraggableNode({
   const RoleIcon = roleGlyph(member.role);
   const revoked = member.status === 'REVOKED';
   const pending = member.status === 'PENDING';
+  // Owners edit anyone but themselves here; whoever keeps a managed member's
+  // books can open its edit to hand them to someone else.
+  const canEdit = (isOwnerViewer && !isSelf) || canManage;
+  const canRemove = isOwnerViewer && !isSelf;
+  const actionCount = [canManage, Boolean(onAddRelative), Boolean(arrange), canEdit, canRemove].filter(
+    Boolean,
+  ).length;
+  // Five labelled buttons do not fit a card; past three they become icons
+  // (each keeps its name as a tooltip and for screen readers).
+  const compact = actionCount > 3;
 
   return (
     <div
@@ -778,11 +859,18 @@ function DraggableNode({
               )}
             </div>
             <p className="text-[11px] text-muted-foreground truncate">
-              {member.managed
-                ? `${member.relation ? `${member.relation} · ` : ''}managed by ${member.managedBy?.name ?? 'nobody'}`
-                : member.relation
-                  ? `${member.relation} · ${member.email ?? ''}`
-                  : member.email}
+              {[
+                member.relation
+                  ? member.relatedTo
+                    ? `${member.relation} of ${member.relatedTo.name}`
+                    : member.relation
+                  : null,
+                member.managed
+                  ? `managed by ${member.managedBy?.name ?? 'nobody'}`
+                  : member.email,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
             <div className="mt-0.5 flex items-center gap-1.5">
               <span className="text-[9px] uppercase tracking-kerned text-muted-foreground">
@@ -805,7 +893,7 @@ function DraggableNode({
         {/* One row of actions, whatever mix applies: open (their manager),
             place (owners), edit and remove (owners, not on yourself). Two
             rows used to spill out of the card. */}
-        {!revoked && (canManage || arrange || (isOwnerViewer && !isSelf)) && (
+        {!revoked && actionCount > 0 && (
           <div className="flex items-center gap-0.5 border-t border-border/50 px-1.5 py-1">
             {canManage && (
               <CardAction
@@ -813,7 +901,17 @@ function DraggableNode({
                 title={`Open ${member.name}’s account`}
                 icon={UserCog}
                 tone="accent"
+                compact={compact}
                 onClick={onManage}
+              />
+            )}
+            {onAddRelative && (
+              <CardAction
+                label="Add"
+                title={`Add a relative of ${member.name}`}
+                icon={UserPlus}
+                compact={compact}
+                onClick={onAddRelative}
               />
             )}
             {arrange && (
@@ -822,25 +920,28 @@ function DraggableNode({
                 title="Change where they sit in the tree"
                 icon={ListTree}
                 expanded={arranging}
+                compact={compact}
                 onClick={() => setArranging((v) => !v)}
               />
             )}
-            {isOwnerViewer && !isSelf && (
-              <>
-                <CardAction
-                  label="Edit"
-                  title={member.managed ? 'Edit relation and manager' : 'Edit permissions'}
-                  icon={Settings2}
-                  onClick={onEdit}
-                />
-                <CardAction
-                  label={member.managed ? 'Remove' : 'Revoke'}
-                  title={member.managed ? 'Remove from the family' : 'Revoke access'}
-                  icon={UserX}
-                  tone="danger"
-                  onClick={onRevoke}
-                />
-              </>
+            {canEdit && (
+              <CardAction
+                label="Edit"
+                title={member.managed ? 'Edit relation and who keeps their books' : 'Edit relation and permissions'}
+                icon={Settings2}
+                compact={compact}
+                onClick={onEdit}
+              />
+            )}
+            {canRemove && (
+              <CardAction
+                label="Remove"
+                title="Remove from the family"
+                icon={UserX}
+                tone="danger"
+                compact={compact}
+                onClick={onRevoke}
+              />
             )}
           </div>
         )}
@@ -900,6 +1001,7 @@ function CardAction({
   onClick,
   tone,
   expanded,
+  compact,
 }: {
   label: string;
   title: string;
@@ -907,11 +1009,13 @@ function CardAction({
   onClick: () => void;
   tone?: 'accent' | 'danger';
   expanded?: boolean;
+  compact?: boolean;
 }) {
   return (
     <button
       type="button"
       title={title}
+      aria-label={compact ? label : undefined}
       aria-expanded={expanded}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
@@ -926,8 +1030,8 @@ function CardAction({
             : 'text-muted-foreground hover:text-foreground'
       }`}
     >
-      <Icon className="h-3 w-3" strokeWidth={1.9} />
-      {label}
+      <Icon className={compact ? 'h-3.5 w-3.5' : 'h-3 w-3'} strokeWidth={1.9} />
+      {!compact && label}
     </button>
   );
 }

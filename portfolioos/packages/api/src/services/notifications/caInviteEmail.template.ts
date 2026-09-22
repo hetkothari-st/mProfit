@@ -105,14 +105,6 @@ export function defaultInviteSubject(direction: InviteDirection, senderName: str
 }
 
 export function renderCaInviteEmail(input: CaInviteEmailInput): RenderedInviteEmail {
-  const advisorName = escapeHtml(input.advisorName);
-  const advisorEmail = escapeHtml(input.advisorEmail);
-  const recipientName = escapeHtml(input.recipientName);
-  const message = escapeHtml(input.message).replace(/\r?\n/g, '<br>');
-  const url = escapeHtml(input.acceptUrl);
-  const expires = escapeHtml(input.expiresOn);
-  const year = new Date().getFullYear();
-
   const heading =
     input.direction === 'CLIENT_TO_ADVISOR'
       ? `${input.advisorName} would like you to see their books`
@@ -125,7 +117,46 @@ export function renderCaInviteEmail(input: CaInviteEmailInput): RenderedInviteEm
     input.direction === 'CLIENT_TO_ADVISOR'
       ? `Sent to ${escapeHtml(input.recipientName)} by ${escapeHtml(input.advisorName)} (${escapeHtml(input.advisorEmail)}). If you weren't expecting this, you can ignore it — accepting is what creates the access, and they can withdraw it at any time.`
       : `Sent to ${escapeHtml(input.recipientName)} by ${escapeHtml(input.advisorName)} (${escapeHtml(input.advisorEmail)}). If you weren't expecting this, you can ignore it — nothing is shared until you accept, and you can withdraw access afterwards from Settings &rsaquo; Account Access.`;
+  return renderInviteShell({
+    title: 'Access request',
+    heading,
+    preheader,
+    closingHtml: closing,
+    message: input.message,
+    acceptUrl: input.acceptUrl,
+    expiresOn: input.expiresOn,
+    logoUrl: input.logoUrl,
+  });
+}
 
+export interface InviteShellInput {
+  title: string;
+  heading: string;
+  preheader: string;
+  /** Already-escaped HTML: who sent it and how to ignore it. Never user-editable. */
+  closingHtml: string;
+  /** The sender's own words. Plain text; escaped here, newlines become breaks. */
+  message: string;
+  acceptUrl: string;
+  expiresOn: string;
+  logoUrl?: string;
+  buttonLabel?: string;
+}
+
+/**
+ * The frame every invitation email shares: brand, heading, the sender's note,
+ * the accept button, the expiry and the fixed closing. Only the note is
+ * the sender's; everything that makes the mail verifiable is rendered here.
+ */
+export function renderInviteShell(input: InviteShellInput): RenderedInviteEmail {
+  const message = escapeHtml(input.message).replace(/\r?\n/g, '<br>');
+  const url = escapeHtml(input.acceptUrl);
+  const expires = escapeHtml(input.expiresOn);
+  const year = new Date().getFullYear();
+  const heading = input.heading;
+  const preheader = input.preheader;
+  const closing = input.closingHtml;
+  const button = escapeHtml(input.buttonLabel ?? 'Review and accept');
   // Fixed pixel dimensions and no CSS sizing: Outlook ignores the latter and
   // would otherwise draw the mark at its natural size.
   const logoCell = input.logoUrl
@@ -137,7 +168,7 @@ export function renderCaInviteEmail(input: CaInviteEmailInput): RenderedInviteEm
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Access request</title>
+<title>${escapeHtml(input.title)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;">
 <div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(preheader)}</div>
@@ -152,7 +183,7 @@ ${logoCell}<td style="font-family:Arial,Helvetica,sans-serif;font-size:18px;font
 <tr><td style="padding:20px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:21px;font-weight:700;line-height:28px;color:#18181b;">${escapeHtml(heading)}</td></tr>
 <tr><td style="padding:18px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#3f3f46;">${message}</td></tr>
 <tr><td align="center" style="padding:28px 32px 8px 32px;">
-<a href="${url}" style="display:inline-block;padding:13px 28px;background-color:#18181b;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">Review and accept</a>
+<a href="${url}" style="display:inline-block;padding:13px 28px;background-color:#18181b;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">${button}</a>
 </td></tr>
 <tr><td style="padding:8px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#71717a;" align="center">This link works once and expires on ${expires}.</td></tr>
 <tr><td style="padding:22px 32px 0 32px;"><div style="height:1px;background-color:#e4e4e7;"></div></td></tr>
@@ -171,7 +202,7 @@ ${closing}
     '',
     input.message,
     '',
-    `Review and accept: ${input.acceptUrl}`,
+    `${input.buttonLabel ?? 'Review and accept'}: ${input.acceptUrl}`,
     `This link works once and expires on ${input.expiresOn}.`,
     '',
     closing.replace(/<[^>]+>/g, '').replace(/&rsaquo;/g, '>').replace(/&#(\d+);/g, (_m, c) => String.fromCharCode(Number(c))),
