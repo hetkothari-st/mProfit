@@ -134,6 +134,10 @@ describe('a rent receipt', () => {
 
     expect(receipt.kind).toBe('RENT');
     expect(receipt.title).toBe('Rent Receipt');
+    // A person's receipt number, not a database id. The raw voucher number
+    // stays available for reconciling, printed small in the footer.
+    expect(receipt.number).toMatch(/^RR\/20250502\/[A-Z0-9]{4}$/);
+    expect(receipt.ledgerRef).toMatch(/^AUTO-RENT-/);
     expect(receipt.isInflow).toBe(true);
     expect(receipt.receivedFrom).toBe('Rajesh Menon');
     expect(receipt.amount).toBe('45000.00');
@@ -156,6 +160,8 @@ describe('a premium receipt', () => {
     expect(receipt.paidTo).toBe('LIC');
     const labels = receipt.fields.map((f) => `${f.label}: ${f.value}`).join(' | ');
     expect(labels).toContain('Policy: Jeevan Anand');
+    // The date is in the header; repeating it as a field was noise.
+    expect(labels).not.toContain('Paid on');
     expect(labels).toContain('Covering: 01 Apr 2025 to 31 Mar 2026');
   });
 });
@@ -168,6 +174,9 @@ describe('a loan payment receipt', () => {
     expect(receipt.kind).toBe('LOAN_PAYMENT');
     expect(receipt.paidTo).toBe('HDFC Bank');
     const labels = receipt.fields.map((f) => `${f.label}: ${f.value}`).join(' | ');
+    // Humanised, and the lender is not repeated — it is already the party.
+    expect(labels).toContain('Loan: Home loan');
+    expect(labels).not.toContain('HOME');
     expect(labels).toContain('Principal: 4500.00');
     expect(labels).toContain('Interest: 7500.00');
   });

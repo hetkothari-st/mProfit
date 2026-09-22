@@ -36,8 +36,16 @@ export interface ReceiptDocument {
   kind: ReceiptKind;
   /** What the document calls itself: "Rent Receipt", "Premium Receipt", … */
   title: string;
-  /** The voucher number, which is also the receipt number. */
+  /**
+   * The number printed on the document. Derived and human-sized for a
+   * generated voucher — nobody writes `AUTO-LOANDISB-cmu5bbo7801rys4hpvj05wore`
+   * on a receipt, and a database id on a document handed to a tenant is both
+   * ugly and a small leak. A hand-posted voucher keeps the number its author
+   * chose, because that one was written by a person for people.
+   */
   number: string;
+  /** The voucher number verbatim, printed small in the footer for reconciling. */
+  ledgerRef: string;
   /** ISO date (YYYY-MM-DD). */
   date: string;
   amount: string;
@@ -85,6 +93,46 @@ function dayLabel(d: Date | null | undefined): string {
   });
 }
 
+/** Short codes for the derived receipt number, one per kind of document. */
+const KIND_CODE: Record<ReceiptKind, string> = {
+  RENT: 'RR',
+  PREMIUM: 'PR',
+  LOAN_PAYMENT: 'LP',
+  LOAN_DISBURSEMENT: 'LD',
+  VOUCHER: 'VR',
+};
+
+/**
+ * `LD/20290917/WORE` — kind, date, and the tail of the source id.
+ *
+ * Deterministic, so the same payment always produces the same receipt number
+ * and a reissued copy matches the one already filed. The id tail is what keeps
+ * two receipts of the same kind on the same day apart.
+ */
+function displayNumber(voucherNo: string, kind: ReceiptKind, isoDate: string): string {
+  if (!voucherNo.startsWith('AUTO-')) return voucherNo;
+  const tail = voucherNo.slice(-4).toUpperCase();
+  return `${KIND_CODE[kind]}/${isoDate.replace(/-/g, '')}/${tail}`;
+}
+
+/** `HOME` → `Home loan`, `PROCESSING_FEE` → `Processing fee`. */
+function humanise(token: string, suffix = ''): string {
+  const words = token.replace(/_/g, ' ').toLowerCase();
+  const sentence = words.charAt(0).toUpperCase() + words.slice(1);
+  return suffix ? `${sentence} ${suffix}` : sentence;
+}
+
+/** `240 months` reads as a number; `240 months (20 years)` reads as a tenure. */
+function tenureLabel(months: number): string {
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  if (years === 0) return `${months} months`;
+  const yearPart = `${years} year${years === 1 ? '' : 's'}`;
+  return rest === 0
+    ? `${months} months (${yearPart})`
+    : `${months} months (${yearPart} ${rest}m)`;
+}
+
 /** The source row id a generated voucher number carries, if it carries one. */
 function sourceIdOf(voucherNo: string, prefix: string): string | null {
   return voucherNo.startsWith(prefix) ? voucherNo.slice(prefix.length) : null;
@@ -118,9 +166,10 @@ export async function buildReceipt(
   );
   const amount = total.toFixed(2);
 
+  const date = istDate(voucher.date);
   const base = {
-    number: voucher.voucherNo,
-    date: istDate(voucher.date),
+    ledgerRef: voucher.voucherNo,
+    date,
     amount,
     amountWords: amountInWords(amount),
     narration: voucher.narration ?? undefined,
@@ -142,6 +191,7 @@ export async function buildReceipt(
       return {
         ...base,
         kind: 'RENT',
+        number: displayNumber(voucher.voucherNo, 'RENT', date),
         title: 'Rent Receipt',
         isInflow: true,
         receivedFrom: receipt.tenancy.tenantName,
@@ -151,8 +201,7 @@ export async function buildReceipt(
             ? [{ label: 'Address', value: receipt.tenancy.property.address }]
             : []),
           { label: 'For the month of', value: monthLabel(receipt.forMonth) },
-          { label: 'Rent due', value: dayLabel(receipt.dueDate) },
-          { label: 'Received on', value: dayLabel(receipt.receivedOn ?? voucher.date) },
+          { label: 'Rent due on', value: dayLabel(receipt.dueDate) },
           { label: 'Amount', value: amount },
         ],
       };
@@ -169,17 +218,18 @@ export async function buildReceipt(
       return {
         ...base,
         kind: 'PREMIUM',
+        number: displayNumber(voucher.voucherNo, 'PREMIUM', date),
         title: 'Premium Payment Receipt',
         isInflow: false,
         paidTo: payment.policy.insurer,
         fields: [
-          { label: 'Policy', value: payment.policy.planName || payment.policy.type },
+          { label: 'Policy', value: payment.policy.planName || humanise(payment.policy.type) },
+          { label: 'Cover', value: humanise(payment.policy.type) },
           { label: 'Policy holder', value: payment.policy.policyHolder },
           {
             label: 'Covering',
             value: `${dayLabel(payment.periodFrom)} to ${dayLabel(payment.periodTo)}`,
           },
-          { label: 'Paid on', value: dayLabel(payment.paidOn) },
           { label: 'Amount', value: amount },
         ],
       };
@@ -202,16 +252,16 @@ export async function buildReceipt(
       return {
         ...base,
         kind: 'LOAN_PAYMENT',
+        number: displayNumber(voucher.voucherNo, 'LOAN_PAYMENT', date),
         title: 'Loan Payment Receipt',
         isInflow: false,
         paidTo: payment.loan.lenderName,
         fields: [
-          { label: 'Loan', value: `${payment.loan.loanType} — ${payment.loan.lenderName}` },
+          { label: 'Loan', value: humanise(payment.loan.loanType, 'loan') },
           { label: 'Borrower', value: payment.loan.borrowerName },
-          { label: 'Payment type', value: payment.paymentType },
+          { label: 'Towards', value: humanise(payment.paymentType) },
           ...(principal ? [{ label: 'Principal', value: principal }] : []),
           ...(interest ? [{ label: 'Interest', value: interest }] : []),
-          { label: 'Paid on', value: dayLabel(payment.paidOn) },
           { label: 'Amount', value: amount },
         ],
       };
@@ -228,15 +278,15 @@ export async function buildReceipt(
       return {
         ...base,
         kind: 'LOAN_DISBURSEMENT',
+        number: displayNumber(voucher.voucherNo, 'LOAN_DISBURSEMENT', date),
         title: 'Loan Disbursement Advice',
         isInflow: true,
         receivedFrom: loan.lenderName,
         fields: [
-          { label: 'Loan', value: `${loan.loanType} — ${loan.lenderName}` },
+          { label: 'Loan', value: humanise(loan.loanType, 'loan') },
           { label: 'Borrower', value: loan.borrowerName },
           { label: 'Rate of interest', value: `${loan.interestRate.toString()}% p.a.` },
-          { label: 'Tenure', value: `${loan.tenureMonths} months` },
-          { label: 'Disbursed on', value: dayLabel(loan.disbursementDate) },
+          { label: 'Tenure', value: tenureLabel(loan.tenureMonths) },
           { label: 'Amount', value: amount },
         ],
       };
@@ -250,11 +300,11 @@ export async function buildReceipt(
   return {
     ...base,
     kind: 'VOUCHER',
+    number: displayNumber(voucher.voucherNo, 'VOUCHER', date),
     title: inflow ? 'Receipt' : voucher.type === 'PAYMENT' ? 'Payment Voucher' : 'Voucher',
     isInflow: inflow,
     fields: [
-      { label: 'Voucher type', value: voucher.type },
-      { label: 'Date', value: dayLabel(voucher.date) },
+      { label: 'Voucher type', value: humanise(voucher.type) },
       { label: 'Amount', value: amount },
     ],
   };
