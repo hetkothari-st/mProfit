@@ -218,6 +218,33 @@ describe('a grant the client has opened up', () => {
   });
 });
 
+describe('what the professional’s own workspace is told', () => {
+  it('carries the switches on the client list, so it can stop offering dead buttons', async () => {
+    const { client, pro, clientId } = await relationship('edit-listed');
+    const { listClients } = await import('../../src/services/ca/caAccess.service.js');
+
+    const before = await runAsUser(pro.userId, () => listClients(pro.userId));
+    expect(before.find((c) => c.id === clientId)).toMatchObject({
+      canEditBooks: false,
+      canEditTransactions: false,
+      canEditImports: false,
+      canEditFmv: false,
+    });
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, clientId, { edit: { books: true, fmv: true } }),
+    );
+
+    const after = await runAsUser(pro.userId, () => listClients(pro.userId));
+    expect(after.find((c) => c.id === clientId)).toMatchObject({
+      canEditBooks: true,
+      canEditTransactions: false,
+      canEditImports: false,
+      canEditFmv: true,
+    });
+  });
+});
+
 describe('the refusal a professional actually sees', () => {
   it('names the permission and who can grant it', async () => {
     const { pro, clientId } = await relationship('edit-message');

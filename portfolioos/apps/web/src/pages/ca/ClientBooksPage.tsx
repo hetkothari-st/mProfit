@@ -79,6 +79,28 @@ const TABS: { key: Tab; label: string }[] = [
 export function ClientBooksPage() {
   const { clientId = '' } = useParams();
   const qc = useQueryClient();
+
+  const { data: clients } = useQuery({
+    queryKey: ['ca', 'clients'],
+    queryFn: () => caApi.listClients(),
+  });
+  const client = (clients ?? []).find((c) => c.id === clientId) ?? null;
+
+  /**
+   * What this grant lets us change.
+   *
+   * The policies are what enforce this; hiding a control is a courtesy, so
+   * that a professional is not offered a button whose only possible outcome is
+   * a refusal. Defaults to false while the client list is still loading —
+   * briefly missing a button beats briefly offering one that fails.
+   */
+  const may = {
+    books: client?.canEditBooks ?? false,
+    transactions: client?.canEditTransactions ?? false,
+    imports: client?.canEditImports ?? false,
+    fmv: client?.canEditFmv ?? false,
+  };
+  const readOnly = !may.books && !may.transactions && !may.imports && !may.fmv;
   const [tab, setTab] = useState<Tab>('accounts');
   const [accountDialog, setAccountDialog] = useState<{
     open: boolean;
@@ -133,7 +155,7 @@ export function ClientBooksPage() {
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not generate vouchers')),
   });
 
-  const generateButton = (
+  const generateButton = !may.books ? null : (
     <Button
       size="sm"
       variant="outline"
@@ -154,11 +176,6 @@ export function ClientBooksPage() {
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not delete the voucher')),
   });
 
-  const { data: clients } = useQuery({
-    queryKey: ['ca', 'clients'],
-    queryFn: () => caApi.listClients(),
-  });
-  const client = (clients ?? []).find((c) => c.id === clientId) ?? null;
 
   const accounts = useQuery({
     queryKey: ['ca', clientId, 'accounts'],
@@ -236,6 +253,14 @@ export function ClientBooksPage() {
         }
       />
 
+      {readOnly && client && (
+        <div className="mb-4 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-[12.5px] leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground">View only.</span> {client.name} has shared
+          these books without edit access, so you can read everything here and download reports, but
+          not post entries or change transactions. They can widen it from their Account Access page.
+        </div>
+      )}
+
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-border scrollbar-none">
         {TABS.map((t) => (
           <button
@@ -256,11 +281,13 @@ export function ClientBooksPage() {
 
       {tab === 'accounts' && (
         <>
-          <div className="mb-3 flex justify-end">
-            <Button size="sm" onClick={() => setAccountDialog({ open: true, account: null })}>
-              <Plus className="h-4 w-4" /> New account
-            </Button>
-          </div>
+          {may.books && (
+            <div className="mb-3 flex justify-end">
+              <Button size="sm" onClick={() => setAccountDialog({ open: true, account: null })}>
+                <Plus className="h-4 w-4" /> New account
+              </Button>
+            </div>
+          )}
           <LedgerTable
             loading={accounts.isLoading}
             empty={{
@@ -272,7 +299,7 @@ export function ClientBooksPage() {
             rows={(accounts.data ?? []).map((a) => [a.code, a.name, a.type])}
             rowActions={(i) => {
               const a = (accounts.data ?? [])[i];
-              if (!a) return null;
+              if (!a || !may.books) return null;
               return (
                 <>
                   <RowButton
@@ -324,9 +351,11 @@ export function ClientBooksPage() {
               <Sheet className="h-4 w-4" /> Receipts (Excel)
             </Button>
             {generateButton}
-            <Button size="sm" onClick={() => setVoucherOpen(true)}>
-              <Plus className="h-4 w-4" /> Post voucher
-            </Button>
+            {may.books && (
+              <Button size="sm" onClick={() => setVoucherOpen(true)}>
+                <Plus className="h-4 w-4" /> Post voucher
+              </Button>
+            )}
           </div>
           <LedgerTable
             loading={vouchers.isLoading}
@@ -376,14 +405,16 @@ export function ClientBooksPage() {
                   >
                     <Download className="h-3.5 w-3.5" />
                   </RowButton>
-                  <RowButton
-                    label={`Delete voucher ${v.voucherNo}`}
-                    danger
-                    disabled={removeVoucher.isPending}
-                    onClick={() => removeVoucher.mutate(v.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </RowButton>
+                  {may.books && (
+                    <RowButton
+                      label={`Delete voucher ${v.voucherNo}`}
+                      danger
+                      disabled={removeVoucher.isPending}
+                      onClick={() => removeVoucher.mutate(v.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </RowButton>
+                  )}
                 </div>
               );
             }}
@@ -405,18 +436,22 @@ export function ClientBooksPage() {
                 if (file) uploadImport.mutate(file);
               }}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={uploadImport.isPending}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="h-4 w-4" />
-              {uploadImport.isPending ? 'Uploading…' : 'Import file'}
-            </Button>
-            <Button size="sm" onClick={() => setAddTxnOpen(true)}>
-              <Plus className="h-4 w-4" /> Add transaction
-            </Button>
+            {may.imports && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={uploadImport.isPending}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-4 w-4" />
+                {uploadImport.isPending ? 'Uploading…' : 'Import file'}
+              </Button>
+            )}
+            {may.transactions && (
+              <Button size="sm" onClick={() => setAddTxnOpen(true)}>
+                <Plus className="h-4 w-4" /> Add transaction
+              </Button>
+            )}
           </div>
 
           <LedgerTable
@@ -442,7 +477,7 @@ export function ClientBooksPage() {
             ])}
             rowActions={(i) => {
               const t = (transactions.data ?? [])[i];
-              if (!t) return null;
+              if (!t || !may.transactions) return null;
               return (
                 <RowButton
                   label={`Correct ${t.assetName ?? 'transaction'}`}
@@ -488,11 +523,13 @@ export function ClientBooksPage() {
 
       {tab === 'fmv' && (
         <>
-          <div className="mb-3 flex justify-end">
-            <Button size="sm" onClick={() => setFmvDialog({ open: true, row: null })}>
-              <Plus className="h-4 w-4" /> Set a value
-            </Button>
-          </div>
+          {may.fmv && (
+            <div className="mb-3 flex justify-end">
+              <Button size="sm" onClick={() => setFmvDialog({ open: true, row: null })}>
+                <Plus className="h-4 w-4" /> Set a value
+              </Button>
+            </div>
+          )}
           <LedgerTable
             loading={fmv.isLoading}
             empty={{
@@ -508,7 +545,7 @@ export function ClientBooksPage() {
               const f = (fmv.data ?? [])[i];
               // Seeded values are reference data, not this client's own
               // judgement — editing one here would silently fork it.
-              if (!f || f.source !== 'USER') return null;
+              if (!f || f.source !== 'USER' || !may.fmv) return null;
               return (
                 <>
                   <RowButton
