@@ -31,6 +31,16 @@ export type InviteDirection = 'ADVISOR_TO_CLIENT' | 'CLIENT_TO_ADVISOR';
 
 export interface CaInviteEmailInput {
   direction: InviteDirection;
+  /**
+   * Absolute URL of the brand mark, served by the web app.
+   *
+   * Absolute because a mail client has no origin to resolve against, and a
+   * remote image rather than an inline one because Gmail strips `data:` URIs
+   * in HTML mail. The wordmark stays as live text beside it, so the header
+   * still reads correctly for the many people whose client blocks images by
+   * default.
+   */
+  logoUrl?: string;
   /** The client, as the advisor entered their name. */
   recipientName: string;
   /** The advisor's display name, and the address replies go to. */
@@ -116,6 +126,12 @@ export function renderCaInviteEmail(input: CaInviteEmailInput): RenderedInviteEm
       ? `Sent to ${escapeHtml(input.recipientName)} by ${escapeHtml(input.advisorName)} (${escapeHtml(input.advisorEmail)}). If you weren't expecting this, you can ignore it — accepting is what creates the access, and they can withdraw it at any time.`
       : `Sent to ${escapeHtml(input.recipientName)} by ${escapeHtml(input.advisorName)} (${escapeHtml(input.advisorEmail)}). If you weren't expecting this, you can ignore it — nothing is shared until you accept, and you can withdraw access afterwards from Settings &rsaquo; Account Access.`;
 
+  // Fixed pixel dimensions and no CSS sizing: Outlook ignores the latter and
+  // would otherwise draw the mark at its natural size.
+  const logoCell = input.logoUrl
+    ? `<td style="padding-right:10px;" valign="middle"><img src="${escapeHtml(input.logoUrl)}" width="28" height="28" alt="" style="display:block;border:0;border-radius:6px;"></td>`
+    : '';
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -128,7 +144,11 @@ export function renderCaInviteEmail(input: CaInviteEmailInput): RenderedInviteEm
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
 <tr><td align="center" style="padding:32px 16px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background-color:#ffffff;border-radius:12px;">
-<tr><td style="padding:32px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:700;color:#18181b;">EveryPaisa</td></tr>
+<tr><td style="padding:32px 32px 0 32px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+${logoCell}<td style="font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:700;color:#18181b;">EveryPaisa</td>
+</tr></table>
+</td></tr>
 <tr><td style="padding:20px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:21px;font-weight:700;line-height:28px;color:#18181b;">${escapeHtml(heading)}</td></tr>
 <tr><td style="padding:18px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#3f3f46;">${message}</td></tr>
 <tr><td align="center" style="padding:28px 32px 8px 32px;">

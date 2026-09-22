@@ -186,11 +186,22 @@ export async function buildInviteEmail(
     client.initiatedBy === 'CLIENT' ? 'CLIENT_TO_ADVISOR' : 'ADVISOR_TO_CLIENT';
   const { subject, message } = applyEdits(edits, direction, advisor.name, client.name);
 
-  const acceptUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/ca/invitations/${client.inviteToken}/accept`;
+
+  // Two directions, two pages, and they are not interchangeable: each posts
+  // to its own endpoint and checks a different side of the row. A
+  // client-initiated invitation sent to the CA-side page fails at accept with
+  // "invitation not found", which reads as a broken link rather than the wrong
+  // one.
+  const base = env.FRONTEND_URL.replace(/\/$/, '');
+  const acceptUrl =
+    direction === 'CLIENT_TO_ADVISOR'
+      ? `${base}/professional-invitations/${client.inviteToken}`
+      : `${base}/ca/invitations/${client.inviteToken}/accept`;
   const expiresOn = prettyDate(client.inviteExpiresAt ?? new Date());
 
   const { html } = renderCaInviteEmail({
     direction,
+    logoUrl: `${base}/brand/everypaisa-mark.png`,
     recipientName: client.name,
     advisorName: advisor.name,
     advisorEmail: advisor.email,
