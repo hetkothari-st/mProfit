@@ -31,6 +31,7 @@
 
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../../lib/prisma.js';
+import { runAsSystem } from '../../../lib/requestContext.js';
 import { assessEligibility } from './eligibility.js';
 import { bucketForScheme } from './categoryMap.js';
 import { ADVISOR_ASSET_BUCKETS, type AdvisorAssetBucketValue } from '../types.js';
@@ -72,6 +73,8 @@ export interface FundDataCoverage {
   missingAum: MissingAumScheme[];
   /** Per-bucket eligible counts, for the minimum-candidate check. */
   buckets: BucketDepth[];
+  /** Every model portfolio and the buckets it allocates to, logged at boot. */
+  modelPortfolios: ModelPortfolioBuckets[];
 }
 
 /**
@@ -228,7 +231,8 @@ export async function fundDataCoverage(
   // Which buckets the model portfolios actually allocate to. A bucket no
   // portfolio uses needs no candidates, and failing a deployment over an
   // empty one would be noise.
-  const usedBuckets = await modelPortfolioBuckets();
+  const portfolios = await modelPortfolioBuckets();
+  const usedBuckets = await bucketsInUse(portfolios);
 
   let terDenominator = 0;
   let terCovered = 0;
@@ -289,6 +293,7 @@ export async function fundDataCoverage(
       eligible: perBucket.get(b) ?? 0,
       used: usedBuckets.has(b),
     })),
+    modelPortfolios: portfolios,
   };
 }
 
@@ -300,37 +305,77 @@ function trackRecordYearsOf(c: FundCandidate): number | null {
   return Math.round((ms / 86_400_000 / 365.25) * 10) / 10;
 }
 
+/** One model portfolio, and the buckets it actually allocates to. */
+export interface ModelPortfolioBuckets {
+  id: string;
+  name: string;
+  riskCategory: string;
+  /** Bucket → target percent, positive weights only. */
+  weights: Array<{ bucket: AdvisorAssetBucketValue; targetPct: number }>;
+}
+
 /**
- * Every bucket any active ModelPortfolio currently allocates to.
+ * Every model portfolio with the buckets it allocates to.
+ *
+ * ── Why runAsSystem ──────────────────────────────────────────────
+ * `ModelPortfolio` is user-scoped and carries an RLS policy of
+ * `userId = app_current_user_id()`. This asks a FIRM-WIDE question — which
+ * buckets does any portfolio use — at boot, when nobody is logged in.
+ *
+ * Without a context, `app_current_user_id()` is NULL, the policy matches
+ * nothing, and the query returns zero rows. Not an error: a silent, empty,
+ * entirely plausible answer.
+ *
+ * That is exactly what happened in production. Four active model portfolios
+ * with correct array-shaped weights across five buckets, and the release
+ * gate's per-bucket minimum-candidate check reading an empty set and passing
+ * unconditionally — the one check whose whole purpose is to refuse. Found by
+ * querying the same table as the app role (0 rows) and as the owner (4 rows).
  *
  * Target weights are versioned and immutable, so this reads the NEWEST
  * version of each active portfolio: a bucket dropped in version 3 is not in
- * use just because version 2 named it. A zero weight is not use either.
+ * use because version 2 named it. A zero weight is not use either.
  */
-export async function modelPortfolioBuckets(): Promise<Set<AdvisorAssetBucketValue>> {
-  const portfolios = await prisma.modelPortfolio.findMany({
-    where: { isActive: true },
-    select: {
-      versions: {
-        orderBy: { version: 'desc' },
-        take: 1,
-        select: { targetWeights: true },
+export async function modelPortfolioBuckets(): Promise<ModelPortfolioBuckets[]> {
+  const portfolios = await runAsSystem(() =>
+    prisma.modelPortfolio.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        riskCategory: true,
+        versions: {
+          orderBy: { version: 'desc' },
+          take: 1,
+          select: { targetWeights: true },
+        },
       },
-    },
-  });
+    }),
+  );
 
-  const used = new Set<AdvisorAssetBucketValue>();
-  for (const p of portfolios) {
-    const weights = p.versions[0]?.targetWeights;
-    if (!Array.isArray(weights)) continue;
-    for (const entry of weights as Array<{ bucket?: unknown; targetPct?: unknown }>) {
-      const bucket = typeof entry?.bucket === 'string' ? entry.bucket : null;
-      const pct = typeof entry?.targetPct === 'number' ? entry.targetPct : Number.NaN;
-      if (!bucket || !Number.isFinite(pct) || pct <= 0) continue;
-      if ((ADVISOR_ASSET_BUCKETS as readonly string[]).includes(bucket)) {
-        used.add(bucket as AdvisorAssetBucketValue);
+  return portfolios.map((p) => {
+    const raw = p.versions[0]?.targetWeights;
+    const weights: ModelPortfolioBuckets['weights'] = [];
+    if (Array.isArray(raw)) {
+      for (const entry of raw as Array<{ bucket?: unknown; targetPct?: unknown }>) {
+        const bucket = typeof entry?.bucket === 'string' ? entry.bucket : null;
+        const pct = Number(entry?.targetPct);
+        if (!bucket || !Number.isFinite(pct) || pct <= 0) continue;
+        if ((ADVISOR_ASSET_BUCKETS as readonly string[]).includes(bucket)) {
+          weights.push({ bucket: bucket as AdvisorAssetBucketValue, targetPct: pct });
+        }
       }
     }
-  }
+    return { id: p.id, name: p.name, riskCategory: String(p.riskCategory), weights };
+  });
+}
+
+/** The set of buckets any active model portfolio allocates to. */
+export async function bucketsInUse(
+  portfolios?: ModelPortfolioBuckets[],
+): Promise<Set<AdvisorAssetBucketValue>> {
+  const list = portfolios ?? (await modelPortfolioBuckets());
+  const used = new Set<AdvisorAssetBucketValue>();
+  for (const p of list) for (const w of p.weights) used.add(w.bucket);
   return used;
 }

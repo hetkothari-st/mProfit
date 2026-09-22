@@ -6,20 +6,24 @@
  * Writes through Prisma with the DIRECT_URL role, so it is a developer tool,
  * not an app path. Never point this at a real database.
  */
-import { PrismaClient, type AssetClass, type TransactionType } from '@prisma/client';
+import type { AssetClass, TransactionType } from '@prisma/client';
+import { opsPrisma } from '../src/lib/opsDatabase.js';
 import { Decimal } from 'decimal.js';
 import { randomUUID } from 'node:crypto';
 import { recomputeForPortfolio } from '../src/services/holdingsProjection.js';
 import { computeAssetKey } from '../src/services/assetKey.js';
-import { runAsUser } from '../src/lib/requestContext.js';
+import { runAsSystem, runAsUser } from '../src/lib/requestContext.js';
 
-const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
-if (!url || !/localhost|127\.0\.0\.1/.test(url)) {
-  throw new Error('Refusing to run: DIRECT_URL must point at a local database.');
+// The APP role by default, through the app's OWN client — see lib/opsDatabase.
+// A client constructed here would have no RLS context plumbing, so runAsUser
+// would wrap it and change nothing.
+const { prisma, choice } = opsPrisma();
+if (!/localhost|127\.0\.0\.1/.test(choice.host)) {
+  throw new Error('Refusing to run: this writes demo data and must point at a local database.');
 }
-const prisma = new PrismaClient({ datasources: { db: { url } } });
 
-const DEMO_EMAIL = 'demo@everypaisa.in';
+const DEMO_EMAIL = process.env.DEMO_EMAIL ?? 'demo@everypaisa.in';
+const PORTFOLIO_NAME = 'Long Term';
 
 function day(offsetDays: number): Date {
   const d = new Date();
@@ -41,10 +45,26 @@ interface Row {
 }
 
 async function main() {
-  const user = await prisma.user.findUniqueOrThrow({ where: { email: DEMO_EMAIL } });
-  const portfolio = await prisma.portfolio.findFirstOrThrow({
-    where: { userId: user.id, name: 'Long Term' },
-  });
+  // The user lookup is a system question — nobody is logged in yet.
+  const user = await runAsSystem(() =>
+    prisma.user.findUniqueOrThrow({ where: { email: DEMO_EMAIL } }),
+  );
+  // Everything after this writes THIS user's rows, so it runs as them. The
+  // script used to connect as the database owner, where RLS did not apply and
+  // none of this was needed — which is precisely why it was worth changing.
+  await runAsUser(user.id, () => seedFor(user));
+}
+
+async function seedFor(user: { id: string }) {
+
+  // A fresh account has no portfolio, and `findFirstOrThrow` turned that into
+  // "No Portfolio found" — which reads like the user is wrong rather than
+  // like the script should have made one. It makes one.
+  const portfolio =
+    (await prisma.portfolio.findFirst({ where: { userId: user.id, name: PORTFOLIO_NAME } })) ??
+    (await prisma.portfolio.create({
+      data: { userId: user.id, name: PORTFOLIO_NAME, isDefault: true, currency: 'INR' },
+    }));
 
   await prisma.transaction.deleteMany({ where: { portfolioId: portfolio.id } });
 
@@ -95,51 +115,36 @@ async function main() {
     });
   }
 
-  // Two sales, so there are realised gains this financial year.
-  rows.push({
-    type: 'SELL',
-    assetClass: 'EQUITY',
-    assetName: bySymbol.get('RELIANCE')!.name,
-    symbol: 'RELIANCE',
-    stockId: bySymbol.get('RELIANCE')!.id,
-    qty: 20,
-    price: 2980,
-    daysAgo: 70,
-  });
-  rows.push({
-    type: 'SELL',
-    assetClass: 'EQUITY',
-    assetName: bySymbol.get('ITC')!.name,
-    symbol: 'ITC',
-    stockId: bySymbol.get('ITC')!.id,
-    qty: 100,
-    price: 455,
-    daysAgo: 30,
-  });
+  // Two sales, so there are realised gains this financial year — and a short
+  // term trade big enough to cross the advance-tax threshold, otherwise the
+  // instalment schedule never renders and cannot be checked.
+  //
+  // Every one of these depends on a StockMaster row that a fresh database may
+  // not have: the universe sync populates it, and a developer who has not run
+  // it yet has an empty table. The original code asserted non-null here
+  // (`bySymbol.get('RELIANCE')!.name`) and died with "Cannot read properties
+  // of undefined (reading 'name')", which says nothing about the real cause.
+  // A missing stock now skips its rows and says so at the end.
+  const skipped: string[] = [];
+  const stockRow = (
+    symbol: string,
+    type: TransactionType,
+    qty: number,
+    price: number,
+    daysAgo: number,
+  ): void => {
+    const s = bySymbol.get(symbol);
+    if (!s) {
+      if (!skipped.includes(symbol)) skipped.push(symbol);
+      return;
+    }
+    rows.push({ type, assetClass: 'EQUITY', assetName: s.name, symbol, stockId: s.id, qty, price, daysAgo });
+  };
 
-  // A short-term trade booked in this financial year, big enough to cross the
-  // ₹10,000 advance-tax threshold — otherwise the instalment schedule never
-  // renders and cannot be checked.
-  rows.push({
-    type: 'BUY',
-    assetClass: 'EQUITY',
-    assetName: bySymbol.get('TCS')!.name,
-    symbol: 'TCS',
-    stockId: bySymbol.get('TCS')!.id,
-    qty: 300,
-    price: 3200,
-    daysAgo: 150,
-  });
-  rows.push({
-    type: 'SELL',
-    assetClass: 'EQUITY',
-    assetName: bySymbol.get('TCS')!.name,
-    symbol: 'TCS',
-    stockId: bySymbol.get('TCS')!.id,
-    qty: 300,
-    price: 4150,
-    daysAgo: 100,
-  });
+  stockRow('RELIANCE', 'SELL', 20, 2980, 70);
+  stockRow('ITC', 'SELL', 100, 455, 30);
+  stockRow('TCS', 'BUY', 300, 3200, 150);
+  stockRow('TCS', 'SELL', 300, 4150, 100);
 
   // A fixed deposit, to prove deposits stay out of the harvest candidates.
   rows.push({
@@ -203,12 +208,16 @@ async function main() {
     });
   }
 
-  // The projection service reads through the RLS-scoped app client, which
-  // sees nothing without a user context.
-  await runAsUser(user.id, () => recomputeForPortfolio(portfolio.id));
+  await recomputeForPortfolio(portfolio.id);
 
   const holdings = await prisma.holdingProjection.count({ where: { portfolioId: portfolio.id } });
   console.log(`✓ ${rows.length} transactions, ${holdings} holdings on "${portfolio.name}"`);
+  if (skipped.length > 0) {
+    console.log(
+      `  (skipped equity rows for ${skipped.join(', ')} — no StockMaster row. ` +
+        'Run the NSE/BSE universe sync to populate it.)',
+    );
+  }
 }
 
 main()

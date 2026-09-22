@@ -683,9 +683,15 @@ model MFNav {
   fund   MutualFundMaster @relation(fields: [fundId], references: [id], onDelete: Cascade)
   date   DateTime         @db.Date
   nav    Decimal          @db.Decimal(18, 4)
+  /// Which historical backfill inserted this row, so a reversal is an exact
+  /// delete by batch rather than a date range that would also take the
+  /// nightly sync's rows. Null on everything the nightly sync wrote, and on
+  /// any row the backfill found already present.
+  backfillBatchId String?
 
   @@unique([fundId, date])
   @@index([fundId])
+  @@index([backfillBatchId])
 }
 
 // ─── CORPORATE ACTIONS ───────────────────────────────────────────

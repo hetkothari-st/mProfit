@@ -26,14 +26,12 @@
 
 import 'dotenv/config';
 import { writeFileSync } from 'node:fs';
-import { PrismaClient } from '@prisma/client';
+import { opsPrisma } from '../lib/opsDatabase.js';
 import { latestTerByScheme, parseTerWorkbook } from '../priceFeeds/amfiTer.parse.js';
 import { joinTerToSchemes, type JoinScheme } from '../priceFeeds/terJoin.js';
 import { terMonthParam } from '../priceFeeds/amfiCostAndSize.service.js';
 
-const prisma = new PrismaClient({
-  datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '' } },
-});
+const { prisma: prisma, disconnect } = opsPrisma();
 
 const AMFI_BASE = 'https://www.amfiindia.com';
 
@@ -141,4 +139,4 @@ main()
     process.exitCode = 1;
     process.stderr.write(`${err instanceof Error ? err.stack : String(err)}\n`);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => disconnect());
