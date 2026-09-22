@@ -5,6 +5,8 @@ import { Header } from './Header';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { MobileTabBar } from './MobileTabBar';
 import { GmailAutoConnectBanner } from './GmailAutoConnectBanner';
+import { ActingAsBanner } from '@/components/family/ActingAsBanner';
+import { useActingAsStore } from '@/stores/actingAs.store';
 import { ScanProvider } from '@/context/ScanContext';
 import { usePrivacyStore } from '@/stores/privacy.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
@@ -23,6 +25,8 @@ export function AppShell() {
   // rows survived the remount. Cache correctness comes from the scope-aware
   // queryKeyHashFn in main.tsx; this key only handles view state.
   const viewingAsFamilyId = useFamilyScopeStore((s) => s.viewingAsFamilyId);
+  // Same reason, for switching into a managed family member's account.
+  const actingId = useActingAsStore((s) => s.profile?.id ?? null);
   useTokenRefresh();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -40,10 +44,11 @@ export function AppShell() {
         <MobileNavDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <Header onOpenMenu={() => setDrawerOpen(true)} />
+          <ActingAsBanner />
           <GmailAutoConnectBanner />
           <main className="flex-1 overflow-y-auto">
             <div
-              key={viewingAsFamilyId ?? '__personal__'}
+              key={`${viewingAsFamilyId ?? '__personal__'}:${actingId ?? '__self__'}`}
               className="mx-auto w-full max-w-[1480px] px-6 py-7 lg:px-10 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] md:pb-7"
             >
               <Outlet />

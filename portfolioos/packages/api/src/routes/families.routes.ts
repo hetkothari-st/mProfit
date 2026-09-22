@@ -33,6 +33,8 @@ import {
   updateMemberPermissions,
   getFamilyTreeLayout,
   updateFamilyTreeLayout,
+  addManagedMember,
+  setManagedMemberManager,
 } from '../services/family.service.js';
 import { NON_AC_CATEGORIES } from '../services/familyScope.service.js';
 
@@ -86,7 +88,16 @@ const permissionsSchema = z.object({
   role: familyRoleEnum.optional(),
   visibleAssetClasses: z.array(assetClassEnum).optional(),
   visibleCategories: z.array(categoryEnum).optional(),
+  relation: z.string().max(40).nullable().optional(),
 });
+
+const managedMemberSchema = z.object({
+  name: z.string().min(1).max(80),
+  relation: z.string().max(40).optional(),
+  managerId: z.string().min(1).optional(),
+});
+
+const managerSchema = z.object({ managerId: z.string().min(1) });
 
 const familyPortfolioSchema = z.object({
   name: z.string().min(1).max(100),
@@ -175,6 +186,31 @@ familiesRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const data = inviteSchema.parse(req.body);
     ok(res, await inviteMember(callerId(req), req.params.familyId!, data));
+  }),
+);
+
+// Someone with no email or login, kept by a family member. Takes a seat like
+// an invite, and past the included seats returns the same seat payment,
+// completed through `/members/invite/verify-payment`.
+familiesRouter.post(
+  '/:familyId/members/managed',
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = managedMemberSchema.parse(req.body);
+    ok(res, await addManagedMember(callerId(req), req.params.familyId!, data));
+  }),
+);
+
+familiesRouter.patch(
+  '/:familyId/members/:memberUserId/manager',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { managerId } = managerSchema.parse(req.body);
+    await setManagedMemberManager(
+      callerId(req),
+      req.params.familyId!,
+      req.params.memberUserId!,
+      managerId,
+    );
+    noContent(res);
   }),
 );
 
@@ -271,6 +307,7 @@ const layoutSchema = z.object({
       }),
     )
     .optional(),
+  parents: z.record(z.string(), z.string().nullable()).optional(),
 });
 
 familiesRouter.get(

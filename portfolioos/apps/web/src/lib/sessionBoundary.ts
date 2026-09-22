@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
+import { useActingAsStore } from '@/stores/actingAs.store';
 
 /**
  * Nothing loaded for one account may ever be shown to another.
@@ -21,13 +22,33 @@ import { useFamilyScopeStore } from '@/stores/familyScope.store';
  * Returns the unsubscribe function (for tests).
  */
 export function bindSessionBoundary(queryClient: QueryClient): () => void {
-  return useAuthStore.subscribe((next, prev) => {
+  const offAuth = useAuthStore.subscribe((next, prev) => {
     const signedOut = Boolean(prev.accessToken) && !next.accessToken;
     const switchedAccount =
       Boolean(prev.user) && Boolean(next.user) && prev.user!.id !== next.user!.id;
+    // A profile entered by someone else (an old tab, a shared machine) is
+    // never carried into this session.
+    const acting = useActingAsStore.getState().profile;
+    const foreignActing = Boolean(acting && next.user && acting.managerId !== next.user.id);
+    if (foreignActing) useActingAsStore.getState().leave();
     if (!signedOut && !switchedAccount) return;
 
     useFamilyScopeStore.getState().clear();
+    useActingAsStore.getState().leave();
     queryClient.clear();
   });
+
+  // Entering or leaving a managed profile is a change of whose data every
+  // screen shows — the same boundary as an account switch, so the same wipe.
+  // The family view is personal to the real account and ends with it.
+  const offActing = useActingAsStore.subscribe((next, prev) => {
+    if (next.profile?.id === prev.profile?.id) return;
+    useFamilyScopeStore.getState().clear();
+    queryClient.clear();
+  });
+
+  return () => {
+    offAuth();
+    offActing();
+  };
 }

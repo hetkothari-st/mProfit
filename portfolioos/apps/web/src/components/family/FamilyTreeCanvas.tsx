@@ -13,6 +13,8 @@ import {
   Save,
   Loader2,
   X,
+  ListTree,
+  UserCog,
 } from 'lucide-react';
 import {
   familiesApi,
@@ -58,12 +60,25 @@ interface TreeNode {
   children: TreeNode[];
 }
 
-function buildTree(members: FamilyMemberRow[]): TreeNode[] {
+/** child userId -> parent userId, or null for someone at the top. */
+type Parents = Record<string, string | null>;
+
+/**
+ * Who sits above `m`. The family's own arrangement wins; without one, the
+ * person who invited them. The fallback is why whoever set the family up
+ * used to be stuck at the top: a son keeping the account for his father is
+ * not the head of the family.
+ */
+function parentOf(m: FamilyMemberRow, parents: Parents): string | null {
+  return m.userId in parents ? (parents[m.userId] ?? null) : m.invitedById;
+}
+
+function buildTree(members: FamilyMemberRow[], parents: Parents): TreeNode[] {
   const byUserId = new Map<string, TreeNode>();
   for (const m of members) byUserId.set(m.userId, { member: m, children: [] });
   const roots: TreeNode[] = [];
   for (const node of byUserId.values()) {
-    const parentId = node.member.invitedById;
+    const parentId = parentOf(node.member, parents);
     if (parentId && byUserId.has(parentId)) {
       byUserId.get(parentId)!.children.push(node);
     } else {
@@ -85,9 +100,12 @@ function buildTree(members: FamilyMemberRow[]): TreeNode[] {
 }
 
 /** Compute default (auto) positions for members using a tidy tree layout. */
-function autoLayout(members: FamilyMemberRow[]): Map<string, { x: number; y: number }> {
+function autoLayout(
+  members: FamilyMemberRow[],
+  parents: Parents,
+): Map<string, { x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>();
-  const tree = buildTree(members);
+  const tree = buildTree(members, parents);
   // Post-order to size each subtree, then assign x centered on children.
   const widths = new Map<string, number>();
   function measure(node: TreeNode): number {
@@ -151,6 +169,27 @@ interface Props {
   isOwner: boolean;
   onEdit: (m: FamilyMemberRow) => void;
   onRevoke: (m: FamilyMemberRow) => void;
+  /** Open a managed member's account; offered only to their manager. */
+  onManage?: (m: FamilyMemberRow) => void;
+}
+
+/** True if `ancestor` sits somewhere above `id` under `parents`. */
+function isAbove(
+  ancestor: string,
+  id: string,
+  members: FamilyMemberRow[],
+  parents: Parents,
+): boolean {
+  const byId = new Map(members.map((m) => [m.userId, m]));
+  const seen = new Set<string>();
+  let at: string | null = id;
+  while (at && !seen.has(at)) {
+    seen.add(at);
+    const m = byId.get(at);
+    at = m ? parentOf(m, parents) : null;
+    if (at === ancestor) return true;
+  }
+  return false;
 }
 
 export function FamilyTreeCanvas({
@@ -160,6 +199,7 @@ export function FamilyTreeCanvas({
   isOwner,
   onEdit,
   onRevoke,
+  onManage,
 }: Props) {
   const queryClient = useQueryClient();
 
@@ -170,10 +210,11 @@ export function FamilyTreeCanvas({
   });
 
   const saved = layoutQuery.data;
+  const parents = useMemo<Parents>(() => saved?.parents ?? {}, [saved]);
 
   // Local editable positions. Seeded from saved layout, falling back
   // to auto layout for any unpositioned member.
-  const auto = useMemo(() => autoLayout(members), [members]);
+  const auto = useMemo(() => autoLayout(members, parents), [members, parents]);
   const [positions, setPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
   const [customLinks, setCustomLinks] = useState<FamilyTreeLink[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -211,8 +252,43 @@ export function FamilyTreeCanvas({
       x: p.x,
       y: p.y,
     }));
-    saveMutation.mutate({ nodes, links: customLinks });
-  }, [positions, customLinks, saveMutation]);
+    saveMutation.mutate({ nodes, links: customLinks, parents });
+  }, [positions, customLinks, parents, saveMutation]);
+
+  /**
+   * Re-shape the tree and save at once. Saved card positions are dropped so
+   * the new shape lays itself out; a drag made for the old shape would put
+   * people in the wrong generation.
+   */
+  const arrangeMutation = useMutation({
+    mutationFn: (next: Parents) =>
+      familiesApi.saveTreeLayout(familyId, { nodes: [], links: customLinks, parents: next }),
+    onSuccess: () => {
+      toast.success('Tree rearranged');
+      queryClient.invalidateQueries({ queryKey: ['family-tree-layout', familyId] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Could not rearrange the tree')),
+  });
+
+  /** `id` goes to the top; everyone currently at the top moves under them. */
+  const makeHead = (id: string) => {
+    const next: Parents = { ...parents, [id]: null };
+    for (const m of members) {
+      if (m.userId === id) continue;
+      const p = parentOf(m, next);
+      // At the top, or under someone who is no longer on the tree.
+      if (p === null || !members.some((x) => x.userId === p)) next[m.userId] = id;
+    }
+    arrangeMutation.mutate(next);
+  };
+
+  const placeUnder = (id: string, parentId: string) => {
+    if (isAbove(id, parentId, members, parents)) {
+      toast.error('That would put someone under their own descendant.');
+      return;
+    }
+    arrangeMutation.mutate({ ...parents, [id]: parentId });
+  };
 
   const resetLayout = () => {
     const next = new Map<string, { x: number; y: number }>();
@@ -296,12 +372,13 @@ export function FamilyTreeCanvas({
     }
     const auto: Array<{ from: string; to: string; custom: false; label: null }> = [];
     for (const m of members) {
-      if (m.invitedById && memberById.has(m.invitedById)) {
-        auto.push({ from: m.invitedById, to: m.userId, custom: false, label: null });
+      const p = parentOf(m, parents);
+      if (p && memberById.has(p)) {
+        auto.push({ from: p, to: m.userId, custom: false, label: null });
       }
     }
     return auto;
-  }, [customLinks, members, memberById]);
+  }, [customLinks, members, memberById, parents]);
 
   // ── Canvas size (grows with content) ──────────────────────────────
   const canvasSize = useMemo(() => {
@@ -505,6 +582,24 @@ export function FamilyTreeCanvas({
                 onClick={() => handleNodeClick(m.userId)}
                 onEdit={() => onEdit(m)}
                 onRevoke={() => onRevoke(m)}
+                canManage={Boolean(onManage) && m.managed && m.managedBy?.id === currentUserId}
+                onManage={() => onManage?.(m)}
+                arrange={
+                  isOwner && m.status === 'ACTIVE'
+                    ? {
+                        isHead: parentOf(m, parents) === null,
+                        candidates: members.filter(
+                          (o) =>
+                            o.userId !== m.userId &&
+                            o.status === 'ACTIVE' &&
+                            !isAbove(m.userId, o.userId, members, parents),
+                        ),
+                        busy: arrangeMutation.isPending,
+                        onMakeHead: () => makeHead(m.userId),
+                        onPlaceUnder: (parentId: string) => placeUnder(m.userId, parentId),
+                      }
+                    : undefined
+                }
               />
             );
           })}
@@ -552,6 +647,9 @@ function DraggableNode({
   onClick,
   onEdit,
   onRevoke,
+  canManage,
+  onManage,
+  arrange,
 }: {
   member: FamilyMemberRow;
   x: number;
@@ -564,8 +662,18 @@ function DraggableNode({
   onClick: () => void;
   onEdit: () => void;
   onRevoke: () => void;
+  canManage: boolean;
+  onManage: () => void;
+  arrange?: {
+    isHead: boolean;
+    candidates: FamilyMemberRow[];
+    busy: boolean;
+    onMakeHead: () => void;
+    onPlaceUnder: (parentId: string) => void;
+  };
 }) {
   const [pos, setPos] = useState({ x, y });
+  const [arranging, setArranging] = useState(false);
   const [dragging, setDragging] = useState(false);
   const startRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const movedRef = useRef(false);
@@ -669,10 +777,16 @@ function DraggableNode({
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-muted-foreground truncate">{member.email}</p>
+            <p className="text-[11px] text-muted-foreground truncate">
+              {member.managed
+                ? `${member.relation ? `${member.relation} · ` : ''}managed by ${member.managedBy?.name ?? 'nobody'}`
+                : member.relation
+                  ? `${member.relation} · ${member.email ?? ''}`
+                  : member.email}
+            </p>
             <div className="mt-0.5 flex items-center gap-1.5">
               <span className="text-[9px] uppercase tracking-kerned text-muted-foreground">
-                {member.role.toLowerCase()}
+                {member.managed ? 'managed' : member.role.toLowerCase()}
               </span>
               {pending && (
                 <span className="text-[9px] uppercase tracking-kerned text-amber-600 dark:text-amber-400">
@@ -688,37 +802,132 @@ function DraggableNode({
           </div>
         </div>
 
-        {isOwnerViewer && !revoked && !isSelf && (
-          <div className="flex items-center gap-1 border-t border-border/50 px-2 py-1">
+        {/* One row of actions, whatever mix applies: open (their manager),
+            place (owners), edit and remove (owners, not on yourself). Two
+            rows used to spill out of the card. */}
+        {!revoked && (canManage || arrange || (isOwnerViewer && !isSelf)) && (
+          <div className="flex items-center gap-0.5 border-t border-border/50 px-1.5 py-1">
+            {canManage && (
+              <CardAction
+                label="Open"
+                title={`Open ${member.name}’s account`}
+                icon={UserCog}
+                tone="accent"
+                onClick={onManage}
+              />
+            )}
+            {arrange && (
+              <CardAction
+                label="Place"
+                title="Change where they sit in the tree"
+                icon={ListTree}
+                expanded={arranging}
+                onClick={() => setArranging((v) => !v)}
+              />
+            )}
+            {isOwnerViewer && !isSelf && (
+              <>
+                <CardAction
+                  label="Edit"
+                  title={member.managed ? 'Edit relation and manager' : 'Edit permissions'}
+                  icon={Settings2}
+                  onClick={onEdit}
+                />
+                <CardAction
+                  label={member.managed ? 'Remove' : 'Revoke'}
+                  title={member.managed ? 'Remove from the family' : 'Revoke access'}
+                  icon={UserX}
+                  tone="danger"
+                  onClick={onRevoke}
+                />
+              </>
+            )}
+          </div>
+        )}
+
+        {arranging && arrange && (
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute left-0 right-0 top-full z-20 mt-1 rounded-lg border border-border bg-popover p-1 shadow-lg"
+          >
             <button
               type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit();
+              disabled={arrange.isHead || arrange.busy}
+              onClick={() => {
+                setArranging(false);
+                arrange.onMakeHead();
               }}
-              className="flex-1 flex items-center justify-center gap-1 text-[11px] py-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-              title="Edit permissions"
+              className="w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-muted disabled:opacity-50"
             >
-              <Settings2 className="h-3 w-3" strokeWidth={1.9} />
-              Edit
+              {arrange.isHead ? 'Already at the top' : 'Make head of the tree'}
             </button>
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRevoke();
-              }}
-              className="flex-1 flex items-center justify-center gap-1 text-[11px] py-0.5 rounded hover:bg-muted text-muted-foreground hover:text-negative"
-              title="Revoke access"
-            >
-              <UserX className="h-3 w-3" strokeWidth={1.9} />
-              Revoke
-            </button>
+            {arrange.candidates.length > 0 && (
+              <>
+                <div className="px-2 pb-0.5 pt-1.5 text-[10.5px] text-muted-foreground">
+                  Place under
+                </div>
+                <div className="max-h-40 overflow-y-auto">
+                  {arrange.candidates.map((c) => (
+                    <button
+                      key={c.userId}
+                      type="button"
+                      disabled={arrange.busy}
+                      onClick={() => {
+                        setArranging(false);
+                        arrange.onPlaceUnder(c.userId);
+                      }}
+                      className="w-full truncate rounded px-2 py-1.5 text-left text-[12px] hover:bg-muted"
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+/** A compact action in a tree card's footer. */
+function CardAction({
+  label,
+  title,
+  icon: Icon,
+  onClick,
+  tone,
+  expanded,
+}: {
+  label: string;
+  title: string;
+  icon: typeof Crown;
+  onClick: () => void;
+  tone?: 'accent' | 'danger';
+  expanded?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-expanded={expanded}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`flex-1 flex items-center justify-center gap-1 rounded py-0.5 text-[11px] hover:bg-muted ${
+        tone === 'accent'
+          ? 'text-accent-ink'
+          : tone === 'danger'
+            ? 'text-muted-foreground hover:text-negative'
+            : 'text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      <Icon className="h-3 w-3" strokeWidth={1.9} />
+      {label}
+    </button>
   );
 }

@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
+import { NotWhileManaging } from './components/family/NotWhileManaging';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
@@ -103,7 +104,9 @@ export function App() {
         path="/onboarding"
         element={
           <ProtectedRoute>
-            <OnboardingWizard onComplete={() => localStorage.setItem('onboarding_v2_done', '1')} />
+            <NotWhileManaging to="/portfolios">
+              <OnboardingWizard onComplete={() => localStorage.setItem('onboarding_v2_done', '1')} />
+            </NotWhileManaging>
           </ProtectedRoute>
         }
       />
