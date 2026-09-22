@@ -25,6 +25,7 @@ import { startAlertJobs } from './jobs/alertJobs.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startFundScoringJob } from './jobs/fundScoring.job.js';
 import { assertNamedFundReleaseGate } from './services/advisor/fundRanking/releaseGate.js';
+import { evaluateDbRole, readDbRoleFacts } from './lib/dbRoleGuard.js';
 import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
@@ -136,6 +137,26 @@ app.use(notFoundHandler);
 // It is a no-op when Sentry is not initialised (no SENTRY_DSN).
 Sentry.setupExpressErrorHandler(app);
 app.use(errorHandler);
+
+// Checked before serving: with a superuser/BYPASSRLS connection every RLS
+// policy is off and the app would still look healthy. Fatal in production,
+// a loud warning elsewhere (local Docker commonly connects as `postgres`).
+try {
+  const verdict = evaluateDbRole(await readDbRoleFacts(), env.NODE_ENV);
+  if (!verdict.ok) {
+    if (verdict.fatal) {
+      logger.fatal(`Refusing to start: ${verdict.message}`);
+      process.exit(1);
+    }
+    logger.warn(verdict.message);
+  }
+} catch (err) {
+  if (env.NODE_ENV === 'production') {
+    logger.fatal({ err }, 'Refusing to start: could not verify the database role');
+    process.exit(1);
+  }
+  logger.warn({ err }, 'Could not verify the database role');
+}
 
 const server = app.listen(env.PORT, '::', () => {
   logger.info(`EveryPaisa API listening on http://localhost:${env.PORT}`);
