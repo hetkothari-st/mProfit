@@ -60,6 +60,17 @@ export interface MemberVisibilityCaps {
   categories: readonly string[] | null;
 }
 
+/**
+ * A member's portfolios as seen from one family view: personal ones plus those
+ * shared into that family. Without a family (a personal view) every portfolio
+ * the user created counts, as before.
+ */
+export function memberPortfolioWhere(userId: string, familyId?: string) {
+  return familyId
+    ? { userId, OR: [{ familyId: null }, { familyId }] }
+    : { userId };
+}
+
 /** Deny-all is representable, so this cannot collapse to a truthiness test. */
 function allows(caps: readonly string[] | null, category: string): boolean {
   return caps === null || caps.includes(category);
@@ -69,6 +80,13 @@ export async function getDashboardNetWorth(
   userId: string,
   portfolioId?: string,
   caps: MemberVisibilityCaps = { assetClasses: null, categories: null },
+  /**
+   * The family in view, when this is one member's slice of a family view. The
+   * member's portfolios are then limited to their personal ones plus those
+   * shared into THIS family — not ones they shared into another household,
+   * which hold money that household's members put in.
+   */
+  familyId?: string,
 ) {
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 86_400_000);
@@ -77,7 +95,7 @@ export async function getDashboardNetWorth(
   // ── 1. Financial portfolio ───────────────────────────────────────────
   const holdings = await prisma.holdingProjection.findMany({
     where: {
-      portfolio: { userId },
+      portfolio: memberPortfolioWhere(userId, familyId),
       ...(portfolioId ? { portfolioId } : {}),
       // Intersect with the caller's asset-class grant. `[]` is deny-all and
       // `{ in: [] }` matches nothing, which is exactly right.
@@ -564,8 +582,8 @@ export async function getDashboardNetWorthForScope(
   const perMember = await Promise.all(
     scope.readableUserIds.map((uid) =>
       uid === callerId
-        ? getDashboardNetWorth(uid, opts.portfolioId)
-        : runAsUser(uid, () => getDashboardNetWorth(uid, opts.portfolioId, caps)),
+        ? getDashboardNetWorth(uid, opts.portfolioId, undefined, scope.familyId!)
+        : runAsUser(uid, () => getDashboardNetWorth(uid, opts.portfolioId, caps, scope.familyId!)),
     ),
   );
   return mergeNetWorthResults(perMember);

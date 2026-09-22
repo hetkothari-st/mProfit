@@ -35,6 +35,7 @@ import {
 } from '../familyScope.service.js';
 import {
   getDashboardNetWorth,
+  memberPortfolioWhere,
   type MemberVisibilityCaps,
   type DashboardNetWorth,
 } from '../dashboard.service.js';
@@ -153,6 +154,8 @@ function daysUntil(date: Date, from: Date = new Date()): number {
 
 interface MemberContext extends FamilyMemberRef {
   caps: MemberVisibilityCaps;
+  /** The family in view; bounds which of this member's portfolios count. */
+  familyId: string;
 }
 
 const NO_CAPS: MemberVisibilityCaps = { assetClasses: null, categories: null };
@@ -191,6 +194,7 @@ async function resolveMembers(
       isSelf,
       restricted: !isSelf && hasCaps,
       caps: isSelf ? NO_CAPS : caps,
+      familyId,
     };
   });
 
@@ -276,7 +280,7 @@ export async function getFamilyWealth(callerId: string, familyId: string): Promi
   const { scope, members } = await resolveMembers(callerId, familyId);
 
   const slices = await Promise.all(
-    members.map((m) => runFor(m, () => getDashboardNetWorth(m.userId, undefined, m.caps))),
+    members.map((m) => runFor(m, () => getDashboardNetWorth(m.userId, undefined, m.caps, m.familyId))),
   );
 
   const householdNetWorth = slices.reduce((s, r) => s.plus(toDecimal(r.totalNetWorth)), ZERO);
@@ -908,7 +912,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
       ? Promise.resolve([])
       : prisma.transaction.findMany({
           where: {
-            portfolio: { userId: m.userId },
+            portfolio: memberPortfolioWhere(m.userId, m.familyId),
             assetClass: { in: depositClasses },
             transactionType: { in: ['BUY', 'DEPOSIT', 'OPENING_BALANCE'] },
             maturityDate: {
@@ -947,7 +951,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
     }),
     prisma.holdingProjection.findMany({
       where: {
-        portfolio: { userId: m.userId },
+        portfolio: memberPortfolioWhere(m.userId, m.familyId),
         ...(m.caps.assetClasses === null ? {} : { assetClass: { in: m.caps.assetClasses } }),
       },
       select: { id: true, assetClass: true, assetName: true, priceAsOf: true },
@@ -1048,7 +1052,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
   if (!m.restricted) {
     const [bankCount, holdingCount] = await Promise.all([
       prisma.bankAccount.count({ where: { userId: m.userId, status: 'ACTIVE' } }),
-      prisma.holdingProjection.count({ where: { portfolio: { userId: m.userId } } }),
+      prisma.holdingProjection.count({ where: { portfolio: memberPortfolioWhere(m.userId, m.familyId) } }),
     ]);
     if (bankCount === 0 && holdingCount === 0) {
       items.push({
@@ -1108,7 +1112,7 @@ export async function getFamilyMemberDetail(
   // from. The cost is computing for every member and keeping one — cheap
   // beside the per-query round trips these already make.
   const [netWorth, holdings, goalsAll, protectionAll, attentionAll] = await Promise.all([
-    runFor(m, () => getDashboardNetWorth(m.userId, undefined, m.caps)),
+    runFor(m, () => getDashboardNetWorth(m.userId, undefined, m.caps, m.familyId)),
     loadMemberHoldings(m),
     getFamilyGoals(callerId, familyId),
     getFamilyProtection(callerId, familyId),
@@ -1141,7 +1145,7 @@ async function loadMemberHoldings(m: MemberContext): Promise<FamilyMemberHolding
   return runFor(m, async () => {
     const rows = await prisma.holdingProjection.findMany({
       where: {
-        portfolio: { userId: m.userId },
+        portfolio: memberPortfolioWhere(m.userId, m.familyId),
         // `[]` is deny-all and `{ in: [] }` matches nothing, which is right.
         ...(m.caps.assetClasses === null ? {} : { assetClass: { in: m.caps.assetClasses } }),
       },
