@@ -7,6 +7,8 @@ import {
   peekProfessionalInvitation,
   cancelProfessionalInvitation,
   listMyProfessionalGrants,
+  listClients,
+  updateGrantScope,
   getCaScope,
   createManagedClient,
 } from '../../src/services/ca/caAccess.service.js';
@@ -216,5 +218,63 @@ describe('records for people with no login', () => {
         createManagedClient(ca.userId, { name: 'Mahesh', consentBasis: 'ENGAGEMENT_LETTER' }),
       ),
     ).rejects.toThrow(/no longer created/i);
+  });
+});
+
+describe('who the professional is shown', () => {
+  it('names the account holder who invited them, not themselves', async () => {
+    // The row's own `name` is what the inviter typed about the PROFESSIONAL.
+    // Reading it on the professional's side showed them their own name at the
+    // top of someone else's books.
+    const het = await person('cig-name-client');
+    const ramesh = await person('cig-name-pro');
+    const { row, token } = await invite(het, ramesh.email);
+    await runAsUser(ramesh.userId, () =>
+      acceptProfessionalInvitation(ramesh.userId, ramesh.email, token),
+    );
+
+    const hetName = await runAsSystem(() =>
+      prisma.user.findUniqueOrThrow({ where: { id: het.userId }, select: { name: true } }),
+    );
+
+    const listed = await runAsUser(ramesh.userId, () => listClients(ramesh.userId));
+    const mine = listed.find((c) => c.id === row.id)!;
+    expect(mine.displayName).toBe(hetName.name);
+    expect(mine.displayEmail).toBe(het.email);
+    expect(mine.displayName).not.toBe('Ramesh CA');
+
+    // And the refusal sentence uses the same person.
+    const scope = await runAsUser(ramesh.userId, () => getCaScope(ramesh.userId, row.id));
+    expect(scope.subjectLabel).toBe(hetName.name);
+  });
+});
+
+describe('how much a professional may change, as the list reports it', () => {
+  it('says VIEW, PARTIAL or FULL rather than a single yes or no', async () => {
+    const het = await person('cig-mode-client');
+    const ramesh = await person('cig-mode-pro');
+    const { row, token } = await invite(het, ramesh.email);
+    await runAsUser(ramesh.userId, () =>
+      acceptProfessionalInvitation(ramesh.userId, ramesh.email, token),
+    );
+
+    const modeNow = async () =>
+      (await runAsUser(het.userId, () => listMyProfessionalGrants(het.userId))).find(
+        (g) => g.clientId === row.id,
+      )!.editMode;
+
+    expect(await modeNow()).toBe('VIEW');
+
+    await runAsUser(het.userId, () =>
+      updateGrantScope(het.userId, row.id, { edit: { books: true } }),
+    );
+    expect(await modeNow()).toBe('PARTIAL');
+
+    await runAsUser(het.userId, () =>
+      updateGrantScope(het.userId, row.id, {
+        edit: { books: true, transactions: true, imports: true, fmv: true },
+      }),
+    );
+    expect(await modeNow()).toBe('FULL');
   });
 });

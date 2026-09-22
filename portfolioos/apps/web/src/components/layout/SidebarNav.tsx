@@ -51,7 +51,8 @@ export function SidebarNav({
   const { data: clientCount } = useQuery({
     queryKey: ['ca', 'clients', 'count'],
     queryFn: async () => (await caApi.listClients()).length,
-    staleTime: 5 * 60_000,
+    // Follows a grant appearing or being withdrawn in someone else's session.
+    refetchInterval: 60_000,
     retry: false,
   });
 

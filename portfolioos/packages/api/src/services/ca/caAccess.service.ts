@@ -126,7 +126,10 @@ export function assertCaMayEdit(scope: CaScope, section: CaEditSection): void {
 export async function getCaScope(callerId: string, clientId: string): Promise<CaScope> {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
-    include: { portfolioScopes: { select: { portfolioId: true } } },
+    include: {
+      portfolioScopes: { select: { portfolioId: true } },
+      clientUser: { select: { name: true, email: true } },
+    },
   });
 
   if (!client || client.advisorId !== callerId) {
@@ -159,7 +162,7 @@ export async function getCaScope(callerId: string, clientId: string): Promise<Ca
     clientId: client.id,
     subjectUserId: client.userId,
     kind: client.kind,
-    subjectLabel: client.name,
+    subjectLabel: subjectDisplay(client).name,
     allowedPortfolioIds: client.scopeAllPortfolios
       ? null
       : client.portfolioScopes.map((s) => s.portfolioId),
@@ -176,11 +179,51 @@ export async function getCaScope(callerId: string, clientId: string): Promise<Ca
   };
 }
 
-/** The CA's own list. Revoked grants stay visible, greyed out, as history. */
-export async function listClients(callerId: string): Promise<Client[]> {
-  return prisma.client.findMany({
+/**
+ * Who a grant is ABOUT, as the professional should see them.
+ *
+ * `Client.name` and `Client.email` are whatever the person who opened the
+ * relationship typed. When a practice invites a client, that is the client —
+ * correct. When an account holder invites their accountant, it is the
+ * ACCOUNTANT — so reading those columns showed a professional their own name
+ * and address at the top of someone else's books, and told them "Ramesh has
+ * given you view-only access" when Ramesh was them.
+ *
+ * For a client-initiated grant the subject is the account that invited, so the
+ * name comes from that user. `User` carries no row-level policy, so this is an
+ * ordinary read of exactly the identity the workspace has to render.
+ */
+function subjectDisplay(client: {
+  initiatedBy: 'ADVISOR' | 'CLIENT';
+  name: string;
+  email: string | null;
+  clientUser?: { name: string | null; email: string } | null;
+}): { name: string; email: string | null } {
+  if (client.initiatedBy === 'CLIENT' && client.clientUser) {
+    return {
+      name: client.clientUser.name || client.clientUser.email,
+      email: client.clientUser.email,
+    };
+  }
+  return { name: client.name, email: client.email };
+}
+
+/**
+ * The professional's own list. Revoked grants stay visible, greyed out, as
+ * history. `displayName` / `displayEmail` are who the books BELONG to — see
+ * `subjectDisplay` — and are what every screen on this side should show.
+ */
+export async function listClients(
+  callerId: string,
+): Promise<Array<Client & { displayName: string; displayEmail: string | null }>> {
+  const rows = await prisma.client.findMany({
     where: { advisorId: callerId },
+    include: { clientUser: { select: { name: true, email: true } } },
     orderBy: [{ status: 'asc' }, { name: 'asc' }],
+  });
+  return rows.map(({ clientUser, ...row }) => {
+    const shown = subjectDisplay({ ...row, clientUser });
+    return { ...row, displayName: shown.name, displayEmail: shown.email };
   });
 }
 
@@ -226,6 +269,9 @@ export async function listMyProfessionals(callerId: string) {
     categoryCount: r.visibleCategories.length,
     // One bit for the card; the manage panel asks for the four.
     canEdit: r.canEditBooks || r.canEditTransactions || r.canEditImports || r.canEditFmv,
+    // Three states rather than a bit, because "some of it" is a real answer
+    // and describing it as either end would misstate what was given.
+    editMode: editModeOf(r),
   }));
 }
 
@@ -535,6 +581,19 @@ export async function listCaActivity(callerId: string, opts: { clientId?: string
 // classes and categories of their life are included, and between which dates
 // any of it works. A CA can read their own scope and nothing else — a
 // professional who could widen their own access has no scope at all.
+
+/** VIEW = nothing may change, FULL = everything may, PARTIAL = some of it. */
+function editModeOf(r: {
+  canEditBooks: boolean;
+  canEditTransactions: boolean;
+  canEditImports: boolean;
+  canEditFmv: boolean;
+}): 'VIEW' | 'PARTIAL' | 'FULL' {
+  const flags = [r.canEditBooks, r.canEditTransactions, r.canEditImports, r.canEditFmv];
+  if (flags.every(Boolean)) return 'FULL';
+  if (flags.some(Boolean)) return 'PARTIAL';
+  return 'VIEW';
+}
 
 /** Categories a grant can be narrowed to. Mirrors `NON_AC_CATEGORIES`. */
 export const CA_SCOPE_CATEGORIES = [
@@ -1109,5 +1168,8 @@ export async function listMyProfessionalGrants(callerId: string) {
     categoryCount: r.visibleCategories.length,
     // One bit for the card; the manage panel asks for the four.
     canEdit: r.canEditBooks || r.canEditTransactions || r.canEditImports || r.canEditFmv,
+    // Three states rather than a bit, because "some of it" is a real answer
+    // and describing it as either end would misstate what was given.
+    editMode: editModeOf(r),
   }));
 }

@@ -11,7 +11,16 @@ export type CaConsentBasis =
 
 export interface CaClient {
   id: string;
+  /**
+   * What the person who OPENED the relationship typed. For an invitation the
+   * account holder sent, that is the professional's own name — so screens on
+   * the professional's side must use `displayName`, never this.
+   */
   name: string;
+  /** Who these books belong to. What the professional's screens show. */
+  displayName: string;
+  displayEmail: string | null;
+  initiatedBy: 'ADVISOR' | 'CLIENT';
   email: string | null;
   pan: string | null;
   phone: string | null;
@@ -647,6 +656,8 @@ export interface MyProfessionalGrant {
   categoryCount: number;
   /** True when ANY of the four write switches is on. */
   canEdit: boolean;
+  /** Nothing, some, or all of the four write switches. */
+  editMode: 'VIEW' | 'PARTIAL' | 'FULL';
 }
 
 /** What a signed-out professional is told before deciding to sign up. */
