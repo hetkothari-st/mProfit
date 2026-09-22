@@ -21,7 +21,7 @@ import {
   describeCalendarGap,
   judgeCalendar,
 } from './calendarIntegrity.js';
-import { captureJobFailure } from '../../../lib/jobAlerting.js';
+import { captureFeedFailure } from '../../../lib/runAlerting.js';
 import { computeMetrics, median, monthlyReturnsPct, rollingReturnsPct } from './metrics.js';
 import { rankBucket, scoreBucket, type ScoringInput } from './scoring.js';
 import type { DetailedExclusionReason, FundCandidate, MethodologyConfig } from './types.js';
@@ -380,18 +380,27 @@ async function assertCalendarIsTrustworthy(args: {
   const gap = verdict.gap!;
   // Written BEFORE the throw. A refusal that fails to record itself leaves
   // exactly the silence this check exists to break (CONTEXT.md §3.5).
-  const row = await prisma.scoringRunLog.create({
+  const row = await prisma.feedRunLog.create({
     data: {
+      kind: 'SCORING',
+      feed: 'fund_scoring',
       check: 'calendar_integrity',
+      finishedAt: new Date(),
       status: 'REFUSED',
-      methodologyVersionId: args.methodologyVersionId,
-      asOfDate: args.asOfDate,
-      tradingDays: args.tradingDays.length,
-      gapWeekdays: gap.weekdays,
-      gapFrom: new Date(`${gap.from}T00:00:00.000Z`),
-      gapTo: new Date(`${gap.to}T00:00:00.000Z`),
       reason: verdict.reason,
-      details: { missingWeekdays: gap.missing, maxCalendarGapWeekdays: max },
+      // The scoring-specific numbers live in `details` rather than as six
+      // more columns that are null on every feed row. They are read for
+      // display and diagnosis, never filtered on.
+      details: {
+        asOfDate: args.asOfDate.toISOString().slice(0, 10),
+        methodologyVersionId: args.methodologyVersionId,
+        tradingDays: args.tradingDays.length,
+        gapWeekdays: gap.weekdays,
+        gapFrom: gap.from,
+        gapTo: gap.to,
+        missingWeekdays: gap.missing,
+        maxCalendarGapWeekdays: max,
+      },
     },
   });
 
@@ -410,11 +419,13 @@ async function assertCalendarIsTrustworthy(args: {
   );
 
   const err = new CalendarIntegrityError(verdict.reason!, row.id);
-  captureJobFailure(err, {
-    job: 'fund_scoring',
+  captureFeedFailure(err, {
+    kind: 'SCORING',
+    subject: 'fund_scoring',
     check: 'calendar_integrity',
     runId: row.id,
     reason: verdict.reason,
+    outcome: 'refused',
     context: {
       asOfDate: args.asOfDate.toISOString().slice(0, 10),
       tradingDays: args.tradingDays.length,

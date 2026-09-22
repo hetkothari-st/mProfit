@@ -210,7 +210,8 @@ export async function retryIngestionFailure(
 }
 
 /**
- * Market-feed runs that failed, newest first.
+ * Scheduled runs that failed or refused, newest first — market feeds and
+ * fund scoring alike, since they share one table now.
  *
  * NOT user-scoped, and deliberately so. `FeedRunLog` describes a feed, not
  * anyone's money: it has no `userId`, no RLS policy and no entry in
@@ -226,24 +227,35 @@ export async function listFeedRunFailures(opts: { since?: Date; limit?: number }
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const rows = await prisma.feedRunLog.findMany({
     where: {
-      status: 'FAILED',
+      // REFUSED as well as FAILED: a scoring run that declined to write is a
+      // decision rather than an error, but it has the same consequence for
+      // whoever is looking at this page — today's ranking is not there.
+      status: { in: ['FAILED', 'REFUSED'] },
       ...(opts.since ? { startedAt: { gte: opts.since } } : {}),
     },
     orderBy: { startedAt: 'desc' },
     take: limit,
   });
   return {
-    items: rows.map((r) => ({
-      id: r.id,
-      feed: r.feed,
-      startedAt: r.startedAt.toISOString(),
-      finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
-      status: r.status,
-      rowsParsed: r.rowsParsed,
-      rowsImported: r.rowsImported,
-      parseFailures: r.parseFailures,
-      previousImported: r.previousImported,
-      reason: r.reason,
-    })),
+    items: rows.map((r) => {
+      const details = (r.details ?? {}) as Record<string, unknown>;
+      return {
+        id: r.id,
+        kind: r.kind === 'SCORING' ? ('SCORING' as const) : ('FEED' as const),
+        feed: r.feed,
+        check: r.check,
+        startedAt: r.startedAt.toISOString(),
+        finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+        status: r.status,
+        rowsParsed: r.rowsParsed,
+        rowsImported: r.rowsImported,
+        parseFailures: r.parseFailures,
+        previousImported: r.previousImported,
+        reason: r.reason,
+        // A scoring refusal has no row counts; what it has is the gap that
+        // caused it, which is the only number worth showing on the card.
+        gapWeekdays: typeof details.gapWeekdays === 'number' ? details.gapWeekdays : null,
+      };
+    }),
   };
 }

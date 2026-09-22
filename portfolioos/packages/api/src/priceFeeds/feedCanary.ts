@@ -29,8 +29,10 @@
 
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { Sentry } from '../lib/sentry.js';
+import { captureFeedFailure } from '../lib/runAlerting.js';
 import { env } from '../config/env.js';
+
+export { captureFeedFailure } from '../lib/runAlerting.js';
 
 /** What a feed has to report for its run to be judged. */
 export interface FeedRunCounts {
@@ -74,56 +76,6 @@ export class FeedCanaryError extends Error {
     super(`[${feed}] ${verdict.reason ?? 'feed canary tripped'}`);
     this.name = 'FeedCanaryError';
   }
-}
-
-/**
- * Tell Sentry.
- *
- * Verified before writing this: nothing did. `Sentry.setupExpressErrorHandler`
- * covers request handlers, and the Bull queues log their `failed` events
- * without capturing them — but the AMFI sync is a `node-cron` job whose
- * `runGuarded` wrapper catches, logs and swallows. A tripped canary produced a
- * `logger.error` line and no alert of any kind, which for a feed that had
- * already been silently broken for weeks is most of the problem again.
- *
- * Tags rather than extras for feed, status and reason: tags are searchable and
- * groupable in Sentry, so "every amfi_nav trip this month" is a query. The
- * counts go in `contexts`, where they are readable without being indexed.
- */
-export function captureFeedFailure(
-  err: unknown,
-  meta: {
-    feed: string;
-    runId: string | null;
-    verdict?: CanaryVerdict | null;
-    counts?: FeedRunCounts | null;
-  },
-): void {
-  Sentry.captureException(err, {
-    level: 'error',
-    tags: {
-      feed: meta.feed,
-      feed_run_id: meta.runId ?? 'unwritten',
-      canary_verdict: meta.verdict ? (meta.verdict.ok ? 'ok' : 'tripped') : 'threw',
-      canary_reason: meta.verdict?.reason ?? 'feed run threw before judgement',
-    },
-    contexts: {
-      feed_run: {
-        feed: meta.feed,
-        runId: meta.runId,
-        rowsParsed: meta.counts?.rowsParsed ?? null,
-        rowsImported: meta.counts?.rowsImported ?? null,
-        parseFailures: meta.counts?.parseFailures ?? null,
-        previousImported: meta.verdict?.previousImported ?? null,
-        parseFailureRatePct: meta.verdict?.parseFailureRatePct ?? null,
-        rowDropPct: meta.verdict?.rowDropPct ?? null,
-      },
-    },
-    // One Sentry issue per feed per failure mode, rather than one per night:
-    // a feed that has been broken for a week should be one issue with seven
-    // events, which is what makes "how long has this been failing" answerable.
-    fingerprint: ['feed-canary', meta.feed, meta.verdict?.ok === false ? 'tripped' : 'threw'],
-  });
 }
 
 /**
@@ -275,7 +227,14 @@ export async function runFeedWithCanary<T>(
       data: { feed, startedAt, finishedAt: new Date(), status: 'FAILED', previousImported, reason },
     });
     logger.error({ feed, runId: row.id, err: reason }, '[feedCanary] feed run threw');
-    captureFeedFailure(err, { feed, runId: row.id, verdict: null, counts: null });
+    captureFeedFailure(err, {
+      kind: 'FEED',
+      subject: feed,
+      check: 'canary',
+      runId: row.id,
+      reason,
+      outcome: 'threw',
+    });
     throw err;
   }
 
@@ -311,7 +270,22 @@ export async function runFeedWithCanary<T>(
       `[feedCanary] ${verdict.reason}`,
     );
     const tripped = new FeedCanaryError(feed, verdict, row.id);
-    captureFeedFailure(tripped, { feed, runId: row.id, verdict, counts });
+    captureFeedFailure(tripped, {
+      kind: 'FEED',
+      subject: feed,
+      check: 'canary',
+      runId: row.id,
+      reason: verdict.reason,
+      outcome: 'tripped',
+      context: {
+        rowsParsed: counts.rowsParsed,
+        rowsImported: counts.rowsImported,
+        parseFailures: counts.parseFailures ?? 0,
+        previousImported: verdict.previousImported,
+        parseFailureRatePct: verdict.parseFailureRatePct,
+        rowDropPct: verdict.rowDropPct,
+      },
+    });
     throw tripped;
   }
 

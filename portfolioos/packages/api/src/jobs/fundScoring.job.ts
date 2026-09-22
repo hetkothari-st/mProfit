@@ -98,10 +98,10 @@ export async function runFundScoringJob(asOf: Date = new Date()): Promise<void> 
     });
   } catch (err) {
     if (err instanceof CalendarIntegrityError) {
-      // Already recorded in ScoringRunLog, already sent to Sentry, already
-      // logged with the gap span. Logged once more here at warn, without the
-      // stack, so the job's own timeline reads straight: a refusal is a
-      // decision this job made, not an error it hit.
+      // Already recorded in FeedRunLog (kind SCORING), already sent to
+      // Sentry, already logged with the gap span. Logged once more here at
+      // warn, without the stack, so the job's own timeline reads straight:
+      // a refusal is a decision this job made, not an error it hit.
       logger.warn(
         { runId: err.runId, reason: err.reason, ms: Date.now() - startedAt },
         '[fundScoring] refused to score — the previous snapshot stands until it ages out',

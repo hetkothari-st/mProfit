@@ -136,7 +136,7 @@ afterAll(async () => {
   await clearFixtureFunds();
   await runAsSystem(async () => {
     await prisma.fundScoreSnapshot.deleteMany({ where: { methodologyVersionId: methodologyId } });
-    await prisma.scoringRunLog.deleteMany({ where: { methodologyVersionId: methodologyId } });
+    await prisma.feedRunLog.deleteMany({ where: { kind: 'SCORING', feed: 'fund_scoring' } });
     await prisma.rankingMethodologyVersion.deleteMany({ where: { id: methodologyId } });
   });
 }, 120_000);
@@ -196,30 +196,37 @@ describe('calendar integrity refusal', () => {
 
     // Recorded before the throw, so the refusal is not itself silent (§3.5).
     const log = await runAsSystem(() =>
-      prisma.scoringRunLog.findFirst({
-        where: { methodologyVersionId: methodologyId, check: 'calendar_integrity' },
+      prisma.feedRunLog.findFirst({
+        where: { kind: 'SCORING', feed: 'fund_scoring', check: 'calendar_integrity' },
         orderBy: { startedAt: 'desc' },
       }),
     );
     expect(log?.status).toBe('REFUSED');
-    expect(log?.gapWeekdays).toBeGreaterThan(4);
-    expect(log?.gapFrom).toBeTruthy();
-    expect(log?.gapTo).toBeTruthy();
+    expect(log?.kind).toBe('SCORING');
+    const details = log!.details as Record<string, unknown>;
+    expect(details.gapWeekdays as number).toBeGreaterThan(4);
+    expect(details.gapFrom).toBeTruthy();
+    expect(details.gapTo).toBeTruthy();
     expect(log?.reason).toMatch(/consecutive weekdays/);
-    expect(log?.asOfDate.toISOString().slice(0, 10)).toBe('2026-03-31');
+    expect(details.asOfDate).toBe('2026-03-31');
 
     // And somebody is told, through the same path the feed canary uses.
     expect(sentryMock.captureException).toHaveBeenCalledTimes(1);
     const [err, opts] = sentryMock.captureException.mock.calls[0]!;
     expect(err).toBeInstanceOf(CalendarIntegrityError);
     expect(opts.level).toBe('error');
-    expect(opts.tags.job).toBe('fund_scoring');
-    expect(opts.tags.job_check).toBe('calendar_integrity');
-    expect(opts.tags.job_run_id).toBe(log!.id);
+    expect(opts.tags.run_kind).toBe('SCORING');
+    expect(opts.tags.feed).toBe('fund_scoring');
+    expect(opts.tags.run_check).toBe('calendar_integrity');
+    expect(opts.tags.feed_run_id).toBe(log!.id);
+    // Scoring keeps its own fingerprint: "AMFI came back thin" and "we
+    // declined to rank on a calendar we do not trust" are different
+    // incidents with different fixes.
     expect(opts.fingerprint).toEqual(['job-refused', 'fund_scoring', 'calendar_integrity']);
-    expect(opts.contexts.job_run).toMatchObject({
+    expect(opts.contexts.feed_run).toMatchObject({
+      kind: 'SCORING',
       maxCalendarGapWeekdays: 4,
-      gapWeekdays: log!.gapWeekdays,
+      gapWeekdays: details.gapWeekdays,
     });
   }, 180_000);
 
