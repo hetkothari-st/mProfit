@@ -101,9 +101,22 @@ export interface BackfillResult {
   failedMonths: Array<{ month: string; reason: string }>;
 }
 
-/** Pause between write chunks, so a long backfill does not crowd out the
- *  live app's request traffic. */
-const CHUNK_PAUSE_MS = 120;
+/**
+ * Pause between write chunks, so a long backfill does not crowd out the live
+ * app's request traffic — and the chunk size it pauses between.
+ *
+ * Both are tunable because the right values depend entirely on where the
+ * script runs. Inside the API container, on the private network, 2,000-row
+ * chunks with a 120ms pause sustained ~53,000 rows/min while leaving the app
+ * responsive. Run from a laptop through Railway's public TCP proxy, every
+ * chunk pays an internet round-trip instead: the same settings managed only
+ * ~6,300 rows/min, which turns a one-hour job into a nine-hour one.
+ *
+ * Over the proxy the round-trip IS the throttle, so the pause buys nothing
+ * and larger chunks amortise the latency. Defaults are the container values;
+ * BACKFILL_CHUNK_SIZE and BACKFILL_CHUNK_PAUSE_MS override them.
+ */
+const CHUNK_PAUSE_MS = Number.parseInt(process.env.BACKFILL_CHUNK_PAUSE_MS ?? '120', 10);
 const MONTH_PAUSE_MS = 1_000;
 const RETRY_PAUSE_MS = 5_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -218,7 +231,7 @@ async function backfillWindow(from: Date, to: Date, dryRun: boolean): Promise<Ba
     // must not be restated from a historical report, and a row the backfill
     // did not create must never carry this batch id — otherwise reversing the
     // batch would delete data the backfill never added.
-    const CHUNK = 2000;
+    const CHUNK = Number.parseInt(process.env.BACKFILL_CHUNK_SIZE ?? '2000', 10);
     let inserted = 0;
     for (let i = 0; i < writes.length; i += CHUNK) {
       const slice = writes.slice(i, i + CHUNK);
