@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Plus, Mail, ArrowUpRight } from 'lucide-react';
+import { Briefcase, Mail, ArrowUpRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -16,11 +16,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
+import { useEntitlement } from '@/hooks/useEntitlement';
 import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
 import { cn } from '@/lib/cn';
-import { caApi, CONSENT_BASIS_LABEL, type CaClient, type CaConsentBasis } from '@/api/ca.api';
+import { caApi, CONSENT_BASIS_LABEL, type CaClient } from '@/api/ca.api';
 
 /**
  * A CA's client list.
@@ -46,8 +46,11 @@ function statusTone(status: CaClient['status']): string {
 
 export function CaWorkspacePage() {
   const qc = useQueryClient();
-  const [managedOpen, setManagedOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  // Inviting a client of your OWN is what the advisor plan is for. Someone who
+  // is here only because a client invited them keeps the workspace for free,
+  // and is shown the way to the plan instead of a button the server refuses.
+  const canInvite = useEntitlement('CA_WORKSPACE').allowed;
 
   const { data: clients, isLoading } = useQuery({
     queryKey: ['ca', 'clients'],
@@ -73,16 +76,19 @@ export function CaWorkspacePage() {
       <PageHeader
         eyebrow="Practice"
         title="Clients"
-        description="The people whose books you keep — those you manage directly, and those who granted you access to their own account."
+        description="The people whose books you keep. Each of them decides what you can see and do, and can withdraw it at any time."
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setInviteOpen(true)}>
+          canInvite ? (
+            <Button size="sm" onClick={() => setInviteOpen(true)}>
               <Mail className="h-4 w-4" /> Invite a client
             </Button>
-            <Button size="sm" onClick={() => setManagedOpen(true)}>
-              <Plus className="h-4 w-4" /> Add managed client
+          ) : (
+            <Button asChild size="sm" variant="outline">
+              <Link to="/settings/billing">
+                <Mail className="h-4 w-4" /> Invite your own clients
+              </Link>
             </Button>
-          </div>
+          )
         }
       />
 
@@ -98,11 +104,17 @@ export function CaWorkspacePage() {
         <EmptyState
           icon={Briefcase}
           title="No clients yet"
-          description="Add a managed record for someone who doesn't use the app, or invite a client who does — they'll grant you access from their own account."
+          description={
+            canInvite
+              ? 'Invite a client and they grant you access from their own account. They decide what you see.'
+              : 'When someone invites you to their books, they appear here. Inviting clients of your own needs an advisor plan.'
+          }
           action={
-            <Button onClick={() => setManagedOpen(true)}>
-              <Plus className="h-4 w-4" /> Add managed client
-            </Button>
+            canInvite ? (
+              <Button onClick={() => setInviteOpen(true)}>
+                <Mail className="h-4 w-4" /> Invite a client
+              </Button>
+            ) : undefined
           }
         />
       ) : (
@@ -128,7 +140,6 @@ export function CaWorkspacePage() {
         </div>
       )}
 
-      <ManagedClientDialog open={managedOpen} onOpenChange={setManagedOpen} />
       <InviteClientDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </div>
   );
@@ -170,7 +181,7 @@ function ClientGroup({
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-[14px] font-medium text-foreground">{c.name}</p>
+                  <p className="truncate text-[14px] font-medium text-foreground">{c.displayName}</p>
                   <span className="text-[9.5px] uppercase tracking-kerned text-muted-foreground/80">
                     {KIND_LABEL[c.kind]}
                   </span>
@@ -181,7 +192,12 @@ function ClientGroup({
                   </span>
                 </div>
                 <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  {[c.email ?? c.invitedEmail, c.pan].filter(Boolean).join(' · ') || '—'}
+                  {/* A client who invited you is identified by their own address; one you
+                      invited, by the address you sent it to. */}
+                  {(c.initiatedBy === 'CLIENT'
+                    ? c.displayEmail
+                    : (c.displayEmail ?? c.invitedEmail)) ?? '—'}
+                  {c.pan && <span className="ml-2">PAN {c.pan}</span>}
                 </p>
                 {c.kind === 'SHADOW' && c.consentBasis && (
                   <p className="mt-1 text-[11px] text-muted-foreground/80">
@@ -217,129 +233,6 @@ function ClientGroup({
         </CardContent>
       </Card>
     </section>
-  );
-}
-
-function ManagedClientDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const qc = useQueryClient();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [pan, setPan] = useState('');
-  const [consentBasis, setConsentBasis] = useState<CaConsentBasis>('ENGAGEMENT_LETTER');
-  const [consentNote, setConsentNote] = useState('');
-
-  const create = useMutation({
-    mutationFn: () =>
-      caApi.createManagedClient({
-        name,
-        email: email || undefined,
-        pan: pan || undefined,
-        consentBasis,
-        consentNote: consentNote || undefined,
-      }),
-    onSuccess: () => {
-      toast.success('Client record created');
-      qc.invalidateQueries({ queryKey: ['ca', 'clients'] });
-      onOpenChange(false);
-      setName('');
-      setEmail('');
-      setPan('');
-      setConsentNote('');
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add a managed client</DialogTitle>
-          <DialogDescription>
-            For a client who does not use this app. You will hold their books.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-            For a client who doesn&apos;t use this app. You will hold their books, and they will
-            have no account and no way to see or end this — so the basis on which you hold their
-            data is recorded here.
-          </p>
-
-          <div>
-            <Label>Client name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Email (optional)</Label>
-              <Input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="For your records"
-              />
-            </div>
-            <div>
-              <Label>PAN (optional)</Label>
-              <Input
-                value={pan}
-                onChange={(e) => setPan(e.target.value.toUpperCase())}
-                maxLength={10}
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label>Basis for holding their data</Label>
-            <Select
-              className="mt-1"
-              value={consentBasis}
-              onChange={(e) => setConsentBasis(e.target.value as CaConsentBasis)}
-            >
-              {(Object.keys(CONSENT_BASIS_LABEL) as CaConsentBasis[]).map((k) => (
-                <option key={k} value={k}>
-                  {CONSENT_BASIS_LABEL[k]}
-                </option>
-              ))}
-            </Select>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              Recorded, not verified. It is your basis, on your record.
-            </p>
-          </div>
-
-          {consentBasis === 'OTHER' && (
-            <div>
-              <Label>Describe the basis</Label>
-              <Input
-                value={consentNote}
-                onChange={(e) => setConsentNote(e.target.value)}
-                placeholder="e.g. verbal instruction confirmed by email, 12 Mar"
-              />
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => create.mutate()}
-            disabled={
-              !name.trim() || create.isPending || (consentBasis === 'OTHER' && !consentNote.trim())
-            }
-          >
-            {create.isPending ? 'Creating…' : 'Create record'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

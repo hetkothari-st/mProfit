@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -80,9 +80,15 @@ export function ClientBooksPage() {
   const { clientId = '' } = useParams();
   const qc = useQueryClient();
 
+  // Polled, because the account holder changes this from a different session
+  // and there is no push channel between two people's browsers. Twenty seconds
+  // is quick enough that a permission granted on a phone call shows up before
+  // the call ends, and it pauses in a background tab.
   const { data: clients } = useQuery({
     queryKey: ['ca', 'clients'],
     queryFn: () => caApi.listClients(),
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
   });
   const client = (clients ?? []).find((c) => c.id === clientId) ?? null;
 
@@ -101,6 +107,26 @@ export function ClientBooksPage() {
     fmv: client?.canEditFmv ?? false,
   };
   const readOnly = !may.books && !may.transactions && !may.imports && !may.fmv;
+
+  // Buttons appearing or vanishing under someone's cursor with no explanation
+  // reads as a glitch. Say what changed, once, when it changes.
+  const rightsKey = client
+    ? `${may.books}${may.transactions}${may.imports}${may.fmv}${client.status}`
+    : null;
+  const lastRights = useRef<string | null>(null);
+  useEffect(() => {
+    if (!rightsKey || !client) return;
+    const prev = lastRights.current;
+    lastRights.current = rightsKey;
+    if (prev === null || prev === rightsKey) return;
+    if (client.status !== 'ACTIVE') {
+      toast(`${client.displayName} has withdrawn your access.`);
+    } else if (readOnly) {
+      toast(`${client.displayName} changed your access to view only.`);
+    } else {
+      toast.success(`${client.displayName} updated what you can do in their books.`);
+    }
+  }, [rightsKey, client, readOnly]);
   const [tab, setTab] = useState<Tab>('accounts');
   const [accountDialog, setAccountDialog] = useState<{
     open: boolean;
@@ -245,7 +271,7 @@ export function ClientBooksPage() {
 
       <PageHeader
         eyebrow="Client books"
-        title={client?.name ?? 'Client'}
+        title={client?.displayName ?? 'Client'}
         description={
           client?.kind === 'INVITED'
             ? 'This client granted you access from their own account. They can see everything you do here, and withdraw access at any time.'
@@ -255,7 +281,7 @@ export function ClientBooksPage() {
 
       {readOnly && client && (
         <div className="mb-4 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-[12.5px] leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground">View only.</span> {client.name} has shared
+          <span className="font-medium text-foreground">View only.</span> {client.displayName} has shared
           these books without edit access, so you can read everything here and download reports, but
           not post entries or change transactions. They can widen it from their Account Access page.
         </div>
