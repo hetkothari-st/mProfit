@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useNextPath } from '@/hooks/useNextPath';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -27,6 +28,7 @@ type FormValues = z.infer<typeof schema>;
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const nextPath = useNextPath();
   const location = useLocation();
   const setSession = useAuthStore((s) => s.setSession);
   const isAuthed = useAuthStore((s) => Boolean(s.accessToken && s.user));
@@ -34,8 +36,8 @@ export function LoginPage() {
   const [credentialsRejected, setCredentialsRejected] = useState(false);
 
   useEffect(() => {
-    if (isAuthed) navigate('/dashboard', { replace: true });
-  }, [isAuthed, navigate]);
+    if (isAuthed) navigate(nextPath ?? '/dashboard', { replace: true });
+  }, [isAuthed, navigate, nextPath]);
 
   const {
     register,
@@ -68,9 +70,15 @@ export function LoginPage() {
       setSession(data.user, data.tokens, { remember: values.rememberMe ?? true });
       toast.success(`Welcome back, ${data.user.name.split(' ')[0]}!`);
       // An account that left setup unfinished picks it back up.
-      const to = isOnboardingUnfinished(data.user.id)
-        ? '/onboarding'
-        : ((location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/dashboard');
+      // An explicit `?next=` outranks everything: the person was in the
+      // middle of something — accepting an invitation, usually — and signing
+      // in was the interruption, not the errand.
+      const to =
+        nextPath ??
+        (isOnboardingUnfinished(data.user.id)
+          ? '/onboarding'
+          : ((location.state as { from?: { pathname?: string } } | null)?.from?.pathname ??
+            '/dashboard'));
       navigate(to, { replace: true });
     },
     onError: (err, { values }) => {
@@ -100,7 +108,12 @@ export function LoginPage() {
       footer={
         <>
           Don&apos;t have an account?{' '}
-          <Link to="/register" className="font-medium text-primary hover:underline">
+          {/* Carries the errand across: someone who came to accept an
+              invitation and decides to register instead must not lose it. */}
+          <Link
+            to={`/register${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ''}`}
+            className="font-medium text-primary hover:underline"
+          >
             Create one
           </Link>
         </>
