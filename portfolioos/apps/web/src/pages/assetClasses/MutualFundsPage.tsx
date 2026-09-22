@@ -28,6 +28,7 @@ import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
 import { useUploadWithPasswordRetry } from '@/hooks/useUploadWithPasswordRetry';
 import { formatINR, formatPercent, Decimal, toDecimal } from '@everypaisa/shared';
 import type { HoldingRow, TransactionDTO } from '@everypaisa/shared';
+import { summariseHoldings, unpricedHint } from '@/lib/holdingsSummary';
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   BUY: 'Buy', SELL: 'Sell / Redeem', DIVIDEND: 'Dividend',
@@ -175,15 +176,12 @@ export function MutualFundsPage() {
     .slice()
     .sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
 
-  const totalValueD = mfs.reduce(
-    (s, h) => (h.currentValue !== null ? s.plus(toDecimal(h.currentValue)) : s),
-    new Decimal(0),
-  );
-  const totalCostD = mfs.reduce((s, h) => s.plus(toDecimal(h.totalCost)), new Decimal(0));
-  const totalPnLD = totalValueD.minus(totalCostD);
-  const totalPnLPct = totalCostD.greaterThan(0)
-    ? totalPnLD.dividedBy(totalCostD).times(100).toNumber()
-    : 0;
+  const summary = summariseHoldings(mfs);
+  const pnlCls = summary.pnl?.greaterThan(0)
+    ? 'text-positive'
+    : summary.pnl?.isNegative()
+      ? 'text-negative'
+      : '';
 
   function openEdit(txn: TransactionDTO) { setEditTxn(txn); setFormOpen(true); }
   function openAdd() { setEditTxn(null); setFormOpen(true); }
@@ -383,23 +381,28 @@ export function MutualFundsPage() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[
-              { label: 'Current value', value: formatINR(totalValueD.toFixed(4)) },
-              { label: 'Invested', value: formatINR(totalCostD.toFixed(4)) },
+              {
+                label: 'Current value',
+                value: formatINR(summary.value.toFixed(4)),
+                hint: unpricedHint(summary.unpricedCount),
+              },
+              { label: 'Invested', value: formatINR(summary.cost.toFixed(4)) },
               {
                 label: 'Unrealised P&L',
-                value: formatINR(totalPnLD.toFixed(4)),
-                cls: totalPnLD.greaterThan(0) ? 'text-positive' : totalPnLD.isNegative() ? 'text-negative' : '',
+                value: summary.pnl ? formatINR(summary.pnl.toFixed(4)) : '—',
+                cls: pnlCls,
               },
               {
                 label: 'Return',
-                value: formatPercent(totalPnLPct),
-                cls: totalPnLD.greaterThan(0) ? 'text-positive' : totalPnLD.isNegative() ? 'text-negative' : '',
+                value: summary.pnlPct != null ? formatPercent(summary.pnlPct) : '—',
+                cls: pnlCls,
               },
             ].map((m) => (
               <Card key={m.label}>
                 <CardContent className="p-4">
                   <div className="text-xs text-muted-foreground">{m.label}</div>
                   <div className={`text-lg sm:text-xl font-semibold mt-1 tabular-nums break-words ${m.cls ?? ''}`}>{m.value}</div>
+                  {m.hint && <div className="text-xs text-muted-foreground mt-1">{m.hint}</div>}
                 </CardContent>
               </Card>
             ))}

@@ -626,7 +626,12 @@ export async function getPortfolioHoldings(userId: string, id: string) {
       valuationMethod: valuationMethodFor(h.assetClass),
       priceAsOf: h.priceAsOf ? h.priceAsOf.toISOString() : null,
       stale: isPriceStale(h.assetClass, h.priceAsOf),
-      xirr: xirrForHolding && xirrForHolding.reliable ? xirrForHolding.xirr : null,
+      // No price yet → the terminal value above is just cost, so the solved
+      // rate is ~0% and reads as a real (flat or negative) return. Hide it.
+      xirr:
+        h.currentValue !== null && xirrForHolding && xirrForHolding.reliable
+          ? xirrForHolding.xirr
+          : null,
       holdingPeriodDays:
         xirrForHolding && xirrForHolding.cashflowCount >= 2 ? xirrForHolding.spanDays : null,
     };

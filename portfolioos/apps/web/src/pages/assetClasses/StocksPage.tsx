@@ -33,6 +33,7 @@ import {
   serializeQuantity,
 } from '@everypaisa/shared';
 import type { HoldingRow, Money, Quantity, TransactionDTO } from '@everypaisa/shared';
+import { summariseHoldings, unpricedHint } from '@/lib/holdingsSummary';
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   BUY: 'Buy',
@@ -194,15 +195,12 @@ export function StocksPage() {
     });
   }
 
-  const totalValueD = aggregated.reduce(
-    (s, h) => (h.currentValue != null ? s.plus(toDecimal(h.currentValue)) : s),
-    new Decimal(0),
-  );
-  const totalCostD = aggregated.reduce((s, h) => s.plus(toDecimal(h.totalCost)), new Decimal(0));
-  const totalPnLD = totalValueD.minus(totalCostD);
-  const totalPnLPct = totalCostD.greaterThan(0)
-    ? totalPnLD.dividedBy(totalCostD).times(100).toNumber()
-    : 0;
+  const summary = summariseHoldings(aggregated);
+  const pnlCls = summary.pnl?.greaterThan(0)
+    ? 'text-emerald-700 dark:text-emerald-400'
+    : summary.pnl?.isNegative()
+      ? 'text-rose-700 dark:text-rose-400'
+      : '';
 
   function openEdit(txn: TransactionDTO) {
     setEditTxn(txn);
@@ -244,25 +242,21 @@ export function StocksPage() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[
-              { label: 'Current value', value: formatINR(totalValueD.toFixed(4)) },
-              { label: 'Invested', value: formatINR(totalCostD.toFixed(4)) },
+              {
+                label: 'Current value',
+                value: formatINR(summary.value.toFixed(4)),
+                hint: unpricedHint(summary.unpricedCount),
+              },
+              { label: 'Invested', value: formatINR(summary.cost.toFixed(4)) },
               {
                 label: 'Unrealised P&L',
-                value: formatINR(totalPnLD.toFixed(4)),
-                cls: totalPnLD.greaterThan(0)
-                  ? 'text-emerald-700 dark:text-emerald-400'
-                  : totalPnLD.isNegative()
-                    ? 'text-rose-700 dark:text-rose-400'
-                    : '',
+                value: summary.pnl ? formatINR(summary.pnl.toFixed(4)) : '—',
+                cls: pnlCls,
               },
               {
                 label: 'Return',
-                value: formatPercent(totalPnLPct),
-                cls: totalPnLD.greaterThan(0)
-                  ? 'text-emerald-700 dark:text-emerald-400'
-                  : totalPnLD.isNegative()
-                    ? 'text-rose-700 dark:text-rose-400'
-                    : '',
+                value: summary.pnlPct != null ? formatPercent(summary.pnlPct) : '—',
+                cls: pnlCls,
               },
             ].map((m) => (
               <Card
@@ -276,6 +270,7 @@ export function StocksPage() {
                   <div className={`text-lg sm:text-xl font-semibold mt-1 tabular-nums break-words ${m.cls ?? ''}`}>
                     {m.value}
                   </div>
+                  {m.hint && <div className="text-xs text-muted-foreground mt-1">{m.hint}</div>}
                 </CardContent>
               </Card>
             ))}
@@ -309,22 +304,16 @@ export function StocksPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-                  <Stat label="Invested" value={formatINR(totalCostD.toFixed(4))} />
+                  <Stat label="Invested" value={formatINR(summary.cost.toFixed(4))} />
                   <Stat
                     label="Value"
-                    value={formatINR(totalValueD.toFixed(4))}
+                    value={formatINR(summary.value.toFixed(4))}
                     bold
                   />
                   <Stat
                     label="P&L"
-                    value={formatINR(totalPnLD.toFixed(4))}
-                    accent={
-                      totalPnLD.greaterThan(0)
-                        ? 'text-emerald-700 dark:text-emerald-400'
-                        : totalPnLD.isNegative()
-                          ? 'text-rose-700 dark:text-rose-400'
-                          : ''
-                    }
+                    value={summary.pnl ? formatINR(summary.pnl.toFixed(4)) : '—'}
+                    accent={pnlCls}
                     bold
                   />
                 </div>

@@ -39,17 +39,19 @@ const FD_RATE_PROXY = 0.07;
 
 function xirrBadge(xirr: number | null) {
   if (xirr == null) return <span className="text-muted-foreground">—</span>;
-  const pct = xirr * 100;
+  // Round before classifying so a −0.00001 rate can't render as a red "−0.00%".
+  const pctStr = (xirr * 100).toFixed(2);
+  const pct = Number.parseFloat(pctStr);
   const cls =
-    xirr < 0
+    pct < 0
       ? 'bg-negative/10 text-negative'
       : xirr >= FD_RATE_PROXY
         ? 'bg-positive/10 text-positive'
         : 'bg-amber-100 text-amber-700';
   return (
     <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${cls}`}>
-      {xirr >= 0 ? '+' : ''}
-      {pct.toFixed(2)}%
+      {pct > 0 ? '+' : ''}
+      {pct === 0 ? '0.00' : pctStr}%
     </span>
   );
 }
