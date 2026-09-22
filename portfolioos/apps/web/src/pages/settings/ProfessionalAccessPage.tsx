@@ -8,6 +8,7 @@ import {
   RotateCcw,
   X,
   Clock,
+  Briefcase,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -24,7 +25,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/common/EmptyState';
-import { professionalAccessApi, type MyProfessionalGrant } from '@/api/ca.api';
+import { Link } from 'react-router-dom';
+import { professionalAccessApi, caApi, type MyProfessionalGrant } from '@/api/ca.api';
+import { useEntitlement } from '@/hooks/useEntitlement';
 import { apiErrorMessage } from '@/api/client';
 import { CaActivityFeed } from '@/components/ca/CaActivityFeed';
 import { GrantScopePanel } from '@/components/ca/GrantScopePanel';
@@ -217,6 +220,8 @@ export function ProfessionalAccessPage() {
         </Card>
       )}
 
+      <ActForClientsCard />
+
       <CaActivityFeed entries={activity ?? []} />
 
       <InviteProfessionalDialog
@@ -225,6 +230,45 @@ export function ProfessionalAccessPage() {
         onInvited={invalidate}
       />
     </div>
+  );
+}
+
+/**
+ * The way in for someone who may take on clients but has none yet.
+ *
+ * The sidebar entry follows grants actually held, so a practice that has just
+ * subscribed would otherwise have nowhere to start. It sits here because this
+ * is already the page about professional relationships — the other side of the
+ * same idea — and it disappears the moment they hold one, when the workspace
+ * gets its own place in the sidebar.
+ */
+function ActForClientsCard() {
+  const entitled = useEntitlement('CA_WORKSPACE');
+  const { data: clients } = useQuery({
+    queryKey: ['ca', 'clients'],
+    queryFn: () => caApi.listClients(),
+    retry: false,
+  });
+
+  if (!entitled.allowed || (clients?.length ?? 0) > 0) return null;
+
+  return (
+    <Card className="mt-4">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <p className="text-[14px] font-medium text-foreground">Do you keep books for clients?</p>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+            Your plan lets you act for other people. Invite your first client and their books get
+            their own place in the sidebar.
+          </p>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/ca">
+            <Briefcase className="h-3.5 w-3.5" /> Open client books
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

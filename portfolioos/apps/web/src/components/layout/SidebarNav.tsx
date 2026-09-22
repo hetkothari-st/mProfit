@@ -8,7 +8,6 @@ import { AssetClassSectionList } from './AssetClassSectionList';
 import { FamilyNavTree } from './FamilyNavTree';
 import { NavSection, OVERVIEW_ITEMS, ASSET_CLASS_ITEMS, NAV_SECTIONS } from './navItems';
 import { Briefcase, ShieldCheck } from 'lucide-react';
-import { useEntitlement } from '@/hooks/useEntitlement';
 import { useQuery } from '@tanstack/react-query';
 import { caApi } from '@/api/ca.api';
 
@@ -46,7 +45,6 @@ export function SidebarNav({
   // — for everyone else it is a section about a job they don't do, and an
   // upsell in the primary nav is worse than a nav without it. The Pricing
   // page is where the pitch belongs.
-  const caWorkspace = useEntitlement('CA_WORKSPACE');
   // A professional who was invited by a client holds grants without holding
   // the plan; the workspace entry has to follow the grants, not the billing.
   // Cheap, cached, and returns an empty list for everyone else.
@@ -142,7 +140,13 @@ export function SidebarNav({
           section={{
             items: [
               { label: 'Account Access', to: '/settings/professional-access', icon: ShieldCheck },
-              ...(caWorkspace.allowed || (clientCount ?? 0) > 0
+              // Driven by grants HELD, not by plan. The top tier also unlocks
+              // the accounting module, so plenty of people on it keep their own
+              // books and act for nobody; showing them an empty client
+              // workspace is noise. Someone entitled to take on clients but
+              // holding none is offered the way in from Account Access, where
+              // the rest of the relationship already lives.
+              ...((clientCount ?? 0) > 0
                 ? [{ label: 'Client books', to: '/ca', icon: Briefcase }]
                 : []),
             ],

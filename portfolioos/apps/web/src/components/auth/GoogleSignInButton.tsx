@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { useNextPath } from '@/hooks/useNextPath';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -85,6 +86,7 @@ export function GoogleSignInButton({
   remember = true,
 }: GoogleSignInButtonProps) {
   const navigate = useNavigate();
+  const nextPath = useNextPath();
   const setSession = useAuthStore((s) => s.setSession);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -107,7 +109,12 @@ export function GoogleSignInButton({
       );
       // A brand-new account goes through setup, whatever this browser saw before.
       // New accounts, and accounts that left setup unfinished, go to onboarding.
-      navigate(data.isNew || isOnboardingUnfinished(data.user.id) ? '/onboarding' : '/dashboard', {
+      // As on the password paths: an explicit destination means they were
+      // part-way through something else.
+      navigate(
+        nextPath ??
+          (data.isNew || isOnboardingUnfinished(data.user.id) ? '/onboarding' : '/dashboard'),
+        {
         replace: true,
       });
     },

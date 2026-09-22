@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useNextPath } from '@/hooks/useNextPath';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -49,6 +50,7 @@ function useSecondsUntil(iso: string): number {
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const nextPath = useNextPath();
   const setSession = useAuthStore((s) => s.setSession);
   // Set once the code has been emailed — switches the page to the code step.
   const [pending, setPending] = useState<PendingRegistration | null>(null);
@@ -94,7 +96,10 @@ export function RegisterPage() {
   const footer = (
     <>
       Already have an account?{' '}
-      <Link to="/login" className="font-medium text-primary hover:underline">
+      <Link
+        to={`/login${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ''}`}
+        className="font-medium text-primary hover:underline"
+      >
         Sign in
       </Link>
     </>
@@ -111,10 +116,11 @@ export function RegisterPage() {
         onVerified={(data) => {
           setSession(data.user, data.tokens, { remember: true });
           toast.success('Email verified. Welcome to EveryPaisa!');
-          // Straight into setup. The dashboard only redirects when this
-          // browser has never finished onboarding, which is wrong for a new
-          // account made on a browser someone has used before.
-          navigate('/onboarding', { replace: true });
+          // Straight into setup, unless they arrived mid-errand. Someone who
+          // made this account in order to accept an invitation goes back to
+          // it: dropping them into portfolio setup loses the token, and the
+          // invitation is the only reason they signed up.
+          navigate(nextPath ?? '/onboarding', { replace: true });
         }}
       />
     );
@@ -153,7 +159,10 @@ export function RegisterPage() {
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Button asChild size="sm">
-                  <Link to="/login" state={{ email }}>
+                  <Link
+                    to={`/login${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ''}`}
+                    state={{ email }}
+                  >
                     Sign in
                   </Link>
                 </Button>
