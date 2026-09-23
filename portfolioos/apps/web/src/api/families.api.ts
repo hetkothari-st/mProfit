@@ -44,6 +44,8 @@ export interface FamilyMemberRow {
   /** Someone without an email or login, kept by another member. */
   managed: boolean;
   managedBy: { id: string; name: string } | null;
+  /** Where to reach a managed member. Noted when they were added; not a login. */
+  contactEmail: string | null;
   /** "Father", "Wife" — of `relatedTo`. */
   relation: string | null;
   /** Who `relation` is measured against, while they are still in the family. */
@@ -233,6 +235,7 @@ export const familiesApi = {
       relatedToId?: string;
       managerId?: string;
       role?: 'CONTRIBUTOR' | 'VIEWER';
+      contactEmail?: string;
     },
   ): Promise<ManagedOutcome> {
     const { data } = await api.post<ApiResponse<ManagedOutcome>>(

@@ -827,7 +827,11 @@ function AddMemberDialog({
   relatedToId?: string;
   onClose: () => void;
 }) {
-  const [mode, setMode] = useState<'email' | 'managed'>('email');
+  // Adding someone directly is the common case — a grandparent, a child, a
+  // spouse whose books the family already keeps. Inviting is for someone who
+  // wants their own login now; it is the slower path, because nothing shows
+  // on the tree until they accept.
+  const [mode, setMode] = useState<'email' | 'managed'>('managed');
   // Once the invitation exists the dialog is about its email; switching to
   // "No email" then would abandon it, so the choice is no longer offered.
   const [committed, setCommitted] = useState(false);
@@ -847,8 +851,16 @@ function AddMemberDialog({
       <div role="radiogroup" aria-label="How to add them" className="mb-4 grid grid-cols-2 gap-2">
         {(
           [
-            ['email', 'They have an email', 'They sign in and see what you allow.'],
-            ['managed', 'No email', 'Someone in the family keeps their books.'],
+            [
+              'managed',
+              'Add them now',
+              'They appear on the tree straight away. Someone in the family keeps their books.',
+            ],
+            [
+              'email',
+              'Invite by email',
+              'They sign in themselves. Nothing shows until they accept.',
+            ],
           ] as const
         ).map(([key, t, hint]) => (
           <button
@@ -912,6 +924,7 @@ function ManagedMemberForm({
   const queryClient = useQueryClient();
   const { enter } = useManageProfile();
   const [name, setName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
   const [managerId, setManagerId] = useState(currentUserId ?? '');
   // They join straight away — there is no invitation to accept — so their
   // place in the family is chosen here rather than by them later.
@@ -931,6 +944,7 @@ function ManagedMemberForm({
         relatedToId: kin.relation.trim() ? kin.relatedToId || undefined : undefined,
         managerId: managerId || undefined,
         role,
+        contactEmail: contactEmail.trim() || undefined,
       });
       if (outcome.status === 'managed_added') return outcome;
       const paid = await payForSeat(familyId, outcome);
@@ -1000,6 +1014,20 @@ function ManagedMemberForm({
             onChange={(e) => setName(e.target.value)}
             disabled={addMutation.isPending}
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="managed-email">Their email (optional)</Label>
+          <Input
+            id="managed-email"
+            type="email"
+            placeholder="them@example.com"
+            value={contactEmail}
+            onChange={(e) => setContactEmail(e.target.value)}
+            disabled={addMutation.isPending}
+          />
+          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+            Noted, not emailed. It saves you typing when you hand them the account later.
+          </p>
         </div>
         <RelationPicker
           members={members}
@@ -1337,7 +1365,7 @@ function HandOverSection({
   onDone: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(member.contactEmail ?? '');
   const [invitationId, setInvitationId] = useState<string | null>(null);
 
   const invite = useMutation({
