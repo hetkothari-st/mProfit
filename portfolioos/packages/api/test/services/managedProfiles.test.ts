@@ -124,10 +124,11 @@ describe('adding a managed member', () => {
     const famId = await family(het, [], 1); // Het alone fills the only seat.
 
     // Payments are not configured in tests, so the paid-seat path refuses
-    // outright — which is the proof the seat rule applied at all.
+    // outright — which is the proof the seat rule applied at all. The refusal
+    // names what is using the seats (see familySeats.test).
     await expect(
       runAsUser(het.userId, () => addManagedMember(het.userId, famId, { name: 'Dadaji' })),
-    ).rejects.toThrow(/exceeds your included seats/i);
+    ).rejects.toThrow(/included seats are taken by 1 member/i);
   });
 
   it('is never made an owner', async () => {
