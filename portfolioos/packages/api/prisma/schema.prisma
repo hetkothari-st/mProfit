@@ -3537,6 +3537,12 @@ model FamilyMember {
 
   invitedById String?
   invitedBy   User?    @relation("FamilyMemberInvitedBy", fields: [invitedById], references: [id])
+  /// Where to reach a member who has no login: noted when they are added,
+  /// used to pre-fill the hand-over invitation later. Deliberately NOT the
+  /// `User.email`, which stays an unroutable placeholder — a real address on
+  /// a profile nobody can sign into would take that address away from the
+  /// person if they ever registered themselves.
+  contactEmail String?
   /// How this person is related to `relatedToId` ("Father" of Akshay).
   /// Shown on the tree; free text because families name themselves.
   relation    String?

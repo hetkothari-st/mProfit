@@ -6,6 +6,7 @@ import {
   cancelInvitation,
   createFamily,
   inviteMember,
+  listMembers,
   listMyFamilies,
   seatUsage,
 } from '../../src/services/family.service.js';
@@ -172,5 +173,50 @@ describe('a member added without an email', () => {
       }),
     );
     expect(row.role).toBe('VIEWER');
+  });
+});
+
+describe('adding someone directly, without an invitation', () => {
+  it('puts them in the family at once and sends nothing, even with an email noted', async () => {
+    const { owner, familyId } = await family('direct-add');
+
+    const res = await runAsUser(owner.userId, () =>
+      addManagedMember(owner.userId, familyId, {
+        name: 'Mahendra Jain',
+        role: 'CONTRIBUTOR',
+        contactEmail: 'Mahendra.Jain@Example.com',
+      }),
+    );
+    if (res.status !== 'managed_added') throw new Error('expected managed_added');
+
+    // On the tree immediately — no invitation to accept, none created.
+    const members = await runAsUser(owner.userId, () => listMembers(owner.userId, familyId));
+    const row = members.find((m) => m.userId === res.userId)!;
+    expect(row.status).toBe('ACTIVE');
+    expect(row.role).toBe('CONTRIBUTOR');
+    expect(row.managed).toBe(true);
+    // Noted for the hand-over later, lower-cased, and never their login.
+    expect(row.contactEmail).toBe('mahendra.jain@example.com');
+    expect(row.email).toBeNull();
+
+    const invitations = await runAsSystem(() =>
+      prisma.familyInvitation.count({ where: { familyId } }),
+    );
+    expect(invitations).toBe(0);
+
+    // The address stays free: they can still register it themselves.
+    const taken = await runAsSystem(() =>
+      prisma.user.findUnique({ where: { email: 'mahendra.jain@example.com' } }),
+    );
+    expect(taken).toBeNull();
+  });
+
+  it('refuses an address that is not one', async () => {
+    const { owner, familyId } = await family('direct-bad-email');
+    await expect(
+      runAsUser(owner.userId, () =>
+        addManagedMember(owner.userId, familyId, { name: 'X', contactEmail: 'not-an-email' }),
+      ),
+    ).rejects.toThrow(/does not look right/i);
   });
 });

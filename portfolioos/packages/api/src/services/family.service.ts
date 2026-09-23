@@ -170,6 +170,8 @@ export async function listMembers(callerId: string, familyId: string) {
       email: managed ? null : r.user.email,
       managed,
       managedBy: managed ? r.user.managedBy : null,
+      // Only a managed member has one; it is where to reach them, not a login.
+      contactEmail: managed ? r.contactEmail : null,
       relation: r.relation,
       // Who the relation is measured against, while they are still here.
       relatedTo:
@@ -643,6 +645,7 @@ export async function verifySeatPaymentAndInvite(
           addedById: pending.createdById,
           passwordHash,
           role: pending.role === 'VIEWER' ? 'VIEWER' : 'CONTRIBUTOR',
+          contactEmail: pending.invitedEmail,
         });
         await tx.pendingFamilyInvite.delete({ where: { id: pending.id } });
         return { family, profile };
@@ -803,6 +806,13 @@ export interface AddManagedMemberInput {
    * could become the last one.
    */
   role?: 'CONTRIBUTOR' | 'VIEWER';
+  /**
+   * Where to reach them, if the family knows. Noted, never mailed: adding
+   * somebody directly is the point of this call. It pre-fills the hand-over
+   * invitation later, and is kept off `User.email` so registering with that
+   * address stays possible for them.
+   */
+  contactEmail?: string;
   /** Who keeps this person's books: any active, non-managed member. Defaults to the caller. */
   managerId?: string;
 }
@@ -839,6 +849,7 @@ async function createManagedProfileTx(
     addedById: string;
     passwordHash: string;
     role: 'CONTRIBUTOR' | 'VIEWER';
+    contactEmail: string | null;
   },
 ) {
   const profile = await tx.user.create({
@@ -863,6 +874,7 @@ async function createManagedProfileTx(
       invitedById: input.addedById,
       relation: input.relation,
       relatedToId: input.relatedToId,
+      contactEmail: input.contactEmail,
     },
   });
   // A portfolio to put their holdings in, so whoever keeps their books can
@@ -988,6 +1000,10 @@ export async function addManagedMember(
   if (name.length > 80) throw new BadRequestError('That name is too long.');
   const { relation, relatedToId } = await validRelative(familyId, input.relation, input.relatedToId);
   const role = input.role ?? 'CONTRIBUTOR';
+  const contactEmail = input.contactEmail?.trim().toLowerCase() || null;
+  if (contactEmail && !contactEmail.includes('@')) {
+    throw new BadRequestError('That email does not look right.');
+  }
   const managerId = input.managerId ?? callerId;
   await assertValidManager(familyId, managerId);
 
@@ -1009,7 +1025,9 @@ export async function addManagedMember(
       data: {
         familyId,
         kind: 'MANAGED',
-        invitedEmail: null,
+        // Where to reach them, carried through the paid-seat detour. This row
+        // is never mailed: a MANAGED seat has nobody to invite.
+        invitedEmail: contactEmail,
         invitedName: name,
         relation,
         relatedToId,
@@ -1048,6 +1066,7 @@ export async function addManagedMember(
         addedById: callerId,
         passwordHash,
         role,
+        contactEmail,
       }),
     ),
   );
