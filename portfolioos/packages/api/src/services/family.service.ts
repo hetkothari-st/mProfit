@@ -642,6 +642,7 @@ export async function verifySeatPaymentAndInvite(
           managerId: pending.managedById ?? pending.createdById,
           addedById: pending.createdById,
           passwordHash,
+          role: pending.role === 'VIEWER' ? 'VIEWER' : 'CONTRIBUTOR',
         });
         await tx.pendingFamilyInvite.delete({ where: { id: pending.id } });
         return { family, profile };
@@ -794,6 +795,14 @@ export interface AddManagedMemberInput {
   /** "Father", "Wife" … of `relatedToId`. */
   relation?: string;
   relatedToId?: string;
+  /**
+   * Their place in the family. They never sign in, so this decides how they
+   * are counted and described rather than what they can do — but a
+   * grandparent whose flat and FDs are half the household is a contributor
+   * to it, and the family says so. Never OWNER: an owner who cannot sign in
+   * could become the last one.
+   */
+  role?: 'CONTRIBUTOR' | 'VIEWER';
   /** Who keeps this person's books: any active, non-managed member. Defaults to the caller. */
   managerId?: string;
 }
@@ -805,6 +814,11 @@ export interface ManagedMemberResult {
   familyName: string;
   seatNumber: number;
   includedSeats: number;
+}
+
+/** "Ramesh Kothari" → "Ramesh". Falls back to the whole name. */
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name.trim();
 }
 
 /** A hash of a secret nobody ever sees: nothing typed will ever match it. */
@@ -824,6 +838,7 @@ async function createManagedProfileTx(
     managerId: string;
     addedById: string;
     passwordHash: string;
+    role: 'CONTRIBUTOR' | 'VIEWER';
   },
 ) {
   const profile = await tx.user.create({
@@ -843,13 +858,25 @@ async function createManagedProfileTx(
     data: {
       familyId: input.familyId,
       userId: profile.id,
-      // They never sign in, so the role only places them in the family;
-      // VIEWER grants nothing that matters.
-      role: 'VIEWER',
+      role: input.role,
       status: 'ACTIVE',
       invitedById: input.addedById,
       relation: input.relation,
       relatedToId: input.relatedToId,
+    },
+  });
+  // A portfolio to put their holdings in, so whoever keeps their books can
+  // record the first FD without stopping to create one — and so the family's
+  // portfolio list shows them straight away. Theirs, not the family's: what
+  // is recorded here belongs to the person it was recorded for, and goes
+  // with them if they ever take the account over.
+  await tx.portfolio.create({
+    data: {
+      userId: profile.id,
+      name: `${firstName(input.name)}'s portfolio`,
+      type: 'INVESTMENT',
+      currency: 'INR',
+      isDefault: true,
     },
   });
   return profile;
@@ -960,6 +987,7 @@ export async function addManagedMember(
   if (!name) throw new BadRequestError('Their name is required.');
   if (name.length > 80) throw new BadRequestError('That name is too long.');
   const { relation, relatedToId } = await validRelative(familyId, input.relation, input.relatedToId);
+  const role = input.role ?? 'CONTRIBUTOR';
   const managerId = input.managerId ?? callerId;
   await assertValidManager(familyId, managerId);
 
@@ -986,7 +1014,7 @@ export async function addManagedMember(
         relation,
         relatedToId,
         managedById: managerId,
-        role: 'VIEWER',
+        role,
         createdById: callerId,
         razorpayOrderId: order.orderId,
         expiresAt: new Date(Date.now() + PENDING_SEAT_INVITE_TTL_MIN * 60_000),
@@ -1019,6 +1047,7 @@ export async function addManagedMember(
         managerId,
         addedById: callerId,
         passwordHash,
+        role,
       }),
     ),
   );

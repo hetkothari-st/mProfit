@@ -132,6 +132,8 @@ const managedMemberSchema = z.object({
   relation: z.string().max(40).optional(),
   relatedToId: z.string().min(1).optional(),
   managerId: z.string().min(1).optional(),
+  // Never OWNER — see AddManagedMemberInput.
+  role: z.enum(['CONTRIBUTOR', 'VIEWER']).optional(),
 });
 
 const managerSchema = z.object({ managerId: z.string().min(1) });

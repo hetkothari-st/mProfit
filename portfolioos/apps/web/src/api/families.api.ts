@@ -227,7 +227,13 @@ export const familiesApi = {
   /** Add someone with no email or login, kept by `managerId` (default: you). */
   async addManagedMember(
     familyId: string,
-    input: { name: string; relation?: string; relatedToId?: string; managerId?: string },
+    input: {
+      name: string;
+      relation?: string;
+      relatedToId?: string;
+      managerId?: string;
+      role?: 'CONTRIBUTOR' | 'VIEWER';
+    },
   ): Promise<ManagedOutcome> {
     const { data } = await api.post<ApiResponse<ManagedOutcome>>(
       `/api/families/${familyId}/members/managed`,
