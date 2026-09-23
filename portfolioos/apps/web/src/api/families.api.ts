@@ -106,6 +106,27 @@ export interface ManagedMemberResult {
 
 export type ManagedOutcome = ManagedMemberResult | SeatPaymentRequiredResult;
 
+/** One person in a bulk add. */
+export interface BulkManagedRow {
+  name: string;
+  relation?: string | null;
+  /** An existing member… */
+  relatedToId?: string | null;
+  /** …or someone listed earlier in this same batch, by position. */
+  relatedToRow?: number | null;
+  managerId?: string | null;
+  role?: 'CONTRIBUTOR' | 'VIEWER';
+  contactEmail?: string | null;
+}
+
+export interface BulkManagedResult {
+  status: 'managed_added';
+  added: Array<{ userId: string; name: string; row: number }>;
+  familyName: string;
+  includedSeats: number;
+  seatsUsed: number;
+}
+
 export interface FamilyTreeNodePos {
   userId: string;
   x: number;
@@ -243,6 +264,21 @@ export const familiesApi = {
     const { data } = await api.post<ApiResponse<ManagedOutcome>>(
       `/api/families/${familyId}/members/managed`,
       input,
+    );
+    return unwrap(data);
+  },
+  /**
+   * Add several people at once. All of them or none, and a row may be
+   * related to someone listed above it (`relatedToRow`) who does not exist
+   * yet — that is how a whole branch goes in at one go.
+   */
+  async addManagedMembers(
+    familyId: string,
+    members: BulkManagedRow[],
+  ): Promise<BulkManagedResult> {
+    const { data } = await api.post<ApiResponse<BulkManagedResult>>(
+      `/api/families/${familyId}/members/managed/bulk`,
+      { members },
     );
     return unwrap(data);
   },

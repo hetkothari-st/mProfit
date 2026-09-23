@@ -18,9 +18,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EmptyState } from '@/components/common/EmptyState';
+import { FAMILY_RELATIONS } from '@everypaisa/shared';
 import {
   familiesApi,
   NON_AC_CATEGORIES,
+  type BulkManagedRow,
   type FamilyMemberRow,
   type FamilyRole,
   type NonAcCategory,
@@ -831,7 +833,7 @@ function AddMemberDialog({
   // spouse whose books the family already keeps. Inviting is for someone who
   // wants their own login now; it is the slower path, because nothing shows
   // on the tree until they accept.
-  const [mode, setMode] = useState<'email' | 'managed'>('managed');
+  const [mode, setMode] = useState<'email' | 'managed' | 'bulk'>('managed');
   // Once the invitation exists the dialog is about its email; switching to
   // "No email" then would abandon it, so the choice is no longer offered.
   const [committed, setCommitted] = useState(false);
@@ -848,13 +850,22 @@ function AddMemberDialog({
   return (
     <ModalShell title={title} onClose={onClose}>
       {!committed && (
-      <div role="radiogroup" aria-label="How to add them" className="mb-4 grid grid-cols-2 gap-2">
+      <div
+        role="radiogroup"
+        aria-label="How to add them"
+        className="mb-4 grid gap-2 sm:grid-cols-3"
+      >
         {(
           [
             [
               'managed',
               'Add them now',
               'They appear on the tree straight away. Someone in the family keeps their books.',
+            ],
+            [
+              'bulk',
+              'Add several',
+              'A whole branch in one pass — each line can be related to one above it.',
             ],
             [
               'email',
@@ -887,6 +898,15 @@ function AddMemberDialog({
           currentUserId={currentUserId}
           kin={kin}
           setKin={setKin}
+          onClose={onClose}
+        />
+      ) : mode === 'bulk' ? (
+        <BulkMemberForm
+          onAdded={() => setCommitted(true)}
+          familyId={familyId}
+          members={members}
+          currentUserId={currentUserId}
+          relatedToId={relatedToId}
           onClose={onClose}
         />
       ) : (
@@ -1107,6 +1127,259 @@ function ManagedMemberForm({
         >
           {addMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
           Add to family
+        </Button>
+      </ModalFooter>
+    </>
+  );
+}
+
+/**
+ * Adding a branch of the family in one pass.
+ *
+ * A household is not entered one dialog at a time: a grandmother, three
+ * uncles and their wives is nine trips through the same four fields. Here
+ * each line is a person, and "related to" offers the people already in the
+ * family AND anyone listed above on this same form — so "Sarita, wife of
+ * Mahendra" can be written before Mahendra himself exists.
+ *
+ * Everyone here joins the way one person does: a profile of their own, kept
+ * by a member, with no invitation to accept. Someone who wants their own
+ * login is invited separately — that flow has an email to write.
+ */
+interface BulkRow {
+  /** Stable across removals, so "related to" keeps pointing at the right line. */
+  key: number;
+  name: string;
+  relation: string;
+  /** `u:<userId>` for an existing member, `r:<key>` for a line above. */
+  anchor: string;
+}
+
+function BulkMemberForm({
+  familyId,
+  members,
+  currentUserId,
+  relatedToId,
+  onAdded,
+  onClose,
+}: {
+  familyId: string;
+  members: FamilyMemberRow[];
+  currentUserId: string | undefined;
+  relatedToId?: string;
+  onAdded: () => void;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const defaultAnchor = `u:${relatedToId ?? currentUserId ?? ''}`;
+  const [nextKey, setNextKey] = useState(3);
+  const [rows, setRows] = useState<BulkRow[]>([
+    { key: 1, name: '', relation: '', anchor: defaultAnchor },
+    { key: 2, name: '', relation: '', anchor: defaultAnchor },
+  ]);
+  const [managerId, setManagerId] = useState(currentUserId ?? '');
+  const [role, setRole] = useState<'CONTRIBUTOR' | 'VIEWER'>('CONTRIBUTOR');
+  const [done, setDone] = useState<string[] | null>(null);
+
+  const managers = keeperOptions(members);
+  const existing = members.filter((m) => m.status === 'ACTIVE');
+
+  const patch = (key: number, change: Partial<BulkRow>) =>
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...change } : r)));
+
+  const addRow = () => {
+    setRows((prev) => [...prev, { key: nextKey, name: '', relation: '', anchor: defaultAnchor }]);
+    setNextKey((k) => k + 1);
+  };
+
+  const removeRow = (key: number) =>
+    setRows((prev) =>
+      prev
+        .filter((r) => r.key !== key)
+        // Anyone related to the removed line falls back to the default.
+        .map((r) => (r.anchor === `r:${key}` ? { ...r, anchor: defaultAnchor } : r)),
+    );
+
+  const filled = rows.filter((r) => r.name.trim());
+  const ready =
+    filled.length > 0 && filled.every((r) => r.relation.trim() && r.anchor) && Boolean(managerId);
+
+  const addMutation = useMutation({
+    mutationFn: () => {
+      const list = rows.filter((r) => r.name.trim());
+      const payload: BulkManagedRow[] = list.map((r) => {
+        const base = { name: r.name.trim(), relation: r.relation.trim(), role, managerId };
+        if (r.anchor.startsWith('u:')) return { ...base, relatedToId: r.anchor.slice(2) };
+        return { ...base, relatedToRow: list.findIndex((x) => `r:${x.key}` === r.anchor) };
+      });
+      return familiesApi.addManagedMembers(familyId, payload);
+    },
+    onSuccess: (res) => {
+      toast.success(
+        res.added.length === 1
+          ? `${res.added[0]!.name} added to the family`
+          : `${res.added.length} people added to the family`,
+      );
+      setDone(res.added.map((a) => a.name));
+      onAdded();
+      queryClient.invalidateQueries({ queryKey: ['families', familyId, 'members'] });
+      queryClient.invalidateQueries({ queryKey: ['families', 'mine'] });
+      queryClient.invalidateQueries({ queryKey: ['family-tree-layout', familyId] });
+      queryClient.invalidateQueries({ queryKey: ['managed-profiles'] });
+      // They each come with a portfolio; the list shows them at once.
+      queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Could not add them')),
+  });
+
+  if (done) {
+    return (
+      <>
+        <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 px-4 py-3">
+          <p className="text-sm font-medium text-foreground">
+            {done.length === 1
+              ? `${done[0]} is on the tree.`
+              : `${done.length} people are on the tree.`}
+          </p>
+          <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+            {done.join(', ')}. Each has a portfolio of their own. Open any of them from their card
+            to record what they hold.
+          </p>
+        </div>
+        <ModalFooter>
+          <Button onClick={onClose}>Done</Button>
+        </ModalFooter>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          {/* Column headings on a wide screen; on a phone the grid stacks and
+              each control carries its own label. */}
+          <div className="hidden md:grid md:grid-cols-[1.4fr_1fr_1.4fr_auto] md:gap-2 md:px-0.5">
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Name</span>
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Is the</span>
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Of</span>
+            <span className="sr-only">Remove</span>
+          </div>
+          {rows.map((row, i) => {
+            const above = rows.slice(0, i).filter((r) => r.name.trim());
+            return (
+              <div
+                key={row.key}
+                className="grid grid-cols-1 gap-2 rounded-lg border border-border/60 p-2 md:grid-cols-[1.4fr_1fr_1.4fr_auto] md:items-center md:rounded-none md:border-0 md:p-0"
+              >
+                <Input
+                  aria-label={`Name of person ${i + 1}`}
+                  placeholder={i === 0 ? 'e.g. Sarita Jain' : 'Their name'}
+                  value={row.name}
+                  maxLength={80}
+                  onChange={(e) => patch(row.key, { name: e.target.value })}
+                  disabled={addMutation.isPending}
+                  className="h-9"
+                />
+                <select
+                  aria-label={`How person ${i + 1} is related`}
+                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  value={row.relation}
+                  onChange={(e) => patch(row.key, { relation: e.target.value })}
+                  disabled={addMutation.isPending}
+                >
+                  <option value="">Relation…</option>
+                  {FAMILY_RELATIONS.map((r) => (
+                    <option key={r.label} value={r.label}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label={`Who person ${i + 1} is related to`}
+                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  value={row.anchor}
+                  onChange={(e) => patch(row.key, { anchor: e.target.value })}
+                  disabled={addMutation.isPending}
+                >
+                  {existing.map((m) => (
+                    <option key={m.userId} value={`u:${m.userId}`}>
+                      {m.userId === currentUserId ? `${m.name} (you)` : m.name}
+                    </option>
+                  ))}
+                  {above.map((r) => (
+                    <option key={r.key} value={`r:${r.key}`}>
+                      {r.name.trim()} — added above
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  aria-label={`Remove person ${i + 1}`}
+                  onClick={() => removeRow(row.key)}
+                  disabled={rows.length === 1 || addMutation.isPending}
+                  className="justify-self-end rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 focus-ring"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={addRow}
+            disabled={rows.length >= 25 || addMutation.isPending}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Add another
+          </Button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="bulk-manager">Who keeps their books</Label>
+            <select
+              id="bulk-manager"
+              className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+              value={managerId}
+              onChange={(e) => setManagerId(e.target.value)}
+              disabled={addMutation.isPending}
+            >
+              {managers.map((m) => (
+                <option key={m.userId} value={m.userId} disabled={m.managed}>
+                  {keeperLabel(m, currentUserId)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="bulk-role">Their place in the family</Label>
+            <select
+              id="bulk-role"
+              className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+              value={role}
+              onChange={(e) => setRole(e.target.value as 'CONTRIBUTOR' | 'VIEWER')}
+              disabled={addMutation.isPending}
+            >
+              <option value="CONTRIBUTOR">Contributors — counted in the household</option>
+              <option value="VIEWER">Viewers — listed, but kept to the side</option>
+            </select>
+          </div>
+        </div>
+        <p className="rounded-md bg-muted/40 px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+          Everyone here takes a family seat. They go in together or not at all, so a name the
+          others are related to is never the one left out. Both settings above apply to the whole
+          list; either can be changed afterwards from a person&rsquo;s card.
+        </p>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={addMutation.isPending}>
+          Cancel
+        </Button>
+        <Button onClick={() => addMutation.mutate()} disabled={!ready || addMutation.isPending}>
+          {addMutation.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+          {filled.length > 1 ? `Add ${filled.length} people` : 'Add to family'}
         </Button>
       </ModalFooter>
     </>
