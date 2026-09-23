@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { layoutFamily, lineTo, NODE_H, ROW_PITCH, unitLabel, type Parents } from './familyTree';
+import { INDENT, layoutFamily, lineTo, PAD, ROW_PITCH, type Parents } from './familyTree';
 import type { FamilyMemberRow, FamilyRole } from '@/api/families.api';
 
 /**
- * The tree lays itself out. Someone is added as a father, a wife, a brother —
- * and these are the shapes that has to produce, without anyone dragging a card.
+ * The tree reads down the page: the head at the top, a husband or wife
+ * beside them, each child stepped in under them with the relation written on
+ * the line. These are the shapes that has to produce, from the relations
+ * alone, with nobody arranging anything by hand.
  */
 
 let joined = 0;
@@ -30,149 +32,140 @@ function member(userId: string, opts: Partial<FamilyMemberRow> = {}): FamilyMemb
   } as FamilyMemberRow;
 }
 
-const family = (ids: string[]) => ids.map((id) => member(id, { name: id }));
-const at = (layout: ReturnType<typeof layoutFamily>, key: string) =>
-  layout.nodes.find((n) => n.key === key)!;
-const keyOf = (layout: ReturnType<typeof layoutFamily>, id: string) => layout.unitOf[id]!;
+const kin = (name: string, relation: string, of: string) =>
+  member(name, { name, relation, relatedTo: { id: of, name: of } });
 
-describe('laying a family out', () => {
-  const members = family(['harish', 'kusum', 'rajesh', 'anita', 'suresh', 'kavya', 'rohit']);
-  const parents: Parents = {
-    harish: null,
-    kusum: null,
-    rajesh: 'harish',
-    anita: null,
-    suresh: 'harish',
-    kavya: 'rajesh',
-    rohit: null,
-  };
-  const partners: [string, string][] = [
-    ['harish', 'kusum'],
-    ['rajesh', 'anita'],
-    ['kavya', 'rohit'],
-  ];
+const MEMBERS = [
+  member('harish', { name: 'harish', role: 'OWNER' }),
+  kin('kusum', 'Wife', 'harish'),
+  kin('rajesh', 'Son', 'harish'),
+  kin('anita', 'Wife', 'rajesh'),
+  kin('kavya', 'Daughter', 'rajesh'),
+  kin('suresh', 'Son', 'harish'),
+];
+const PARENTS: Parents = {
+  harish: null,
+  kusum: null,
+  rajesh: 'harish',
+  anita: null,
+  kavya: 'rajesh',
+  suresh: 'harish',
+};
+const PARTNERS: [string, string][] = [
+  ['harish', 'kusum'],
+  ['rajesh', 'anita'],
+];
 
-  it('puts a couple in one place and each generation on its own line', () => {
-    const l = layoutFamily(members, parents, partners);
-    const top = at(l, keyOf(l, 'harish'));
-    expect(top.ids).toEqual(['harish', 'kusum']);
-    expect(unitLabel(top.members)).toBe('harish & kusum');
-    expect(at(l, keyOf(l, 'rajesh')).y - top.y).toBe(ROW_PITCH);
-    expect(at(l, keyOf(l, 'kavya')).y - top.y).toBe(ROW_PITCH * 2);
-    // A wife stands with her husband, not as a child of his father.
-    expect(keyOf(l, 'anita')).toBe(keyOf(l, 'rajesh'));
-    expect(at(l, keyOf(l, 'rajesh')).parentKey).toBe(keyOf(l, 'harish'));
+const rowFor = (l: ReturnType<typeof layoutFamily>, id: string) =>
+  l.rows.find((r) => r.key === id)!;
+
+describe('laying a family out as an indented tree', () => {
+  it('reads down the page, one row per household', () => {
+    const l = layoutFamily(MEMBERS, PARENTS, PARTNERS);
+    // A couple is one row, not two.
+    expect(l.rows.map((r) => r.key)).toEqual(['harish', 'rajesh', 'kavya', 'suresh']);
+    expect(rowFor(l, 'harish').spouse?.userId).toBe('kusum');
+    expect(l.rowOf.kusum).toBe('harish');
+    // Depth-first: a son, then his children, then the next son.
+    expect(rowFor(l, 'kavya').y).toBeLessThan(rowFor(l, 'suresh').y);
+    expect(rowFor(l, 'rajesh').y - rowFor(l, 'harish').y).toBe(ROW_PITCH);
   });
 
-  it('centres a parent over the children it shares', () => {
-    const l = layoutFamily(members, parents, partners);
-    const top = at(l, keyOf(l, 'harish'));
-    const a = at(l, keyOf(l, 'rajesh'));
-    const b = at(l, keyOf(l, 'suresh'));
-    const centre = (Math.min(a.x, b.x) + Math.max(a.x + a.w, b.x + b.w)) / 2;
-    expect(top.x + top.w / 2).toBeCloseTo(centre, 5);
+  it('steps each generation in, and puts the spouse beside', () => {
+    const l = layoutFamily(MEMBERS, PARENTS, PARTNERS);
+    expect(rowFor(l, 'harish').x).toBe(PAD);
+    expect(rowFor(l, 'rajesh').x).toBe(PAD + INDENT);
+    expect(rowFor(l, 'kavya').x).toBe(PAD + INDENT * 2);
+    const head = rowFor(l, 'harish');
+    expect(head.spouseX).toBeGreaterThan(head.x + head.w);
+    expect(head.spouseLabel).toBe('wife');
   });
 
-  it('draws one line per branch, from the pair down to each child', () => {
-    const l = layoutFamily(members, parents, partners);
-    const fromTop = l.edges.filter((e) => e.from === keyOf(l, 'harish'));
-    expect(fromTop).toHaveLength(2);
-    expect(fromTop[0]!.d.startsWith('M ')).toBe(true);
+  it('writes the relation on the line to each child', () => {
+    const l = layoutFamily(MEMBERS, PARENTS, PARTNERS);
+    const labels = Object.fromEntries(l.stubs.map((s) => [s.key.split('->')[1], s.label]));
+    expect(labels).toEqual({ rajesh: 'son', suresh: 'son', kavya: 'daughter' });
+    // Each child's line lands on the indent its pill starts at.
+    const stub = l.stubs.find((s) => s.key.endsWith('kavya'))!;
+    expect(stub.x2).toBe(rowFor(l, 'kavya').x);
   });
 
-  it('never overlaps two places on the same line', () => {
-    const l = layoutFamily(members, parents, partners);
-    const byRow = new Map<number, typeof l.nodes>();
-    for (const n of l.nodes) byRow.set(n.y, [...(byRow.get(n.y) ?? []), n]);
-    for (const row of byRow.values()) {
-      const sorted = [...row].sort((p, q) => p.x - q.x);
-      for (let i = 1; i < sorted.length; i++) {
-        expect(sorted[i]!.x).toBeGreaterThanOrEqual(sorted[i - 1]!.x + sorted[i - 1]!.w);
-      }
-    }
+  it('drops one rail past all of a parent’s children', () => {
+    const l = layoutFamily(MEMBERS, PARENTS, PARTNERS);
+    const rail = l.rails.find((r) => r.key === 'rail:harish')!;
+    // It starts under Harish and reaches his last child, Suresh.
+    expect(rail.y1).toBeGreaterThan(rowFor(l, 'harish').y);
+    expect(rail.y2).toBeGreaterThanOrEqual(rowFor(l, 'suresh').y);
+    expect(rail.x).toBeGreaterThan(rowFor(l, 'harish').x);
+    expect(rail.x).toBeLessThan(rowFor(l, 'rajesh').x);
   });
 
-  it('stands a brother of the person at the top beside them, not under', () => {
-    // Nobody knows Harish's parents, so his brother has none to hang from:
-    // the family becomes two roots, and both must still be laid out.
-    const withBrother = [...members, member('mohan', { name: 'mohan' })];
-    const l = layoutFamily(withBrother, { ...parents, mohan: null }, partners);
-    const mohan = at(l, keyOf(l, 'mohan'));
-    const harish = at(l, keyOf(l, 'harish'));
+  it('gives each line of the family its own branch', () => {
+    const l = layoutFamily(MEMBERS, PARENTS, PARTNERS);
+    expect(rowFor(l, 'rajesh').branch).not.toBe(rowFor(l, 'suresh').branch);
+    // A branch runs all the way down: Kavya is on her father's.
+    expect(rowFor(l, 'kavya').branch).toBe(rowFor(l, 'rajesh').branch);
+  });
+
+  it('hangs children of a wife from the row she is drawn on', () => {
+    // Kavya entered against her mother, who is drawn beside her father.
+    const members = MEMBERS.map((m) =>
+      m.userId === 'kavya' ? { ...m, relatedTo: { id: 'anita', name: 'anita' } } : m,
+    );
+    const l = layoutFamily(members, { ...PARENTS, kavya: 'anita' }, PARTNERS);
+    expect(rowFor(l, 'kavya').parentKey).toBe('rajesh');
+    expect(rowFor(l, 'kavya').x).toBe(PAD + INDENT * 2);
+  });
+
+  it('starts a second line for a brother of the person at the top', () => {
+    const members = [...MEMBERS, kin('mohan', 'Brother', 'harish')];
+    const l = layoutFamily(members, { ...PARENTS, mohan: null }, PARTNERS);
+    const mohan = rowFor(l, 'mohan');
     expect(mohan.parentKey).toBeNull();
-    expect(mohan.y).toBe(harish.y);
-    expect(mohan.x).toBeGreaterThanOrEqual(harish.x + harish.w);
-    // And the rest of the family keeps its shape underneath.
-    expect(at(l, keyOf(l, 'kavya')).y - harish.y).toBe(ROW_PITCH * 2);
+    expect(mohan.depth).toBe(0);
+    expect(mohan.x).toBe(PAD);
+    // And he is below the family already drawn, not on top of it.
+    expect(mohan.y).toBeGreaterThan(rowFor(l, 'suresh').y);
   });
 
   it('re-hangs everyone when a father is added above the top', () => {
-    const withFather = [...members, member('dada', { name: 'dada' })];
-    const l = layoutFamily(withFather, { ...parents, dada: null, harish: 'dada' }, partners);
-    expect(at(l, keyOf(l, 'dada')).parentKey).toBeNull();
-    expect(at(l, keyOf(l, 'harish')).parentKey).toBe(keyOf(l, 'dada'));
-    // Everyone below moves down a generation with no other change.
-    expect(at(l, keyOf(l, 'kavya')).y - at(l, keyOf(l, 'dada')).y).toBe(ROW_PITCH * 3);
+    const members = [...MEMBERS, member('dada', { name: 'dada' })];
+    const l = layoutFamily(members, { ...PARENTS, dada: null, harish: 'dada' }, PARTNERS);
+    expect(rowFor(l, 'dada').depth).toBe(0);
+    expect(rowFor(l, 'harish').depth).toBe(1);
+    expect(rowFor(l, 'kavya').depth).toBe(3);
   });
 
-  it('survives an arrangement that points in a circle', () => {
-    const l = layoutFamily(family(['a', 'b']), { a: 'b', b: 'a' }, []);
-    expect(l.nodes).toHaveLength(2);
-    expect(l.nodes.some((n) => n.parentKey === null)).toBe(true);
+  it('draws everyone exactly once, even when the arrangement loops', () => {
+    const l = layoutFamily(
+      [member('a', { name: 'a' }), member('b', { name: 'b' })],
+      { a: 'b', b: 'a' },
+      [],
+    );
+    expect(l.rows).toHaveLength(2);
+    expect(new Set(l.rows.map((r) => r.key)).size).toBe(2);
   });
 
-  it('measures what it drew, so the board can fit it', () => {
-    const l = layoutFamily(members, parents, partners);
-    const right = Math.max(...l.nodes.map((n) => n.x + n.w));
-    const bottom = Math.max(...l.nodes.map((n) => n.y + NODE_H));
+  it('measures what it drew, so the page can size itself', () => {
+    const l = layoutFamily(MEMBERS, PARENTS, PARTNERS);
+    const right = Math.max(...l.rows.map((r) => (r.spouseX ?? r.x) + (r.spouseW ?? r.w)));
     expect(l.width).toBeGreaterThanOrEqual(right);
-    expect(l.height).toBeGreaterThanOrEqual(bottom);
+    expect(l.height).toBeGreaterThan(rowFor(l, 'suresh').y);
   });
 
   it('is empty for an empty family rather than throwing', () => {
     const l = layoutFamily([], {}, []);
-    expect(l.nodes).toEqual([]);
-    expect(l.width).toBe(0);
-  });
-});
-
-describe('folding a family that is too wide', () => {
-  const members = family(['top', 'a', 'b', 'c', 'a1', 'b1']);
-  const parents: Parents = { top: null, a: 'top', b: 'top', c: 'top', a1: 'a', b1: 'b' };
-
-  it('keeps the line to the focus and folds the branches away from it', () => {
-    const l = layoutFamily(members, parents, [], { focusKey: 'a', fold: true });
-    const keys = l.nodes.map((n) => n.key);
-    expect(keys).toContain('top');
-    expect(keys).toContain('a');
-    // Siblings of the focus stay: that is where "who else is here" is read.
-    expect(keys).toContain('b');
-    expect(keys).toContain('a1');
-    // Their children do not.
-    expect(keys).not.toContain('b1');
-    const folded = l.nodes.find((n) => n.more);
-    expect(folded?.foldedFrom).toBe('b');
-    expect(folded?.more).toBe(1);
-  });
-
-  it('opens a folded branch when asked, and still fits it into the drawing', () => {
-    const l = layoutFamily(members, parents, [], { focusKey: 'a', fold: true, openKeys: ['b'] });
-    expect(l.nodes.map((n) => n.key)).toContain('b1');
-    expect(l.nodes.find((n) => n.key === 'b1')!.parentKey).toBe('b');
-  });
-
-  it('draws the whole family when folding is off', () => {
-    const l = layoutFamily(members, parents, [], { focusKey: 'a' });
-    expect(l.nodes).toHaveLength(6);
-    expect(l.nodes.some((n) => n.more)).toBe(false);
+    expect(l.rows).toEqual([]);
+    expect(l.width).toBe(PAD);
   });
 });
 
 describe('the line down to someone', () => {
-  it('reads from the top of the tree to them', () => {
-    const members = family(['top', 'a', 'a1']);
-    const l = layoutFamily(members, { top: null, a: 'top', a1: 'a' }, []);
-    expect(lineTo(l, 'a1').map((n) => n.key)).toEqual(['top', 'a', 'a1']);
+  it('reads from the top of the tree to them, spouses included', () => {
+    const l = layoutFamily(MEMBERS, PARENTS, PARTNERS);
+    expect(lineTo(l, 'kavya').map((r) => r.key)).toEqual(['harish', 'rajesh', 'kavya']);
+    // Asking about a wife answers with the row she stands on.
+    expect(lineTo(l, 'anita').map((r) => r.key)).toEqual(['harish', 'rajesh']);
     expect(lineTo(l, null)).toEqual([]);
   });
 });
