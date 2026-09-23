@@ -904,6 +904,26 @@ function AddMemberDialog({
   );
 }
 
+/**
+ * Who can be offered as the keeper of someone's books.
+ *
+ * Everyone active is listed, in the family's own order, because a list of
+ * one — "only you" — reads as a broken dropdown rather than as the fact it
+ * is. The ones who cannot are shown greyed out with the reason: keeping
+ * somebody's books means opening their account, and a managed member has no
+ * login to open it with. The moment they take their account over, they can.
+ */
+function keeperOptions(members: FamilyMemberRow[]): FamilyMemberRow[] {
+  return members
+    .filter((m) => m.status === 'ACTIVE')
+    .sort((a, b) => Number(a.managed) - Number(b.managed));
+}
+
+function keeperLabel(m: FamilyMemberRow, currentUserId: string | undefined): string {
+  if (m.managed) return `${m.name} — no login yet`;
+  return m.userId === currentUserId ? `${m.name} (you)` : m.name;
+}
+
 function ManagedMemberForm({
   familyId,
   members,
@@ -933,8 +953,7 @@ function ManagedMemberForm({
     null,
   );
 
-  // Anyone who can sign in may keep the books: a spouse, a sibling, you.
-  const managers = members.filter((m) => m.status === 'ACTIVE' && !m.managed);
+  const managers = keeperOptions(members);
 
   const addMutation = useMutation({
     mutationFn: async () => {
@@ -1064,14 +1083,14 @@ function ManagedMemberForm({
             disabled={addMutation.isPending}
           >
             {managers.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {m.userId === currentUserId ? `${m.name} (you)` : m.name}
+              <option key={m.userId} value={m.userId} disabled={m.managed}>
+                {keeperLabel(m, currentUserId)}
               </option>
             ))}
           </select>
           <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-            Only this person can open their account. They can hand it to anyone else in the family
-            later, and invite them to take it over once they have an email.
+            Only this person can open their account. Members with no login of their own are greyed
+            out — they can keep books once they take over their own account.
           </p>
         </div>
         <p className="rounded-md bg-muted/40 px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
@@ -1269,7 +1288,7 @@ function EditManagedMemberDialog({
     relation: member.relation ?? '',
   });
   const [managerId, setManagerId] = useState(member.managedBy?.id ?? '');
-  const managers = members.filter((m) => m.status === 'ACTIVE' && !m.managed);
+  const managers = keeperOptions(members);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1323,14 +1342,14 @@ function EditManagedMemberDialog({
           >
             {!member.managedBy && <option value="">Choose someone</option>}
             {managers.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {m.userId === currentUserId ? `${m.name} (you)` : m.name}
+              <option key={m.userId} value={m.userId} disabled={m.managed}>
+                {keeperLabel(m, currentUserId)}
               </option>
             ))}
           </select>
           <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-            Any member with their own login can keep them — they do not need to be an owner. Only
-            that person can open the account, from the moment you save.
+            Any member with their own login can keep them — they do not need to be an owner. Members
+            with no login are greyed out. The change applies the moment you save.
           </p>
         </div>
         <HandOverSection familyId={familyId} member={member} onDone={onClose} />
