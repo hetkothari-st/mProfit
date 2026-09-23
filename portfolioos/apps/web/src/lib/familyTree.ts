@@ -89,7 +89,9 @@ const ROLE_RANK: Record<FamilyRole, number> = { OWNER: 0, CONTRIBUTOR: 1, VIEWER
 /** Owners first, then by when they joined: a stable order to draw in. */
 export function inDrawOrder(members: FamilyMemberRow[]): FamilyMemberRow[] {
   return [...members].sort((a, b) =>
-    a.role !== b.role ? ROLE_RANK[a.role] - ROLE_RANK[b.role] : a.joinedAt.localeCompare(b.joinedAt),
+    a.role !== b.role
+      ? ROLE_RANK[a.role] - ROLE_RANK[b.role]
+      : a.joinedAt.localeCompare(b.joinedAt),
   );
 }
 
@@ -348,7 +350,7 @@ export function layoutFamily(
   function place(key: string) {
     const node = placed.get(key)!;
     if (node.childKeys.length === 0) {
-      node.x = Math.max(cursor, (rowRight.get(node.depth) ?? PAD));
+      node.x = Math.max(cursor, rowRight.get(node.depth) ?? PAD);
       cursor = node.x + node.w + SIBLING_GAP;
       rowRight.set(node.depth, cursor);
       return;
