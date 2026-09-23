@@ -9,6 +9,7 @@ import {
   type PartnerPair,
 } from '@everypaisa/shared';
 import { familiesApi, type FamilyMemberRow } from '@/api/families.api';
+import { managedProfilesApi } from '@/api/managedProfiles.api';
 import { apiErrorMessage } from '@/api/client';
 import {
   chipWidth,
@@ -41,19 +42,16 @@ import {
 /**
  * A colour per branch of the family: every line and label under a given child
  * of the head shares one hue, so which line someone belongs to is clear
- * without tracing it. Kept away from the lime the app uses for "this is you".
+ * without tracing it.
+ *
+ * The values live in the theme (`--tree-1` … `--tree-6`) because a hue that
+ * reads on a near-black board disappears on white — the light theme takes
+ * the same six lines several stops deeper.
  */
-const BRANCH_COLOURS = [
-  '190 72% 58%', // cyan
-  '32 92% 62%', // amber
-  '268 72% 70%', // violet
-  '155 60% 55%', // emerald
-  '345 78% 66%', // rose
-  '215 85% 68%', // blue
-];
+const BRANCHES = 6;
 function branchHsl(branch: number): string {
-  if (branch < 0) return 'var(--muted-foreground)';
-  return BRANCH_COLOURS[branch % BRANCH_COLOURS.length]!;
+  if (branch < 0) return 'var(--tree-line)';
+  return `var(--tree-${(branch % BRANCHES) + 1})`;
 }
 
 interface Props {
@@ -87,6 +85,19 @@ export function FamilyTreeBoard({
     queryFn: () => familiesApi.getTreeLayout(familyId),
     staleTime: 30_000,
   });
+
+  /**
+   * Whose books you keep — asked of the server, the same list the profile
+   * switcher in the header is built from. The tree used to decide this from
+   * the member row in front of it, which disagreed with the switcher often
+   * enough that "record something for Karan" had no way in from the tree.
+   */
+  const { data: managedProfiles = [] } = useQuery({
+    queryKey: ['managed-profiles'],
+    queryFn: () => managedProfilesApi.list(),
+    staleTime: 60_000,
+  });
+  const iKeepBooksFor = useMemo(() => new Set(managedProfiles.map((p) => p.id)), [managedProfiles]);
   const saved = layoutQuery.data;
   const parents = useMemo<Parents>(() => saved?.parents ?? {}, [saved]);
   const memberIds = useMemo(() => new Set(members.map((m) => m.userId)), [members]);
@@ -181,7 +192,12 @@ export function FamilyTreeBoard({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <svg width="22" height="8" aria-hidden>
-            <path d="M 1 4 H 21" stroke="hsl(var(--muted-foreground))" strokeWidth="1.5" />
+            <path
+              d="M 1 4 H 21"
+              stroke="hsl(var(--tree-1))"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+            />
           </svg>
           Parent to child
         </span>
@@ -189,8 +205,9 @@ export function FamilyTreeBoard({
           <svg width="22" height="8" aria-hidden>
             <path
               d="M 1 4 H 21"
-              stroke="hsl(var(--muted-foreground))"
-              strokeWidth="1.5"
+              stroke="hsl(var(--tree-spouse))"
+              strokeWidth="1.75"
+              strokeLinecap="round"
               strokeDasharray="3 3"
             />
           </svg>
@@ -201,7 +218,7 @@ export function FamilyTreeBoard({
         </span>
       </div>
 
-      <div className="overflow-auto rounded-xl border border-border/70 bg-muted/15">
+      <div className="overflow-auto rounded-2xl border border-border/70 bg-background/60 p-1">
         <div
           className="relative"
           style={{ width: Math.max(layout.width, 280), height: layout.height }}
@@ -219,8 +236,9 @@ export function FamilyTreeBoard({
                 key={rail.key}
                 data-tree-rail={rail.key}
                 d={`M ${rail.x} ${rail.y1} V ${rail.y2}`}
-                stroke={`hsl(${branchHsl(rail.branch)} / 0.45)`}
-                strokeWidth={1.5}
+                stroke={`hsl(${branchHsl(rail.branch)} / 0.5)`}
+                strokeWidth={1.75}
+                strokeLinecap="round"
                 fill="none"
               />
             ))}
@@ -229,8 +247,9 @@ export function FamilyTreeBoard({
                 key={stub.key}
                 data-tree-edge={stub.key}
                 d={`M ${stub.x1} ${stub.y} H ${stub.x2}`}
-                stroke={`hsl(${branchHsl(stub.branch)} / 0.45)`}
-                strokeWidth={1.5}
+                stroke={`hsl(${branchHsl(stub.branch)} / 0.5)`}
+                strokeWidth={1.75}
+                strokeLinecap="round"
                 fill="none"
               />
             ))}
@@ -241,8 +260,8 @@ export function FamilyTreeBoard({
                   key={`spouse:${row.key}`}
                   data-tree-spouse={row.key}
                   d={`M ${row.x + row.w} ${row.y + ROW_H / 2} H ${row.spouseX}`}
-                  stroke="hsl(340 60% 70% / 0.6)"
-                  strokeWidth={1.5}
+                  stroke="hsl(var(--tree-spouse) / 0.7)"
+                  strokeWidth={1.75}
                   strokeDasharray="4 4"
                   fill="none"
                 />
@@ -258,12 +277,13 @@ export function FamilyTreeBoard({
                 key={`chip:${stub.key}`}
                 style={{
                   left: stub.x2 - w - 4,
-                  top: stub.y - 10,
+                  top: stub.y - 11,
                   width: w,
                   color: `hsl(${branchHsl(stub.branch)})`,
-                  backgroundColor: `hsl(${branchHsl(stub.branch)} / 0.14)`,
+                  backgroundColor: `hsl(${branchHsl(stub.branch)} / 0.13)`,
+                  borderColor: `hsl(${branchHsl(stub.branch)} / 0.3)`,
                 }}
-                className="absolute grid h-5 place-items-center rounded-full text-[10.5px] font-medium lowercase"
+                className="absolute grid h-[22px] place-items-center rounded-full border text-[10.5px] font-semibold lowercase tracking-[0.01em]"
               >
                 {stub.label}
               </span>
@@ -287,7 +307,7 @@ export function FamilyTreeBoard({
           key={pickedMember.userId}
           member={pickedMember}
           isOwner={isOwner}
-          currentUserId={currentUserId}
+          iKeepTheirBooks={iKeepBooksFor.has(pickedMember.userId)}
           busy={arrangeMutation.isPending}
           isHead={
             (layout.rows.find((r) => r.key === layout.rowOf[pickedMember.userId])?.parentKey ??
@@ -336,10 +356,10 @@ function Row({
             style={{
               left:
                 row.spouseX - (row.spouseX - (row.x + row.w)) / 2 - chipWidth(row.spouseLabel!) / 2,
-              top: row.y + ROW_H / 2 - 10,
+              top: row.y + ROW_H / 2 - 11,
               width: chipWidth(row.spouseLabel!),
             }}
-            className="absolute grid h-5 place-items-center rounded-full bg-[hsl(340_60%_70%_/_0.16)] text-[10.5px] font-medium lowercase text-[hsl(340_70%_76%)]"
+            className="absolute grid h-[22px] place-items-center rounded-full border border-[hsl(var(--tree-spouse)/0.3)] bg-[hsl(var(--tree-spouse)/0.13)] text-[10.5px] font-semibold lowercase tracking-[0.01em] text-[hsl(var(--tree-spouse))]"
           >
             {row.spouseLabel}
           </span>
@@ -380,12 +400,12 @@ function Pill({
       type="button"
       onClick={onClick}
       style={{ left: x, top: y, width: w, height: ROW_H }}
-      className={`absolute flex items-center gap-1.5 rounded-xl border px-3 text-left transition-colors focus-ring ${
+      className={`absolute flex items-center gap-1.5 rounded-[13px] border px-3 text-left shadow-sm transition-all hover:-translate-y-px hover:shadow-md focus-ring ${
         selected
-          ? 'border-accent bg-accent text-accent-foreground'
+          ? 'border-accent bg-accent text-accent-foreground shadow-md'
           : isSelf
-            ? 'border-accent/60 bg-accent/10 text-foreground'
-            : 'border-border bg-card text-foreground hover:border-border/90 hover:bg-muted/50'
+            ? 'border-accent/50 bg-accent/[0.07] text-foreground'
+            : 'border-border bg-card text-foreground hover:border-foreground/25'
       }`}
     >
       <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold leading-none">
@@ -404,7 +424,7 @@ function Pill({
 function PersonCard({
   member,
   isOwner,
-  currentUserId,
+  iKeepTheirBooks,
   busy,
   isHead,
   candidates,
@@ -418,7 +438,8 @@ function PersonCard({
 }: {
   member: FamilyMemberRow;
   isOwner: boolean;
-  currentUserId: string | undefined;
+  /** Their account is one of the profiles you keep, so you can record for them. */
+  iKeepTheirBooks: boolean;
   busy: boolean;
   isHead: boolean;
   candidates: FamilyMemberRow[];
@@ -430,9 +451,9 @@ function PersonCard({
   onMakeHead: (id: string) => void;
   onPlaceUnder: (id: string, parentId: string) => void;
 }) {
-  const canManage = Boolean(onManage) && member.managed && member.managedBy?.id === currentUserId;
+  const canManage = Boolean(onManage) && iKeepTheirBooks;
   return (
-    <div className="rounded-2xl border border-border bg-card p-3">
+    <div className="rounded-2xl border border-border bg-card p-3 shadow-sm">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[14.5px] font-semibold leading-tight text-foreground">
@@ -446,16 +467,6 @@ function PersonCard({
                 : (member.email ?? 'Family member')}
           </p>
         </div>
-        {canManage && (
-          <button
-            type="button"
-            onClick={() => onManage!(member)}
-            className="rounded-lg border border-border px-2.5 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted focus-ring"
-          >
-            <UserCog className="mr-1 inline h-3.5 w-3.5" />
-            Their books
-          </button>
-        )}
         <button
           type="button"
           aria-label="Close"
@@ -465,6 +476,26 @@ function PersonCard({
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
+
+      {canManage && (
+        <div className="mt-2.5 border-t border-border/70 pt-2.5">
+          <button
+            type="button"
+            onClick={() => onManage!(member)}
+            className="flex w-full items-center gap-2.5 rounded-xl bg-accent px-3 py-2 text-left text-accent-foreground transition-opacity hover:opacity-90 focus-ring"
+          >
+            <UserCog className="h-4 w-4 flex-none" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-semibold leading-tight">
+                Record something for {member.name.split(' ')[0]}
+              </span>
+              <span className="block text-[11px] leading-tight opacity-80">
+                Opens their books — their FDs, insurance and anything else they hold
+              </span>
+            </span>
+          </button>
+        </div>
+      )}
 
       {isOwner && (
         <div className="mt-2.5 space-y-2 border-t border-border/70 pt-2.5">
