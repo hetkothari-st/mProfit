@@ -398,6 +398,8 @@ const layoutSchema = z.object({
     )
     .optional(),
   parents: z.record(z.string(), z.string().nullable()).optional(),
+  // Couples, as [one, the other]. Order carries no meaning.
+  partners: z.array(z.tuple([z.string(), z.string()])).max(200).optional(),
 });
 
 familiesRouter.get(

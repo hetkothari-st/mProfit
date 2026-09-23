@@ -77,11 +77,13 @@ async function addRelative(
   return res.userId;
 }
 
+const layoutOf = async (owner: TestScope, familyId: string) =>
+  (await runAsUser(owner.userId, () => getFamilyTreeLayout(owner.userId, familyId))) ?? {};
 const parentsOf = async (owner: TestScope, familyId: string) =>
-  (await runAsUser(owner.userId, () => getFamilyTreeLayout(owner.userId, familyId)))?.parents ?? {};
+  (await layoutOf(owner, familyId)).parents ?? {};
 
 describe('adding a relative places them on the tree, and remembers it', () => {
-  it('puts a father above, a wife beside and a son below the person they relate to', async () => {
+  it('puts a father above, a wife alongside and a son below the person they relate to', async () => {
     const akshay = await person('rel-akshay');
     const famId = await family(akshay);
 
@@ -92,9 +94,44 @@ describe('adding a relative places them on the tree, and remembers it', () => {
 
     const wife = await addRelative(akshay, famId, 'Neha', 'Wife', akshay.userId);
     const son = await addRelative(akshay, famId, 'Aarav', 'Son', akshay.userId);
-    parents = await parentsOf(akshay, famId);
-    expect(parents[wife]).toBe(papa); // same generation as Akshay
+    const layout = await layoutOf(akshay, famId);
+    parents = layout.parents ?? {};
+    // A wife is joined to her husband, not born to his father: giving her
+    // his parent drew her as her father-in-law's daughter.
+    expect(parents[wife]).toBeNull();
+    expect(layout.partners).toEqual([[wife, akshay.userId]]);
     expect(parents[son]).toBe(akshay.userId);
+  });
+
+  it('keeps a couple together when the next generation marries', async () => {
+    const mahendra = await person('rel-couple');
+    const famId = await family(mahendra);
+
+    const sarita = await addRelative(mahendra, famId, 'Sarita', 'Wife', mahendra.userId);
+    const shalin = await addRelative(mahendra, famId, 'Shalin', 'Son', mahendra.userId);
+    const ritika = await addRelative(mahendra, famId, 'Ritika', 'Wife', shalin);
+
+    const layout = await layoutOf(mahendra, famId);
+    const parents = layout.parents ?? {};
+    // Ritika married into the family; she is nobody's daughter here.
+    expect(parents[ritika]).toBeNull();
+    expect(parents[shalin]).toBe(mahendra.userId);
+    expect(layout.partners).toEqual([
+      [sarita, mahendra.userId],
+      [ritika, shalin],
+    ]);
+  });
+
+  it('leaves the surviving partner holding the children when one is removed', async () => {
+    const mahendra = await person('rel-widow');
+    const famId = await family(mahendra);
+    const sarita = await addRelative(mahendra, famId, 'Sarita', 'Wife', mahendra.userId);
+    const akshay = await addRelative(mahendra, famId, 'Akshay', 'Son', mahendra.userId);
+
+    await runAsUser(mahendra.userId, () => revokeMember(mahendra.userId, famId, sarita));
+    const layout = await layoutOf(mahendra, famId);
+    expect(layout.partners).toEqual([]);
+    expect((layout.parents ?? {})[akshay]).toBe(mahendra.userId);
   });
 
   it('names who the relation is to on the member list', async () => {
