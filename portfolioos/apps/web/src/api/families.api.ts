@@ -17,6 +17,14 @@ export const NON_AC_CATEGORIES = [
 ] as const;
 export type NonAcCategory = (typeof NON_AC_CATEGORIES)[number];
 
+/** What is using the family's seats. An open invitation holds one. */
+export interface SeatUsage {
+  includedSeats: number;
+  members: number;
+  openInvitations: number;
+  used: number;
+}
+
 export interface MyFamily {
   id: string;
   name: string;
@@ -24,6 +32,7 @@ export interface MyFamily {
   role: FamilyRole;
   status: FamilyMemberStatus;
   joinedAt: string;
+  seats: SeatUsage | null;
 }
 
 export interface FamilyMemberRow {

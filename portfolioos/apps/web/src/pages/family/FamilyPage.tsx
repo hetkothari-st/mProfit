@@ -25,6 +25,7 @@ import {
   type FamilyRole,
   type NonAcCategory,
   type SeatPaymentRequiredResult,
+  type SeatUsage,
   familyInviteEmailApi,
   familyClaimApi,
 } from '@/api/families.api';
@@ -233,7 +234,13 @@ function FamilyWorkspace({
   currentUserId,
   onActivateFamilyView,
 }: {
-  family: { id: string; name: string; role: FamilyRole; description: string | null };
+  family: {
+    id: string;
+    name: string;
+    role: FamilyRole;
+    description: string | null;
+    seats: SeatUsage | null;
+  };
   currentUserId: string | undefined;
   onActivateFamilyView: (id: string, name: string) => void;
 }) {
@@ -306,6 +313,7 @@ function FamilyWorkspace({
                 {activeMembers.length} active member{activeMembers.length === 1 ? '' : 's'}
                 {' · '}your role: {family.role.toLowerCase()}
               </p>
+              {family.seats && <SeatLine seats={family.seats} />}
               <h2 className="font-display text-2xl leading-none tracking-tight">
                 {family.name}
               </h2>
@@ -510,6 +518,30 @@ function FamilyWorkspace({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * What is using the family's seats, in plain words.
+ *
+ * An invitation nobody has accepted holds a seat — otherwise a family could
+ * invite any number of people past its seats and only pay when they all
+ * accepted. That is defensible, and invisible: "you have 2 members, pay for
+ * a third" reads as a bug unless the invitation is named here.
+ */
+function SeatLine({ seats }: { seats: SeatUsage }) {
+  const parts = [`${seats.members} member${seats.members === 1 ? '' : 's'}`];
+  if (seats.openInvitations > 0) {
+    parts.push(
+      `${seats.openInvitations} open invitation${seats.openInvitations === 1 ? '' : 's'}`,
+    );
+  }
+  const full = seats.used >= seats.includedSeats;
+  return (
+    <p className={`mb-1 text-[11.5px] ${full ? 'text-warning' : 'text-muted-foreground'}`}>
+      {seats.used} of {seats.includedSeats} seats used — {parts.join(', ')}
+      {full && seats.openInvitations > 0 && '. Cancel an invitation to free one.'}
+    </p>
   );
 }
 

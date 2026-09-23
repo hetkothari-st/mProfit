@@ -92,13 +92,17 @@ export async function listMyFamilies(callerId: string) {
     include: { family: true },
     orderBy: { joinedAt: 'asc' },
   });
-  return memberships.map((m) => ({
+  const usage = await Promise.all(
+    memberships.map((m) => seatUsage(m.familyId).catch(() => null)),
+  );
+  return memberships.map((m, i) => ({
     id: m.family.id,
     name: m.family.name,
     description: m.family.description,
     role: m.role,
     status: m.status,
     joinedAt: m.joinedAt.toISOString(),
+    seats: usage[i],
   }));
 }
 
@@ -489,12 +493,12 @@ export async function inviteMember(
   }
   const kin = await validRelative(familyId, input.relation, input.relatedToId);
 
-  const { family, seatNumber } = await nextSeat(familyId);
+  const { family, usage, seatNumber } = await nextSeat(familyId);
 
   if (seatNumber > family.includedSeats) {
     if (!isRazorpayConfigured()) {
       throw new BadRequestError(
-        'Adding another family member exceeds your included seats, and payments are not configured on this server.',
+        `${seatMessage(usage, toDecimal(family.extraSeatPriceInr).toString())} Payments are not configured on this server.`,
       );
     }
     const amountPaise = toDecimal(family.extraSeatPriceInr).mul(100).toNumber();
@@ -533,7 +537,7 @@ export async function inviteMember(
       extraSeatPriceInr: serializeMoney(toDecimal(family.extraSeatPriceInr)),
       seatNumber,
       includedSeats: family.includedSeats,
-      message: `This is your ${ordinal(seatNumber)} family member; it exceeds your included ${family.includedSeats} seats. Pay ₹${toDecimal(family.extraSeatPriceInr).toString()} to add this seat.`,
+      message: seatMessage(usage, toDecimal(family.extraSeatPriceInr).toString()),
     };
   }
 
@@ -715,22 +719,72 @@ export async function verifySeatPaymentAndInvite(
 // ─── Seats ───────────────────────────────────────────────────────────
 
 /**
- * The seat the next member would take. Seats already spoken for: ACTIVE
- * members (managed profiles included — a grandparent is a member like anyone
- * else) plus still-pending, unexpired invitations.
+ * The seat the next member would take, and what is using the others.
+ *
+ * Seats are held by ACTIVE members (managed profiles included — a grandparent
+ * is a member like anyone else) and by invitations nobody has accepted yet.
+ * An open invitation has to hold one: without that, a family could invite
+ * any number of people past its seats and only pay once they all accepted.
+ *
+ * It does NOT count an invitation that hands an existing member the account
+ * kept for them — they already hold their seat, and counting it twice took a
+ * seat away from a family for doing nothing at all.
  */
-async function nextSeat(familyId: string) {
-  const family = await prisma.family.findUniqueOrThrow({
-    where: { id: familyId },
-    select: { name: true, includedSeats: true, extraSeatPriceInr: true },
-  });
-  const [activeMemberCount, pendingInviteCount] = await Promise.all([
+export interface SeatUsage {
+  includedSeats: number;
+  members: number;
+  openInvitations: number;
+  used: number;
+}
+
+export async function seatUsage(familyId: string): Promise<SeatUsage> {
+  const [family, members, openInvitations] = await Promise.all([
+    prisma.family.findUniqueOrThrow({
+      where: { id: familyId },
+      select: { includedSeats: true },
+    }),
     prisma.familyMember.count({ where: { familyId, status: 'ACTIVE' } }),
     prisma.familyInvitation.count({
-      where: { familyId, acceptedAt: null, expiresAt: { gt: new Date() } },
+      where: {
+        familyId,
+        acceptedAt: null,
+        expiresAt: { gt: new Date() },
+        claimForUserId: null,
+      },
     }),
   ]);
-  return { family, seatNumber: activeMemberCount + pendingInviteCount + 1 };
+  return {
+    includedSeats: family.includedSeats,
+    members,
+    openInvitations,
+    used: members + openInvitations,
+  };
+}
+
+async function nextSeat(familyId: string) {
+  const [family, usage] = await Promise.all([
+    prisma.family.findUniqueOrThrow({
+      where: { id: familyId },
+      select: { name: true, includedSeats: true, extraSeatPriceInr: true },
+    }),
+    seatUsage(familyId),
+  ]);
+  return { family, usage, seatNumber: usage.used + 1 };
+}
+
+/** Says what is actually using the seats, so "pay up" is never a mystery. */
+function seatMessage(usage: SeatUsage, priceInr: string): string {
+  const parts = [`${usage.members} member${usage.members === 1 ? '' : 's'}`];
+  if (usage.openInvitations > 0) {
+    parts.push(
+      `${usage.openInvitations} invitation${usage.openInvitations === 1 ? '' : 's'} nobody has accepted yet`,
+    );
+  }
+  return (
+    `Your family's ${usage.includedSeats} included seats are taken by ${parts.join(' and ')}. ` +
+    `Pay ₹${priceInr} to add a seat` +
+    (usage.openInvitations > 0 ? ', or cancel an invitation to free one.' : '.')
+  );
 }
 
 // ─── Managed members ─────────────────────────────────────────────────
@@ -909,12 +963,12 @@ export async function addManagedMember(
   const managerId = input.managerId ?? callerId;
   await assertValidManager(familyId, managerId);
 
-  const { family, seatNumber } = await nextSeat(familyId);
+  const { family, usage, seatNumber } = await nextSeat(familyId);
 
   if (seatNumber > family.includedSeats) {
     if (!isRazorpayConfigured()) {
       throw new BadRequestError(
-        'Adding another family member exceeds your included seats, and payments are not configured on this server.',
+        `${seatMessage(usage, toDecimal(family.extraSeatPriceInr).toString())} Payments are not configured on this server.`,
       );
     }
     const amountPaise = toDecimal(family.extraSeatPriceInr).mul(100).toNumber();
@@ -948,7 +1002,7 @@ export async function addManagedMember(
       extraSeatPriceInr: serializeMoney(toDecimal(family.extraSeatPriceInr)),
       seatNumber,
       includedSeats: family.includedSeats,
-      message: `This is your ${ordinal(seatNumber)} family member; it exceeds your included ${family.includedSeats} seats. Pay ₹${toDecimal(family.extraSeatPriceInr).toString()} to add this seat.`,
+      message: seatMessage(usage, toDecimal(family.extraSeatPriceInr).toString()),
     };
   }
 
@@ -1012,20 +1066,6 @@ export async function setManagedMemberManager(
   logger.info({ familyId, profileId, managerId }, '[family] managed member manager changed');
 }
 
-function ordinal(n: number): string {
-  const rem100 = n % 100;
-  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
-  switch (n % 10) {
-    case 1:
-      return `${n}st`;
-    case 2:
-      return `${n}nd`;
-    case 3:
-      return `${n}rd`;
-    default:
-      return `${n}th`;
-  }
-}
 
 /** OWNER-only. List still-pending invitations on the family. */
 export async function listPendingInvitations(callerId: string, familyId: string) {
