@@ -15,14 +15,18 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { isPartnerRelation, normalizePartners, pairKey, type PartnerPair } from '@everypaisa/shared';
+import {
+  isPartnerRelation,
+  normalizePartners,
+  pairKey,
+  type PartnerPair,
+} from '@everypaisa/shared';
 import { familiesApi, type FamilyMemberRow } from '@/api/families.api';
 import { apiErrorMessage } from '@/api/client';
 import {
   layoutFamily,
   lineTo,
   NODE_H,
-
   parentOf,
   unitLabel,
   unitSubtitle,
@@ -35,9 +39,10 @@ import {
  *
  * It arranges itself. Add a father, a wife, a brother — even a brother of the
  * person at the top, who has no parent to hang from — and the whole drawing is
- * worked out again from the relations and fitted to the screen. There is
- * nothing to drag and nothing to save: a tree that has to be tidied by hand is
- * a tree that is wrong the moment the family grows.
+ * worked out again from the relations and fitted to the screen. Nothing has to
+ * be arranged or saved: a tree that has to be tidied by hand is a tree that is
+ * wrong the moment the family grows. It can still be dragged and pinched, for
+ * a closer look at one branch and as a way out if the fit is ever wrong.
  *
  * On a narrow screen the branches away from whoever is in focus fold into a
  * "+n", because a phone-wide family shrunk to fit is a family nobody can read.
@@ -49,6 +54,9 @@ import {
 
 const MAX_SCALE = 1.3;
 const MIN_SCALE = 0.45;
+/** The board is never shorter than this, nor taller than this much of the window. */
+const MIN_STAGE = 300;
+const STAGE_SHARE = 0.62;
 /** Below this the tree folds to the line in focus. */
 const FOLD_BELOW = 720;
 
@@ -76,13 +84,25 @@ export function FamilyTreeBoard({
   onAddRelative,
 }: Props) {
   const queryClient = useQueryClient();
-  const viewportRef = useRef<HTMLDivElement>(null);
+  /**
+   * The board element, held as state rather than a plain ref: this component
+   * returns a spinner while the arrangement loads, so the element arrives a
+   * render or two after mount. A `useEffect` that read a ref once found
+   * nothing, never measured, and left the tree drawn at full size with half
+   * of it off the side of a phone.
+   */
+  const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [openKeys, setOpenKeys] = useState<string[]>([]);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   /** null = fitted to the screen, which is the point of the thing. */
   const [zoom, setZoom] = useState<number | null>(null);
+  /** Nudged by hand from where the fit put it. Reset by "Fit". */
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === 'undefined' ? 800 : window.innerHeight,
+  );
 
   const layoutQuery = useQuery({
     queryKey: ['family-tree-layout', familyId],
@@ -111,16 +131,47 @@ export function FamilyTreeBoard({
     return pairs;
   }, [saved, members, memberIds]);
 
+  /**
+   * How big the board is. Measured rather than assumed, and measured again
+   * until it answers: the tree lives in a tab panel that starts hidden, where
+   * everything reports zero. Fitting to a zero-width board is what left a
+   * phone showing a tree at full size with half of it off the screen.
+   */
   useEffect(() => {
-    const node = viewportRef.current;
-    if (!node || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => {
+    const node = stage;
+    if (!node) return;
+    let frame = 0;
+    const read = () => {
       const rect = node.getBoundingClientRect();
-      setBox({ w: Math.round(rect.width), h: Math.round(rect.height) });
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+      if (!rect.width || !rect.height) return false;
+      setBox((prev) =>
+        prev.w === Math.round(rect.width) && prev.h === Math.round(rect.height)
+          ? prev
+          : { w: Math.round(rect.width), h: Math.round(rect.height) },
+      );
+      return true;
+    };
+    // Keep asking until the panel is on screen and has a size to give.
+    const poll = () => {
+      if (!read()) frame = requestAnimationFrame(poll);
+    };
+    poll();
+    const observer =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => read()) : null;
+    observer?.observe(node);
+    const onResize = () => {
+      setViewportHeight(window.innerHeight);
+      read();
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, [stage, members.length]);
 
   const fold = box.w > 0 && box.w < FOLD_BELOW;
   /** Whoever is in focus, falling back to you, falling back to the top. */
@@ -144,27 +195,108 @@ export function FamilyTreeBoard({
     [members, parents, partners, effectiveFocus, fold, openKeys, box.w],
   );
 
+  /**
+   * How tall to be: as tall as the drawing needs at the width available, up
+   * to a share of the window. A fixed slab left a small family marooned in
+   * the middle of an empty box.
+   */
+  const stageHeight = useMemo(() => {
+    const ceiling = Math.max(MIN_STAGE, Math.round(viewportHeight * STAGE_SHARE));
+    if (!box.w || !layout.width || !layout.height) return Math.min(ceiling, 420);
+    const byWidth = Math.min(MAX_SCALE, (box.w - 8) / layout.width);
+    return Math.max(MIN_STAGE, Math.min(ceiling, Math.round(layout.height * byWidth) + 16));
+  }, [box.w, layout.width, layout.height, viewportHeight]);
+
   const fitScale = useMemo(() => {
-    if (!box.w || !box.h || !layout.width || !layout.height) return 1;
+    if (!box.w || !layout.width || !layout.height) return 1;
+    // The zoom controls sit over the board; on a narrow one the drawing is
+    // kept clear of them rather than drawn underneath.
+    const usable = box.w - 8 - (box.w < 520 ? 48 : 0);
     return Math.max(
       MIN_SCALE,
-      Math.min(MAX_SCALE, (box.w - 8) / layout.width, (box.h - 8) / layout.height),
+      Math.min(MAX_SCALE, usable / layout.width, (stageHeight - 8) / layout.height),
     );
-  }, [box, layout.width, layout.height]);
+  }, [box.w, stageHeight, layout.width, layout.height]);
   const scale = zoom ?? fitScale;
-  const offset = useMemo(
+  const centred = useMemo(
     () => ({
       x: Math.max(0, (box.w - layout.width * scale) / 2),
-      y: Math.max(0, (box.h - layout.height * scale) / 2),
+      y: Math.max(0, (stageHeight - layout.height * scale) / 2),
     }),
-    [box, layout.width, layout.height, scale],
+    [box.w, stageHeight, layout.width, layout.height, scale],
   );
+  const offset = { x: centred.x + pan.x, y: centred.y + pan.y };
 
   // A member added or removed re-fits: the new shape is the one to look at.
   useEffect(() => {
     setZoom(null);
+    setPan({ x: 0, y: 0 });
     setPicked(null);
   }, [members.length]);
+
+  /**
+   * Dragging and pinching.
+   *
+   * The tree fits by itself, so this is not how it is meant to be read — but
+   * a drawing you cannot move is a trap when anything else goes wrong, and
+   * zooming in on one branch is a fair thing to want. Reset by "Fit".
+   */
+  const gesture = useRef<{
+    points: Map<number, { x: number; y: number }>;
+    startPan: { x: number; y: number };
+    startScale: number;
+    startSpread: number;
+    moved: boolean;
+  }>({
+    points: new Map(),
+    startPan: { x: 0, y: 0 },
+    startScale: 1,
+    startSpread: 0,
+    moved: false,
+  });
+
+  const spread = (points: Map<number, { x: number; y: number }>) => {
+    const [a, b] = [...points.values()];
+    if (!a || !b) return 0;
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    // A tap on somebody is a tap, not a drag.
+    if ((e.target as HTMLElement).closest('button')) return;
+    const g = gesture.current;
+    g.points.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    g.startPan = { ...pan };
+    g.startScale = scale;
+    g.startSpread = spread(g.points);
+    g.moved = false;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const g = gesture.current;
+    if (!g.points.has(e.pointerId)) return;
+    const first = [...g.points.keys()][0];
+    const prev = g.points.get(e.pointerId)!;
+    g.points.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (g.points.size >= 2) {
+      const now = spread(g.points);
+      if (g.startSpread > 0 && now > 0) {
+        setZoom(Math.max(MIN_SCALE, Math.min(MAX_SCALE, g.startScale * (now / g.startSpread))));
+        g.moved = true;
+      }
+      return;
+    }
+    if (e.pointerId !== first) return;
+    const dx = e.clientX - prev.x;
+    const dy = e.clientY - prev.y;
+    if (Math.abs(dx) + Math.abs(dy) > 0) g.moved = true;
+    setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    gesture.current.points.delete(e.pointerId);
+  };
 
   const byKey = useMemo(() => new Map(layout.nodes.map((n) => [n.key, n])), [layout.nodes]);
   const pickedNode = picked ? byKey.get(picked) : undefined;
@@ -233,18 +365,23 @@ export function FamilyTreeBoard({
     );
   }
 
-  const cardAt = pickedNode
-    ? {
-        left: Math.min(
-          Math.max(8, pickedNode.x * scale + offset.x + (pickedNode.w * scale) / 2 - 140),
-          Math.max(8, box.w - 288),
-        ),
-        top: Math.min(
-          (pickedNode.y + NODE_H) * scale + offset.y + 10,
-          Math.max(8, box.h - 150),
-        ),
-      }
-    : null;
+  // On a phone the card goes under the board rather than over it: a card
+  // that hides the tree it is about is no use for "where does she sit".
+  const asSheet = box.w < 520;
+  const cardAt = !pickedNode
+    ? null
+    : asSheet
+      ? {}
+      : {
+          left: Math.min(
+            Math.max(8, pickedNode.x * scale + offset.x + (pickedNode.w * scale) / 2 - 140),
+            Math.max(8, box.w - 288),
+          ),
+          top: Math.min(
+            (pickedNode.y + NODE_H) * scale + offset.y + 10,
+            Math.max(8, stageHeight - 160),
+          ),
+        };
 
   return (
     <div className="space-y-3">
@@ -257,9 +394,7 @@ export function FamilyTreeBoard({
                 type="button"
                 onClick={() => focusOn(node.key)}
                 className={`rounded-md px-1.5 py-0.5 transition-colors hover:bg-muted focus-ring ${
-                  i === crumbs.length - 1
-                    ? 'font-medium text-foreground'
-                    : 'text-muted-foreground'
+                  i === crumbs.length - 1 ? 'font-medium text-foreground' : 'text-muted-foreground'
                 }`}
               >
                 {unitLabel(node.members)}
@@ -269,72 +404,84 @@ export function FamilyTreeBoard({
         </div>
       )}
 
-      <div
-        ref={viewportRef}
-        className="relative h-[clamp(320px,58vh,680px)] w-full overflow-hidden rounded-xl border border-border/70 bg-muted/20"
-        style={{
-          backgroundImage:
-            'radial-gradient(hsl(var(--muted-foreground) / 0.16) 1px, transparent 1px)',
-          backgroundSize: '16px 16px',
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setPicked(null);
-        }}
-      >
+      <div className="relative">
         <div
-          className="absolute left-0 top-0 origin-top-left transition-transform duration-300 ease-out"
+          ref={setStage}
+          className="relative w-full cursor-grab touch-none overflow-hidden rounded-xl border border-border/70 bg-muted/20 active:cursor-grabbing"
           style={{
-            width: layout.width,
-            height: layout.height,
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+            height: stageHeight,
+            backgroundImage:
+              'radial-gradient(hsl(var(--muted-foreground) / 0.16) 1px, transparent 1px)',
+            backgroundSize: '16px 16px',
+          }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !gesture.current.moved) setPicked(null);
           }}
         >
-          <svg
-            className="pointer-events-none absolute inset-0 overflow-visible"
-            width={layout.width}
-            height={layout.height}
+          <div
+            className={`absolute left-0 top-0 origin-top-left ${
+              gesture.current.points.size ? '' : 'transition-transform duration-300 ease-out'
+            }`}
+            style={{
+              width: layout.width,
+              height: layout.height,
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+              // Until the board has been measured there is no honest scale to
+              // draw at; showing it anyway is how half a tree ends up off-screen.
+              visibility: box.w ? 'visible' : 'hidden',
+            }}
           >
-            {layout.edges.map((edge) => (
-              <path
-                key={edge.key}
-                data-tree-edge={edge.key}
-                d={edge.d}
-                fill="none"
-                strokeWidth={1.75}
-                strokeLinecap="round"
-                stroke="hsl(var(--muted-foreground) / 0.55)"
-              />
-            ))}
-          </svg>
+            <svg
+              className="pointer-events-none absolute inset-0 overflow-visible"
+              width={layout.width}
+              height={layout.height}
+            >
+              {layout.edges.map((edge) => (
+                <path
+                  key={edge.key}
+                  data-tree-edge={edge.key}
+                  d={edge.d}
+                  fill="none"
+                  strokeWidth={1.75}
+                  strokeLinecap="round"
+                  stroke="hsl(var(--muted-foreground) / 0.55)"
+                />
+              ))}
+            </svg>
 
-          {layout.nodes.map((node) =>
-            node.more ? (
-              <button
-                key={node.key}
-                type="button"
-                onClick={() => {
-                  setOpenKeys((prev) => [...prev, node.foldedFrom!]);
-                  setZoom(null);
-                }}
-                style={{ left: node.x, top: node.y, width: node.w, height: NODE_H }}
-                className="absolute rounded-xl border border-dashed border-border bg-background/40 text-[12px] text-muted-foreground transition-colors hover:border-accent/60 hover:text-foreground focus-ring"
-              >
-                +{node.more} more
-              </button>
-            ) : (
-              <TreeCard
-                key={node.key}
-                node={node}
-                currentUserId={currentUserId}
-                selected={picked === node.key}
-                inFocus={effectiveFocus === node.key}
-                onClick={() => setPicked((prev) => (prev === node.key ? null : node.key))}
-              />
-            ),
-          )}
+            {layout.nodes.map((node) =>
+              node.more ? (
+                <button
+                  key={node.key}
+                  type="button"
+                  onClick={() => {
+                    setOpenKeys((prev) => [...prev, node.foldedFrom!]);
+                    setZoom(null);
+                  }}
+                  style={{ left: node.x, top: node.y, width: node.w, height: NODE_H }}
+                  className="absolute rounded-xl border border-dashed border-border bg-background/40 text-[12px] text-muted-foreground transition-colors hover:border-accent/60 hover:text-foreground focus-ring"
+                >
+                  +{node.more} more
+                </button>
+              ) : (
+                <TreeCard
+                  key={node.key}
+                  node={node}
+                  currentUserId={currentUserId}
+                  selected={picked === node.key}
+                  inFocus={effectiveFocus === node.key}
+                  onClick={() => setPicked((prev) => (prev === node.key ? null : node.key))}
+                />
+              ),
+            )}
+          </div>
         </div>
 
-        {pickedNode && cardAt && (
+        {pickedNode && cardAt && !asSheet && (
           <PersonCard
             // Tapping a different person must open a card about them, not the
             // last one with a new name on it: the chosen half of a couple is
@@ -342,6 +489,7 @@ export function FamilyTreeBoard({
             key={pickedNode.key}
             node={pickedNode}
             style={cardAt}
+            full={asSheet}
             isOwner={isOwner}
             currentUserId={currentUserId}
             busy={arrangeMutation.isPending}
@@ -357,14 +505,20 @@ export function FamilyTreeBoard({
           />
         )}
 
-        <div className="absolute bottom-3 right-3 flex flex-col overflow-hidden rounded-xl border border-border bg-card/90 backdrop-blur">
+        <div className="absolute right-3 top-3 z-10 flex flex-col overflow-hidden rounded-xl border border-border bg-card/90 backdrop-blur">
           <IconButton label="Zoom in" onClick={() => setZoom(Math.min(MAX_SCALE, scale + 0.12))}>
             <ZoomIn className="h-3.5 w-3.5" />
           </IconButton>
           <IconButton label="Zoom out" onClick={() => setZoom(Math.max(MIN_SCALE, scale - 0.12))}>
             <ZoomOut className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton label="Fit to screen" onClick={() => setZoom(null)}>
+          <IconButton
+            label="Fit to screen"
+            onClick={() => {
+              setZoom(null);
+              setPan({ x: 0, y: 0 });
+            }}
+          >
             <Maximize2 className="h-3.5 w-3.5" />
           </IconButton>
         </div>
@@ -396,6 +550,28 @@ export function FamilyTreeBoard({
           </button>
         )}
       </div>
+
+      {/* On a phone the card sits under the board, where it hides nothing. */}
+      {pickedNode && cardAt && asSheet && (
+        <PersonCard
+          key={pickedNode.key}
+          node={pickedNode}
+          style={cardAt}
+          full
+          isOwner={isOwner}
+          currentUserId={currentUserId}
+          busy={arrangeMutation.isPending}
+          candidates={layout.nodes.filter((n) => !n.more && n.key !== pickedNode.key)}
+          onClose={() => setPicked(null)}
+          onFocus={() => focusOn(pickedNode.key)}
+          onEdit={onEdit}
+          onRevoke={onRevoke}
+          onManage={onManage}
+          onAddRelative={onAddRelative}
+          onMakeHead={makeHead}
+          onPlaceUnder={placeUnder}
+        />
+      )}
     </div>
   );
 }
@@ -454,8 +630,8 @@ function TreeCard({
         selected
           ? 'border-accent bg-accent/12 shadow-[0_0_0_3px_hsl(var(--accent)/0.12)]'
           : inFocus
-          ? 'border-accent/45 bg-card'
-          : 'border-border bg-card hover:border-border/90 hover:bg-muted/40'
+            ? 'border-accent/45 bg-card'
+            : 'border-border bg-card hover:border-border/90 hover:bg-muted/40'
       }`}
     >
       <span
@@ -486,6 +662,7 @@ function TreeCard({
 function PersonCard({
   node,
   style,
+  full,
   isOwner,
   currentUserId,
   busy,
@@ -500,7 +677,9 @@ function PersonCard({
   onPlaceUnder,
 }: {
   node: LayoutNode;
-  style: { left: number; top: number };
+  style: React.CSSProperties;
+  /** Pinned across the foot of the board, which is what a phone has room for. */
+  full?: boolean;
   isOwner: boolean;
   currentUserId: string | undefined;
   busy: boolean;
@@ -521,7 +700,9 @@ function PersonCard({
   return (
     <div
       style={style}
-      className="absolute z-20 w-72 rounded-2xl border border-border bg-card p-3 shadow-2xl"
+      className={`rounded-2xl border border-border bg-card p-3 shadow-2xl ${
+        full ? 'relative' : 'absolute z-20 w-72'
+      }`}
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
@@ -532,8 +713,8 @@ function PersonCard({
             {subject.relation && subject.relatedTo
               ? `${subject.relation} of ${subject.relatedTo.name}`
               : subject.managed
-              ? `Kept by ${subject.managedBy?.name ?? 'the family'}`
-              : subject.email ?? 'Family member'}
+                ? `Kept by ${subject.managedBy?.name ?? 'the family'}`
+                : (subject.email ?? 'Family member')}
           </p>
         </div>
         <button
@@ -589,7 +770,10 @@ function PersonCard({
         <div className="mt-2.5 space-y-2 border-t border-border/70 pt-2.5">
           <div className="flex flex-wrap gap-1.5">
             {onAddRelative && (
-              <CardAction onClick={() => onAddRelative(subject)} icon={<UserPlus className="h-3.5 w-3.5" />}>
+              <CardAction
+                onClick={() => onAddRelative(subject)}
+                icon={<UserPlus className="h-3.5 w-3.5" />}
+              >
                 Add a relative
               </CardAction>
             )}
