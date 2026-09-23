@@ -121,6 +121,8 @@ export interface FamilyTreeLayout {
   links?: FamilyTreeLink[];
   /** child userId → parent userId, or null for someone at the top of the tree. */
   parents?: Record<string, string | null>;
+  /** Couples who stand together, as [one, the other]. Order means nothing. */
+  partners?: [string, string][];
 }
 
 export interface InvitationPeek {

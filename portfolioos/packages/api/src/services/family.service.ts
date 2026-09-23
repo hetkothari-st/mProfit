@@ -1,6 +1,13 @@
 import crypto from 'node:crypto';
 import type { AssetClass, FamilyRole } from '@prisma/client';
-import { toDecimal, serializeMoney, placeRelative, hasCycle } from '@everypaisa/shared';
+import {
+  toDecimal,
+  serializeMoney,
+  placeRelative,
+  hasCycle,
+  normalizePartners,
+  type PartnerPair,
+} from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 import {
@@ -375,9 +382,19 @@ async function detachFromTree(familyId: string, userId: string): Promise<void> {
     const invitedBy = new Map(family.members.map((m) => [m.userId, m.invitedById]));
     const parentOf = (id: string) => (id in parents ? (parents[id] ?? null) : (invitedBy.get(id) ?? null));
     const theirParent = parentOf(userId);
+    const partners = normalizePartners(layout.partners);
+    /**
+     * Children of the couple this person was in keep their place: their
+     * surviving parent stands where the pair did, so removing a husband
+     * does not orphan the family under his widow.
+     */
+    const mate = partners.find(([a, b]) => a === userId || b === userId);
+    const survivor = mate ? (mate[0] === userId ? mate[1] : mate[0]) : null;
     for (const m of family.members) {
-      if (m.userId !== userId && parentOf(m.userId) === userId) parents[m.userId] = theirParent;
+      if (m.userId === userId) continue;
+      if (parentOf(m.userId) === userId) parents[m.userId] = survivor ?? theirParent;
     }
+    if (survivor && parents[survivor] == null) parents[survivor] = theirParent;
     delete parents[userId];
     await prisma.family.update({
       where: { id: familyId },
@@ -386,6 +403,7 @@ async function detachFromTree(familyId: string, userId: string): Promise<void> {
           nodes: (layout.nodes ?? []).filter((n) => n.userId !== userId),
           links: (layout.links ?? []).filter((l) => l.fromUserId !== userId && l.toUserId !== userId),
           parents,
+          partners: partners.filter(([a, b]) => a !== userId && b !== userId),
         } as unknown as object,
       },
     });
@@ -941,8 +959,8 @@ async function placeInTree(
       });
       const layout = (family.treeLayout as FamilyTreeLayout | null) ?? {};
       const invitedBy = new Map(family.members.map((m) => [m.userId, m.invitedById]));
-      const parents = placeRelative(
-        layout.parents ?? {},
+      const { parents, partners } = placeRelative(
+        { parents: layout.parents ?? {}, partners: normalizePartners(layout.partners) },
         (id) => invitedBy.get(id) ?? null,
         newUserId,
         relatedToId,
@@ -956,7 +974,12 @@ async function placeInTree(
       await prisma.family.update({
         where: { id: familyId },
         data: {
-          treeLayout: { nodes: [], links: layout.links ?? [], parents } as unknown as object,
+          treeLayout: {
+            nodes: [],
+            links: layout.links ?? [],
+            parents,
+            partners,
+          } as unknown as object,
         },
       });
     });
@@ -1283,6 +1306,12 @@ export interface FamilyTreeLayout {
    * son running the account for his father is not the head of the tree.
    */
   parents?: Record<string, string | null>;
+  /**
+   * Couples: two people who stand together on the tree. A husband and wife
+   * are one place, and their children hang from the pair — not from
+   * whichever of them happened to be added first.
+   */
+  partners?: PartnerPair[];
 }
 
 /**
@@ -1371,6 +1400,7 @@ export async function updateFamilyTreeLayout(
           }))
       : [],
     parents: sanitizeParents(layout.parents),
+    partners: normalizePartners(layout.partners, (id) => id.length > 0 && id.length <= 64),
   };
   await prisma.family.update({
     where: { id: familyId },

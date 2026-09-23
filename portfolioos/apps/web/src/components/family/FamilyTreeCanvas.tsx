@@ -21,6 +21,14 @@ import {
   Maximize2,
 } from 'lucide-react';
 import {
+  buildUnits,
+  isPartnerRelation,
+  normalizePartners,
+  pairKey,
+  type PartnerPair,
+  type TreeUnit,
+} from '@everypaisa/shared';
+import {
   familiesApi,
   type FamilyMemberRow,
   type FamilyRole,
@@ -41,26 +49,42 @@ import { apiErrorMessage } from '@/api/client';
  *
  * Layout precedence:
  *   1. Explicit `treeLayout.nodes` position when present.
- *   2. Fallback auto layout derived from `FamilyMember.invitedById`.
+ *   2. Fallback auto layout over the arrangement in `treeLayout.parents`,
+ *      falling back to `FamilyMember.invitedById`.
+ *
+ * Couples:
+ *   A husband and wife occupy ONE place on the tree, drawn side by side and
+ *   joined by a short line. Their children hang from the pair, so a son
+ *   added against either parent links to both. Partners come from
+ *   `treeLayout.partners`, plus any the members' own relations imply — which
+ *   is how a family recorded before couples existed corrects itself.
  *
  * Edges:
  *   - When `treeLayout.links` is non-empty, ONLY those edges render
  *     (owner has taken over the graph shape).
- *   - Otherwise, edges derive from the `invitedById` chain.
+ *   - Otherwise one line per branch, from a place to each place below it.
  *
  * Aesthetic: absolute-positioned pill cards over an SVG connector layer.
  * The SVG uses cubic Bezier curves between node anchors so lines feel
  * organic rather than the earlier boxy `└` characters.
  */
 
-const CARD_W = 220;
+export const CARD_W = 220;
 const CARD_H = 110;
 const H_GAP = 60; // between siblings
 const V_GAP = 90; // between generations
+const PARTNER_GAP = 26; // between two people who stand together
 const CANVAS_PAD = 40;
 
+/**
+ * A place on the tree: one person, or a couple standing side by side. The
+ * tree branches between places, not between people — which is how a husband
+ * and wife end up with one set of children between them instead of the
+ * children hanging off whichever of them was added first.
+ */
 interface TreeNode {
-  member: FamilyMemberRow;
+  unit: TreeUnit;
+  members: FamilyMemberRow[];
   children: TreeNode[];
 }
 
@@ -77,76 +101,109 @@ function parentOf(m: FamilyMemberRow, parents: Parents): string | null {
   return m.userId in parents ? (parents[m.userId] ?? null) : m.invitedById;
 }
 
-function buildTree(members: FamilyMemberRow[], parents: Parents): TreeNode[] {
-  const byUserId = new Map<string, TreeNode>();
-  for (const m of members) byUserId.set(m.userId, { member: m, children: [] });
-  const roots: TreeNode[] = [];
-  for (const node of byUserId.values()) {
-    const parentId = parentOf(node.member, parents);
-    if (parentId && byUserId.has(parentId)) {
-      byUserId.get(parentId)!.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  }
-  const sortNodes = (nodes: TreeNode[]) => {
-    nodes.sort((a, b) => {
-      if (a.member.role !== b.member.role) {
-        const rank: Record<FamilyRole, number> = { OWNER: 0, CONTRIBUTOR: 1, VIEWER: 2 };
-        return rank[a.member.role] - rank[b.member.role];
-      }
-      return a.member.joinedAt.localeCompare(b.member.joinedAt);
+/** Members in the order they should be drawn: owners first, then by joining. */
+export function inDrawOrder(members: FamilyMemberRow[]): FamilyMemberRow[] {
+  const rank: Record<FamilyRole, number> = { OWNER: 0, CONTRIBUTOR: 1, VIEWER: 2 };
+  return [...members].sort((a, b) =>
+    a.role !== b.role ? rank[a.role] - rank[b.role] : a.joinedAt.localeCompare(b.joinedAt),
+  );
+}
+
+export function buildTree(
+  members: FamilyMemberRow[],
+  parents: Parents,
+  partners: PartnerPair[],
+): TreeNode[] {
+  const ordered = inDrawOrder(members);
+  const byUserId = new Map(ordered.map((m) => [m.userId, m]));
+  const units = buildUnits(
+    ordered.map((m) => m.userId),
+    partners,
+  );
+  const unitOfMember = new Map<string, string>();
+  for (const u of units) for (const id of u.ids) unitOfMember.set(id, u.anchor);
+
+  const nodes = new Map<string, TreeNode>();
+  for (const u of units) {
+    nodes.set(u.anchor, {
+      unit: u,
+      members: u.ids.map((id) => byUserId.get(id)!).filter(Boolean),
+      children: [],
     });
-    for (const n of nodes) sortNodes(n.children);
+  }
+
+  const roots: TreeNode[] = [];
+  for (const node of nodes.values()) {
+    // The place a couple hangs from: whichever of them has a parent on the
+    // tree. Both may (each has their own parents) — the first wins, and the
+    // other's parent still draws a line in.
+    let parentAnchor: string | null = null;
+    for (const m of node.members) {
+      const p = parentOf(m, parents);
+      const anchor = p ? unitOfMember.get(p) : undefined;
+      if (anchor && anchor !== node.unit.anchor) {
+        parentAnchor = anchor;
+        break;
+      }
+    }
+    if (parentAnchor && nodes.has(parentAnchor)) nodes.get(parentAnchor)!.children.push(node);
+    else roots.push(node);
+  }
+
+  const sortNodes = (list: TreeNode[]) => {
+    list.sort((a, b) => {
+      const am = a.members[0];
+      const bm = b.members[0];
+      if (!am || !bm) return 0;
+      if (am.role !== bm.role) {
+        const rank: Record<FamilyRole, number> = { OWNER: 0, CONTRIBUTOR: 1, VIEWER: 2 };
+        return rank[am.role] - rank[bm.role];
+      }
+      return am.joinedAt.localeCompare(bm.joinedAt);
+    });
+    for (const n of list) sortNodes(n.children);
   };
   sortNodes(roots);
   return roots;
 }
 
+/** How wide a place is: one card, or two side by side. */
+function unitWidth(node: TreeNode): number {
+  const n = Math.max(1, node.members.length);
+  return n * CARD_W + (n - 1) * PARTNER_GAP;
+}
+
 /** Compute default (auto) positions for members using a tidy tree layout. */
-function autoLayout(
+export function autoLayout(
   members: FamilyMemberRow[],
   parents: Parents,
+  partners: PartnerPair[],
 ): Map<string, { x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>();
-  const tree = buildTree(members, parents);
-  // Post-order to size each subtree, then assign x centered on children.
-  const widths = new Map<string, number>();
-  function measure(node: TreeNode): number {
-    if (node.children.length === 0) {
-      widths.set(node.member.userId, CARD_W);
-      return CARD_W;
-    }
-    let w = 0;
-    for (let i = 0; i < node.children.length; i++) {
-      if (i > 0) w += H_GAP;
-      w += measure(node.children[i]!);
-    }
-    w = Math.max(w, CARD_W);
-    widths.set(node.member.userId, w);
-    return w;
+  const tree = buildTree(members, parents, partners);
+  /** Lay the people of one place out side by side, from `x`. */
+  function placeUnitAt(node: TreeNode, x: number, depth: number) {
+    const y = CANVAS_PAD + depth * (CARD_H + V_GAP);
+    node.members.forEach((m, i) => {
+      positions.set(m.userId, { x: x + i * (CARD_W + PARTNER_GAP), y });
+    });
   }
   let cursorX = CANVAS_PAD;
   function place(node: TreeNode, depth: number) {
-    const w = widths.get(node.member.userId) ?? CARD_W;
     if (node.children.length === 0) {
-      positions.set(node.member.userId, { x: cursorX, y: CANVAS_PAD + depth * (CARD_H + V_GAP) });
-      cursorX += CARD_W + H_GAP;
+      placeUnitAt(node, cursorX, depth);
+      cursorX += unitWidth(node) + H_GAP;
       return;
     }
-    const startX = cursorX;
     for (const c of node.children) place(c, depth + 1);
-    // Center parent above children span.
-    const firstChild = positions.get(node.children[0]!.member.userId)!;
-    const lastChild = positions.get(node.children[node.children.length - 1]!.member.userId)!;
-    const center = (firstChild.x + lastChild.x + CARD_W) / 2 - CARD_W / 2;
-    positions.set(node.member.userId, {
-      x: center,
-      y: CANVAS_PAD + depth * (CARD_H + V_GAP),
-    });
-    // widths and cursorX already advanced by children
-    void w;
-    void startX;
+    // Centre this place over the span its children occupy.
+    const first = node.children[0]!;
+    const last = node.children[node.children.length - 1]!;
+    const firstPos = positions.get(first.unit.ids[0]!)!;
+    const lastId = last.unit.ids[last.unit.ids.length - 1]!;
+    const lastPos = positions.get(lastId)!;
+    const centre = (firstPos.x + lastPos.x + CARD_W) / 2;
+    placeUnitAt(node, centre - unitWidth(node) / 2, depth);
   }
   for (const root of tree) place(root, 0);
   return positions;
@@ -165,6 +222,19 @@ function roleGlyph(role: FamilyRole): typeof Crown {
 }
 
 type Mode = 'move' | 'link';
+
+/** A line on the canvas, already measured against the cards it connects. */
+interface DrawEdge {
+  key: string;
+  /** SVG path. */
+  d: string;
+  kind: 'parent' | 'partner' | 'custom';
+  label?: string | null;
+  /** Where a label sits, when there is one. */
+  labelAt?: { x: number; y: number };
+  /** Which custom link this is, for selecting and deleting it. */
+  linkIdx?: number;
+}
 
 interface Props {
   familyId: string;
@@ -281,9 +351,43 @@ export function FamilyTreeCanvas({
   const saved = layoutQuery.data;
   const parents = useMemo<Parents>(() => saved?.parents ?? {}, [saved]);
 
+  const memberIds = useMemo(() => new Set(members.map((m) => m.userId)), [members]);
+
+  /**
+   * Who stands with whom. Saved couples, plus any the relations already say:
+   * a member recorded as someone's wife or husband is drawn as their partner
+   * even if they were added before the tree knew about couples. That is what
+   * corrects a family where a wife was drawn as her father-in-law's daughter,
+   * without anyone having to re-enter her.
+   */
+  const partners = useMemo<PartnerPair[]>(() => {
+    const pairs = normalizePartners(saved?.partners, (id) => memberIds.has(id));
+    const seen = new Set(pairs.map(([a, b]) => pairKey(a, b)));
+    for (const m of members) {
+      const other = m.relatedTo?.id;
+      if (!other || !memberIds.has(other) || !isPartnerRelation(m.relation)) continue;
+      const key = pairKey(m.userId, other);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push([m.userId, other]);
+    }
+    return pairs;
+  }, [saved, members, memberIds]);
+
+  /** The place each person occupies, and who else stands there. */
+  const units = useMemo(
+    () => buildUnits(inDrawOrder(members).map((m) => m.userId), partners),
+    [members, partners],
+  );
+  const unitOfMember = useMemo(() => {
+    const map = new Map<string, TreeUnit>();
+    for (const u of units) for (const id of u.ids) map.set(id, u);
+    return map;
+  }, [units]);
+
   // Local editable positions. Seeded from saved layout, falling back
   // to auto layout for any unpositioned member.
-  const auto = useMemo(() => autoLayout(members, parents), [members, parents]);
+  const auto = useMemo(() => autoLayout(members, parents, partners), [members, parents, partners]);
   const [positions, setPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
   const [customLinks, setCustomLinks] = useState<FamilyTreeLink[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -321,8 +425,8 @@ export function FamilyTreeCanvas({
       x: p.x,
       y: p.y,
     }));
-    saveMutation.mutate({ nodes, links: customLinks, parents });
-  }, [positions, customLinks, parents, saveMutation]);
+    saveMutation.mutate({ nodes, links: customLinks, parents, partners });
+  }, [positions, customLinks, parents, partners, saveMutation]);
 
   /**
    * Re-shape the tree and save at once. Saved card positions are dropped so
@@ -331,7 +435,12 @@ export function FamilyTreeCanvas({
    */
   const arrangeMutation = useMutation({
     mutationFn: (next: Parents) =>
-      familiesApi.saveTreeLayout(familyId, { nodes: [], links: customLinks, parents: next }),
+      familiesApi.saveTreeLayout(familyId, {
+        nodes: [],
+        links: customLinks,
+        parents: next,
+        partners,
+      }),
     onSuccess: () => {
       toast.success('Tree rearranged');
       queryClient.invalidateQueries({ queryKey: ['family-tree-layout', familyId] });
@@ -339,24 +448,44 @@ export function FamilyTreeCanvas({
     onError: (err) => toast.error(apiErrorMessage(err, 'Could not rearrange the tree')),
   });
 
-  /** `id` goes to the top; everyone currently at the top moves under them. */
+  /**
+   * `id` goes to the top; every other place that has nobody above it moves
+   * under them. Places, not people — a wife is not stranded at the top when
+   * her husband moves, and she is not made anyone's child either.
+   */
   const makeHead = (id: string) => {
     const next: Parents = { ...parents, [id]: null };
-    for (const m of members) {
-      if (m.userId === id) continue;
-      const p = parentOf(m, next);
+    const headUnit = unitOfMember.get(id);
+    const byId = new Map(members.map((m) => [m.userId, m]));
+    for (const u of units) {
+      if (u.anchor === headUnit?.anchor) continue;
+      const attached = u.ids.some((memberId) => {
+        const m = byId.get(memberId);
+        const p = m ? parentOf(m, next) : null;
+        return p !== null && memberIds.has(p);
+      });
       // At the top, or under someone who is no longer on the tree.
-      if (p === null || !members.some((x) => x.userId === p)) next[m.userId] = id;
+      if (!attached) next[u.anchor] = id;
     }
     arrangeMutation.mutate(next);
   };
 
+  /** Move a whole place under someone: a couple goes together. */
   const placeUnder = (id: string, parentId: string) => {
     if (isAbove(id, parentId, members, parents)) {
       toast.error('That would put someone under their own descendant.');
       return;
     }
-    arrangeMutation.mutate({ ...parents, [id]: parentId });
+    const unit = unitOfMember.get(id);
+    const next: Parents = { ...parents };
+    if (unit && unit.ids.length > 1) {
+      // One of them carries the link; the other stands with them.
+      next[id] = parentId;
+      for (const other of unit.ids) if (other !== id) next[other] = null;
+    } else {
+      next[id] = parentId;
+    }
+    arrangeMutation.mutate(next);
   };
 
   const resetLayout = () => {
@@ -432,22 +561,74 @@ export function FamilyTreeCanvas({
     return m;
   }, [members]);
 
-  const edges = useMemo(() => {
-    // Custom links override auto. If none, derive from invitedById chain.
+  const edges = useMemo<DrawEdge[]>(() => {
+    const out: DrawEdge[] = [];
+    const at = (id: string) => positions.get(id) ?? null;
+    /** The outline of a place: where lines arrive, and where they leave. */
+    const span = (ids: string[]) => {
+      const boxes = ids.map(at).filter((p): p is { x: number; y: number } => Boolean(p));
+      if (boxes.length === 0) return null;
+      const left = Math.min(...boxes.map((p) => p.x));
+      const right = Math.max(...boxes.map((p) => p.x + CARD_W));
+      return {
+        cx: (left + right) / 2,
+        top: Math.min(...boxes.map((p) => p.y)),
+        bottom: Math.max(...boxes.map((p) => p.y + CARD_H)),
+      };
+    };
+    const drop = (from: { cx: number; bottom: number }, to: { cx: number; top: number }) => {
+      const mid = (from.bottom + to.top) / 2;
+      return `M ${from.cx} ${from.bottom} C ${from.cx} ${mid}, ${to.cx} ${mid}, ${to.cx} ${to.top}`;
+    };
+
+    // A couple: joined to each other, at eye level.
+    for (const u of units) {
+      if (u.ids.length < 2) continue;
+      const a = at(u.ids[0]!);
+      const b = at(u.ids[1]!);
+      if (!a || !b) continue;
+      const [l, r] = a.x <= b.x ? [a, b] : [b, a];
+      out.push({
+        key: `partner:${u.ids[0]}:${u.ids[1]}`,
+        kind: 'partner',
+        d: `M ${l.x + CARD_W} ${l.y + CARD_H / 2} L ${r.x} ${r.y + CARD_H / 2}`,
+      });
+    }
+
+    // Custom links override the family lines: the owner drew the shape.
     if (customLinks.length > 0) {
-      return customLinks
-        .filter((l) => memberById.has(l.fromUserId) && memberById.has(l.toUserId))
-        .map((l) => ({ from: l.fromUserId, to: l.toUserId, custom: true, label: l.label }));
+      customLinks.forEach((l, idx) => {
+        if (!memberById.has(l.fromUserId) || !memberById.has(l.toUserId)) return;
+        const from = span([l.fromUserId]);
+        const to = span([l.toUserId]);
+        if (!from || !to) return;
+        out.push({
+          key: `custom:${idx}`,
+          kind: 'custom',
+          linkIdx: idx,
+          label: l.label ?? null,
+          labelAt: { x: (from.cx + to.cx) / 2, y: (from.bottom + to.top) / 2 - 4 },
+          d: drop(from, to),
+        });
+      });
+      return out;
     }
-    const auto: Array<{ from: string; to: string; custom: false; label: null }> = [];
-    for (const m of members) {
-      const p = parentOf(m, parents);
-      if (p && memberById.has(p)) {
-        auto.push({ from: p, to: m.userId, custom: false, label: null });
+
+    // One line per branch, from the pair to their children — not from
+    // whichever parent the child happened to be entered against.
+    const walk = (node: TreeNode) => {
+      const from = span(node.unit.ids);
+      for (const child of node.children) {
+        const to = span(child.unit.ids);
+        if (from && to) {
+          out.push({ key: `parent:${node.unit.anchor}:${child.unit.anchor}`, kind: 'parent', d: drop(from, to) });
+        }
+        walk(child);
       }
-    }
-    return auto;
-  }, [customLinks, members, memberById, parents]);
+    };
+    for (const root of buildTree(members, parents, partners)) walk(root);
+    return out;
+  }, [customLinks, members, memberById, parents, partners, positions, units]);
 
   // ── Canvas size (grows with content) ──────────────────────────────
   const canvasSize = useMemo(() => {
@@ -697,47 +878,41 @@ export function FamilyTreeCanvas({
             width={canvasSize.w}
             height={canvasSize.h}
           >
-            {edges.map((e, idx) => {
-              const a = positions.get(e.from);
-              const b = positions.get(e.to);
-              if (!a || !b) return null;
-              const ax = a.x + CARD_W / 2;
-              const ay = a.y + CARD_H;
-              const bx = b.x + CARD_W / 2;
-              const by = b.y;
-              const mid = (ay + by) / 2;
-              const d = `M ${ax} ${ay} C ${ax} ${mid}, ${bx} ${mid}, ${bx} ${by}`;
-              const isSelected = e.custom && selectedLinkIdx === idx;
+            {edges.map((e) => {
+              const isSelected = e.linkIdx !== undefined && selectedLinkIdx === e.linkIdx;
+              const isPartner = e.kind === 'partner';
               return (
-                <g key={idx}>
+                <g key={e.key}>
                   {/* wide invisible hit target for click selection */}
-                  {e.custom && (
+                  {e.linkIdx !== undefined && (
                     <path
-                      d={d}
+                      d={e.d}
                       stroke="transparent"
                       strokeWidth={14}
                       fill="none"
                       className="pointer-events-auto cursor-pointer"
-                      onClick={() => setSelectedLinkIdx(idx)}
+                      onClick={() => setSelectedLinkIdx(e.linkIdx!)}
                     />
                   )}
                   <path
-                    d={d}
+                    d={e.d}
                     stroke={
                       isSelected
                         ? 'hsl(0 80% 55%)'
-                        : e.custom
+                        : e.kind === 'custom'
                         ? 'hsl(213 53% 40%)'
+                        : isPartner
+                        ? 'hsl(var(--muted-foreground))'
                         : 'hsl(var(--border))'
                     }
-                    strokeWidth={isSelected ? 2.5 : e.custom ? 2 : 1.5}
-                    strokeDasharray={e.custom ? '0' : '4 4'}
+                    strokeWidth={isSelected ? 2.5 : e.kind === 'custom' ? 2 : isPartner ? 2 : 1.5}
+                    strokeDasharray={e.kind === 'parent' ? '4 4' : '0'}
                     fill="none"
                   />
-                  {e.label && (
+                  {e.label && e.labelAt && (
                     <text
-                      x={(ax + bx) / 2}
-                      y={mid - 4}
+                      x={e.labelAt.x}
+                      y={e.labelAt.y}
                       textAnchor="middle"
                       className="fill-muted-foreground text-[10px]"
                     >
@@ -786,7 +961,12 @@ export function FamilyTreeCanvas({
                 arrange={
                   isOwner && m.status === 'ACTIVE'
                     ? {
-                        isHead: parentOf(m, parents) === null,
+                        // At the top when nobody in their place is under anyone.
+                        isHead: (unitOfMember.get(m.userId)?.ids ?? [m.userId]).every((id) => {
+                          const person = memberById.get(id);
+                          const p = person ? parentOf(person, parents) : null;
+                          return p === null || !memberIds.has(p);
+                        }),
                         candidates: members.filter(
                           (o) =>
                             o.userId !== m.userId &&

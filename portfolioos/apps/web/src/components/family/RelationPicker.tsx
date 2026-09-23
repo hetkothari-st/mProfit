@@ -36,6 +36,9 @@ const PLACEMENT_WORDS = {
   TWO_ABOVE: 'two generations above',
   BESIDE: 'beside',
   BELOW: 'below',
+  // Read separately: a couple is one place on the tree, not a person beside
+  // another. See the sentence below.
+  PARTNER: 'with',
 } as const;
 
 export function RelationPicker({
@@ -135,9 +138,18 @@ export function RelationPicker({
       {anchor && value.relation.trim() && (
         <p className="rounded-md bg-muted/40 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
           <span className="font-medium text-foreground">{personName.trim() || 'They'}</span> will be{' '}
-          {anchorName} {value.relation.trim().toLowerCase()}, and sit{' '}
-          {PLACEMENT_WORDS[placement]} {anchor.userId === currentUserId ? 'you' : anchor.name} on the
-          tree.
+          {anchorName} {value.relation.trim().toLowerCase()}, and{' '}
+          {placement === 'PARTNER' ? (
+            <>
+              stand with {anchor.userId === currentUserId ? 'you' : anchor.name} as a couple —
+              children added to either of you link to both.
+            </>
+          ) : (
+            <>
+              sit {PLACEMENT_WORDS[placement]}{' '}
+              {anchor.userId === currentUserId ? 'you' : anchor.name} on the tree.
+            </>
+          )}
         </p>
       )}
     </div>
