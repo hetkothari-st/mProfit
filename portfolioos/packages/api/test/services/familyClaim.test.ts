@@ -157,10 +157,12 @@ describe('taking it over', () => {
     );
     expect(after).toEqual({ isShadowClient: false, managedById: null });
 
+    // The one the family recorded, alongside the portfolio they were given
+    // when they were added — both still theirs, under the same user.
     const kept = await runAsUser(profileId, () =>
-      prisma.portfolio.count({ where: { userId: profileId } }),
+      prisma.portfolio.findMany({ where: { userId: profileId }, select: { name: true } }),
     );
-    expect(kept).toBe(1);
+    expect(kept.map((p) => p.name).sort()).toEqual(["Dadaji FDs", "Dadaji's portfolio"]);
 
     // They can sign in, and the family member who kept their books cannot
     // open the account any more.

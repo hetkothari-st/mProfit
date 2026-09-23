@@ -18,6 +18,7 @@ import {
   UserPlus,
   ZoomIn,
   ZoomOut,
+  Maximize2,
 } from 'lucide-react';
 import {
   familiesApi,
@@ -178,6 +179,9 @@ interface Props {
   onAddRelative?: (m: FamilyMemberRow) => void;
 }
 
+/** How much of the window the canvas may take, and its hard ceiling. */
+const MAX_VIEWPORT_SHARE = 0.72;
+const MAX_VIEWPORT_PX = 900;
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.6;
 const ZOOM_STEP = 0.1;
@@ -212,9 +216,21 @@ export function FamilyTreeCanvas({
   onManage,
   onAddRelative,
 }: Props) {
-  // Zoom scales the whole board; the scroll area grows with it so every card
-  // stays reachable. Ctrl/⌘ + scroll zooms too, like a map.
+  /**
+   * Zoom scales the drawing, and the canvas is sized to what is drawn —
+   * so zooming out really does fit more of the tree on screen instead of
+   * shrinking the picture inside the same scrollable box.
+   *
+   * The canvas grows as the tree grows, up to a share of the window, and
+   * "Fit" (also run automatically when the tree gains or loses a member)
+   * picks the zoom that brings the whole tree into view. Adding a level
+   * used to mean scrolling to find it.
+   */
   const [zoom, setZoom] = useState(1);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  // Panning: drag the empty canvas to move around when zoomed in.
+  const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const [panning, setPanning] = useState(false);
   const queryClient = useQueryClient();
 
   const layoutQuery = useQuery({
@@ -402,8 +418,30 @@ export function FamilyTreeCanvas({
       if (p.x + CARD_W > maxX) maxX = p.x + CARD_W;
       if (p.y + CARD_H > maxY) maxY = p.y + CARD_H;
     }
-    return { w: maxX + CANVAS_PAD, h: maxY + CANVAS_PAD };
+    return { w: Math.max(maxX + CANVAS_PAD, 640), h: Math.max(maxY + CANVAS_PAD, 320) };
   }, [positions]);
+
+  /** The zoom at which the whole tree fits the visible canvas. */
+  const fitZoom = useCallback(() => {
+    const box = viewportRef.current;
+    if (!box) return 1;
+    const width = box.clientWidth - 8;
+    const height = Math.min(window.innerHeight * MAX_VIEWPORT_SHARE, MAX_VIEWPORT_PX) - 8;
+    return clampZoom(Math.min(1, width / canvasSize.w, height / canvasSize.h));
+  }, [canvasSize.w, canvasSize.h]);
+
+  const fitToView = useCallback(() => setZoom(fitZoom()), [fitZoom]);
+
+  // Bring the whole tree back into view whenever it gains or loses someone:
+  // the new card is usually the one you want to see, and it is usually the
+  // one just outside the edge. Only ever zooms out — never enlarges past
+  // what the person chose.
+  const memberCount = members.length;
+  useEffect(() => {
+    setZoom((z) => Math.min(z, fitZoom()));
+    // fitZoom changes with the layout; this should run on member changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberCount]);
 
   if (members.length === 0) {
     return (
@@ -527,32 +565,76 @@ export function FamilyTreeCanvas({
           >
             <ZoomIn className="h-3.5 w-3.5" strokeWidth={1.9} />
           </button>
+          <button
+            type="button"
+            onClick={fitToView}
+            title="Fit the whole tree"
+            aria-label="Fit the whole tree"
+            className="border-l border-border px-2 py-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          >
+            <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.9} />
+          </button>
         </div>
       </div>
 
       {/* Canvas */}
       <div
-        className="relative overflow-auto rounded-lg border border-border bg-gradient-to-br from-muted/20 to-transparent"
-        style={{ maxHeight: 640 }}
+        ref={viewportRef}
+        className={`relative overflow-auto rounded-lg border border-border bg-gradient-to-br from-muted/20 to-transparent ${
+          panning ? 'cursor-grabbing' : ''
+        }`}
+        // Tall enough for the tree, never taller than a comfortable share of
+        // the window; a two-person family gets a small box, not a vast one.
+        style={{ height: Math.min(canvasSize.h * zoom + 2, window.innerHeight * MAX_VIEWPORT_SHARE, MAX_VIEWPORT_PX) }}
         onWheel={(e) => {
           if (!e.ctrlKey && !e.metaKey) return;
           e.preventDefault();
           setZoom((z) => clampZoom(z + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)));
         }}
+        onPointerDown={(e) => {
+          // Only the empty canvas pans; a card handles its own drag.
+          if (e.target !== e.currentTarget && !(e.target as HTMLElement).dataset.canvas) return;
+          const box = viewportRef.current;
+          if (!box) return;
+          panRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            left: box.scrollLeft,
+            top: box.scrollTop,
+          };
+          setPanning(true);
+        }}
+        onPointerMove={(e) => {
+          const start = panRef.current;
+          const box = viewportRef.current;
+          if (!start || !box) return;
+          box.scrollLeft = start.left - (e.clientX - start.x);
+          box.scrollTop = start.top - (e.clientY - start.y);
+        }}
+        onPointerUp={() => {
+          panRef.current = null;
+          setPanning(false);
+        }}
+        onPointerLeave={() => {
+          panRef.current = null;
+          setPanning(false);
+        }}
       >
         {/* The outer box takes the scaled size so the scroll area matches
             what is drawn; the inner board is scaled from its top-left. */}
         <div
+          data-canvas="1"
           style={{
-            width: Math.max(canvasSize.w, 800) * zoom,
-            height: Math.max(canvasSize.h, 400) * zoom,
+            width: canvasSize.w * zoom,
+            height: canvasSize.h * zoom,
           }}
         >
         <div
           className="relative"
+          data-canvas="1"
           style={{
-            width: Math.max(canvasSize.w, 800),
-            height: Math.max(canvasSize.h, 400),
+            width: canvasSize.w,
+            height: canvasSize.h,
             transform: `scale(${zoom})`,
             transformOrigin: '0 0',
           }}
@@ -560,8 +642,8 @@ export function FamilyTreeCanvas({
           {/* Edges layer */}
           <svg
             className="absolute inset-0 pointer-events-none"
-            width={Math.max(canvasSize.w, 800)}
-            height={Math.max(canvasSize.h, 400)}
+            width={canvasSize.w}
+            height={canvasSize.h}
           >
             {edges.map((e, idx) => {
               const a = positions.get(e.from);

@@ -292,8 +292,11 @@ function FamilyWorkspace({
     onSuccess: () => {
       toast.success('Removed from the family');
       queryClient.invalidateQueries({ queryKey: ['families', family.id, 'members'] });
+      queryClient.invalidateQueries({ queryKey: ['families', 'mine'] });
       queryClient.invalidateQueries({ queryKey: ['family-tree-layout', family.id] });
       queryClient.invalidateQueries({ queryKey: ['managed-profiles'] });
+      // A managed member takes their portfolios with them.
+      queryClient.invalidateQueries({ queryKey: ['portfolios'] });
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Could not remove them')),
   });
@@ -910,6 +913,9 @@ function ManagedMemberForm({
   const { enter } = useManageProfile();
   const [name, setName] = useState('');
   const [managerId, setManagerId] = useState(currentUserId ?? '');
+  // They join straight away — there is no invitation to accept — so their
+  // place in the family is chosen here rather than by them later.
+  const [role, setRole] = useState<'CONTRIBUTOR' | 'VIEWER'>('CONTRIBUTOR');
   const [added, setAdded] = useState<{ userId: string; name: string; managerId: string } | null>(
     null,
   );
@@ -924,6 +930,7 @@ function ManagedMemberForm({
         relation: kin.relation.trim() || undefined,
         relatedToId: kin.relation.trim() ? kin.relatedToId || undefined : undefined,
         managerId: managerId || undefined,
+        role,
       });
       if (outcome.status === 'managed_added') return outcome;
       const paid = await payForSeat(familyId, outcome);
@@ -935,8 +942,11 @@ function ManagedMemberForm({
       setAdded({ userId: res.userId, name: res.name, managerId });
       onAdded();
       queryClient.invalidateQueries({ queryKey: ['families', familyId, 'members'] });
+      queryClient.invalidateQueries({ queryKey: ['families', 'mine'] });
       queryClient.invalidateQueries({ queryKey: ['family-tree-layout', familyId] });
       queryClient.invalidateQueries({ queryKey: ['managed-profiles'] });
+      // They come with a portfolio of their own; the list shows it at once.
+      queryClient.invalidateQueries({ queryKey: ['portfolios'] });
     },
     onError: (err) => {
       if (err instanceof Error && err.message === 'dismissed') return; // Razorpay modal closed
@@ -999,6 +1009,23 @@ function ManagedMemberForm({
           onChange={setKin}
           disabled={addMutation.isPending}
         />
+        <div className="space-y-1.5">
+          <Label htmlFor="managed-role">Their place in the family</Label>
+          <select
+            id="managed-role"
+            className="w-full h-9 rounded-md border border-border bg-background text-sm px-2"
+            value={role}
+            onChange={(e) => setRole(e.target.value as 'CONTRIBUTOR' | 'VIEWER')}
+            disabled={addMutation.isPending}
+          >
+            <option value="CONTRIBUTOR">Contributor — counted in the household</option>
+            <option value="VIEWER">Viewer — listed, but kept to the side</option>
+          </select>
+          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+            They join now; there is no invitation to accept. They never sign in, so this describes
+            their place rather than granting them anything.
+          </p>
+        </div>
         <div className="space-y-1.5">
           <Label htmlFor="managed-manager">Who keeps their books</Label>
           <select
@@ -1087,6 +1114,8 @@ function InviteForm({
       setInvitationId(res.id);
       onInvited();
       queryClient.invalidateQueries({ queryKey: ['families', familyId, 'invitations'] });
+      // An open invitation holds a seat — the header line says so.
+      queryClient.invalidateQueries({ queryKey: ['families', 'mine'] });
     },
     onError: (err) => {
       if (err instanceof Error && err.message === 'dismissed') return; // Razorpay modal closed

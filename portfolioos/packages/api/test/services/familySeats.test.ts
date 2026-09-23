@@ -40,6 +40,7 @@ async function family(label: string, includedSeats = 3) {
       await prisma.familyInvitation.deleteMany({ where: { familyId: fam.id } });
       await prisma.pendingFamilyInvite.deleteMany({ where: { familyId: fam.id } });
       await prisma.familyMember.deleteMany({ where: { familyId: fam.id } });
+      await prisma.portfolio.deleteMany({ where: { userId: { in: managed.map((m) => m.userId) } } });
       await prisma.user.deleteMany({ where: { id: { in: managed.map((m) => m.userId) } } });
       await prisma.family.delete({ where: { id: fam.id } });
     });
@@ -132,5 +133,44 @@ describe('what uses a family seat', () => {
       openInvitations: 0,
       used: 1,
     });
+  });
+});
+
+describe('a member added without an email', () => {
+  it('joins straight away, as a contributor by default, with a portfolio of their own', async () => {
+    const { owner, familyId } = await family('seat-role');
+    const res = await runAsUser(owner.userId, () =>
+      addManagedMember(owner.userId, familyId, { name: 'Ramesh Kothari' }),
+    );
+    if (res.status !== 'managed_added') throw new Error('expected managed_added');
+
+    const row = await runAsSystem(() =>
+      prisma.familyMember.findUniqueOrThrow({
+        where: { familyId_userId: { familyId, userId: res.userId } },
+        select: { role: true, status: true },
+      }),
+    );
+    expect(row).toEqual({ role: 'CONTRIBUTOR', status: 'ACTIVE' });
+
+    const portfolios = await runAsUser(res.userId, () =>
+      prisma.portfolio.findMany({ where: { userId: res.userId }, select: { name: true, isDefault: true } }),
+    );
+    expect(portfolios).toEqual([{ name: "Ramesh's portfolio", isDefault: true }]);
+  });
+
+  it('can be added as a viewer instead', async () => {
+    const { owner, familyId } = await family('seat-role-viewer');
+    const res = await runAsUser(owner.userId, () =>
+      addManagedMember(owner.userId, familyId, { name: 'Dadi', role: 'VIEWER' }),
+    );
+    if (res.status !== 'managed_added') throw new Error('expected managed_added');
+
+    const row = await runAsSystem(() =>
+      prisma.familyMember.findUniqueOrThrow({
+        where: { familyId_userId: { familyId, userId: res.userId } },
+        select: { role: true },
+      }),
+    );
+    expect(row.role).toBe('VIEWER');
   });
 });
