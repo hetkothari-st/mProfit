@@ -34,6 +34,8 @@ import {
   getFamilyTreeLayout,
   updateFamilyTreeLayout,
   addManagedMember,
+  addManagedMembersBulk,
+  BULK_MANAGED_MAX,
   setManagedMemberManager,
 } from '../services/family.service.js';
 import { NON_AC_CATEGORIES } from '../services/familyScope.service.js';
@@ -137,6 +139,24 @@ const managedMemberSchema = z.object({
   contactEmail: z.string().email().optional(),
 });
 
+const bulkManagedSchema = z.object({
+  members: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(80),
+        relation: z.string().max(40).nullable().optional(),
+        relatedToId: z.string().min(1).nullable().optional(),
+        // Someone listed earlier in this same batch, by position.
+        relatedToRow: z.number().int().min(0).nullable().optional(),
+        managerId: z.string().min(1).nullable().optional(),
+        role: z.enum(['CONTRIBUTOR', 'VIEWER']).optional(),
+        contactEmail: z.string().email().nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(BULK_MANAGED_MAX),
+});
+
 const managerSchema = z.object({ managerId: z.string().min(1) });
 
 const familyPortfolioSchema = z.object({
@@ -237,6 +257,16 @@ familiesRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const data = managedMemberSchema.parse(req.body);
     ok(res, await addManagedMember(callerId(req), req.params.familyId!, data));
+  }),
+);
+
+// A whole branch of the family in one pass. All of them or none, and
+// relations may point at people listed earlier in the same batch.
+familiesRouter.post(
+  '/:familyId/members/managed/bulk',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { members } = bulkManagedSchema.parse(req.body);
+    ok(res, await addManagedMembersBulk(callerId(req), req.params.familyId!, members));
   }),
 );
 

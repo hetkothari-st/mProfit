@@ -1105,6 +1105,167 @@ export async function addManagedMember(
   };
 }
 
+/** At most this many people in one go — a household, not an import. */
+export const BULK_MANAGED_MAX = 25;
+
+export interface BulkManagedRow {
+  name: string;
+  contactEmail?: string | null;
+  relation?: string | null;
+  /** An existing active member of this family. */
+  relatedToId?: string | null;
+  /**
+   * Or someone added earlier in this same batch, by position. Setting up a
+   * family in one pass means saying "Sarita, wife of Mahendra" before
+   * Mahendra exists — so a row may point at an earlier row instead.
+   */
+  relatedToRow?: number | null;
+  role?: 'CONTRIBUTOR' | 'VIEWER';
+  managerId?: string | null;
+}
+
+export interface BulkManagedResult {
+  status: 'managed_added';
+  added: Array<{ userId: string; name: string; row: number }>;
+  familyName: string;
+  includedSeats: number;
+  seatsUsed: number;
+}
+
+/**
+ * OWNER-only. Add a whole branch of the family at once.
+ *
+ * All of them or none: one bad row does not leave half a family behind, and
+ * half a family is worse than none — the missing half is what the rest were
+ * related to. Seats are checked for the batch up front, because finding out
+ * at person seven that you owe for a seat is no way to enter a family.
+ *
+ * Paid seats are deliberately not offered here: that is a payment per person
+ * and belongs to the one-at-a-time flow, which can carry it properly.
+ */
+export async function addManagedMembersBulk(
+  callerId: string,
+  familyId: string,
+  rows: BulkManagedRow[],
+): Promise<BulkManagedResult> {
+  await assertOwnerOf(callerId, familyId);
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new BadRequestError('Add at least one person.');
+  }
+  if (rows.length > BULK_MANAGED_MAX) {
+    throw new BadRequestError(`You can add up to ${BULK_MANAGED_MAX} people at a time.`);
+  }
+
+  const [family, usage] = await Promise.all([
+    prisma.family.findUniqueOrThrow({
+      where: { id: familyId },
+      select: { name: true, includedSeats: true, extraSeatPriceInr: true },
+    }),
+    seatUsage(familyId),
+  ]);
+  const free = family.includedSeats - usage.used;
+  if (rows.length > free) {
+    const seats = free === 1 ? '1 free seat' : `${free} free seats`;
+    throw new BadRequestError(
+      `${seatMessage(usage, toDecimal(family.extraSeatPriceInr).toString())} ` +
+        `You are adding ${rows.length} people with ${free < 0 ? 'no' : seats} left — ` +
+        'add them one at a time to pay per seat, or remove some from the list.',
+    );
+  }
+
+  // Everything checkable is checked before a single row is written.
+  const prepared: Array<{
+    name: string;
+    contactEmail: string | null;
+    relation: string | null;
+    relatedToId: string | null;
+    relatedToRow: number | null;
+    role: 'CONTRIBUTOR' | 'VIEWER';
+    managerId: string;
+  }> = [];
+  const managersChecked = new Set<string>();
+  for (const [index, row] of rows.entries()) {
+    const at = `Row ${index + 1}`;
+    const name = (row.name ?? '').trim();
+    if (!name) throw new BadRequestError(`${at}: a name is needed.`);
+    if (name.length > 80) throw new BadRequestError(`${at}: that name is too long.`);
+    const contactEmail = row.contactEmail?.trim().toLowerCase() || null;
+    if (contactEmail && !contactEmail.includes('@')) {
+      throw new BadRequestError(`${at}: that email does not look right.`);
+    }
+    const relatedToRow = row.relatedToRow ?? null;
+    if (relatedToRow !== null) {
+      // Earlier only: a pair of rows each waiting on the other has no order
+      // to be created in.
+      if (!Number.isInteger(relatedToRow) || relatedToRow < 0 || relatedToRow >= index) {
+        throw new BadRequestError(`${at}: can only be related to someone listed above them.`);
+      }
+    }
+    const kin =
+      relatedToRow !== null
+        ? { relation: row.relation?.trim().slice(0, 40) || null, relatedToId: null }
+        : await validRelative(familyId, row.relation, row.relatedToId);
+    const managerId = row.managerId ?? callerId;
+    if (!managersChecked.has(managerId)) {
+      await assertValidManager(familyId, managerId);
+      managersChecked.add(managerId);
+    }
+    prepared.push({
+      name,
+      contactEmail,
+      relation: kin.relation,
+      relatedToId: kin.relatedToId,
+      relatedToRow,
+      role: row.role === 'VIEWER' ? 'VIEWER' : 'CONTRIBUTOR',
+      managerId,
+    });
+  }
+
+  const passwordHashes = await Promise.all(prepared.map(() => unusablePasswordHash()));
+
+  // Privileged: these rows belong to users who are not the caller, which
+  // FamilyMember's policy refuses. Ownership was proven above.
+  const created = await runAsSystem(() =>
+    runInTransaction(async (tx) => {
+      const out: Array<{ userId: string; name: string; row: number }> = [];
+      for (const [index, row] of prepared.entries()) {
+        const relatedToId =
+          row.relatedToRow !== null ? out[row.relatedToRow]!.userId : row.relatedToId;
+        const profile = await createManagedProfileTx(tx, {
+          familyId,
+          name: row.name,
+          relation: row.relation,
+          relatedToId,
+          managerId: row.managerId,
+          addedById: callerId,
+          passwordHash: passwordHashes[index]!,
+          role: row.role,
+          contactEmail: row.contactEmail,
+        });
+        out.push({ userId: profile.id, name: profile.name, row: index });
+      }
+      return out;
+    }),
+  );
+
+  // Placing happens after the commit, in the order they were listed, so each
+  // one is measured against a tree that already holds the people above it.
+  for (const [index, row] of prepared.entries()) {
+    const relatedToId =
+      row.relatedToRow !== null ? created[row.relatedToRow]!.userId : row.relatedToId;
+    await placeInTree(familyId, created[index]!.userId, relatedToId, row.relation);
+  }
+
+  logger.info({ familyId, count: created.length, callerId }, '[family] members added in bulk');
+  return {
+    status: 'managed_added',
+    added: created,
+    familyName: family.name,
+    includedSeats: family.includedSeats,
+    seatsUsed: usage.used + created.length,
+  };
+}
+
 /**
  * Hand a managed profile to another member to keep — when the son who set it
  * up moves abroad, say, and his sister takes over. Open to the current
