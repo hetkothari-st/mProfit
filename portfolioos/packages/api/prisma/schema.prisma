@@ -3564,6 +3564,11 @@ model FamilyInvitation {
   /// the invitation is accepted.
   relation            String?
   relatedToId         String?
+  /// Set when this invitation hands a MANAGED profile to the person it
+  /// belongs to: accepting turns that profile into their own account —
+  /// their email, their password — rather than creating a second one.
+  /// Their history, holdings and place in the family stay as they are.
+  claimForUserId      String?
   invitedById         String
   invitedBy           User         @relation("FamilyInvitationInviter", fields: [invitedById], references: [id])
 

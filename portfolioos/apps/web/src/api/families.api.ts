@@ -1,6 +1,6 @@
 import type { InviteEmailDraft } from './ca.api';
 import { api, unwrap } from './client';
-import type { ApiResponse } from '@everypaisa/shared';
+import type { ApiResponse, AuthUser, AuthTokens } from '@everypaisa/shared';
 
 export type FamilyRole = 'OWNER' | 'CONTRIBUTOR' | 'VIEWER';
 export type FamilyMemberStatus = 'PENDING' | 'ACTIVE' | 'REVOKED';
@@ -281,6 +281,55 @@ export const familiesApi = {
   ) {
     const { data } = await api.post<ApiResponse<{ id: string; name: string }>>(
       `/api/families/${familyId}/portfolios`,
+      input,
+    );
+    return unwrap(data);
+  },
+};
+
+/** Handing a managed member the account that was kept for them. */
+export interface ClaimInviteResult {
+  invitationId: string;
+  token: string;
+  invitedEmail: string;
+  expiresAt: string;
+}
+
+export interface ClaimPreview {
+  profileName: string;
+  familyName: string;
+  invitedBy: string;
+  invitedEmail: string;
+  expiresAt: string;
+}
+
+export const familyClaimApi = {
+  /** Invite the person a managed profile belongs to, now that they have an email. */
+  async invite(
+    familyId: string,
+    memberUserId: string,
+    email: string,
+  ): Promise<ClaimInviteResult> {
+    const { data } = await api.post<ApiResponse<ClaimInviteResult>>(
+      `/api/families/${familyId}/members/${memberUserId}/claim-invite`,
+      { email },
+    );
+    return unwrap(data);
+  },
+  /** Public: what the link says, before they have an account. */
+  async peek(token: string): Promise<ClaimPreview> {
+    const { data } = await api.get<ApiResponse<ClaimPreview>>(
+      `/api/families/claims/${token}/peek`,
+    );
+    return unwrap(data);
+  },
+  /** Public: take it over. Returns a session — they are signed in as it. */
+  async claim(
+    token: string,
+    input: { email: string; password: string },
+  ): Promise<{ user: AuthUser; tokens: AuthTokens }> {
+    const { data } = await api.post<ApiResponse<{ user: AuthUser; tokens: AuthTokens }>>(
+      `/api/families/claims/${token}`,
       input,
     );
     return unwrap(data);
