@@ -1,87 +1,95 @@
-import { buildUnits, normalizePartners, type PartnerPair, type TreeUnit } from '@everypaisa/shared';
+import { normalizePartners, partnersOf, type PartnerPair } from '@everypaisa/shared';
 import type { FamilyMemberRow, FamilyRole } from '@/api/families.api';
 
 /**
- * Laying a family out on its own.
+ * Laying a family out as an indented tree.
  *
- * The tree is never arranged by hand. Someone is added as a father, a wife, a
- * brother — and the whole drawing is worked out again from those relations:
- * generations by depth, couples as one place, parents centred over the
- * children they share, and the lot measured so it can be fitted to whatever
- * screen it is on. Nothing here knows about the DOM, so it can be tested on
- * its own and reused by the board and by anything that comes later.
+ * Read down the page, the way a family is actually recited: the head at the
+ * top, their husband or wife beside them, and each child indented under them
+ * with the relation written on the line that connects them — "son",
+ * "daughter", "wife". Nothing is left to be inferred from a shape.
  *
- * Shapes it has to get right, because families have all of them:
- *   - a couple standing together with their children hanging from the pair
- *   - someone added above the person at the top, who then becomes the top
- *   - a brother of the person at the top, who has no parent to hang from and
- *     so stands beside them as a second root (a family is a forest, not a
- *     tree — see `roots`)
- *   - a branch wider than the screen, folded into a "+n" node until asked for
+ * Why this rather than the wall-chart it replaced: a chart that fans out
+ * sideways has to be shrunk to fit a phone, and a shrunk chart is one nobody
+ * can read. Indenting costs one column per generation, scrolls the way every
+ * other screen does, and leaves every name at full size however large the
+ * family gets.
+ *
+ * Shapes it has to get right:
+ *   - a couple: two pills side by side, joined by a dashed line and labelled
+ *   - children hanging from a rail under the parent they were entered against
+ *   - someone added above the top, who becomes the new top
+ *   - a brother of the person at the top, who has no parent and so starts his
+ *     own line at the same indent (a family is a forest, not a tree)
+ *   - an arrangement that points in a circle, which must not hang
  */
 
 /** child userId -> parent userId, or null for someone at the top. */
 export type Parents = Record<string, string | null>;
 
-export const NODE_H = 48;
-/** Distance between the top of one generation and the top of the next. */
-export const ROW_PITCH = 104;
-const SIBLING_GAP = 20;
-/** Two families under one roof (nobody's parent is known) stand further apart. */
-const ROOT_GAP = 40;
-export const PAD = 20;
-const MIN_W = 96;
-const MAX_W = 260;
-const MORE_W = 92;
+export const ROW_H = 40;
+export const ROW_GAP = 16;
+/** Top of one row to the top of the next. */
+export const ROW_PITCH = ROW_H + ROW_GAP;
+/** How far each generation steps to the right. */
+export const INDENT = 64;
+/** Where a parent's rail drops, measured from the left of their pill. */
+export const RAIL_DX = 18;
+export const PAD = 16;
+/** The gap a spouse link needs between two pills. */
+const SPOUSE_GAP = 62;
+const MIN_PILL = 74;
+const MAX_PILL = 190;
 
-export interface LayoutNode {
-  /** Unit anchor id, or `more:<anchor>` for a folded branch. */
+export interface TreeRow {
+  /** The person this row is about. */
   key: string;
-  /** The people standing here. Empty for a folded branch. */
-  ids: string[];
-  members: FamilyMemberRow[];
-  /** How many people are hidden behind a folded branch. */
-  more?: number;
-  /** The unit whose children are folded, for a `more` node. */
-  foldedFrom?: string;
+  member: FamilyMemberRow;
+  /** Their husband or wife, drawn beside them. */
+  spouse?: FamilyMemberRow;
+  /** "wife", "husband" — what sits on the dashed line between them. */
+  spouseLabel?: string;
+  /** "son", "daughter" — what sits on the line from their parent. */
+  relation?: string;
   parentKey: string | null;
   depth: number;
-  /**
-   * Which branch of the family this belongs to: the position of the ancestor
-   * it descends from among the children of the top. -1 for the top itself.
-   * The board gives each branch its own colour, which is what makes a tree
-   * readable at a glance rather than a grey diagram.
-   */
+  /** Which branch of the family this belongs to; -1 at the top. */
   branch: number;
   x: number;
   y: number;
   w: number;
+  /** Where the spouse's pill starts, when there is one. */
+  spouseX?: number;
+  spouseW?: number;
 }
 
-export interface LayoutEdge {
+/** The line dropping from a parent past all of their children. */
+export interface TreeRail {
   key: string;
-  from: string;
-  to: string;
-  /** The branch this line belongs to — it is drawn in that branch's colour. */
+  x: number;
+  y1: number;
+  y2: number;
   branch: number;
-  /** SVG path: down out of the parent, across, down into the child. */
-  d: string;
+}
+
+/** The line from a rail across to one child, and the word on it. */
+export interface TreeStub {
+  key: string;
+  x1: number;
+  x2: number;
+  y: number;
+  label: string;
+  branch: number;
 }
 
 export interface FamilyLayout {
-  nodes: LayoutNode[];
-  edges: LayoutEdge[];
+  rows: TreeRow[];
+  rails: TreeRail[];
+  stubs: TreeStub[];
   width: number;
   height: number;
-  /** Anchor id of the unit each member stands in. */
-  unitOf: Record<string, string>;
-  /**
-   * Places at the top of the tree that are not drawn, because the view is
-   * following another line. Nobody's parents are known here — an uncle whose
-   * own parents were never recorded stands at the top too — so there is no
-   * branch to fold them into, and the board offers them separately.
-   */
-  hiddenRoots: { keys: string[]; people: number };
+  /** Which row each member is drawn on, spouses included. */
+  rowOf: Record<string, string>;
 }
 
 /**
@@ -104,413 +112,175 @@ export function inDrawOrder(members: FamilyMemberRow[]): FamilyMemberRow[] {
   );
 }
 
-const firstName = (name: string) => name.trim().split(/\s+/)[0] || name.trim();
-
 /**
- * "Mahendra & Sarita", or just "Akshay Jain" — and first names only when the
- * board is narrow, because a phone's width is better spent on type big enough
- * to read than on surnames everyone in the family shares.
+ * How wide a pill has to be to hold a name without cutting it short —
+ * including room for the crown or the eye on the end, which was what clipped
+ * the head of the family's own name.
  */
-export function unitLabel(members: FamilyMemberRow[], compact = false): string {
-  if (members.length === 1) return compact ? firstName(members[0]!.name) : members[0]!.name;
-  return members.map((m) => firstName(m.name)).join(' & ');
+export function pillWidth(member: FamilyMemberRow): number {
+  const badge = member.role === 'OWNER' || member.role === 'VIEWER' ? 20 : 0;
+  return Math.round(Math.max(MIN_PILL, Math.min(MAX_PILL, member.name.length * 8.4 + 26 + badge)));
 }
 
-/** The second line on a pill: how this place relates to the rest. */
-export function unitSubtitle(members: FamilyMemberRow[]): string {
-  if (members.length > 1) return 'Married';
-  const m = members[0];
-  if (!m) return '';
-  if (m.relation && m.relatedTo) {
-    return `${m.relation} of ${m.relatedTo.name.trim().split(/\s+/)[0]}`;
-  }
-  return m.managed ? 'Managed' : 'Member';
+/** How wide the word on a connector is. */
+export function chipWidth(label: string): number {
+  return Math.round(label.length * 6.2 + 16);
 }
 
-/**
- * How wide a pill has to be to hold what is on it: the initials plate, the
- * name, and the line under it — measured for both, because "Son of Kavya" is
- * often longer than the name above it. A pill that has to cut a name short is
- * worse than one with room to spare.
- */
-const PLATE = 32;
-const PILL_PADDING = 26;
-const GAP_AFTER_PLATE = 10;
-/** The crown, the eye, or the "You" chip on the end. */
-const BADGE = 32;
-function measure(label: string, subtitle: string, compact: boolean, badge: number): number {
-  if (compact) {
-    // No initials plate on a narrow board: it costs 42px a pill, which is the
-    // difference between type you can read and type you cannot.
-    const text = label.length * 7.9;
-    return Math.round(Math.max(96, Math.min(224, 24 + badge + text)));
-  }
-  const text = Math.max(label.length * 7.6, subtitle.length * 6.1);
-  return Math.round(
-    Math.max(MIN_W, Math.min(MAX_W, PLATE + GAP_AFTER_PLATE + PILL_PADDING + BADGE + text)),
-  );
-}
-
-interface Unit extends TreeUnit {
-  members: FamilyMemberRow[];
-  parentKey: string | null;
-  depth: number;
-}
-
-/** The places on the tree, and which place sits under which. */
-function buildUnitGraph(members: FamilyMemberRow[], parents: Parents, partners: PartnerPair[]) {
-  const ordered = inDrawOrder(members);
-  const byId = new Map(ordered.map((m) => [m.userId, m]));
-  const known = (id: string) => byId.has(id);
-  const pairs = normalizePartners(partners, known);
-  const rawUnits = buildUnits(
-    ordered.map((m) => m.userId),
-    pairs,
-  );
-  const unitOf: Record<string, string> = {};
-  for (const u of rawUnits) for (const id of u.ids) unitOf[id] = u.anchor;
-
-  const units = new Map<string, Unit>();
-  for (const u of rawUnits) {
-    units.set(u.anchor, {
-      ...u,
-      members: u.ids.map((id) => byId.get(id)!).filter(Boolean),
-      parentKey: null,
-      depth: 0,
-    });
-  }
-  for (const unit of units.values()) {
-    for (const m of unit.members) {
-      const p = parentOf(m, parents);
-      const anchor = p ? unitOf[p] : null;
-      if (anchor && anchor !== unit.anchor && units.has(anchor)) {
-        unit.parentKey = anchor;
-        break;
-      }
-    }
-  }
-  // A saved arrangement can point in a circle (someone under their own
-  // descendant). Rather than hang, the first one back to itself is cut loose
-  // and stands as a root.
-  for (const unit of units.values()) {
-    const seen = new Set<string>([unit.anchor]);
-    let at = unit.parentKey;
-    while (at) {
-      if (seen.has(at)) {
-        unit.parentKey = null;
-        break;
-      }
-      seen.add(at);
-      at = units.get(at)?.parentKey ?? null;
-    }
-  }
-  for (const unit of units.values()) {
-    let d = 0;
-    let at = unit.parentKey;
-    while (at) {
-      d += 1;
-      at = units.get(at)?.parentKey ?? null;
-    }
-    unit.depth = d;
-  }
-  return { units, unitOf };
+/** "son", "wife" — lower case, because it is read as part of a sentence. */
+function relationWord(relation: string | null | undefined, fallback: string): string {
+  const word = (relation ?? '').trim();
+  return word ? word.toLowerCase() : fallback;
 }
 
 export interface LayoutOptions {
-  /**
-   * Draw the relation under each name. Turned off on a narrow board, where
-   * a shorter pill means bigger, readable type.
-   */
-  withSubtitle?: boolean;
-  /** Narrow board: first names, no initials plate, tighter pills. */
-  compact?: boolean;
-  /** Who is signed in, so their pill leaves room for the "You" chip. */
+  /** Reserved: who is signed in, for callers that want to mark their row. */
   selfId?: string;
-  /**
-   * Show the line down to this unit, its generation and its children, and
-   * fold everything else. Without it the whole family is drawn.
-   */
-  focusKey?: string | null;
-  /** Folded branches the person has opened. */
-  openKeys?: string[];
-  /** Fold at all. The full tree is fine on a wide screen. */
-  fold?: boolean;
-  /**
-   * The most places to draw side by side under one parent while folding.
-   * A phone that shows nine of them shows nine unreadable ones; the rest
-   * fold into a "+n" that opens on a tap.
-   */
-  maxPerParent?: number;
 }
 
 /**
- * The units on screen when only part of the family is shown: the line from
- * the top down to the focus, who else stands on those generations, and the
- * focus's own children — capped, so a wide generation folds instead of
- * shrinking everyone to nothing.
- */
-function visibleKeys(
-  units: Map<string, Unit>,
-  focusKey: string,
-  openKeys: string[],
-  maxPerParent: number,
-): Set<string> {
-  const keep = new Set<string>();
-  const childrenOf = (key: string | null) =>
-    [...units.values()].filter((u) => u.parentKey === key).map((u) => u.anchor);
-
-  let at: string | null = focusKey;
-  const path: string[] = [];
-  while (at) {
-    path.unshift(at);
-    at = units.get(at)?.parentKey ?? null;
-  }
-  const onPath = new Set(path);
-  /** The one that must be there, then as many others as there is room for. */
-  const takeRow = (row: string[]) => {
-    const must = row.filter((s) => onPath.has(s) || openKeys.includes(s));
-    const rest = row.filter((s) => !must.includes(s));
-    for (const key of [...must, ...rest].slice(0, Math.max(must.length, maxPerParent))) {
-      keep.add(key);
-    }
-  };
-
-  // Above the focus, only the line itself: a phone has no room for every
-  // uncle on the way up, and their branches fold into a "+n" on the way.
-  for (const key of path) keep.add(key);
-  // The focus's own generation: them, and who else stands there.
-  takeRow(childrenOf(units.get(focusKey)?.parentKey ?? null));
-  // Their children.
-  takeRow(childrenOf(focusKey));
-  for (const open of openKeys) {
-    if (!units.has(open)) continue;
-    keep.add(open);
-    for (const child of childrenOf(open)) keep.add(child);
-  }
-  return keep;
-}
-
-/**
- * Where everything goes. Children are laid out first and their parent is
- * centred over them; a parent too wide for the span it covers pushes its whole
- * branch aside rather than landing on top of the branch beside it.
+ * Turn the family into rows, rails and stubs, measured in pixels.
+ *
+ * Depth-first, so the page reads as one continuous line of descent rather
+ * than as generations in bands: a son, then his children, then the next son.
  */
 export function layoutFamily(
   members: FamilyMemberRow[],
   parents: Parents,
   partners: PartnerPair[],
-  options: LayoutOptions = {},
+  _options: LayoutOptions = {},
 ): FamilyLayout {
-  const { units, unitOf } = buildUnitGraph(members, parents, partners);
-  const nodes: LayoutNode[] = [];
-  const noRoots = { keys: [] as string[], people: 0 };
-  if (units.size === 0) {
-    return { nodes, edges: [], width: 0, height: 0, unitOf, hiddenRoots: noRoots };
-  }
-
-  const focusKey = options.focusKey && units.has(options.focusKey) ? options.focusKey : null;
-  const folding = Boolean(options.fold && focusKey);
-  const keep = folding
-    ? visibleKeys(units, focusKey!, options.openKeys ?? [], options.maxPerParent ?? 3)
-    : null;
-  const shown = [...units.values()].filter((u) => !keep || keep.has(u.anchor));
-  const shownKeys = new Set(shown.map((u) => u.anchor));
+  const ordered = inDrawOrder(members);
+  const byId = new Map(ordered.map((m) => [m.userId, m]));
+  const pairs = normalizePartners(partners, (id) => byId.has(id));
 
   /**
-   * Which branch each place belongs to: walk up to the child-of-the-top it
-   * descends from, and take that one's position among its siblings. The top
-   * itself belongs to no branch.
+   * Who is drawn beside whom. The first of a pair to appear keeps their own
+   * row and the other joins it, so a couple is one row and never two.
    */
-  const rootsInOrder = shown.filter((u) => !u.parentKey || !shownKeys.has(u.parentKey));
-  const branchOf = new Map<string, number>();
-  {
-    const topLevel = new Map<string, number>();
-    let n = 0;
-    for (const root of rootsInOrder) {
-      branchOf.set(root.anchor, -1);
-      for (const child of shown.filter((u) => u.parentKey === root.anchor)) {
-        topLevel.set(child.anchor, n);
-        n += 1;
-      }
-    }
-    const resolve = (key: string, guard = 0): number => {
-      if (branchOf.has(key)) return branchOf.get(key)!;
-      if (topLevel.has(key)) return topLevel.get(key)!;
-      const parent = units.get(key)?.parentKey;
-      if (!parent || guard > 64) return -1;
-      return resolve(parent, guard + 1);
+  const spouseOf = new Map<string, FamilyMemberRow>();
+  const drawnBeside = new Set<string>();
+  for (const m of ordered) {
+    if (drawnBeside.has(m.userId) || spouseOf.has(m.userId)) continue;
+    const mate = partnersOf(pairs, m.userId).find(
+      (id) => byId.has(id) && !drawnBeside.has(id) && !spouseOf.has(id),
+    );
+    if (!mate) continue;
+    spouseOf.set(m.userId, byId.get(mate)!);
+    drawnBeside.add(mate);
+  }
+
+  /** Children go under the row their parent is drawn on. */
+  const rowFor = (id: string): string => {
+    if (!drawnBeside.has(id)) return id;
+    for (const [holder, mate] of spouseOf) if (mate.userId === id) return holder;
+    return id;
+  };
+  const childrenOf = new Map<string | null, FamilyMemberRow[]>();
+  for (const m of ordered) {
+    if (drawnBeside.has(m.userId)) continue;
+    const p = parentOf(m, parents);
+    const key = p && byId.has(p) ? rowFor(p) : null;
+    childrenOf.set(key === m.userId ? null : key, [
+      ...(childrenOf.get(key === m.userId ? null : key) ?? []),
+      m,
+    ]);
+  }
+
+  const rows: TreeRow[] = [];
+  const rails: TreeRail[] = [];
+  const stubs: TreeStub[] = [];
+  const rowOf: Record<string, string> = {};
+  const placed = new Set<string>();
+  let cursorY = PAD;
+  let branchSeed = 0;
+
+  const walk = (m: FamilyMemberRow, depth: number, parentKey: string | null, branch: number) => {
+    // A saved arrangement can point in a circle; nobody is drawn twice.
+    if (placed.has(m.userId)) return;
+    placed.add(m.userId);
+
+    const spouse = spouseOf.get(m.userId);
+    const x = PAD + depth * INDENT;
+    const w = pillWidth(m);
+    const row: TreeRow = {
+      key: m.userId,
+      member: m,
+      spouse,
+      spouseLabel: spouse ? relationWord(spouse.relation, 'spouse') : undefined,
+      relation: parentKey ? relationWord(m.relation, 'child') : undefined,
+      parentKey,
+      depth,
+      branch,
+      x,
+      y: cursorY,
+      w,
+      spouseX: spouse ? x + w + SPOUSE_GAP : undefined,
+      spouseW: spouse ? pillWidth(spouse) : undefined,
     };
-    for (const u of shown) branchOf.set(u.anchor, resolve(u.anchor));
-  }
+    rows.push(row);
+    rowOf[m.userId] = m.userId;
+    if (spouse) rowOf[spouse.userId] = m.userId;
+    cursorY += ROW_PITCH;
 
-  interface Placed extends LayoutNode {
-    childKeys: string[];
-  }
-  const placed = new Map<string, Placed>();
-  const childrenOf = (key: string) => shown.filter((u) => u.parentKey === key).map((u) => u.anchor);
-
-  const compact = options.compact === true;
-  for (const u of shown) {
-    const label = unitLabel(u.members, compact);
-    const subtitle = options.withSubtitle === false ? '' : unitSubtitle(u.members);
-    // "You" is a word; a crown is an icon; nobody at all is nothing.
-    const badge = u.ids.some((id) => id === options.selfId)
-      ? 40
-      : u.members.some((m) => m.role === 'OWNER' || m.role === 'VIEWER')
-        ? 22
-        : 8;
-    placed.set(u.anchor, {
-      key: u.anchor,
-      ids: u.ids,
-      members: u.members,
-      parentKey: u.parentKey && shownKeys.has(u.parentKey) ? u.parentKey : null,
-      depth: u.depth,
-      branch: branchOf.get(u.anchor) ?? -1,
-      x: 0,
-      y: PAD + u.depth * ROW_PITCH,
-      w: measure(label, subtitle, compact, badge),
-      childKeys: childrenOf(u.anchor),
-    });
-  }
-  // A branch that is not on screen leaves a "+n" behind, so nobody disappears
-  // without saying where they went.
-  if (folding) {
-    for (const u of shown) {
-      const hidden = [...units.values()].filter(
-        (c) => c.parentKey === u.anchor && !shownKeys.has(c.anchor),
-      );
-      if (hidden.length === 0) continue;
-      const key = `more:${u.anchor}`;
-      placed.set(key, {
-        key,
-        ids: [],
-        members: [],
-        more: hidden.reduce((n, c) => n + c.members.length, 0),
-        foldedFrom: u.anchor,
-        parentKey: u.anchor,
-        depth: u.depth + 1,
-        branch: branchOf.get(u.anchor) ?? -1,
-        x: 0,
-        y: PAD + (u.depth + 1) * ROW_PITCH,
-        w: compact ? 78 : MORE_W,
-        childKeys: [],
+    const kids = (childrenOf.get(m.userId) ?? []).filter((k) => !placed.has(k.userId));
+    if (kids.length === 0) return;
+    const railX = x + RAIL_DX;
+    let lastChildY = row.y + ROW_H;
+    for (const kid of kids) {
+      const kidBranch = depth === 0 ? branchSeed++ : branch;
+      const childY = cursorY + ROW_H / 2;
+      stubs.push({
+        key: `${m.userId}->${kid.userId}`,
+        x1: railX,
+        x2: PAD + (depth + 1) * INDENT,
+        y: childY,
+        label: relationWord(kid.relation, 'child'),
+        branch: kidBranch,
       });
-      placed.get(u.anchor)!.childKeys.push(key);
+      lastChildY = childY;
+      walk(kid, depth + 1, m.userId, kidBranch);
     }
-  }
-
-  const roots = [...placed.values()].filter((n) => n.parentKey === null);
-  // Deepest generation first keeps the widest families from drifting: the
-  // rightmost edge used so far, per generation, is what a branch is pushed past.
-  const rowRight = new Map<number, number>();
-  let cursor = PAD;
-
-  const subtree = (key: string): string[] => {
-    const node = placed.get(key)!;
-    return [key, ...node.childKeys.flatMap(subtree)];
-  };
-  const shift = (key: string, dx: number) => {
-    for (const k of subtree(key)) placed.get(k)!.x += dx;
-  };
-
-  function place(key: string) {
-    const node = placed.get(key)!;
-    if (node.childKeys.length === 0) {
-      node.x = Math.max(cursor, rowRight.get(node.depth) ?? PAD);
-      cursor = node.x + node.w + SIBLING_GAP;
-      rowRight.set(node.depth, cursor);
-      return;
-    }
-    for (const child of node.childKeys) place(child);
-    const first = placed.get(node.childKeys[0]!)!;
-    const last = placed.get(node.childKeys[node.childKeys.length - 1]!)!;
-    const centre = (first.x + last.x + last.w) / 2;
-    node.x = centre - node.w / 2;
-    // Wider than the children it covers: move the whole branch along rather
-    // than let the parent overlap whatever is already drawn on its row.
-    const floor = rowRight.get(node.depth) ?? PAD;
-    if (node.x < floor) {
-      shift(key, floor - node.x);
-      cursor = Math.max(cursor, placed.get(key)!.x + node.w + SIBLING_GAP);
-    }
-    rowRight.set(node.depth, node.x + node.w + SIBLING_GAP);
-    for (const k of subtree(key)) {
-      const n = placed.get(k)!;
-      rowRight.set(n.depth, Math.max(rowRight.get(n.depth) ?? 0, n.x + n.w + SIBLING_GAP));
-      cursor = Math.max(cursor, n.x + n.w + SIBLING_GAP);
-    }
-  }
-
-  roots.forEach((root, i) => {
-    if (i > 0) cursor += ROOT_GAP - SIBLING_GAP;
-    place(root.key);
-  });
-
-  for (const node of placed.values()) {
-    const { childKeys: _children, ...rest } = node;
-    nodes.push(rest);
-  }
-  nodes.sort((a, b) => (a.depth === b.depth ? a.x - b.x : a.depth - b.depth));
-
-  const edges: LayoutEdge[] = [];
-  for (const node of nodes) {
-    if (!node.parentKey) continue;
-    const parent = placed.get(node.parentKey);
-    if (!parent) continue;
-    edges.push({
-      key: `${parent.key}->${node.key}`,
-      from: parent.key,
-      to: node.key,
-      branch: node.branch,
-      d: elbow(parent.x + parent.w / 2, parent.y + NODE_H, node.x + node.w / 2, node.y),
+    rails.push({
+      key: `rail:${m.userId}`,
+      x: railX,
+      y1: row.y + ROW_H,
+      y2: lastChildY,
+      branch: depth === 0 ? -1 : branch,
     });
+  };
+
+  for (const root of childrenOf.get(null) ?? []) walk(root, 0, null, -1);
+  // Anyone the arrangement lost — a loop, or a parent who is not on the tree —
+  // still has to appear, so they start their own line at the top level.
+  for (const m of ordered) {
+    if (drawnBeside.has(m.userId) || placed.has(m.userId)) continue;
+    walk(m, 0, null, -1);
   }
 
-  const hiddenRootUnits = [...units.values()].filter(
-    (u) => !u.parentKey && !shownKeys.has(u.anchor),
-  );
-  const width = Math.max(...nodes.map((n) => n.x + n.w), 0) + PAD;
-  const height = Math.max(...nodes.map((n) => n.y + NODE_H), 0) + PAD;
-  return {
-    nodes,
-    edges,
-    width,
-    height,
-    unitOf,
-    hiddenRoots: {
-      keys: hiddenRootUnits.map((u) => u.anchor),
-      people: hiddenRootUnits.reduce((n, u) => n + u.members.length, 0),
-    },
-  };
-}
-
-/** Down out of the parent, across, and down into the child, with soft corners. */
-export function elbow(x1: number, y1: number, x2: number, y2: number, radius = 10): string {
-  if (Math.abs(x1 - x2) < 1) return `M ${x1} ${y1} V ${y2}`;
-  const mid = y1 + (y2 - y1) / 2;
-  const dir = x2 > x1 ? 1 : -1;
-  const r = Math.min(radius, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2);
-  return (
-    `M ${x1} ${y1} V ${mid - r} ` +
-    `Q ${x1} ${mid} ${x1 + r * dir} ${mid} ` +
-    `H ${x2 - r * dir} ` +
-    `Q ${x2} ${mid} ${x2} ${mid + r} ` +
-    `V ${y2}`
-  );
+  const rights = rows.map((r) => (r.spouseX ?? r.x) + (r.spouseW ?? r.w));
+  const width = (rights.length ? Math.max(...rights) : 0) + PAD;
+  const height = (rows[rows.length - 1]?.y ?? PAD - ROW_PITCH) + ROW_H + PAD;
+  return { rows, rails, stubs, width, height, rowOf };
 }
 
 /** The line from the top of the tree down to `key`, for a breadcrumb. */
-export function lineTo(layout: FamilyLayout, key: string | null): LayoutNode[] {
+export function lineTo(layout: FamilyLayout, key: string | null): TreeRow[] {
   if (!key) return [];
-  const byKey = new Map(layout.nodes.map((n) => [n.key, n]));
-  const out: LayoutNode[] = [];
-  let at: string | null = key;
+  const byKey = new Map(layout.rows.map((r) => [r.key, r]));
+  const out: TreeRow[] = [];
   const seen = new Set<string>();
+  let at: string | null = layout.rowOf[key] ?? key;
   while (at && byKey.has(at) && !seen.has(at)) {
     seen.add(at);
-    const node: LayoutNode = byKey.get(at)!;
-    out.unshift(node);
-    at = node.parentKey;
+    const row: TreeRow = byKey.get(at)!;
+    out.unshift(row);
+    at = row.parentKey;
   }
   return out;
+}
+
+/** Everyone standing on a row: the person, and their partner if drawn beside. */
+export function peopleOf(row: TreeRow): FamilyMemberRow[] {
+  return row.spouse ? [row.member, row.spouse] : [row.member];
 }
