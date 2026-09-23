@@ -55,8 +55,33 @@ import {
 const MAX_SCALE = 1.3;
 const MIN_SCALE = 0.45;
 /** The board is never shorter than this, nor taller than this much of the window. */
-const MIN_STAGE = 300;
-const STAGE_SHARE = 0.62;
+const MIN_STAGE = 360;
+const STAGE_SHARE = 0.72;
+/** Never smaller than this on a phone, whatever the family's size. */
+const READABLE_SCALE = 0.92;
+
+/**
+ * A colour per branch of the family.
+ *
+ * Every line and every pill below a given child of the top is drawn in one
+ * colour, so "who descends from whom" can be read across the board without
+ * following a wire with your eye. Chosen to hold up on both themes, and to
+ * stay clear of the lime the app uses for whoever is in focus.
+ */
+const BRANCH_COLOURS = [
+  '190 72% 58%', // cyan
+  '32 92% 62%', // amber
+  '268 72% 70%', // violet
+  '155 60% 55%', // emerald
+  '345 78% 66%', // rose
+  '215 85% 68%', // blue
+];
+
+/** The colour a branch is drawn in; the top of the tree is neutral. */
+function branchHsl(branch: number): string {
+  if (branch < 0) return 'var(--muted-foreground)';
+  return BRANCH_COLOURS[branch % BRANCH_COLOURS.length]!;
+}
 /** Below this the tree folds to the line in focus. */
 const FOLD_BELOW = 720;
 
@@ -188,11 +213,17 @@ export function FamilyTreeBoard({
         focusKey: effectiveFocus,
         fold,
         openKeys,
-        // Three abreast is what stays readable on a phone; a fourth shrinks
-        // every name until none of them can be read.
-        maxPerParent: box.w < 420 ? 2 : 3,
+        // What fits at a size worth reading: a phone gets the line itself
+        // and a "+n" for everyone beside it, a tablet two abreast, a desktop
+        // three. Shrinking the drawing instead is how it became unreadable.
+        maxPerParent: box.w < 520 ? 2 : 3,
+        // A narrow board spends its width on names, not on relations or
+        // initials: the card says how they are related when one is tapped.
+        withSubtitle: box.w >= 520,
+        compact: box.w > 0 && box.w < 520,
+        selfId: currentUserId,
       }),
-    [members, parents, partners, effectiveFocus, fold, openKeys, box.w],
+    [members, parents, partners, effectiveFocus, fold, openKeys, box.w, currentUserId],
   );
 
   /**
@@ -207,24 +238,43 @@ export function FamilyTreeBoard({
     return Math.max(MIN_STAGE, Math.min(ceiling, Math.round(layout.height * byWidth) + 16));
   }, [box.w, layout.width, layout.height, viewportHeight]);
 
+  /**
+   * The scale to draw at.
+   *
+   * Fitted to the board — but never below what can be read. A family too wide
+   * for a phone is drawn at a legible size and centred on whoever is in
+   * focus, with the rest a drag away, because a tree shrunk until it fits is
+   * a tree nobody can use.
+   */
   const fitScale = useMemo(() => {
     if (!box.w || !layout.width || !layout.height) return 1;
     // The zoom controls sit over the board; on a narrow one the drawing is
     // kept clear of them rather than drawn underneath.
     const usable = box.w - 8 - (box.w < 520 ? 48 : 0);
+    const floor = box.w < 520 ? READABLE_SCALE : MIN_SCALE;
     return Math.max(
-      MIN_SCALE,
+      floor,
       Math.min(MAX_SCALE, usable / layout.width, (stageHeight - 8) / layout.height),
     );
   }, [box.w, stageHeight, layout.width, layout.height]);
   const scale = zoom ?? fitScale;
-  const centred = useMemo(
-    () => ({
-      x: Math.max(0, (box.w - layout.width * scale) / 2),
-      y: Math.max(0, (stageHeight - layout.height * scale) / 2),
-    }),
-    [box.w, stageHeight, layout.width, layout.height, scale],
-  );
+  const centred = useMemo(() => {
+    const drawnW = layout.width * scale;
+    const drawnH = layout.height * scale;
+    if (drawnW <= box.w) {
+      return {
+        x: (box.w - drawnW) / 2,
+        y: Math.max(0, (stageHeight - drawnH) / 2),
+      };
+    }
+    // Wider than the board: hold whoever is in focus in the middle of it.
+    const node = layout.nodes.find((n) => n.key === effectiveFocus) ?? layout.nodes[0];
+    const centreOn = node ? (node.x + node.w / 2) * scale : drawnW / 2;
+    return {
+      x: Math.min(0, Math.max(box.w - drawnW, box.w / 2 - centreOn)),
+      y: Math.max(Math.min(0, stageHeight - drawnH), (stageHeight - drawnH) / 2),
+    };
+  }, [box.w, stageHeight, layout.width, layout.height, layout.nodes, effectiveFocus, scale]);
   const offset = { x: centred.x + pan.x, y: centred.y + pan.y };
 
   // A member added or removed re-fits: the new shape is the one to look at.
@@ -446,9 +496,9 @@ export function FamilyTreeBoard({
                   data-tree-edge={edge.key}
                   d={edge.d}
                   fill="none"
-                  strokeWidth={1.75}
+                  strokeWidth={2.25}
                   strokeLinecap="round"
-                  stroke="hsl(var(--muted-foreground) / 0.55)"
+                  stroke={`hsl(${branchHsl(edge.branch)} / ${edge.branch < 0 ? 0.5 : 0.8})`}
                 />
               ))}
             </svg>
@@ -462,8 +512,16 @@ export function FamilyTreeBoard({
                     setOpenKeys((prev) => [...prev, node.foldedFrom!]);
                     setZoom(null);
                   }}
-                  style={{ left: node.x, top: node.y, width: node.w, height: NODE_H }}
-                  className="absolute rounded-xl border border-dashed border-border bg-background/40 text-[12px] text-muted-foreground transition-colors hover:border-accent/60 hover:text-foreground focus-ring"
+                  style={{
+                    left: node.x,
+                    top: node.y,
+                    width: node.w,
+                    height: NODE_H,
+                    borderColor: `hsl(${branchHsl(node.branch)} / 0.5)`,
+                    color: `hsl(${branchHsl(node.branch)})`,
+                    backgroundColor: `hsl(${branchHsl(node.branch)} / 0.06)`,
+                  }}
+                  className="absolute rounded-2xl border-[1.5px] border-dashed text-[12.5px] font-medium transition-transform hover:scale-[1.03] focus-ring"
                 >
                   +{node.more} more
                 </button>
@@ -474,6 +532,8 @@ export function FamilyTreeBoard({
                   currentUserId={currentUserId}
                   selected={picked === node.key}
                   inFocus={effectiveFocus === node.key}
+                  withSubtitle={box.w >= 520}
+                  compact={box.w > 0 && box.w < 520}
                   onClick={() => setPicked((prev) => (prev === node.key ? null : node.key))}
                 />
               ),
@@ -503,6 +563,15 @@ export function FamilyTreeBoard({
             onMakeHead={makeHead}
             onPlaceUnder={placeUnder}
           />
+        )}
+
+        {/* A family wider than the board is cut off on purpose — these say so,
+            rather than leaving a name that looks broken at the edge. */}
+        {layout.width * scale > box.w && (
+          <>
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-background/85 to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background/85 to-transparent" />
+          </>
         )}
 
         <div className="absolute right-3 top-3 z-10 flex flex-col overflow-hidden rounded-xl border border-border bg-card/90 backdrop-blur">
@@ -605,54 +674,101 @@ function initials(name: string): string {
 }
 
 /** One place on the tree: a person, or a couple standing together. */
+/**
+ * One place on the tree.
+ *
+ * Wearing its branch's colour, because that is what makes the drawing
+ * readable: a whole line of descent shares one hue, so where somebody sits is
+ * clear before a single line is traced. Whoever the tree is focused on is
+ * filled in, the way a selected thing should be — the earlier version tinted
+ * a border by a few per cent and vanished into the background.
+ */
 function TreeCard({
   node,
   currentUserId,
   selected,
   inFocus,
+  withSubtitle,
+  compact,
   onClick,
 }: {
   node: LayoutNode;
   currentUserId: string | undefined;
   selected: boolean;
   inFocus: boolean;
+  withSubtitle: boolean;
+  compact: boolean;
   onClick: () => void;
 }) {
   const isSelf = node.members.some((m) => m.userId === currentUserId);
   const owner = node.members.some((m) => m.role === 'OWNER');
   const viewerOnly = node.members.every((m) => m.role === 'VIEWER');
+  const hue = branchHsl(node.branch);
+  const lit = inFocus || selected;
   return (
     <button
       type="button"
       onClick={onClick}
-      style={{ left: node.x, top: node.y, width: node.w, height: NODE_H }}
-      className={`absolute flex items-center gap-2 rounded-xl border px-2.5 text-left transition-all focus-ring ${
-        selected
-          ? 'border-accent bg-accent/12 shadow-[0_0_0_3px_hsl(var(--accent)/0.12)]'
-          : inFocus
-            ? 'border-accent/45 bg-card'
-            : 'border-border bg-card hover:border-border/90 hover:bg-muted/40'
+      style={{
+        left: node.x,
+        top: node.y,
+        width: node.w,
+        height: NODE_H,
+        borderColor: lit ? 'hsl(var(--accent))' : `hsl(${hue} / 0.55)`,
+        backgroundColor: lit ? 'hsl(var(--accent))' : `hsl(${hue} / 0.10)`,
+        boxShadow: selected ? '0 0 0 4px hsl(var(--accent) / 0.18)' : undefined,
+      }}
+      className={`absolute flex items-center rounded-2xl border-[1.5px] text-left backdrop-blur-[2px] transition-[transform,box-shadow] duration-150 hover:scale-[1.02] focus-ring ${
+        compact ? 'justify-center gap-1.5 px-2.5' : 'gap-2.5 px-3'
       }`}
     >
-      <span
-        className={`grid h-7 w-7 flex-none place-items-center rounded-lg text-[10px] font-semibold ${
-          isSelf ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'
-        }`}
-      >
-        {initials(node.members[0]!.name)}
-      </span>
+      {!compact && (
+        <span
+          style={{
+            backgroundColor: lit ? 'hsl(var(--accent-foreground) / 0.12)' : `hsl(${hue} / 0.22)`,
+            color: lit ? 'hsl(var(--accent-foreground))' : `hsl(${hue})`,
+          }}
+          className="grid h-8 w-8 flex-none place-items-center rounded-xl text-[11px] font-bold tracking-tight"
+        >
+          {initials(node.members[0]!.name)}
+        </span>
+      )}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12.5px] font-medium leading-tight text-foreground">
-          {unitLabel(node.members)}
+        <span
+          className={`block truncate font-semibold leading-tight ${
+            compact ? 'text-[15px]' : 'text-[13.5px]'
+          } ${lit ? 'text-accent-foreground' : 'text-foreground'}`}
+        >
+          {unitLabel(node.members, compact)}
         </span>
-        <span className="block truncate text-[10.5px] leading-tight text-muted-foreground">
-          {unitSubtitle(node.members)}
-        </span>
+        {withSubtitle && (
+          <span
+            className={`block truncate text-[11px] leading-tight ${
+              lit ? 'text-accent-foreground/75' : 'text-muted-foreground'
+            }`}
+          >
+            {unitSubtitle(node.members)}
+          </span>
+        )}
       </span>
-      {owner ? (
-        <Crown className="h-3 w-3 flex-none text-accent" />
+      {isSelf ? (
+        <span
+          className={`flex-none rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+            lit ? 'bg-accent-foreground/15 text-accent-foreground' : 'bg-accent/20 text-accent'
+          }`}
+        >
+          You
+        </span>
+      ) : owner ? (
+        <Crown
+          className="h-3.5 w-3.5 flex-none"
+          style={{ color: lit ? 'hsl(var(--accent-foreground))' : 'hsl(var(--accent))' }}
+        />
       ) : viewerOnly ? (
-        <Eye className="h-3 w-3 flex-none text-muted-foreground" />
+        <Eye
+          className="h-3.5 w-3.5 flex-none"
+          style={{ color: lit ? 'hsl(var(--accent-foreground) / 0.7)' : `hsl(${hue} / 0.8)` }}
+        />
       ) : null}
     </button>
   );

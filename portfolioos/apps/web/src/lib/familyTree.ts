@@ -23,10 +23,10 @@ import type { FamilyMemberRow, FamilyRole } from '@/api/families.api';
 /** child userId -> parent userId, or null for someone at the top. */
 export type Parents = Record<string, string | null>;
 
-export const NODE_H = 44;
+export const NODE_H = 48;
 /** Distance between the top of one generation and the top of the next. */
-export const ROW_PITCH = 96;
-const SIBLING_GAP = 18;
+export const ROW_PITCH = 104;
+const SIBLING_GAP = 20;
 /** Two families under one roof (nobody's parent is known) stand further apart. */
 const ROOT_GAP = 40;
 export const PAD = 20;
@@ -46,6 +46,13 @@ export interface LayoutNode {
   foldedFrom?: string;
   parentKey: string | null;
   depth: number;
+  /**
+   * Which branch of the family this belongs to: the position of the ancestor
+   * it descends from among the children of the top. -1 for the top itself.
+   * The board gives each branch its own colour, which is what makes a tree
+   * readable at a glance rather than a grey diagram.
+   */
+  branch: number;
   x: number;
   y: number;
   w: number;
@@ -55,6 +62,8 @@ export interface LayoutEdge {
   key: string;
   from: string;
   to: string;
+  /** The branch this line belongs to — it is drawn in that branch's colour. */
+  branch: number;
   /** SVG path: down out of the parent, across, down into the child. */
   d: string;
 }
@@ -95,10 +104,16 @@ export function inDrawOrder(members: FamilyMemberRow[]): FamilyMemberRow[] {
   );
 }
 
-/** "Mahendra & Sarita", or just "Akshay Jain". */
-export function unitLabel(members: FamilyMemberRow[]): string {
-  if (members.length === 1) return members[0]!.name;
-  return members.map((m) => m.name.trim().split(/\s+/)[0] || m.name).join(' & ');
+const firstName = (name: string) => name.trim().split(/\s+/)[0] || name.trim();
+
+/**
+ * "Mahendra & Sarita", or just "Akshay Jain" — and first names only when the
+ * board is narrow, because a phone's width is better spent on type big enough
+ * to read than on surnames everyone in the family shares.
+ */
+export function unitLabel(members: FamilyMemberRow[], compact = false): string {
+  if (members.length === 1) return compact ? firstName(members[0]!.name) : members[0]!.name;
+  return members.map((m) => firstName(m.name)).join(' & ');
 }
 
 /** The second line on a pill: how this place relates to the rest. */
@@ -118,13 +133,19 @@ export function unitSubtitle(members: FamilyMemberRow[]): string {
  * often longer than the name above it. A pill that has to cut a name short is
  * worse than one with room to spare.
  */
-const PLATE = 28;
-const PILL_PADDING = 24;
-const GAP_AFTER_PLATE = 8;
-/** The crown or the eye that marks an owner or a viewer. */
-const BADGE = 18;
-function measure(label: string, subtitle: string): number {
-  const text = Math.max(label.length * 7.1, subtitle.length * 5.9);
+const PLATE = 32;
+const PILL_PADDING = 26;
+const GAP_AFTER_PLATE = 10;
+/** The crown, the eye, or the "You" chip on the end. */
+const BADGE = 32;
+function measure(label: string, subtitle: string, compact: boolean, badge: number): number {
+  if (compact) {
+    // No initials plate on a narrow board: it costs 42px a pill, which is the
+    // difference between type you can read and type you cannot.
+    const text = label.length * 7.9;
+    return Math.round(Math.max(96, Math.min(224, 24 + badge + text)));
+  }
+  const text = Math.max(label.length * 7.6, subtitle.length * 6.1);
   return Math.round(
     Math.max(MIN_W, Math.min(MAX_W, PLATE + GAP_AFTER_PLATE + PILL_PADDING + BADGE + text)),
   );
@@ -196,6 +217,15 @@ function buildUnitGraph(members: FamilyMemberRow[], parents: Parents, partners: 
 }
 
 export interface LayoutOptions {
+  /**
+   * Draw the relation under each name. Turned off on a narrow board, where
+   * a shorter pill means bigger, readable type.
+   */
+  withSubtitle?: boolean;
+  /** Narrow board: first names, no initials plate, tighter pills. */
+  compact?: boolean;
+  /** Who is signed in, so their pill leaves room for the "You" chip. */
+  selfId?: string;
   /**
    * Show the line down to this unit, its generation and its children, and
    * fold everything else. Without it the whole family is drawn.
@@ -286,24 +316,59 @@ export function layoutFamily(
   const shown = [...units.values()].filter((u) => !keep || keep.has(u.anchor));
   const shownKeys = new Set(shown.map((u) => u.anchor));
 
+  /**
+   * Which branch each place belongs to: walk up to the child-of-the-top it
+   * descends from, and take that one's position among its siblings. The top
+   * itself belongs to no branch.
+   */
+  const rootsInOrder = shown.filter((u) => !u.parentKey || !shownKeys.has(u.parentKey));
+  const branchOf = new Map<string, number>();
+  {
+    const topLevel = new Map<string, number>();
+    let n = 0;
+    for (const root of rootsInOrder) {
+      branchOf.set(root.anchor, -1);
+      for (const child of shown.filter((u) => u.parentKey === root.anchor)) {
+        topLevel.set(child.anchor, n);
+        n += 1;
+      }
+    }
+    const resolve = (key: string, guard = 0): number => {
+      if (branchOf.has(key)) return branchOf.get(key)!;
+      if (topLevel.has(key)) return topLevel.get(key)!;
+      const parent = units.get(key)?.parentKey;
+      if (!parent || guard > 64) return -1;
+      return resolve(parent, guard + 1);
+    };
+    for (const u of shown) branchOf.set(u.anchor, resolve(u.anchor));
+  }
+
   interface Placed extends LayoutNode {
     childKeys: string[];
   }
   const placed = new Map<string, Placed>();
   const childrenOf = (key: string) => shown.filter((u) => u.parentKey === key).map((u) => u.anchor);
 
+  const compact = options.compact === true;
   for (const u of shown) {
-    const label = unitLabel(u.members);
-    const subtitle = unitSubtitle(u.members);
+    const label = unitLabel(u.members, compact);
+    const subtitle = options.withSubtitle === false ? '' : unitSubtitle(u.members);
+    // "You" is a word; a crown is an icon; nobody at all is nothing.
+    const badge = u.ids.some((id) => id === options.selfId)
+      ? 40
+      : u.members.some((m) => m.role === 'OWNER' || m.role === 'VIEWER')
+        ? 22
+        : 8;
     placed.set(u.anchor, {
       key: u.anchor,
       ids: u.ids,
       members: u.members,
       parentKey: u.parentKey && shownKeys.has(u.parentKey) ? u.parentKey : null,
       depth: u.depth,
+      branch: branchOf.get(u.anchor) ?? -1,
       x: 0,
       y: PAD + u.depth * ROW_PITCH,
-      w: measure(label, subtitle),
+      w: measure(label, subtitle, compact, badge),
       childKeys: childrenOf(u.anchor),
     });
   }
@@ -324,9 +389,10 @@ export function layoutFamily(
         foldedFrom: u.anchor,
         parentKey: u.anchor,
         depth: u.depth + 1,
+        branch: branchOf.get(u.anchor) ?? -1,
         x: 0,
         y: PAD + (u.depth + 1) * ROW_PITCH,
-        w: MORE_W,
+        w: compact ? 78 : MORE_W,
         childKeys: [],
       });
       placed.get(u.anchor)!.childKeys.push(key);
@@ -395,6 +461,7 @@ export function layoutFamily(
       key: `${parent.key}->${node.key}`,
       from: parent.key,
       to: node.key,
+      branch: node.branch,
       d: elbow(parent.x + parent.w / 2, parent.y + NODE_H, node.x + node.w / 2, node.y),
     });
   }
