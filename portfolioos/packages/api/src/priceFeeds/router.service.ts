@@ -123,7 +123,7 @@ export async function runMasterSync(): Promise<MasterSyncResult> {
   const { loadNseEquityUniverse, loadNseEtfUniverse } = await import('./nseUniverse.service.js');
   const { loadBseEquityUniverse } = await import('./bseUniverse.service.js');
   const { loadNseCorporateActions } = await import('./corporateActions.service.js');
-  const { loadAmfiNavToDb } = await import('./amfi.service.js');
+  const { syncAmfiNav } = await import('./amfi.service.js');
   const { updateStockPricesFromYahoo } = await import('./yahoo.service.js');
   const { syncAllCommodities } = await import('./commodity.service.js');
   const { syncCryptoPrices } = await import('./crypto.service.js');
@@ -138,7 +138,7 @@ export async function runMasterSync(): Promise<MasterSyncResult> {
     }],
     ['bseUniverse', () => loadBseEquityUniverse()],
     ['corporateActions', () => loadNseCorporateActions()],
-    ['amfiNav', () => loadAmfiNavToDb()],
+    ['amfiNav', () => syncAmfiNav()],
     ['stockPrices', () => updateStockPricesFromYahoo()],
     ['commodities', () => syncAllCommodities()],
     ['crypto', () => syncCryptoPrices()],

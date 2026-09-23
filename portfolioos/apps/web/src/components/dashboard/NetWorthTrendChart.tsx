@@ -1,16 +1,13 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, CircleAlert } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { intelligenceApi, type NetWorthHistoryPeriod } from '@/api/intelligence.api';
 import { formatINR, toDecimal } from '@everypaisa/shared';
-import {
-  EstimatedChip,
-  EstimatedDataNotice,
-} from '@/pages/family/widgets/RestrictedNotice';
+import { EstimatedChip } from '@/pages/family/widgets/RestrictedNotice';
 
 const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
   { label: '1M', value: '1M' },
@@ -111,12 +108,24 @@ export function NetWorthTrendChart() {
           </div>
         )}
 
-        <EstimatedDataNotice
-          estimatedCount={estimatedCount}
-          what="The trend below"
-          reason={estimatedReason}
-          className="mb-3"
-        />
+        {/* One quiet line rather than a banner. The disclosure has to be here
+            — those days really were priced from stale NAVs — but it describes
+            a window that has already closed, and it will sit on this card for
+            as long as the window stays inside the period. A paragraph in a
+            warning box every time you open the dashboard reads as something
+            being wrong now; it is not. The full explanation is a hover away. */}
+        {estimatedCount > 0 && (
+          <p
+            title={
+              estimatedReason ??
+              'Fund prices did not reach us on those dates, so those figures were calculated from the last prices we had. The trend still shows what we recorded.'
+            }
+            className="mb-3 inline-flex cursor-help items-center gap-1.5 text-[11.5px] text-muted-foreground"
+          >
+            <CircleAlert className="h-3.5 w-3.5 opacity-70" strokeWidth={1.8} />
+            {estimatedCount} of these days were priced from the last NAVs we had
+          </p>
+        )}
 
         {isError ? (
           <div className="h-56 flex items-center justify-center text-sm text-negative">
@@ -197,24 +206,13 @@ export function NetWorthTrendChart() {
                 stroke="hsl(var(--foreground))"
                 strokeWidth={2}
                 fill="url(#gradNetWorthTrend)"
-                dot={(props: { cx?: number; cy?: number; index?: number; payload?: { estimated?: boolean } }) => {
-                  const est = props.payload?.estimated === true;
-                  // An estimated point is always drawn, however dense the
-                  // series: it is the one the reader most needs to see.
-                  if (!est && chartData.length > 10) return <g key={props.index} />;
-                  return (
-                    <circle
-                      key={props.index}
-                      cx={props.cx}
-                      cy={props.cy}
-                      r={est ? 3.5 : 2.5}
-                      fill={est ? 'hsl(var(--card))' : 'hsl(var(--foreground))'}
-                      stroke={est ? 'rgb(217 119 6)' : 'hsl(var(--card))'}
-                      strokeWidth={est ? 1.8 : 1.5}
-                      strokeDasharray={est ? '2 1.5' : undefined}
-                    />
-                  );
-                }}
+                /* No markers. Ringing every estimated day turned a trend line
+                   into a dotted scribble — a month of stale prices is a run of
+                   days, not a handful of outliers worth pointing at one by one.
+                   The estimate is still disclosed: the notice above says how
+                   many there are, and the tooltip names the one under the
+                   cursor. */
+                dot={false}
                 activeDot={{ r: 5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 2 }}
               />
             </AreaChart>

@@ -12,7 +12,7 @@ import {
   getLatestStockPrice,
   updateStockPricesFromYahoo,
 } from '../priceFeeds/yahoo.service.js';
-import { getLatestNavForFund, loadAmfiNavToDb } from '../priceFeeds/amfi.service.js';
+import { getLatestNavForFund, syncAmfiNav } from '../priceFeeds/amfi.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
 import { loadBseEquityUniverse } from '../priceFeeds/bseUniverse.service.js';
 import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.js';
@@ -91,7 +91,7 @@ export async function refreshAllPrices(_req: Request, res: Response) {
 }
 
 export async function amfiSync(_req: Request, res: Response) {
-  const result = await loadAmfiNavToDb();
+  const result = await syncAmfiNav();
   created(res, result);
 }
 
