@@ -11,6 +11,10 @@ import type { FamilyMemberRow } from '@/api/families.api';
  */
 
 const saveTreeLayout = vi.fn(async () => ({}));
+const managedProfiles = vi.fn(async () => [{ id: 'kavya', name: 'Kavya Shah' }]);
+vi.mock('@/api/managedProfiles.api', () => ({
+  managedProfilesApi: { list: () => managedProfiles() },
+}));
 vi.mock('@/api/families.api', () => ({
   familiesApi: {
     getTreeLayout: async () => ({
@@ -147,16 +151,20 @@ describe('the family tree board', () => {
     );
   });
 
-  it('offers their books only to whoever keeps them', async () => {
+  /**
+   * Whose books you keep comes from the server — the same list the profile
+   * switcher is built from — rather than from the member row, which used to
+   * disagree with it and leave no way to record anything for them.
+   */
+  it('offers to record for the people whose books you keep', async () => {
     const onManage = vi.fn();
-    const kept = members.map((m) =>
-      m.userId === 'kavya' ? { ...m, managedBy: { id: 'harish', name: 'Harish Shah' } } : m,
-    );
-    renderBoard({ members: kept, onManage });
+    renderBoard({ onManage });
     fireEvent.click(await pill('Rajesh Shah'));
-    expect(screen.queryByText('Their books')).toBeNull();
+    await waitFor(() => expect(screen.queryByText(/Record something for/)).toBeNull());
+
     fireEvent.click(await pill('Kavya Shah'));
-    fireEvent.click(screen.getByText('Their books'));
+    const record = await screen.findByText('Record something for Kavya');
+    fireEvent.click(record);
     expect(onManage).toHaveBeenCalledWith(expect.objectContaining({ userId: 'kavya' }));
   });
 
