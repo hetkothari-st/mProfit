@@ -179,9 +179,16 @@ interface Props {
   onAddRelative?: (m: FamilyMemberRow) => void;
 }
 
-/** How much of the window the canvas may take, and its hard ceiling. */
-const MAX_VIEWPORT_SHARE = 0.72;
-const MAX_VIEWPORT_PX = 900;
+/**
+ * The working area: how tall the canvas is by default, and the range the
+ * person can drag it to. Deliberately independent of the zoom — a canvas
+ * that shrank as you zoomed out gave you a smaller picture in a smaller
+ * box, which is no more room than you started with.
+ */
+const DEFAULT_VIEWPORT_SHARE = 0.62;
+const MIN_VIEWPORT_PX = 320;
+const MAX_VIEWPORT_PX = 1400;
+const VIEWPORT_HEIGHT_KEY = 'everypaisa.familyTree.height';
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.6;
 const ZOOM_STEP = 0.1;
@@ -228,6 +235,38 @@ export function FamilyTreeCanvas({
    */
   const [zoom, setZoom] = useState(1);
   const viewportRef = useRef<HTMLDivElement>(null);
+  /**
+   * How tall the working area is. Dragging the canvas's bottom edge resizes
+   * it — "make the tree longer" is a real thing to want — and the choice is
+   * remembered per browser. Falls back to a comfortable share of the window.
+   */
+  const [viewportHeight, setViewportHeight] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem(VIEWPORT_HEIGHT_KEY));
+      if (Number.isFinite(saved) && saved >= MIN_VIEWPORT_PX) {
+        return Math.min(saved, MAX_VIEWPORT_PX);
+      }
+      // eslint-disable-next-line everypaisa/no-silent-catch -- blocked storage (private mode) just means the default height applies
+    } catch { /* ignore */ }
+    return Math.max(MIN_VIEWPORT_PX, Math.round(window.innerHeight * DEFAULT_VIEWPORT_SHARE));
+  });
+
+  // The person dragged the canvas's resize corner: remember it.
+  useEffect(() => {
+    const box = viewportRef.current;
+    if (!box || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      const h = Math.round(box.getBoundingClientRect().height);
+      if (!h || Math.abs(h - viewportHeight) < 2) return;
+      setViewportHeight(h);
+      try {
+        localStorage.setItem(VIEWPORT_HEIGHT_KEY, String(h));
+        // eslint-disable-next-line everypaisa/no-silent-catch -- the size still applies for this visit; only remembering it fails
+      } catch { /* ignore */ }
+    });
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [viewportHeight]);
   // Panning: drag the empty canvas to move around when zoomed in.
   const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const [panning, setPanning] = useState(false);
@@ -421,12 +460,12 @@ export function FamilyTreeCanvas({
     return { w: Math.max(maxX + CANVAS_PAD, 640), h: Math.max(maxY + CANVAS_PAD, 320) };
   }, [positions]);
 
-  /** The zoom at which the whole tree fits the visible canvas. */
+  /** The zoom at which the whole tree fits the working area. */
   const fitZoom = useCallback(() => {
     const box = viewportRef.current;
     if (!box) return 1;
     const width = box.clientWidth - 8;
-    const height = Math.min(window.innerHeight * MAX_VIEWPORT_SHARE, MAX_VIEWPORT_PX) - 8;
+    const height = box.clientHeight - 8;
     return clampZoom(Math.min(1, width / canvasSize.w, height / canvasSize.h));
   }, [canvasSize.w, canvasSize.h]);
 
@@ -442,6 +481,12 @@ export function FamilyTreeCanvas({
     // fitZoom changes with the layout; this should run on member changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberCount]);
+
+  // Never smaller than the working area: empty canvas is room to work in.
+  const boardFloor = {
+    w: (viewportRef.current?.clientWidth ?? 0) - 2,
+    h: viewportHeight - 2,
+  };
 
   if (members.length === 0) {
     return (
@@ -583,9 +628,16 @@ export function FamilyTreeCanvas({
         className={`relative overflow-auto rounded-lg border border-border bg-gradient-to-br from-muted/20 to-transparent ${
           panning ? 'cursor-grabbing' : ''
         }`}
-        // Tall enough for the tree, never taller than a comfortable share of
-        // the window; a two-person family gets a small box, not a vast one.
-        style={{ height: Math.min(canvasSize.h * zoom + 2, window.innerHeight * MAX_VIEWPORT_SHARE, MAX_VIEWPORT_PX) }}
+        // A working area of its own height, which the person can drag taller
+        // by the bottom-right corner. Zoom changes the drawing inside it, so
+        // zooming out leaves room to spread the tree rather than shrinking
+        // the box around it.
+        style={{
+          height: viewportHeight,
+          minHeight: MIN_VIEWPORT_PX,
+          maxHeight: MAX_VIEWPORT_PX,
+          resize: 'vertical',
+        }}
         onWheel={(e) => {
           if (!e.ctrlKey && !e.metaKey) return;
           e.preventDefault();
@@ -625,8 +677,8 @@ export function FamilyTreeCanvas({
         <div
           data-canvas="1"
           style={{
-            width: canvasSize.w * zoom,
-            height: canvasSize.h * zoom,
+            width: Math.max(canvasSize.w * zoom, boardFloor.w),
+            height: Math.max(canvasSize.h * zoom, boardFloor.h),
           }}
         >
         <div
