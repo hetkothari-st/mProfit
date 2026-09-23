@@ -38,7 +38,7 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
-import { FamilyTreeCanvas } from '@/components/family/FamilyTreeCanvas';
+import { FamilyTreeBoard } from '@/components/family/FamilyTreeBoard';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { openRazorpayCheckout } from '@/lib/razorpay';
 import {
@@ -60,7 +60,7 @@ import { FamilyAttentionCard } from './widgets/FamilyAttentionCard';
  * needs attention. Reads the four `/dashboard/*` endpoints, FAMILY-tier gated.
  *
  * **Members** is the original management surface, moved here wholesale: the
- * visual tree canvas, invitations, the per-member permission matrix, and
+ * family tree, invitations, the per-member permission matrix, and
  * family-shared portfolios. Nothing about it changed — it is the same
  * components, one level deeper.
  *
@@ -347,9 +347,9 @@ function FamilyWorkspace({
           The two panels are rendered differently on purpose. Overview goes in
           a real <TabsContent>, which unmounts when inactive, so a user working
           on the Members tab never fires four dashboard requests. Members is a
-          plain hidden panel that stays mounted, because FamilyTreeCanvas holds
-          un-saved node positions in local state — unmounting it on a tab
-          switch would silently throw away a drag the user hasn't saved yet. */}
+          plain hidden panel that stays mounted so the tree keeps whoever it
+          was focused on, and the folded branches the person opened, across a
+          tab switch. */}
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'overview' | 'members')}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -382,7 +382,7 @@ function FamilyWorkspace({
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mx-auto" />
                 </div>
               ) : (
-                <FamilyTreeCanvas
+                <FamilyTreeBoard
                   familyId={family.id}
                   members={members}
                   currentUserId={currentUserId}
