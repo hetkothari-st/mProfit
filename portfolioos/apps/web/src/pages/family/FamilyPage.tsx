@@ -26,6 +26,7 @@ import {
   type NonAcCategory,
   type SeatPaymentRequiredResult,
   familyInviteEmailApi,
+  familyClaimApi,
 } from '@/api/families.api';
 import { useManageProfile } from '@/hooks/useManageProfile';
 import { RelationPicker, type RelationValue } from '@/components/family/RelationPicker';
@@ -1243,6 +1244,7 @@ function EditManagedMemberDialog({
             that person can open the account, from the moment you save.
           </p>
         </div>
+        <HandOverSection familyId={familyId} member={member} onDone={onClose} />
       </div>
       <ModalFooter>
         <Button variant="outline" onClick={onClose} disabled={saveMutation.isPending}>
@@ -1254,6 +1256,90 @@ function EditManagedMemberDialog({
         </Button>
       </ModalFooter>
     </ModalShell>
+  );
+}
+
+/**
+ * Handing the account over, once they have an email of their own.
+ *
+ * The profile already holds their FDs, policies and history; this offers the
+ * key to it rather than a second account. The email is sent from the app,
+ * read and edited first, like every other invitation here.
+ */
+function HandOverSection({
+  familyId,
+  member,
+  onDone,
+}: {
+  familyId: string;
+  member: FamilyMemberRow;
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState('');
+  const [invitationId, setInvitationId] = useState<string | null>(null);
+
+  const invite = useMutation({
+    mutationFn: () => familyClaimApi.invite(familyId, member.userId, email.trim().toLowerCase()),
+    onSuccess: (res) => setInvitationId(res.invitationId),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Could not send that invitation')),
+  });
+
+  if (invitationId) {
+    return (
+      <div className="rounded-lg border border-border/70 p-3">
+        <InviteEmailComposer
+          source={{
+            key: ['family-claim-email', familyId, invitationId],
+            preview: (edits) => familyInviteEmailApi.preview(familyId, invitationId, edits),
+            send: (edits) => familyInviteEmailApi.send(familyId, invitationId, edits),
+          }}
+          onDone={onDone}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-border/70 px-3 py-2.5">
+      {!open ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[12.5px] text-muted-foreground">
+            Has {member.name} got an email now?
+          </p>
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+            Hand the account to them
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="claim-invite-email">Their email</Label>
+          <div className="flex gap-2">
+            <Input
+              id="claim-invite-email"
+              type="email"
+              autoFocus
+              placeholder="them@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={invite.isPending}
+            />
+            <Button
+              size="sm"
+              onClick={() => invite.mutate()}
+              disabled={!email.trim() || invite.isPending}
+            >
+              {invite.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+              Next
+            </Button>
+          </div>
+          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+            They set a password and this account becomes theirs — the same holdings, the same place
+            in the family. Nobody keeps their books for them after that.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 

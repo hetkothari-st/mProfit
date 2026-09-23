@@ -12,6 +12,7 @@ import { PortfolioGroupDetailPage } from './pages/portfolios/PortfolioGroupDetai
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { AcceptInvitationPage } from './pages/family/AcceptInvitationPage';
+import { ClaimProfilePage } from './pages/family/ClaimProfilePage';
 import { FamilyPage } from './pages/family/FamilyPage';
 import { CaWorkspacePage } from './pages/ca/CaWorkspacePage';
 import { ClientBooksPage } from './pages/ca/ClientBooksPage';
@@ -93,6 +94,9 @@ export function App() {
         path="/families/invitations/:token/accept"
         element={<AcceptInvitationPage />}
       />
+      {/* Outside the protected tree on purpose: the person taking over the
+          account kept for them has no login yet — that is the point. */}
+      <Route path="/family/claims/:token" element={<ClaimProfilePage />} />
       {/* Outside the protected tree on purpose: a professional opening this
           link may not have an account yet, and has to be told who is asking
           before being asked to make one. */}

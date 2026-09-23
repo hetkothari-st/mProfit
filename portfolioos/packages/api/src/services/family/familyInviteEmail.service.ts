@@ -40,6 +40,8 @@ export interface FamilyInviteEmailDraft {
   senderName: string;
   senderEmail: string;
   familyName: string;
+  /** True when this hands a managed profile to the person it belongs to. */
+  isClaim: boolean;
   sendsRemaining: number;
   canSend: boolean;
 }
@@ -52,8 +54,41 @@ function prettyDate(d: Date): string {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-export function defaultFamilyInviteSubject(senderName: string, familyName: string): string {
-  return `${senderName || 'A family member'} invited you to ${familyName} on EveryPaisa`;
+export function defaultFamilyInviteSubject(
+  senderName: string,
+  familyName: string,
+  isClaim = false,
+): string {
+  return isClaim
+    ? `${senderName || 'A family member'} has set up your EveryPaisa account`
+    : `${senderName || 'A family member'} invited you to ${familyName} on EveryPaisa`;
+}
+
+/**
+ * The note for a hand-over: their books already exist, kept for them. What
+ * they are being offered is the key to them, not a new account.
+ */
+export function defaultProfileClaimMessage(
+  senderName: string,
+  recipientName: string,
+  familyName: string,
+): string {
+  const to = recipientName.trim().split(/\s+/)[0] || 'there';
+  return (
+    `Hi ${to},
+
+` +
+    `I've been keeping your investments and policies on EveryPaisa, under ` +
+    `${familyName}. Now that you have an email, you can take the account over ` +
+    `and keep it yourself.
+
+` +
+    `Everything recorded for you so far stays exactly as it is — you just set ` +
+    `a password below and it becomes yours. After that only you can open it.
+
+` +
+    `— ${senderName || 'Family'}`
+  );
 }
 
 export function defaultFamilyInviteMessage(
@@ -134,17 +169,20 @@ export async function buildFamilyInviteEmail(
         )
       : null;
 
+  const isClaim = Boolean(inv.claimForUserId);
   const subject =
-    (edits.subject ?? '').trim() || defaultFamilyInviteSubject(senderName, familyName);
+    (edits.subject ?? '').trim() || defaultFamilyInviteSubject(senderName, familyName, isClaim);
   const message =
     (edits.message ?? '').trim() ||
-    defaultFamilyInviteMessage(
-      senderName,
-      recipientName,
-      familyName,
-      inv.relation,
-      relatedTo?.name ?? null,
-    );
+    (isClaim
+      ? defaultProfileClaimMessage(senderName, recipientName, familyName)
+      : defaultFamilyInviteMessage(
+          senderName,
+          recipientName,
+          familyName,
+          inv.relation,
+          relatedTo?.name ?? null,
+        ));
   if (subject.length > SUBJECT_MAX) {
     throw new BadRequestError(`Subject is too long (max ${SUBJECT_MAX} characters).`);
   }
@@ -154,19 +192,27 @@ export async function buildFamilyInviteEmail(
   if (/[\r\n]/.test(subject)) throw new BadRequestError('Subject must be a single line.');
 
   const base = env.FRONTEND_URL.replace(/\/$/, '');
-  const acceptUrl = `${base}/families/invitations/${inv.token}/accept`;
+  // Two different pages: joining a family, or taking over the account that
+  // was kept for you. The wrong one reads as a broken link.
+  const acceptUrl = isClaim
+    ? `${base}/family/claims/${inv.token}`
+    : `${base}/families/invitations/${inv.token}/accept`;
   const expiresOn = prettyDate(inv.expiresAt);
 
   const { html } = renderInviteShell({
     title: 'Family invitation',
-    heading: `${senderName} invited you to ${familyName}`,
-    preheader: `${senderName} has invited you to join ${familyName} on EveryPaisa. The link expires on ${expiresOn}.`,
+    heading: isClaim
+      ? `${senderName} has set up your EveryPaisa account`
+      : `${senderName} invited you to ${familyName}`,
+    preheader: isClaim
+      ? `${senderName} has been keeping your finances on EveryPaisa and is handing the account to you. The link expires on ${expiresOn}.`
+      : `${senderName} has invited you to join ${familyName} on EveryPaisa. The link expires on ${expiresOn}.`,
     closingHtml: `Sent to ${escapeHtml(inv.invitedEmail)} by ${escapeHtml(senderName)} (${escapeHtml(sender.email)}). If you weren't expecting this, you can ignore it — nothing is shared until you accept.`,
     message,
     acceptUrl,
     expiresOn,
     logoUrl: `${base}/brand/everypaisa-mark.png`,
-    buttonLabel: 'Join the family',
+    buttonLabel: isClaim ? 'Take over my account' : 'Join the family',
   });
 
   const counts = await sendCounts(callerId, invitationId);
@@ -181,6 +227,7 @@ export async function buildFamilyInviteEmail(
     senderName,
     senderEmail: sender.email,
     familyName,
+    isClaim,
     sendsRemaining: Math.max(0, MAX_SENDS_PER_INVITE - counts.forInvite),
     canSend: Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS),
   };
@@ -220,14 +267,16 @@ export async function sendFamilyInviteEmail(
   }
 
   const { text } = renderInviteShell({
-    title: 'Family invitation',
-    heading: `${draft.senderName} invited you to ${draft.familyName}`,
+    title: draft.isClaim ? 'Your EveryPaisa account' : 'Family invitation',
+    heading: draft.isClaim
+      ? `${draft.senderName} has set up your EveryPaisa account`
+      : `${draft.senderName} invited you to ${draft.familyName}`,
     preheader: '',
     closingHtml: `Sent to ${draft.to} by ${draft.senderName} (${draft.senderEmail}). If you weren't expecting this, you can ignore it — nothing is shared until you accept.`,
     message: draft.message,
     acceptUrl: draft.acceptUrl,
     expiresOn: draft.expiresOn,
-    buttonLabel: 'Join the family',
+    buttonLabel: draft.isClaim ? 'Take over my account' : 'Join the family',
   });
 
   const result = await sendEmail({

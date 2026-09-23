@@ -41,6 +41,11 @@ import {
   buildFamilyInviteEmail,
   sendFamilyInviteEmail,
 } from '../services/family/familyInviteEmail.service.js';
+import {
+  claimProfile,
+  inviteProfileClaim,
+  peekProfileClaim,
+} from '../services/family/familyClaim.service.js';
 
 /**
  * Family / HOF HTTP surface. Mounted at `/api/families`.
@@ -59,6 +64,30 @@ familiesRouter.get(
   '/invitations/:token/peek',
   asyncHandler(async (req: Request, res: Response) => {
     ok(res, await peekInvitation(req.params.token!));
+  }),
+);
+
+// ─── Taking over a managed profile (no auth: they have no account yet) ──
+//
+// Placed BEFORE `authenticate` for the same reason as the invite preview: the
+// person holding the link is exactly the person who cannot sign in yet.
+familiesRouter.get(
+  '/claims/:token/peek',
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await peekProfileClaim(req.params.token!));
+  }),
+);
+
+const claimSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8).max(100),
+});
+
+familiesRouter.post(
+  '/claims/:token',
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = claimSchema.parse(req.body);
+    ok(res, await claimProfile(req.params.token!, data));
   }),
 );
 
@@ -219,6 +248,21 @@ familiesRouter.patch(
       managerId,
     );
     noContent(res);
+  }),
+);
+
+// Invite the person a managed profile belongs to, now that they have an
+// email, to take it over. Owners and the member keeping their books.
+familiesRouter.post(
+  '/:familyId/members/:memberUserId/claim-invite',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    ok(
+      res,
+      await inviteProfileClaim(callerId(req), req.params.familyId!, req.params.memberUserId!, {
+        email,
+      }),
+    );
   }),
 );
 
