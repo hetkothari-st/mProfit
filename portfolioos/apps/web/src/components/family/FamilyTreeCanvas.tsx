@@ -595,32 +595,38 @@ export function FamilyTreeCanvas({
       });
     }
 
-    // Custom links override the family lines: the owner drew the shape.
-    if (customLinks.length > 0) {
-      customLinks.forEach((l, idx) => {
-        if (!memberById.has(l.fromUserId) || !memberById.has(l.toUserId)) return;
-        const from = span([l.fromUserId]);
-        const to = span([l.toUserId]);
-        if (!from || !to) return;
-        out.push({
-          key: `custom:${idx}`,
-          kind: 'custom',
-          linkIdx: idx,
-          label: l.label ?? null,
-          labelAt: { x: (from.cx + to.cx) / 2, y: (from.bottom + to.top) / 2 - 4 },
-          d: drop(from, to),
-        });
+    // Links the owner drew themselves.
+    const drawn = new Set<string>();
+    customLinks.forEach((l, idx) => {
+      if (!memberById.has(l.fromUserId) || !memberById.has(l.toUserId)) return;
+      const from = span([l.fromUserId]);
+      const to = span([l.toUserId]);
+      if (!from || !to) return;
+      drawn.add(pairKey(l.fromUserId, l.toUserId));
+      out.push({
+        key: `custom:${idx}`,
+        kind: 'custom',
+        linkIdx: idx,
+        label: l.label ?? null,
+        labelAt: { x: (from.cx + to.cx) / 2, y: (from.bottom + to.top) / 2 - 4 },
+        d: drop(from, to),
       });
-      return out;
-    }
+    });
 
-    // One line per branch, from the pair to their children — not from
-    // whichever parent the child happened to be entered against.
+    /**
+     * One line per branch, from the pair to their children — not from
+     * whichever parent the child happened to be entered against. These are
+     * drawn alongside the owner's own links, skipping any two people they
+     * have already joined by hand: drawing one link used to switch the
+     * family's own lines off everywhere, leaving a tree of loose cards.
+     */
+    const covered = (a: string[], b: string[]) =>
+      a.some((x) => b.some((y) => drawn.has(pairKey(x, y))));
     const walk = (node: TreeNode) => {
       const from = span(node.unit.ids);
       for (const child of node.children) {
         const to = span(child.unit.ids);
-        if (from && to) {
+        if (from && to && !covered(node.unit.ids, child.unit.ids)) {
           out.push({ key: `parent:${node.unit.anchor}:${child.unit.anchor}`, kind: 'parent', d: drop(from, to) });
         }
         walk(child);
@@ -894,19 +900,23 @@ export function FamilyTreeCanvas({
                       onClick={() => setSelectedLinkIdx(e.linkIdx!)}
                     />
                   )}
+                  {/* The family's own lines are the drawing, not a hint at
+                      one: `--border` dashed at 1.5px all but vanished on a
+                      dark canvas. Solid, and bright enough to follow from
+                      one generation to the next. */}
                   <path
                     d={e.d}
                     stroke={
                       isSelected
                         ? 'hsl(0 80% 55%)'
                         : e.kind === 'custom'
-                        ? 'hsl(213 53% 40%)'
+                        ? 'hsl(213 70% 55%)'
                         : isPartner
-                        ? 'hsl(var(--muted-foreground))'
-                        : 'hsl(var(--border))'
+                        ? 'hsl(var(--foreground) / 0.8)'
+                        : 'hsl(var(--muted-foreground) / 0.85)'
                     }
-                    strokeWidth={isSelected ? 2.5 : e.kind === 'custom' ? 2 : isPartner ? 2 : 1.5}
-                    strokeDasharray={e.kind === 'parent' ? '4 4' : '0'}
+                    strokeWidth={isSelected ? 2.5 : 2}
+                    strokeLinecap="round"
                     fill="none"
                   />
                   {e.label && e.labelAt && (
