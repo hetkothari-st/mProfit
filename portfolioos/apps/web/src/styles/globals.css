@@ -29,35 +29,35 @@
     --secondary: 0 0% 94%;
     --secondary-foreground: 0 0% 8%;
 
-    --accent: 258 78% 46%; /* deep indigo — light-mode-only, replaces lime (unreadable on white) */
-    --accent-foreground: 0 0% 100%; /* white text/icons on filled accent — lime used near-black, indigo needs white */
-    --accent-ink: 258 78% 46%; /* = --accent — one color for fill+text, no split needed at this lightness */
+    --accent: 258 78% 46%;                /* deep indigo — light-mode-only, replaces lime (unreadable on white) */
+    --accent-foreground: 0 0% 100%;       /* white text/icons on filled accent — lime used near-black, indigo needs white */
+    --accent-ink: 258 78% 46%;            /* = --accent — one color for fill+text, no split needed at this lightness */
 
     --muted: 0 0% 95%;
     --muted-foreground: 0 0% 40%;
 
-    --destructive: 4 75% 45%; /* darker red than dark mode — text contrast on white */
+    --destructive: 4 75% 45%;             /* darker red than dark mode — text contrast on white */
     --destructive-foreground: 0 0% 98%;
 
     --border: 0 0% 88%;
     --input: 0 0% 88%;
-    --ring: 258 78% 46%; /* = --accent */
+    --ring: 258 78% 46%;                  /* = --accent */
 
-    --positive: 100 65% 30%; /* darker green, distinct hue from accent */
+    --positive: 100 65% 30%;              /* darker green, distinct hue from accent */
     --negative: 4 75% 45%;
     --warning: 35 85% 38%;
-    --brand-sage: 135 10% 36%; /* logo "Paisa" sage, deepened to read on white */
+    --brand-sage: 135 10% 36%;            /* logo "Paisa" sage, deepened to read on white */
 
     /* Family tree — one hue per line of descent. Deep enough that a label
        and a hairline both hold up on white; the dark theme lifts them. */
-    --tree-1: 199 90% 34%; /* cyan */
-    --tree-2: 28 88% 40%; /* amber */
-    --tree-3: 265 70% 52%; /* violet */
-    --tree-4: 158 62% 30%; /* emerald */
-    --tree-5: 342 68% 44%; /* rose */
-    --tree-6: 218 80% 46%; /* blue */
-    --tree-spouse: 340 62% 48%; /* the dashed married link */
-    --tree-line: 0 0% 72%; /* a line with no branch of its own */
+    --tree-1: 199 90% 34%;                /* cyan */
+    --tree-2: 28 88% 40%;                 /* amber */
+    --tree-3: 265 70% 52%;                /* violet */
+    --tree-4: 158 62% 30%;                /* emerald */
+    --tree-5: 342 68% 44%;                /* rose */
+    --tree-6: 218 80% 46%;                /* blue */
+    --tree-spouse: 340 62% 48%;           /* the dashed married link */
+    --tree-line: 0 0% 72%;                /* a line with no branch of its own */
 
     --sidebar: 0 0% 97%;
     --sidebar-foreground: 0 0% 10%;
@@ -97,34 +97,34 @@
     --secondary: 0 0% 14%;
     --secondary-foreground: 0 0% 96%;
 
-    --accent: 70 95% 65%; /* signature lime, ~#E2FE53 */
+    --accent: 70 95% 65%;                /* signature lime, ~#E2FE53 */
     --accent-foreground: 0 0% 8%;
-    --accent-ink: 70 95% 65%; /* same as --accent — bright lime already pops on black */
+    --accent-ink: 70 95% 65%;            /* same as --accent — bright lime already pops on black */
 
     --muted: 0 0% 13%;
     --muted-foreground: 0 0% 62%;
 
-    --destructive: 4 85% 62%; /* warm coral-red */
+    --destructive: 4 85% 62%;             /* warm coral-red */
     --destructive-foreground: 0 0% 96%;
 
-    --border: 0 0% 18%; /* hairline, subtle-but-opaque against 5%/9% surfaces */
+    --border: 0 0% 18%;                   /* hairline, subtle-but-opaque against 5%/9% surfaces */
     --input: 0 0% 18%;
-    --ring: 70 95% 65%; /* = --accent */
+    --ring: 70 95% 65%;                   /* = --accent */
 
-    --positive: 85 75% 58%; /* greener-lime, on-brand for gains */
+    --positive: 85 75% 58%;               /* greener-lime, on-brand for gains */
     --negative: 4 85% 62%;
     --warning: 40 90% 60%;
-    --brand-sage: 115 7% 63%; /* logo "Paisa" sage, as drawn (#9CA89B) */
+    --brand-sage: 115 7% 63%;             /* logo "Paisa" sage, as drawn (#9CA89B) */
 
     /* Family tree — the same six lines, lifted for a near-black board. */
-    --tree-1: 190 72% 58%;
-    --tree-2: 32 92% 62%;
-    --tree-3: 268 72% 70%;
-    --tree-4: 155 60% 55%;
-    --tree-5: 345 78% 66%;
-    --tree-6: 215 85% 68%;
-    --tree-spouse: 340 65% 70%;
-    --tree-line: 0 0% 42%;
+    --tree-1: 190 72% 58%;                /* cyan */
+    --tree-2: 32 92% 62%;                 /* amber */
+    --tree-3: 268 72% 70%;                /* violet */
+    --tree-4: 155 60% 55%;                /* emerald */
+    --tree-5: 345 78% 66%;                /* rose */
+    --tree-6: 215 85% 68%;                /* blue */
+    --tree-spouse: 340 65% 70%;           /* the dashed married link */
+    --tree-line: 0 0% 42%;                /* a line with no branch of its own */
 
     /* Sidebar — same near-black family, no separate warm tint */
     --sidebar: 0 0% 6%;
@@ -138,14 +138,14 @@
     --radius: 1rem;
 
     /* Chart palette — vivid, higher-lightness so it holds up on near-black */
-    --chart-1: 70 95% 65%; /* lime */
-    --chart-2: 0 0% 90%; /* ivory */
-    --chart-3: 4 85% 66%; /* coral */
-    --chart-4: 185 70% 55%; /* teal */
-    --chart-5: 265 70% 72%; /* violet */
-    --chart-6: 40 90% 62%; /* amber */
-    --chart-7: 210 85% 65%; /* blue */
-    --chart-8: 330 70% 68%; /* rose */
+    --chart-1: 70 95% 65%;    /* lime */
+    --chart-2: 0 0% 90%;      /* ivory */
+    --chart-3: 4 85% 66%;     /* coral */
+    --chart-4: 185 70% 55%;   /* teal */
+    --chart-5: 265 70% 72%;   /* violet */
+    --chart-6: 40 90% 62%;    /* amber */
+    --chart-7: 210 85% 65%;   /* blue */
+    --chart-8: 330 70% 68%;   /* rose */
   }
 }
 
@@ -170,7 +170,7 @@
   }
 
   ::selection {
-    background: hsl(var(--accent) / 0.3);
+    background: hsl(var(--accent) / 0.30);
     color: hsl(var(--foreground));
   }
 
@@ -205,11 +205,7 @@
     border: 2px solid transparent;
   }
 
-  h1,
-  h2,
-  h3,
-  h4,
-  h5 {
+  h1, h2, h3, h4, h5 {
     font-feature-settings: 'ss01', 'ss03', 'liga', 'kern';
   }
 }
@@ -219,18 +215,14 @@
   .font-display {
     font-family: 'Fraunces', ui-serif, Georgia, serif;
     font-feature-settings: 'liga', 'kern';
-    font-variation-settings:
-      'opsz' 40,
-      'SOFT' 0;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0;
     letter-spacing: -0.015em;
     font-weight: 700;
   }
   .font-display-italic {
     font-family: 'Fraunces', ui-serif, Georgia, serif;
     font-style: italic;
-    font-variation-settings:
-      'opsz' 40,
-      'SOFT' 0;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0;
     letter-spacing: -0.008em;
     font-weight: 500;
   }
@@ -270,7 +262,7 @@
     color: hsl(var(--foreground));
     text-shadow:
       0 1px 0 hsl(0 0% 100% / 0.75),
-      0 1px 1px hsl(var(--shadow-color) / 0.2),
+      0 1px 1px hsl(var(--shadow-color) / 0.20),
       0 3px 8px hsl(var(--shadow-color) / 0.12);
   }
   .dark .money-digits {
@@ -287,7 +279,7 @@
     text-shadow:
       0 1px 0 hsl(0 0% 100% / 0.55),
       0 2px 1px hsl(var(--shadow-color) / 0.12),
-      0 6px 14px hsl(var(--shadow-color) / 0.1);
+      0 6px 14px hsl(var(--shadow-color) / 0.10);
   }
   .dark .money-hero-digits {
     color: hsl(38 26% 90%);
@@ -295,52 +287,26 @@
       0 -1px 0 hsl(38 30% 95% / 0.12),
       0 1px 0 hsl(0 0% 0% / 0.7),
       0 2px 1px hsl(0 0% 0% / 0.5),
-      0 8px 22px hsl(var(--accent) / 0.2);
+      0 8px 22px hsl(var(--accent) / 0.20);
   }
 
-  .text-balance {
-    text-wrap: balance;
-  }
-  .text-pretty {
-    text-wrap: pretty;
-  }
+  .text-balance { text-wrap: balance; }
+  .text-pretty  { text-wrap: pretty; }
 
   /* Brand color utilities */
-  .text-positive {
-    color: hsl(var(--positive));
-  }
-  .text-negative {
-    color: hsl(var(--negative));
-  }
-  .text-warning {
-    color: hsl(var(--warning));
-  }
-  .bg-positive\/10 {
-    background-color: hsl(var(--positive) / 0.1);
-  }
-  .bg-negative\/10 {
-    background-color: hsl(var(--negative) / 0.1);
-  }
-  .bg-warning\/10 {
-    background-color: hsl(var(--warning) / 0.12);
-  }
-  .bg-warning\/60 {
-    background-color: hsl(var(--warning) / 0.6);
-  }
-  .bg-accent\/8 {
-    background-color: hsl(var(--accent) / 0.08);
-  }
-  .ring-accent\/30 {
-    --tw-ring-color: hsl(var(--accent) / 0.3);
-  }
+  .text-positive  { color: hsl(var(--positive)); }
+  .text-negative  { color: hsl(var(--negative)); }
+  .text-warning   { color: hsl(var(--warning)); }
+  .bg-positive\/10 { background-color: hsl(var(--positive) / 0.1); }
+  .bg-negative\/10 { background-color: hsl(var(--negative) / 0.1); }
+  .bg-warning\/10  { background-color: hsl(var(--warning) / 0.12); }
+  .bg-warning\/60  { background-color: hsl(var(--warning) / 0.6); }
+  .bg-accent\/8    { background-color: hsl(var(--accent) / 0.08); }
+  .ring-accent\/30 { --tw-ring-color: hsl(var(--accent) / 0.3); }
 
   /* Hairlines & paper texture */
-  .hairline-b {
-    box-shadow: inset 0 -1px 0 hsl(var(--border));
-  }
-  .hairline-t {
-    box-shadow: inset 0 1px 0 hsl(var(--border));
-  }
+  .hairline-b { box-shadow: inset 0 -1px 0 hsl(var(--border)); }
+  .hairline-t { box-shadow: inset 0 1px 0 hsl(var(--border)); }
 
   /* Light-mode card lift for image-led tiles (property cards). A white card on
      the 98% page with the stock 10% shadow-elev reads as flat paper; this adds
@@ -352,8 +318,8 @@
     border-color: hsl(215 16% 84%);
     box-shadow:
       0 1px 2px hsl(215 25% 15% / 0.08),
-      0 4px 10px -4px hsl(215 25% 15% / 0.1),
-      0 14px 32px -12px hsl(215 25% 15% / 0.2),
+      0 4px 10px -4px hsl(215 25% 15% / 0.10),
+      0 14px 32px -12px hsl(215 25% 15% / 0.20),
       0 28px 56px -28px hsl(215 25% 15% / 0.24);
   }
   html:not(.dark) .group:hover .card-lift {
@@ -361,7 +327,7 @@
       0 2px 4px hsl(215 25% 15% / 0.09),
       0 8px 18px -6px hsl(215 25% 15% / 0.14),
       0 22px 44px -14px hsl(215 25% 15% / 0.26),
-      0 40px 72px -32px hsl(215 25% 15% / 0.3);
+      0 40px 72px -32px hsl(215 25% 15% / 0.30);
   }
 
   /* Dark-mode card lift — stock shadow-elev disappears on dark surfaces.
@@ -371,7 +337,7 @@
       inset 0 1px 0 hsl(38 30% 95% / 0.04),
       0 1px 0 hsl(var(--border)),
       0 6px 18px -8px hsl(0 0% 0% / 0.45),
-      0 2px 6px -2px hsl(0 0% 0% / 0.3);
+      0 2px 6px -2px hsl(0 0% 0% / 0.30);
   }
   .dark .shadow-elev-lg {
     box-shadow:
@@ -392,7 +358,8 @@
 
   .paper {
     background-color: hsl(var(--card));
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.04 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.04 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
     background-size: 220px 220px;
   }
 
@@ -400,13 +367,7 @@
   .rule-ornament {
     position: relative;
     height: 1px;
-    background: linear-gradient(
-      to right,
-      transparent,
-      hsl(var(--border)) 20%,
-      hsl(var(--border)) 80%,
-      transparent
-    );
+    background: linear-gradient(to right, transparent, hsl(var(--border)) 20%, hsl(var(--border)) 80%, transparent);
   }
   .rule-ornament::before,
   .rule-ornament::after {
@@ -419,12 +380,8 @@
     background: hsl(var(--accent));
     opacity: 0.5;
   }
-  .rule-ornament::before {
-    left: calc(50% - 22px);
-  }
-  .rule-ornament::after {
-    left: calc(50% + 18px);
-  }
+  .rule-ornament::before { left: calc(50% - 22px); }
+  .rule-ornament::after  { left: calc(50% + 18px); }
   .rule-ornament > span {
     position: absolute;
     top: 50%;
@@ -441,7 +398,7 @@
     isolation: isolate;
     background:
       radial-gradient(120% 90% at 0% 0%, hsl(var(--accent) / 0.18) 0px, transparent 55%),
-      radial-gradient(100% 80% at 100% 0%, hsl(var(--primary) / 0.1) 0px, transparent 55%),
+      radial-gradient(100% 80% at 100% 0%, hsl(var(--primary) / 0.10) 0px, transparent 55%),
       radial-gradient(140% 100% at 50% 130%, hsl(var(--accent) / 0.06) 0px, transparent 60%),
       linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--card) / 0.92) 100%);
   }
@@ -455,30 +412,15 @@
     mix-blend-mode: overlay;
     opacity: 0.55;
   }
-  .dark .hero-canvas::before {
-    mix-blend-mode: soft-light;
-    opacity: 0.35;
-  }
+  .dark .hero-canvas::before { mix-blend-mode: soft-light; opacity: 0.35; }
 
   /* Subtle entrance reveal */
-  .reveal {
-    animation: reveal-up 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
-  }
-  .reveal-delay-1 {
-    animation-delay: 60ms;
-  }
-  .reveal-delay-2 {
-    animation-delay: 120ms;
-  }
-  .reveal-delay-3 {
-    animation-delay: 180ms;
-  }
-  .reveal-delay-4 {
-    animation-delay: 240ms;
-  }
-  .reveal-delay-5 {
-    animation-delay: 300ms;
-  }
+  .reveal { animation: reveal-up 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+  .reveal-delay-1 { animation-delay: 60ms; }
+  .reveal-delay-2 { animation-delay: 120ms; }
+  .reveal-delay-3 { animation-delay: 180ms; }
+  .reveal-delay-4 { animation-delay: 240ms; }
+  .reveal-delay-5 { animation-delay: 300ms; }
 
   /* Active rail for sidebar nav */
   .nav-rail {
@@ -509,13 +451,8 @@
     font-family: 'Inter Tight', sans-serif !important;
     font-size: 12px !important;
   }
-  .recharts-cartesian-axis-tick-value {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-  }
-  .recharts-legend-item-text {
-    font-size: 12px !important;
-  }
+  .recharts-cartesian-axis-tick-value { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .recharts-legend-item-text { font-size: 12px !important; }
 
   /* Privacy mode: replace numeric values with clean redaction bars.
      Text stays in DOM so layout is preserved; color becomes transparent,
@@ -529,9 +466,7 @@
     border-radius: 4px;
     user-select: none;
     pointer-events: none;
-    transition:
-      color 180ms ease,
-      background-color 180ms ease;
+    transition: color 180ms ease, background-color 180ms ease;
   }
 
   /* Hide gain/loss sign (+ / -) — reveals directional info */
@@ -556,9 +491,7 @@
     border-radius: 4px;
     user-select: none;
     pointer-events: none;
-    transition:
-      color 180ms ease,
-      background-color 180ms ease;
+    transition: color 180ms ease, background-color 180ms ease;
   }
 
   /* CASCADE: numeric containers often wrap a coloured child element
