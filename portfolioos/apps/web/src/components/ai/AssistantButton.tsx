@@ -3,6 +3,7 @@ import { Sparkles, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { AIAssistant } from './AIAssistant';
 import { aiAssistantApi } from '@/api/aiAssistant.api';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 /**
  * Floating AI-assistant launcher.
@@ -66,12 +67,23 @@ export function AssistantButton() {
     return fromApi.length > 0 ? fromApi : FALLBACK_QUESTIONS;
   }, [suggestedQuery.data]);
 
-  // Move welcome → suggested rotation after a short hold.
+  // On a phone the bubble sits over the content, so it shows the welcome
+  // once per session and then gets out of the way instead of rotating.
+  const isPhone = useMediaQuery('(max-width: 767px)');
+
+  // Move welcome → suggested rotation after a short hold (phones: hide).
   useEffect(() => {
     if (dismissed || open) return;
-    const t = setTimeout(() => setPhase('suggested'), FIRST_VISIT_HOLD_MS);
+    const t = setTimeout(() => {
+      if (!isPhone) {
+        setPhase('suggested');
+        return;
+      }
+      setDismissed(true);
+      window.sessionStorage.setItem(DISMISS_KEY, '1');
+    }, FIRST_VISIT_HOLD_MS);
     return () => clearTimeout(t);
-  }, [dismissed, open]);
+  }, [dismissed, open, isPhone]);
 
   // Rotate teaser question every ROTATE_MS while visible.
   useEffect(() => {
@@ -163,7 +175,7 @@ function TeaserBubble({
         <button
           type="button"
           onClick={onDismiss}
-          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shadow"
+          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shadow before:absolute before:-inset-2.5 before:content-['']"
           aria-label="Dismiss"
         >
           <X className="h-3 w-3" strokeWidth={2} />
