@@ -70,7 +70,30 @@ describe('tileSurface', () => {
     expect(tileSurface('#e7e514', '#01824b').base).toBe('#01824b'); // KVB: yellow + green
     expect(tileSurface('#004c8f', '#ed232a').base).toBe('#004c8f'); // HDFC keeps its navy
   });
+
+  // A pure red clears white-text contrast while still very bright, so it
+  // came out near fire-engine red (#e1131b for Kotak) and glared beside the
+  // navy and burgundy tiles.
+  it('deepens a vivid red to the same weight as other tiles', () => {
+    const [, s, l] = hsl(tileSurface('#ec1c24', null).via); // Kotak
+    expect(l).toBeLessThanOrEqual(0.4);
+    expect(s).toBeLessThanOrEqual(0.75);
+  });
+
+  it('leaves already-deep brand colours as they were', () => {
+    expect(tileSurface('#004c8f', null).via).toBe('#0b4b84'); // HDFC
+    expect(tileSurface('#97144d', null).via).toBe('#97144d'); // Axis
+  });
 });
+
+function hsl(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255) as [number, number, number];
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  return [0, s, l];
+}
 
 describe('brandAccent', () => {
   it.each(['#004c8f', '#fff200', '#9d1d27', '#0473ea'])(
@@ -80,4 +103,10 @@ describe('brandAccent', () => {
       expect(contrastRatio(brandAccent(color, false), '#ffffff')).toBeGreaterThanOrEqual(4.5);
     },
   );
+
+  it('tones a vivid red down on the dark theme', () => {
+    const accent = brandAccent('#ec1c24', true); // Kotak
+    expect(hsl(accent)[1]).toBeLessThanOrEqual(0.75);
+    expect(contrastRatio(accent, '#0a0a0a')).toBeGreaterThanOrEqual(4.5);
+  });
 });
