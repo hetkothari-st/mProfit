@@ -281,12 +281,12 @@ function InterestSoFar({ holding }: { holding: FDHolding }) {
   const up = earned.gte(0);
   return (
     <span className={up ? 'text-positive' : 'text-negative'}>
-      <span className="money-digits">
+      <span className="money-digits whitespace-nowrap">
         {up ? '+' : ''}
         {formatINR(earned.toString())}
       </span>
       {pct && (
-        <span className="ml-1 text-xs opacity-75">
+        <span className="ml-1 whitespace-nowrap text-xs opacity-75">
           {up ? '+' : ''}
           {pct.toFixed(2)}%
         </span>

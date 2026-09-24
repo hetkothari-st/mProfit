@@ -83,7 +83,7 @@ function AccountTile({
 }) {
   return (
     <div className="group relative">
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity [@media(hover:none)]:rounded-full [@media(hover:none)]:bg-black/45 [@media(hover:none)]:px-1 [@media(hover:none)]:backdrop-blur-sm">
         <Button
           variant="ghost"
           size="sm"

@@ -468,7 +468,7 @@ function FeedFailures() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-[11px] uppercase tracking-kerned text-muted-foreground">
                   <th className="px-4 py-2 font-medium">Source</th>
@@ -480,7 +480,7 @@ function FeedFailures() {
               <tbody>
                 {items.map((row) => (
                   <tr key={row.id} className="border-b last:border-0 align-top">
-                    <td className="px-4 py-2.5">
+                    <td data-label="Source" className="px-4 py-2.5">
                       <div className="flex items-center gap-1.5">
                         <span className="font-medium">{feedLabel(row.feed)}</span>
                         {/* A scoring refusal is a different animal from a thin
@@ -497,7 +497,7 @@ function FeedFailures() {
                         {row.check ? ` · ${row.check}` : ''}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground tabular-nums">
+                    <td data-label="When" className="whitespace-nowrap px-4 py-2.5 text-muted-foreground tabular-nums">
                       {new Date(row.startedAt).toLocaleString('en-IN', {
                         day: '2-digit',
                         month: 'short',
@@ -505,7 +505,7 @@ function FeedFailures() {
                         minute: '2-digit',
                       })}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
+                    <td data-label="Imported" className="whitespace-nowrap px-4 py-2.5 tabular-nums">
                       {/* The comparison IS the finding, so both numbers are
                           shown rather than a single count that looks fine. A
                           scoring refusal has no row counts; its finding is the
@@ -532,7 +532,7 @@ function FeedFailures() {
                         </>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
+                    <td data-fullrow className="px-4 py-2.5 text-muted-foreground">
                       {row.reason ?? 'The run failed without a reason recorded.'}
                     </td>
                   </tr>

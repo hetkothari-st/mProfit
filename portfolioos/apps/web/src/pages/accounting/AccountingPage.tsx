@@ -127,13 +127,16 @@ function ChartOfAccountsTab() {
       </div>
       <Card>
         <CardContent className="p-0 overflow-x-auto">
-          <div className="min-w-[480px]">
+          <div className="sm:min-w-[480px]">
             <div className="flex items-center gap-1 py-2 px-2 border-b text-xs text-muted-foreground font-medium uppercase tracking-wider">
               <span className="w-4 shrink-0" />
-              <span className="w-16 shrink-0">Code</span>
-              <span className="flex-1">Name</span>
-              <span className="w-20 text-right">Type</span>
-              <span className="w-28 text-right">Opening Balance</span>
+              <span className="w-11 sm:w-16 shrink-0">Code</span>
+              <span className="flex-1 min-w-0">Name</span>
+              <span className="hidden sm:inline w-20 text-right">Type</span>
+              <span className="w-24 sm:w-28 shrink-0 text-right">
+                <span className="sm:hidden">Opening</span>
+                <span className="hidden sm:inline">Opening Balance</span>
+              </span>
               <span className="w-12" />
             </div>
             {tree.map((n) => (
