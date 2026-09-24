@@ -143,11 +143,11 @@ const PHONE_NOTE = { 'toll-free': 'toll-free', 'shared-cost': 'charges apply', s
 function Phone({ number }: { number: string }) {
   const note = PHONE_NOTE[phoneKind(number)];
   return (
-    <span className="whitespace-nowrap">
-      <a href={telHref(number)} className="text-accent hover:underline">
+    <span>
+      <a href={telHref(number)} className="whitespace-nowrap text-accent hover:underline">
         {number}
       </a>
-      {note && <span className="ml-1 text-xs text-muted-foreground">({note})</span>}
+      {note && <span className="ml-1 whitespace-nowrap text-xs text-muted-foreground">({note})</span>}
     </span>
   );
 }

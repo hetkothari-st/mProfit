@@ -21,7 +21,7 @@ export function LiabilitiesVsAssetsCard({ data }: { data: LiabilitiesVsAssets })
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-3 gap-3 text-sm">
+        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 gap-3 text-sm">
           <div>
             <p className="text-xs text-muted-foreground">You own</p>
             <p className="mt-0.5 font-semibold tabular-nums">{formatINR(data.assets)}</p>

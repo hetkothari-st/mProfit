@@ -405,8 +405,8 @@ function SummaryView({
   return (
     <div className="space-y-4">
       <Card className="border-accent/30 bg-accent/5">
-        <CardContent className="pt-4 flex items-center justify-between gap-4">
-          <div>
+        <CardContent className="pt-4 flex flex-col items-start sm:flex-row sm:items-center justify-between gap-4">
+          <div className="min-w-0">
             <div className="text-sm font-medium">CA-ready capital gains report</div>
             <div className="text-xs text-muted-foreground mt-1">
               One PDF with tax summary, unrealised snapshot, harvesting opportunities, and full
