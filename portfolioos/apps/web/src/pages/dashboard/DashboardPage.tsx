@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { Money } from '@/components/ui/money';
 import { AutoFitText } from '@/components/ui/AutoFitText';
 import { Select } from '@/components/ui/select';
@@ -306,6 +307,8 @@ function holdingRoute(h: { id: string; assetClass: string }): string | null {
 export function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string>('ALL');
   const [period, setPeriod] = useState<number>(365);
+  // Phones: narrower value axis + room for the last date label on the chart.
+  const isPhone = useMediaQuery('(max-width: 767px)');
   // Net-worth-only privacy toggle. Hidden by default so a screen-share or
   // co-worker glance doesn't reveal the headline number; everything else on
   // the page (MetricCards, charts, holdings) stays visible. This is local to
@@ -653,8 +656,8 @@ export function DashboardPage() {
                     >
                       <UrgencyIcon urgency={a.urgency} dark={dark} />
                       <div className="flex-1 min-w-0">
-                        <span className="font-medium">{a.title}</span>
-                        <span className="text-muted-foreground ml-2">{a.description}</span>
+                        <span className="block sm:inline font-medium">{a.title}</span>
+                        <span className="block sm:inline text-muted-foreground mt-0.5 sm:mt-0 sm:ml-2">{a.description}</span>
                       </div>
                       {a.daysUntil != null && (
                         <span className={`text-xs font-medium flex-shrink-0 ${urgencyColor(a.urgency, dark)}`}>
@@ -914,7 +917,7 @@ export function DashboardPage() {
       {/* Chart + Full Allocation Pie */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-2">
             <div>
               <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Trajectory</p>
               <CardTitle className="text-[16px]">Portfolio value over time</CardTitle>
@@ -944,7 +947,7 @@ export function DashboardPage() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <AreaChart data={chartData} margin={{ top: 8, right: isPhone ? 32 : 8, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="gradValue" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%"  stopColor="hsl(var(--foreground))" stopOpacity={0.22} />
@@ -969,7 +972,7 @@ export function DashboardPage() {
                   />
                   <YAxis
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
-                    axisLine={false} tickLine={false} width={72}
+                    axisLine={false} tickLine={false} width={isPhone ? 52 : 72}
                     tickFormatter={(v: number) =>
                       hideSensitive ? '•••'
                         : v >= 10_000_000 ? `₹${(v / 10_000_000).toFixed(1)}Cr`
@@ -1067,7 +1070,7 @@ export function DashboardPage() {
             {/* Compact mobile list — two lines per holding (name + value, then
                 class + return). Replaces the card-ified table below md so the
                 10-row list stays tight. */}
-            <ul className="md:hidden divide-y divide-border/40">
+            <ul className="md:hidden divide-y divide-border/40 px-[var(--card-pad)]">
               {topHoldings.map((h, idx) => {
                 const pnlD = toDecimal(h.unrealisedPnL ?? '0');
                 const pos = pnlD.greaterThan(0), neg = pnlD.lessThan(0);
