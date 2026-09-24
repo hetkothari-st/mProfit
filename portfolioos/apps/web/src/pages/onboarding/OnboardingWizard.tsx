@@ -16,25 +16,28 @@ import {
   type OnboardingItemId,
 } from './onboardingItems';
 import { QuickAddForm } from './QuickAddForms';
+import { WelcomePanels } from './WelcomePanels';
 
 interface Props {
   onComplete: () => void;
 }
 
-type Phase = 'pick' | 'add' | 'done';
+type Phase = 'welcome' | 'pick' | 'add' | 'done';
 
 /**
- * New-account setup: pick what you own, add each with a few fields, land on
- * a dashboard that already has numbers. Every step can be skipped.
+ * New-account setup: read what this is and what happens to your data, pick
+ * what you own, add each with a few fields, land on a dashboard that already
+ * has numbers. Every step can be skipped.
  */
 export function OnboardingWizard({ onComplete }: Props) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [phase, setPhase] = useState<Phase>('pick');
+  const [phase, setPhase] = useState<Phase>('welcome');
   const [selected, setSelected] = useState<OnboardingItemId[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
   const [added, setAdded] = useState<Partial<Record<OnboardingItemId, string[]>>>({});
   const userId = useAuthStore((s) => s.user?.id);
+  const userName = useAuthStore((s) => s.user?.name);
 
   // Remember that this account is mid-setup, so signing in again resumes it.
   useEffect(() => {
@@ -84,7 +87,11 @@ export function OnboardingWizard({ onComplete }: Props) {
 
   let body: JSX.Element;
 
-  if (portfolioQuery.isLoading) {
+  if (phase === 'welcome') {
+    // Shown while the portfolio call is still in flight: there is nothing to
+    // wait for here, and a spinner before a welcome reads badly.
+    body = <WelcomePanels name={userName} onDone={() => setPhase('pick')} />;
+  } else if (portfolioQuery.isLoading) {
     body = (
       <div className="flex justify-center py-16">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
