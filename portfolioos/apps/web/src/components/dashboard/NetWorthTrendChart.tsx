@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { intelligenceApi, type NetWorthHistoryPeriod } from '@/api/intelligence.api';
 import { formatINR, toDecimal } from '@everypaisa/shared';
 import { EstimatedChip } from '@/pages/family/widgets/RestrictedNotice';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
   { label: '1M', value: '1M' },
@@ -25,6 +26,9 @@ const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
  */
 export function NetWorthTrendChart() {
   const [period, setPeriod] = useState<NetWorthHistoryPeriod>('1Y');
+  // Phones: a narrower value axis, and room on the right for the last date,
+  // which is centred on the final point and otherwise gets cut in half.
+  const isPhone = useMediaQuery('(max-width: 767px)');
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['intelligence', 'net-worth-history', period],
@@ -55,7 +59,7 @@ export function NetWorthTrendChart() {
 
   return (
     <Card className="reveal">
-      <CardHeader className="flex-row items-center justify-between pb-2">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-2">
         <div>
           <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Trend</p>
           <CardTitle className="text-[16px]">Net worth over time</CardTitle>
@@ -144,7 +148,7 @@ export function NetWorthTrendChart() {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 8, right: isPhone ? 32 : 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="gradNetWorthTrend" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="hsl(var(--foreground))" stopOpacity={0.22} />
@@ -166,7 +170,7 @@ export function NetWorthTrendChart() {
                 tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
                 axisLine={false}
                 tickLine={false}
-                width={72}
+                width={isPhone ? 52 : 72}
                 tickFormatter={(v: number) =>
                   v >= 10_000_000
                     ? `₹${(v / 10_000_000).toFixed(1)}Cr`
