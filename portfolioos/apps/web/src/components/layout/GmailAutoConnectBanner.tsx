@@ -65,18 +65,19 @@ export function GmailAutoConnectBanner() {
   }
 
   return (
-    <div className="border-b bg-blue-50/50 dark:bg-blue-950/20 px-6 py-2.5">
-      <div className="flex items-center gap-3 text-sm">
+    <div className="border-b bg-blue-50/50 dark:bg-blue-950/20 px-4 sm:px-6 py-2.5">
+      <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 text-sm">
         <Mail className="h-4 w-4 text-blue-600 shrink-0" />
-        <div className="flex-1">
+        <div className="flex-1 min-w-0 basis-[calc(100%-1.75rem)] sm:basis-auto">
           <span className="font-medium">Auto-import statements from your inbox.</span>{' '}
           <span className="text-muted-foreground">
-            Connect <span className="font-mono">{userEmail}</span> — we'll fetch contract notes,
+            Connect <span className="font-mono break-all">{userEmail}</span> — we'll fetch contract notes,
             CAS PDFs, and trade confirmations automatically. You approve each new sender once.
           </span>
         </div>
         <Button
           size="sm"
+          className="ml-7 sm:ml-0"
           onClick={() => connectMut.mutate()}
           disabled={connectMut.isPending}
         >

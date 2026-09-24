@@ -41,7 +41,7 @@ export function TabsList({ children, className }: { children: React.ReactNode; c
     <div
       role="tablist"
       className={cn(
-        'inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground gap-0.5',
+        'inline-flex h-10 max-w-full items-center justify-start overflow-x-auto overflow-y-hidden rounded-md bg-muted p-1 text-muted-foreground gap-0.5',
         className,
       )}
     >

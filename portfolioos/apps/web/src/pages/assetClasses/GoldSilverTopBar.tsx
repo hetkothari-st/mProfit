@@ -166,14 +166,14 @@ export function GoldSilverTopBar() {
 
   return (
     <div className="sticky top-0 z-30 mb-5 px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-lg border border-border/60 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-sm">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-center divide-y divide-border/60 sm:divide-y-0 gap-0 sm:gap-8">
+      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-1.5 xl:gap-6">
+        <div className="flex flex-col lg:flex-row lg:items-center divide-y divide-border/60 lg:divide-y-0 gap-0 lg:gap-8">
           <MetalPrice metal="GOLD" base={data?.GOLD} priceClass="text-amber-600 dark:text-amber-400" />
-          <div className="hidden sm:block h-8 w-px bg-border/60" />
+          <div className="hidden lg:block h-8 w-px bg-border/60" />
           <MetalPrice metal="SILVER" base={data?.SILVER} priceClass="text-slate-600 dark:text-slate-300" />
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground pt-1.5 sm:pt-0 border-t border-border/40 sm:border-t-0">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground pt-1.5 xl:pt-0 border-t border-border/40 xl:border-t-0">
           {error && !data ? (
             <span className="text-destructive">Live feed unavailable</span>
           ) : (

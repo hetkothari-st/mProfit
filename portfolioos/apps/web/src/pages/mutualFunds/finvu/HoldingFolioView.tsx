@@ -53,7 +53,7 @@ function SchemeCard({ holding }: { holding: Record<string, unknown> }) {
     <div className="rounded-xl border border-border/70 bg-card/40 overflow-hidden">
       <div className="px-4 py-3 border-b bg-muted/30">
         <div className="flex flex-wrap items-start gap-2">
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 basis-40">
             <div className="text-sm font-semibold text-foreground truncate">
               {asString(holding['isinDescription']) ?? asString(holding['schemeCode']) ?? '—'}
             </div>

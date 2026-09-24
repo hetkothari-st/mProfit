@@ -988,10 +988,10 @@ export function RentalRemindersPanel() {
           className="flex flex-1 items-center gap-2.5 min-w-0 text-left rounded-md -mx-2 px-2 py-1 hover:bg-foreground/[0.03] focus-ring transition-colors"
         >
           <BellRing className="h-5 w-5 text-accent-ink/70 shrink-0" />
-          <CardTitle className="text-[20px] font-semibold flex items-center gap-3 min-w-0">
+          <CardTitle className="text-[20px] font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
             <span>Pending tenant reminders</span>
             {reminders.length > 0 && (
-              <span className="inline-flex items-center rounded-full bg-accent/15 text-accent-ink ring-1 ring-accent/30 text-xs font-medium px-2 py-0.5">
+              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-accent/15 text-accent-ink ring-1 ring-accent/30 text-xs font-medium px-2 py-0.5">
                 {reminders.length} awaiting approval
               </span>
             )}

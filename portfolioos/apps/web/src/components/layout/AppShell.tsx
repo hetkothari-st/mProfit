@@ -39,17 +39,17 @@ export function AppShell() {
 
   return (
     <ScanProvider>
-      <div className={`h-screen flex overflow-hidden bg-background ${hideSensitive ? 'privacy-mask' : ''}`}>
+      <div className={`h-dvh flex overflow-hidden bg-background pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${hideSensitive ? 'privacy-mask' : ''}`}>
         <Sidebar />
         <MobileNavDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <Header onOpenMenu={() => setDrawerOpen(true)} />
           <ActingAsBanner />
           <GmailAutoConnectBanner />
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden">
             <div
               key={`${viewingAsFamilyId ?? '__personal__'}:${actingId ?? '__self__'}`}
-              className="mx-auto w-full max-w-[1480px] px-6 py-7 lg:px-10 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] md:pb-7"
+              className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-6 sm:py-7 lg:px-10 pb-[calc(3.5rem+env(safe-area-inset-bottom)+5rem)] md:pb-7"
             >
               <Outlet />
             </div>

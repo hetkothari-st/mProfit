@@ -52,10 +52,10 @@ function AccountTreeNode({ node, depth, onAdd, onDelete }: {
             ? (open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />)
             : <span className="w-3 inline-block" />}
         </button>
-        <span className="text-xs text-muted-foreground w-16 shrink-0 font-mono">{node.code}</span>
-        <span className="flex-1 text-sm">{node.name}</span>
-        <span className={`text-xs font-medium ${typeColors[node.type]} w-20 text-right`}>{node.type}</span>
-        <span className="text-xs tabular-nums text-muted-foreground w-28 text-right">
+        <span className="text-xs text-muted-foreground w-11 sm:w-16 shrink-0 font-mono">{node.code}</span>
+        <span className="flex-1 min-w-0 text-sm">{node.name}</span>
+        <span className={`text-xs font-medium ${typeColors[node.type]} hidden sm:inline w-20 text-right`}>{node.type}</span>
+        <span className="text-xs tabular-nums text-muted-foreground w-24 sm:w-28 shrink-0 text-right">
           {!toDecimal(node.openingBalance).isZero() ? formatINR(node.openingBalance) : '—'}
         </span>
         <div className="opacity-0 group-hover:opacity-100 flex gap-1 ml-2">

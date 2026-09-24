@@ -681,7 +681,7 @@ function Composer({
 }) {
   const disabled = isStreaming || capped || previewLocked;
   return (
-    <div className="border-t border-border bg-card/40 backdrop-blur">
+    <div className="border-t border-border bg-card/40 backdrop-blur pb-[env(safe-area-inset-bottom)]">
       <form
         onSubmit={onSubmit}
         className={`p-3 flex flex-col gap-1.5 w-full ${expanded ? 'max-w-3xl mx-auto' : ''}`}

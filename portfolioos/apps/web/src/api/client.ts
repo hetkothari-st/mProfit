@@ -32,15 +32,44 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-let refreshPromise: Promise<string> | null = null;
+class NoRefreshTokenError extends Error {
+  constructor() {
+    super('No refresh token');
+  }
+}
 
-export async function doRefresh(): Promise<string> {
+/**
+ * True when the server rejected the session itself (401/403), or there is no
+ * refresh token to try. Only this may sign the user out: a 429, a 5xx or a
+ * dropped mobile connection says nothing about whether the session is valid.
+ */
+export function isAuthRejection(err: unknown): boolean {
+  if (err instanceof NoRefreshTokenError) return true;
+  const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+  return status === 401 || status === 403;
+}
+
+async function doRefresh(): Promise<string> {
   const refreshToken = useAuthStore.getState().refreshToken;
-  if (!refreshToken) throw new Error('No refresh token');
+  if (!refreshToken) throw new NoRefreshTokenError();
   const response = await axios.post(`${baseURL}/api/auth/refresh`, { refreshToken });
   const { user, tokens } = response.data.data;
   useAuthStore.getState().setSession(user, tokens);
   return tokens.accessToken as string;
+}
+
+let refreshPromise: Promise<string> | null = null;
+
+/**
+ * Refresh the session, one request at a time. Refresh tokens are single-use,
+ * so a second concurrent refresh (the proactive timer racing a 401 retry)
+ * would present an already-rotated token and be rejected.
+ */
+export function refreshSession(): Promise<string> {
+  refreshPromise ??= doRefresh().finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
 }
 
 api.interceptors.response.use(
@@ -51,14 +80,11 @@ api.interceptors.response.use(
     if (status === 401 && !original._retry && !original.url?.includes('/api/auth/')) {
       original._retry = true;
       try {
-        refreshPromise = refreshPromise ?? doRefresh();
-        const newToken = await refreshPromise;
-        refreshPromise = null;
+        const newToken = await refreshSession();
         original.headers.set('Authorization', `Bearer ${newToken}`);
         return api.request(original);
       } catch (refreshError) {
-        refreshPromise = null;
-        useAuthStore.getState().clearSession();
+        if (isAuthRejection(refreshError)) useAuthStore.getState().clearSession();
         return Promise.reject(refreshError);
       }
     }

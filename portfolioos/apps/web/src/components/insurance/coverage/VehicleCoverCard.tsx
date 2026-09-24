@@ -19,7 +19,7 @@ export function VehicleCoverCard({ check, onAddPolicy }: { check: VehicleCheck; 
         <ul className="divide-y divide-border/60 rounded-lg border border-border/70">
           {check.vehicles.map((v) => (
             <li key={v.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:flex-nowrap">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 basis-40">
                 <Link to={`/vehicles/${v.id}`} className="block truncate text-sm font-medium hover:underline">
                   {v.label}
                   {v.label !== v.registrationNo && <span className="font-normal text-muted-foreground"> · {v.registrationNo}</span>}

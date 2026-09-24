@@ -43,7 +43,7 @@ export function TransactionsPage() {
         title="Transactions"
         description="All buys, sells, dividends, SIPs, and corporate actions"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => setDuplicatesOpen(true)}>
               <CopyCheck className="h-4 w-4" /> Find duplicates
             </Button>

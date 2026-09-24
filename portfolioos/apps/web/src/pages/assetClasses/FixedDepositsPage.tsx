@@ -369,7 +369,7 @@ function FDCard({
           </p>
         )}
 
-        <div className="grid grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
+        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
           <Figure label="Principal">
             <span className="money-digits">{formatINR(holding.totalCost)}</span>
           </Figure>
@@ -494,7 +494,7 @@ function RDCard({
 
         <MaturityTrack accent={accent} pct={0} opened={openDate} maturity={maturity} showBar={false} />
 
-        <div className="grid grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
+        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
           <Figure label="EMI">
             <span className="money-digits">{monthlyRaw ? formatINR(monthlyRaw) : '—'}</span>
           </Figure>

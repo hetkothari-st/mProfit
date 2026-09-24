@@ -44,7 +44,7 @@ export function ComingUpPanel({
           {urgent.map(({ p, meta }) => (
             <li key={p.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 sm:flex-nowrap">
               <InsurerLogo insurer={p.insurer} type={p.type} size={32} maxWidth={96} />
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 basis-40 sm:basis-0">
                 <Link to={`/insurance/${p.id}`} className="block truncate text-sm font-medium hover:underline">
                   {p.insurer} — {policyTitle(p)}
                 </Link>

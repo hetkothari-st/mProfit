@@ -11,6 +11,8 @@
 
 @layer base {
   :root {
+    /* Card inner padding: 16px on phones, 24px from sm up. */
+    --card-pad: 1rem;
     /* Surfaces — near-white, card brighter than bg (mirrors dark mode's lift) */
     --background: 0 0% 98%;
     --foreground: 0 0% 8%;
@@ -585,6 +587,12 @@
    shown via ::before. Use data-fullrow on a <td> to make it span
    the whole card (e.g. an actions cell) without a label.
    ─────────────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+  :root {
+    --card-pad: 1.5rem;
+  }
+}
+
 @media (max-width: 767px) {
   table.rtable thead {
     position: absolute;
@@ -625,6 +633,12 @@
     width: auto;
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+
+  /* Let a cell's content shrink so truncate/wrap works instead of
+     pushing the card wider than the screen. */
+  table.rtable td > * {
+    min-width: 0;
   }
 
   table.rtable td::before {
@@ -725,5 +739,28 @@
   .print-sheet * {
     color: #000 !important;
     border-color: #bbb !important;
+  }
+}
+
+/* Touch screens have no hover, so controls revealed only on group-hover
+   (row edit/delete icons etc.) would stay invisible. Show them there.
+   Limited to interactive elements so hover-only decoration stays hidden. */
+@media (hover: none) {
+  .group-hover\:opacity-100:is(button, a, [role='button']),
+  .group-hover\:opacity-100:has(button, a, [role='button']) {
+    opacity: 1;
+  }
+}
+
+/* iOS Safari zooms the whole page when a field under 16px gets focus.
+   Pin form text to 16px on iOS phones only; desktop and Android keep
+   the designed sizes. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 767px) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 }
