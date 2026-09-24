@@ -275,7 +275,7 @@ function TradeLeg({ leg }: { leg: TradeAction }) {
         <Icon className="h-3 w-3" strokeWidth={2.2} />
         {meta.label}
       </span>
-      <span className="min-w-0 flex-1 text-[13.5px] font-medium text-foreground">
+      <span className="min-w-0 flex-1 basis-32 text-[13.5px] font-medium text-foreground">
         {leg.instrumentName}
       </span>
       <span className="text-[11px] uppercase tracking-kerned text-muted-foreground">

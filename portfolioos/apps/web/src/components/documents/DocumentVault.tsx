@@ -193,10 +193,10 @@ export function DocumentVault({ ownerType, ownerId, title = 'Documents', default
               return (
                 <div
                   key={d.id}
-                  className="flex items-center gap-3 p-3 hover:bg-muted/30"
+                  className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1 p-3 hover:bg-muted/30"
                 >
                   <Icon className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 basis-[calc(100%-2rem)] sm:basis-0">
                     {isRenaming ? (
                       <form
                         onSubmit={(e) => {
@@ -239,7 +239,7 @@ export function DocumentVault({ ownerType, ownerId, title = 'Documents', default
                     )}
                   </div>
                   {!isRenaming && (
-                    <div className="flex flex-wrap items-center gap-1">
+                    <div className="ml-8 sm:ml-0 flex flex-wrap items-center gap-1">
                       {viewable && (
                         <Button
                           size="sm"

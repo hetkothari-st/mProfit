@@ -58,7 +58,7 @@ export function TransactionsPage() {
         <CardContent className="p-4">
           <div className="flex items-center gap-3 pb-3">
             <Select
-              className="max-w-xs"
+              className="min-w-0 max-w-xs"
               value={portfolioFilter}
               onChange={(e) => { setPortfolioFilter(e.target.value); setPage(1); }}
             >
@@ -68,7 +68,7 @@ export function TransactionsPage() {
               ))}
             </Select>
             {data && (
-              <div className="text-sm text-muted-foreground">
+              <div className="shrink-0 whitespace-nowrap text-sm text-muted-foreground">
                 {data.pagination.total} transaction{data.pagination.total === 1 ? '' : 's'}
               </div>
             )}

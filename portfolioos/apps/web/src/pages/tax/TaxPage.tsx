@@ -562,11 +562,11 @@ function SummaryView({
             </tbody>
             <tfoot>
               <tr className="border-t bg-muted/20 font-semibold">
-                <td colSpan={2} className="p-2">Total</td>
-                <td className="p-2 text-right">₹{fmt(data.totalRealisedGain)}</td>
-                <td className="p-2 text-right">—</td>
-                <td className="p-2 text-right">—</td>
-                <td className="p-2 text-right">₹{fmt(data.totalEstimatedTax)}</td>
+                <td colSpan={2} data-fullrow className="p-2">Total</td>
+                <td data-label="Gain" className="p-2 text-right">₹{fmt(data.totalRealisedGain)}</td>
+                <td className="p-2 text-right hidden md:table-cell">—</td>
+                <td className="p-2 text-right hidden md:table-cell">—</td>
+                <td data-label="Tax" className="p-2 text-right">₹{fmt(data.totalEstimatedTax)}</td>
               </tr>
             </tfoot>
           </table>

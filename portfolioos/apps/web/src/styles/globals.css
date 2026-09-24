@@ -541,6 +541,7 @@
 
   table.rtable,
   table.rtable tbody,
+  table.rtable tfoot,
   table.rtable tr,
   table.rtable td {
     display: block;
@@ -572,6 +573,22 @@
      pushing the card wider than the screen. */
   table.rtable td > * {
     min-width: 0;
+  }
+
+  /* Every card gets the same outline, including the last one: desktop
+     row classes like last:border-0 would otherwise strip it. */
+  table.rtable tr:nth-child(n) {
+    border: 1px solid hsl(var(--border));
+  }
+
+  /* Desktop truncation (truncate / max-w-[..]) clips a card cell mid-word
+     with no ellipsis; in card mode let it wrap instead. */
+  table.rtable td {
+    max-width: none;
+  }
+  table.rtable td.truncate {
+    white-space: normal;
+    overflow: visible;
   }
 
   table.rtable td::before {
