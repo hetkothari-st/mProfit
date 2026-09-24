@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { AuthUser } from '@everypaisa/shared';
 import { useAuthStore } from '@/stores/auth.store';
 import { authApi } from '@/api/auth.api';
+import { isAuthRejection, refreshSession } from '@/api/client';
 
 export type SessionState =
   | { status: 'loading'; user: null }
@@ -28,9 +29,13 @@ export function useResolvedSession(): SessionState {
     // 401 cached for an expired token outlived a later sign-in in the same
     // page and wiped the new session the moment it reached a guarded route.
     queryKey: ['auth-me', accessToken],
-    queryFn: () => authApi.me(),
+    queryFn: resumeSession,
     enabled: Boolean(accessToken) && !user,
-    retry: false,
+    // Only the server rejecting the session ends it. A rate limit, a 5xx or a
+    // phone that has lost signal is retried — with backoff, indefinitely —
+    // instead of signing the user out.
+    retry: (_count, err) => !isAuthRejection(err),
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30_000),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -42,14 +47,29 @@ export function useResolvedSession(): SessionState {
     // A token /me rejects is not a token worth keeping — but only while that
     // token is still being resolved. A session that already has its profile
     // (a fresh sign-in sets both) is never discarded on a /me error.
-    if (meQuery.isError && !user) clearSession();
-  }, [meQuery.isError, user, clearSession]);
+    if (meQuery.isError && isAuthRejection(meQuery.error) && !user) clearSession();
+  }, [meQuery.isError, meQuery.error, user, clearSession]);
 
   if (!accessToken) return { status: 'signed-out', user: null };
   if (user) return { status: 'signed-in', user };
-  if (meQuery.isError) return { status: 'signed-out', user: null };
+  if (meQuery.isError && isAuthRejection(meQuery.error)) return { status: 'signed-out', user: null };
   // Holding a token whose profile is on its way, or already fetched and about
   // to be stored by the effect above.
   if (meQuery.data) return { status: 'signed-in', user: meQuery.data };
   return { status: 'loading', user: null };
+}
+
+/**
+ * /me for a stored token. An access token that expired while the tab was
+ * closed is renewed with the refresh token rather than treated as signed out
+ * (the axios interceptor never retries /api/auth/* calls itself).
+ */
+async function resumeSession(): Promise<AuthUser> {
+  try {
+    return await authApi.me();
+  } catch (err) {
+    if (!isAuthRejection(err)) throw err;
+    await refreshSession(); // throws an auth rejection if the refresh token is dead too
+    return useAuthStore.getState().user ?? authApi.me();
+  }
 }
