@@ -182,7 +182,7 @@ export function Figure({
   return (
     <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p title={hint} className={`mt-0.5 truncate text-[15px] tabular-nums ${className ?? 'text-foreground'}`}>
+      <p title={hint} className={`mt-0.5 [overflow-wrap:anywhere] xl:truncate text-[15px] tabular-nums ${className ?? 'text-foreground'}`}>
         {children}
       </p>
     </div>

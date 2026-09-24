@@ -75,7 +75,7 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
           <Menu className="h-5 w-5" strokeWidth={1.7} />
         </button>
         <div className="leading-tight min-w-0">
-          <p className="text-[9.5px] sm:text-[10px] uppercase tracking-kerned text-muted-foreground/80 whitespace-nowrap">
+          <p className="max-[359px]:hidden text-[9.5px] sm:text-[10px] uppercase tracking-kerned text-muted-foreground/80 whitespace-nowrap">
             <span className="sm:hidden">{todayShort}</span>
             <span className="hidden sm:inline">{today}</span>
           </p>

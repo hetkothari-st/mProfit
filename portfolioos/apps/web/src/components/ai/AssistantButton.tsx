@@ -102,7 +102,7 @@ export function AssistantButton() {
   return (
     <>
       {!open && !dismissed && (
-        <div className="fixed z-30 bottom-[9.5rem] md:bottom-[5rem] right-4 sm:right-6 flex flex-col items-end gap-2 pointer-events-none">
+        <div className="fixed z-30 bottom-[calc(9.5rem+env(safe-area-inset-bottom))] md:bottom-[5rem] right-4 sm:right-6 flex flex-col items-end gap-2 pointer-events-none">
           <TeaserBubble
             phase={phase}
             question={currentQuestion.question}
@@ -116,7 +116,7 @@ export function AssistantButton() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-24 md:bottom-6 right-4 sm:right-6 z-30 h-12 w-12 rounded-full bg-accent text-accent-foreground shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center group"
+          className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-6 right-4 sm:right-6 z-30 h-12 w-12 rounded-full bg-accent text-accent-foreground shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center group"
           aria-label="Open AI Assistant"
           title="Ask the AI Assistant"
         >
