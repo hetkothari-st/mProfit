@@ -11,7 +11,7 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { TransactionFormDialog } from './TransactionFormDialog';
 import { DuplicatesDialog } from './DuplicatesDialog';
 import type { TransactionDTO } from '@everypaisa/shared';
-import { formatINR, formatQuantity } from '@everypaisa/shared';
+import { ASSET_CLASS_LABELS, formatINR, formatQuantity } from '@everypaisa/shared';
 
 export function TransactionsPage() {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('');
@@ -86,7 +86,39 @@ export function TransactionsPage() {
               }
             />
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Phones: two lines per transaction instead of a seven-row card
+                with an always-empty Broker line. Tap a row to edit it. */}
+            <ul className="md:hidden -mx-1 divide-y divide-border/50">
+              {rows.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => { setEditing(r); setOpen(true); }}
+                    className="w-full px-1 py-2.5 text-left active:bg-accent/20"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 truncate text-sm font-medium">{r.assetName}</span>
+                      <span className="shrink-0 text-sm font-medium tabular-nums">{formatINR(r.netAmount)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className={`shrink-0 rounded px-1.5 py-px text-[10.5px] font-medium ${txTypeTone(r.transactionType)}`}>
+                          {r.transactionType.replace(/_/g, ' ')}
+                        </span>
+                        <span className="shrink-0 tabular-nums">{r.tradeDate}</span>
+                        <span className="truncate">· {r.symbol ?? r.schemeCode ?? r.isin ?? ASSET_CLASS_LABELS[r.assetClass] ?? r.assetClass}</span>
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        {formatQuantity(r.quantity)} × {formatINR(r.price)}
+                      </span>
+                    </div>
+                    {r.broker && <div className="mt-0.5 text-[11px] text-muted-foreground">{r.broker}</div>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm rtable">
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground uppercase tracking-wide border-b">
@@ -108,15 +140,7 @@ export function TransactionsPage() {
                     >
                       <td data-label="Date" className="py-2 pr-4 tabular-nums">{r.tradeDate}</td>
                       <td data-label="Type" className="py-2 pr-4">
-                        <span
-                          className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${
-                            r.transactionType === 'BUY' || r.transactionType === 'SIP' || r.transactionType === 'SWITCH_IN'
-                              ? 'bg-positive/10 text-positive'
-                              : r.transactionType === 'SELL' || r.transactionType === 'SWITCH_OUT' || r.transactionType === 'REDEMPTION'
-                              ? 'bg-negative/10 text-negative'
-                              : 'bg-muted text-muted-foreground'
-                          }`}
-                        >
+                        <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${txTypeTone(r.transactionType)}`}>
                           {r.transactionType.replace(/_/g, ' ')}
                         </span>
                       </td>
@@ -135,6 +159,7 @@ export function TransactionsPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {data && data.pagination.totalPages > 1 && (
@@ -164,4 +189,10 @@ export function TransactionsPage() {
       <DuplicatesDialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen} />
     </div>
   );
+}
+
+function txTypeTone(type: string): string {
+  if (type === 'BUY' || type === 'SIP' || type === 'SWITCH_IN') return 'bg-positive/10 text-positive';
+  if (type === 'SELL' || type === 'SWITCH_OUT' || type === 'REDEMPTION') return 'bg-negative/10 text-negative';
+  return 'bg-muted text-muted-foreground';
 }
