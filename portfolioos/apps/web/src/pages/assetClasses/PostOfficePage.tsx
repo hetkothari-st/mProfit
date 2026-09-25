@@ -163,13 +163,17 @@ export function PostOfficePage() {
                     <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                       <Landmark className="h-3.5 w-3.5" />
                     </span>
-                    <span className="min-w-0">
+                    {/* Phones stack the full name under the short one; side by
+                        side with the add button it crushed "Time Deposit". */}
+                    <span className="min-w-0 flex flex-col sm:block">
                       <span className="text-sm font-medium text-foreground/80">{cfg.label}</span>
-                      <span className="text-xs text-muted-foreground ml-2 truncate">{cfg.fullName}</span>
+                      <span className="text-xs text-muted-foreground sm:ml-2 truncate">{cfg.fullName}</span>
                     </span>
                   </span>
                   <span className="text-xs text-muted-foreground group-hover:text-foreground flex items-center gap-1 shrink-0">
-                    <Plus className="h-3.5 w-3.5" /> Add first {cfg.label}
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Add first {cfg.label}</span>
+                    <span className="sm:hidden">Add</span>
                   </span>
                 </button>
               );
