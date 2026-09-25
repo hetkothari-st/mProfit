@@ -162,6 +162,8 @@ const RED_SATURATION_CAP = 0.72;
  * beside HDFC's navy or Axis's burgundy, which sit around 30–37%.
  */
 const TILE_MAX_LIGHTNESS = 0.4;
+/** Reds sit deeper still: at 40% a red tile still read loud on a dark page. */
+const RED_TILE_MAX_LIGHTNESS = 0.33;
 
 /**
  * A tile background in the bank's colour that white text can sit on. A light
@@ -175,7 +177,14 @@ export function tileSurface(color: string, accent: string | null): TileSurface {
       : color;
   const [h, s0, l] = rgbToHsl(hexToRgb(base));
   const s = Math.min(s0, isVividRed(h) ? RED_SATURATION_CAP : 0.85);
-  const via = untilContrast(h, s, Math.min(l, TILE_MAX_LIGHTNESS), '#ffffff', 4.8, -1);
+  const via = untilContrast(
+    h,
+    s,
+    Math.min(l, isVividRed(h) ? RED_TILE_MAX_LIGHTNESS : TILE_MAX_LIGHTNESS),
+    '#ffffff',
+    4.8,
+    -1,
+  );
   const lv = rgbToHsl(hexToRgb(via))[2];
   // Reds get a shorter lift to the light end, which otherwise glares again.
   const from = untilContrast(h, s, Math.min(lv + (isVividRed(h) ? 0.04 : 0.08), 1), '#ffffff', 4.5, -1);
