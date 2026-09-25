@@ -196,7 +196,7 @@ export function RealEstateDetailPage() {
                 Rentals tab. Cost basis and capital-gain stay here.
               </p>
             </div>
-            <div className="ml-8 sm:ml-0 flex flex-wrap items-center gap-2 shrink-0">
+            <div className="ml-8 sm:ml-0 min-w-0 basis-[calc(100%-2rem)] sm:basis-auto flex flex-wrap items-center gap-2 sm:shrink-0">
               <Button asChild size="sm" variant="outline">
                 <Link to={`/rental/${property.rentalPropertyId}`}>
                   Open rental record <ExternalLink className="h-3.5 w-3.5" />

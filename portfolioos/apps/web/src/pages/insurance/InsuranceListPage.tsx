@@ -38,12 +38,14 @@ function CoverSummary({ policies }: { policies: InsurancePolicyDTO[] }) {
   ];
   return (
     <Card>
-      <CardContent className="grid grid-cols-1 divide-y px-0 py-0 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      {/* Phones keep all three side by side at a smaller size instead of
+          stacking three tall rows. */}
+      <CardContent className="grid grid-cols-3 divide-x px-0 py-0">
         {figures.map((f) => (
-          <div key={f.label} className="px-5 py-4">
-            <p className="text-sm text-muted-foreground">{f.label}</p>
-            <p className="mt-1 font-display text-3xl tabular-nums">{formatINR(f.value.toString(), { compact: true })}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{f.note}</p>
+          <div key={f.label} className="min-w-0 px-3 py-3 sm:px-5 sm:py-4">
+            <p className="text-[11px] leading-tight text-muted-foreground sm:text-sm">{f.label}</p>
+            <p className="mt-1 font-display text-xl tabular-nums sm:text-3xl">{formatINR(f.value.toString(), { compact: true })}</p>
+            <p className="mt-0.5 text-[10.5px] leading-tight text-muted-foreground sm:text-xs">{f.note}</p>
           </div>
         ))}
       </CardContent>

@@ -461,7 +461,38 @@ export function FamilyMemberPage() {
               </span>
             </div>
           ) : (
-            <div className="-mx-1 overflow-x-auto">
+            <>
+            {/* Phones: a two-line list that fits the width — the 680px table
+                needed sideways scrolling and its class pills were oversized. */}
+            <ul className="md:hidden -mx-1 divide-y divide-border/40">
+              {detail.holdings.map((h) => {
+                const sign = moneySign(h.unrealisedPnL);
+                return (
+                  <li key={`${h.assetClass}:${h.assetKey}`} className="px-1 py-2.5">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 truncate text-[13.5px] font-medium text-foreground">{h.assetName}</span>
+                      <Money className="shrink-0 text-[13.5px] font-medium">{formatINR(h.currentValue)}</Money>
+                    </div>
+                    <div className="mt-0.5 flex items-baseline justify-between gap-3 text-[11.5px]">
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {assetClassLabel(h.assetClass)}
+                        {' · '}
+                        <Money>{formatINR(h.totalCost)}</Money> invested
+                      </span>
+                      <Money
+                        className={cn(
+                          'shrink-0 font-medium',
+                          sign > 0 ? 'text-positive' : sign < 0 ? 'text-negative' : 'text-muted-foreground',
+                        )}
+                      >
+                        {formatINR(h.unrealisedPnL, { showSign: true })}
+                      </Money>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden md:block -mx-1 overflow-x-auto">
               <table className="w-full min-w-[680px] border-collapse text-[13px]">
                 <thead>
                   <tr className="border-b border-border/70">
@@ -513,6 +544,7 @@ export function FamilyMemberPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -836,7 +868,7 @@ function ProtectionBlock({
               </span>{' '}
               active {protection.policyCount === 1 ? 'policy' : 'policies'} · adequacy score{' '}
               <span className="numeric font-medium text-foreground">
-                {protection.coverAdequacyScore}
+                {Math.round(protection.coverAdequacyScore)}
               </span>
               /100
             </>
@@ -1001,7 +1033,7 @@ function AttentionRow({ item }: { item: AttentionItem }) {
           : `in ${item.daysUntil}d`;
 
   return (
-    <li className="flex items-baseline gap-4 px-1 py-3">
+    <li className="flex items-baseline gap-3 sm:gap-4 px-1 py-3">
       <div className="w-[4.75rem] shrink-0 text-right">
         {when ? (
           <>
@@ -1028,9 +1060,16 @@ function AttentionRow({ item }: { item: AttentionItem }) {
           {ATTENTION_TYPE_LABEL[item.type]}
           {item.description && <span> · {item.description}</span>}
         </p>
+        {/* Phones: the amount sits under the text instead of a column that
+            squeezed the title to a word a line. */}
+        {item.amountInr && (
+          <Money className="numeric mt-1 block text-[14px] font-medium text-foreground sm:hidden">
+            {formatINR(item.amountInr)}
+          </Money>
+        )}
       </div>
 
-      <div className="shrink-0 text-right">
+      <div className="hidden shrink-0 text-right sm:block">
         {item.amountInr ? (
           <Money className="numeric text-[14px] font-medium text-foreground">
             {formatINR(item.amountInr)}
