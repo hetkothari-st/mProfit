@@ -149,8 +149,8 @@ export function DocumentVault({ ownerType, ownerId, title = 'Documents', default
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-        <CardTitle>{title}</CardTitle>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+        <CardTitle className="min-w-0">{title}</CardTitle>
         <div>
           <input
             ref={fileInputRef}

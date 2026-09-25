@@ -45,17 +45,18 @@ function AccountTreeNode({ node, depth, onAdd, onDelete }: {
     <div>
       <div
         className="flex items-center gap-1 py-1.5 px-2 rounded hover:bg-muted/50 group"
-        style={{ paddingLeft: `${8 + depth * 20}px` }}
+        // Phones indent each level less (--tree-indent is set on the tree).
+        style={{ paddingLeft: `calc(8px + ${depth} * var(--tree-indent, 20px))` }}
       >
         <button type="button" onClick={() => setOpen((v) => !v)} className="w-4 shrink-0 text-muted-foreground">
           {hasChildren
             ? (open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />)
             : <span className="w-3 inline-block" />}
         </button>
-        <span className="text-xs text-muted-foreground w-11 sm:w-16 shrink-0 font-mono">{node.code}</span>
+        <span className="text-xs text-muted-foreground w-10 sm:w-16 shrink-0 font-mono">{node.code}</span>
         <span className="flex-1 min-w-0 text-sm">{node.name}</span>
         <span className={`text-xs font-medium ${typeColors[node.type]} hidden sm:inline w-20 text-right`}>{node.type}</span>
-        <span className="text-xs tabular-nums text-muted-foreground w-24 sm:w-28 shrink-0 text-right">
+        <span className="text-xs tabular-nums text-muted-foreground sm:w-28 shrink-0 text-right">
           {!toDecimal(node.openingBalance).isZero() ? formatINR(node.openingBalance) : '—'}
         </span>
         <div className="opacity-0 group-hover:opacity-100 flex gap-1 ml-2">
@@ -127,13 +128,13 @@ function ChartOfAccountsTab() {
       </div>
       <Card>
         <CardContent className="p-0 overflow-x-auto">
-          <div className="sm:min-w-[480px]">
+          <div className="sm:min-w-[480px] [--tree-indent:12px] sm:[--tree-indent:20px]">
             <div className="flex items-center gap-1 py-2 px-2 border-b text-xs text-muted-foreground font-medium uppercase tracking-wider">
               <span className="w-4 shrink-0" />
-              <span className="w-11 sm:w-16 shrink-0">Code</span>
+              <span className="w-10 sm:w-16 shrink-0">Code</span>
               <span className="flex-1 min-w-0">Name</span>
               <span className="hidden sm:inline w-20 text-right">Type</span>
-              <span className="w-24 sm:w-28 shrink-0 text-right">
+              <span className="sm:w-28 shrink-0 text-right">
                 <span className="sm:hidden">Opening</span>
                 <span className="hidden sm:inline">Opening Balance</span>
               </span>

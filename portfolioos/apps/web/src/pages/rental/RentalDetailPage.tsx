@@ -319,7 +319,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                   title="Mark as received"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Received</span>
+                  <span className="ml-1">Received</span>
                 </Button>
                 <Button
                   size="sm"
@@ -330,7 +330,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                   title="Skip this month"
                 >
                   <SkipForward className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Skip</span>
+                  <span className="ml-1">Skip</span>
                 </Button>
               </>
             )}
@@ -344,7 +344,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                 title="Undo auto-match"
               >
                 <Undo2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Undo</span>
+                <span className="ml-1">Undo</span>
               </Button>
             )}
             {isReceived && !receipt.autoMatchedFromEventId && (
@@ -357,7 +357,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                 title="Undo mark-received (also deletes cashflow)"
               >
                 <Undo2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Undo</span>
+                <span className="ml-1">Undo</span>
               </Button>
             )}
             {isSkipped && (
@@ -370,7 +370,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                 title="Undo skip"
               >
                 <Undo2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Undo</span>
+                <span className="ml-1">Undo</span>
               </Button>
             )}
           </div>

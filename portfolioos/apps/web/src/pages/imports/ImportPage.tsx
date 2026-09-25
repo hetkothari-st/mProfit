@@ -321,6 +321,8 @@ export function ImportPage() {
                               title="Download source file"
                             >
                               <Download className="h-4 w-4" />
+                              {/* Phones: no hover tooltip, so say what it does. */}
+                              <span className="sm:hidden">Download</span>
                             </Button>
                             <Button
                               variant="ghost"
@@ -330,6 +332,7 @@ export function ImportPage() {
                               title="Reprocess"
                             >
                               <RefreshCw className="h-3 w-3" />
+                              <span className="sm:hidden">Reprocess</span>
                             </Button>
                             <Button
                               variant="ghost"
@@ -340,8 +343,10 @@ export function ImportPage() {
                                   removeMutation.mutate(j.id);
                                 }
                               }}
+                              title="Delete"
                             >
                               <Trash2 className="h-3 w-3 text-negative" />
+                              <span className="sm:hidden text-negative">Delete</span>
                             </Button>
                           </div>
                         </td>
