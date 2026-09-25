@@ -19,10 +19,10 @@ import { useReportSubject } from './useReportSubject';
 
 type ReportTheme = 'light' | 'dark';
 
-export type ReportType = 'holdings' | 'dashboard' | 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental';
+export type ReportType = 'holdings' | 'dashboard' | 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental' | 'real-estate';
 
-type SectionReportType = 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental';
-const SECTION_TYPES: SectionReportType[] = ['vehicles', 'insurance', 'loans', 'credit-cards', 'rental'];
+type SectionReportType = 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental' | 'real-estate';
+const SECTION_TYPES: SectionReportType[] = ['vehicles', 'insurance', 'loans', 'credit-cards', 'rental', 'real-estate'];
 
 interface Props {
   /** Which report endpoint to hit */
