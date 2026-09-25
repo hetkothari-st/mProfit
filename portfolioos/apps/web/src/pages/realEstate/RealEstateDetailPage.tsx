@@ -183,9 +183,11 @@ export function RealEstateDetailPage() {
       {/* Permanent banner: this property is mirrored in the Rentals module */}
       {property.rentalPropertyId && (
         <Card className="mb-6 border-accent/40 bg-accent/5">
-          <CardContent className="p-4 flex items-start gap-3">
+          <CardContent className="p-4 flex flex-wrap sm:flex-nowrap items-start gap-x-3 gap-y-3">
             <KeyRound className="h-5 w-5 text-accent shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
+            {/* On a phone the text takes the full row and the actions sit
+                under it; beside them it was squeezed to a few words a line. */}
+            <div className="flex-1 min-w-0 basis-[calc(100%-2rem)] sm:basis-0">
               <p className="text-sm font-medium">
                 This property is also tracked in Rentals.
               </p>
@@ -194,7 +196,7 @@ export function RealEstateDetailPage() {
                 Rentals tab. Cost basis and capital-gain stay here.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="ml-8 sm:ml-0 flex flex-wrap items-center gap-2 shrink-0">
               <Button asChild size="sm" variant="outline">
                 <Link to={`/rental/${property.rentalPropertyId}`}>
                   Open rental record <ExternalLink className="h-3.5 w-3.5" />
@@ -207,8 +209,11 @@ export function RealEstateDetailPage() {
                   onClick={() => unlinkMutation.mutate()}
                   disabled={unlinkMutation.isPending}
                   title="Remove from rentals (only if no tenancies/expenses exist)"
+                  aria-label="Remove from rentals"
                 >
                   <Undo2 className="h-3.5 w-3.5" />
+                  {/* Touch screens never show the title tooltip. */}
+                  <span className="sm:hidden">Remove from rentals</span>
                 </Button>
               )}
             </div>
