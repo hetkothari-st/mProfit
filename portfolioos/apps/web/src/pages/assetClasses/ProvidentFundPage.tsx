@@ -93,7 +93,7 @@ function AutoFetchSection() {
           <Button size="sm" variant="ghost" asChild>
             <Link to="/provident-fund/extension" className="flex items-center gap-1">
               <PlugZap className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Browser extension</span>
+              <span>Browser extension</span>
             </Link>
           </Button>
           <Button
@@ -192,6 +192,7 @@ function AutoFetchSection() {
                       title="Upload passbook PDF"
                     >
                       <Upload className="h-3.5 w-3.5" />
+                      <span className="ml-1">Passbook</span>
                     </Button>
                     <Button
                       size="sm"
@@ -200,7 +201,7 @@ function AutoFetchSection() {
                       title="Fetch from EPFO portal"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
-                      <span className="ml-1 hidden sm:inline">Refresh</span>
+                      <span className="ml-1">Refresh</span>
                     </Button>
                   </div>
                 </CardContent>
