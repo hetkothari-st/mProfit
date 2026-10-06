@@ -236,6 +236,19 @@ export function startMfScoreJob(): void {
   // Ranking runs ~150 universes in 7-universe slices and finishes well inside
   // an hour; 90 minutes leaves headroom. Starting earlier would not error, it
   // would silently score against a partial set of ranks, which is worse.
-  cron.schedule('0 2 15 * *', () => void runMfScoreJob(), { timezone: TZ });
-  logger.info('[cron] scheduled: mf score @02:00 IST on the 15th');
+  //
+  // The scheduled run scores the month that ENDED, not the 15th: a mid-month
+  // asOf rates nothing (mfAsOfGuard). It recomputes metrics and peer ranks for
+  // that month-end first, in order. 03:30 so the nightly peer-rank run (00:30,
+  // well under an hour) has finished and released its lock. Imported lazily
+  // because the chain imports this module.
+  cron.schedule(
+    '30 3 15 * *',
+    () =>
+      void import('./mfMonthlyRatingChain.js')
+        .then((m) => m.runMonthlyRatingChain())
+        .catch((err: unknown) => logger.error({ err }, '[cron] mf monthly rating chain failed')),
+    { timezone: TZ },
+  );
+  logger.info('[cron] scheduled: mf monthly rating chain @03:30 IST on the 15th (previous month-end)');
 }
