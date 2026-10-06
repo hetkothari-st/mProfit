@@ -21,6 +21,7 @@
 
 import { request } from 'undici';
 import { logger } from '../lib/logger.js';
+import { followRedirects } from '../lib/httpDispatcher.js';
 
 const HISTORY_URL = 'https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx';
 
@@ -113,7 +114,7 @@ export async function fetchAmfiNavHistory(from: Date, to: Date): Promise<string>
   logger.info({ url }, '[amfiHistory] fetching');
   const res = await request(url, {
     method: 'GET',
-    maxRedirections: 5,
+    dispatcher: followRedirects,
     headers: {
       'user-agent': 'Mozilla/5.0 (compatible; EveryPaisa/0.3)',
       accept: 'text/plain,*/*',

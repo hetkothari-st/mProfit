@@ -6,6 +6,7 @@ import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { runFeedWithCanary } from './feedCanary.js';
 import type { MFCategory } from '@prisma/client';
+import { followRedirects } from '../lib/httpDispatcher.js';
 
 export interface AmfiNavRow {
   schemeCode: string;
@@ -58,7 +59,7 @@ function parseDate(dateStr: string): Date | null {
 export async function fetchAmfiNavText(): Promise<string> {
   const res = await request(env.AMFI_NAV_URL, {
     method: 'GET',
-    maxRedirections: 5,
+    dispatcher: followRedirects,
     headers: {
       'user-agent': 'Mozilla/5.0 (compatible; EveryPaisa/0.3)',
       accept: 'text/plain,*/*',

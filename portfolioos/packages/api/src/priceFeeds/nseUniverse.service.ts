@@ -2,6 +2,7 @@ import { request } from 'undici';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import type { Exchange } from '@prisma/client';
+import { followRedirects } from '../lib/httpDispatcher.js';
 
 const NSE_EQUITY_LIST_URL = 'https://archives.nseindia.com/content/equities/EQUITY_L.csv';
 const NSE_ETF_LIST_URL = 'https://archives.nseindia.com/content/equities/eq_etfseclist.csv';
@@ -26,7 +27,7 @@ const BROWSER_HEADERS = {
 };
 
 async function fetchCsv(url: string): Promise<string> {
-  const res = await request(url, { method: 'GET', headers: BROWSER_HEADERS, maxRedirections: 5 });
+  const res = await request(url, { method: 'GET', headers: BROWSER_HEADERS, dispatcher: followRedirects });
   if (res.statusCode < 200 || res.statusCode >= 300) {
     throw new Error(`NSE fetch failed ${url}: ${res.statusCode}`);
   }

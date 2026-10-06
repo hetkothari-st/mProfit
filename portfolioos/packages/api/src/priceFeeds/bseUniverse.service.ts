@@ -2,6 +2,7 @@ import { request } from 'undici';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import type { Exchange } from '@prisma/client';
+import { followRedirects } from '../lib/httpDispatcher.js';
 
 const BSE_EQUITY_LIST_URL = 'https://api.bseindia.com/BseIndiaAPI/api/ListOfScripCode/w';
 
@@ -27,7 +28,7 @@ interface BseScrip {
 
 export async function fetchBseScripList(): Promise<BseScrip[]> {
   try {
-    const res = await request(BSE_EQUITY_LIST_URL, { method: 'GET', headers: BROWSER_HEADERS, maxRedirections: 5 });
+    const res = await request(BSE_EQUITY_LIST_URL, { method: 'GET', headers: BROWSER_HEADERS, dispatcher: followRedirects });
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw new Error(`BSE scrip list fetch failed: ${res.statusCode}`);
     }

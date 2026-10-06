@@ -45,7 +45,7 @@ import { goalsRouter } from './goals.routes.js';
 import { advisorRouter } from './advisor.routes.js';
 import { incomeRouter } from './income.routes.js';
 import { intelligenceRouter } from './intelligence.routes.js';
-import { finfactorRouter, finfactorWebhookRouter } from './finfactor.routes.js';
+import { mountFinfactorRoutes } from './finfactor.routes.js';
 import { caRouter, professionalAccessRouter, professionalInviteRouter } from './ca.routes.js';
 import { familiesRouter } from './families.routes.js';
 import { managedProfilesRouter } from './managedProfiles.routes.js';
@@ -102,8 +102,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/advisor', advisorRouter);
   app.use('/api/income', incomeRouter);
   app.use('/api/intelligence', intelligenceRouter);
-  app.use('/api/integrations/finfactor', finfactorRouter);
-  app.use('/api/integrations/finfactor/webhook', finfactorWebhookRouter);
+  mountFinfactorRoutes(app);
   if (env.ENABLE_FAMILY === 'true') {
     app.use('/api/families', familiesRouter);
     app.use('/api/managed-profiles', managedProfilesRouter);

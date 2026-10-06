@@ -3,6 +3,7 @@ import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import type { CorporateActionType } from '@prisma/client';
+import { followRedirects } from '../lib/httpDispatcher.js';
 
 const NSE_CA_URL = 'https://archives.nseindia.com/content/equities/corporate_actions.csv';
 
@@ -169,7 +170,7 @@ export async function loadNseCorporateActions(): Promise<CorpActionLoadResult> {
   logger.info('[CA] fetching NSE corporate actions CSV');
   let text: string;
   try {
-    const res = await request(NSE_CA_URL, { method: 'GET', headers: BROWSER_HEADERS, maxRedirections: 5 });
+    const res = await request(NSE_CA_URL, { method: 'GET', headers: BROWSER_HEADERS, dispatcher: followRedirects });
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw new Error(`NSE CA fetch failed: ${res.statusCode}`);
     }
