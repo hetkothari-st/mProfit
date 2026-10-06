@@ -84,7 +84,7 @@ export function LoansOverview({
         <div className="mt-3 truncate font-display text-[30px] leading-none tabular-nums">
           {side.headline}
         </div>
-        <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-border/60 pt-3">
+        <dl className="mt-4 grid grid-cols-2 min-[400px]:grid-cols-3 gap-3 border-t border-border/60 pt-3">
           {side.lines.map((l) => (
             <div key={l.label} className="min-w-0">
               <dt className="truncate text-[11px] text-muted-foreground">{l.label}</dt>

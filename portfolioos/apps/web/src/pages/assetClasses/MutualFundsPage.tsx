@@ -343,7 +343,7 @@ export function MutualFundsPage() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                         onClick={() => setConfirmDeleteImportId(j.id)}
                         title="Remove from list"
                         disabled={isRunning}
@@ -428,8 +428,12 @@ export function MutualFundsPage() {
                   {mfs.map((h: HoldingRow & { portfolioName: string; portfolioId: string }) => (
                     <tr key={h.id} className="border-b last:border-0 hover:bg-accent/20">
                       <td data-label="Scheme" className="py-2 pr-4">
-                        <div className="font-medium truncate max-w-sm">{h.assetName}</div>
-                        <div className="text-xs text-muted-foreground">{h.symbol ?? h.isin ?? ''}</div>
+                        {/* One wrapper so the phone card stacks the ISIN under
+                            the name instead of squeezing it alongside. */}
+                        <div className="min-w-0">
+                          <div className="font-medium truncate max-w-sm">{h.assetName}</div>
+                          <div className="text-xs text-muted-foreground">{h.symbol ?? h.isin ?? ''}</div>
+                        </div>
                       </td>
                       <td data-label="Units" className="py-2 pr-4 text-right tabular-nums">{h.quantity}</td>
                       <td data-label="Avg cost" className="py-2 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
@@ -484,8 +488,10 @@ export function MutualFundsPage() {
                     <tr key={txn.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                       <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">{txn.tradeDate}</td>
                       <td data-label="Scheme" className="px-4 py-3">
-                        <p className="font-medium truncate max-w-[180px]">{txn.assetName ?? '—'}</p>
-                        {txn.isin && <p className="text-xs text-muted-foreground">{txn.isin}</p>}
+                        <div className="min-w-0">
+                          <p className="font-medium truncate max-w-[180px]">{txn.assetName ?? '—'}</p>
+                          {txn.isin && <p className="text-xs text-muted-foreground">{txn.isin}</p>}
+                        </div>
                       </td>
                       <td data-label="Type" className="px-4 py-3 hidden sm:table-cell">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${['BUY','DEPOSIT','DIVIDEND_PAYOUT','DIVIDEND_REINVEST','SIP','BONUS'].includes(txn.transactionType) ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
@@ -506,10 +512,10 @@ export function MutualFundsPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-1 justify-end">
-                            <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(txn)} title="Edit">
+                            <Button type="button" variant="ghost" size="sm" className="tap-expand h-7 w-7 p-0" onClick={() => openEdit(txn)} title="Edit">
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => setConfirmDeleteId(txn.id)} title="Delete">
+                            <Button type="button" variant="ghost" size="sm" className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => setConfirmDeleteId(txn.id)} title="Delete">
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                             </Button>
                           </div>

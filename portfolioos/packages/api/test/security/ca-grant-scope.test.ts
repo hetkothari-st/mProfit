@@ -186,6 +186,82 @@ describe('a grant narrowed by asset class', () => {
     );
     expect(txns.map((t) => t.assetClass)).toEqual(['EQUITY']);
   });
+
+  // Holdings and capital gains feed the CA's report downloads, which run under
+  // the CA's own identity and so rely on these policies alone. They used to
+  // check only the portfolio, so a CA limited to one class could download the
+  // client's full holdings and gains.
+  it('hides holdings, capital gains and cash flows outside the grant', async () => {
+    const client = await clientWithSpread('scope-achg-client');
+    const ca = await person('scope-achg-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await runAsSystem(async () => {
+      const hold = (portfolioId: string, assetClass: 'EQUITY' | 'MUTUAL_FUND', key: string) =>
+        prisma.holdingProjection.create({
+          data: {
+            portfolioId, assetKey: key, assetClass, assetName: key, sourceTxCount: 1,
+            quantity: '1', avgCostPrice: '100', totalCost: '100', currentValue: '100', unrealisedPnL: '0',
+          },
+        });
+      await hold(client.portfolioId, 'EQUITY', 'name:Infosys');
+      await hold(client.secondPortfolioId, 'MUTUAL_FUND', 'name:PPFC');
+      const txns = await prisma.transaction.findMany({
+        where: { portfolio: { userId: client.userId } },
+        select: { id: true, portfolioId: true, assetClass: true },
+      });
+      for (const t of txns) {
+        await prisma.capitalGain.create({
+          data: {
+            portfolioId: t.portfolioId, sellTransactionId: t.id, buyTransactionId: t.id,
+            assetClass: t.assetClass, assetName: 'x', buyDate: new Date('2024-01-01'),
+            sellDate: new Date('2025-06-01'), quantity: '1', buyPrice: '100', sellPrice: '120',
+            buyAmount: '100', sellAmount: '120', capitalGainType: 'LONG_TERM',
+            gainLoss: '20', taxableGain: '20', financialYear: '2025-26',
+          },
+        });
+      }
+      await prisma.cashFlow.create({
+        data: { portfolioId: client.portfolioId, date: new Date('2025-06-01'), type: 'INFLOW', amount: '500' },
+      });
+    });
+    cleanups.push(() =>
+      runAsSystem(async () => {
+        const ids = [client.portfolioId, client.secondPortfolioId];
+        await prisma.capitalGain.deleteMany({ where: { portfolioId: { in: ids } } });
+        await prisma.holdingProjection.deleteMany({ where: { portfolioId: { in: ids } } });
+        await prisma.cashFlow.deleteMany({ where: { portfolioId: { in: ids } } });
+      }),
+    );
+
+    const readAsCa = () =>
+      runAsUser(ca.userId, () =>
+        Promise.all([
+          prisma.holdingProjection.findMany({ where: { portfolio: { userId: client.userId } } }),
+          prisma.capitalGain.findMany({
+            where: { portfolioId: { in: [client.portfolioId, client.secondPortfolioId] } },
+          }),
+          prisma.cashFlow.findMany({ where: { portfolio: { userId: client.userId } } }),
+        ]),
+      );
+
+    // Unnarrowed, the CA sees everything — proves the rows are reachable.
+    const [allH, allG, allF] = await readAsCa();
+    expect(allH).toHaveLength(2);
+    expect(allG).toHaveLength(2);
+    expect(allF).toHaveLength(1);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { assetClasses: ['MUTUAL_FUND'] }),
+    );
+
+    const [holdings, gains, flows] = await readAsCa();
+    expect(holdings.map((h) => h.assetClass)).toEqual(['MUTUAL_FUND']);
+    expect(gains.map((c) => c.assetClass)).toEqual(['MUTUAL_FUND']);
+    // Cash flows carry no asset class, so a class-narrowed grant cannot say
+    // which of them it covers; it withholds them rather than guess.
+    expect(flows).toHaveLength(0);
+  });
 });
 
 describe('the access window', () => {
@@ -207,6 +283,26 @@ describe('the access window', () => {
     await expect(runAsUser(ca.userId, () => getCaScope(ca.userId, g.id))).rejects.toThrow(
       /ended on 2020-01-01/,
     );
+  });
+
+  // "Until <date>" means through that whole day in India. The window used to
+  // close at 00:00 UTC — 05:30 IST on the last day — and open at 05:30 IST on
+  // the first.
+  it('stays open for the whole of its first and last day (IST)', async () => {
+    const client = await clientWithSpread('scope-lastday-client');
+    const ca = await person('scope-lastday-ca');
+    const g = await grant(ca.userId, client.userId);
+    const istToday = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { accessFrom: istToday, accessUntil: istToday }),
+    );
+
+    const portfolios = await runAsUser(ca.userId, () =>
+      prisma.portfolio.findMany({ where: { userId: client.userId } }),
+    );
+    expect(portfolios.length).toBeGreaterThan(0);
+    await expect(runAsUser(ca.userId, () => getCaScope(ca.userId, g.id))).resolves.toBeTruthy();
   });
 
   it('refuses a window that ends before it starts', async () => {

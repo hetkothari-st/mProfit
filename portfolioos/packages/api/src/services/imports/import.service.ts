@@ -1,5 +1,5 @@
 import { readFile, unlink } from 'node:fs/promises';
-import type { ImportType } from '@prisma/client';
+import type { AssetClass, ImportType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { NotFoundError, ForbiddenError } from '../../lib/errors.js';
@@ -26,6 +26,8 @@ export interface CreateImportJobInput {
   /** When this import was promoted from a Gmail discovered doc, the
    *  doc's id so the worker can mirror the final status back. */
   gmailDocId?: string | null;
+  /** A class-limited CA's grant: the asset classes this job may write. */
+  caAllowedAssetClasses?: AssetClass[] | null;
 }
 
 export async function createImportJob(input: CreateImportJobInput) {
@@ -80,6 +82,7 @@ export async function createImportJob(input: CreateImportJobInput) {
         contentHash: input.contentHash ?? null,
         gmailMessageId: input.gmailMessageId ?? null,
         gmailDocId: input.gmailDocId ?? null,
+        ...(input.caAllowedAssetClasses ? { caAllowedAssetClasses: input.caAllowedAssetClasses } : {}),
       },
     });
 
@@ -297,8 +300,25 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
     };
   }
 
+  // A class-limited CA's upload is parsed under the client's identity, so
+  // RLS would let it write any class (F6). Hold it to the grant here.
+  const allowedClasses = Array.isArray(job.caAllowedAssetClasses)
+    ? new Set(job.caAllowedAssetClasses as string[])
+    : null;
+
   for (const [i, event] of events.entries()) {
     try {
+      if (allowedClasses) {
+        const cls = projectTransactionEvent(event, portfolioId).assetClass;
+        if (!allowedClasses.has(cls)) {
+          failed++;
+          errors.push({
+            row: i + 1,
+            reason: `Asset class ${cls} is outside what your professional may edit for this client.`,
+          });
+          continue;
+        }
+      }
       // Per §6.2 preference order: adapter-supplied hash → broker natural
       // key (derived inside createTransaction) → file+row positional
       // fallback. For adapters like CAS/CSV that don't emit orderNo+tradeNo,

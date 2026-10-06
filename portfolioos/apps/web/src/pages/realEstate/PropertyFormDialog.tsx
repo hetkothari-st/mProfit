@@ -476,7 +476,7 @@ export function PropertyFormDialog({ open, onOpenChange, initial }: Props) {
                 <Label>Maintenance amount (₹)</Label>
                 <Input value={form.monthlyMaintenance ?? ''} onChange={(e) => set('monthlyMaintenance', e.target.value)} />
               </div>
-              <div>
+              <div className="col-span-2 md:col-span-1">
                 <Label>Frequency</Label>
                 <select
                   className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"

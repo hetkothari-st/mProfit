@@ -330,6 +330,12 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
     .plus(d(watch('sebiCharges')))
     .plus(d(watch('otherCharges')));
   const txType = watch('transactionType');
+  // Editing a row whose type isn't offered for new entries (DEPOSIT, MATURITY,
+  // OPENING_BALANCE…) must still show that type, or the select renders blank.
+  const typeOptions =
+    initial && !TXN_TYPE_OPTIONS.includes(initial.transactionType)
+      ? [...TXN_TYPE_OPTIONS, initial.transactionType]
+      : TXN_TYPE_OPTIONS;
   const isBuyish = ['BUY', 'SWITCH_IN', 'SIP', 'DIVIDEND_REINVEST', 'RIGHTS_ISSUE'].includes(txType);
   const netD = isBuyish ? grossD.plus(chargesD) : grossD.minus(chargesD);
 
@@ -395,7 +401,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
             <div>
               <Label htmlFor="transactionType">Type</Label>
               <Select id="transactionType" className="mt-1" {...register('transactionType')}>
-                {TXN_TYPE_OPTIONS.map((t) => (
+                {typeOptions.map((t) => (
                   <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
                 ))}
               </Select>
@@ -538,16 +544,16 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
             <Textarea id="narration" rows={2} className="mt-1" {...register('narration')} />
           </div>
 
-          <div className="rounded-md bg-muted/40 px-3 py-2 text-sm grid grid-cols-3 sm:grid-cols-3 gap-2">
-            <div>
+          <div className="rounded-md bg-muted/40 px-3 py-2 text-sm grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-2">
+            <div className="flex items-baseline justify-between gap-2 sm:block">
               <div className="text-xs text-muted-foreground">Gross</div>
               <div className="tabular-nums font-medium">{formatINR(grossD.toFixed(4))}</div>
             </div>
-            <div>
+            <div className="flex items-baseline justify-between gap-2 sm:block">
               <div className="text-xs text-muted-foreground">Charges</div>
               <div className="tabular-nums font-medium">{formatINR(chargesD.toFixed(4))}</div>
             </div>
-            <div>
+            <div className="flex items-baseline justify-between gap-2 sm:block">
               <div className="text-xs text-muted-foreground">Net {isBuyish ? '(outflow)' : '(inflow)'}</div>
               <div className="tabular-nums font-semibold">{formatINR(netD.toFixed(4))}</div>
             </div>

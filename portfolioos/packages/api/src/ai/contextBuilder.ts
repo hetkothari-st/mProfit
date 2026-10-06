@@ -38,6 +38,7 @@ import {
 import { listPolicies } from '../services/insurance.service.js';
 import { Decimal, HELP_TOPICS, matchHelpTopics } from '@everypaisa/shared';
 import { QueryIntent, type ClassifiedQuery } from './queryClassifier.js';
+import { effectivePlan } from '../lib/effectivePlan.js';
 
 export interface AssistantContext {
   queryIntent: string;
@@ -86,6 +87,7 @@ async function buildUserProfile(
       email: true,
       dob: true,
       plan: true,
+      planExpiresAt: true,
       role: true,
     },
   });
@@ -119,7 +121,7 @@ async function buildUserProfile(
     fullName: user?.name ?? null,
     email: user?.email ?? null,
     age,
-    subscriptionTier: user?.plan ?? 'FREE',
+    subscriptionTier: user ? effectivePlan(user) : 'FREE',
     userRole: user?.role ?? 'INVESTOR',
     totalNetWorth: netWorth,
     totalLiabilities: liabilities,
@@ -313,14 +315,19 @@ async function buildTaxData(callerId: string, query: ClassifiedQuery): Promise<R
 
 // ─── Net worth compare ───────────────────────────────────────────────
 
-async function buildNetWorthData(
+export async function buildNetWorthData(
   callerId: string,
   scope: EffectiveScope,
 ): Promise<Record<string, unknown>> {
   const nw = await getDashboardNetWorthForScope(callerId, {
     familyId: scope.familyId ?? undefined,
   }).catch(() => null);
-  const snapshot = await loadSnapshot(callerId);
+  // The history below is the caller's own. In a family view `current` is the
+  // whole family's, so comparing the two read as growth that never happened
+  // (F2). There is no family history on the same basis, so family view
+  // reports the current figure and no growth.
+  const familyView = Boolean(scope.familyId);
+  const snapshot = familyView ? null : await loadSnapshot(callerId);
   const valueLine = snapshot?.portfolioValueLine ?? [];
   const monthsAgo = (n: number) => {
     if (valueLine.length === 0) return null;
@@ -356,6 +363,12 @@ async function buildNetWorthData(
       '12m': changeOf(at12m),
     },
     historyMonthly: valueLine.slice(-24).map((v) => ({ date: v.date, value: v.value })),
+    ...(familyView
+      ? {
+          historyNote:
+            'Family view: only the current family net worth is known. There is no family history to compare against, so do not state growth or change over time.',
+        }
+      : {}),
   };
 }
 

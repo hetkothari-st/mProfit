@@ -28,7 +28,7 @@
 import type { Request, Response } from 'express';
 import fs from 'node:fs';
 import { ok, created, noContent } from '../lib/response.js';
-import { BadRequestError, NotFoundError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { getCaScope, assertCaMayEdit, type CaScope } from '../services/ca/caAccess.service.js';
@@ -146,6 +146,14 @@ async function ensureDefaultPortfolio(scope: CaScope, req: Request) {
     orderBy: { createdAt: 'asc' },
   });
   if (existing) return existing;
+  // RLS showed the CA none of the client's portfolios. With a portfolio-
+  // narrowed grant that means none are in scope — creating one would put a
+  // book the client never shared into the CA's reach (F6).
+  if (scope.allowedPortfolioIds !== null) {
+    throw new ForbiddenError(
+      'None of the portfolios this client shared with you can take these entries. Ask the client to share one.',
+    );
+  }
 
   return runInTransaction(async (tx) => {
     const portfolio = await tx.portfolio.create({
@@ -776,6 +784,8 @@ export async function caCreateImport(req: Request, res: Response) {
     filePath: req.file.path,
     broker: body.broker ?? null,
     pdfPassword: body.password ?? null,
+    // The worker writes as the client, so it must be told the grant's limit.
+    caAllowedAssetClasses: scope.allowedAssetClasses,
   });
 
   // Not transactional with the job insert for the same reason

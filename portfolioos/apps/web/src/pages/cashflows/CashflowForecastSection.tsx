@@ -142,7 +142,7 @@ export function CashflowForecastSection() {
                     </div>
                   </div>
                   <div
-                    className={`tabular-nums font-medium ${
+                    className={`shrink-0 whitespace-nowrap tabular-nums font-medium ${
                       e.direction === 'INFLOW' ? 'text-positive' : 'text-negative'
                     }`}
                   >

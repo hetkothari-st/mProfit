@@ -347,7 +347,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Coins className="h-5 w-5 text-muted-foreground" />
@@ -425,7 +425,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
           )}
 
           {/* Name + ISIN */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Name / Description <span className="text-destructive">*</span></Label>
               <Input {...register('assetName')}

@@ -104,7 +104,7 @@ function EditNomineesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nominees</DialogTitle>
         </DialogHeader>
@@ -121,8 +121,8 @@ function EditNomineesDialog({
           {rows.map((r, i) => (
             <fieldset key={i} className="space-y-3 rounded-lg border p-3">
               <legend className="sr-only">Nominee {i + 1}</legend>
-              <div className="grid gap-3 sm:grid-cols-[1fr_9rem_6rem_auto]">
-                <div>
+              <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_auto] gap-3 sm:grid-cols-[1fr_9rem_6rem_auto]">
+                <div className="col-span-3 sm:col-span-1">
                   <Label htmlFor={`nominee-name-${i}`}>Name</Label>
                   <Input id={`nominee-name-${i}`} value={r.name} onChange={(e) => set(i, { name: e.target.value })} />
                 </div>

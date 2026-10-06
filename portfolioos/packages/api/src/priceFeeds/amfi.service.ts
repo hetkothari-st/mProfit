@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
+import { runFeedWithCanary } from './feedCanary.js';
 import type { MFCategory } from '@prisma/client';
 
 export interface AmfiNavRow {
@@ -273,6 +274,29 @@ export async function loadAmfiNavToDb(): Promise<AmfiLoadResult> {
   };
   logger.info(result, 'AMFI NAV load complete');
   return result;
+}
+
+/**
+ * Load AMFI's NAV file, judged.
+ *
+ * The plain loader is the primitive; this is what the rest of the app calls,
+ * because the canary belongs at the source rather than at four call sites that
+ * each have to remember it. The nightly job remembered. The startup sync, the
+ * "sync everything" route and the admin refresh button did not — so a run that
+ * parsed the whole file and imported nothing stayed silent through any of
+ * those three, which is exactly the failure that carried funds at stale NAVs
+ * for a month.
+ *
+ * Trips throw `FeedCanaryError`. Every caller either logs it (startup, master
+ * sync) or returns it (the admin endpoint); none of them can mistake it for a
+ * success.
+ */
+export async function syncAmfiNav(): Promise<AmfiLoadResult> {
+  return runFeedWithCanary('amfi_nav', () => loadAmfiNavToDb(), (r) => ({
+    rowsParsed: r.rowsParsed,
+    rowsImported: r.rowsImported,
+    parseFailures: r.parseFailures,
+  }));
 }
 
 function randomId(): string {

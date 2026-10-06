@@ -11,6 +11,8 @@
 
 @layer base {
   :root {
+    /* Card inner padding: 16px on phones, 24px from sm up. */
+    --card-pad: 1rem;
     /* Surfaces — near-white, card brighter than bg (mirrors dark mode's lift) */
     --background: 0 0% 98%;
     --foreground: 0 0% 8%;
@@ -45,6 +47,17 @@
     --negative: 4 75% 45%;
     --warning: 35 85% 38%;
     --brand-sage: 135 10% 36%;            /* logo "Paisa" sage, deepened to read on white */
+
+    /* Family tree — one hue per line of descent. Deep enough that a label
+       and a hairline both hold up on white; the dark theme lifts them. */
+    --tree-1: 199 90% 34%;                /* cyan */
+    --tree-2: 28 88% 40%;                 /* amber */
+    --tree-3: 265 70% 52%;                /* violet */
+    --tree-4: 158 62% 30%;                /* emerald */
+    --tree-5: 342 68% 44%;                /* rose */
+    --tree-6: 218 80% 46%;                /* blue */
+    --tree-spouse: 340 62% 48%;           /* the dashed married link */
+    --tree-line: 0 0% 72%;                /* a line with no branch of its own */
 
     --sidebar: 0 0% 97%;
     --sidebar-foreground: 0 0% 10%;
@@ -102,6 +115,16 @@
     --negative: 4 85% 62%;
     --warning: 40 90% 60%;
     --brand-sage: 115 7% 63%;             /* logo "Paisa" sage, as drawn (#9CA89B) */
+
+    /* Family tree — the same six lines, lifted for a near-black board. */
+    --tree-1: 190 72% 58%;                /* cyan */
+    --tree-2: 32 92% 62%;                 /* amber */
+    --tree-3: 268 72% 70%;                /* violet */
+    --tree-4: 155 60% 55%;                /* emerald */
+    --tree-5: 345 78% 66%;                /* rose */
+    --tree-6: 215 85% 68%;                /* blue */
+    --tree-spouse: 340 65% 70%;           /* the dashed married link */
+    --tree-line: 0 0% 42%;                /* a line with no branch of its own */
 
     /* Sidebar — same near-black family, no separate warm tint */
     --sidebar: 0 0% 6%;
@@ -497,6 +520,12 @@
    shown via ::before. Use data-fullrow on a <td> to make it span
    the whole card (e.g. an actions cell) without a label.
    ─────────────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+  :root {
+    --card-pad: 1.5rem;
+  }
+}
+
 @media (max-width: 767px) {
   table.rtable thead {
     position: absolute;
@@ -512,6 +541,7 @@
 
   table.rtable,
   table.rtable tbody,
+  table.rtable tfoot,
   table.rtable tr,
   table.rtable td {
     display: block;
@@ -537,6 +567,28 @@
     width: auto;
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+
+  /* Let a cell's content shrink so truncate/wrap works instead of
+     pushing the card wider than the screen. */
+  table.rtable td > * {
+    min-width: 0;
+  }
+
+  /* Every card gets the same outline, including the last one: desktop
+     row classes like last:border-0 would otherwise strip it. */
+  table.rtable tr:nth-child(n) {
+    border: 1px solid hsl(var(--border));
+  }
+
+  /* Desktop truncation (truncate / max-w-[..]) clips a card cell mid-word
+     with no ellipsis; in card mode let it wrap instead. */
+  table.rtable td {
+    max-width: none;
+  }
+  table.rtable td.truncate {
+    white-space: normal;
+    overflow: visible;
   }
 
   table.rtable td::before {
@@ -637,5 +689,55 @@
   .print-sheet * {
     color: #000 !important;
     border-color: #bbb !important;
+  }
+}
+
+/* Touch screens have no hover, so controls revealed only on group-hover
+   (row edit/delete icons etc.) would stay invisible. Show them there.
+   Limited to interactive elements so hover-only decoration stays hidden. */
+@media (hover: none) {
+  .group-hover\:opacity-100:is(button, a, [role='button']),
+  .group-hover\:opacity-100:has(button, a, [role='button']) {
+    opacity: 1;
+  }
+}
+
+/* iOS Safari zooms the whole page when a field under 16px gets focus.
+   Pin form text to 16px on iOS phones only; desktop and Android keep
+   the designed sizes. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 767px) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* Edge fade on horizontal scrollers with hidden content (see hooks/useScrollFade). */
+[data-scroll-fade='right'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+[data-scroll-fade='left'] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+[data-scroll-fade='both'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+/* Small icon buttons: invisible, larger hit area on touch screens only, so a
+   24px edit/delete icon is still easy to tap without changing how it looks. */
+@media (pointer: coarse) {
+  .tap-expand {
+    position: relative;
+  }
+  .tap-expand::before {
+    content: '';
+    position: absolute;
+    inset: -5px;
   }
 }

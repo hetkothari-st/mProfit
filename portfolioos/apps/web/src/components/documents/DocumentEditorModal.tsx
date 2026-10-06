@@ -41,9 +41,9 @@ export function DocumentEditorModal({ documentId, fileName, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
-      <div className="flex items-center justify-between border-b px-4 py-2">
-        <div className="font-display text-lg truncate">{fileName}</div>
-        <Button size="sm" variant="ghost" onClick={onClose}>
+      <div className="flex items-center justify-between gap-2 border-b px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+        <div className="min-w-0 flex-1 font-display text-lg truncate">{fileName}</div>
+        <Button size="sm" variant="ghost" className="shrink-0" onClick={onClose}>
           <X className="h-4 w-4" /> Close
         </Button>
       </div>
@@ -54,24 +54,40 @@ export function DocumentEditorModal({ documentId, fileName, onClose }: Props) {
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-negative px-6 text-center">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background text-sm text-negative px-6 text-center">
             {error}
             <br />
             Verify OnlyOffice DocumentServer is running at the configured URL.
           </div>
         )}
+        {/* OnlyOffice swaps the editor's placeholder div for its own iframe.
+            Keep that node alone inside a wrapper React owns, so React never
+            has to insert the error/loading siblings next to a node it no
+            longer finds (that threw insertBefore and blanked the app). */}
         {data && (
+          <div className="absolute inset-0">
           <DocumentEditor
             id={`oo-editor-${documentId}`}
             documentServerUrl={data.docServerUrl}
             // The wrapper accepts the full config object — we cast because
             // the upstream typings are looser than ours.
             config={data.config as never}
+            onLoadComponentError={(code: number, description: string) => {
+              // Fires when DocumentServer's api.js can't be loaded — the most
+              // common cause of the previous "blank page": the OnlyOffice
+              // container isn't running / unreachable. Surface it instead of
+              // showing nothing.
+              setError(
+                `Could not reach the document editor (${description || `code ${code}`}). ` +
+                  'The OnlyOffice DocumentServer may not be running.',
+              );
+            }}
             events_onError={(e: unknown) => {
               const err = e as { data?: { errorDescription?: string } };
               setError(err.data?.errorDescription ?? 'OnlyOffice error');
             }}
           />
+          </div>
         )}
       </div>
     </div>

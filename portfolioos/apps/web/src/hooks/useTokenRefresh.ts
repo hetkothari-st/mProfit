@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
-import { doRefresh } from '@/api/client';
+import { isAuthRejection, refreshSession } from '@/api/client';
 
 const REFRESH_BEFORE_MS = 2 * 60 * 1000; // refresh 2 min before expiry
 
@@ -21,11 +21,13 @@ export function useTokenRefresh() {
     const refreshAt = expiresAt - REFRESH_BEFORE_MS;
     const delay = Math.max(0, refreshAt - Date.now());
 
+    // Only a rejected session signs out. Offline, a rate limit or a 5xx keeps
+    // it: the next request's 401 retries the refresh once the network is back.
     const timer = setTimeout(async () => {
       try {
-        await doRefresh();
-      } catch {
-        useAuthStore.getState().clearSession();
+        await refreshSession();
+      } catch (err) {
+        if (isAuthRejection(err)) useAuthStore.getState().clearSession();
       }
     }, delay);
 

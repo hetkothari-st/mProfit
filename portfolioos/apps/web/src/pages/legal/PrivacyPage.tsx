@@ -1,6 +1,10 @@
 export function PrivacyPage() {
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10 prose prose-sm dark:prose-invert">
+    <div
+      // `prose` needs @tailwindcss/typography, which isn't installed, so the
+      // page rendered as one undivided block. Style the elements directly.
+      className="mx-auto max-w-3xl px-4 py-10 text-sm leading-relaxed text-foreground sm:px-6 [&_code]:break-all [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:text-[0.85em] [&_h1]:mb-4 [&_h1]:font-display [&_h1]:text-2xl [&_h1]:leading-tight [&_h2]:mb-2 [&_h2]:mt-8 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:my-1 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
+    >
       <h1>EveryPaisa Browser Extension — Privacy Policy</h1>
       <p><strong>Effective:</strong> 2026-05-07</p>
       <h2>What we collect</h2>

@@ -691,7 +691,7 @@ function StockTransactions({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0"
+                          className="tap-expand h-6 w-6 p-0"
                           onClick={() => openEdit(txn)}
                           title="Edit"
                         >
@@ -701,7 +701,7 @@ function StockTransactions({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          className="tap-expand h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                           onClick={() => setConfirmDeleteId(txn.id)}
                           title="Delete"
                         >
