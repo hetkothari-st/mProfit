@@ -25,7 +25,7 @@ import { PolicyNumberReveal } from './PolicyNumberReveal';
 import { useInsurerLook } from './useInsurerLook';
 
 const ICON_BUTTON =
-  '-m-1 rounded p-1 text-white/60 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60';
+  'tap-expand -m-1 rounded p-1 text-white/60 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60';
 
 export function PolicyCard({
   policy,

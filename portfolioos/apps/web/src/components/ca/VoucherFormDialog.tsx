@@ -181,7 +181,7 @@ export function VoucherFormDialog({
                 {entries.map((e, i) => (
                   <div
                     key={i}
-                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_120px_auto] items-end gap-2"
+                    className="grid grid-cols-2 items-end gap-2 border-b border-border/50 pb-2 last:border-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_120px_auto] sm:border-0 sm:pb-0"
                   >
                     <div>
                       {i === 0 && (

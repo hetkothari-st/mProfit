@@ -121,7 +121,7 @@ export function AddTransactionDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Type</Label>
               <Select
@@ -148,7 +148,7 @@ export function AddTransactionDialog({
           </div>
 
           {isFund ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label>Scheme name</Label>
                 <Input
@@ -172,7 +172,7 @@ export function AddTransactionDialog({
               </div>
             </div>
           ) : isStockLike ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Symbol</Label>
                 <Input
@@ -197,7 +197,7 @@ export function AddTransactionDialog({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Asset name</Label>
                 <Input value={form.assetName ?? ''} onChange={(e) => set('assetName', e.target.value)} />
@@ -214,7 +214,7 @@ export function AddTransactionDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label>Trade date</Label>
               <Input
@@ -258,7 +258,7 @@ export function AddTransactionDialog({
           </button>
 
           {showCharges && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {(
                 [
                   ['brokerage', 'Brokerage'],

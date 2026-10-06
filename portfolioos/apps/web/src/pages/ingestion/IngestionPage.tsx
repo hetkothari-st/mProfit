@@ -971,8 +971,8 @@ function ReviewStep({
           <div className="divide-y">
             {groups.map(([sender, group]) => (
               <div key={sender}>
-                <div className="flex items-center justify-between bg-muted/30 px-4 py-2">
-                  <div className="text-xs font-mono text-muted-foreground">
+                <div className="flex items-center justify-between gap-2 bg-muted/30 px-3 py-2 sm:px-4">
+                  <div className="min-w-0 break-all text-xs font-mono text-muted-foreground">
                     {sender} · {group.length} event
                     {group.length === 1 ? '' : 's'}
                   </div>
@@ -988,7 +988,7 @@ function ReviewStep({
                     </Button>
                   )}
                 </div>
-                <table className="w-full text-sm">
+                <table className="w-full table-fixed text-sm">
                   <tbody className="divide-y">
                     {group.map((r) => (
                       <tr
@@ -996,15 +996,16 @@ function ReviewStep({
                         className="hover:bg-muted/30 cursor-pointer"
                         onClick={() => onRowClick(r)}
                       >
-                        <td className="px-4 py-2 w-28 text-xs text-muted-foreground">
+                        <td className="hidden px-4 py-2 w-28 text-xs text-muted-foreground sm:table-cell">
                           {r.eventDate}
                         </td>
-                        <td className="px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-block px-1.5 py-0.5 rounded bg-muted text-[10px] font-medium tracking-wide">
+                        <td className="px-3 py-2 sm:px-4">
+                          <div className="mb-0.5 text-[11px] text-muted-foreground sm:hidden">{r.eventDate}</div>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="inline-block shrink-0 px-1.5 py-0.5 rounded bg-muted text-[10px] font-medium tracking-wide">
                               {r.eventType}
                             </span>
-                            <span className="text-sm truncate">
+                            <span className="min-w-0 text-sm truncate">
                               {r.counterparty ??
                                 r.instrumentSymbol ??
                                 r.instrumentName ??
@@ -1017,10 +1018,10 @@ function ReviewStep({
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right font-mono text-sm">
+                        <td className="w-24 whitespace-nowrap px-1 py-2 text-right font-mono text-xs sm:w-32 sm:px-4 sm:text-sm">
                           {r.amount ? `₹${r.amount}` : '—'}
                         </td>
-                        <td className="px-4 py-2 w-32 text-right">
+                        <td className="w-[84px] px-2 py-2 text-right sm:w-32 sm:px-4">
                           <div
                             className="flex justify-end gap-1"
                             onClick={(e) => e.stopPropagation()}
@@ -1043,7 +1044,7 @@ function ReviewStep({
                             </Button>
                           </div>
                         </td>
-                        <td className="px-4 py-2 text-muted-foreground w-8">
+                        <td className="hidden px-4 py-2 text-muted-foreground w-10 sm:table-cell">
                           <ChevronRight className="h-3 w-3" />
                         </td>
                       </tr>

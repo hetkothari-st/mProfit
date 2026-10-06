@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -17,6 +17,7 @@ import { assetsApi, type LiveCryptoCoin } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
 import { CryptoFormDialog } from './CryptoFormDialog';
 import { formatUSD } from './cryptoUtils';
+import { useScrollFade } from '@/hooks/useScrollFade';
 
 // ── Coin avatar (colored gradient w/ symbol) ─────────────────────
 const SYMBOL_GRADIENTS: Record<string, string> = {
@@ -51,10 +52,12 @@ function LiveTicker({ coins }: { coins: LiveCryptoCoin[] }) {
   const featured = coins
     .filter((c) => c.priceInr)
     .slice(0, 8);
+  const tickerRef = useRef<HTMLDivElement>(null);
+  useScrollFade(tickerRef, featured.length);
   if (featured.length === 0) return null;
   return (
     <div className="mb-6 overflow-hidden rounded-xl border bg-gradient-to-r from-amber-50/40 via-background to-violet-50/40 dark:from-amber-950/10 dark:to-violet-950/10">
-      <div className="flex gap-6 px-4 py-3 overflow-x-auto scrollbar-none">
+      <div ref={tickerRef} className="flex gap-6 px-4 py-3 overflow-x-auto scrollbar-none">
         {featured.map((c) => {
           const up = (c.change24h ?? 0) >= 0;
           return (

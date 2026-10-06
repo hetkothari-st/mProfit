@@ -405,7 +405,7 @@ export function ProvidentFundPage() {
           { label: 'EPF entry', assetClass: 'EPF', FormComponent: EPFFormDialog },
         ]}
       />
-      <div className="mx-auto max-w-5xl px-4 pb-8">
+      <div className="mx-auto max-w-5xl pb-8 sm:px-4">
         <AutoFetchSection />
       </div>
     </>

@@ -54,7 +54,9 @@ const ENTRY_TYPES_BY_DIRECTION: Record<Direction, LedgerEntryType[]> = {
  * didn't.
  */
 const KHATA_GRID =
-  'grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_8.5rem_2rem]';
+  'grid-cols-[minmax(0,1fr)_5.25rem_5.75rem_1.75rem] gap-2 px-3 sm:grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_8.5rem_2rem] sm:gap-3 sm:px-4';
+// Phones have no room for separate gave/got columns. A row is only ever one of
+// the two, so below `sm` they share one column, told apart by colour.
 
 function humanizeEntryType(entryType: string): string {
   const lower = entryType.replace(/_/g, ' ').toLowerCase();
@@ -223,23 +225,28 @@ function LedgerRow({
   const subLabel = isReceipt ? `Rent · ${row.forMonth ?? ''}` : row.note || humanizeEntryType(row.entryType);
 
   return (
-    <div className={`grid ${KHATA_GRID} items-start gap-3 py-3 px-4 border-b border-border/60 last:border-b-0`}>
+    <div className={`grid ${KHATA_GRID} items-start py-3 border-b border-border/60 last:border-b-0`}>
       <div className="min-w-0">
-        <p className="text-sm text-foreground whitespace-nowrap">{formatRowDate(row.date)}</p>
+        <p className="text-sm text-foreground sm:whitespace-nowrap">{formatRowDate(row.date)}</p>
         <p className="text-xs text-muted-foreground truncate">{subLabel}</p>
       </div>
-      <div className="text-right tabular-nums pt-0.5">
+      <div className="text-right tabular-nums pt-0.5 text-xs sm:hidden">
+        <span className={`font-medium ${row.kind === 'CHARGE' ? 'text-destructive' : 'text-positive'}`}>
+          {formatINR(row.amount)}
+        </span>
+      </div>
+      <div className="hidden text-right tabular-nums pt-0.5 sm:block">
         {row.kind === 'CHARGE' && (
           <span className="text-destructive font-medium">{formatINR(row.amount)}</span>
         )}
       </div>
-      <div className="text-right tabular-nums pt-0.5">
+      <div className="hidden text-right tabular-nums pt-0.5 sm:block">
         {row.kind === 'CREDIT' && (
           <span className="text-positive font-medium">{formatINR(row.amount)}</span>
         )}
       </div>
       <div className="text-right">
-        <p className="text-sm font-medium tabular-nums pt-0.5">{formatINR(row.runningBalance)}</p>
+        <p className="text-xs sm:text-sm font-medium tabular-nums pt-0.5">{formatINR(row.runningBalance)}</p>
       </div>
       {/* Its own column, always rendered, so a row with a delete button and a
           row without one still line their balances up with the header. */}
@@ -248,7 +255,7 @@ function LedgerRow({
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-destructive"
+            className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive sm:h-6 sm:w-6"
             onClick={onAskDelete}
             disabled={isDeleting}
             title="Delete entry"
@@ -482,10 +489,11 @@ export function TenantKhataPage() {
         />
       ) : (
         <Card className="overflow-hidden">
-          <div className={`grid ${KHATA_GRID} gap-3 py-2 px-4 border-b border-border/60 bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground font-medium`}>
+          <div className={`grid ${KHATA_GRID} py-2 border-b border-border/60 bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground font-medium`}>
             <div>Date</div>
-            <div className="text-right">You gave</div>
-            <div className="text-right">You got</div>
+            <div className="text-right sm:hidden">Gave / got</div>
+            <div className="hidden text-right sm:block">You gave</div>
+            <div className="hidden text-right sm:block">You got</div>
             <div className="text-right">Balance</div>
             <div aria-hidden />
           </div>

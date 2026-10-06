@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { AutoFitText } from '@/components/ui/AutoFitText';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -480,9 +481,11 @@ export function LoanGivenDetailPage() {
             />
             <div className="relative">
               <div className="text-sm text-white/75">{active ? 'Still owed to you' : 'Lent'}</div>
-              <div className="mt-1 font-display text-[40px] leading-none tabular-nums">
-                {formatINR(active ? summary.outstandingPrincipal : summary.principalLent)}
-              </div>
+              <AutoFitText className="mt-1">
+                <div className="font-display text-[40px] leading-none tabular-nums">
+                  {formatINR(active ? summary.outstandingPrincipal : summary.principalLent)}
+                </div>
+              </AutoFitText>
               <div className="mt-2 text-sm text-white/75">
                 of {formatINR(summary.principalLent)} lent on {formatDay(loan.lentOn)}
               </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AutoFitText } from '@/components/ui/AutoFitText';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -99,7 +100,7 @@ const LOAN_TYPE_ICONS: Record<string, LucideIcon> = {
 };
 
 const STUB_BUTTON =
-  '-m-1 rounded p-1 text-white/65 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60';
+  'tap-expand -m-1 rounded p-1 text-white/65 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60';
 
 function LoanCard({
   loan,
@@ -234,11 +235,13 @@ function LoanCard({
         {/* Body */}
         <div className="min-w-0 flex-1 space-y-4 p-5">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm text-muted-foreground">{active ? 'Outstanding' : 'Loan amount'}</p>
-              <p className="money-digits truncate font-display text-[28px] leading-tight tabular-nums text-foreground">
-                {active ? (summary ? formatINR(summary.outstandingBalance) : '—') : formatINR(loan.principalAmount)}
-              </p>
+              <AutoFitText>
+                <p className="money-digits font-display text-[28px] leading-tight tabular-nums text-foreground">
+                  {active ? (summary ? formatINR(summary.outstandingBalance) : '—') : formatINR(loan.principalAmount)}
+                </p>
+              </AutoFitText>
             </div>
             <div className="shrink-0 text-right">
               <p className="font-display text-[28px] leading-tight tabular-nums" style={{ color: accent }}>
@@ -428,7 +431,7 @@ function CreateLoanDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit loan' : 'Add loan'}</DialogTitle>
         </DialogHeader>

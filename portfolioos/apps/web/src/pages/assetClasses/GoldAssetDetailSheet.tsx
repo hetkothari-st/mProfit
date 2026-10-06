@@ -274,7 +274,7 @@ export function GoldAssetDetailSheet({ holding, livePrice, open, onClose, onEdit
                         {onEditTransaction && (
                           <Button
                             variant="ghost" size="sm"
-                            className="h-6 w-6 p-0 mt-1"
+                            className="tap-expand h-6 w-6 p-0 mt-1"
                             onClick={() => onEditTransaction(t)}
                           >
                             <Pencil className="h-3 w-3" />

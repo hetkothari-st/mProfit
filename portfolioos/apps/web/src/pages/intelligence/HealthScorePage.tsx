@@ -201,7 +201,7 @@ function DimensionDetailCard({ id, sub }: { id: DimensionId; sub: HealthSubScore
             {meta.label}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+            <Badge variant="outline" className="whitespace-nowrap text-[10px] text-muted-foreground">
               Weight {meta.weight}%
             </Badge>
             <span className={cn('numeric-display text-lg font-semibold', tone.text)}>{sub.score}</span>

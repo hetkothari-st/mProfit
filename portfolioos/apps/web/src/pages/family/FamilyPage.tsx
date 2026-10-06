@@ -2056,7 +2056,7 @@ function ModalShell({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+        className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <div>

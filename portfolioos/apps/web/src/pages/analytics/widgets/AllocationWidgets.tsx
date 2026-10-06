@@ -99,14 +99,14 @@ export function SectorPie({ slices }: SectorPieProps) {
         ) : (
           <div>
             <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
+              <PieChart margin={{ top: 14, right: 8, bottom: 14, left: 8 }}>
                 <Pie
                   data={data}
                   dataKey="pct"
                   nameKey="sector"
                   cx="50%"
                   cy="50%"
-                  outerRadius={92}
+                  outerRadius={80}
                   paddingAngle={1}
                   label={(entry: { pct: number }) => (entry.pct > 6 ? `${entry.pct.toFixed(0)}%` : '')}
                   labelLine={false}

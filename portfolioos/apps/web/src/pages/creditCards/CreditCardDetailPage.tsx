@@ -364,14 +364,14 @@ function StatementTable({ card }: { card: CreditCardDTO }) {
                             <div className="flex gap-1 justify-end">
                               {s.status !== 'PAID' && (
                                 <Button size="sm" variant="ghost"
-                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-positive"
+                                  className="tap-expand h-6 w-6 p-0 text-muted-foreground hover:text-positive"
                                   title="Mark paid"
                                   onClick={() => setMarkPaidId(s.id)}>
                                   <CheckCircle2 className="h-3.5 w-3.5" />
                                 </Button>
                               )}
                               <Button size="sm" variant="ghost"
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-negative"
+                                className="tap-expand h-6 w-6 p-0 text-muted-foreground hover:text-negative"
                                 title="Delete"
                                 onClick={() => setConfirmDeleteId(s.id)}>
                                 <Trash2 className="h-3.5 w-3.5" />

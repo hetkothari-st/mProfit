@@ -343,7 +343,7 @@ function EditLoanDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit loan</DialogTitle>
         </DialogHeader>
@@ -553,7 +553,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-negative"
+                        className="tap-expand h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-negative"
                         onClick={() => setConfirmDeletePayId(p.id)}
                       >
                         <Trash2 className="h-3 w-3" />

@@ -80,7 +80,7 @@ export function VehicleListPage() {
                 aria-selected={viewMode === 'individual'}
                 onClick={() => changeViewMode('individual')}
                 className={cn(
-                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
+                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
                   viewMode === 'individual'
                     ? 'bg-foreground text-background shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',
@@ -94,7 +94,7 @@ export function VehicleListPage() {
                 aria-selected={viewMode === 'family'}
                 onClick={() => changeViewMode('family')}
                 className={cn(
-                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
+                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
                   viewMode === 'family'
                     ? 'bg-foreground text-background shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',
