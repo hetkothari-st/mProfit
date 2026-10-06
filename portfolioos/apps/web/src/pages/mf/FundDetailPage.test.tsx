@@ -97,6 +97,10 @@ async function renderPage(dto: MfFundAnalyticsDto) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  // The page opens on the plain-language overview (9a7046b1); everything these
+  // tests check — score card, pillars, metrics, horizons — is in "Detailed
+  // calculations". They were written before the overview existed.
+  fireEvent.click(await screen.findByRole('tab', { name: 'Detailed calculations' }));
   // Everything below the score card waits on the same query.
   await screen.findByTestId('mf-score-card');
 }
@@ -108,6 +112,25 @@ function renderedMetrics(): Array<{ status: string; text: string }> {
     text: el.textContent ?? '',
   }));
 }
+
+describe('FundDetailPage — default view', () => {
+  it('opens on the plain-language overview, with the detail one tap away', async () => {
+    analyticsMock.mockResolvedValue(ratedFixture());
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/mutual-funds/120503']}>
+          <Routes>
+            <Route path="/mutual-funds/:schemeCode" element={<FundDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const overviewTab = await screen.findByRole('tab', { name: 'Overview' });
+    expect(overviewTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByTestId('mf-score-card')).toBeNull();
+  });
+});
 
 describe('FundDetailPage — rated state', () => {
   it('renders the composite, the star rating, the risk-o-meter and the disclaimer', async () => {
