@@ -22,7 +22,13 @@
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
-import { decryptIdentifier, encryptIdentifier, hashIdentifier, last4 } from './pfCredentials.service.js';
+import {
+  decryptIdentifier,
+  decryptIdentifierSync,
+  encryptIdentifier,
+  hashIdentifier,
+  last4,
+} from './pfCredentials.service.js';
 
 const PAN_PURPOSE = 'pan';
 
@@ -44,6 +50,26 @@ function canEncrypt(): boolean {
   return false;
 }
 const REG_NO_PURPOSE = 'vehicle-registration';
+
+/**
+ * One encrypted free-text field: `<field>` (legacy plaintext) beside
+ * `<field>Enc`. Once a key exists the plaintext is never written, so every
+ * reader must go through {@link openText}.
+ */
+export async function sealText(
+  raw: string | null | undefined,
+): Promise<{ plain: string | null; enc: string | null }> {
+  const value = raw?.trim();
+  if (!value) return { plain: null, enc: null };
+  if (!canEncrypt()) return { plain: value, enc: null };
+  return { plain: null, enc: await encryptIdentifier(value) };
+}
+
+/** The value of a sealed field, from ciphertext or legacy plaintext. */
+export function openText(enc: string | null | undefined, plain: string | null | undefined): string | null {
+  if (enc) return decryptIdentifierSync(enc);
+  return plain ?? null;
+}
 
 export function normalizePan(raw: string): string {
   return raw.trim().toUpperCase();
@@ -73,28 +99,76 @@ export async function panColumns(raw: string | null | undefined) {
 }
 
 /**
- * Encrypted columns for a registration number, to write ALONGSIDE the
- * plaintext `registrationNo` — not instead of it.
- *
- * Unlike PAN this is dual-write for now: roughly twenty call sites still read
- * the plaintext plate (challan scans, alerts, cron jobs, labels, reports) and
- * clearing it before they move to readRegistrationNo would blank the plate
- * across the app. The caller keeps setting `registrationNo` itself.
+ * Columns to write for a registration number. The plaintext plate is no
+ * longer written once a key exists: every reader goes through plateOf /
+ * revealVehicle, and lookups go through the fingerprint (findVehicleByPlate).
+ * Spread these AFTER any `registrationNo` the caller sets.
  */
 export async function registrationNoColumns(raw: string) {
   const value = normalizeRegistrationNo(raw);
   if (!canEncrypt()) {
     return {
+      registrationNo: value,
       registrationNoEnc: null,
       registrationNoHash: null,
       registrationNoLast4: value.slice(-4),
     };
   }
   return {
+    registrationNo: null,
     registrationNoEnc: await encryptIdentifier(value),
     registrationNoHash: hashIdentifier(value, REG_NO_PURPOSE),
     registrationNoLast4: value.slice(-4),
   };
+}
+
+/** Columns to write for a vehicle's engine number. */
+export async function engineNoColumns(raw: string | null | undefined) {
+  const { plain, enc } = await sealText(raw);
+  return { engineNo: plain, engineNoEnc: enc };
+}
+
+/** Select these wherever a vehicle's plate is read. */
+export const PLATE_SELECT = { registrationNo: true, registrationNoEnc: true } as const;
+
+/** The plate of a vehicle row selected with {@link PLATE_SELECT}. */
+export function plateOf(v: { registrationNo?: string | null; registrationNoEnc?: string | null }): string {
+  return openText(v.registrationNoEnc, v.registrationNo) ?? '';
+}
+
+type VehicleSecrets = {
+  registrationNo: string | null;
+  registrationNoEnc: string | null;
+  registrationNoHash?: string | null;
+  engineNo?: string | null;
+  engineNoEnc?: string | null;
+};
+
+/**
+ * A vehicle row as it may leave the API: plate (and engine number, when the
+ * row carries it) decrypted, ciphertext and fingerprint dropped. Works on a
+ * full row or a `select` that includes {@link PLATE_SELECT}.
+ */
+export function revealVehicle<T extends VehicleSecrets>(
+  v: T,
+): Omit<T, 'registrationNoEnc' | 'registrationNoHash' | 'engineNoEnc'> & { registrationNo: string } {
+  const { registrationNoEnc, registrationNoHash: _hash, engineNoEnc, ...rest } = v;
+  const out = { ...rest, registrationNo: openText(registrationNoEnc, v.registrationNo) ?? '' };
+  if ('engineNo' in v || engineNoEnc !== undefined) {
+    (out as { engineNo?: string | null }).engineNo = openText(engineNoEnc, v.engineNo);
+  }
+  return out;
+}
+
+/**
+ * Find a user's vehicle by plate. Matches the fingerprint, and the legacy
+ * plaintext for rows written without a key or not yet backfilled.
+ */
+export async function findVehicleByPlate(userId: string, raw: string) {
+  const plate = normalizeRegistrationNo(raw);
+  const or: Array<Record<string, string>> = [{ registrationNo: plate }];
+  if (canEncrypt()) or.push({ registrationNoHash: hashIdentifier(plate, REG_NO_PURPOSE) });
+  return prisma.vehicle.findFirst({ where: { userId, OR: or } });
 }
 
 export function registrationNoHash(raw: string): string {
@@ -140,6 +214,57 @@ export async function readRegistrationNo(row: {
   return row.registrationNo ?? null;
 }
 
+/** Columns to write for a tenant's contact fields. */
+export async function tenantContactColumns(input: {
+  tenantPhone?: string | null;
+  tenantEmail?: string | null;
+  tenantContact?: string | null;
+}) {
+  const out: Record<string, string | null> = {};
+  for (const key of ['tenantPhone', 'tenantEmail', 'tenantContact'] as const) {
+    if (input[key] === undefined) continue;
+    const { plain, enc } = await sealText(input[key]);
+    out[key] = plain;
+    out[`${key}Enc`] = enc;
+  }
+  return out;
+}
+
+type TenancySecrets = {
+  tenantPhone?: string | null;
+  tenantPhoneEnc?: string | null;
+  tenantEmail?: string | null;
+  tenantEmailEnc?: string | null;
+  tenantContact?: string | null;
+  tenantContactEnc?: string | null;
+};
+
+/**
+ * A tenancy row as it may leave the API or feed a reminder: contact fields
+ * decrypted, ciphertext dropped. Fields the row does not carry stay absent.
+ */
+export function revealTenancy<T extends TenancySecrets>(
+  t: T,
+): Omit<T, 'tenantPhoneEnc' | 'tenantEmailEnc' | 'tenantContactEnc'> {
+  const { tenantPhoneEnc, tenantEmailEnc, tenantContactEnc, ...rest } = t;
+  const out: Record<string, unknown> = { ...rest };
+  if ('tenantPhone' in t || tenantPhoneEnc !== undefined) out.tenantPhone = openText(tenantPhoneEnc, t.tenantPhone);
+  if ('tenantEmail' in t || tenantEmailEnc !== undefined) out.tenantEmail = openText(tenantEmailEnc, t.tenantEmail);
+  if ('tenantContact' in t || tenantContactEnc !== undefined)
+    out.tenantContact = openText(tenantContactEnc, t.tenantContact);
+  return out as Omit<T, 'tenantPhoneEnc' | 'tenantEmailEnc' | 'tenantContactEnc'>;
+}
+
+/** Select these wherever a tenant's contact details are read. */
+export const TENANT_CONTACT_SELECT = {
+  tenantPhone: true,
+  tenantPhoneEnc: true,
+  tenantEmail: true,
+  tenantEmailEnc: true,
+  tenantContact: true,
+  tenantContactEnc: true,
+} as const;
+
 /** Convenience: the full PAN for a user id. */
 export async function getUserPan(userId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({
@@ -167,9 +292,10 @@ export async function backfillPiiAtRest(): Promise<{
   clients: number;
   vehicles: number;
   loans: number;
+  sealedFields: number;
   failed: number;
 }> {
-  if (!canEncrypt()) return { users: 0, clients: 0, vehicles: 0, loans: 0, failed: 0 };
+  if (!canEncrypt()) return { users: 0, clients: 0, vehicles: 0, loans: 0, sealedFields: 0, failed: 0 };
   const clear = clearPlaintextEnabled();
   let users = 0;
   let clients = 0;
@@ -269,6 +395,7 @@ export async function backfillPiiAtRest(): Promise<{
       if (batch.length === 0) break;
       for (const row of batch) {
         try {
+          if (!row.registrationNo) throw new Error('no plate to encrypt');
           const value = normalizeRegistrationNo(row.registrationNo);
           const cols = await registrationNoColumns(value);
           // Unreachable while backfillPiiAtRest returns early without a key,
@@ -277,9 +404,12 @@ export async function backfillPiiAtRest(): Promise<{
           if ((await decryptIdentifier(cols.registrationNoEnc)) !== value) {
             throw new Error('encrypted registration did not read back');
           }
-          // Never clears the plate, even with PII_BACKFILL_CLEAR_PLAINTEXT:
-          // plate readers have not all moved to readRegistrationNo yet.
-          await prisma.vehicle.update({ where: { id: row.id }, data: cols });
+          // Every plate reader goes through plateOf / revealVehicle now, so
+          // the plate clears like PAN: only under PII_BACKFILL_CLEAR_PLAINTEXT.
+          await prisma.vehicle.update({
+            where: { id: row.id },
+            data: { ...cols, registrationNo: clear ? null : row.registrationNo },
+          });
           vehicles += 1;
         } catch (err) {
           failed += 1;
@@ -291,6 +421,15 @@ export async function backfillPiiAtRest(): Promise<{
         }
       }
     }
+  }
+
+  // Rows encrypted while the plate was still dual-written keep their
+  // plaintext until clearing is switched on.
+  if (clear) {
+    await prisma.vehicle.updateMany({
+      where: { registrationNoEnc: { not: null }, registrationNo: { not: null } },
+      data: { registrationNo: null },
+    });
   }
 
   // ── Loan.accountNumber ──
@@ -332,5 +471,84 @@ export async function backfillPiiAtRest(): Promise<{
     }
   }
 
-  return { users, clients, vehicles, loans, failed };
+  // ── Free-text identifiers sealed with sealText ──
+  let sealedFields = 0;
+  for (const [model, field] of SEALED_FIELDS) {
+    const r = await backfillSealedField(model, field, clear);
+    sealedFields += r.done;
+    failed += r.failed;
+  }
+
+  return { users, clients, vehicles, loans, sealedFields, failed };
+}
+
+const SEALED_FIELDS = [
+  ['vehicle', 'engineNo'],
+  ['bankAccount', 'customerId'],
+  ['tenancy', 'tenantPhone'],
+  ['tenancy', 'tenantEmail'],
+  ['tenancy', 'tenantContact'],
+] as const;
+
+/**
+ * Encrypt one `<field>` into `<field>Enc` for rows not yet done, verifying
+ * each ciphertext reads back, and clear the plaintext only when `clear`.
+ */
+async function backfillSealedField(
+  model: (typeof SEALED_FIELDS)[number][0],
+  field: string,
+  clear: boolean,
+): Promise<{ done: number; failed: number }> {
+  // The models differ only in which column is sealed; a typed delegate per
+  // pair would repeat this loop five times.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const delegate = (prisma as unknown as Record<string, any>)[model];
+  const encField = `${field}Enc`;
+  const skipped: string[] = [];
+  let done = 0;
+  let failed = 0;
+  for (;;) {
+    const batch: Array<{ id: string } & Record<string, string | null>> = await delegate.findMany({
+      where: {
+        [encField]: null,
+        [field]: { not: null },
+        ...(skipped.length > 0 && { id: { notIn: skipped } }),
+      },
+      select: { id: true, [field]: true },
+      take: 200,
+    });
+    if (batch.length === 0) break;
+    for (const row of batch) {
+      try {
+        const value = row[field]?.trim();
+        if (!value) {
+          // Blank text: nothing worth encrypting, just stop storing it.
+          await delegate.update({ where: { id: row.id }, data: { [field]: null } });
+          continue;
+        }
+        const { enc } = await sealText(value);
+        if (!enc) throw new Error('encryption unavailable');
+        if (decryptIdentifierSync(enc) !== value) throw new Error(`encrypted ${field} did not read back`);
+        await delegate.update({
+          where: { id: row.id },
+          data: { [encField]: enc, [field]: clear ? null : row[field] },
+        });
+        done += 1;
+      } catch (err) {
+        failed += 1;
+        skipped.push(row.id);
+        logger.warn(
+          { model, field, id: row.id, err: err instanceof Error ? err.message : String(err) },
+          '[pii] could not encrypt a saved identifier',
+        );
+      }
+    }
+  }
+  if (clear) {
+    await delegate.updateMany({
+      where: { [encField]: { not: null }, [field]: { not: null } },
+      data: { [field]: null },
+    });
+  }
+  return { done, failed };
 }

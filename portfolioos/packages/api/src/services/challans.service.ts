@@ -35,6 +35,7 @@ import {
   CHALLAN_ADAPTER_VERSION,
 } from '../adapters/vehicle/challan.js';
 import { writeIngestionFailure } from './ingestionFailures.service.js';
+import { PLATE_SELECT, plateOf } from './piiAtRest.service.js';
 
 // The $extends-wrapped Prisma client passes a different tx client type
 // to $transaction callbacks than Prisma.TransactionClient — extract it
@@ -132,7 +133,9 @@ async function emitCanonicalEvent(
       userId,
       sourceAdapter: CHALLAN_ADAPTER_ID,
       sourceAdapterVer: CHALLAN_ADAPTER_VERSION,
-      sourceRef: `${regNo}:${row.challanNo}`,
+      // Vehicle id, not the plate: the plate is encrypted at rest and must
+      // not reappear in plain text here.
+      sourceRef: `${vehicleId}:${row.challanNo}`,
       sourceHash: hash,
       eventType: 'VEHICLE_CHALLAN',
       eventDate,
@@ -140,7 +143,6 @@ async function emitCanonicalEvent(
       counterparty: row.location ?? null,
       metadata: {
         vehicleId,
-        registrationNo: regNo,
         challanNo: row.challanNo,
         offenceType: row.offenceType,
         location: row.location,
@@ -196,23 +198,21 @@ export async function scanChallansForVehicle(
     select: {
       id: true,
       userId: true,
-      registrationNo: true,
+      ...PLATE_SELECT,
       chassisLast4: true,
     },
   });
   if (!vehicle) throw new NotFoundError('Vehicle not found');
   if (vehicle.userId !== userId) throw new ForbiddenError();
+  const plate = plateOf(vehicle);
 
-  const result = await fetchChallansForRegNo(
-    vehicle.registrationNo,
-    vehicle.chassisLast4,
-  );
+  const result = await fetchChallansForRegNo(plate, vehicle.chassisLast4);
   if (!result.ok) {
     await writeIngestionFailure({
       userId,
       sourceAdapter: CHALLAN_ADAPTER_ID,
       adapterVersion: CHALLAN_ADAPTER_VERSION,
-      sourceRef: vehicle.registrationNo,
+      sourceRef: vehicleId,
       error: result.error ?? 'Challan adapter returned not-ok without an error',
       rawPayload: { vehicleId, result },
     });
@@ -231,7 +231,7 @@ export async function scanChallansForVehicle(
   return applyScanOutcomeToDb(
     userId,
     vehicleId,
-    vehicle.registrationNo,
+    plate,
     result,
   );
 }
@@ -252,8 +252,6 @@ export async function scanChallansMonthlyForAllActiveVehicles(): Promise<{
       select: {
         id: true,
         userId: true,
-        registrationNo: true,
-        chassisLast4: true,
       },
     });
     let totalNew = 0;
@@ -271,7 +269,7 @@ export async function scanChallansMonthlyForAllActiveVehicles(): Promise<{
       } catch (err) {
         totalFailed += 1;
         logger.warn(
-          { err, vehicleId: v.id, regNo: v.registrationNo },
+          { err, vehicleId: v.id },
           '[challan.cron] per-vehicle scan threw',
         );
       }

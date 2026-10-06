@@ -31,6 +31,7 @@ import {
 } from './notifications/config.service.js';
 import { sendViaGmailApi, getGmailSendAccount } from './notifications/gmailSender.service.js';
 import { markOverdueReceipts } from './rental.service.js';
+import { openText, revealTenancy, tenantContactColumns } from './piiAtRest.service.js';
 
 export const REMINDER_LEAD_DAYS = [5, 3, 1, 0] as const;
 export type ReminderLeadDay = (typeof REMINDER_LEAD_DAYS)[number];
@@ -207,8 +208,8 @@ async function enqueueOne(
   };
   const { subject, body, smsBody } = buildTemplate(vars);
   const channels = {
-    email: !!ctx.tenancy.tenantEmail,
-    sms: !!ctx.tenancy.tenantPhone,
+    email: !!openText(ctx.tenancy.tenantEmailEnc, ctx.tenancy.tenantEmail),
+    sms: !!openText(ctx.tenancy.tenantPhoneEnc, ctx.tenancy.tenantPhone),
   };
 
   // Decide create vs revive vs leave-alone based on existing row state.
@@ -297,14 +298,16 @@ async function migrateLegacyContactsIfNeeded(userId?: string): Promise<void> {
     where: {
       isActive: true,
       tenantEmail: null,
+      tenantEmailEnc: null,
       tenantPhone: null,
-      tenantContact: { not: null },
+      tenantPhoneEnc: null,
+      OR: [{ tenantContact: { not: null } }, { tenantContactEnc: { not: null } }],
       ...(userId ? { property: { userId } } : {}),
     },
-    select: { id: true, tenantContact: true },
+    select: { id: true, tenantContact: true, tenantContactEnc: true },
   });
   for (const t of candidates) {
-    const raw = (t.tenantContact ?? '').trim();
+    const raw = (openText(t.tenantContactEnc, t.tenantContact) ?? '').trim();
     if (!raw) continue;
     const data: { tenantEmail?: string; tenantPhone?: string } = {};
     if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw)) {
@@ -315,7 +318,7 @@ async function migrateLegacyContactsIfNeeded(userId?: string): Promise<void> {
       else if (/^91[6-9]\d{9}$/.test(digits)) data.tenantPhone = digits.slice(2);
     }
     if (Object.keys(data).length > 0) {
-      await prisma.tenancy.update({ where: { id: t.id }, data });
+      await prisma.tenancy.update({ where: { id: t.id }, data: await tenantContactColumns(data) });
       logger.info({ tenancyId: t.id, fields: Object.keys(data) }, '[rental.reminders] migrated legacy tenantContact');
     }
   }
@@ -432,7 +435,7 @@ export async function listReminders(
   userId: string,
   filter: { status?: ReminderStatus; tenancyId?: string } = {},
 ) {
-  return prisma.rentReminder.findMany({
+  const rows = await prisma.rentReminder.findMany({
     where: {
       tenancy: { property: { userId } },
       ...(filter.status ? { status: filter.status } : {}),
@@ -445,7 +448,9 @@ export async function listReminders(
           id: true,
           tenantName: true,
           tenantEmail: true,
+          tenantEmailEnc: true,
           tenantPhone: true,
+          tenantPhoneEnc: true,
           property: { select: { id: true, name: true } },
         },
       },
@@ -460,6 +465,7 @@ export async function listReminders(
       },
     },
   });
+  return rows.map((r) => ({ ...r, tenancy: revealTenancy(r.tenancy) }));
 }
 
 async function getReminderOwned(userId: string, id: string) {
@@ -551,8 +557,8 @@ export async function approveAndSendReminder(
         sms: channelOverride.sms ?? storedChannels.sms ?? false,
       }
     : storedChannels;
-  const tenantEmail = existing.tenancy.tenantEmail;
-  const tenantPhone = existing.tenancy.tenantPhone;
+  const tenantEmail = openText(existing.tenancy.tenantEmailEnc, existing.tenancy.tenantEmail);
+  const tenantPhone = openText(existing.tenancy.tenantPhoneEnc, existing.tenancy.tenantPhone);
 
   await prisma.rentReminder.update({
     where: { id },

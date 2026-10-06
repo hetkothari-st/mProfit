@@ -26,7 +26,14 @@ import {
 } from '../adapters/vehicle/chain.js';
 import type { VehicleRecord } from '../adapters/vehicle/types.js';
 import { resolveVehiclePhoto } from '../adapters/vehicle/photo.js';
-import { registrationNoColumns } from './piiAtRest.service.js';
+import {
+  engineNoColumns,
+  findVehicleByPlate,
+  openText,
+  plateOf,
+  registrationNoColumns,
+  revealVehicle,
+} from './piiAtRest.service.js';
 
 // Indian RC pattern: 2-char state + 1-2 digit RTO + 1-3 alpha series +
 // 4-digit number. Covers MH47BT5950, DL01AB1234, KA05MP9999, etc. We
@@ -94,9 +101,8 @@ function decimalOrNull(
 }
 
 export async function listVehicles(userId: string) {
-  return prisma.vehicle.findMany({
+  const rows = await prisma.vehicle.findMany({
     where: { userId },
-    orderBy: [{ registrationNo: 'asc' }],
     include: {
       challans: {
         orderBy: { offenceDate: 'desc' },
@@ -104,9 +110,17 @@ export async function listVehicles(userId: string) {
       },
     },
   });
+  // Sorted after decrypting: the plate column is ciphertext, so the database
+  // cannot order by it.
+  return rows.map(revealVehicle).sort((a, b) => a.registrationNo.localeCompare(b.registrationNo));
 }
 
 export async function getVehicle(userId: string, id: string) {
+  return revealVehicle(await getVehicleRow(userId, id));
+}
+
+/** The stored row, ciphertext included, for this service's own use. */
+async function getVehicleRow(userId: string, id: string) {
   const row = await prisma.vehicle.findUnique({
     where: { id },
     include: {
@@ -124,18 +138,15 @@ export async function getVehicle(userId: string, id: string) {
 
 export async function createVehicle(userId: string, input: CreateVehicleInput) {
   const registrationNo = normaliseRegNo(input.registrationNo);
-  const existing = await prisma.vehicle.findUnique({
-    where: { userId_registrationNo: { userId, registrationNo } },
-  });
+  const existing = await findVehicleByPlate(userId, registrationNo);
   if (existing) {
     throw new BadRequestError(`Vehicle ${registrationNo} already exists`);
   }
 
-  return prisma.vehicle.create({
+  const created = await prisma.vehicle.create({
     data: {
       userId,
-      registrationNo,
-      // Encrypted copy + fingerprint alongside the plate (dual-write).
+      // Ciphertext, fingerprint and last-4; plaintext only without a key.
       ...(await registrationNoColumns(registrationNo)),
       portfolioId: input.portfolioId ?? null,
       make: input.make ?? null,
@@ -158,6 +169,7 @@ export async function createVehicle(userId: string, input: CreateVehicleInput) {
       permitExpiry: dateOrNull(input.permitExpiry) ?? null,
     },
   });
+  return revealVehicle(created);
 }
 
 export async function updateVehicle(
@@ -165,14 +177,13 @@ export async function updateVehicle(
   id: string,
   patch: UpdateVehicleInput,
 ) {
-  await getVehicle(userId, id);
+  await getVehicleRow(userId, id);
 
   const data: Prisma.VehicleUpdateInput = {};
   if (patch.registrationNo !== undefined) {
-    data.registrationNo = normaliseRegNo(patch.registrationNo);
-    data.rtoCode = rtoFromRegNo(data.registrationNo as string) ?? null;
-    // Keep the encrypted copy in step with the plate it mirrors.
-    Object.assign(data, await registrationNoColumns(data.registrationNo as string));
+    const plate = normaliseRegNo(patch.registrationNo);
+    data.rtoCode = rtoFromRegNo(plate) ?? null;
+    Object.assign(data, await registrationNoColumns(plate));
   }
   if (patch.portfolioId !== undefined) data.portfolioId = patch.portfolioId;
   if (patch.make !== undefined) data.make = patch.make;
@@ -203,11 +214,11 @@ export async function updateVehicle(
   if (patch.permitExpiry !== undefined)
     data.permitExpiry = dateOrNull(patch.permitExpiry);
 
-  return prisma.vehicle.update({ where: { id }, data });
+  return revealVehicle(await prisma.vehicle.update({ where: { id }, data }));
 }
 
 export async function deleteVehicle(userId: string, id: string) {
-  await getVehicle(userId, id);
+  await getVehicleRow(userId, id);
   await prisma.vehicle.delete({ where: { id } });
 }
 
@@ -275,7 +286,7 @@ function mergeRecord(
   if (record.unloadedWeight !== undefined)
     d.unloadedWeight = prefer(record.unloadedWeight, existing.unloadedWeight);
   if (record.engineNo !== undefined)
-    d.engineNo = prefer(record.engineNo, existing.engineNo);
+    d.engineNo = prefer(record.engineNo, openText(existing.engineNoEnc, existing.engineNo));
   if (record.hypothecation !== undefined)
     d.hypothecation = prefer(record.hypothecation, existing.hypothecation);
   const regDt = dateField(record.registrationDate);
@@ -284,16 +295,22 @@ function mergeRecord(
   return d;
 }
 
+/** Swap a merged plaintext engine number for its encrypted columns. */
+async function sealEngineNo(d: Prisma.VehicleUpdateInput): Promise<Prisma.VehicleUpdateInput> {
+  if (d.engineNo === undefined) return d;
+  return { ...d, ...(await engineNoColumns(d.engineNo as string | null)) };
+}
+
 export async function refreshVehicle(
   userId: string,
   id: string,
   input: RefreshVehicleInput,
 ) {
-  const existing = await getVehicle(userId, id);
+  const existing = await getVehicleRow(userId, id);
 
   const outcome = await runVehicleChain({
     userId,
-    registrationNo: existing.registrationNo,
+    registrationNo: plateOf(existing),
     mode: input.mode,
     context: {
       chassisLast4: input.chassisLast4 ?? existing.chassisLast4 ?? undefined,
@@ -306,10 +323,10 @@ export async function refreshVehicle(
       { vehicleId: id, attempts: outcome.attempts },
       '[vehicles] refresh produced no data',
     );
-    return { vehicle: existing, outcome };
+    return { vehicle: revealVehicle(existing), outcome };
   }
 
-  const data = mergeRecord(outcome.record, existing);
+  const data = await sealEngineNo(mergeRecord(outcome.record, existing));
   data.lastRefreshedAt = new Date();
   data.refreshSource = outcome.source ?? null;
 
@@ -338,7 +355,7 @@ export async function refreshVehicle(
     },
   });
 
-  return { vehicle: updated, outcome };
+  return { vehicle: revealVehicle(updated), outcome };
 }
 
 /**
@@ -368,7 +385,7 @@ export async function refreshVehiclePhoto(userId: string, id: string) {
       },
     },
   });
-  return { vehicle: updated, photo };
+  return { vehicle: revealVehicle(updated), photo };
 }
 
 /**
@@ -382,9 +399,7 @@ export async function applyVahanSms(
   smsBody: string,
 ) {
   const normalised = normaliseRegNo(registrationNo);
-  const existing = await prisma.vehicle.findUnique({
-    where: { userId_registrationNo: { userId, registrationNo: normalised } },
-  });
+  const existing = await findVehicleByPlate(userId, normalised);
 
   const outcome = await runVehicleChain({
     userId,
@@ -396,18 +411,18 @@ export async function applyVahanSms(
   });
 
   if (!outcome.ok || !outcome.record) {
-    return { vehicle: existing, outcome, created: false };
+    return { vehicle: existing ? revealVehicle(existing) : null, outcome, created: false };
   }
 
   if (existing) {
-    const data = mergeRecord(outcome.record, existing);
+    const data = await sealEngineNo(mergeRecord(outcome.record, existing));
     data.lastRefreshedAt = new Date();
     data.refreshSource = outcome.source ?? null;
     const updated = await prisma.vehicle.update({
       where: { id: existing.id },
       data,
     });
-    return { vehicle: updated, outcome, created: false };
+    return { vehicle: revealVehicle(updated), outcome, created: false };
   }
 
   const photo = await resolveVehiclePhoto(
@@ -419,7 +434,6 @@ export async function applyVahanSms(
   const created = await prisma.vehicle.create({
     data: {
       userId,
-      registrationNo: normalised,
       ...(await registrationNoColumns(normalised)),
       rtoCode: rtoFromRegNo(normalised) ?? null,
       make: outcome.record.make ?? null,
@@ -450,7 +464,7 @@ export async function applyVahanSms(
       normsType: outcome.record.normsType ?? null,
       seatingCapacity: outcome.record.seatingCapacity ?? null,
       unloadedWeight: outcome.record.unloadedWeight ?? null,
-      engineNo: outcome.record.engineNo ?? null,
+      ...(await engineNoColumns(outcome.record.engineNo)),
       hypothecation: outcome.record.hypothecation ?? null,
       registrationDate: outcome.record.registrationDate
         ? new Date(`${outcome.record.registrationDate}T00:00:00.000Z`)
@@ -461,5 +475,5 @@ export async function applyVahanSms(
       lastRefreshedAt: new Date(),
     },
   });
-  return { vehicle: created, outcome, created: true };
+  return { vehicle: revealVehicle(created), outcome, created: true };
 }

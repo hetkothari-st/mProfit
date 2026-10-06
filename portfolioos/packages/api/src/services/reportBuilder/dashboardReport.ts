@@ -48,6 +48,7 @@ import {
 } from '../charts/pdfCharts.js';
 import { themeFor, type ThemeName, type PdfTheme } from '../charts/pdfTheme.js';
 import { drawBrandLockup } from '../charts/pdfBrand.js';
+import { plateOf } from '../piiAtRest.service.js';
 
 export type DashboardScope = 'single' | 'all';
 
@@ -640,7 +641,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     const vSec = sectionBand(`Vehicles (${vehicles.length})`, cy);
     cy = vSec.cy;
     const vRows = vehicles.map(v => ({
-      reg:     v.registrationNo.length > 4 ? `XXXX${v.registrationNo.slice(-4)}` : v.registrationNo,
+      reg:     `XXXX${v.registrationNoLast4 ?? plateOf(v).slice(-4)}`,
       make:    v.make ?? '',
       model:   v.model ?? '',
       year:    String(v.manufacturingYear ?? ''),

@@ -98,14 +98,15 @@ describe('SEC-14: no code path writes User.pan in plaintext', () => {
   });
 });
 
-describe('SEC-14: vehicle registration gains an encrypted copy (dual-write)', () => {
-  it('produces ciphertext, fingerprint and last-4 alongside the plate', async () => {
+describe('SEC-14: vehicle registration is encrypted, not dual-written', () => {
+  it('produces ciphertext, fingerprint and last-4, and nulls the plaintext plate', async () => {
     const cols = await registrationNoColumns('MH 47 BT 5950');
     expect(cols.registrationNoEnc).toBeTruthy();
     expect(cols.registrationNoHash).toMatch(/^[0-9a-f]{64}$/);
     expect(cols.registrationNoLast4).toBe('5950');
-    // Dual-write: it must NOT null the plate — twenty readers still use it.
-    expect('registrationNo' in cols).toBe(false);
+    // Every reader goes through plateOf / revealVehicle, so the plate itself
+    // is no longer written.
+    expect(cols.registrationNo).toBeNull();
   });
 
   it('decrypts back to the normalised plate', async () => {
@@ -131,9 +132,9 @@ describe('SEC-14: plaintext clearing is an explicit operator decision', () => {
     expect(svc).toContain('pan: clear ? null : row.pan');
   });
 
-  it('never clears Client.pan or the vehicle plate yet', () => {
+  it('never clears Client.pan; clears the plate only behind the flag', () => {
     expect(svc).toContain('Never clears Client.pan');
-    expect(svc).toContain('Never clears the plate');
+    expect(svc).toContain('registrationNo: clear ? null : row.registrationNo');
   });
 
   it('verifies each ciphertext decrypts before saving it', () => {

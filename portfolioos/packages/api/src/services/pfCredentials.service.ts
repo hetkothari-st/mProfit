@@ -106,6 +106,15 @@ export async function decryptIdentifier(blob: string): Promise<string> {
 }
 
 /**
+ * Synchronous decrypt, for shaping rows into responses with a plain `.map`.
+ * The cipher work is synchronous already; the async variant stays for its
+ * existing callers.
+ */
+export function decryptIdentifierSync(blob: string): string {
+  return decrypt(blob).toString('utf8');
+}
+
+/**
  * Return the last 4 digits of a string, stripping non-digit characters first.
  * Falls back to the last 4 raw characters if no digits are present.
  *
