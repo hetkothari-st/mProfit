@@ -12,7 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
-import { authApi } from '@/api/auth.api';
+import { authApi, isMfaChallenge, type AuthResult } from '@/api/auth.api';
+import { TwoFactorChallenge } from '@/components/auth/TwoFactorChallenge';
 import { isSessionRemembered, useAuthStore } from '@/stores/auth.store';
 import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import { isOnboardingUnfinished } from '@/lib/onboardingProgress';
@@ -34,6 +35,14 @@ export function LoginPage() {
   const isAuthed = useAuthStore((s) => Boolean(s.accessToken && s.user));
   // Wrong email/password, shown under the field with a way out.
   const [credentialsRejected, setCredentialsRejected] = useState(false);
+  // Set when the password (or Google) step passed on a two-factor account.
+  // A Google sign-in from another page arrives here with the token in state.
+  const [mfa, setMfa] = useState<{ token: string; remember: boolean; restore: boolean } | null>(() => {
+    const st = location.state as { mfaToken?: unknown; remember?: unknown } | null;
+    return typeof st?.mfaToken === 'string'
+      ? { token: st.mfaToken, remember: st.remember !== false, restore: false }
+      : null;
+  });
 
   useEffect(() => {
     if (isAuthed) navigate(nextPath ?? '/dashboard', { replace: true });
@@ -61,25 +70,34 @@ export function LoginPage() {
   // Set when sign-in was refused because the account is pending deletion.
   const [pendingRestore, setPendingRestore] = useState<{ values: FormValues; scheduledFor: string } | null>(null);
 
+  function finishSignIn(data: AuthResult, remember: boolean, restored: boolean) {
+    setMfa(null);
+    if (restored) toast.success('Your account has been restored.');
+    setSession(data.user, data.tokens, { remember });
+    toast.success(`Welcome back, ${data.user.name.split(' ')[0]}!`);
+    // An account that left setup unfinished picks it back up.
+    // An explicit `?next=` outranks everything: the person was in the
+    // middle of something — accepting an invitation, usually — and signing
+    // in was the interruption, not the errand.
+    const to =
+      nextPath ??
+      (isOnboardingUnfinished(data.user.id)
+        ? '/onboarding'
+        : ((location.state as { from?: { pathname?: string } } | null)?.from?.pathname ??
+          '/dashboard'));
+    navigate(to, { replace: true });
+  }
+
   const loginMutation = useMutation({
     mutationFn: ({ values, restore }: { values: FormValues; restore?: boolean }) =>
       authApi.login({ email: values.email, password: values.password, ...(restore ? { restore } : {}) }),
     onSuccess: (data, { values, restore }) => {
       setPendingRestore(null);
-      if (restore) toast.success('Your account has been restored.');
-      setSession(data.user, data.tokens, { remember: values.rememberMe ?? true });
-      toast.success(`Welcome back, ${data.user.name.split(' ')[0]}!`);
-      // An account that left setup unfinished picks it back up.
-      // An explicit `?next=` outranks everything: the person was in the
-      // middle of something — accepting an invitation, usually — and signing
-      // in was the interruption, not the errand.
-      const to =
-        nextPath ??
-        (isOnboardingUnfinished(data.user.id)
-          ? '/onboarding'
-          : ((location.state as { from?: { pathname?: string } } | null)?.from?.pathname ??
-            '/dashboard'));
-      navigate(to, { replace: true });
+      if (isMfaChallenge(data)) {
+        setMfa({ token: data.mfaToken, remember: values.rememberMe ?? true, restore: Boolean(restore) });
+        return;
+      }
+      finishSignIn(data, values.rememberMe ?? true, Boolean(restore));
     },
     onError: (err, { values }) => {
       const scheduledFor = pendingDeletionDate(err);
@@ -119,6 +137,13 @@ export function LoginPage() {
         </>
       }
     >
+      {mfa ? (
+        <TwoFactorChallenge
+          mfaToken={mfa.token}
+          onVerified={(result) => finishSignIn(result, mfa.remember, mfa.restore)}
+          onCancel={() => setMfa(null)}
+        />
+      ) : (
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {pendingRestore && (
           <RestoreAccountNotice
@@ -201,8 +226,13 @@ export function LoginPage() {
           </div>
         </div>
 
-        <GoogleSignInButton text="signin_with" remember={watch('rememberMe') ?? true} />
+        <GoogleSignInButton
+          text="signin_with"
+          remember={watch('rememberMe') ?? true}
+          onMfaRequired={(token) => setMfa({ token, remember: watch('rememberMe') ?? true, restore: false })}
+        />
       </form>
+      )}
     </AuthLayout>
   );
 }
