@@ -7,7 +7,7 @@ export function PrivacyPage() {
       // page rendered as one undivided block. Style the elements directly.
       className="mx-auto max-w-3xl px-4 py-10 text-sm leading-relaxed text-foreground sm:px-6 [&_code]:break-all [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:text-[0.85em] [&_h1]:mb-4 [&_h1]:font-display [&_h1]:text-2xl [&_h1]:leading-tight [&_h2]:mb-2 [&_h2]:mt-8 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:my-1 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
     >
-      <Link to="/" className="mb-6 inline-block text-xs text-muted-foreground no-underline hover:text-foreground">
+      <Link to="/" className="-my-2 -ml-2 mb-4 inline-block px-2 py-2 text-xs text-muted-foreground no-underline hover:text-foreground">
         ← EveryPaisa
       </Link>
       <h1>EveryPaisa Browser Extension — Privacy Policy</h1>
