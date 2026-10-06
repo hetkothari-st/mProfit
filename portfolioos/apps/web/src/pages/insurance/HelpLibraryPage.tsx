@@ -77,7 +77,7 @@ export function HelpLibraryPage() {
               <details className="rounded-lg border border-border/70 bg-card/50 px-4 py-3 lg:hidden">
                 <summary className="cursor-pointer text-sm font-medium">Jump to a topic</summary>
                 <div className="mt-3 max-h-[60vh] overflow-y-auto">
-                  <HelpContents groups={groups} />
+                  <HelpContents groups={groups} label="Help topics, jump list" />
                 </div>
               </details>
             )}
