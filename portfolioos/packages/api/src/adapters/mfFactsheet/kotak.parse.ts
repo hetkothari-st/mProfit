@@ -65,7 +65,7 @@ import type {
 
 export const KOTAK_AMC_CODE = 'KOTAK';
 export const KOTAK_ADAPTER_ID = 'mf.factsheet.kotak';
-export const KOTAK_ADAPTER_VERSION = '1.1.0';
+export const KOTAK_ADAPTER_VERSION = '1.2.0';
 
 export const KOTAK_TABLE_SPEC: AmcTableSpec = {
   amcCode: KOTAK_AMC_CODE,
@@ -129,11 +129,16 @@ export const KOTAK_FACTS_SPEC: AmcFactsSpec = {
    * as the direct plan's.
    */
   terDirectPatterns: [
-    /Expense Ratio\*{0,2}[\s\S]{0,60}?Direct Plan\s*:?[\s\S]{0,20}?[\d.]+\s*%\s*([\d.]+)\s*%/i,
+    /Expense Ratio\*{0,2}[\s\S]{0,40}?Regular Plan\s*:?\s*Direct Plan\s*:?\s*[\d.]+\s*%\s*([\d.]+)\s*%/i,
     /Total Expense Ratio[^\n]*?(?<!other than )Direct Plan\s*:?\s*([\d.]+)\s*%/i,
   ],
   terRegularPatterns: [
-    /Expense Ratio\*{0,2}[\s\S]{0,60}?Direct Plan\s*:?[\s\S]{0,20}?([\d.]+)\s*%/i,
+    // Labels-then-values only: "Regular Plan:" and "Direct Plan:" must sit back
+    // to back. Loosely anchored, this pattern also matched the label-beside-
+    // value layout ("Regular Plan: 1.72% ; Direct Plan: 0.62%") at "Direct
+    // Plan: 0.62%" and reported the DIRECT plan's TER as the regular plan's —
+    // understating a regular-plan holder's cost by over a percentage point.
+    /Expense Ratio\*{0,2}[\s\S]{0,40}?Regular Plan\s*:?\s*Direct Plan\s*:?\s*([\d.]+)\s*%/i,
     /Total Expense Ratio[^\n]*?Regular Plan\s*:?\s*([\d.]+)\s*%/i,
   ],
   terSinglePatterns: [/Total Expense Ratio\s*:\s*([\d.]+)\s*%/i],

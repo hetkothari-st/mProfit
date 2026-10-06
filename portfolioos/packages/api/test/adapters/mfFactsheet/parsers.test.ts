@@ -10,6 +10,9 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SBI_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/sbi.parse.js';
+import { ICICI_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/icici.parse.js';
+import { HDFC_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/hdfc.parse.js';
 import { Decimal } from '@everypaisa/shared';
 import { csvToGrid, buildAmfiMarketCapLookup } from '../../../src/adapters/mfFactsheet/normalise.js';
 import { parseSbiPortfolio, parseSbiSchemeFacts } from '../../../src/adapters/mfFactsheet/sbi.parse.js';
@@ -54,6 +57,7 @@ interface AmcUnderTest {
   amc: string;
   amcCode: string;
   adapterId: string;
+  adapterVersion: string;
   parsePortfolio: (i: PortfolioParseInput) => MfFactsheetResult<PortfolioRaw>;
   parseFacts: (i: SchemeFactsParseInput) => MfFactsheetResult<SchemeFactsRaw>;
   /** The regular-plan TER printed in `factsheet-normal.txt`. */
@@ -69,6 +73,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'sbi',
     amcCode: 'SBI',
     adapterId: 'mf.factsheet.sbi',
+    adapterVersion: SBI_ADAPTER_VERSION,
     parsePortfolio: parseSbiPortfolio,
     parseFacts: parseSbiSchemeFacts,
     regularTer: '1.45',
@@ -80,6 +85,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'icici',
     amcCode: 'ICICI_PRU',
     adapterId: 'mf.factsheet.iciciPru',
+    adapterVersion: ICICI_ADAPTER_VERSION,
     parsePortfolio: parseIciciPortfolio,
     parseFacts: parseIciciSchemeFacts,
     regularTer: '1.51',
@@ -91,6 +97,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'hdfc',
     amcCode: 'HDFC',
     adapterId: 'mf.factsheet.hdfc',
+    adapterVersion: HDFC_ADAPTER_VERSION,
     parsePortfolio: parseHdfcPortfolio,
     parseFacts: parseHdfcSchemeFacts,
     regularTer: '1.44',
@@ -115,7 +122,7 @@ for (const amc of AMCS) {
       const p = result.data;
       expect(p.amcCode).toBe(amc.amcCode);
       expect(p.sourceAdapter).toBe(amc.adapterId);
-      expect(p.sourceAdapterVer).toBe('1.0.0');
+      expect(p.sourceAdapterVer).toBe(amc.adapterVersion);
       expect(p.sourceHash).toMatch(/^[0-9a-f]{64}$/);
       expect(p.asOf.toISOString()).toBe('2026-03-31T00:00:00.000Z');
 

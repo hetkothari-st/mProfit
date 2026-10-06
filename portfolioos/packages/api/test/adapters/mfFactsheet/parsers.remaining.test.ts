@@ -21,6 +21,13 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { NIPPON_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/nippon.parse.js';
+import { KOTAK_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/kotak.parse.js';
+import { AXIS_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/axis.parse.js';
+import { UTI_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/uti.parse.js';
+import { ABSL_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/absl.parse.js';
+import { MIRAE_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/mirae.parse.js';
+import { DSP_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/dsp.parse.js';
 import { Decimal } from '@everypaisa/shared';
 import { csvToGrid, buildAmfiMarketCapLookup } from '../../../src/adapters/mfFactsheet/normalise.js';
 import {
@@ -84,6 +91,7 @@ interface AmcUnderTest {
   amc: string;
   amcCode: string;
   adapterId: string;
+  adapterVersion: string;
   parsePortfolio: (i: PortfolioParseInput) => MfFactsheetResult<PortfolioRaw>;
   parseFacts: (i: SchemeFactsParseInput) => MfFactsheetResult<SchemeFactsRaw>;
   /** The regular-plan TER printed in `factsheet-normal.txt`. */
@@ -121,6 +129,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'nippon',
     amcCode: 'NIPPON',
     adapterId: 'mf.factsheet.nippon',
+    adapterVersion: NIPPON_ADAPTER_VERSION,
     parsePortfolio: parseNipponPortfolio,
     parseFacts: parseNipponSchemeFacts,
     regularTer: '1.62',
@@ -135,6 +144,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'kotak',
     amcCode: 'KOTAK',
     adapterId: 'mf.factsheet.kotak',
+    adapterVersion: KOTAK_ADAPTER_VERSION,
     parsePortfolio: parseKotakPortfolio,
     parseFacts: parseKotakSchemeFacts,
     regularTer: '1.72',
@@ -149,6 +159,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'axis',
     amcCode: 'AXIS',
     adapterId: 'mf.factsheet.axis',
+    adapterVersion: AXIS_ADAPTER_VERSION,
     parsePortfolio: parseAxisPortfolio,
     parseFacts: parseAxisSchemeFacts,
     regularTer: '1.68',
@@ -163,6 +174,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'uti',
     amcCode: 'UTI',
     adapterId: 'mf.factsheet.uti',
+    adapterVersion: UTI_ADAPTER_VERSION,
     parsePortfolio: parseUtiPortfolio,
     parseFacts: parseUtiSchemeFacts,
     regularTer: '1.29',
@@ -177,6 +189,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'absl',
     amcCode: 'ABSL',
     adapterId: 'mf.factsheet.absl',
+    adapterVersion: ABSL_ADAPTER_VERSION,
     parsePortfolio: parseAbslPortfolio,
     parseFacts: parseAbslSchemeFacts,
     regularTer: '1.85',
@@ -200,6 +213,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'mirae',
     amcCode: 'MIRAE',
     adapterId: 'mf.factsheet.mirae',
+    adapterVersion: MIRAE_ADAPTER_VERSION,
     parsePortfolio: parseMiraePortfolio,
     parseFacts: parseMiraeSchemeFacts,
     regularTer: '1.55',
@@ -214,6 +228,7 @@ const AMCS: readonly AmcUnderTest[] = [
     amc: 'dsp',
     amcCode: 'DSP',
     adapterId: 'mf.factsheet.dsp',
+    adapterVersion: DSP_ADAPTER_VERSION,
     parsePortfolio: parseDspPortfolio,
     parseFacts: parseDspSchemeFacts,
     regularTer: '1.71',
@@ -241,7 +256,7 @@ for (const amc of AMCS) {
       const p = result.data;
       expect(p.amcCode).toBe(amc.amcCode);
       expect(p.sourceAdapter).toBe(amc.adapterId);
-      expect(p.sourceAdapterVer).toBe('1.0.0');
+      expect(p.sourceAdapterVer).toBe(amc.adapterVersion);
       expect(p.sourceHash).toMatch(/^[0-9a-f]{64}$/);
       // Every fixture states its as-of in a DIFFERENT format — "31-Mar-2026",
       // "31/03/2026", "31-03-2026", "March 31, 2026" — and all four must land
@@ -508,3 +523,31 @@ for (const amc of AMCS) {
     });
   });
 }
+
+// Kotak's real fund page prints the LABELS first and the VALUES after, in label
+// order ("Expense Ratio** Regular Plan: Direct Plan: 0.38% 0.16%" — the July
+// 2026 factsheet). The fixture above uses the label-beside-value layout. Both
+// must read the right plan: a loose real-layout pattern once matched
+// "Direct Plan: 0.62%" in the fixture layout and reported it as the REGULAR
+// plan's TER, understating a regular-plan holder's cost by 1.1 points.
+describe('KOTAK factsheet parser, labels-first layout', () => {
+  async function realLayout(): Promise<string> {
+    const base = await text('kotak', 'factsheet-normal.txt');
+    return base.replace(
+      /^Total Expense Ratio:.*$/m,
+      'Expense Ratio** Regular Plan: Direct Plan: 0.38% 0.16%',
+    );
+  }
+
+  it('reads the regular plan as the first figure', async () => {
+    const result = parseKotakSchemeFacts({ schemeCode: '200001', text: await realLayout(), planType: 'REGULAR' });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (result.ok) expect(new Decimal(result.data.terPct ?? '0').toFixed(2)).toBe('0.38');
+  });
+
+  it('reads the direct plan as the second figure', async () => {
+    const result = parseKotakSchemeFacts({ schemeCode: '200001', text: await realLayout(), planType: 'DIRECT' });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (result.ok) expect(new Decimal(result.data.terPct ?? '0').toFixed(2)).toBe('0.16');
+  });
+});
