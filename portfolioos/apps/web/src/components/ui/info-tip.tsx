@@ -28,7 +28,7 @@ export function InfoTip({ title, children, className, side = 'top' }: InfoTipPro
           type="button"
           aria-label={`About ${title}`}
           className={cn(
-            'inline-grid h-5 w-5 shrink-0 place-items-center rounded-full align-middle',
+            'tap-expand inline-grid h-5 w-5 shrink-0 place-items-center rounded-full align-middle',
             'text-muted-foreground/70 transition-colors hover:text-foreground',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
             'data-[state=open]:text-foreground',

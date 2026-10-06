@@ -390,7 +390,7 @@ export function PPFNpsFormDialog({ open, onOpenChange, initial, defaultPortfolio
           </div>
 
           {/* Account name + ID */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>{cfg.accountLabel} <span className="text-destructive">*</span></Label>
               <Input {...register('assetName')} placeholder={cfg.accountPlaceholder} />
@@ -417,7 +417,7 @@ export function PPFNpsFormDialog({ open, onOpenChange, initial, defaultPortfolio
           </div>
 
           {/* Date + Amount */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Date <span className="text-destructive">*</span></Label>
               <Input type="date" {...register('tradeDate')} />

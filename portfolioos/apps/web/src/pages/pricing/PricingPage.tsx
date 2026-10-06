@@ -165,7 +165,7 @@ export function PricingPage() {
                 key={c}
                 onClick={() => setCycle(c)}
                 className={cn(
-                  'px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
+                  'px-2.5 py-1.5 sm:py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
                   cycle === c
                     ? 'bg-foreground text-background shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',

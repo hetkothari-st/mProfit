@@ -193,10 +193,10 @@ function TransactionLog({
                         </div>
                       ) : (
                         <div className="flex gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onEdit(t!)} title="Edit">
+                          <Button size="sm" variant="ghost" className="tap-expand h-6 w-6 p-0" onClick={() => onEdit(t!)} title="Edit">
                             <Pencil className="h-3 w-3" />
                           </Button>
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          <Button size="sm" variant="ghost" className="tap-expand h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                             onClick={() => setConfirmId(t!.id)} title="Delete">
                             <Trash2 className="h-3 w-3" />
                           </Button>

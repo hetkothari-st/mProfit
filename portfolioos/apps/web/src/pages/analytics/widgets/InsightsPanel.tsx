@@ -188,7 +188,7 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
   return (
     <Card>
       <CardHeader className={`flex-row items-center justify-between gap-3 flex-wrap ${open ? 'pb-3' : ''}`}>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <CardTitle className="flex items-center gap-1.5">
             <button
               type="button"
@@ -208,7 +208,7 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
             <AnalyticsInfo k="insights" />
           </CardTitle>
           {open && okPayload?.fromCache && (
-            <span className="text-[10px] uppercase tracking-kerned text-muted-foreground border rounded-full px-2 py-0.5">
+            <span className="shrink-0 whitespace-nowrap text-[10px] uppercase tracking-kerned text-muted-foreground border rounded-full px-2 py-0.5">
               Cached · {new Date(okPayload.generatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
             </span>
           )}

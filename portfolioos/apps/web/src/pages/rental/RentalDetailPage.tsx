@@ -542,7 +542,7 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
           )}
 
           {receipts.length > 0 ? (
-            <div className="border-t border-border/60 max-h-[420px] overflow-y-auto overflow-x-auto">
+            <div className="border-t border-border/60 overflow-x-auto md:max-h-[420px] md:overflow-y-auto">
               <table className="w-full text-sm rtable">
                 <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
                   <tr className="border-b border-border/60 text-[10.5px] uppercase tracking-kerned text-muted-foreground">
@@ -617,7 +617,7 @@ function SummaryTile({
           />
         </div>
       )}
-      {hint && <div className="mt-1 text-[10.5px] text-muted-foreground truncate">{hint}</div>}
+      {hint && <div className="mt-1 text-[10.5px] text-muted-foreground sm:truncate">{hint}</div>}
     </div>
   );
 }
@@ -692,7 +692,7 @@ function AddTenancyDialog({
               <p className="text-xs text-negative mt-1">{errors.tenantName}</p>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tenant email</Label>
               <Input
@@ -726,7 +726,7 @@ function AddTenancyDialog({
               placeholder="Alt phone, alternate email, etc."
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Start date *</Label>
               <Input
@@ -747,7 +747,7 @@ function AddTenancyDialog({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Monthly rent (₹) *</Label>
               <Input
@@ -1143,7 +1143,7 @@ export function RentalDetailPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="tap-expand h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={() => deleteExpense.mutate(e.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />

@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
+import { AutoFitText } from '@/components/ui/AutoFitText';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
@@ -106,7 +107,9 @@ function Stat({
             {label}
           </p>
         </div>
-        <p className={`text-xl font-semibold tabular-nums mt-1 ${valCls}`}>{value}</p>
+        <AutoFitText className="mt-1">
+          <p className={`text-xl font-semibold tabular-nums ${valCls}`}>{value}</p>
+        </AutoFitText>
         {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
       </CardContent>
     </Card>
@@ -322,10 +325,10 @@ function PaymentHistory({
                         </div>
                       ) : (
                         <div className="flex gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onEdit(t!)} title="Edit">
+                          <Button size="sm" variant="ghost" className="tap-expand h-6 w-6 p-0" onClick={() => onEdit(t!)} title="Edit">
                             <Pencil className="h-3 w-3" />
                           </Button>
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          <Button size="sm" variant="ghost" className="tap-expand h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                             onClick={() => setConfirmId(t!.id)} title="Delete">
                             <Trash2 className="h-3 w-3" />
                           </Button>
@@ -659,20 +662,20 @@ export function FdDetailPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Sticky nav */}
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b px-4 sm:px-6 py-3 flex items-center gap-3 flex-wrap">
-        <Button variant="ghost" size="sm" className="gap-1.5 -ml-2" onClick={() => navigate('/fds')}>
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b px-4 sm:px-6 py-3 flex items-center gap-2 sm:gap-3 sm:flex-wrap">
+        <Button variant="ghost" size="sm" className="gap-1.5 -ml-2" aria-label="Back to FDs & RDs" onClick={() => navigate('/fds')}>
           <ArrowLeft className="h-4 w-4" />
-          FDs & RDs
+          <span className="hidden sm:inline">FDs & RDs</span>
         </Button>
         <div className="h-4 w-px bg-border" />
-        <p className="font-medium text-sm truncate flex-1">{holding.assetName}</p>
-        <Button variant="outline" size="sm" className="gap-1.5"
+        <p className="font-medium text-sm truncate flex-1 min-w-0">{holding.assetName}</p>
+        <Button variant="outline" size="sm" className="gap-1.5" aria-label="Log payment"
           onClick={() => { setEditTxn(null); setEditOpen(true); }}>
-          <Plus className="h-3.5 w-3.5" /> Log payment
+          <Plus className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Log payment</span>
         </Button>
         {primary && (
-          <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => openEdit(primary)}>
-            <Pencil className="h-3.5 w-3.5" /> Edit
+          <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Edit" onClick={() => openEdit(primary)}>
+            <Pencil className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Edit</span>
           </Button>
         )}
       </div>
@@ -799,7 +802,7 @@ export function FdDetailPage() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={260}>
-                  <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                  <AreaChart data={chartData} margin={{ top: 20, right: 12, left: 0, bottom: 4 }}>
                     <defs>
                       <linearGradient id="gradValue" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor={CHART_GROWTH} stopOpacity={0.22} />
@@ -943,7 +946,7 @@ export function FdDetailPage() {
                     <YAxis fontSize={10} tickLine={false} axisLine={false} width={55}
                       stroke="hsl(var(--muted-foreground))" tickFormatter={INR_COMPACT} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={TOOLTIP_LABEL_STYLE}
-                      formatter={(v: number, name: string) => [formatINR(String(v)), name === 'principal' ? 'Principal' : 'Interest']} />
+                      formatter={(v: number, name: string) => [formatINR(String(v)), String(name).toLowerCase() === 'principal' ? 'Principal' : 'Interest']} />
                     <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconType="circle" iconSize={8} />
                     <Area type="monotone" dataKey="principal" stackId="1" stroke={CHART_PRINCIPAL} strokeWidth={1.5}
                       fill="url(#gradStackedPrincipal)" name="Principal" />

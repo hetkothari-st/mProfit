@@ -242,7 +242,7 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
 
             {/* Readable fallback — the chart shows shape, the table carries the numbers. */}
             <div className="-mx-1 overflow-x-auto">
-              <table className="w-full min-w-[460px] border-collapse text-[13px]">
+              <table className="w-full border-collapse text-[12px] sm:min-w-[460px] sm:text-[13px]">
                 <thead>
                   <tr className="border-b border-border/70">
                     <th className="px-1 py-2 text-left text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
@@ -287,7 +287,7 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
                           {r.driftPp > 0 ? '+' : ''}
                           {r.driftPp.toFixed(1)} pp
                         </td>
-                        <td className="px-1 py-2 text-right text-muted-foreground">
+                        <td className="whitespace-nowrap px-1 py-2 text-right text-muted-foreground">
                           {r.driftValue ? (
                             <Money>{formatINR(r.driftValue, { showSign: true })}</Money>
                           ) : (

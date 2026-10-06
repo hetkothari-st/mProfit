@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import {
   Bar,
   BarChart,
@@ -375,7 +376,7 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
               </ResponsiveContainer>
 
               {/* The chart shows shape; the ledger carries the numbers. */}
-              <div className="-mx-1 overflow-x-auto">
+              <HScroll className="-mx-1 overflow-x-auto">
                 <table className="w-full min-w-[520px] border-collapse text-[13px]">
                   <thead>
                     <tr className="border-b border-border/70">
@@ -436,7 +437,7 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
                     )}
                   </tbody>
                 </table>
-              </div>
+              </HScroll>
 
               {restrictedCount > 0 && (
                 <p className="text-[12px] leading-relaxed text-muted-foreground">

@@ -157,7 +157,7 @@ export function PfExtensionPairPage() {
   const codeExpired = countdown === 0 && code !== null;
 
   return (
-    <div className="max-w-lg mx-auto space-y-6 py-6 px-4">
+    <div className="max-w-lg mx-auto space-y-6 py-6 sm:px-4">
       {/* Header */}
       <div className="flex items-center gap-3">
         <PlugZap className="h-6 w-6 text-primary" />

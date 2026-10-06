@@ -714,3 +714,30 @@
     }
   }
 }
+
+/* Edge fade on horizontal scrollers with hidden content (see hooks/useScrollFade). */
+[data-scroll-fade='right'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+[data-scroll-fade='left'] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+[data-scroll-fade='both'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+/* Small icon buttons: invisible, larger hit area on touch screens only, so a
+   24px edit/delete icon is still easy to tap without changing how it looks. */
+@media (pointer: coarse) {
+  .tap-expand {
+    position: relative;
+  }
+  .tap-expand::before {
+    content: '';
+    position: absolute;
+    inset: -5px;
+  }
+}

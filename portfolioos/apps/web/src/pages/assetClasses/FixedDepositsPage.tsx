@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AutoFitText } from '@/components/ui/AutoFitText';
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
@@ -298,14 +299,16 @@ function InterestSoFar({ holding }: { holding: FDHolding }) {
 /** "At maturity" + the value in the bank's accent — the number the card leads with. */
 function MaturityValue({ value, accent }: { value: Decimal | null; accent: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-sm text-muted-foreground">At maturity</p>
-      <p
-        className="money-digits font-display text-[30px] leading-tight tabular-nums"
-        style={value ? { color: accent } : undefined}
-      >
-        {value ? formatINR(value.toString()) : '—'}
-      </p>
+      <AutoFitText>
+        <p
+          className="money-digits font-display text-[30px] leading-tight tabular-nums"
+          style={value ? { color: accent } : undefined}
+        >
+          {value ? formatINR(value.toString()) : '—'}
+        </p>
+      </AutoFitText>
     </div>
   );
 }

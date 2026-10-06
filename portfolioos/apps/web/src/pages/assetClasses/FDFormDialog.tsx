@@ -233,7 +233,7 @@ export function FDFormDialog({
               <Label>Deposit type</Label>
               <div className="grid grid-cols-2 gap-2">
                 {([
-                  { kind: 'FIXED_DEPOSIT' as const,     label: 'Fixed Deposit',     hint: 'One-time lump-sum',  Icon: PiggyBank },
+                  { kind: 'FIXED_DEPOSIT' as const,     label: 'Fixed Deposit',     hint: 'One-time lump‑sum',  Icon: PiggyBank },
                   { kind: 'RECURRING_DEPOSIT' as const, label: 'Recurring Deposit', hint: 'Monthly installments', Icon: CalendarClock },
                 ]).map(({ kind, label, hint, Icon }) => {
                   const selected = depositKind === kind;

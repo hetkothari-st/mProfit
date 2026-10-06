@@ -2049,14 +2049,25 @@ function ModalShell({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  // Not the shared Dialog, so Escape has to be wired by hand.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/70 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+        className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <div>
@@ -2068,7 +2079,8 @@ function ModalShell({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded hover:bg-muted text-muted-foreground"
+            aria-label="Close"
+            className="tap-expand p-1 rounded hover:bg-muted text-muted-foreground"
           >
             <X className="h-4 w-4" strokeWidth={1.7} />
           </button>

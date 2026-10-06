@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { cn } from '@/lib/cn';
+import { useScrollFade } from '@/hooks/useScrollFade';
 
 interface TabsContextValue {
   value: string;
@@ -37,8 +38,11 @@ export function Tabs({ defaultValue, value: controlledValue, onValueChange, chil
 }
 
 export function TabsList({ children, className }: { children: React.ReactNode; className?: string }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  useScrollFade(ref);
   return (
     <div
+      ref={ref}
       role="tablist"
       className={cn(
         'inline-flex h-10 max-w-full items-center justify-start overflow-x-auto overflow-y-hidden rounded-md bg-muted p-1 text-muted-foreground gap-0.5',
@@ -59,8 +63,15 @@ interface TabsTriggerProps {
 export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
   const { value: activeValue, onValueChange } = useTabsContext();
   const isActive = activeValue === value;
+  const ref = React.useRef<HTMLButtonElement>(null);
+  // Bring the selected tab into view when it sits in the scrolled-off part of a
+  // narrow tab row (phones).
+  React.useEffect(() => {
+    if (isActive) ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [isActive]);
   return (
     <button
+      ref={ref}
       type="button"
       role="tab"
       aria-selected={isActive}

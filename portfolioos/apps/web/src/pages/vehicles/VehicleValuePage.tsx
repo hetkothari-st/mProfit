@@ -347,7 +347,7 @@ export function VehicleValuePage() {
           {!quote ? (
             <Card>
               <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                Pick a vehicle on the left and click <strong>Get price</strong> to see valuation.
+                Pick a vehicle <span className="lg:hidden">above</span><span className="hidden lg:inline">on the left</span> and click <strong>Get price</strong> to see valuation.
               </CardContent>
             </Card>
           ) : (
