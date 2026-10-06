@@ -17,6 +17,7 @@ import { writeIngestionFailure } from '../services/ingestionFailures.service.js'
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { panColumns } from '../services/piiAtRest.service.js';
+import { readBuffer } from '../lib/documentStorage.js';
 
 const ImportTypeEnum = z.enum([
   'CONTRACT_NOTE_PDF',
@@ -238,6 +239,13 @@ export async function download(req: Request, res: Response) {
   const id = req.params.id!;
   const job = await getImportJob(req.user.id, id);
 
+  // The encrypted copy is the durable one; the disk path is legacy only.
+  if (job.blobKey) {
+    const bytes = await readBuffer(req.user.id, job.blobKey);
+    res.attachment(job.fileName);
+    res.send(bytes);
+    return;
+  }
   if (!job.filePath || !fs.existsSync(job.filePath)) {
     throw new NotFoundError('Source file not found on server');
   }
