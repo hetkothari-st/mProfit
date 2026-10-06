@@ -143,13 +143,16 @@ export async function getCaScope(callerId: string, clientId: string): Promise<Ca
   if (client.status === 'PENDING' || !client.userId) {
     throw new ForbiddenError('That client has not accepted your invitation yet.');
   }
-  const now = new Date();
-  if (client.accessFrom && client.accessFrom > now) {
+  // The window is a pair of calendar dates (stored as midnight UTC of the
+  // picked day) and means whole days in India — same rule as the SQL side's
+  // app_ist_today(). Comparing against `now` cut the last day off at 05:30.
+  const today = istToday();
+  if (client.accessFrom && client.accessFrom > today) {
     throw new ForbiddenError(
       `This access starts on ${client.accessFrom.toISOString().slice(0, 10)}.`,
     );
   }
-  if (client.accessUntil && client.accessUntil < now) {
+  if (client.accessUntil && client.accessUntil < today) {
     // Said plainly, because the CA can do nothing about it themselves: the
     // client sets the window and only the client can extend it.
     throw new ForbiddenError(
@@ -848,6 +851,11 @@ export async function reinstateGrant(
 }
 
 /** `YYYY-MM-DD` at the start of that day, or null. Anything else is refused. */
+/** Today's date in India, as midnight UTC — the form access dates are stored in. */
+function istToday(now: Date = new Date()): Date {
+  return new Date(`${new Date(now.getTime() + 330 * 60_000).toISOString().slice(0, 10)}T00:00:00.000Z`);
+}
+
 function parseScopeDate(value: string | null | undefined, field: string): Date | null {
   if (value === undefined || value === null || value === '') return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {

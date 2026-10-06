@@ -44,7 +44,8 @@ import {
   renameSession,
   touchSession,
 } from '../ai/chatSessions.js';
-import { checkQuota, incrementUsage } from '../ai/rateLimit.js';
+import { logger } from '../lib/logger.js';
+import { checkQuota, refundQuota, reserveQuota } from '../ai/rateLimit.js';
 import { computeSuggestedQuestions } from '../ai/suggestedQuestions.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
 
@@ -156,6 +157,21 @@ aiAssistantRouter.get(
 );
 
 aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
+  // Set once a message is reserved, cleared once output starts; a failure in
+  // between gives the reservation back.
+  let reservedFor: string | null = null;
+  const refundReservation = async (): Promise<void> => {
+    if (!reservedFor) return;
+    const id = reservedFor;
+    reservedFor = null;
+    try {
+      await refundQuota(id);
+    } catch (err) {
+      // The request already failed; a lost refund only costs the user one
+      // message of today's allowance, so log it rather than mask the error.
+      logger.warn({ err, userId: id }, '[ai.quota] refund failed');
+    }
+  };
   try {
     if (!req.user) throw new UnauthorizedError();
     const userId = req.user.id;
@@ -234,6 +250,22 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
       return;
     }
 
+    // Take this message from the allowance now, before any work: the check
+    // above alone let parallel requests all through (F9). Given back only if
+    // the request fails before the assistant produced anything.
+    if (!(await reserveQuota(userId, quota.limit))) {
+      res.status(429).json({
+        success: false,
+        error: 'daily_cap',
+        message: `You've hit the daily limit of ${quota.limit} questions. Resets tomorrow.`,
+        used: quota.limit,
+        limit: quota.limit,
+        resetsAt: quota.resetsAt,
+      });
+      return;
+    }
+    reservedFor = userId;
+
     // Persist the user's turn BEFORE calling Claude so we always have a
     // record even if Claude errors mid-stream.
     const classified = classifyQuery(message);
@@ -310,13 +342,13 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
             familyId,
           });
           await touchSession(sessionId);
-          await incrementUsage(userId);
           if (card) {
             send({ type: 'card', data: card });
           }
         },
       )) {
         fullResponse += chunk;
+        reservedFor = null; // an answer is coming: the message counts
         const visible = cardFilter.push(chunk);
         if (visible) send({ type: 'token', content: visible });
       }
@@ -324,6 +356,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
       if (rest) send({ type: 'token', content: rest });
       send({ type: 'done' });
     } catch (err) {
+      await refundReservation();
       const message = err instanceof Error ? err.message : 'stream_error';
       send({ type: 'error', message });
     } finally {
@@ -331,6 +364,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     }
     void fullResponse;
   } catch (err) {
+    await refundReservation();
     if (!res.headersSent) {
       const message = err instanceof Error ? err.message : 'assistant_error';
       res.status(500).json({ success: false, error: message });

@@ -1272,6 +1272,9 @@ model ImportJob {
   successRows    Int?
   failedRows     Int?
   errorLog       Json?
+  /// Set when a CA with an asset-class-limited grant uploaded the file: the
+  /// classes the job may write (JSON array). Null = not limited.
+  caAllowedAssetClasses Json?
   // Phase C: content-hash dedup. SHA-256 of file bytes — replaces the
   // filename-only check that silently dropped same-named PDFs from
   // different emails (e.g. `Contract Note.pdf` daily).
