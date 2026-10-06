@@ -1,9 +1,16 @@
 import type { HelpGroup, HelpTopic } from '@everypaisa/shared';
 
 /** The topics, by group, as anchor links — the page's table of contents. */
-export function HelpContents({ groups }: { groups: Array<{ group: HelpGroup; topics: HelpTopic[] }> }) {
+export function HelpContents({
+  groups,
+  label = 'Help topics',
+}: {
+  groups: Array<{ group: HelpGroup; topics: HelpTopic[] }>;
+  /** Landmark name. Two navs on one page need distinct names. */
+  label?: string;
+}) {
   return (
-    <nav aria-label="Help topics" className="space-y-5 text-sm">
+    <nav aria-label={label} className="space-y-5 text-sm">
       {groups.map(({ group, topics }) => (
         <div key={group.id}>
           <a href={`#group-${group.id.toLowerCase()}`} className="font-medium hover:underline">
