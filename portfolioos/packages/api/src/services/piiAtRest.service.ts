@@ -171,6 +171,11 @@ export async function findVehicleByPlate(userId: string, raw: string) {
   return prisma.vehicle.findFirst({ where: { userId, OR: or } });
 }
 
+/** Keyed fingerprint of a PAN, as panColumns writes it. */
+export function panHash(raw: string): string {
+  return hashIdentifier(normalizePan(raw), PAN_PURPOSE);
+}
+
 export function registrationNoHash(raw: string): string {
   return hashIdentifier(normalizeRegistrationNo(raw), REG_NO_PURPOSE);
 }

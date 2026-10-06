@@ -20,6 +20,7 @@ import { startRentalJobs } from './jobs/rentalJobs.js';
 import { startInsuranceJobs } from './jobs/insuranceJobs.js';
 import { startAccountDeletionJob } from './jobs/accountDeletionJob.js';
 import { startPiiAtRestJobs } from './jobs/piiAtRestJobs.js';
+import { startKeyRotationJobs } from './jobs/keyRotationJobs.js';
 import { startSecretRotationJobs } from './jobs/secretRotationJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
@@ -176,6 +177,7 @@ const server = app.listen(env.PORT, '::', () => {
   startRentalJobs();
   startInsuranceJobs();
   startAccountDeletionJob();
+  startKeyRotationJobs();
   startPiiAtRestJobs();
   startSecretRotationJobs();
   startAlertJobs();

@@ -35,8 +35,7 @@ export interface KeyProvider {
   unwrap(wrapped: string, kekVersion: number): Buffer;
 }
 
-function deriveKek(): Buffer {
-  const raw = process.env.APP_ENCRYPTION_KEY;
+function deriveKek(raw: string | undefined = process.env.APP_ENCRYPTION_KEY): Buffer {
   if (!raw) throw new Error('APP_ENCRYPTION_KEY not set — per-user keys unavailable');
   const ikm = Buffer.from(raw, 'base64');
   // A separate subkey: the identifier ciphers and fingerprints that also use
@@ -69,9 +68,70 @@ export const envKeyProvider: KeyProvider = {
   },
   unwrap(wrapped, kekVersion) {
     if (kekVersion !== 1) throw new Error(`Unknown KEK version ${kekVersion}`);
-    return gcmDecrypt(deriveKek(), Buffer.from(wrapped, 'base64'), Buffer.from('dek'));
+    const sealed = Buffer.from(wrapped, 'base64');
+    try {
+      return gcmDecrypt(deriveKek(), sealed, Buffer.from('dek'));
+    } catch (err) {
+      // Mid-rotation of APP_ENCRYPTION_KEY: keys still wrapped by the old KEK.
+      // rewrapUserKeys() moves them; then APP_ENCRYPTION_KEY_PREVIOUS goes.
+      const previous = process.env.APP_ENCRYPTION_KEY_PREVIOUS;
+      if (!previous) throw err;
+      return gcmDecrypt(deriveKek(previous), sealed, Buffer.from('dek'));
+    }
   },
 };
+
+/** True when a wrapped key opens under the current KEK alone. */
+function wrappedUnderCurrentKek(wrapped: string): boolean {
+  try {
+    gcmDecrypt(deriveKek(), Buffer.from(wrapped, 'base64'), Buffer.from('dek'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Re-wrap every user key still under the previous KEK. Only the small key
+ * rows change; files sealed with those keys are untouched. Run as system.
+ */
+export async function rewrapUserKeys(): Promise<{ rewrapped: number; failed: number; failedUserIds: string[] }> {
+  let rewrapped = 0;
+  let failed = 0;
+  const failedUserIds: string[] = [];
+  let afterId: string | undefined;
+  for (;;) {
+    const rows = await runAsSystem(() =>
+      prisma.userDataKey.findMany({
+        where: afterId ? { userId: { gt: afterId } } : {},
+        orderBy: { userId: 'asc' },
+        take: 200,
+      }),
+    );
+    if (rows.length === 0) break;
+    afterId = rows[rows.length - 1]!.userId;
+    for (const row of rows) {
+      if (row.kekVersion === envKeyProvider.kekVersion && wrappedUnderCurrentKek(row.wrappedKey)) continue;
+      try {
+        const dek = provider.unwrap(row.wrappedKey, row.kekVersion);
+        await runAsSystem(() =>
+          prisma.userDataKey.update({
+            where: { userId: row.userId },
+            data: { wrappedKey: provider.wrap(dek), kekVersion: provider.kekVersion },
+          }),
+        );
+        cache.delete(row.userId);
+        rewrapped += 1;
+      } catch {
+        // Opens under neither KEK: the files sealed with it are unreadable.
+        // Reported, not deleted — an operator decides.
+        failed += 1;
+        failedUserIds.push(row.userId);
+      }
+    }
+  }
+  return { rewrapped, failed, failedUserIds };
+}
 
 let provider: KeyProvider = envKeyProvider;
 /** Tests and a future KMS provider swap the provider here. */

@@ -224,6 +224,16 @@ const EnvSchema = z.object({
       (v) => v === undefined || Buffer.from(v, 'base64').length === 32,
       'APP_ENCRYPTION_KEY must be base64 of exactly 32 bytes',
     ),
+  // Key rotation only (SECURITY.md → Rotation): the key being retired. Set
+  // during a rotation, removed once the boot job has moved everything.
+  APP_ENCRYPTION_KEY_PREVIOUS: z
+    .string()
+    .optional()
+    .refine(
+      (v) => v === undefined || Buffer.from(v, 'base64').length === 32,
+      'APP_ENCRYPTION_KEY_PREVIOUS must be base64 of exactly 32 bytes',
+    ),
+  SECRETS_KEY_PREVIOUS: z.string().min(32, 'SECRETS_KEY_PREVIOUS must be at least 32 characters').optional(),
 });
 
 /**

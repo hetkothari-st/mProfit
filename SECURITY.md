@@ -30,11 +30,26 @@ Production secrets live in Railway service variables, never in the repo.
 | `BACKUP_PASSPHRASE` | Backups can't be opened. | Password manager, **not** next to the backups. |
 | `ONLYOFFICE_JWT_SECRET` | Document editing stops until both services share a new one. | Optional. |
 
-**Rotation.** `JWT_SECRET`: replace it; users sign in again. `SECRETS_KEY`: the
-boot job moves legacy rows onto the current key, but there is no general
-re-key job yet. `APP_ENCRYPTION_KEY`: there is no re-encryption job yet, so
-don't rotate it without one. A per-user-key re-wrap (`UserDataKey`) would only
-need the KEK changed; identifier columns would need full re-encryption.
+**Rotation.** `JWT_SECRET`: replace it; everyone signs in again.
+
+`APP_ENCRYPTION_KEY` and `SECRETS_KEY` rotate the same way, without downtime:
+
+1. Set `APP_ENCRYPTION_KEY_PREVIOUS` (or `SECRETS_KEY_PREVIOUS`) to the
+   current value, and set `APP_ENCRYPTION_KEY` (or `SECRETS_KEY`) to a new one.
+   Back up the new key first. Deploy.
+2. Reads keep working the whole time: decryption tries the new key, then the
+   previous one. On boot a job moves everything:
+   - `APP_ENCRYPTION_KEY`: re-encrypts every identifier, recomputes every
+     lookup fingerprint, and re-wraps every per-user data key. Vault files
+     themselves don't change. Logged as `[keys] APP_ENCRYPTION_KEY rotation pass`.
+   - `SECRETS_KEY`: re-encrypts every stored third-party secret.
+3. Check the log. `failed` must be 0; `failures` names any row that opens under
+   neither key. Redeploy once more: the second pass should move nothing.
+4. Remove the `*_PREVIOUS` variable and deploy.
+
+Between steps 1 and 2 finishing (seconds), a lookup by fingerprint (vehicle
+duplicate check, premium-email policy matching) can miss a row that hasn't been
+recomputed yet. Rotate off-peak.
 
 ## Backups and restore
 
@@ -90,5 +105,4 @@ when the backup was taken.
    affected users without delay, with what happened, which data, and what
    users should do.
 5. **Recover.** Restore from the last verified backup if data was altered.
-   Rotate `SECRETS_KEY` and `APP_ENCRYPTION_KEY` only once a re-encryption
-   job exists (see Rotation).
+   If an encryption key may have leaked, rotate it (see Rotation).

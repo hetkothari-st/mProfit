@@ -44,6 +44,23 @@ function loadKey(): Buffer {
   return key;
 }
 
+/**
+ * The key being rotated away from, while a rotation is in progress
+ * (APP_ENCRYPTION_KEY_PREVIOUS). Ciphertext carries no key id, so decrypt
+ * tries the current key and falls back to this one; the GCM tag makes a
+ * wrong-key attempt fail loudly, never return garbage. jobs/keyRotationJobs.ts
+ * re-encrypts everything still under it; then the variable is removed.
+ */
+export function loadPreviousKey(): Buffer | null {
+  const raw = process.env.APP_ENCRYPTION_KEY_PREVIOUS;
+  if (!raw) return null;
+  const key = Buffer.from(raw, 'base64');
+  if (key.length !== 32) {
+    throw new Error(`APP_ENCRYPTION_KEY_PREVIOUS must decode to exactly 32 bytes (got ${key.length})`);
+  }
+  return key;
+}
+
 function encrypt(plaintext: Buffer): string {
   const key = loadKey();
   const iv = randomBytes(IV_BYTES);
@@ -55,7 +72,21 @@ function encrypt(plaintext: Buffer): string {
 }
 
 function decrypt(blob: string): Buffer {
-  const key = loadKey();
+  return decryptWithKeyInfo(blob).plain;
+}
+
+/** Decrypt, reporting whether the previous key was needed (so it must be re-encrypted). */
+export function decryptWithKeyInfo(blob: string): { plain: Buffer; usedPreviousKey: boolean } {
+  try {
+    return { plain: decryptUnder(loadKey(), blob), usedPreviousKey: false };
+  } catch (err) {
+    const previous = loadPreviousKey();
+    if (!previous) throw err;
+    return { plain: decryptUnder(previous, blob), usedPreviousKey: true };
+  }
+}
+
+function decryptUnder(key: Buffer, blob: string): Buffer {
   const buf = Buffer.from(blob, 'base64');
   const minLen = IV_BYTES + TAG_BYTES + 1;
   if (buf.length < minLen) {

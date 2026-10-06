@@ -134,6 +134,9 @@ export interface RotationResult {
 export async function rotateLegacySecrets(): Promise<RotationResult> {
   let rotated = 0;
   let undecryptable = 0;
+  // While SECRETS_KEY_PREVIOUS is set, current-format (v2) values may still be
+  // under the key being retired, so they are opened too, not skipped.
+  const rotatingKey = !!process.env.SECRETS_KEY_PREVIOUS;
 
   for (const t of TARGETS) {
     // Walk every row once with an id cursor. The "not yet v2" test is a prefix
@@ -147,9 +150,11 @@ export async function rotateLegacySecrets(): Promise<RotationResult> {
         const data: Record<string, string> = {};
         for (const field of t.fields) {
           const value = row[field];
-          if (typeof value !== 'string' || !value || isCurrentFormat(value)) continue;
+          if (typeof value !== 'string' || !value) continue;
+          if (isCurrentFormat(value) && !rotatingKey) continue;
           try {
-            const { plain } = decryptSecretWithKeyInfo(value);
+            const { plain, usedLegacyKey, usedPreviousKey } = decryptSecretWithKeyInfo(value);
+            if (isCurrentFormat(value) && !usedLegacyKey && !usedPreviousKey) continue;
             data[field] = encryptSecret(plain);
           } catch (err) {
             undecryptable += 1;
