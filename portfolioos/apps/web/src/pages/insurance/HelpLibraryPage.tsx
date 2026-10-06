@@ -71,6 +71,16 @@ export function HelpLibraryPage() {
             <p aria-live="polite" className="text-xs text-muted-foreground">
               {query.trim() ? `${topics.length} ${topics.length === 1 ? 'topic matches' : 'topics match'}` : ''}
             </p>
+            {/* Below lg the sidebar contents are hidden, which left phones a
+                long unbroken scroll. Same list, folded under the search. */}
+            {groups.length > 0 && (
+              <details className="rounded-lg border border-border/70 bg-card/50 px-4 py-3 lg:hidden">
+                <summary className="cursor-pointer text-sm font-medium">Jump to a topic</summary>
+                <div className="mt-3 max-h-[60vh] overflow-y-auto">
+                  <HelpContents groups={groups} />
+                </div>
+              </details>
+            )}
           </div>
 
           {groups.length === 0 ? (
