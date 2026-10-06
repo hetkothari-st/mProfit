@@ -348,7 +348,7 @@ function EditLoanDialog({
           <DialogTitle>Edit loan</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="col-span-2">
               <Label>Lender name *</Label>
               <div className="mt-1">
@@ -374,7 +374,7 @@ function EditLoanDialog({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Principal (₹) *</Label>
               <Input value={form.principalAmount}
@@ -389,7 +389,7 @@ function EditLoanDialog({
                 className={errors['interestRate'] ? 'border-negative' : ''} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tenure (months) *</Label>
               <Input type="number" value={form.tenureMonths}
@@ -412,7 +412,7 @@ function EditLoanDialog({
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Status</Label>
               <select

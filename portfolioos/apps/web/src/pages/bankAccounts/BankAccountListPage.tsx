@@ -87,7 +87,7 @@ function AccountTile({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
           onClick={onEdit}
           title="Edit"
         >
@@ -96,7 +96,7 @@ function AccountTile({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-negative/80 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-negative/80 hover:text-white"
           onClick={onDelete}
           disabled={isDeleting}
           title="Delete"
@@ -107,7 +107,7 @@ function AccountTile({
           asChild
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
           title="Open"
         >
           <Link to={`/bank-accounts/${account.id}`}>

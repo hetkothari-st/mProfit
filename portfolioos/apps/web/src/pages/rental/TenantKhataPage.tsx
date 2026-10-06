@@ -255,7 +255,7 @@ function LedgerRow({
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive sm:h-6 sm:w-6"
+            className="tap-expand h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive sm:h-6 sm:w-6"
             onClick={onAskDelete}
             disabled={isDeleting}
             title="Delete entry"

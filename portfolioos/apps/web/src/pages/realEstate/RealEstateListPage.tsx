@@ -708,7 +708,7 @@ function PropertyCard({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0"
+                className="tap-expand h-7 w-7 p-0"
                 onClick={(e) => { stop(e); onEdit(); }}
                 title="Edit"
               >
@@ -717,7 +717,7 @@ function PropertyCard({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                 onClick={(e) => { stop(e); onDelete(); }}
                 disabled={isDeleting}
                 title="Delete"

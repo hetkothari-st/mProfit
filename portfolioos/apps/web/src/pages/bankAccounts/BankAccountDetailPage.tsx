@@ -411,7 +411,7 @@ export function BankAccountDetailPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                         onClick={() => deleteSnapshot.mutate(s.id)}
                         disabled={deleteSnapshot.isPending}
                         title="Delete"

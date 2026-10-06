@@ -377,7 +377,7 @@ export function PolicyFormDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                   aria-label="Remove attached file"
                   onClick={() => setPendingFile(null)}
                 >

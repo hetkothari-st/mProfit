@@ -437,7 +437,7 @@ function CreateLoanDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="col-span-2">
               <Label>Lender name *</Label>
               <div className="mt-1">
@@ -464,7 +464,7 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Borrower name *</Label>
               <Input placeholder="Full name" {...inp('borrowerName')} />
@@ -476,7 +476,7 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Principal amount (₹) *</Label>
               <Input placeholder="1000000" {...inp('principalAmount')} />
@@ -489,7 +489,7 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tenure (months) *</Label>
               <Input placeholder="240" type="number" min="1"
@@ -511,7 +511,7 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>EMI due day (1-28)</Label>
               <Input type="number" min="1" max="28"
@@ -531,7 +531,7 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Disbursement date *</Label>
               <Input {...inp('disbursementDate', 'date')} />
@@ -544,7 +544,7 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tax benefit section</Label>
               <select
