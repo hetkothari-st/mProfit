@@ -7,8 +7,8 @@ describe('evaluateDbRole', () => {
       .toEqual({ ok: true });
   });
 
-  it('refuses a superuser in production', () => {
-    const v = evaluateDbRole({ role: 'postgres', superuser: true, bypassRls: true }, 'production');
+  it('refuses a superuser in production when strict', () => {
+    const v = evaluateDbRole({ role: 'postgres', superuser: true, bypassRls: true }, 'production', true);
     expect(v.ok).toBe(false);
     if (!v.ok) {
       expect(v.fatal).toBe(true);
@@ -16,13 +16,19 @@ describe('evaluateDbRole', () => {
     }
   });
 
-  it('refuses a BYPASSRLS owner role in production', () => {
-    const v = evaluateDbRole({ role: 'neondb_owner', superuser: false, bypassRls: true }, 'production');
+  it('refuses a BYPASSRLS owner role in production when strict', () => {
+    const v = evaluateDbRole({ role: 'neondb_owner', superuser: false, bypassRls: true }, 'production', true);
     expect(v.ok).toBe(false);
     if (!v.ok) {
       expect(v.fatal).toBe(true);
       expect(v.message).toContain('BYPASSRLS');
     }
+  });
+
+  it('flags but does not stop production when not strict', () => {
+    const v = evaluateDbRole({ role: 'postgres', superuser: true, bypassRls: true }, 'production');
+    expect(v.ok).toBe(false);
+    if (!v.ok) expect(v.fatal).toBe(false);
   });
 
   it('only warns outside production', () => {

@@ -21,15 +21,18 @@ export type DbRoleVerdict =
   | { ok: true }
   | { ok: false; fatal: boolean; message: string };
 
-/** Pure: decide what to do about the connected role. */
-export function evaluateDbRole(facts: DbRoleFacts, nodeEnv: string): DbRoleVerdict {
+/**
+ * Pure: decide what to do about the connected role. Fatal only in production
+ * with `strict` on (DB_ROLE_GUARD_STRICT); otherwise the caller logs an error.
+ */
+export function evaluateDbRole(facts: DbRoleFacts, nodeEnv: string, strict = false): DbRoleVerdict {
   if (!facts.superuser && !facts.bypassRls) return { ok: true };
   const why = facts.superuser ? 'is a superuser' : 'has BYPASSRLS';
   const message =
     `DATABASE_URL connects as "${facts.role}", which ${why}: every row-level ` +
     'security policy is skipped, so users could read each other\'s data. ' +
     'Connect as the NOBYPASSRLS runtime role (portfolioos_app); migrations use DIRECT_URL.';
-  return { ok: false, fatal: nodeEnv === 'production', message };
+  return { ok: false, fatal: nodeEnv === 'production' && strict, message };
 }
 
 export async function readDbRoleFacts(): Promise<DbRoleFacts> {

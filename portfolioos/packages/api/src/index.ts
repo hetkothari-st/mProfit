@@ -139,19 +139,22 @@ Sentry.setupExpressErrorHandler(app);
 app.use(errorHandler);
 
 // Checked before serving: with a superuser/BYPASSRLS connection every RLS
-// policy is off and the app would still look healthy. Fatal in production,
-// a loud warning elsewhere (local Docker commonly connects as `postgres`).
+// policy is off and the app would still look healthy. Logged as an error in
+// production; fatal only with DB_ROLE_GUARD_STRICT=true (local Docker commonly
+// connects as `postgres`, so elsewhere it's a warning).
+const strictRoleGuard = env.DB_ROLE_GUARD_STRICT === 'true';
 try {
-  const verdict = evaluateDbRole(await readDbRoleFacts(), env.NODE_ENV);
+  const verdict = evaluateDbRole(await readDbRoleFacts(), env.NODE_ENV, strictRoleGuard);
   if (!verdict.ok) {
     if (verdict.fatal) {
       logger.fatal(`Refusing to start: ${verdict.message}`);
       process.exit(1);
     }
-    logger.warn(verdict.message);
+    if (env.NODE_ENV === 'production') logger.error(verdict.message);
+    else logger.warn(verdict.message);
   }
 } catch (err) {
-  if (env.NODE_ENV === 'production') {
+  if (env.NODE_ENV === 'production' && strictRoleGuard) {
     logger.fatal({ err }, 'Refusing to start: could not verify the database role');
     process.exit(1);
   }

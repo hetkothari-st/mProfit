@@ -100,6 +100,10 @@ const EnvSchema = z.object({
   // accidentally flipping one of the two leaves the other as a stop.
   ANTHROPIC_API_KEY: z.string().optional(),
   ENABLE_LLM_PARSER: z.enum(['true', 'false']).default('false'),
+  // 'true' makes the boot-time DB role check fatal in production. Off until
+  // the prod runtime role is confirmed NOBYPASSRLS, so a misconfigured role
+  // logs an error instead of taking the API down.
+  DB_ROLE_GUARD_STRICT: z.enum(['true', 'false']).default('false'),
   LLM_MODEL: z.string().default('claude-haiku-4-5-20251001'),
   // The in-app adviser (AI assistant). Overridable at runtime with the
   // `llm.assistant_model` AppSetting; the default lives here so no host
