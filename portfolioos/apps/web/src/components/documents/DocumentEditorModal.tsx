@@ -72,6 +72,16 @@ export function DocumentEditorModal({ documentId, fileName, onClose }: Props) {
             // The wrapper accepts the full config object — we cast because
             // the upstream typings are looser than ours.
             config={data.config as never}
+            onLoadComponentError={(code: number, description: string) => {
+              // Fires when DocumentServer's api.js can't be loaded — the most
+              // common cause of the previous "blank page": the OnlyOffice
+              // container isn't running / unreachable. Surface it instead of
+              // showing nothing.
+              setError(
+                `Could not reach the document editor (${description || `code ${code}`}). ` +
+                  'The OnlyOffice DocumentServer may not be running.',
+              );
+            }}
             events_onError={(e: unknown) => {
               const err = e as { data?: { errorDescription?: string } };
               setError(err.data?.errorDescription ?? 'OnlyOffice error');
