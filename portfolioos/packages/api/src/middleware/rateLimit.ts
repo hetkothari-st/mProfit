@@ -13,29 +13,27 @@ import { logger } from '../lib/logger.js';
  *      published limit by N.
  *
  * Redis is already a hard dependency here (Bull queues), so the limiters share
- * it. A Redis outage must not become an API outage, and two things guarantee
- * that — both verified against an unreachable Redis before shipping:
+ * it. A Redis outage must not become an API outage, nor an unlimited one:
  *
- *   - Every limiter sets `passOnStoreError`, so a store error lets the request
- *     through (unlimited) instead of failing it. Without it, every request
- *     failed.
- *   - The store only talks to Redis when the connection is ready and throws
- *     immediately otherwise, so an outage adds no latency either.
+ *   - While Redis is not ready (boot, outage) the store counts in process
+ *     memory instead. Limits then apply per instance rather than globally,
+ *     which is weaker but still bounds a brute-force run. It used to throw,
+ *     and `passOnStoreError` turned that into "no limit at all", so every
+ *     boot opened a window with login unthrottled.
+ *   - Every limiter still sets `passOnStoreError`, so an error from a Redis
+ *     that was ready but failed mid-call lets the request through instead of
+ *     failing it.
+ *   - The store never waits on a reconnect, so an outage adds no latency.
  *   - The store below is hand-rolled rather than `rate-limit-redis`. That
  *     library loads a Lua script from its constructor without handling the
  *     rejection, and index.ts exits on any unhandled rejection — so a Redis
  *     blip during boot put the API into a crash loop.
  */
 let sharedClient: Redis | null = null;
-/**
- * The connection when it is ready; otherwise throw at once. The limiter's
- * `passOnStoreError` turns that into "allow", so a Redis outage costs rate
- * limiting, not latency — requests are neither failed nor delayed.
- */
-function redisClient(): Redis {
+/** The connection when it is ready, otherwise null (use the memory fallback). */
+function readyClient(): Redis | null {
   const c = connection();
-  if (c.status !== 'ready') throw new Error(`rate limit store unavailable (redis ${c.status})`);
-  return c;
+  return c.status === 'ready' ? c : null;
 }
 
 function connection(): Redis {
@@ -62,12 +60,17 @@ function connection(): Redis {
  * call that `passOnStoreError` turns into "allow", never as an unhandled
  * rejection.
  */
-class RedisWindowStore implements Store {
+export class RedisWindowStore implements Store {
   prefix: string;
   localKeys = false;
   private windowMs = 60_000;
+  /** Fixed-window counters used only while Redis is unavailable. */
+  private local = new Map<string, { hits: number; resetAt: number }>();
 
-  constructor(prefix: string) {
+  constructor(
+    prefix: string,
+    private getClient: () => Redis | null = readyClient,
+  ) {
     this.prefix = `rl:${prefix}:`;
   }
 
@@ -77,7 +80,9 @@ class RedisWindowStore implements Store {
 
   async increment(key: string): Promise<ClientRateLimitInfo> {
     const k = this.prefix + key;
-    const results = await redisClient()
+    const client = this.getClient();
+    if (!client) return this.incrementLocal(k);
+    const results = await client
       .multi()
       .set(k, '0', 'PX', this.windowMs, 'NX')
       .incr(k)
@@ -91,11 +96,37 @@ class RedisWindowStore implements Store {
   }
 
   async decrement(key: string): Promise<void> {
-    await redisClient().decr(this.prefix + key);
+    const k = this.prefix + key;
+    const client = this.getClient();
+    if (!client) {
+      const entry = this.local.get(k);
+      if (entry && entry.hits > 0) entry.hits -= 1;
+      return;
+    }
+    await client.decr(k);
   }
 
   async resetKey(key: string): Promise<void> {
-    await redisClient().del(this.prefix + key);
+    const k = this.prefix + key;
+    this.local.delete(k);
+    const client = this.getClient();
+    if (client) await client.del(k);
+  }
+
+  private incrementLocal(k: string): ClientRateLimitInfo {
+    const now = Date.now();
+    let entry = this.local.get(k);
+    if (!entry || entry.resetAt <= now) {
+      entry = { hits: 0, resetAt: now + this.windowMs };
+      this.local.set(k, entry);
+      // Expired windows are replaced as they are touched; sweep the rest so a
+      // long outage under many keys (IPs) does not grow without bound.
+      if (this.local.size > 10_000) {
+        for (const [key, e] of this.local) if (e.resetAt <= now) this.local.delete(key);
+      }
+    }
+    entry.hits += 1;
+    return { totalHits: entry.hits, resetTime: new Date(entry.resetAt) };
   }
 }
 
