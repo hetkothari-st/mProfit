@@ -151,6 +151,12 @@ const EnvSchema = z.object({
   // that is impossible if computing a snapshot requires signing for it.
   // Advice remains gated on RIA_VERDICTS_ENABLED plus a signed methodology.
   ENABLE_FUND_SCORING: z.enum(['true', 'false']).default('true'),
+  // First-deploy MF ratings from stored NAV history (jobs/mfBootstrap.ts):
+  // runs once in the background after boot, then marks itself done.
+  ENABLE_MF_BOOTSTRAP: z.enum(['true', 'false']).default('true'),
+  /** How many past month-ends the bootstrap rates (1–12). More = a rating
+   *  history on day one, at roughly one full pipeline pass per month. */
+  MF_BOOTSTRAP_MONTHS: z.coerce.number().int().min(1).max(12).default(1),
   ENABLE_COST_SIZE_REFRESH: z.enum(['true', 'false']).default('true'),
   // Named-fund advice. With this off the advisor engine and the assistant
   // still work, but they speak in categories ("a large-cap index fund")

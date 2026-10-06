@@ -23,7 +23,15 @@ export function previousMonthEnd(now: Date = new Date()): Date {
 }
 
 export async function runMonthlyRatingChain(now: Date = new Date()): Promise<void> {
-  const asOf = previousMonthEnd(now);
+  await runRatingChainFor(previousMonthEnd(now));
+}
+
+/**
+ * Metrics -> peer ranks -> scores for one month-end. Returns false when it
+ * declined to score (peer ranks did not run). Also used by the first-deploy
+ * bootstrap to rate past month-ends from history.
+ */
+export async function runRatingChainFor(asOf: Date): Promise<boolean> {
   const iso = asOf.toISOString().slice(0, 10);
   logger.info({ asOf: iso }, '[mf] monthly rating chain: start');
   await runMfMetricsJob({ asOf });
@@ -32,8 +40,9 @@ export async function runMonthlyRatingChain(now: Date = new Date()): Promise<voi
     // runMfPeerRankJob returns an all-zero result when another run holds its
     // lock. Scoring now would rate against last month's ranks, or none.
     logger.error({ asOf: iso }, '[mf] monthly rating chain: peer ranks did not run — not scoring');
-    return;
+    return false;
   }
   await runMfScoreJob(asOf);
   logger.info({ asOf: iso }, '[mf] monthly rating chain: done');
+  return true;
 }

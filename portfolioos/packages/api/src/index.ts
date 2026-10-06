@@ -163,6 +163,13 @@ try {
 
 const server = app.listen(env.PORT, '::', () => {
   logger.info(`EveryPaisa API listening on http://localhost:${env.PORT}`);
+  // Rate funds from the NAV history already stored, once, without holding up
+  // the boot (it takes about an hour). See jobs/mfBootstrap.ts.
+  if (env.ENABLE_MF_BOOTSTRAP === 'true' && env.NODE_ENV !== 'test') {
+    void import('./jobs/mfBootstrap.js')
+      .then((m) => m.runMfBootstrapOnce({ months: env.MF_BOOTSTRAP_MONTHS }))
+      .catch((err: unknown) => logger.error({ err }, '[mf] bootstrap: could not start'));
+  }
   startPriceJobs();
   // Named-fund advice must be able to run honestly before it runs at all: the
   // gate checks TER and AUM coverage and that the signed methodology is the
