@@ -107,12 +107,21 @@ describe('SuggestInput', () => {
       expect(screen.getByRole('option', { name: 'HDFC Bank' }).getAttribute('aria-selected')).toBe('true');
     });
 
-    it('shows every option when focused again', () => {
+    it('shows every option when tapped again', () => {
       render(<Harness />);
       pickHdfc();
       fireEvent.blur(input());
       fireEvent.focus(input());
+      fireEvent.click(input());
       expect(optionTexts()).toEqual(ALL);
+    });
+
+    // A dialog auto-focuses its first field; that alone must not throw the
+    // list open over the fields below.
+    it('stays closed on focus without a tap', () => {
+      render(<Harness />);
+      fireEvent.focus(input());
+      expect(optionTexts()).toEqual([]);
     });
 
     it('filters again once the user types', () => {

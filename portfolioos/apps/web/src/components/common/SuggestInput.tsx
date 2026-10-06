@@ -154,12 +154,12 @@ export function SuggestInput({
           setOpen(true);
           setActive(-1);
         }}
+        // Not opened on focus: a dialog auto-focuses its first field, which
+        // popped the whole list open over the fields below before the user
+        // touched anything. A tap, typing or ArrowDown opens it.
         onFocus={(e) => {
-          openAll();
           onFocus?.(e);
         }}
-        // Focus stays in the field after a pick, so a second click fires no
-        // focus event — reopen on click too.
         onClick={() => {
           if (!open) openAll();
         }}

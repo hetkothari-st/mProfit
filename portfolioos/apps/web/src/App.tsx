@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { NotFoundPage } from './pages/notFound/NotFoundPage';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { NotWhileManaging } from './components/family/NotWhileManaging';
 import { AppShell } from './components/layout/AppShell';
@@ -206,9 +207,9 @@ export function App() {
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        {/* Inside the protected shell: signed-out visitors still go to login. */}
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
-
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }
