@@ -1,0 +1,33 @@
+# Weekly dependency updates, grouped so they arrive as a few reviewable PRs.
+# Security updates are raised as soon as GitHub publishes an advisory.
+# Merging any of these deploys to production — review before merging.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /portfolioos
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Majors need a deliberate upgrade (API changes, e.g. pdfjs-dist, nodemailer).
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: docker
+    directory: /portfolioos/packages/api
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /portfolioos/apps/web
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
