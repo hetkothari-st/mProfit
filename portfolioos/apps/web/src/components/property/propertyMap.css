@@ -1,3 +1,9 @@
+/* Leaflet panes/controls use z-index 400–1000. Contain them so the map can't
+   paint over dialogs and full-screen modals (z-50) opened above it. */
+.pos-map {
+  isolation: isolate;
+}
+
 /* Leaflet map styling for property maps — themed pins and a darker map in dark mode. */
 
 .pos-map .leaflet-container {

@@ -510,7 +510,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
+        <div className="overflow-x-auto md:max-h-[400px] md:overflow-y-auto">
           <table className="rtable w-full text-xs">
             <thead className="sticky top-0 bg-card z-10">
               <tr className="border-b">
@@ -660,7 +660,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
         )}
       </CardHeader>
       <CardContent>
-        <div ref={scrollRef} className="max-h-[600px] overflow-y-auto overflow-x-auto">
+        <div ref={scrollRef} className="overflow-x-auto md:max-h-[600px] md:overflow-y-auto">
           <table className="rtable w-full text-xs">
             <thead className="sticky top-0 bg-card z-10">
               <tr className="border-b">
@@ -831,7 +831,7 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={balanceData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+            <AreaChart data={balanceData} margin={{ top: 5, right: 22, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="gradBalance" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="hsl(var(--foreground))" stopOpacity={0.22} />
@@ -883,7 +883,7 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={splitData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }} stackOffset="none">
+              <AreaChart data={splitData} margin={{ top: 5, right: 22, left: 0, bottom: 0 }} stackOffset="none">
                 <defs>
                   <linearGradient id="gradPrincipal" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="hsl(var(--positive))" stopOpacity={0.5} />

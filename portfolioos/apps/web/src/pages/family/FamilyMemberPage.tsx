@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
@@ -461,7 +462,7 @@ export function FamilyMemberPage() {
               </span>
             </div>
           ) : (
-            <div className="-mx-1 overflow-x-auto">
+            <HScroll className="-mx-1 overflow-x-auto">
               <table className="w-full min-w-[680px] border-collapse text-[13px]">
                 <thead>
                   <tr className="border-b border-border/70">
@@ -512,7 +513,7 @@ export function FamilyMemberPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </HScroll>
           )}
         </CardContent>
       </Card>

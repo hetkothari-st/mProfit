@@ -371,7 +371,7 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor={fid('bank')}>Bank *</Label>
               <SuggestInput
@@ -401,7 +401,7 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor={fid('holder')}>Account holder *</Label>
               <SuggestInput
@@ -452,7 +452,7 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor={fid('ifsc')}>IFSC</Label>
               <Input
@@ -532,7 +532,7 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor={fid('balance')}>Current balance (₹)</Label>
               <Input
@@ -560,7 +560,7 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
               Nominee & joint holders
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label htmlFor={fid('nominee')}>Nominee name</Label>
                 <SuggestInput
@@ -604,7 +604,7 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
               Linked debit card (optional)
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label htmlFor={fid('card4')}>Card last 4</Label>
                 <Input

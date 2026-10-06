@@ -54,13 +54,18 @@ export function DocumentEditorModal({ documentId, fileName, onClose }: Props) {
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-negative px-6 text-center">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background text-sm text-negative px-6 text-center">
             {error}
             <br />
             Verify OnlyOffice DocumentServer is running at the configured URL.
           </div>
         )}
+        {/* OnlyOffice swaps the editor's placeholder div for its own iframe.
+            Keep that node alone inside a wrapper React owns, so React never
+            has to insert the error/loading siblings next to a node it no
+            longer finds (that threw insertBefore and blanked the app). */}
         {data && (
+          <div className="absolute inset-0">
           <DocumentEditor
             id={`oo-editor-${documentId}`}
             documentServerUrl={data.docServerUrl}
@@ -72,6 +77,7 @@ export function DocumentEditorModal({ documentId, fileName, onClose }: Props) {
               setError(err.data?.errorDescription ?? 'OnlyOffice error');
             }}
           />
+          </div>
         )}
       </div>
     </div>

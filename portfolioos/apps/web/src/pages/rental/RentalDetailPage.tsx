@@ -542,7 +542,7 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
           )}
 
           {receipts.length > 0 ? (
-            <div className="border-t border-border/60 max-h-[420px] overflow-y-auto overflow-x-auto">
+            <div className="border-t border-border/60 overflow-x-auto md:max-h-[420px] md:overflow-y-auto">
               <table className="w-full text-sm rtable">
                 <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
                   <tr className="border-b border-border/60 text-[10.5px] uppercase tracking-kerned text-muted-foreground">

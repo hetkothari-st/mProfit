@@ -423,7 +423,7 @@ function CreateCardDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="cc-issuer">Issuer bank *</Label>
               <SuggestInput
@@ -479,7 +479,7 @@ function CreateCardDialog({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="cc-last4">Last 4 digits *</Label>
               <Input id="cc-last4" placeholder="1234" maxLength={4} value={form.last4}
@@ -510,7 +510,7 @@ function CreateCardDialog({
             {errors['creditLimit'] && <p className="text-xs text-negative mt-1">{errors['creditLimit']}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Statement day</Label>
               <Input type="number" min="1" max="31" value={form.statementDay}
@@ -523,7 +523,7 @@ function CreateCardDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Interest rate (% p.a.)</Label>
               <Input placeholder="42.00" value={form.interestRate ?? ''}
