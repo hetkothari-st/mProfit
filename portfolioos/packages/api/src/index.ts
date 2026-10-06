@@ -30,6 +30,8 @@ import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 import { makeOriginCheck } from './lib/corsOrigins.js';
+import { apiSandbox } from './lib/apiSandbox.js';
+import { redactUrl } from './lib/redactUrl.js';
 
 // Initialise Sentry BEFORE building the Express app so auto-instrumentation
 // wraps all request handling. No-ops if SENTRY_DSN is not set.
@@ -100,10 +102,10 @@ app.use(
       return 'info';
     },
     customSuccessMessage: (req: IncomingMessage, res: ServerResponse, responseTime: number) =>
-      `${(req as Request).method} ${(req as Request).url} ${res.statusCode} ${responseTime.toFixed(1)}ms`,
+      `${(req as Request).method} ${redactUrl((req as Request).url)} ${res.statusCode} ${responseTime.toFixed(1)}ms`,
     customAttributeKeys: { responseTime: 'duration_ms' },
     serializers: {
-      req: (req: Request) => ({ method: req.method, url: req.url }),
+      req: (req: Request) => ({ method: req.method, url: redactUrl(req.url) }),
       res: (res: Response) => ({ statusCode: res.statusCode }),
     },
   }),
@@ -113,6 +115,7 @@ app.get('/health', (_req, res) => {
   res.json({ success: true, data: { status: 'ok', uptime: process.uptime() } });
 });
 
+app.use('/api', apiSandbox);
 app.use('/api', standardLimiter);
 registerRoutes(app);
 

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/sheet';
 import { gmailScanApi } from '@/api/gmailScan.api';
 import { api } from '@/api/client';
+import { classifyPreview, type PreviewMode } from '@/lib/safePreview';
 
 interface Props {
   docId: string | null;
@@ -23,6 +24,7 @@ export function InboxImportPreviewSheet({ docId, onClose }: Props) {
   });
 
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [mode, setMode] = useState<PreviewMode>('none');
   const [blobError, setBlobError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,10 +35,13 @@ export function InboxImportPreviewSheet({ docId, onClose }: Props) {
     api.get<ArrayBuffer>(metaQ.data.url, { responseType: 'arraybuffer' })
       .then(({ data, headers }) => {
         if (revoked) return;
-        const mime = (headers['content-type'] as string) || metaQ.data!.mimeType || 'application/octet-stream';
-        const blob = new Blob([data], { type: mime });
-        const url = URL.createObjectURL(blob);
-        setBlobUrl(url);
+        // The attachment came from an email: its declared type is the
+        // sender's choice. classifyPreview decides from the bytes.
+        const declared = (headers['content-type'] as string) || metaQ.data!.mimeType || '';
+        const preview = classifyPreview(data, declared, metaQ.data!.fileName ?? '');
+        setMode(preview.mode);
+        if (preview.blob) setBlobUrl(URL.createObjectURL(preview.blob));
+        else setBlobError('No preview for this file type. Import it to see its contents.');
       })
       .catch((err) => {
         if (!revoked) setBlobError(String(err));
@@ -71,6 +76,9 @@ export function InboxImportPreviewSheet({ docId, onClose }: Props) {
               key={blobUrl}
               src={blobUrl}
               title={fileName}
+              // HTML/text attachments get no scripts and an opaque origin.
+              // PDFs cannot render sandboxed, and only real PDFs reach here.
+              {...(mode === 'pdf' ? {} : { sandbox: '' })}
               className="w-full h-full border-0"
             />
           )}
