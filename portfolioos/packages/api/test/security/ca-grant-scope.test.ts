@@ -285,6 +285,26 @@ describe('the access window', () => {
     );
   });
 
+  // "Until <date>" means through that whole day in India. The window used to
+  // close at 00:00 UTC — 05:30 IST on the last day — and open at 05:30 IST on
+  // the first.
+  it('stays open for the whole of its first and last day (IST)', async () => {
+    const client = await clientWithSpread('scope-lastday-client');
+    const ca = await person('scope-lastday-ca');
+    const g = await grant(ca.userId, client.userId);
+    const istToday = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { accessFrom: istToday, accessUntil: istToday }),
+    );
+
+    const portfolios = await runAsUser(ca.userId, () =>
+      prisma.portfolio.findMany({ where: { userId: client.userId } }),
+    );
+    expect(portfolios.length).toBeGreaterThan(0);
+    await expect(runAsUser(ca.userId, () => getCaScope(ca.userId, g.id))).resolves.toBeTruthy();
+  });
+
   it('refuses a window that ends before it starts', async () => {
     const client = await clientWithSpread('scope-badwindow-client');
     const ca = await person('scope-badwindow-ca');
