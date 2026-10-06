@@ -273,6 +273,7 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
               <iframe
                 title="Email preview"
                 srcDoc={bodyDraft}
+                sandbox=""
                 className="w-full h-64 border-0 bg-white"
               />
             </div>
