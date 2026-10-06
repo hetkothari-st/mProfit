@@ -82,7 +82,7 @@ export function PortfolioListPage() {
           <h2 className="text-base font-semibold uppercase tracking-kerned text-foreground mb-3">
             Family groups
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {groups!.map((g) => (
               <GroupCard
                 key={g.id}
@@ -102,7 +102,7 @@ export function PortfolioListPage() {
       </h2>
 
       {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <Card key={i} className="h-36 animate-pulse bg-muted/60" />
           ))}
@@ -123,7 +123,7 @@ export function PortfolioListPage() {
       )}
 
       {!isLoading && hasPortfolios && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {portfolios!.map((p) => (
             <PortfolioCard
               key={p.id}
@@ -185,7 +185,7 @@ function PortfolioCard({
           </Button>
         </div>
 
-        <div className="mt-5 pt-4 border-t border-border/60 flex items-end justify-between">
+        <div className="mt-5 pt-4 border-t border-border/60 flex flex-wrap items-end justify-between gap-x-3 gap-y-1">
           <div>
             <div className="text-[10px] uppercase tracking-kerned text-muted-foreground">Current value</div>
             <div className="numeric-display text-[22px] mt-1 text-foreground">
@@ -261,7 +261,7 @@ function GroupCard({
           </Button>
         </div>
 
-        <div className="mt-5 pt-4 border-t border-border/60 flex items-end justify-between">
+        <div className="mt-5 pt-4 border-t border-border/60 flex flex-wrap items-end justify-between gap-x-3 gap-y-1">
           <div>
             <div className="text-[10px] uppercase tracking-kerned text-muted-foreground">Combined value</div>
             <div className="numeric-display text-[22px] mt-1 text-foreground">

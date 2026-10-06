@@ -149,6 +149,20 @@ export function FinvuSandboxCard() {
     onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
+  const statusPill = statusQ.data ? (
+    <span
+      className={`text-[10px] uppercase tracking-kerned px-2 py-1 rounded-full font-medium ${
+        demoMode
+          ? 'bg-accent/15 text-accent-ink ring-1 ring-accent/30'
+          : configured
+          ? 'bg-positive/10 text-positive ring-1 ring-positive/20'
+          : 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/20'
+      }`}
+    >
+      {demoMode ? 'Demo mode' : configured ? 'Configured' : 'Token missing'}
+    </span>
+  ) : null;
+
   return (
     <Card>
       <CardContent className="pt-5 pb-5 space-y-4">
@@ -160,25 +174,16 @@ export function FinvuSandboxCard() {
             <h3 className="text-base font-semibold flex items-center gap-2 flex-wrap">
               Finvu (Account Aggregator){' '}
               <span className="text-xs text-muted-foreground font-normal">via Finfactor Wealthscape</span>
+              {/* Phones: the badge rides with the title instead of taking a
+                  column that squeezed the title to a word a line. */}
+              {statusPill && <span className="sm:hidden">{statusPill}</span>}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Pull mutual fund holdings, folios, transactions and insights from the user's linked AAs.
               The sandbox UAT serves dummy data — useful for verifying the round-trip before consent goes live.
             </p>
           </div>
-          {statusQ.data && (
-            <span
-              className={`text-[10px] uppercase tracking-kerned px-2 py-1 rounded-full font-medium ${
-                demoMode
-                  ? 'bg-accent/15 text-accent-ink ring-1 ring-accent/30'
-                  : configured
-                  ? 'bg-positive/10 text-positive ring-1 ring-positive/20'
-                  : 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/20'
-              }`}
-            >
-              {demoMode ? 'Demo mode' : configured ? 'Configured' : 'Token missing'}
-            </span>
-          )}
+          {statusPill && <span className="hidden sm:inline-flex shrink-0">{statusPill}</span>}
         </div>
 
         {statusQ.data && demoMode && (

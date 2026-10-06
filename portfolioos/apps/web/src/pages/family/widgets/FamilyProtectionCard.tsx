@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import {
   Bar,
   BarChart,
@@ -15,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';
 import { useThemeStore } from '@/stores/theme.store';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { memberLabel, type FamilyProtection } from '@/api/familyDashboard.api';
 import { PartialDataNotice } from './RestrictedNotice';
 import { isPositiveMoney, moneyToNumber, pluralMembers } from './money';
@@ -73,6 +75,9 @@ export interface FamilyProtectionCardProps {
 }
 
 export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtectionCardProps) {
+  // Phones: fewer value ticks (five compact ₹ labels overlap), room for the
+  // last one, and a narrower member-name column.
+  const isPhone = useMediaQuery('(max-width: 767px)');
   const dark = useThemeStore((s) => s.dark);
   const C = dark ? CHART_DARK : CHART_LIGHT;
 
@@ -244,7 +249,7 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
               <BarChart
                 data={members}
                 layout="vertical"
-                margin={{ top: 4, right: 16, left: 4, bottom: 0 }}
+                margin={{ top: 4, right: isPhone ? 28 : 16, left: 4, bottom: 0 }}
                 barGap={2}
               >
                 <CartesianGrid
@@ -262,11 +267,12 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(v: number) => formatINR(v.toFixed(2), { compact: true })}
+                  tickCount={isPhone ? 3 : 5}
                 />
                 <YAxis
                   type="category"
                   dataKey="label"
-                  width={120}
+                  width={isPhone ? 84 : 120}
                   tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                   axisLine={false}
                   tickLine={false}
@@ -314,7 +320,7 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
             </ResponsiveContainer>
 
             {/* ── Ledger ───────────────────────────────────────────────── */}
-            <div className="-mx-1 overflow-x-auto">
+            <HScroll className="-mx-1 overflow-x-auto">
               <table className="w-full min-w-[720px] border-collapse text-[13px]">
                 <thead>
                   <tr className="border-b border-border/70">
@@ -337,7 +343,7 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
                           <span className="inline-flex items-center gap-2">
                             <span className="text-foreground">{m.label}</span>
                             {m.hasNoCover === true && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-negative/45 bg-negative/10 px-1.5 py-px text-[9.5px] font-medium uppercase tracking-kerned text-negative">
+                              <span className="inline-flex items-center whitespace-nowrap gap-1 rounded-full border border-negative/45 bg-negative/10 px-1.5 py-px text-[9.5px] font-medium uppercase tracking-kerned text-negative">
                                 <AlertTriangle className="h-2.5 w-2.5" strokeWidth={2.2} />
                                 No cover
                               </span>
@@ -403,7 +409,7 @@ export function FamilyProtectionCard({ data, isLoading, isError }: FamilyProtect
                   })}
                 </tbody>
               </table>
-            </div>
+            </HScroll>
 
             {/* ── Renewals ─────────────────────────────────────────────── */}
             <div>

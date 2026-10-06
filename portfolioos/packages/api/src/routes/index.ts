@@ -48,6 +48,7 @@ import { intelligenceRouter } from './intelligence.routes.js';
 import { finfactorRouter, finfactorWebhookRouter } from './finfactor.routes.js';
 import { caRouter, professionalAccessRouter, professionalInviteRouter } from './ca.routes.js';
 import { familiesRouter } from './families.routes.js';
+import { managedProfilesRouter } from './managedProfiles.routes.js';
 import { aiAssistantRouter } from './aiAssistant.routes.js';
 import { billingRouter } from './billing.routes.js';
 import { env } from '../config/env.js';
@@ -105,6 +106,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/integrations/finfactor/webhook', finfactorWebhookRouter);
   if (env.ENABLE_FAMILY === 'true') {
     app.use('/api/families', familiesRouter);
+    app.use('/api/managed-profiles', managedProfilesRouter);
     app.use('/api/ca', caRouter);
     app.use('/api/me/professional-access', professionalAccessRouter);
     // Inside the same flag as the rest of the relationship, but carrying no

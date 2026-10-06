@@ -33,8 +33,21 @@ import {
   updateMemberPermissions,
   getFamilyTreeLayout,
   updateFamilyTreeLayout,
+  addManagedMember,
+  addManagedMembersBulk,
+  BULK_MANAGED_MAX,
+  setManagedMemberManager,
 } from '../services/family.service.js';
 import { NON_AC_CATEGORIES } from '../services/familyScope.service.js';
+import {
+  buildFamilyInviteEmail,
+  sendFamilyInviteEmail,
+} from '../services/family/familyInviteEmail.service.js';
+import {
+  claimProfile,
+  inviteProfileClaim,
+  peekProfileClaim,
+} from '../services/family/familyClaim.service.js';
 
 /**
  * Family / HOF HTTP surface. Mounted at `/api/families`.
@@ -53,6 +66,30 @@ familiesRouter.get(
   '/invitations/:token/peek',
   asyncHandler(async (req: Request, res: Response) => {
     ok(res, await peekInvitation(req.params.token!));
+  }),
+);
+
+// ─── Taking over a managed profile (no auth: they have no account yet) ──
+//
+// Placed BEFORE `authenticate` for the same reason as the invite preview: the
+// person holding the link is exactly the person who cannot sign in yet.
+familiesRouter.get(
+  '/claims/:token/peek',
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await peekProfileClaim(req.params.token!));
+  }),
+);
+
+const claimSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8).max(100),
+});
+
+familiesRouter.post(
+  '/claims/:token',
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = claimSchema.parse(req.body);
+    ok(res, await claimProfile(req.params.token!, data));
   }),
 );
 
@@ -80,13 +117,47 @@ const inviteSchema = z.object({
   role: familyRoleEnum.optional(),
   visibleAssetClasses: z.array(assetClassEnum).optional(),
   visibleCategories: z.array(categoryEnum).optional(),
+  relation: z.string().max(40).optional(),
+  relatedToId: z.string().min(1).optional(),
 });
 
 const permissionsSchema = z.object({
   role: familyRoleEnum.optional(),
   visibleAssetClasses: z.array(assetClassEnum).optional(),
   visibleCategories: z.array(categoryEnum).optional(),
+  relation: z.string().max(40).nullable().optional(),
+  relatedToId: z.string().min(1).nullable().optional(),
 });
+
+const managedMemberSchema = z.object({
+  name: z.string().min(1).max(80),
+  relation: z.string().max(40).optional(),
+  relatedToId: z.string().min(1).optional(),
+  managerId: z.string().min(1).optional(),
+  // Never OWNER — see AddManagedMemberInput.
+  role: z.enum(['CONTRIBUTOR', 'VIEWER']).optional(),
+  contactEmail: z.string().email().optional(),
+});
+
+const bulkManagedSchema = z.object({
+  members: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(80),
+        relation: z.string().max(40).nullable().optional(),
+        relatedToId: z.string().min(1).nullable().optional(),
+        // Someone listed earlier in this same batch, by position.
+        relatedToRow: z.number().int().min(0).nullable().optional(),
+        managerId: z.string().min(1).nullable().optional(),
+        role: z.enum(['CONTRIBUTOR', 'VIEWER']).optional(),
+        contactEmail: z.string().email().nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(BULK_MANAGED_MAX),
+});
+
+const managerSchema = z.object({ managerId: z.string().min(1) });
 
 const familyPortfolioSchema = z.object({
   name: z.string().min(1).max(100),
@@ -178,6 +249,56 @@ familiesRouter.post(
   }),
 );
 
+// Someone with no email or login, kept by a family member. Takes a seat like
+// an invite, and past the included seats returns the same seat payment,
+// completed through `/members/invite/verify-payment`.
+familiesRouter.post(
+  '/:familyId/members/managed',
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = managedMemberSchema.parse(req.body);
+    ok(res, await addManagedMember(callerId(req), req.params.familyId!, data));
+  }),
+);
+
+// A whole branch of the family in one pass. All of them or none, and
+// relations may point at people listed earlier in the same batch.
+familiesRouter.post(
+  '/:familyId/members/managed/bulk',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { members } = bulkManagedSchema.parse(req.body);
+    ok(res, await addManagedMembersBulk(callerId(req), req.params.familyId!, members));
+  }),
+);
+
+familiesRouter.patch(
+  '/:familyId/members/:memberUserId/manager',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { managerId } = managerSchema.parse(req.body);
+    await setManagedMemberManager(
+      callerId(req),
+      req.params.familyId!,
+      req.params.memberUserId!,
+      managerId,
+    );
+    noContent(res);
+  }),
+);
+
+// Invite the person a managed profile belongs to, now that they have an
+// email, to take it over. Owners and the member keeping their books.
+familiesRouter.post(
+  '/:familyId/members/:memberUserId/claim-invite',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    ok(
+      res,
+      await inviteProfileClaim(callerId(req), req.params.familyId!, req.params.memberUserId!, {
+        email,
+      }),
+    );
+  }),
+);
+
 const verifySeatPaymentSchema = z.object({
   pendingInviteId: z.string().min(1),
   razorpayOrderId: z.string().min(1),
@@ -192,6 +313,41 @@ familiesRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const data = verifySeatPaymentSchema.parse(req.body);
     ok(res, await verifySeatPaymentAndInvite(callerId(req), req.params.familyId!, data));
+  }),
+);
+
+const inviteEmailSchema = z.object({
+  subject: z.string().max(200).optional(),
+  message: z.string().max(5000).optional(),
+});
+
+// The invitation email, exactly as it will go out — the owner can edit the
+// subject and note before sending. Link and expiry are fixed by the template.
+familiesRouter.post(
+  '/:familyId/invitations/:invitationId/email/preview',
+  asyncHandler(async (req: Request, res: Response) => {
+    const edits = inviteEmailSchema.parse(req.body ?? {});
+    ok(
+      res,
+      await buildFamilyInviteEmail(callerId(req), req.params.familyId!, req.params.invitationId!, edits),
+    );
+  }),
+);
+
+familiesRouter.post(
+  '/:familyId/invitations/:invitationId/email/send',
+  asyncHandler(async (req: Request, res: Response) => {
+    const edits = inviteEmailSchema.parse(req.body ?? {});
+    ok(
+      res,
+      await sendFamilyInviteEmail(
+        callerId(req),
+        req.params.familyId!,
+        req.params.invitationId!,
+        edits,
+        req,
+      ),
+    );
   }),
 );
 
@@ -271,6 +427,9 @@ const layoutSchema = z.object({
       }),
     )
     .optional(),
+  parents: z.record(z.string(), z.string().nullable()).optional(),
+  // Couples, as [one, the other]. Order carries no meaning.
+  partners: z.array(z.tuple([z.string(), z.string()])).max(200).optional(),
 });
 
 familiesRouter.get(

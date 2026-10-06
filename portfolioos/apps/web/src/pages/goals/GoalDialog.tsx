@@ -148,7 +148,7 @@ export function GoalDialog({ open, existing, portfolios, onClose, onSaved }: Pro
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit goal' : 'Create goal'}</DialogTitle>
         </DialogHeader>

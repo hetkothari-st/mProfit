@@ -7,6 +7,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { professionalInviteApi } from '@/api/ca.api';
 import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
+import { authApi } from '@/api/auth.api';
+import { useResolvedSession } from '@/hooks/useResolvedSession';
 
 /**
  * A professional accepting a client's invitation.
@@ -25,7 +27,12 @@ import { useAuthStore } from '@/stores/auth.store';
 export function AcceptProfessionalInvitePage() {
   const { token = '' } = useParams();
   const navigate = useNavigate();
-  const user = useAuthStore((st) => st.user);
+  // Resolved, not read raw: a professional opening a second client's link in
+  // a new tab holds a token but no loaded profile yet, and reading `user`
+  // alone told them to sign in to an account they were already signed in to.
+  const session = useResolvedSession();
+  const clearSession = useAuthStore((st) => st.clearSession);
+  const refreshToken = useAuthStore((st) => st.refreshToken);
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
 
@@ -70,6 +77,20 @@ export function AcceptProfessionalInvitePage() {
   }
 
   const invite = preview.data!;
+  const inviteNext = `/professional-invitations/${token}`;
+  const signedInAs = session.status === 'signed-in' ? session.user.email : null;
+  // No recorded address means the server alone decides who may accept.
+  const emailMatches =
+    signedInAs !== null &&
+    (!invite.invitedEmail || signedInAs.toLowerCase() === invite.invitedEmail.toLowerCase());
+
+  /** Leave this session and come back here signed in as the invited account. */
+  async function switchAccount() {
+    // eslint-disable-next-line everypaisa/no-silent-catch -- best-effort revoke, as in Header: the local session is cleared either way, and a failed revoke only leaves a refresh token to expire on its own
+    try { await authApi.logout(refreshToken); } catch { /* ignore */ }
+    clearSession();
+    navigate(`/login?next=${encodeURIComponent(inviteNext)}`);
+  }
 
   if (accepted) {
     return (
@@ -149,15 +170,38 @@ export function AcceptProfessionalInvitePage() {
 
           {error && <p className="text-[12.5px] text-negative">{error}</p>}
 
-          {user ? (
-            <Button
-              onClick={() => accept.mutate()}
-              disabled={accept.isPending}
-              className="w-full"
-            >
-              {accept.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Accept and open their books
-            </Button>
+          {session.status === 'loading' ? (
+            <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Checking your sign-in…
+            </div>
+          ) : session.status === 'signed-in' ? (
+            <div className="space-y-3">
+              {emailMatches ? (
+                <p className="text-[12.5px] text-muted-foreground">
+                  Signed in as <span className="font-medium text-foreground">{signedInAs}</span>.
+                </p>
+              ) : (
+                <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-relaxed text-foreground">
+                  You are signed in as <span className="font-medium">{signedInAs}</span>, but this
+                  invitation is for <span className="font-medium">{invite.invitedEmail}</span>. Sign
+                  in with that account to accept it.
+                </p>
+              )}
+              {emailMatches ? (
+                <Button
+                  onClick={() => accept.mutate()}
+                  disabled={accept.isPending}
+                  className="w-full"
+                >
+                  {accept.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Accept and open their books
+                </Button>
+              ) : (
+                <Button onClick={switchAccount} variant="outline" className="w-full">
+                  Sign in as {invite.invitedEmail}
+                </Button>
+              )}
+            </div>
           ) : (
             <div className="space-y-2">
               <p className="text-[12.5px] leading-relaxed text-muted-foreground">
@@ -166,14 +210,12 @@ export function AcceptProfessionalInvitePage() {
               </p>
               <div className="flex gap-2">
                 <Button asChild className="flex-1">
-                  <Link to={`/login?next=${encodeURIComponent(`/professional-invitations/${token}`)}`}>
+                  <Link to={`/login?next=${encodeURIComponent(inviteNext)}`}>
                     Sign in
                   </Link>
                 </Button>
                 <Button asChild variant="outline" className="flex-1">
-                  <Link
-                    to={`/register?next=${encodeURIComponent(`/professional-invitations/${token}`)}`}
-                  >
+                  <Link to={`/register?next=${encodeURIComponent(inviteNext)}`}>
                     Create account
                   </Link>
                 </Button>

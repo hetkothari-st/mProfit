@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AutoFitText } from '@/components/ui/AutoFitText';
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
@@ -281,12 +282,12 @@ function InterestSoFar({ holding }: { holding: FDHolding }) {
   const up = earned.gte(0);
   return (
     <span className={up ? 'text-positive' : 'text-negative'}>
-      <span className="money-digits">
+      <span className="money-digits whitespace-nowrap">
         {up ? '+' : ''}
         {formatINR(earned.toString())}
       </span>
       {pct && (
-        <span className="ml-1 text-xs opacity-75">
+        <span className="ml-1 whitespace-nowrap text-xs opacity-75">
           {up ? '+' : ''}
           {pct.toFixed(2)}%
         </span>
@@ -298,14 +299,16 @@ function InterestSoFar({ holding }: { holding: FDHolding }) {
 /** "At maturity" + the value in the bank's accent — the number the card leads with. */
 function MaturityValue({ value, accent }: { value: Decimal | null; accent: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-sm text-muted-foreground">At maturity</p>
-      <p
-        className="money-digits font-display text-[30px] leading-tight tabular-nums"
-        style={value ? { color: accent } : undefined}
-      >
-        {value ? formatINR(value.toString()) : '—'}
-      </p>
+      <AutoFitText>
+        <p
+          className="money-digits font-display text-[30px] leading-tight tabular-nums"
+          style={value ? { color: accent } : undefined}
+        >
+          {value ? formatINR(value.toString()) : '—'}
+        </p>
+      </AutoFitText>
     </div>
   );
 }
@@ -369,7 +372,7 @@ function FDCard({
           </p>
         )}
 
-        <div className="grid grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
+        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
           <Figure label="Principal">
             <span className="money-digits">{formatINR(holding.totalCost)}</span>
           </Figure>
@@ -494,7 +497,7 @@ function RDCard({
 
         <MaturityTrack accent={accent} pct={0} opened={openDate} maturity={maturity} showBar={false} />
 
-        <div className="grid grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
+        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 border-t border-border/60 pt-3">
           <Figure label="EMI">
             <span className="money-digits">{monthlyRaw ? formatINR(monthlyRaw) : '—'}</span>
           </Figure>

@@ -126,11 +126,11 @@ function CardCard({
   return (
     <div className="group relative">
       {/* Action overlay (top-right, hover-reveal) */}
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity [@media(hover:none)]:rounded-full [@media(hover:none)]:bg-black/45 [@media(hover:none)]:px-1 [@media(hover:none)]:backdrop-blur-sm">
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
           onClick={onEdit}
           title="Edit"
         >
@@ -139,7 +139,7 @@ function CardCard({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-negative/80 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-negative/80 hover:text-white"
           onClick={onDelete}
           disabled={isDeleting}
           title="Delete"
@@ -150,7 +150,7 @@ function CardCard({
           asChild
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
           title="Open"
         >
           <Link to={`/credit-cards/${card.id}`}>
@@ -408,7 +408,7 @@ function CreateCardDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit credit card' : 'Add credit card'}</DialogTitle>
           <DialogDescription>
@@ -423,7 +423,7 @@ function CreateCardDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="cc-issuer">Issuer bank *</Label>
               <SuggestInput
@@ -479,7 +479,7 @@ function CreateCardDialog({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="cc-last4">Last 4 digits *</Label>
               <Input id="cc-last4" placeholder="1234" maxLength={4} value={form.last4}
@@ -510,7 +510,7 @@ function CreateCardDialog({
             {errors['creditLimit'] && <p className="text-xs text-negative mt-1">{errors['creditLimit']}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Statement day</Label>
               <Input type="number" min="1" max="31" value={form.statementDay}
@@ -523,7 +523,7 @@ function CreateCardDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Interest rate (% p.a.)</Label>
               <Input placeholder="42.00" value={form.interestRate ?? ''}

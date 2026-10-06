@@ -24,12 +24,19 @@ import { prisma } from '../../lib/prisma.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { toDecimal } from '@everypaisa/shared';
 import { amountInWords } from './amountInWords.js';
+import { inr } from './format.js';
 
 export type ReceiptKind = 'RENT' | 'PREMIUM' | 'LOAN_PAYMENT' | 'LOAN_DISBURSEMENT' | 'VOUCHER';
 
 export interface ReceiptField {
   label: string;
   value: string;
+}
+
+/** One run of the receipt's sentence; `strong` runs are the facts it attests. */
+export interface StatementPart {
+  text: string;
+  strong?: boolean;
 }
 
 export interface ReceiptDocument {
@@ -61,6 +68,15 @@ export interface ReceiptDocument {
   entries: Array<{ debit: string; credit: string; amount: string }>;
   /** Name shown as the issuer — the account holder. */
   issuedBy: string;
+  /** Printed under the issuer's name on the letterhead, when known. */
+  issuerEmail?: string;
+  /**
+   * The receipt said as one sentence — "Received with thanks from … the sum
+   * of … towards …". It is what makes a slip of paper read as a receipt
+   * rather than a table of fields, and it is how receipts in India are
+   * written by hand; the fields below it are the same facts, for reference.
+   */
+  statement: StatementPart[];
   /**
    * True when the receipt records money RECEIVED (so it is signed by the
    * person issuing it) rather than money paid out. Decides the signature line
@@ -69,7 +85,8 @@ export interface ReceiptDocument {
   isInflow: boolean;
 }
 
-const RUPEE_FIELDS = new Set(['Amount']);
+/** Fields whose value is a sum of money, printed with Rs. and grouping. */
+const RUPEE_FIELDS = new Set(['Amount', 'Principal', 'Interest']);
 
 /** ISO date of a `Date`, in IST terms, for a document meant to be filed in India. */
 function istDate(d: Date): string {
@@ -115,10 +132,23 @@ function displayNumber(voucherNo: string, kind: ReceiptKind, isoDate: string): s
   return `${KIND_CODE[kind]}/${isoDate.replace(/-/g, '')}/${tail}`;
 }
 
-/** `HOME` → `Home loan`, `PROCESSING_FEE` → `Processing fee`. */
+/** Tokens that are abbreviations, and stay in capitals wherever they appear. */
+const ACRONYMS = new Set(['emi', 'ulip', 'nps', 'epf', 'ppf']);
+
+/** Lower-case words, except abbreviations: `EMI` stays `EMI`, not `Emi`. */
+function words(token: string): string {
+  return token
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .split(' ')
+    .map((w) => (ACRONYMS.has(w) ? w.toUpperCase() : w))
+    .join(' ');
+}
+
+/** `HOME` → `Home loan`, `PROCESSING_FEE` → `Processing fee`, `EMI` → `EMI`. */
 function humanise(token: string, suffix = ''): string {
-  const words = token.replace(/_/g, ' ').toLowerCase();
-  const sentence = words.charAt(0).toUpperCase() + words.slice(1);
+  const w = words(token);
+  const sentence = w.charAt(0).toUpperCase() + w.slice(1);
   return suffix ? `${sentence} ${suffix}` : sentence;
 }
 
@@ -179,7 +209,17 @@ export async function buildReceipt(
       amount: toDecimal(e.amount.toString()).toFixed(2),
     })),
     issuedBy: owner?.name || owner?.email || 'Account holder',
+    issuerEmail: owner?.name && owner.email ? owner.email : undefined,
   };
+
+  // "the sum of forty-five thousand rupees only (Rs. 45,000.00)" — the words
+  // lead, as on a cheque, and the figure confirms them.
+  const inWords = base.amountWords.charAt(0).toLowerCase() + base.amountWords.slice(1);
+  const sum: StatementPart[] = [
+    { text: ' the sum of ' },
+    { text: inWords, strong: true },
+    { text: ` (${inr(amount)})` },
+  ];
 
   const rentId = sourceIdOf(voucher.voucherNo, 'AUTO-RENT-');
   if (rentId) {
@@ -195,6 +235,16 @@ export async function buildReceipt(
         title: 'Rent Receipt',
         isInflow: true,
         receivedFrom: receipt.tenancy.tenantName,
+        statement: [
+          { text: 'Received with thanks from ' },
+          { text: receipt.tenancy.tenantName, strong: true },
+          ...sum,
+          { text: ' towards rent of ' },
+          { text: receipt.tenancy.property.name, strong: true },
+          { text: ' for the month of ' },
+          { text: monthLabel(receipt.forMonth), strong: true },
+          { text: '.' },
+        ],
         fields: [
           { label: 'Property', value: receipt.tenancy.property.name },
           ...(receipt.tenancy.property.address
@@ -222,6 +272,16 @@ export async function buildReceipt(
         title: 'Premium Payment Receipt',
         isInflow: false,
         paidTo: payment.policy.insurer,
+        statement: [
+          { text: 'Paid to ' },
+          { text: payment.policy.insurer, strong: true },
+          ...sum,
+          { text: ' towards the premium on ' },
+          { text: payment.policy.planName || humanise(payment.policy.type, 'policy'), strong: true },
+          { text: ' held by ' },
+          { text: payment.policy.policyHolder, strong: true },
+          { text: `, covering ${dayLabel(payment.periodFrom)} to ${dayLabel(payment.periodTo)}.` },
+        ],
         fields: [
           { label: 'Policy', value: payment.policy.planName || humanise(payment.policy.type) },
           { label: 'Cover', value: humanise(payment.policy.type) },
@@ -256,6 +316,16 @@ export async function buildReceipt(
         title: 'Loan Payment Receipt',
         isInflow: false,
         paidTo: payment.loan.lenderName,
+        statement: [
+          { text: 'Paid to ' },
+          { text: payment.loan.lenderName, strong: true },
+          ...sum,
+          { text: ` towards ${words(payment.paymentType)} on the ` },
+          { text: `${words(payment.loan.loanType)} loan`, strong: true },
+          { text: ' of ' },
+          { text: payment.loan.borrowerName, strong: true },
+          { text: '.' },
+        ],
         fields: [
           { label: 'Loan', value: humanise(payment.loan.loanType, 'loan') },
           { label: 'Borrower', value: payment.loan.borrowerName },
@@ -282,6 +352,16 @@ export async function buildReceipt(
         title: 'Loan Disbursement Advice',
         isInflow: true,
         receivedFrom: loan.lenderName,
+        statement: [
+          { text: 'Received from ' },
+          { text: loan.lenderName, strong: true },
+          ...sum,
+          { text: ', being the disbursement of the ' },
+          { text: `${words(loan.loanType)} loan`, strong: true },
+          { text: ' sanctioned to ' },
+          { text: loan.borrowerName, strong: true },
+          { text: '.' },
+        ],
         fields: [
           { label: 'Loan', value: humanise(loan.loanType, 'loan') },
           { label: 'Borrower', value: loan.borrowerName },
@@ -303,6 +383,17 @@ export async function buildReceipt(
     number: displayNumber(voucher.voucherNo, 'VOUCHER', date),
     title: inflow ? 'Receipt' : voucher.type === 'PAYMENT' ? 'Payment Voucher' : 'Voucher',
     isInflow: inflow,
+    statement: [
+      {
+        text: inflow
+          ? 'Received'
+          : voucher.type === 'PAYMENT'
+            ? 'Paid'
+            : `Recorded as a ${words(voucher.type)} entry,`,
+      },
+      ...sum,
+      { text: voucher.narration ? ` towards ${voucher.narration}.` : '.' },
+    ],
     fields: [
       { label: 'Voucher type', value: humanise(voucher.type) },
       { label: 'Amount', value: amount },

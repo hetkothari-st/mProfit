@@ -174,7 +174,8 @@ export function AssetClassXirrBar({ rows }: { rows: AssetClassXirrRow[] }) {
             <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${v.toFixed(0)}%`} />
-              <YAxis dataKey="label" type="category" tick={{ fontSize: 11, fill: 'hsl(var(--foreground))' }} axisLine={false} tickLine={false} width={120} />
+              <YAxis dataKey="label" type="category" tick={{ fontSize: 11, fill: 'hsl(var(--foreground))' }} axisLine={false} tickLine={false} width={92}
+                tickFormatter={(v: string) => (v.length > 13 ? `${v.slice(0, 12)}…` : v)} />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
                 formatter={(v: number, _n: string, p: { payload?: { invested?: string; currentValue?: string } }) => [

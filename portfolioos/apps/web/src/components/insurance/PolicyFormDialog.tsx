@@ -190,7 +190,7 @@ export function PolicyFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit policy' : 'Add a policy'}</DialogTitle>
         </DialogHeader>
@@ -377,7 +377,7 @@ export function PolicyFormDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                   aria-label="Remove attached file"
                   onClick={() => setPendingFile(null)}
                 >

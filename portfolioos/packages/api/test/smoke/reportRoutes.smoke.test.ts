@@ -100,6 +100,7 @@ function routes(seed: SeededReports): RouteCase[] {
     { path: '/section-export?section=loans', handler: reports.getSectionExport, query: { section: 'loans' } },
     { path: '/section-export?section=rental', handler: reports.getSectionExport, query: { section: 'rental' } },
     { path: '/section-export?section=insurance', handler: reports.getSectionExport, query: { section: 'insurance' } },
+    { path: '/section-export?section=real-estate', handler: reports.getSectionExport, query: { section: 'real-estate' } },
     { path: '/statement/holdings', handler: reports.getStatementHoldings },
     { path: '/statement/capital-gains', handler: reports.getStatementCapitalGains, query: { fy: FY, kind: 'all' } },
     { path: '/statement/income', handler: reports.getStatementIncome, query: { fy: FY } },

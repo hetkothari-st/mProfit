@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { ok } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
-import { isValidFinancialYear } from '@everypaisa/shared';
+import { Decimal, isValidFinancialYear } from '@everypaisa/shared';
 import {
   intradayReport,
   stcgReport,
@@ -487,16 +487,16 @@ export async function getDashboardExport(req: Request, res: Response) {
   await runForSubject(resolved.via, userId, () => streamDashboardPdf(res, { userId, portfolioId, scope, theme }));
 }
 
-// ─── Specialized section exports (Vehicles / Insurance / Loans / Credit Cards / Rental) ─────
+// ─── Specialized section exports (Vehicles / Insurance / Loans / Credit Cards / Rental / Real Estate) ─────
 
-type SectionType = 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental';
+type SectionType = 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental' | 'real-estate';
 
 export async function getSectionExport(req: Request, res: Response) {
   const section = (req.query.section as string | undefined) as SectionType | undefined;
   const format  = getFormat(req);
 
-  if (!section || !['vehicles', 'insurance', 'loans', 'credit-cards', 'rental'].includes(section)) {
-    throw new BadRequestError('section must be one of: vehicles, insurance, loans, credit-cards, rental');
+  if (!section || !['vehicles', 'insurance', 'loans', 'credit-cards', 'rental', 'real-estate'].includes(section)) {
+    throw new BadRequestError('section must be one of: vehicles, insurance, loans, credit-cards, rental, real-estate');
   }
 
   const resolved = await resolveReportSubjects(req);
@@ -610,6 +610,47 @@ async function sectionPayload(
           interestRate: r.interestRate?.toString() ?? '',
           annualFee:    r.annualFee?.toString() ?? '',
         })),
+      };
+      break;
+    }
+    case 'real-estate': {
+      // Owned properties are not holdings, so the holdings export filtered to
+      // REAL_ESTATE came back empty (null / 0 everywhere). Read them directly.
+      const rows = await prisma.ownedProperty.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
+      payload = {
+        title: 'Real Estate',
+        meta: { 'Generated On': new Date().toISOString().slice(0, 10), 'Total': String(rows.length) },
+        columns: [
+          { key: 'name',             header: 'Property',       width: 24 },
+          { key: 'propertyType',     header: 'Type',           width: 16 },
+          { key: 'city',             header: 'City',           width: 14 },
+          { key: 'status',           header: 'Status',         width: 14 },
+          { key: 'purchaseDate',     header: 'Purchased',      width: 12, formatter: fmtDate },
+          { key: 'purchasePrice',    header: 'Purchase Price', width: 14, formatter: v => fmtNum(v) },
+          { key: 'costBasis',        header: 'Cost Basis',     width: 14, formatter: v => fmtNum(v) },
+          { key: 'currentValue',     header: 'Current Value',  width: 14, formatter: v => fmtNum(v) },
+          { key: 'gain',             header: 'Gain',           width: 14, formatter: v => fmtNum(v) },
+          { key: 'ownershipPercent', header: 'My Share %',     width: 10, formatter: v => fmtNum(v, 2) },
+        ],
+        rows: rows.map(r => {
+          const cost = new Decimal(r.purchasePrice ?? 0)
+            .plus(r.stampDuty ?? 0)
+            .plus(r.registrationFee ?? 0)
+            .plus(r.brokerage ?? 0)
+            .plus(r.otherCosts ?? 0);
+          return {
+            name: r.name,
+            propertyType: r.propertyType.replace(/_/g, ' '),
+            city: r.city ?? '',
+            status: r.status.replace(/_/g, ' '),
+            purchaseDate: r.purchaseDate,
+            purchasePrice: r.purchasePrice?.toString() ?? '',
+            costBasis: cost.toString(),
+            currentValue: r.currentValue?.toString() ?? '',
+            gain: r.currentValue ? new Decimal(r.currentValue).minus(cost).toString() : '',
+            ownershipPercent: r.ownershipPercent.toString(),
+          };
+        }),
       };
       break;
     }

@@ -2,48 +2,53 @@
  * The receipt as a piece of paper.
  *
  * Deliberately NOT built on `ExportPayload`. That renders tables, and a
- * receipt is not a table: it is a heading, a number, one amount said twice —
- * in figures and in words — the handful of facts that identify what was paid
- * for, and a signature line. Forcing it through the table renderer would
- * produce something that is technically the same data and obviously not a
- * receipt.
+ * receipt is not a table: it is an issuer, a number, one sentence saying who
+ * paid whom how much for what, the amount said twice, and a signature.
  *
- * The layout is one column inside a hairline frame, and everything hangs off
- * two vertical rhythms: a label column and a value column that never move.
- * The first version let each block find its own left edge and pinned the
- * signature to the bottom of the page, which on a short receipt left a hand's
- * width of nothing in the middle and read as a broken page rather than a
- * document. Content now flows, and only the footnote is pinned.
+ * It is drawn the way banks and registrars draw theirs, because that is what
+ * people trust on paper:
  *
- * Printed on the light theme, always. This gets printed, attached to a return,
- * or emailed to a tenant; the app's dark skin is wrong in all three places.
- * `Rs.` rather than `₹` for the same reason the charts use it — PDFKit's
- * built-in Helvetica has no U+20B9 glyph and would draw a blank box.
+ *  - a letterhead in the ISSUER's name (the account holder — the landlord on
+ *    a rent receipt), on a navy band with a fine guilloche line pattern of
+ *    the kind printed on cheques and certificates;
+ *  - the receipt number and date in ruled form cells;
+ *  - the formal sentence ("Received with thanks from … the sum of …"), which
+ *    is how receipts in India are written, with the particulars below it as
+ *    a ruled grid for reference;
+ *  - an amount box, a signature block and a RECEIVED / PAID seal;
+ *  - the ledger posting and a footer, inside a double-ruled frame.
+ *
+ * The frame wraps the content rather than the page. A receipt is a slip; a
+ * full-page border around a third of a page of text read as a document that
+ * failed to finish.
+ *
+ * Printed on white, always: it gets printed, attached to a return or emailed
+ * to a tenant. `Rs.` rather than `₹` — see `format.ts`.
  */
 
 import PDFDocument from 'pdfkit';
-import { LIGHT_THEME } from '../charts/pdfTheme.js';
-import { drawBrandLockup } from '../charts/pdfBrand.js';
 import type { ReceiptDocument } from './receiptData.js';
+import { RUPEE_FIELDS } from './receiptData.js';
+import { inr } from './format.js';
 
-const C = LIGHT_THEME;
+type Doc = InstanceType<typeof PDFDocument>;
 
-const PAGE_MARGIN = 44;
-/** The frame sits inside the margin; everything else sits inside the frame. */
-const FRAME_PAD = 26;
-/** Where values start. Fixed, so labels and values line up down the page. */
+const INK = '#1B2027';
+const MUTED = '#5B6572';
+const NAVY = '#15304D';
+const NAVY_LINE = '#2C4D73';
+const RULE = '#B8C2CF';
+const SHADE = '#F2F5F9';
+const AMOUNT_BG = '#F5F8FC';
+const AMOUNT_LINE = '#DCE4EE';
+const SEAL_IN = '#1F6B46';
+const SEAL_OUT = NAVY;
+
+const PAGE_MARGIN = 36;
+/** Content sits this far inside the outer frame line. */
+const PAD = 24;
+/** Width of the shaded label column in the particulars grid. */
 const LABEL_W = 150;
-
-/** Rs. with Indian digit grouping, for a string already fixed to 2dp. */
-function inr(amount: string): string {
-  const [whole = '0', frac = '00'] = amount.split('.');
-  const negative = whole.startsWith('-');
-  const digits = whole.replace('-', '');
-  const head = digits.length > 3 ? digits.slice(0, digits.length - 3) : '';
-  const tail = digits.slice(-3);
-  const grouped = head ? `${head.replace(/\B(?=(\d{2})+(?!\d))/g, ',')},${tail}` : tail;
-  return `${negative ? '-' : ''}Rs. ${grouped}.${frac}`;
-}
 
 function prettyDate(iso: string): string {
   const [y, m, d] = iso.split('-').map((n) => Number.parseInt(n, 10));
@@ -54,22 +59,71 @@ function prettyDate(iso: string): string {
   });
 }
 
-/** A label in the muted ink, small caps-ish, used to open each section. */
-function sectionLabel(
-  doc: InstanceType<typeof PDFDocument>,
-  text: string,
+/**
+ * Fine interlaced waves across a rectangle — the security-print texture on
+ * cheques and share certificates. Clipped to the rectangle, drawn under
+ * whatever sits on it.
+ */
+function guilloche(
+  doc: Doc,
   x: number,
   y: number,
-  width: number,
-): number {
+  w: number,
+  h: number,
+  color: string,
+  strands = 12,
+): void {
+  doc.save();
+  doc.rect(x, y, w, h).clip();
+  doc.lineWidth(0.35).strokeColor(color);
+  for (let i = 0; i < strands; i++) {
+    const phase = (i / strands) * Math.PI * 2;
+    const amp = h * 0.32;
+    const mid = y + h / 2;
+    doc.moveTo(x, mid + amp * Math.sin(phase));
+    for (let px = 4; px <= w; px += 4) {
+      const t = px / w;
+      const yy =
+        mid +
+        amp * Math.sin(t * Math.PI * 6 + phase) * 0.7 +
+        amp * Math.sin(t * Math.PI * 2.5 - phase * 1.5) * 0.3;
+      doc.lineTo(x + px, yy);
+    }
+    doc.stroke();
+  }
+  doc.restore();
+}
+
+/**
+ * Size `text` to fit `room` on one line: shrink from `size` towards `min`,
+ * and only if it still does not fit, cut it with an ellipsis. PDFKit's own
+ * `ellipsis` does not stop a wrap at a hyphen, so this measures instead.
+ */
+function fitLine(
+  doc: Doc,
+  text: string,
+  room: number,
+  size: number,
+  min: number,
+  spacing = 0,
+): { text: string; size: number } {
+  let s = size;
+  const w = (t: string) => doc.fontSize(s).widthOfString(t, { characterSpacing: spacing });
+  while (s > min && w(text) > room) s -= 0.5;
+  if (w(text) <= room) return { text, size: s };
+  let cut = text;
+  while (cut.length > 1 && w(`${cut}…`) > room) cut = cut.slice(0, -1);
+  return { text: `${cut.trimEnd()}…`, size: s };
+}
+
+/** A small spaced caption above a block, in the navy of the letterhead. */
+function caption(doc: Doc, text: string, x: number, y: number): number {
   doc
     .font('Helvetica-Bold')
-    .fontSize(7.5)
-    .fillColor(C.muted)
-    .text(text.toUpperCase(), x, y, { width, characterSpacing: 0.8 });
-  const ruleY = y + 12;
-  doc.moveTo(x, ruleY).lineTo(x + width, ruleY).lineWidth(0.5).strokeColor(C.border).stroke();
-  return ruleY + 10;
+    .fontSize(7)
+    .fillColor(NAVY)
+    .text(text.toUpperCase(), x, y, { characterSpacing: 1, lineBreak: false });
+  return y + 12;
 }
 
 /**
@@ -78,222 +132,328 @@ function sectionLabel(
  * Kept separate from `renderReceiptPdf` so a bundle can put many receipts in
  * one file, one per page, without re-opening a document each time.
  */
-export function drawReceipt(
-  doc: InstanceType<typeof PDFDocument>,
-  receipt: ReceiptDocument,
-): void {
+export function drawReceipt(doc: Doc, receipt: ReceiptDocument): void {
   const frameX = PAGE_MARGIN;
   const frameW = doc.page.width - PAGE_MARGIN * 2;
-  const left = frameX + FRAME_PAD;
-  const width = frameW - FRAME_PAD * 2;
+  const left = frameX + PAD;
+  const width = frameW - PAD * 2;
   const right = left + width;
-  const valueX = left + LABEL_W;
-  const valueW = width - LABEL_W;
 
-  // ── Masthead ──
-  //
-  // Brand on the left, document name on the right. The title is right-aligned
-  // against the brand rather than centred under it: centred, it collided with
-  // the lockup on long names and floated free of everything else on short ones.
-  let y = PAGE_MARGIN + FRAME_PAD;
-  drawBrandLockup(doc, C, left, y, 14);
+  // ── Letterhead ──
+  const bandX = frameX + 4;
+  const bandY = PAGE_MARGIN + 4;
+  const bandW = frameW - 8;
+  const bandH = 68;
+  doc.rect(bandX, bandY, bandW, bandH).fillColor(NAVY).fill();
+  guilloche(doc, bandX, bandY, bandW, bandH, NAVY_LINE, 14);
 
+  const headW = width * 0.52;
+  doc.font('Helvetica-Bold');
+  const issuer = fitLine(doc, receipt.issuedBy, headW, 17, 12);
   doc
-    .font('Helvetica-Bold')
-    .fontSize(15)
-    .fillColor(C.titleInk)
-    .text(receipt.title.toUpperCase(), left + 200, y + 3, {
-      width: width - 200,
-      align: 'right',
-      characterSpacing: 0.4,
+    .fontSize(issuer.size)
+    .fillColor('#FFFFFF')
+    .text(issuer.text, left, bandY + 20 + (17 - issuer.size) / 2, {
+      width: headW + 20,
+      lineBreak: false,
     });
-
-  y += 40;
-  doc.moveTo(left, y).lineTo(right, y).lineWidth(1.2).strokeColor(C.ink).stroke();
-
-  // ── Number and date, facing each other ──
-  y += 14;
-  doc.font('Helvetica').fontSize(7.5).fillColor(C.muted);
-  doc.text('RECEIPT NO.', left, y, { characterSpacing: 0.6 });
-  doc.text('DATE', left, y, { width, align: 'right', characterSpacing: 0.6 });
-
-  y += 11;
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(C.ink);
-  doc.text(receipt.number, left, y, { width: width / 2 });
-  doc.text(prettyDate(receipt.date), left, y, { width, align: 'right' });
-
-  // ── Counterparty ──
-  y += 26;
-  const party = receipt.isInflow ? receipt.receivedFrom : receipt.paidTo;
-  if (party) {
-    doc
-      .font('Helvetica')
-      .fontSize(7.5)
-      .fillColor(C.muted)
-      .text(
-        receipt.isInflow ? 'RECEIVED WITH THANKS FROM' : 'PAID TO',
-        left,
-        y,
-        { characterSpacing: 0.6 },
-      );
-    y += 12;
-    doc.font('Helvetica-Bold').fontSize(14).fillColor(C.titleInk).text(party, left, y, { width });
-    y += 24;
-  }
-
-  // ── The amount, said twice, in one bordered band ──
-  const bandH = 56;
-  doc.rect(left, y, width, bandH).fillColor(C.rowAlt).fill();
-  doc.rect(left, y, width, bandH).lineWidth(0.6).strokeColor(C.border).stroke();
-  // A rule down the left edge, heavier, so the band reads as a stamp rather
-  // than a grey slab.
-  doc.rect(left, y, 3, bandH).fillColor(C.ink).fill();
-
   doc
     .font('Helvetica')
-    .fontSize(7.5)
-    .fillColor(C.muted)
-    .text('AMOUNT', left + 16, y + 11, { characterSpacing: 0.6 });
+    .fontSize(8.5)
+    .fillColor('#C6D3E2')
+    .text(receipt.issuerEmail ?? 'Issuer', left, bandY + 42, {
+      width: headW,
+      lineBreak: false,
+      ellipsis: true,
+    });
+
+  // The title shrinks to its half of the band rather than running into a
+  // long issuer name: "PREMIUM PAYMENT RECEIPT" is twice "RENT RECEIPT".
+  const titleRoom = width - headW - 16;
+  doc.font('Helvetica-Bold');
+  const title = fitLine(doc, receipt.title.toUpperCase(), titleRoom, 15, 10, 1.2);
+  doc
+    .fontSize(title.size)
+    .fillColor('#FFFFFF')
+    .text(title.text, left + headW + 16, bandY + 20 + (15 - title.size) / 2, {
+      width: titleRoom,
+      align: 'right',
+      characterSpacing: 1.2,
+      lineBreak: false,
+    });
+  // "ORIGINAL" in an outlined tag, as printed on bank-issued copies.
+  doc.font('Helvetica-Bold').fontSize(6.5);
+  const tag = 'ORIGINAL';
+  const tagW = doc.widthOfString(tag, { characterSpacing: 1.4 }) + 14;
+  const tagX = right - tagW;
+  const tagY = bandY + 42;
+  doc.roundedRect(tagX, tagY, tagW, 13, 2).lineWidth(0.7).strokeColor('#C6D3E2').stroke();
+  doc
+    .fillColor('#FFFFFF')
+    .text(tag, tagX, tagY + 3.6, { width: tagW, align: 'center', characterSpacing: 1.4, lineBreak: false });
+
+  let y = bandY + bandH + 18;
+
+  // ── Reference strip: number and date, in ruled form cells ──
+  const stripH = 40;
+  const half = width / 2;
+  doc.rect(left, y, width, stripH).fillColor(SHADE).fill();
+  doc.rect(left, y, width, stripH).lineWidth(0.6).strokeColor(RULE).stroke();
+  doc.moveTo(left + half, y).lineTo(left + half, y + stripH).lineWidth(0.6).strokeColor(RULE).stroke();
+  const cell = (label: string, value: string, x: number) => {
+    doc
+      .font('Helvetica')
+      .fontSize(6.8)
+      .fillColor(MUTED)
+      .text(label.toUpperCase(), x + 12, y + 8, { characterSpacing: 0.8, lineBreak: false });
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .fillColor(INK)
+      .text(value, x + 12, y + 20, { width: half - 24, lineBreak: false, ellipsis: true });
+  };
+  cell('Receipt no.', receipt.number, left);
+  cell('Date', prettyDate(receipt.date), left + half);
+  y += stripH + 22;
+
+  // ── The receipt, as one sentence ──
+  doc.fillColor(INK).fontSize(11.5);
+  receipt.statement.forEach((part, i) => {
+    doc.font(part.strong ? 'Helvetica-Bold' : 'Helvetica');
+    const last = i === receipt.statement.length - 1;
+    if (i === 0) {
+      doc.text(part.text, left, y, { width, lineGap: 5, continued: !last });
+    } else {
+      doc.text(part.text, { lineGap: 5, continued: !last });
+    }
+  });
+  y = doc.y + 22;
+
+  // ── Particulars, as a ruled grid ──
+  y = caption(doc, 'Particulars', left, y);
+  const rows = receipt.fields
+    .filter((f) => f.label !== 'Amount') // stated twice already
+    .map((f) => ({
+      label: f.label,
+      value: RUPEE_FIELDS.has(f.label) && /^-?\d+(\.\d+)?$/.test(f.value) ? inr(f.value) : f.value,
+    }));
+  if (receipt.narration) rows.push({ label: 'Narration', value: receipt.narration });
+
+  const valueX = left + LABEL_W;
+  const valueW = width - LABEL_W;
+  const gridTop = y;
+  doc.fontSize(9.5);
+  for (const row of rows) {
+    doc.font('Helvetica-Bold');
+    const lh = doc.heightOfString(row.label, { width: LABEL_W - 20 });
+    doc.font('Helvetica');
+    const vh = doc.heightOfString(row.value, { width: valueW - 20 });
+    const rowH = Math.max(lh, vh) + 14;
+
+    doc.rect(left, y, LABEL_W, rowH).fillColor(SHADE).fill();
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(MUTED)
+      .text(row.label, left + 10, y + 7, { width: LABEL_W - 20 });
+    doc
+      .font('Helvetica')
+      .fontSize(9.5)
+      .fillColor(INK)
+      .text(row.value, valueX + 10, y + 7, { width: valueW - 20 });
+    y += rowH;
+    doc.moveTo(left, y).lineTo(right, y).lineWidth(0.5).strokeColor(RULE).stroke();
+  }
+  if (rows.length > 0) {
+    doc.rect(left, gridTop, width, y - gridTop).lineWidth(0.6).strokeColor(RULE).stroke();
+    doc.moveTo(valueX, gridTop).lineTo(valueX, y).lineWidth(0.5).strokeColor(RULE).stroke();
+  }
+  y += 24;
+
+  // ── Amount box, signature and seal ──
+  const boxW = width * 0.5;
+  const boxH = 76;
+  doc.rect(left, y, boxW, boxH).fillColor(AMOUNT_BG).fill();
+  guilloche(doc, left, y, boxW, boxH, AMOUNT_LINE, 10);
+  doc.rect(left, y, boxW, boxH).lineWidth(0.9).strokeColor(NAVY).stroke();
+  doc
+    .font('Helvetica')
+    .fontSize(6.8)
+    .fillColor(MUTED)
+    .text(receipt.isInflow ? 'AMOUNT RECEIVED' : 'AMOUNT PAID', left + 12, y + 9, {
+      characterSpacing: 0.8,
+      lineBreak: false,
+    });
   doc
     .font('Helvetica-Bold')
-    .fontSize(19)
-    .fillColor(C.titleInk)
-    .text(inr(receipt.amount), left + 16, y + 22, { width: width - 32, align: 'right' });
+    .fontSize(21)
+    .fillColor(NAVY)
+    .text(inr(receipt.amount), left + 12, y + 21, { width: boxW - 24, lineBreak: false });
   doc
     .font('Helvetica-Oblique')
-    .fontSize(9)
-    .fillColor(C.muted)
-    .text(receipt.amountWords, left + 16, y + 26, { width: width - 200 });
+    .fontSize(8.5)
+    .fillColor(INK)
+    .text(receipt.amountWords, left + 12, y + 50, { width: boxW - 24, height: 22, ellipsis: true });
 
-  y += bandH + 22;
+  const sigX = left + width * 0.6;
+  const sigW = right - sigX;
+  doc.font('Helvetica');
+  const forLine = fitLine(doc, `For ${receipt.issuedBy}`, sigW, 8.5, 7.5);
+  doc
+    .fontSize(forLine.size)
+    .fillColor(MUTED)
+    .text(forLine.text, sigX, y + 2, { width: sigW, align: 'right', lineBreak: false });
+  const lineY = y + boxH - 16;
+  doc.moveTo(sigX, lineY).lineTo(right, lineY).lineWidth(0.8).strokeColor(INK).stroke();
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(8.5)
+    .fillColor(INK)
+    .text(
+      receipt.isInflow ? 'Signature of receiver' : 'Authorised signatory',
+      sigX,
+      lineY + 5,
+      { width: sigW, align: 'right', lineBreak: false },
+    );
 
-  // ── Particulars ──
-  y = sectionLabel(doc, 'Particulars', left, y, width);
-
-  for (const field of receipt.fields) {
-    if (field.label === 'Amount') continue; // already stated, twice
-    const rowTop = y;
-    doc.font('Helvetica').fontSize(9.5).fillColor(C.muted).text(field.label, left, y, {
-      width: LABEL_W - 12,
+  // The seal: set beside the signature, turned a few degrees, the way a
+  // rubber stamp lands. Semi-opaque so the line under it still shows.
+  const sealW = 112;
+  const sealH = 38;
+  const sealCx = sigX + sealW / 2 + 6;
+  const sealCy = y + 34;
+  const sealColor = receipt.isInflow ? SEAL_IN : SEAL_OUT;
+  doc.save();
+  doc.rotate(-9, { origin: [sealCx, sealCy] });
+  doc.opacity(0.82);
+  doc
+    .roundedRect(sealCx - sealW / 2, sealCy - sealH / 2, sealW, sealH, 5)
+    .lineWidth(1.8)
+    .strokeColor(sealColor)
+    .stroke();
+  doc
+    .roundedRect(sealCx - sealW / 2 + 3, sealCy - sealH / 2 + 3, sealW - 6, sealH - 6, 3)
+    .lineWidth(0.5)
+    .strokeColor(sealColor)
+    .stroke();
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(12.5)
+    .fillColor(sealColor)
+    .text(receipt.isInflow ? 'RECEIVED' : 'PAID', sealCx - sealW / 2, sealCy - 11, {
+      width: sealW,
+      align: 'center',
+      characterSpacing: 2.2,
+      lineBreak: false,
     });
-    const labelBottom = doc.y;
-    doc
-      .font('Helvetica')
-      .fontSize(10)
-      .fillColor(C.ink)
-      .text(field.value, valueX, rowTop, { width: valueW });
-    y = Math.max(labelBottom, doc.y) + 9;
-    doc.moveTo(left, y - 4).lineTo(right, y - 4).lineWidth(0.3).strokeColor(C.border).stroke();
-  }
-
-  if (receipt.narration) {
-    const rowTop = y;
-    doc.font('Helvetica').fontSize(9.5).fillColor(C.muted).text('Narration', left, y, {
-      width: LABEL_W - 12,
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(6.8)
+    .text(prettyDate(receipt.date).toUpperCase(), sealCx - sealW / 2, sealCy + 4, {
+      width: sealW,
+      align: 'center',
+      characterSpacing: 0.8,
+      lineBreak: false,
     });
-    const labelBottom = doc.y;
-    doc
-      .font('Helvetica')
-      .fontSize(10)
-      .fillColor(C.ink)
-      .text(receipt.narration, valueX, rowTop, { width: valueW });
-    y = Math.max(labelBottom, doc.y) + 9;
-    doc.moveTo(left, y - 4).lineTo(right, y - 4).lineWidth(0.3).strokeColor(C.border).stroke();
-  }
+  doc.restore();
 
-  // ── The ledger legs ──
+  y += boxH + 26;
+
+  // ── Ledger posting ──
   //
   // A receipt is not a voucher, but whoever files it usually wants to know
   // which accounts moved, and printing it here means the paper reconciles to
   // the books without a second document.
-  y += 14;
-  y = sectionLabel(doc, 'Accounting entry', left, y, width);
-
-  for (const e of receipt.entries.slice(0, 5)) {
-    doc
-      .font('Helvetica')
-      .fontSize(8.5)
-      .fillColor(C.muted)
-      .text(`Dr  ${e.debit}`, left, y, { width: width * 0.42, ellipsis: true, lineBreak: false });
-    doc.text(`Cr  ${e.credit}`, left + width * 0.44, y, {
-      width: width * 0.32,
+  y = caption(doc, 'Ledger posting', left, y);
+  const colDr = width * 0.4;
+  const colCr = width * 0.4;
+  const colAmt = width - colDr - colCr;
+  const headH = 18;
+  const postTop = y;
+  doc.rect(left, y, width, headH).fillColor(SHADE).fill();
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(MUTED);
+  doc.text('Debit', left + 10, y + 5.5, { lineBreak: false });
+  doc.text('Credit', left + colDr + 10, y + 5.5, { lineBreak: false });
+  doc.text('Amount', left, y + 5.5, { width: width - 10, align: 'right', lineBreak: false });
+  y += headH;
+  const shown = receipt.entries.slice(0, 5);
+  for (const e of shown) {
+    doc.moveTo(left, y).lineTo(right, y).lineWidth(0.4).strokeColor(RULE).stroke();
+    doc.font('Helvetica').fontSize(8.5).fillColor(INK);
+    doc.text(e.debit, left + 10, y + 5.5, { width: colDr - 20, lineBreak: false, ellipsis: true });
+    doc.text(e.credit, left + colDr + 10, y + 5.5, {
+      width: colCr - 20,
+      lineBreak: false,
       ellipsis: true,
+    });
+    doc.text(inr(e.amount), left + colDr + colCr, y + 5.5, {
+      width: colAmt - 10,
+      align: 'right',
       lineBreak: false,
     });
-    doc
-      .font('Helvetica')
-      .fillColor(C.ink)
-      .text(inr(e.amount), left, y, { width, align: 'right', lineBreak: false });
-    y += 13;
+    y += 19;
   }
-  if (receipt.entries.length > 5) {
+  if (receipt.entries.length > shown.length) {
+    doc.moveTo(left, y).lineTo(right, y).lineWidth(0.4).strokeColor(RULE).stroke();
     doc
       .font('Helvetica-Oblique')
-      .fontSize(8.5)
-      .fillColor(C.muted)
-      .text(`and ${receipt.entries.length - 5} more`, left, y);
-    y += 13;
+      .fontSize(8)
+      .fillColor(MUTED)
+      .text(`and ${receipt.entries.length - shown.length} more`, left + 10, y + 5.5, {
+        lineBreak: false,
+      });
+    y += 19;
   }
-
-  // ── Signature ──
-  //
-  // Sits a clear gap below the content, but is pushed down to just above the
-  // footnote whenever the receipt is short. A receipt is signed at the foot of
-  // the page; leaving the signature high and a hand's width of nothing beneath
-  // it reads as a page that failed to finish rather than a document.
-  const footYPinned = doc.page.height - PAGE_MARGIN - 34;
-  const signY = Math.min(Math.max(y + 58, footYPinned - 66), footYPinned - 30);
-  const signW = 190;
+  doc.rect(left, postTop, width, y - postTop).lineWidth(0.6).strokeColor(RULE).stroke();
   doc
-    .moveTo(right - signW, signY)
-    .lineTo(right, signY)
-    .lineWidth(0.8)
-    .strokeColor(C.ink)
+    .moveTo(left + colDr, postTop)
+    .lineTo(left + colDr, y)
+    .moveTo(left + colDr + colCr, postTop)
+    .lineTo(left + colDr + colCr, y)
+    .lineWidth(0.4)
+    .strokeColor(RULE)
     .stroke();
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(9.5)
-    .fillColor(C.ink)
-    .text(receipt.issuedBy, right - signW, signY + 7, { width: signW, align: 'center' });
-  doc
-    .font('Helvetica')
-    .fontSize(8)
-    .fillColor(C.muted)
-    .text(
-      receipt.isInflow ? 'Signature of recipient' : 'Authorised signatory',
-      right - signW,
-      signY + 20,
-      { width: signW, align: 'center' },
-    );
+  y += 22;
 
-  // ── Frame ──
-  //
-  // Drawn last so no fill lands on top of it.
-  const frameBottom = doc.page.height - PAGE_MARGIN;
-  doc
-    .rect(frameX, PAGE_MARGIN, frameW, frameBottom - PAGE_MARGIN)
-    .lineWidth(0.6)
-    .strokeColor(C.border)
-    .stroke();
-
-  // ── Footnote, pinned inside the frame ──
-  const footY = frameBottom - 34;
-  doc.moveTo(left, footY).lineTo(right, footY).lineWidth(0.3).strokeColor(C.border).stroke();
+  // ── Footer ──
+  doc.moveTo(left, y).lineTo(right, y).lineWidth(0.4).strokeColor(RULE).stroke();
+  y += 8;
+  const generated = new Date().toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
   doc
     .font('Helvetica')
     .fontSize(7)
-    .fillColor(C.muted)
-    .text(`Ledger reference ${receipt.ledgerRef}`, left, footY + 8, {
-      width: width / 2,
-      ellipsis: true,
-      lineBreak: false,
-    });
-  doc.text(
-    'Computer-generated from recorded transactions. Valid without a physical seal.',
-    left,
-    footY + 8,
-    { width, align: 'right', lineBreak: false },
-  );
+    .fillColor(MUTED)
+    .text(
+      'Computer-generated receipt, prepared from the issuer’s recorded transactions.',
+      left,
+      y,
+      { width, lineBreak: false },
+    );
+  y += 11;
+  doc.text(`Generated on ${generated} with EveryPaisa`, left, y, { lineBreak: false });
+  doc.text(`Ledger ref ${receipt.ledgerRef}`, left + width * 0.45, y, {
+    width: width * 0.55,
+    align: 'right',
+    lineBreak: false,
+    ellipsis: true,
+  });
+  y += 10 + PAD - 6;
+
+  // ── Frame: a heavy outer rule and a hairline just inside it ──
+  doc
+    .rect(frameX, PAGE_MARGIN, frameW, y - PAGE_MARGIN)
+    .lineWidth(1.2)
+    .strokeColor(NAVY)
+    .stroke();
+  doc
+    .rect(frameX + 2.5, PAGE_MARGIN + 2.5, frameW - 5, y - PAGE_MARGIN - 5)
+    .lineWidth(0.4)
+    .strokeColor(RULE)
+    .stroke();
 }
 
 /** One receipt, as a PDF buffer. */
@@ -312,7 +472,7 @@ export function renderReceiptsPdf(receipts: ReceiptDocument[]): Promise<Buffer> 
 
     receipts.forEach((r, i) => {
       if (i > 0) doc.addPage();
-      doc.rect(0, 0, doc.page.width, doc.page.height).fillColor(C.pageBg).fill();
+      doc.rect(0, 0, doc.page.width, doc.page.height).fillColor('#FFFFFF').fill();
       drawReceipt(doc, r);
     });
 

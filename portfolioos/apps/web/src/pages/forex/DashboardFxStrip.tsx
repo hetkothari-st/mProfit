@@ -1,7 +1,9 @@
+import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { forexApi } from '@/api/forex.api';
+import { useScrollFade } from '@/hooks/useScrollFade';
 
 // Compact rates strip for the main dashboard. Shows the four most-referenced
 // INR rates (USD, EUR, GBP, JPY) with source badge. 30s auto-poll mirrors the
@@ -16,6 +18,9 @@ export function DashboardFxStrip() {
     staleTime: 0,
   });
 
+  const stripRef = useRef<HTMLDivElement>(null);
+  useScrollFade(stripRef, rows?.length);
+
   if (!rows || rows.length === 0) return null;
 
   return (
@@ -23,7 +28,7 @@ export function DashboardFxStrip() {
       to="/forex"
       className="flex items-center justify-between rounded-lg border border-border bg-card/60 px-3 py-2 text-xs transition-colors hover:bg-card"
     >
-      <div className="flex items-center gap-4 overflow-x-auto">
+      <div ref={stripRef} className="flex min-w-0 items-center gap-4 overflow-x-auto">
         <span className="text-[10px] font-medium uppercase tracking-kerned text-muted-foreground shrink-0">
           FX
         </span>

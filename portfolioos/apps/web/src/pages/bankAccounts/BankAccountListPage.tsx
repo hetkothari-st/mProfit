@@ -83,11 +83,11 @@ function AccountTile({
 }) {
   return (
     <div className="group relative">
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity [@media(hover:none)]:rounded-full [@media(hover:none)]:bg-black/45 [@media(hover:none)]:px-1 [@media(hover:none)]:backdrop-blur-sm">
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
           onClick={onEdit}
           title="Edit"
         >
@@ -96,7 +96,7 @@ function AccountTile({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-negative/80 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-negative/80 hover:text-white"
           onClick={onDelete}
           disabled={isDeleting}
           title="Delete"
@@ -107,7 +107,7 @@ function AccountTile({
           asChild
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
           title="Open"
         >
           <Link to={`/bank-accounts/${account.id}`}>

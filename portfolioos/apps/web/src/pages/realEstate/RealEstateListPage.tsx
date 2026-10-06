@@ -708,7 +708,7 @@ function PropertyCard({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0"
+                className="tap-expand h-7 w-7 p-0"
                 onClick={(e) => { stop(e); onEdit(); }}
                 title="Edit"
               >
@@ -717,7 +717,7 @@ function PropertyCard({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                 onClick={(e) => { stop(e); onDelete(); }}
                 disabled={isDeleting}
                 title="Delete"
@@ -858,7 +858,7 @@ export function RealEstateListPage() {
         description="Properties you own — homes, plots, commercial. Manual current value, capital-gain on sale, document vault."
         actions={
           <div className="flex flex-wrap gap-2">
-            <DownloadReportButton type="holdings" assetClasses={['REAL_ESTATE']} />
+            <DownloadReportButton type="real-estate" />
             <Button onClick={() => { setEditProperty(null); setCreateOpen(true); }}>
               <Plus className="h-4 w-4" /> Add property
             </Button>

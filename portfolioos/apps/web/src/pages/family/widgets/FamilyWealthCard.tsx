@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import {
   Bar,
   BarChart,
@@ -18,6 +19,7 @@ import { Money } from '@/components/ui/money';
 import { AutoFitText } from '@/components/ui/AutoFitText';
 import { cn } from '@/lib/cn';
 import { useThemeStore } from '@/stores/theme.store';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { memberLabel, type FamilyWealth } from '@/api/familyDashboard.api';
 import { PartialDataNotice, PartialSuffix, RestrictedChip } from './RestrictedNotice';
 import { isPositiveMoney, moneySign, moneyToNumber, pluralMembers } from './money';
@@ -84,6 +86,9 @@ export interface FamilyWealthCardProps {
 }
 
 export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardProps) {
+  // Phones: fewer value ticks (five compact ₹ labels overlap), room for the
+  // last one, and a narrower member-name column.
+  const isPhone = useMediaQuery('(max-width: 767px)');
   const dark = useThemeStore((s) => s.dark);
   const palette = dark ? MEMBER_COLORS_DARK : MEMBER_COLORS_LIGHT;
 
@@ -189,7 +194,7 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
                 Household
               </span>
               <p className="font-display-italic text-[17px] leading-[1.25] text-foreground/85">
-                &ldquo;A family&rsquo;s balance sheet is one balance sheet.&rdquo;
+                &ldquo;Wealth is held by people, not portfolios.&rdquo;
               </p>
             </div>
           </div>
@@ -319,7 +324,7 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
                 <BarChart
                   data={members}
                   layout="vertical"
-                  margin={{ top: 4, right: 16, left: 4, bottom: 0 }}
+                  margin={{ top: 4, right: isPhone ? 28 : 16, left: 4, bottom: 0 }}
                 >
                   <CartesianGrid
                     strokeDasharray="2 4"
@@ -336,11 +341,12 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v: number) => formatINR(v.toFixed(2), { compact: true })}
+                    tickCount={isPhone ? 3 : 5}
                   />
                   <YAxis
                     type="category"
                     dataKey="label"
-                    width={120}
+                    width={isPhone ? 84 : 120}
                     tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                     axisLine={false}
                     tickLine={false}
@@ -370,7 +376,7 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
               </ResponsiveContainer>
 
               {/* The chart shows shape; the ledger carries the numbers. */}
-              <div className="-mx-1 overflow-x-auto">
+              <HScroll className="-mx-1 overflow-x-auto">
                 <table className="w-full min-w-[520px] border-collapse text-[13px]">
                   <thead>
                     <tr className="border-b border-border/70">
@@ -431,7 +437,7 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
                     )}
                   </tbody>
                 </table>
-              </div>
+              </HScroll>
 
               {restrictedCount > 0 && (
                 <p className="text-[12px] leading-relaxed text-muted-foreground">

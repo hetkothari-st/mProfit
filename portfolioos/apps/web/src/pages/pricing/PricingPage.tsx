@@ -165,7 +165,7 @@ export function PricingPage() {
                 key={c}
                 onClick={() => setCycle(c)}
                 className={cn(
-                  'px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
+                  'px-2.5 py-1.5 sm:py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
                   cycle === c
                     ? 'bg-foreground text-background shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',
@@ -178,7 +178,7 @@ export function PricingPage() {
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {TIERS.map((t) => {
           const isCurrent = user?.plan === t.tier;
           const { price, note } = priceDisplay(t.tier, cycle);

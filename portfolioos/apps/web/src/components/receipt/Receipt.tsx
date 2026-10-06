@@ -70,7 +70,7 @@ export function ReceiptShell({
 }
 
 const ICON_BUTTON =
-  '-m-1 rounded p-1 text-white/60 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60';
+  'tap-expand -m-1 rounded p-1 text-white/60 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60';
 
 export function ReceiptHeader({
   institution,
@@ -182,7 +182,7 @@ export function Figure({
   return (
     <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p title={hint} className={`mt-0.5 truncate text-[15px] tabular-nums ${className ?? 'text-foreground'}`}>
+      <p title={hint} className={`mt-0.5 break-words xl:truncate text-[15px] tabular-nums ${className ?? 'text-foreground'}`}>
         {children}
       </p>
     </div>

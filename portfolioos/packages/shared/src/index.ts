@@ -9,3 +9,4 @@ export * from './finance/index.js';
 export * from './entitlements.js';
 export * from './pricing.js';
 export * from './insurance/index.js';
+export * from './familyRelations.js';

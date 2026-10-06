@@ -130,7 +130,7 @@ export function AnalyticsPage() {
                 <button
                   key={opt.value}
                   onClick={() => setPeriod(opt.value)}
-                  className={`px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all ${
+                  className={`px-2.5 py-1.5 sm:py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all ${
                     period === opt.value
                       ? 'bg-foreground text-background shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'

@@ -105,7 +105,7 @@ function EditContactsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Who to call</DialogTitle>
         </DialogHeader>
@@ -143,11 +143,11 @@ const PHONE_NOTE = { 'toll-free': 'toll-free', 'shared-cost': 'charges apply', s
 function Phone({ number }: { number: string }) {
   const note = PHONE_NOTE[phoneKind(number)];
   return (
-    <span className="whitespace-nowrap">
-      <a href={telHref(number)} className="text-accent hover:underline">
+    <span>
+      <a href={telHref(number)} className="whitespace-nowrap text-accent hover:underline">
         {number}
       </a>
-      {note && <span className="ml-1 text-xs text-muted-foreground">({note})</span>}
+      {note && <span className="ml-1 whitespace-nowrap text-xs text-muted-foreground">({note})</span>}
     </span>
   );
 }

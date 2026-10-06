@@ -6,7 +6,7 @@ import { Loader2, Users, CheckCircle2, AlertOctagon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { familiesApi } from '@/api/families.api';
-import { useAuthStore } from '@/stores/auth.store';
+import { useResolvedSession } from '@/hooks/useResolvedSession';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { apiErrorMessage } from '@/api/client';
 
@@ -20,9 +20,13 @@ export function AcceptInvitationPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user, accessToken } = useAuthStore();
+  // Resolved, not read raw: in a new tab the session has a token but no
+  // loaded profile yet, and treating that as signed out sent a signed-in
+  // member to the login page.
+  const session = useResolvedSession();
+  const user = session.user;
   const setFamily = useFamilyScopeStore((s) => s.setFamily);
-  const isAuthed = Boolean(user && accessToken);
+  const isAuthed = session.status === 'signed-in';
 
   const peekQuery = useQuery({
     queryKey: ['family-invitation', token],
@@ -46,15 +50,15 @@ export function AcceptInvitationPage() {
   });
 
   useEffect(() => {
-    if (!isAuthed && peekQuery.isSuccess) {
+    if (session.status === 'signed-out' && peekQuery.isSuccess) {
       // Take them to login, return here after.
       navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`, {
         replace: false,
       });
     }
-  }, [isAuthed, peekQuery.isSuccess, navigate]);
+  }, [session.status, peekQuery.isSuccess, navigate]);
 
-  if (peekQuery.isLoading) {
+  if (peekQuery.isLoading || session.status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

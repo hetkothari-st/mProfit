@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { env } from '../config/env.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { loadAmfiNavToDb } from '../priceFeeds/amfi.service.js';
+import { syncAmfiNav } from '../priceFeeds/amfi.service.js';
 import { refreshFundCostAndSize } from '../priceFeeds/amfiCostAndSize.service.js';
 import {
   FeedCanaryError,
@@ -92,8 +92,9 @@ async function runAmfiJob(): Promise<void> {
     // The canary runs BEFORE holdings are repriced: repricing every holding
     // from a NAV table that just lost most of its rows would push the damage
     // into user-visible valuations, which is what made the eight-column
-    // change so expensive to miss.
-    const r = await runFeedWithCanary('amfi_nav', () => loadAmfiNavToDb(), (x) => x);
+    // change so expensive to miss. It lives inside syncAmfiNav, so every
+    // other entry point is judged the same way this one is.
+    const r = await syncAmfiNav();
     await refreshAllHoldingPrices();
     // Once a day is often enough to keep the run table from growing forever.
     await pruneFeedRunLogs();

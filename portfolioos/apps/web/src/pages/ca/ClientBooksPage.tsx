@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import { Link, useParams } from 'react-router-dom';
 import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -303,7 +304,8 @@ export function ClientBooksPage() {
         <div className="mb-6 h-[150px] animate-pulse rounded-xl border border-border/60 bg-muted/20" />
       )}
 
-      <nav
+      <HScroll
+        as="nav"
         aria-label="Sections of these books"
         className="mb-6 flex items-center gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/30 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
@@ -333,7 +335,7 @@ export function ClientBooksPage() {
             })}
           </Fragment>
         ))}
-      </nav>
+      </HScroll>
 
       {tab === 'accounts' && (
         <>
@@ -1009,9 +1011,10 @@ function LedgerTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
-      <div className="relative overflow-x-auto">
-        <table className="w-full min-w-[560px]">
+    <div className="overflow-hidden max-md:overflow-visible md:rounded-xl md:border md:border-border/70 md:bg-card">
+      {/* Below md the rows become stacked cards (.rtable), so nothing scrolls sideways. */}
+      <div className="relative md:overflow-x-auto">
+        <table className="rtable w-full md:min-w-[560px]">
           <thead>
             <tr className="border-b border-border/60 bg-muted/40">
               {columns.map((c, i) => (
@@ -1042,6 +1045,7 @@ function LedgerTable({
                 {r.map((cell, ci) => (
                   <td
                     key={ci}
+                    data-label={columns[ci]}
                     className={cn(
                       'px-4 py-3 text-[13px] text-foreground',
                       isNumeric(ci) ? 'numeric tabular-nums text-right' : 'text-left',
@@ -1051,7 +1055,7 @@ function LedgerTable({
                   </td>
                 ))}
                 {rowActions && (
-                  <td className="px-3 py-2">
+                  <td data-label="" className="px-3 py-2">
                     <div className="flex items-center justify-end gap-0.5 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                       {rowActions(ri)}
                     </div>

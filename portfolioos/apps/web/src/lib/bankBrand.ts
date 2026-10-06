@@ -150,6 +150,22 @@ export interface TileSurface {
 }
 
 /**
+ * Pure reds (Kotak, ICICI Lombard…) glare at full saturation in a way navy,
+ * green or burgundy never do, so on a large surface or a big number they are
+ * softened. Hue in degrees.
+ */
+const isVividRed = (h: number) => h >= 340 || h <= 15;
+const RED_SATURATION_CAP = 0.72;
+/**
+ * Deepest a tile's middle stop may start from. A red clears white-text
+ * contrast while still very bright (Kotak came out #e1131b), so it glared
+ * beside HDFC's navy or Axis's burgundy, which sit around 30–37%.
+ */
+const TILE_MAX_LIGHTNESS = 0.4;
+/** Reds sit deeper still: at 40% a red tile still read loud on a dark page. */
+const RED_TILE_MAX_LIGHTNESS = 0.33;
+
+/**
  * A tile background in the bank's colour that white text can sit on. A light
  * brand colour (yellow, sky blue) gives way to its darker second colour when
  * the mark has one, then deepens until white clears WCAG AA.
@@ -160,10 +176,18 @@ export function tileSurface(color: string, accent: string | null): TileSurface {
       ? accent
       : color;
   const [h, s0, l] = rgbToHsl(hexToRgb(base));
-  const s = Math.min(s0, 0.85);
-  const via = untilContrast(h, s, l, '#ffffff', 4.8, -1);
+  const s = Math.min(s0, isVividRed(h) ? RED_SATURATION_CAP : 0.85);
+  const via = untilContrast(
+    h,
+    s,
+    Math.min(l, isVividRed(h) ? RED_TILE_MAX_LIGHTNESS : TILE_MAX_LIGHTNESS),
+    '#ffffff',
+    4.8,
+    -1,
+  );
   const lv = rgbToHsl(hexToRgb(via))[2];
-  const from = untilContrast(h, s, Math.min(lv + 0.08, 1), '#ffffff', 4.5, -1);
+  // Reds get a shorter lift to the light end, which otherwise glares again.
+  const from = untilContrast(h, s, Math.min(lv + (isVividRed(h) ? 0.04 : 0.08), 1), '#ffffff', 4.5, -1);
   const to = hslToHex(h, s, Math.max(lv - 0.14, 0.04));
   return { base, from, via, to, glow: accent && accent !== base ? accent : color };
 }
@@ -175,7 +199,7 @@ export function tileSurface(color: string, accent: string | null): TileSurface {
  */
 export function brandAccent(color: string, dark: boolean): string {
   const [h, s, l] = rgbToHsl(hexToRgb(color));
-  const sat = Math.min(s, 0.9);
+  const sat = Math.min(s, isVividRed(h) ? RED_SATURATION_CAP : 0.9);
   return dark
     ? untilContrast(h, sat, Math.max(l, 0.55), '#0a0a0a', 4.6, 1)
     : untilContrast(h, sat, Math.min(l, 0.45), '#ffffff', 4.6, -1);

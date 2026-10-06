@@ -147,6 +147,20 @@ describe('a rent receipt', () => {
     expect(labels).toContain('Property: Andheri East flat');
     expect(labels).toContain('For the month of: May 2025');
     expect(labels).toContain('Andheri East, Mumbai');
+
+    // The formal sentence a receipt is read by: who, how much in words and
+    // figures, for what. The attested facts are the bold runs.
+    const sentence = receipt.statement.map((p) => p.text).join('');
+    expect(sentence).toBe(
+      'Received with thanks from Rajesh Menon the sum of forty-five thousand rupees only ' +
+        '(Rs. 45,000.00) towards rent of Andheri East flat for the month of May 2025.',
+    );
+    expect(receipt.statement.filter((p) => p.strong).map((p) => p.text)).toEqual([
+      'Rajesh Menon',
+      'forty-five thousand rupees only',
+      'Andheri East flat',
+      'May 2025',
+    ]);
   });
 });
 
@@ -179,6 +193,9 @@ describe('a loan payment receipt', () => {
     expect(labels).not.toContain('HOME');
     expect(labels).toContain('Principal: 4500.00');
     expect(labels).toContain('Interest: 7500.00');
+    // Abbreviations keep their capitals in the sentence too.
+    expect(receipt.statement.map((p) => p.text).join('')).toMatch(/^Paid to HDFC Bank the sum of /);
+    expect(receipt.statement.map((p) => p.text).join('')).not.toMatch(/\bemi\b/);
   });
 });
 
