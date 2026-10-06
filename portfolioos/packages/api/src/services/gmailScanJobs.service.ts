@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError, BadRequestError } from '../lib/errors.js';
-import { getGmailScanQueue } from '../lib/queue.js';
+import { enqueueBounded, getGmailScanQueue } from '../lib/queue.js';
 import { logger } from '../lib/logger.js';
 
 export interface CreateScanJobInput {
@@ -30,8 +30,9 @@ export async function createScanJob(input: CreateScanJobInput) {
   });
   try {
     const q = getGmailScanQueue();
-    await q.add({ scanJobId: job.id });
-    logger.info({ jobId: job.id }, '[gmailScan] enqueued');
+    if (await enqueueBounded(q.add({ scanJobId: job.id }), `gmailScan:${job.id}`)) {
+      logger.info({ jobId: job.id }, '[gmailScan] enqueued');
+    }
   } catch (err) {
     logger.warn({ err, jobId: job.id }, '[gmailScan] enqueue failed — manual retry needed');
   }
@@ -71,6 +72,6 @@ export async function resumeScanJob(userId: string, id: string) {
     data: { status: 'CLASSIFYING', errorMessage: null, completedAt: null },
   });
   const q = getGmailScanQueue();
-  await q.add({ scanJobId: id });
+  await enqueueBounded(q.add({ scanJobId: id }), `gmailScan:${id}`);
   return getScanJob(userId, id);
 }

@@ -114,3 +114,31 @@ export async function closeQueues(): Promise<void> {
     _gmailScanQueue = null;
   }
 }
+
+/**
+ * Wait at most `ms` for a queue add to be accepted.
+ *
+ * Bull's `add` never rejects while Redis is down: ioredis buffers the command
+ * and waits for a reconnect, so an upload or scan request that awaited it
+ * hung until the client gave up, even though the callers were written to
+ * carry on ("enqueue failed — manual retry"). This returns false instead, and
+ * leaves the buffered add running: if Redis comes back, the job still runs.
+ */
+export async function enqueueBounded(add: Promise<unknown>, label: string, ms = 5_000): Promise<boolean> {
+  // The add may settle after we stop waiting; never let that be unhandled.
+  const settled = add.then(
+    () => true,
+    (err: unknown) => {
+      logger.warn({ err, label }, '[queue] enqueue failed');
+      return false;
+    },
+  );
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  const ok = await Promise.race([settled, timedOut]);
+  clearTimeout(timer);
+  if (!ok) logger.warn({ label, waitedMs: ms }, '[queue] not enqueued in time (Redis unavailable?) — will run if Redis recovers');
+  return ok;
+}
