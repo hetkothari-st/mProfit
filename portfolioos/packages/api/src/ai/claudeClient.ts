@@ -18,7 +18,8 @@ import { Decimal } from 'decimal.js';
 import { env } from '../config/env.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { recordSpend } from '../ingestion/llm/client.js';
+import { recordSpend, warnIfZeroRetentionUnconfirmed } from '../ingestion/llm/client.js';
+import { redactText } from '../ingestion/pii.js';
 import { AI_ASSISTANT_SYSTEM_PROMPT } from './systemPrompt.js';
 import { ADVISOR_TOOLS, runAdvisorTool, type ToolContext, type ToolOutcome } from './advisorTools.js';
 import { knowledgeForPrompt, type KnowledgeHit } from './knowledge/search.js';
@@ -250,13 +251,36 @@ export interface AdvisorInputs {
 }
 
 /** The user message: facts, reading, pre-computed data, then the question. */
-function buildUserTurn(userMessage: string, context: AssistantContext, advisor: AdvisorInputs): string {
+/**
+ * Identity fields the adviser never needs: it addresses the client by first
+ * name and reasons over numbers. Dropped here as well as in contextBuilder so
+ * a field added to the profile later cannot reach Anthropic by accident.
+ */
+const PROFILE_KEYS_NEVER_SENT = ['fullName', 'email', 'phone', 'pan', 'dob'] as const;
+
+export function promptSafeContext(context: AssistantContext): AssistantContext {
+  const profile = { ...context.userProfile };
+  for (const key of PROFILE_KEYS_NEVER_SENT) delete profile[key];
+  return { ...context, userProfile: profile };
+}
+
+/**
+ * What the client typed can contain a PAN, account number or phone pasted
+ * into the chat. Only their own words are redacted: the computed context is
+ * numbers, and the phone/Aadhaar patterns would mangle a raw 10–12 digit
+ * amount.
+ */
+export function redactClientText(text: string): string {
+  return redactText(text);
+}
+
+export function buildUserTurn(userMessage: string, context: AssistantContext, advisor: AdvisorInputs): string {
   const parts = [`<user_facts>\n${advisor.factsText}\n</user_facts>`];
   const reading = knowledgeForPrompt(advisor.knowledge);
   if (reading) parts.push(`<library>\n${reading}\n</library>`);
   parts.push(
-    `<portfolio_context>\n${JSON.stringify(context)}\n</portfolio_context>`,
-    `<question>\n${userMessage.trim()}\n</question>`,
+    `<portfolio_context>\n${JSON.stringify(promptSafeContext(context))}\n</portfolio_context>`,
+    `<question>\n${redactClientText(userMessage.trim())}\n</question>`,
   );
   return parts.join('\n\n');
 }
@@ -296,9 +320,12 @@ export async function* streamAssistantResponse(
   const client = getClient();
   const model = await readAssistantModel();
   const fx = await readFx();
+  warnIfZeroRetentionUnconfirmed('assistant');
 
   const messages: Anthropic.MessageParam[] = sanitizeHistory([
-    ...history.slice(-10),
+    ...history
+      .slice(-10)
+      .map((m) => (m.role === 'user' ? { ...m, content: redactClientText(m.content) } : m)),
     { role: 'user', content: buildUserTurn(userMessage, context, advisor) },
   ]);
 

@@ -2802,7 +2802,12 @@ model Loan {
   portfolioId String?
 
   lenderName    String
-  accountNumber String?
+  // Legacy plaintext; no longer written when APP_ENCRYPTION_KEY is set and
+  // cleared by the PII backfill under PII_BACKFILL_CLEAR_PLAINTEXT=true.
+  accountNumber      String?
+  // AES-256-GCM via pfCredentials.encryptIdentifier; never serialized.
+  accountNumberEnc   String?
+  accountNumberLast4 String?
   loanType      String // HOME | CAR | PERSONAL | EDUCATION | BUSINESS | GOLD | LAS | OTHER
   borrowerName  String
 

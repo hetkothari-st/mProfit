@@ -84,7 +84,6 @@ async function buildUserProfile(
     where: { id: callerId },
     select: {
       name: true,
-      email: true,
       dob: true,
       plan: true,
       planExpiresAt: true,
@@ -117,9 +116,10 @@ async function buildUserProfile(
   const age = user?.dob ? Math.floor((Date.now() - user.dob.getTime()) / (365.25 * 86_400_000)) : null;
   const firstName = user?.name ? user.name.split(/\s+/)[0]! : 'there';
   return {
+    // First name only: the full name and email are identity, not inputs to
+    // advice, and this profile is sent to Anthropic and stored with each
+    // answer.
     firstName,
-    fullName: user?.name ?? null,
-    email: user?.email ?? null,
     age,
     subscriptionTier: user ? effectivePlan(user) : 'FREE',
     userRole: user?.role ?? 'INVESTOR',

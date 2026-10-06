@@ -5,7 +5,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { checkBudget, type BudgetStatus } from '../ingestion/llm/budget.js';
-import { recordSpend } from '../ingestion/llm/client.js';
+import { recordSpend, warnIfZeroRetentionUnconfirmed } from '../ingestion/llm/client.js';
 import {
   getAnalyticsSnapshot,
   type AnalyticsScope,
@@ -365,6 +365,7 @@ export async function getOrGenerateInsights(
   let apiError: Error | null = null;
 
   try {
+    warnIfZeroRetentionUnconfirmed('portfolio_insight');
     const client = getClient();
     const res = await client.messages.create({
       model,

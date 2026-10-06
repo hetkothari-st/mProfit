@@ -22,7 +22,7 @@
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
-import { decryptIdentifier, encryptIdentifier, hashIdentifier } from './pfCredentials.service.js';
+import { decryptIdentifier, encryptIdentifier, hashIdentifier, last4 } from './pfCredentials.service.js';
 
 const PAN_PURPOSE = 'pan';
 
@@ -101,6 +101,27 @@ export function registrationNoHash(raw: string): string {
   return hashIdentifier(normalizeRegistrationNo(raw), REG_NO_PURPOSE);
 }
 
+/**
+ * Columns to write for a loan account number. Plaintext is not written once
+ * a key is present: every reader goes through readLoanAccountNumber or the
+ * last-4 column.
+ */
+export async function loanAccountNumberColumns(raw: string | null | undefined) {
+  const value = raw?.trim();
+  if (!value) return { accountNumber: null, accountNumberEnc: null, accountNumberLast4: null };
+  const tail = last4(value);
+  if (!canEncrypt()) return { accountNumber: value, accountNumberEnc: null, accountNumberLast4: tail };
+  return { accountNumber: null, accountNumberEnc: await encryptIdentifier(value), accountNumberLast4: tail };
+}
+
+export async function readLoanAccountNumber(row: {
+  accountNumber?: string | null;
+  accountNumberEnc?: string | null;
+}): Promise<string | null> {
+  if (row.accountNumberEnc) return decryptIdentifier(row.accountNumberEnc);
+  return row.accountNumber ?? null;
+}
+
 /** Read a PAN from a row that may be encrypted, plaintext, or both. */
 export async function readPan(row: {
   pan?: string | null;
@@ -145,13 +166,15 @@ export async function backfillPiiAtRest(): Promise<{
   users: number;
   clients: number;
   vehicles: number;
+  loans: number;
   failed: number;
 }> {
-  if (!canEncrypt()) return { users: 0, clients: 0, vehicles: 0, failed: 0 };
+  if (!canEncrypt()) return { users: 0, clients: 0, vehicles: 0, loans: 0, failed: 0 };
   const clear = clearPlaintextEnabled();
   let users = 0;
   let clients = 0;
   let vehicles = 0;
+  let loans = 0;
   let failed = 0;
 
   // ── User.pan ──
@@ -270,5 +293,44 @@ export async function backfillPiiAtRest(): Promise<{
     }
   }
 
-  return { users, clients, vehicles, failed };
+  // ── Loan.accountNumber ──
+  {
+    const skipped: string[] = [];
+    for (;;) {
+      const batch = await prisma.loan.findMany({
+        where: {
+          accountNumberEnc: null,
+          accountNumber: { not: null },
+          ...(skipped.length > 0 && { id: { notIn: skipped } }),
+        },
+        select: { id: true, accountNumber: true },
+        take: 200,
+      });
+      if (batch.length === 0) break;
+      for (const row of batch) {
+        try {
+          const value = row.accountNumber!.trim();
+          const cols = await loanAccountNumberColumns(value);
+          if (!cols.accountNumberEnc) throw new Error('encryption unavailable');
+          if ((await decryptIdentifier(cols.accountNumberEnc)) !== value) {
+            throw new Error('encrypted loan account number did not read back');
+          }
+          await prisma.loan.update({
+            where: { id: row.id },
+            data: { ...cols, accountNumber: clear ? null : row.accountNumber },
+          });
+          loans += 1;
+        } catch (err) {
+          failed += 1;
+          skipped.push(row.id);
+          logger.warn(
+            { loanId: row.id, err: err instanceof Error ? err.message : String(err) },
+            '[pii] could not encrypt a saved loan account number',
+          );
+        }
+      }
+    }
+  }
+
+  return { users, clients, vehicles, loans, failed };
 }
