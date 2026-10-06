@@ -1287,10 +1287,11 @@ export function PlainOverview({
           show. */}
       {alternatives !== null && alternatives.alternatives.length > 0 && (
         <section className="border-b border-border py-10">
-          <h3 className="font-display text-[19px] text-foreground">Better-scoring funds here</h3>
+          <h3 className="font-display text-[19px] text-foreground">Ranked higher by your adviser</h3>
           <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-            Same category, same plan, same scoring. A comparison, not advice to switch: moving
-            funds can trigger an exit load and a tax bill this page cannot see.
+            Same category, placed above this fund in the adviser&rsquo;s fund ranking — the list
+            the Advisor page recommends from. A comparison, not advice to switch: moving funds can
+            trigger an exit load and a tax bill this page cannot see.
           </p>
 
           <ul className="mt-6 divide-y divide-border border-y border-border">
@@ -1382,8 +1383,9 @@ export function PlainOverview({
         alternatives.subjectComposite !== null && (
           <section className="border-b border-border py-10">
             <p className="max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
-              <span className="text-foreground">Nothing in its category scores higher.</span> Of
-              the {alternatives.universeSize} funds we can rate here, none beats it.
+              <span className="text-foreground">
+                No fund in its category is ranked above this one by your adviser right now.
+              </span>
             </p>
           </section>
         )}

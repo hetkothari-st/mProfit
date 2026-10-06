@@ -33,6 +33,11 @@
  * different conversation from "this fund is managed better".
  */
 
+import {
+  currentMethodology,
+  latestSnapshotDate,
+  snapshotIsFresh,
+} from '../advisor/fundRanking/methodology.service.js';
 import { prisma } from '../../lib/prisma.js';
 import type {
   MfAlternativesDto,
@@ -137,6 +142,70 @@ async function rollingFor(
   return out;
 }
 
+export interface AdvisorRank {
+  bucket: string;
+  rank: number;
+}
+
+/**
+ * Which funds the page may name as alternatives, in order.
+ *
+ * The adviser's signed fund ranking (FundScoreSnapshot — what /advisor tells a
+ * client to buy) decides, not the MF research score: ranking by the research
+ * score alone could name a fund the adviser ranks BELOW the one the client
+ * holds, so two parts of one advisory product would contradict each other on
+ * what to buy. A candidate must be ranked by the adviser, in the subject's
+ * bucket, above the subject (when the subject is ranked at all). No usable
+ * ranking — none signed, or stale — names nothing.
+ */
+export function pickAdvisorRankedAlternatives(
+  subjectCode: string,
+  pool: string[],
+  ranking: Map<string, AdvisorRank> | null,
+  max: number,
+): string[] {
+  if (ranking === null) return [];
+  const subject = ranking.get(subjectCode);
+  return pool
+    .filter((code) => code !== subjectCode)
+    .flatMap((code) => {
+      const r = ranking.get(code);
+      if (r === undefined) return [];
+      if (subject !== undefined && (r.bucket !== subject.bucket || r.rank >= subject.rank)) return [];
+      return [{ code, rank: r.rank }];
+    })
+    .sort((a, b) => a.rank - b.rank || a.code.localeCompare(b.code))
+    .slice(0, max)
+    .map((c) => c.code);
+}
+
+/** The adviser's current signed ranking for these schemes, or null when there
+ *  is no signed methodology or its latest snapshot is too old to advise from. */
+async function loadAdvisorRanking(codes: string[]): Promise<Map<string, AdvisorRank> | null> {
+  const methodology = await currentMethodology();
+  if (methodology === null) return null;
+  const date = await latestSnapshotDate(methodology.id);
+  if (!snapshotIsFresh(date, methodology.config, new Date())) return null;
+  const rows = await prisma.fundScoreSnapshot.findMany({
+    where: {
+      methodologyVersionId: methodology.id,
+      asOfDate: date!,
+      eligible: true,
+      rankInBucket: { not: null },
+      schemeCode: { in: codes },
+    },
+    select: { schemeCode: true, bucket: true, rankInBucket: true },
+  });
+  const out = new Map<string, AdvisorRank>();
+  for (const r of rows) {
+    const prev = out.get(r.schemeCode);
+    if (prev === undefined || r.rankInBucket! < prev.rank) {
+      out.set(r.schemeCode, { bucket: r.bucket, rank: r.rankInBucket! });
+    }
+  }
+  return out;
+}
+
 export async function loadAlternatives(schemeCode: string): Promise<MfAlternativesDto> {
   // The subject's own latest score fixes both the comparison point and the
   // as-of. Reading candidates at a different as-of would compare this month's
@@ -170,21 +239,26 @@ export async function loadAlternatives(schemeCode: string): Promise<MfAlternativ
 
   const subjectComposite = subject.composite;
 
-  const candidates =
-    subjectComposite === null
-      ? []
-      : await prisma.mfSchemeScore.findMany({
-          where: {
-            universeKey: subject.universeKey,
-            asOf: subject.asOf,
-            schemeCode: { not: schemeCode },
-            rating: { not: null },
-            composite: { gt: subjectComposite },
-          },
-          orderBy: [{ composite: 'desc' }],
-          take: MAX_ALTERNATIVES,
-          select: { schemeCode: true, composite: true, rating: true },
-        });
+  // Same SEBI-category universe and as-of as the subject; the adviser's
+  // ranking then decides which of these may be named, and in what order.
+  const pool = await prisma.mfSchemeScore.findMany({
+    where: {
+      universeKey: subject.universeKey,
+      asOf: subject.asOf,
+      schemeCode: { not: schemeCode },
+      rating: { not: null },
+    },
+    select: { schemeCode: true, composite: true, rating: true },
+  });
+  const ranking = await loadAdvisorRanking([schemeCode, ...pool.map((c) => c.schemeCode)]);
+  const picked = pickAdvisorRankedAlternatives(
+    schemeCode,
+    pool.map((c) => c.schemeCode),
+    ranking,
+    MAX_ALTERNATIVES,
+  );
+  const poolBy = new Map(pool.map((c) => [c.schemeCode, c]));
+  const candidates = picked.map((code) => poolBy.get(code)!);
 
   const metas = await prisma.mfSchemeMeta.findMany({
     where: { schemeCode: { in: candidates.map((c) => c.schemeCode) } },
