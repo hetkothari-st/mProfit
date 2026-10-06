@@ -12,6 +12,7 @@ import {
   File as FileIcon,
   Loader2,
   Edit3,
+  Eye,
   FileOutput,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -265,7 +266,7 @@ export function DocumentVault({ ownerType, ownerId, title = 'Documents', default
                           }
                           title="View in browser"
                         >
-                          <Edit3 className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                           View
                         </Button>
                       )}

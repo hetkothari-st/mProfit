@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, decodeBlobError } from './client';
 import { getApiBaseUrl } from './baseUrl';
 import type {
   ApiResponse,
@@ -50,8 +50,13 @@ export const documentsApi = {
   async fetchBlob(id: string): Promise<Blob> {
     // Authed fetch of the raw bytes (access token sent via axios). Used for
     // in-browser preview (PDF/image) and downloads. Avoids relying on cookies.
-    const res = await api.get(`/api/documents/${id}/download`, { responseType: 'blob' });
-    return res.data as Blob;
+    try {
+      const res = await api.get(`/api/documents/${id}/download`, { responseType: 'blob' });
+      return res.data as Blob;
+    } catch (err) {
+      // e.g. "This file is no longer stored on the server. Please upload it again."
+      throw await decodeBlobError(err);
+    }
   },
   async openDownload(id: string, fileName: string): Promise<void> {
     const blob = await documentsApi.fetchBlob(id);

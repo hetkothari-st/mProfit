@@ -285,8 +285,10 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
                                 : 'text-positive',
                           )}
                         >
-                          {r.driftPp > 0 ? '+' : ''}
-                          {r.driftPp.toFixed(1)} pp
+                          <span className="whitespace-nowrap">
+                            {r.driftPp > 0 ? '+' : ''}
+                            {r.driftPp.toFixed(1)} pp
+                          </span>
                           {r.driftValue && (
                             <span className="block whitespace-nowrap text-[11px] font-normal text-muted-foreground min-[400px]:hidden">
                               <Money>{formatINR(r.driftValue, { showSign: true })}</Money>

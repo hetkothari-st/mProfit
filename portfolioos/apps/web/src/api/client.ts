@@ -120,6 +120,27 @@ export function apiErrorCode(err: unknown): string | undefined {
   return data?.code;
 }
 
+/**
+ * A request made with `responseType: 'blob'` gets its error body as a Blob
+ * too, so `apiErrorMessage` can't see the server's `error` field and shows
+ * axios's generic "Request failed with status code 404". Decode a JSON error
+ * body back into an object in place, then rethrow-ready.
+ */
+export async function decodeBlobError(err: unknown): Promise<unknown> {
+  if (!axios.isAxiosError(err)) return err;
+  const data = err.response?.data;
+  if (typeof Blob === 'undefined' || !(data instanceof Blob)) return err;
+  if (!/json/i.test(data.type)) return err;
+  const text = await data.text();
+  try {
+    err.response!.data = JSON.parse(text);
+  } catch {
+    // Labelled JSON but isn't: keep the original error and its generic message.
+    return err;
+  }
+  return err;
+}
+
 export function apiErrorMessage(err: unknown, fallback = 'Something went wrong'): string {
   let raw: string | undefined;
   if (axios.isAxiosError(err)) {
