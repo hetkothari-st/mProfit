@@ -66,6 +66,8 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   // AI Assistant — conversation history + daily usage counter.
   'AiConversation',
   'AiUsage',
+  // Billing — consumed Razorpay payments (20261006120000_billing_payment).
+  'BillingPayment',
   // Sec 55(2)(ac) grandfathering — user-entered FMV overrides. SystemFmvSeed
   // is deliberately excluded: it's shared reference data, not user-scoped.
   'FmvOverride',
