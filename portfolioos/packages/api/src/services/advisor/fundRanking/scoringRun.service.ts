@@ -31,6 +31,39 @@ import type { DetailedExclusionReason, FundCandidate, MethodologyConfig } from '
  *  without pulling a decade of rows for every scheme in the market. */
 const NAV_LOOKBACK_YEARS = 5;
 
+/**
+ * How many schemes to load NAV history for per round trip.
+ *
+ * ── Why this is not one query ────────────────────────────────────
+ * It used to be. One `findMany` over `MutualFundMaster` with `navHistory`
+ * nested inside it, and for a long time that was fine: the development
+ * database held 191 trading days, production 314, so the whole universe came
+ * back as roughly 859,000 rows.
+ *
+ * Then production got the history it was always supposed to have — 1,821
+ * trading days, 9.7 million NAV rows — and the same query died with:
+ *
+ *   PrismaClientKnownRequestError: Invalid `prisma.mutualFundMaster.findMany()`
+ *   code: 'GenericFailure'  meta: { modelName: 'MutualFundMaster' }
+ *
+ * Not an out-of-memory kill: the container has a 24 GB limit and nothing came
+ * close to it. It is the query engine refusing to materialise a single nested
+ * result set that large. Zero snapshots were written, which is the correct
+ * failure mode and a useless one — the scoring run simply could not happen on
+ * the complete data it exists to read.
+ *
+ * Paging fixes it for two reasons. The obvious one is that no single result
+ * set is enormous any more. The less obvious one matters more: Prisma hands
+ * back every NAV as a `Decimal` object, and this loader's whole job is to turn
+ * those into plain numbers. Batched, each batch's Decimals become garbage as
+ * soon as the batch is mapped, so peak memory is the plain-number universe
+ * plus one batch of Decimals rather than both in full at once.
+ *
+ * What does NOT change is the result: the same candidates, in the same shape,
+ * with the same history. This is a loader change, not a methodology change.
+ */
+const FUND_BATCH_SIZE = Number.parseInt(process.env.FUND_SCORING_BATCH_SIZE ?? '500', 10);
+
 export interface ScoringRunResult {
   asOfDate: Date;
   methodologyVersionId: string;
@@ -39,33 +72,93 @@ export interface ScoringRunResult {
   failures: number;
 }
 
-/** Load the scheme universe with its NAV history, as plain ranking inputs. */
-async function loadCandidates(asOf: Date): Promise<FundCandidate[]> {
+/**
+ * Load the scheme universe with its NAV history, as plain ranking inputs.
+ *
+ * Exported for the paging test: the interesting property — every scheme
+ * exactly once, across batch boundaries — is invisible from `runFundScoring`
+ * and is exactly the thing a cursor gets wrong.
+ */
+export async function loadCandidates(asOf: Date): Promise<FundCandidate[]> {
   const since = new Date(asOf.getTime() - NAV_LOOKBACK_YEARS * 365.25 * 86_400_000);
-  const funds = await prisma.mutualFundMaster.findMany({
-    select: {
-      id: true,
-      schemeCode: true,
-      schemeName: true,
-      amcName: true,
-      category: true,
-      subCategory: true,
-      isin: true,
-      isActive: true,
-      planType: true,
-      optionType: true,
-      terPct: true,
-      terJoinStatus: true,
-      aumInr: true,
-      navHistory: {
-        where: { date: { gte: since, lte: asOf } },
-        orderBy: { date: 'asc' },
-        select: { date: true, nav: true },
-      },
-    },
-  });
+  const out: FundCandidate[] = [];
+  let cursor: string | undefined;
+  let batches = 0;
+  let navRows = 0;
 
-  return funds.map((f) => ({
+  for (;;) {
+    const funds = await prisma.mutualFundMaster.findMany({
+      take: FUND_BATCH_SIZE,
+      // `skip: 1` steps past the cursor row itself, which was already
+      // returned by the previous batch. Without it every batch boundary
+      // duplicates one scheme; with it on the FIRST call, one scheme is
+      // dropped. Hence the conditional, and the test that counts both.
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      // A stable total order is what makes the cursor mean anything. Ids are
+      // unique, so no two batches can straddle the same row.
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        schemeCode: true,
+        schemeName: true,
+        amcName: true,
+        category: true,
+        subCategory: true,
+        isin: true,
+        isActive: true,
+        planType: true,
+        optionType: true,
+        terPct: true,
+        terJoinStatus: true,
+        aumInr: true,
+        navHistory: {
+          where: { date: { gte: since, lte: asOf } },
+          orderBy: { date: 'asc' },
+          select: { date: true, nav: true },
+        },
+      },
+    });
+
+    if (funds.length === 0) break;
+    batches += 1;
+    for (const f of funds) {
+      navRows += f.navHistory.length;
+      out.push(toCandidate(f));
+    }
+    cursor = funds[funds.length - 1]!.id;
+    if (funds.length < FUND_BATCH_SIZE) break;
+  }
+
+  logger.info(
+    { schemes: out.length, navRows, batches, batchSize: FUND_BATCH_SIZE },
+    '[fundScoring] loaded the scheme universe',
+  );
+  return out;
+}
+
+/** Anything that stringifies to a number: `Prisma.Decimal` in production, a
+ *  plain string in a test fixture. The mapping only ever reads it as text. */
+type NumericLike = { toString(): string };
+
+type FundRow = {
+  schemeCode: string;
+  schemeName: string;
+  amcName: string;
+  category: string;
+  subCategory: string | null;
+  isin: string | null;
+  isActive: boolean;
+  planType: string | null;
+  optionType: string | null;
+  terPct: NumericLike | null;
+  terJoinStatus: string | null;
+  aumInr: NumericLike | null;
+  navHistory: Array<{ date: Date; nav: NumericLike }>;
+};
+
+/** One database row into one ranking input. Pure, so paging cannot change it. */
+function toCandidate(f: FundRow): FundCandidate {
+  return {
     schemeCode: f.schemeCode,
     schemeName: f.schemeName,
     amcName: f.amcName,
@@ -91,7 +184,7 @@ async function loadCandidates(asOf: Date): Promise<FundCandidate[]> {
     // Still absent: no verified source. See DATA-INVENTORY.md.
     managerTenureYears: null,
     benchmarkTri: null,
-  }));
+  };
 }
 
 /** Comparator series for a bucket: the median peer, built from the same
