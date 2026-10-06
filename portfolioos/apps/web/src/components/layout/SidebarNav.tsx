@@ -173,10 +173,8 @@ export function SidebarNav({
         {/* LLM spend gauge hidden for now. */}
         {/* <BudgetGauge collapsed={collapsed} /> */}
         {!collapsed && (
-          <div className="px-4 py-3 flex items-center justify-between text-[10px] uppercase tracking-kerned text-sidebar-foreground/45">
+          <div className="px-4 py-3 text-[10px] uppercase tracking-kerned text-sidebar-foreground/45">
             <span>v0.5.0</span>
-            <span className="h-1 w-1 rounded-full bg-accent/60" />
-            <span>Phase 5-E</span>
           </div>
         )}
       </div>

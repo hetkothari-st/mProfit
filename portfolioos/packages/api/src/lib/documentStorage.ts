@@ -1,25 +1,32 @@
 /**
- * Per-user document filesystem storage.
+ * Per-user document storage.
  *
- * Layout:
- *   ${UPLOAD_DIR}/documents/user_${userId}/${storageKey}
+ * Bytes live in Postgres (`DocumentBlob`, keyed by `storageKey`). They used to
+ * live on disk at ${UPLOAD_DIR}/documents/user_${userId}/${storageKey}, but the
+ * API container's disk is wiped by every Railway deploy, so uploads silently
+ * vanished. Reads still fall back to that disk path for any file written
+ * before the move that happens to survive; nothing new is written there.
  *
- * `storageKey` is the random filename including extension. Original file
- * names are stored separately in `Document.fileName` for display only —
- * never trusted on disk (BUG-015).
+ * `storageKey` is a random name including extension. Original file names are
+ * stored separately in `Document.fileName` for display only (BUG-015).
+ *
+ * Every DB call runs as the owning user: the table's RLS policy is owner-only,
+ * and callers such as the OnlyOffice download route have no request user.
  */
 
 import { join } from 'node:path';
-import { mkdir, writeFile, readFile, unlink, stat, open } from 'node:fs/promises';
-import { createWriteStream } from 'node:fs';
+import { readFile, unlink, stat, open } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import type { Response } from 'express';
 import { env } from '../config/env.js';
 import { NotFoundError } from './errors.js';
 import { logger } from './logger.js';
+import { prisma } from './prisma.js';
+import { runAsUser } from './requestContext.js';
+
+const GONE = 'This file is no longer stored on the server. Please upload it again.';
 
 function userDir(userId: string): string {
   // userId is a Prisma cuid — alphanumeric only — but be defensive against
@@ -40,9 +47,14 @@ export async function saveBuffer(
   storageKey: string,
   buffer: Buffer,
 ): Promise<void> {
-  const dir = userDir(userId);
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, storageKey), buffer);
+  userDir(userId); // validates the id, as the disk layout did
+  await runAsUser(userId, () =>
+    prisma.documentBlob.upsert({
+      where: { storageKey },
+      create: { storageKey, userId, data: buffer },
+      update: { data: buffer },
+    }),
+  );
 }
 
 export async function saveStream(
@@ -50,19 +62,11 @@ export async function saveStream(
   storageKey: string,
   stream: Readable,
 ): Promise<number> {
-  const dir = userDir(userId);
-  await mkdir(dir, { recursive: true });
-  const target = join(dir, storageKey);
-  let bytes = 0;
-  stream.on('data', (chunk: Buffer) => {
-    bytes += chunk.length;
-  });
-  await pipeline(stream, createWriteStream(target));
-  return bytes;
-}
-
-export function storedFilePath(userId: string, storageKey: string): string {
-  return join(userDir(userId), storageKey);
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk as Buffer));
+  const buffer = Buffer.concat(chunks);
+  await saveBuffer(userId, storageKey, buffer);
+  return buffer.length;
 }
 
 /**
@@ -81,9 +85,7 @@ export async function streamFileTo(res: Response, path: string): Promise<void> {
     handle = await open(path, 'r');
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new NotFoundError(
-        'This file is no longer stored on the server. Please upload it again.',
-      );
+      throw new NotFoundError(GONE);
     }
     throw err;
   }
@@ -95,15 +97,41 @@ export async function streamFileTo(res: Response, path: string): Promise<void> {
   stream.pipe(res);
 }
 
+/** Bytes of a stored file. NotFoundError when neither the DB nor a legacy disk copy has it. */
 export async function readBuffer(userId: string, storageKey: string): Promise<Buffer> {
-  return readFile(join(userDir(userId), storageKey));
+  const blob = await runAsUser(userId, () =>
+    prisma.documentBlob.findUnique({ where: { storageKey }, select: { userId: true, data: true } }),
+  );
+  if (blob && blob.userId === userId) return Buffer.from(blob.data);
+  try {
+    const legacy = await readFile(join(userDir(userId), storageKey));
+    // Written before the move to Postgres and still on this container: copy it
+    // in, so the next deploy doesn't lose it.
+    await saveBuffer(userId, storageKey, legacy);
+    return legacy;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') throw new NotFoundError(GONE);
+    throw err;
+  }
 }
 
 export async function deleteFile(userId: string, storageKey: string): Promise<void> {
-  await unlink(join(userDir(userId), storageKey)).catch(() => undefined);
+  await runAsUser(userId, () => prisma.documentBlob.deleteMany({ where: { storageKey, userId } }));
+  try {
+    await unlink(join(userDir(userId), storageKey));
+  } catch (err) {
+    // A legacy disk copy usually isn't there; anything else is worth knowing.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn({ err, storageKey }, '[documents] legacy file delete failed');
+    }
+  }
 }
 
 export async function fileSize(userId: string, storageKey: string): Promise<number> {
+  const blob = await runAsUser(userId, () =>
+    prisma.documentBlob.findUnique({ where: { storageKey }, select: { userId: true, data: true } }),
+  );
+  if (blob && blob.userId === userId) return blob.data.length;
   const s = await stat(join(userDir(userId), storageKey));
   return s.size;
 }

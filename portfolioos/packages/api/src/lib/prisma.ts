@@ -117,6 +117,8 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'BrokerCredential',
   'DerivativePosition',
   'Document',
+  // Vault file bytes (20261006170000_document_blob) — same owner policy.
+  'DocumentBlob',
   'ExpiryCloseJob',
   'ExtensionPairing',
   'ForexBalance',
