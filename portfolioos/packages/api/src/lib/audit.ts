@@ -31,7 +31,8 @@ export type AuditAction =
   | 'insurance_modified'
   | 'account_deletion_requested'
   | 'account_deletion_cancelled'
-  | 'account_purged';
+  | 'account_purged'
+  | 'security_alert';
 
 export interface AuditInput {
   userId?: string | null;
