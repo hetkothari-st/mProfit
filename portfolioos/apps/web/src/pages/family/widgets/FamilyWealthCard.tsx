@@ -194,7 +194,7 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
                 Household
               </span>
               <p className="font-display-italic text-[17px] leading-[1.25] text-foreground/85">
-                &ldquo;A family&rsquo;s balance sheet is one balance sheet.&rdquo;
+                &ldquo;Wealth is held by people, not portfolios.&rdquo;
               </p>
             </div>
           </div>
