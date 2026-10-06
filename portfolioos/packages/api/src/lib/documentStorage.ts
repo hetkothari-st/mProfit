@@ -12,6 +12,10 @@
  *
  * Every DB call runs as the owning user: the table's RLS policy is owner-only,
  * and callers such as the OnlyOffice download route have no request user.
+ *
+ * Bytes are sealed with the owner's data key (lib/userKeys) when one can be
+ * made; `keyed` says which rows are. The AAD is the storage key, so a blob
+ * moved to another row or another user does not decrypt.
  */
 
 import { join } from 'node:path';
@@ -24,7 +28,8 @@ import { env } from '../config/env.js';
 import { NotFoundError } from './errors.js';
 import { logger } from './logger.js';
 import { prisma } from './prisma.js';
-import { runAsUser } from './requestContext.js';
+import { runAsSystem, runAsUser } from './requestContext.js';
+import { openForUser, SEAL_OVERHEAD, sealForUser, userKeysAvailable } from './userKeys.js';
 
 const GONE = 'This file is no longer stored on the server. Please upload it again.';
 
@@ -48,13 +53,20 @@ export async function saveBuffer(
   buffer: Buffer,
 ): Promise<void> {
   userDir(userId); // validates the id, as the disk layout did
+  const keyed = userKeysAvailable();
+  const data = keyed ? await sealForUser(userId, storageKey, buffer) : buffer;
   await runAsUser(userId, () =>
     prisma.documentBlob.upsert({
       where: { storageKey },
-      create: { storageKey, userId, data: buffer },
-      update: { data: buffer },
+      create: { storageKey, userId, data, keyed },
+      update: { data, keyed },
     }),
   );
+}
+
+async function openBlob(userId: string, storageKey: string, blob: { data: Uint8Array; keyed: boolean }) {
+  const bytes = Buffer.from(blob.data);
+  return blob.keyed ? openForUser(userId, storageKey, bytes) : bytes;
 }
 
 export async function saveStream(
@@ -100,9 +112,9 @@ export async function streamFileTo(res: Response, path: string): Promise<void> {
 /** Bytes of a stored file. NotFoundError when neither the DB nor a legacy disk copy has it. */
 export async function readBuffer(userId: string, storageKey: string): Promise<Buffer> {
   const blob = await runAsUser(userId, () =>
-    prisma.documentBlob.findUnique({ where: { storageKey }, select: { userId: true, data: true } }),
+    prisma.documentBlob.findUnique({ where: { storageKey }, select: { userId: true, data: true, keyed: true } }),
   );
-  if (blob && blob.userId === userId) return Buffer.from(blob.data);
+  if (blob && blob.userId === userId) return openBlob(userId, storageKey, blob);
   try {
     const legacy = await readFile(join(userDir(userId), storageKey));
     // Written before the move to Postgres and still on this container: copy it
@@ -129,9 +141,52 @@ export async function deleteFile(userId: string, storageKey: string): Promise<vo
 
 export async function fileSize(userId: string, storageKey: string): Promise<number> {
   const blob = await runAsUser(userId, () =>
-    prisma.documentBlob.findUnique({ where: { storageKey }, select: { userId: true, data: true } }),
+    prisma.documentBlob.findUnique({ where: { storageKey }, select: { userId: true, data: true, keyed: true } }),
   );
-  if (blob && blob.userId === userId) return blob.data.length;
+  if (blob && blob.userId === userId) return blob.data.length - (blob.keyed ? SEAL_OVERHEAD : 0);
   const s = await stat(join(userDir(userId), storageKey));
   return s.size;
+}
+
+/**
+ * Seal vault files stored before per-user keys existed. Idempotent and
+ * batched; each row is re-read after sealing to prove it opens before the
+ * plaintext is replaced. Runs at boot when APP_ENCRYPTION_KEY is set.
+ */
+export async function sealLegacyBlobs(batchSize = 20): Promise<{ sealed: number; failed: number }> {
+  if (!userKeysAvailable()) return { sealed: 0, failed: 0 };
+  let sealed = 0;
+  let failed = 0;
+  const skipped: string[] = [];
+  for (;;) {
+    const batch = await runAsSystem(() =>
+      prisma.documentBlob.findMany({
+        where: { keyed: false, ...(skipped.length > 0 && { storageKey: { notIn: skipped } }) },
+        select: { storageKey: true, userId: true, data: true },
+        take: batchSize,
+      }),
+    );
+    if (batch.length === 0) break;
+    for (const row of batch) {
+      try {
+        const plain = Buffer.from(row.data);
+        const data = await sealForUser(row.userId, row.storageKey, plain);
+        if (!(await openForUser(row.userId, row.storageKey, data)).equals(plain)) {
+          throw new Error('sealed blob did not open back');
+        }
+        await runAsSystem(() =>
+          prisma.documentBlob.update({ where: { storageKey: row.storageKey }, data: { data, keyed: true } }),
+        );
+        sealed += 1;
+      } catch (err) {
+        failed += 1;
+        skipped.push(row.storageKey);
+        logger.warn(
+          { storageKey: row.storageKey, err: err instanceof Error ? err.message : String(err) },
+          '[documents] could not seal a stored file',
+        );
+      }
+    }
+  }
+  return { sealed, failed };
 }

@@ -119,6 +119,7 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'Document',
   // Vault file bytes (20261006170000_document_blob) — same owner policy.
   'DocumentBlob',
+  'UserDataKey',
   'ExpiryCloseJob',
   'ExtensionPairing',
   'ForexBalance',

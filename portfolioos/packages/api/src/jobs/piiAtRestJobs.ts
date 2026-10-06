@@ -1,6 +1,7 @@
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { backfillPiiAtRest } from '../services/piiAtRest.service.js';
+import { sealLegacyBlobs } from '../lib/documentStorage.js';
 
 /**
  * Encrypt PAN and vehicle registration numbers still stored as plain text
@@ -29,6 +30,15 @@ export function startPiiAtRestJobs(): void {
         { err: err instanceof Error ? err.message : String(err) },
         '[pii] identifier encryption run failed',
       );
+    },
+  );
+  // Vault files stored before per-user keys: sealed under each owner's key.
+  sealLegacyBlobs().then(
+    (result) => {
+      if (result.sealed + result.failed > 0) logger.info(result, '[pii] sealed stored vault files');
+    },
+    (err: unknown) => {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, '[pii] vault file sealing failed');
     },
   );
 }

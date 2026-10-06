@@ -6,9 +6,27 @@ import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
 import { ok, noContent } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
+import { sniffImage } from '../services/propertyPhotos.service.js';
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 const MAX_BYTES = (env.MAX_UPLOAD_SIZE_MB ?? 20) * 1024 * 1024;
+
+/**
+ * The image type the bytes actually are. The upload filter only sees the
+ * browser's declared type, which a client sets freely; this file is later
+ * served back with the stored type, so the stored type must be the real one.
+ */
+export function sniffPhoto(buf: Buffer): string | null {
+  const basic = sniffImage(buf);
+  if (basic) return basic;
+  // HEIC/HEIF: ISO-BMFF `ftyp` box with an image brand.
+  if (buf.length >= 12 && buf.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buf.subarray(8, 12).toString('ascii');
+    if (['heic', 'heix', 'hevc', 'heim', 'heis'].includes(brand)) return 'image/heic';
+    if (['mif1', 'msf1'].includes(brand)) return 'image/heif';
+  }
+  return null;
+}
 
 async function userOwnsTransaction(userId: string, txnId: string): Promise<boolean> {
   const txn = await prisma.transaction.findUnique({
@@ -44,12 +62,25 @@ export async function uploadPhoto(req: Request, res: Response) {
   const file = req.file;
   if (!file) throw new BadRequestError('No file uploaded');
 
+  const head = Buffer.alloc(16);
+  const fh = await fs.open(file.path, 'r');
+  try {
+    await fh.read(head, 0, 16, 0);
+  } finally {
+    await fh.close();
+  }
+  const mimeType = sniffPhoto(head);
+  if (!mimeType) {
+    await fs.unlink(file.path).catch(() => undefined);
+    throw new BadRequestError('That file is not a JPEG, PNG, WebP or HEIC image.');
+  }
+
   const photo = await prisma.transactionPhoto.create({
     data: {
       transactionId: txnId,
       fileName: file.originalname,
       filePath: file.path,
-      mimeType: file.mimetype,
+      mimeType,
       sizeBytes: file.size,
     },
   });
