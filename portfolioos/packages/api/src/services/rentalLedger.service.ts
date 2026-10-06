@@ -17,6 +17,7 @@ import {
   type ChargeInput,
   type CreditInput,
 } from './rentalLedgerMath.js';
+import { openText } from './piiAtRest.service.js';
 
 export const LEDGER_ENTRY_TYPES = [
   'PAYMENT',
@@ -567,7 +568,7 @@ export async function getTenancyLedger(
   return {
     tenancyId,
     tenantName: tenancy.tenantName,
-    tenantPhone: tenancy.tenantPhone,
+    tenantPhone: openText(tenancy.tenantPhoneEnc, tenancy.tenantPhone),
     propertyId: property.id,
     propertyName: property.name,
     monthlyRent: fresh.monthlyRent.toString(),
@@ -618,7 +619,7 @@ export async function listCollections(userId: string): Promise<CollectionRowDTO[
     return {
       tenancyId: t.id,
       tenantName: t.tenantName,
-      tenantPhone: t.tenantPhone,
+      tenantPhone: openText(t.tenantPhoneEnc, t.tenantPhone),
       propertyId: t.property.id,
       propertyName: t.property.name,
       balanceDue: t.balanceDue.toString(),

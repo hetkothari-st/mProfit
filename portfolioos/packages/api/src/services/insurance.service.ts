@@ -46,6 +46,7 @@ import { prisma, runInTransaction } from '../lib/prisma.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { decryptIdentifier, encryptIdentifier, hashIdentifier } from './pfCredentials.service.js';
+import { PLATE_SELECT, revealVehicle } from './piiAtRest.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -469,11 +470,15 @@ export async function listPolicies(userId: string) {
     include: {
       premiumHistory: { orderBy: { paidOn: 'desc' }, take: 5 },
       claims: { orderBy: { claimDate: 'desc' } },
-      vehicle: { select: { id: true, registrationNo: true, make: true, model: true } },
+      vehicle: { select: { id: true, ...PLATE_SELECT, make: true, model: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
-  return rows.map((r) => ({ ...toPolicyDto(r), claims: r.claims.map(toClaimDto) }));
+  return rows.map((r) => ({
+    ...toPolicyDto(r),
+    vehicle: r.vehicle ? revealVehicle(r.vehicle) : null,
+    claims: r.claims.map(toClaimDto),
+  }));
 }
 
 export async function getPolicy(userId: string, policyId: string) {
@@ -482,11 +487,15 @@ export async function getPolicy(userId: string, policyId: string) {
     include: {
       premiumHistory: { orderBy: { paidOn: 'desc' } },
       claims: { orderBy: { claimDate: 'desc' } },
-      vehicle: { select: { id: true, registrationNo: true, make: true, model: true } },
+      vehicle: { select: { id: true, ...PLATE_SELECT, make: true, model: true } },
     },
   });
   if (!policy) throw new NotFoundError(`InsurancePolicy ${policyId} not found`);
-  return { ...toPolicyDto(policy), claims: policy.claims.map(toClaimDto) };
+  return {
+    ...toPolicyDto(policy),
+    vehicle: policy.vehicle ? revealVehicle(policy.vehicle) : null,
+    claims: policy.claims.map(toClaimDto),
+  };
 }
 
 const DUPLICATE_POLICY = 'You already have this policy saved for this insurer';

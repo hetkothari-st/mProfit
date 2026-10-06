@@ -19,6 +19,7 @@ import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { encryptIdentifier, decryptIdentifier, last4 as last4Of } from './pfCredentials.service.js';
 import { lookupIfsc, type IfscDetails } from './ifscLookup.service.js';
+import { openText, sealText } from './piiAtRest.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -119,13 +120,23 @@ async function decryptAccountNumber(enc: string, accountId: string): Promise<str
 /**
  * Drop the ciphertext before a row leaves this service — `accountNumberEnc`
  * must never be serialized, even encrypted. The client only learns whether a
- * full number exists.
+ * full number exists. The customer ID (CIF) is shown to its owner in full, so
+ * it is decrypted here rather than masked.
  */
-export function toBankAccountDto<T extends { accountNumberEnc: string | null }>(
-  row: T,
-): Omit<T, 'accountNumberEnc'> & { hasAccountNumber: boolean } {
-  const { accountNumberEnc, ...rest } = row;
-  return { ...rest, hasAccountNumber: accountNumberEnc !== null };
+export function toBankAccountDto<
+  T extends { accountNumberEnc: string | null; customerId: string | null; customerIdEnc: string | null },
+>(row: T): Omit<T, 'accountNumberEnc' | 'customerIdEnc'> & { hasAccountNumber: boolean } {
+  const { accountNumberEnc, customerIdEnc, ...rest } = row;
+  return {
+    ...rest,
+    customerId: openText(customerIdEnc, row.customerId),
+    hasAccountNumber: accountNumberEnc !== null,
+  };
+}
+
+async function customerIdColumns(raw: string | null | undefined) {
+  const { plain, enc } = await sealText(raw);
+  return { customerId: plain, customerIdEnc: enc };
 }
 
 // ── Account CRUD ─────────────────────────────────────────────────────────────
@@ -164,7 +175,7 @@ export async function createAccount(userId: string, input: CreateBankAccountInpu
       // disagree (auto-attribution matches on last4).
       last4: accountNumber ? last4Of(accountNumber) : input.last4.trim(),
       accountNumberEnc: accountNumber ? await encryptIdentifier(accountNumber) : null,
-      customerId: input.customerId?.trim() || null,
+      ...(await customerIdColumns(input.customerId)),
       portfolioId: input.portfolioId ?? null,
       ifsc: input.ifsc?.trim() || null,
       branch: input.branch?.trim() || null,
@@ -213,7 +224,7 @@ export async function updateAccount(
       data.last4 = last4Of(accountNumber);
     }
   }
-  if (input.customerId !== undefined) data.customerId = input.customerId?.trim() || null;
+  if (input.customerId !== undefined) Object.assign(data, await customerIdColumns(input.customerId));
   if (input.portfolioId !== undefined)
     data.portfolio = input.portfolioId
       ? { connect: { id: input.portfolioId } }

@@ -36,6 +36,7 @@ import {
   getTenancyOwned,
   OVERDUE_GRACE_DAYS,
 } from './rentalLedger.service.js';
+import { revealTenancy, tenantContactColumns } from './piiAtRest.service.js';
 
 /**
  * Transaction client type as handed to $transaction callbacks on our
@@ -210,7 +211,7 @@ function enumerateMonths(
 // ── Property CRUD ────────────────────────────────────────────────────
 
 export async function listProperties(userId: string) {
-  return prisma.rentalProperty.findMany({
+  const rows = await prisma.rentalProperty.findMany({
     where: { userId },
     orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     include: {
@@ -224,6 +225,7 @@ export async function listProperties(userId: string) {
       _count: { select: { expenses: true } },
     },
   });
+  return rows.map((p) => ({ ...p, tenancies: p.tenancies.map(revealTenancy) }));
 }
 
 export async function getProperty(userId: string, id: string) {
@@ -241,7 +243,7 @@ export async function getProperty(userId: string, id: string) {
   });
   if (!row) throw new NotFoundError('Property not found');
   if (row.userId !== userId) throw new ForbiddenError();
-  return row;
+  return { ...row, tenancies: row.tenancies.map(revealTenancy) };
 }
 
 export async function createProperty(
@@ -419,9 +421,11 @@ export async function createTenancy(userId: string, input: CreateTenancyInput) {
       data: {
         propertyId: input.propertyId,
         tenantName: input.tenantName.trim(),
-        tenantContact: input.tenantContact ?? null,
-        tenantEmail: input.tenantEmail?.trim() || null,
-        tenantPhone: input.tenantPhone?.trim() || null,
+        ...(await tenantContactColumns({
+          tenantContact: input.tenantContact ?? null,
+          tenantEmail: input.tenantEmail ?? null,
+          tenantPhone: input.tenantPhone ?? null,
+        })),
         startDate,
         endDate,
         monthlyRent,
@@ -452,7 +456,7 @@ export async function createTenancy(userId: string, input: CreateTenancyInput) {
       });
     }
     await recomputeTenancyLedger(tx, tenancy.id);
-    return tx.tenancy.findUniqueOrThrow({ where: { id: tenancy.id } });
+    return revealTenancy(await tx.tenancy.findUniqueOrThrow({ where: { id: tenancy.id } }));
   });
 }
 
@@ -465,9 +469,14 @@ export async function updateTenancy(
 
   const data: Prisma.TenancyUpdateInput = {};
   if (patch.tenantName !== undefined) data.tenantName = patch.tenantName.trim();
-  if (patch.tenantContact !== undefined) data.tenantContact = patch.tenantContact;
-  if (patch.tenantEmail !== undefined) data.tenantEmail = patch.tenantEmail?.trim() || null;
-  if (patch.tenantPhone !== undefined) data.tenantPhone = patch.tenantPhone?.trim() || null;
+  Object.assign(
+    data,
+    await tenantContactColumns({
+      tenantContact: patch.tenantContact,
+      tenantEmail: patch.tenantEmail,
+      tenantPhone: patch.tenantPhone,
+    }),
+  );
   if (patch.startDate !== undefined) {
     throw new BadRequestError(
       'startDate is immutable after tenancy creation — create a new tenancy instead',
@@ -546,8 +555,8 @@ export async function updateTenancy(
     // historical and shouldn't shift under the user.
     if (patch.tenantEmail !== undefined || patch.tenantPhone !== undefined) {
       const channels = {
-        email: !!updated.tenantEmail,
-        sms: !!updated.tenantPhone,
+        email: !!(updated.tenantEmailEnc || updated.tenantEmail),
+        sms: !!(updated.tenantPhoneEnc || updated.tenantPhone),
       };
       await tx.rentReminder.updateMany({
         where: { tenancyId: id, status: 'PENDING_APPROVAL' },
@@ -618,7 +627,7 @@ export async function updateTenancy(
 
     await recomputeTenancyLedger(tx, id);
 
-    return tx.tenancy.findUniqueOrThrow({ where: { id } });
+    return revealTenancy(await tx.tenancy.findUniqueOrThrow({ where: { id } }));
   });
 }
 

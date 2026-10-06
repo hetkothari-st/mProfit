@@ -7,6 +7,7 @@ import { generateCreditCardAlerts } from './creditCards.service.js';
 import { generateRealEstateAlerts } from './realEstateAlerts.js';
 import { generateDepositReminderAlerts } from './depositReminders.service.js';
 import { generateClaimAlerts, generateRenewalAlerts } from './insurance.service.js';
+import { PLATE_SELECT, plateOf } from './piiAtRest.service.js';
 
 const EXPIRY_THRESHOLDS = [30, 15, 7, 1] as const;
 
@@ -128,7 +129,7 @@ export async function generateVehicleExpiryAlerts(userId?: string): Promise<numb
       })),
     },
     select: {
-      id: true, userId: true, registrationNo: true,
+      id: true, userId: true, registrationNoLast4: true, ...PLATE_SELECT,
       pucExpiry: true, insuranceExpiry: true, fitnessExpiry: true, roadTaxExpiry: true,
     },
   });
@@ -155,7 +156,8 @@ export async function generateVehicleExpiryAlerts(userId?: string): Promise<numb
           userId: vehicle.userId,
           type: 'CUSTOM',
           title: `${label} expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
-          description: `Vehicle ${vehicle.registrationNo} — ${label} expires on ${expiryDate.toISOString().slice(0, 10)}`,
+          // Last four only: alert text is stored in plain text.
+          description: `Vehicle ending ${vehicle.registrationNoLast4 ?? plateOf(vehicle).slice(-4)} — ${label} expires on ${expiryDate.toISOString().slice(0, 10)}`,
           triggerDate: new Date(),
           metadata: { key: metaKey, vehicleId: vehicle.id, field, daysLeft },
         },

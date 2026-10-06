@@ -8,6 +8,7 @@ import { outstandingLoansGiven } from './loansGiven.service.js';
 import { computeCardSummary } from './creditCards.service.js';
 import { getEffectiveScope, type EffectiveScope } from './familyScope.service.js';
 import { runAsUser } from '../lib/requestContext.js';
+import { plateOf } from './piiAtRest.service.js';
 
 // Human-readable labels for the AssetClass enum — used in dashboard breakdown.
 // Mirrors the per-class labels in apps/web/src/pages/assetClasses/SimpleAssetPage.tsx
@@ -141,7 +142,7 @@ export async function getDashboardNetWorth(
     daysUntil: number;
   }> = [];
   for (const v of vehicles) {
-    const label = [v.make, v.model, v.registrationNo].filter(Boolean).join(' ');
+    const label = [v.make, v.model, plateOf(v)].filter(Boolean).join(' ');
     const checks: Array<[Date | null, string]> = [
       [v.insuranceExpiry, 'Insurance'],
       [v.pucExpiry, 'PUC'],

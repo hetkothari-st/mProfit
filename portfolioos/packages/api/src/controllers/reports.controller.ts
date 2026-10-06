@@ -536,11 +536,9 @@ async function sectionPayload(
           { key: 'fitnessExpiry',  header: 'Fitness Expiry',width: 12, formatter: fmtDate },
         ],
         rows: rows.map(v => ({
-          ...v,
+          ...revealVehicle(v),
           // Mask all but last 4 chars per §15.1 PII rules
-          registrationNo: v.registrationNo.length > 4
-            ? `XXXX${v.registrationNo.slice(-4)}`
-            : v.registrationNo,
+          registrationNo: `XXXX${v.registrationNoLast4 ?? plateOf(v).slice(-4)}`,
           purchasePrice: v.purchasePrice?.toString(),
           currentValue: v.currentValue?.toString(),
         })),
@@ -1022,6 +1020,7 @@ import {
   requireSingleSubject,
   runForSubject,
 } from '../services/reports/reportSubjects.js';
+import { plateOf, revealVehicle } from '../services/piiAtRest.service.js';
 
 async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {
   const format = getFormat(req);

@@ -17,7 +17,7 @@ export function startPiiAtRestJobs(): void {
   }
   runAsSystem(() => backfillPiiAtRest()).then(
     (result) => {
-      if (result.users + result.clients + result.vehicles + result.loans + result.failed > 0) {
+      if (result.users + result.clients + result.vehicles + result.loans + result.sealedFields + result.failed > 0) {
         logger.info(
           { ...result, plaintextCleared: process.env.PII_BACKFILL_CLEAR_PLAINTEXT === 'true' },
           '[pii] encrypted saved identifiers',

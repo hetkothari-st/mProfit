@@ -1768,7 +1768,8 @@ model Vehicle {
   userId             String
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   portfolioId        String?
-  registrationNo     String
+  // Legacy plaintext; null once encrypted. Read via piiAtRest.plateOf.
+  registrationNo     String?
   /// Encrypted registration (AES-256-GCM). See migration 20260918100000.
   registrationNoEnc   String?
   registrationNoHash  String?
@@ -1799,6 +1800,7 @@ model Vehicle {
   seatingCapacity    Int?
   unloadedWeight     Int? // kg
   engineNo           String?
+  engineNoEnc        String?
   hypothecation      String? // financier name or "NONE"
   registrationDate   DateTime? @db.Date
   // ── Stock photo (make+model lookup) ──
@@ -1984,8 +1986,11 @@ model Tenancy {
   // Legacy single-line contact (free text). Retained for back-compat with
   // tenancies created before tenantEmail/tenantPhone were split out.
   tenantContact   String?
+  tenantContactEnc String?
   tenantEmail     String?
+  tenantEmailEnc  String?
   tenantPhone     String?
+  tenantPhoneEnc  String?
   startDate       DateTime       @db.Date
   endDate         DateTime?      @db.Date
   monthlyRent     Decimal        @db.Decimal(12, 2)
@@ -2929,6 +2934,8 @@ model BankAccount {
   accountHolder String
   last4         String // last 4 digits of the account number
   customerId    String? // bank-issued customer identification number (CIF / CustID)
+  // Encrypted CIF (AES-256-GCM); `customerId` is legacy plaintext, read via piiAtRest.openText.
+  customerIdEnc String?
   ifsc          String?
   branch        String?
   branchAddress String? // auto-filled from IFSC (ifscLookup.service), user-editable

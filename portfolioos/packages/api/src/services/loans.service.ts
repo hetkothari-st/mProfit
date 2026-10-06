@@ -14,7 +14,7 @@ import { prisma } from '../lib/prisma.js';
 import { NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { serializeMoney } from '@everypaisa/shared';
-import { loanAccountNumberColumns, readLoanAccountNumber } from './piiAtRest.service.js';
+import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from './piiAtRest.service.js';
 import { last4 } from './pfCredentials.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -602,12 +602,12 @@ export async function listLoans(userId: string) {
     where: { userId },
     include: {
       payments: { orderBy: { paidOn: 'desc' }, take: 5 },
-      vehicle: { select: { id: true, registrationNo: true, make: true, model: true } },
+      vehicle: { select: { id: true, ...PLATE_SELECT, make: true, model: true } },
       rentalProperty: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
-  return loans.map(withMaskedAccount);
+  return loans.map((l) => ({ ...withMaskedAccount(l), vehicle: l.vehicle ? revealVehicle(l.vehicle) : null }));
 }
 
 export async function getLoan(userId: string, loanId: string) {
@@ -615,12 +615,12 @@ export async function getLoan(userId: string, loanId: string) {
     where: { id: loanId, userId },
     include: {
       payments: { orderBy: { paidOn: 'asc' } },
-      vehicle: { select: { id: true, registrationNo: true, make: true, model: true } },
+      vehicle: { select: { id: true, ...PLATE_SELECT, make: true, model: true } },
       rentalProperty: { select: { id: true, name: true } },
     },
   });
   if (!loan) throw new NotFoundError(`Loan ${loanId} not found`);
-  return withMaskedAccount(loan);
+  return { ...withMaskedAccount(loan), vehicle: loan.vehicle ? revealVehicle(loan.vehicle) : null };
 }
 
 export async function createLoan(userId: string, input: CreateLoanInput) {

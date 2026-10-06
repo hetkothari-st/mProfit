@@ -76,8 +76,9 @@ describe('SEC-30: loan account numbers are masked in list/detail', () => {
   const svc = read('services/loans.service.ts');
 
   it('masks on both read paths', () => {
-    expect(svc).toContain('loans.map(withMaskedAccount)');
-    expect(svc).toContain('return withMaskedAccount(loan)');
+    // List and detail each pass the row through withMaskedAccount.
+    expect(svc).toContain('loans.map((l) => ({ ...withMaskedAccount(l)');
+    expect(svc).toContain('return { ...withMaskedAccount(loan)');
   });
 
   it('exposes the full value only through an explicit reveal', () => {
