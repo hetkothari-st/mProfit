@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Express } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
 import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
@@ -77,3 +77,15 @@ finfactorWebhookRouter.post('/data', asyncHandler(postDataWebhook));
 finfactorWebhookRouter.post('/historical', asyncHandler(postHistoricalWebhook));
 finfactorWebhookRouter.post('/cohort', asyncHandler(postCohortWebhook));
 finfactorWebhookRouter.post('/subscription', asyncHandler(postSubscriptionWebhook));
+
+/**
+ * Mount both routers. The webhook router goes FIRST: Express hands a request
+ * to the first router whose prefix matches, and `/api/integrations/finfactor`
+ * matches `/api/integrations/finfactor/webhook/...` too. Mounted the other way
+ * round, finfactorRouter's `authenticate` answered every Finvu callback with
+ * 401 before the HMAC-verified webhook handlers ever saw it.
+ */
+export function mountFinfactorRoutes(app: Express): void {
+  app.use('/api/integrations/finfactor/webhook', finfactorWebhookRouter);
+  app.use('/api/integrations/finfactor', finfactorRouter);
+}

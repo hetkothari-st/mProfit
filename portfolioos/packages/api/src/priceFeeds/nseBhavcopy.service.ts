@@ -15,6 +15,7 @@
 import { request } from 'undici';
 import { Decimal } from 'decimal.js';
 import { logger } from '../lib/logger.js';
+import { followRedirects } from '../lib/httpDispatcher.js';
 
 const BROWSER_HEADERS = {
   'user-agent':
@@ -104,7 +105,7 @@ export async function getNseBhavPrices(): Promise<Map<string, Decimal>> {
       const res = await request(url, {
         method: 'GET',
         headers: BROWSER_HEADERS,
-        maxRedirections: 5,
+        dispatcher: followRedirects,
         bodyTimeout: 30_000,
         headersTimeout: 15_000,
       });
