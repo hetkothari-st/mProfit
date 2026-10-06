@@ -1088,7 +1088,7 @@ export function RentalDetailPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="max-h-[600px] overflow-y-auto pr-1 space-y-3">
+          <div className="space-y-3 md:max-h-[600px] md:overflow-y-auto md:pr-1">
             {(property.tenancies ?? []).map((t) => (
               <TenancyCard key={t.id} tenancy={t} />
             ))}

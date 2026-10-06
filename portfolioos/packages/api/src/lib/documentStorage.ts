@@ -10,13 +10,16 @@
  */
 
 import { join } from 'node:path';
-import { mkdir, writeFile, readFile, unlink, stat } from 'node:fs/promises';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdir, writeFile, readFile, unlink, stat, open } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import type { Response } from 'express';
 import { env } from '../config/env.js';
+import { NotFoundError } from './errors.js';
+import { logger } from './logger.js';
 
 function userDir(userId: string): string {
   // userId is a Prisma cuid — alphanumeric only — but be defensive against
@@ -58,8 +61,38 @@ export async function saveStream(
   return bytes;
 }
 
-export function readStream(userId: string, storageKey: string) {
-  return createReadStream(join(userDir(userId), storageKey));
+export function storedFilePath(userId: string, storageKey: string): string {
+  return join(userDir(userId), storageKey);
+}
+
+/**
+ * Stream a stored file into an HTTP response, safely.
+ *
+ * Files live on the container's disk, which a redeploy can wipe. Piping a
+ * bare createReadStream() into `res` left its 'error' event unhandled, so a
+ * missing file reached the process's uncaughtException handler and took the
+ * whole API down. Open the file first — a missing one becomes a 404 the
+ * caller's error handler turns into a message — and keep an error listener on
+ * the stream for anything that fails mid-way.
+ */
+export async function streamFileTo(res: Response, path: string): Promise<void> {
+  let handle;
+  try {
+    handle = await open(path, 'r');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new NotFoundError(
+        'This file is no longer stored on the server. Please upload it again.',
+      );
+    }
+    throw err;
+  }
+  const stream = handle.createReadStream();
+  stream.on('error', (err) => {
+    logger.error({ err, path }, '[documents] stream failed mid-response');
+    res.destroy(err);
+  });
+  stream.pipe(res);
 }
 
 export async function readBuffer(userId: string, storageKey: string): Promise<Buffer> {

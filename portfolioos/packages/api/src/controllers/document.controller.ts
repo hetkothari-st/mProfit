@@ -20,7 +20,7 @@ import {
   listAllDocuments,
   zipDocuments,
 } from '../services/document.service.js';
-import { readStream } from '../lib/documentStorage.js';
+import { storedFilePath, streamFileTo } from '../lib/documentStorage.js';
 import { downloadHeaders, storedMimeFor } from '../lib/documentMime.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
@@ -131,7 +131,7 @@ export async function download(req: Request, res: Response) {
     res.setHeader(k, v);
   }
   res.setHeader('Content-Length', String(doc.sizeBytes));
-  readStream(doc.userId, doc.storageKey).pipe(res);
+  await streamFileTo(res, storedFilePath(doc.userId, doc.storageKey));
 }
 
 // ─── OnlyOffice integration ──────────────────────────────────────
@@ -230,7 +230,7 @@ export async function onlyofficeDownload(req: Request, res: Response) {
   const doc = await getDocumentForDownload(payload.userId, payload.documentId);
   res.setHeader('Content-Type', doc.mimeType);
   res.setHeader('Content-Length', String(doc.sizeBytes));
-  readStream(doc.userId, doc.storageKey).pipe(res);
+  await streamFileTo(res, storedFilePath(doc.userId, doc.storageKey));
 }
 
 // OnlyOffice DocumentServer save callback. JWT in `Authorization: Bearer …`
