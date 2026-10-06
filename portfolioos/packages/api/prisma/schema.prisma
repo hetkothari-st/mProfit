@@ -1066,6 +1066,10 @@ model TransactionPhoto {
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   fileName      String
   filePath      String
+  /// Encrypted copy of the file in DocumentBlob (lib/fileStore). The filePath
+  /// copy on local disk is temporary: a deploy wipes it, and it is restored
+  /// from here when needed. Null on rows from before the store existed.
+  blobKey String?
   mimeType      String
   sizeBytes     Int
 
@@ -1271,6 +1275,10 @@ model ImportJob {
   status         ImportStatus @default(PENDING)
   fileName       String
   filePath       String
+  /// Encrypted copy of the file in DocumentBlob (lib/fileStore). The filePath
+  /// copy on local disk is temporary: a deploy wipes it, and it is restored
+  /// from here when needed. Null on rows from before the store existed.
+  blobKey String?
   broker         String?
   totalRows      Int?
   successRows    Int?
@@ -1393,6 +1401,10 @@ model GmailDiscoveredDoc {
   classifierTokensOut  Int?
 
   storagePath String
+  /// Encrypted copy of the file in DocumentBlob (lib/fileStore). The storagePath
+  /// copy on local disk is temporary: a deploy wipes it, and it is restored
+  /// from here when needed. Null on rows from before the store existed.
+  blobKey String?
 
   status GmailDocStatus @default(CLASSIFYING)
 

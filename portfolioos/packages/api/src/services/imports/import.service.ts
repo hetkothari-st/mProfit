@@ -11,6 +11,8 @@ import { enqueueBounded, getImportQueue } from '../../lib/queue.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
 import { hookAutoLinkImportedPremium } from '../insuranceExtras.service.js';
+import { dropLocalFile, ensureLocalFile, persistLocalFile } from '../../lib/fileStore.js';
+import { deleteFile } from '../../lib/documentStorage.js';
 
 export interface CreateImportJobInput {
   userId: string;
@@ -70,6 +72,10 @@ export async function createImportJob(input: CreateImportJobInput) {
       }
     }
 
+    // The upload sits on local disk, which a deploy wipes; keep an encrypted
+    // copy so the job can be processed, reprocessed or downloaded later.
+    const blobKey = await persistLocalFile(input.userId, input.filePath, 'import');
+
     const job = await prisma.importJob.create({
       data: {
         userId: input.userId,
@@ -78,6 +84,7 @@ export async function createImportJob(input: CreateImportJobInput) {
         status: 'PENDING',
         fileName: input.fileName,
         filePath: input.filePath,
+        blobKey,
         broker: input.broker ?? null,
         contentHash: input.contentHash ?? null,
         gmailMessageId: input.gmailMessageId ?? null,
@@ -140,9 +147,29 @@ export async function deleteImportJob(userId: string, id: string) {
   // not a correctness bug.
   // eslint-disable-next-line everypaisa/no-silent-catch -- best-effort cleanup
   try { await unlink(job.filePath); } catch { /* ignore */ }
+  if (job.blobKey) await deleteFile(userId, job.blobKey);
 }
 
-export async function processImportJob(importJobId: string, pdfPassword?: string | null): Promise<{
+export async function processImportJob(
+  importJobId: string,
+  pdfPassword?: string | null,
+): ReturnType<typeof processImportJobFromDisk> {
+  const file = await prisma.importJob.findUnique({
+    where: { id: importJobId },
+    select: { userId: true, filePath: true, blobKey: true },
+  });
+  if (!file) throw new NotFoundError('Import job not found');
+  // Put the file back where the parsers expect it if a deploy removed it,
+  // and remove the plain-text copy again when done (the encrypted one stays).
+  await ensureLocalFile(file.userId, file.blobKey, file.filePath);
+  try {
+    return await processImportJobFromDisk(importJobId, pdfPassword);
+  } finally {
+    await dropLocalFile(file.blobKey, file.filePath);
+  }
+}
+
+async function processImportJobFromDisk(importJobId: string, pdfPassword?: string | null): Promise<{
   parser: string;
   total: number;
   success: number;
