@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import { useQuery } from '@tanstack/react-query';
 import {
   FileDown,
@@ -364,7 +365,7 @@ export function ReportsPage() {
         </CardContent>
       </Card>
 
-      <div className="flex gap-1 mb-4 border-b overflow-x-auto scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
+      <HScroll className="flex gap-1 mb-4 border-b overflow-x-auto scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -379,7 +380,7 @@ export function ReportsPage() {
             {t.label}
           </button>
         ))}
-      </div>
+      </HScroll>
 
       {tab === 'inbox-imports' ? (
         <InboxImportsTab />

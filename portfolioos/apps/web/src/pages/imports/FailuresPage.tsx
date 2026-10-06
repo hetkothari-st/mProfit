@@ -225,8 +225,10 @@ export function FailuresPage() {
                         onClick={() => setDetail(r)}
                       >
                         <td data-label="Adapter" className="px-4 py-2 font-mono text-xs">
-                          <div>{r.sourceAdapter}</div>
-                          <div className="text-muted-foreground">v{r.adapterVersion}</div>
+                          <div className="min-w-0 break-words text-right md:text-left">
+                            {r.sourceAdapter}
+                            <span className="block text-muted-foreground">v{r.adapterVersion}</span>
+                          </div>
                         </td>
                         <td data-label="Source" className="px-4 py-2 text-xs text-muted-foreground max-w-[28ch] truncate">
                           {r.sourceRef}
@@ -519,7 +521,9 @@ function FeedFailures() {
                       ) : row.rowsImported === null ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
-                        <>
+                        // One span, so a phone card (cells are flex rows there)
+                        // keeps "0 of 2" together instead of spreading it out.
+                        <span>
                           <span className="font-medium">
                             {row.rowsImported.toLocaleString('en-IN')}
                           </span>
@@ -529,7 +533,7 @@ function FeedFailures() {
                               of {row.previousImported.toLocaleString('en-IN')}
                             </span>
                           )}
-                        </>
+                        </span>
                       )}
                     </td>
                     <td data-fullrow className="px-4 py-2.5 text-muted-foreground">

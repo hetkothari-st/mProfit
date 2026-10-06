@@ -146,7 +146,7 @@ export function SendersPage() {
               <EmptyState
                 icon={Mail}
                 title="No senders configured"
-                description="Run a discovery scan, or add a sender manually on the left."
+                description="Run a discovery scan, or add a sender manually with the form on this page."
               />
             ) : (
               <div className="space-y-2">

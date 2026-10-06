@@ -303,7 +303,7 @@ export function ImportPage() {
                           {new Date(j.createdAt).toLocaleString()}
                         </td>
                         <td data-fullrow className="px-4 py-2">
-                          <div className="flex justify-end gap-1">
+                          <div className="flex flex-wrap justify-end gap-1">
                             {!pwErr && ((j.failedRows ?? 0) > 0 || (j.errorLog?.parserWarnings?.length ?? 0) > 0 || (j.errorLog?.rowErrors?.length ?? 0) > 0) && (
                               <Button
                                 variant="ghost"

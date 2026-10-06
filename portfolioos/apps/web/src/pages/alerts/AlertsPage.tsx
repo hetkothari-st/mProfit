@@ -172,7 +172,7 @@ function AlertRow({ alert, onMarkRead, onDelete }: {
             onClick={() => onMarkRead(alert.id)}
             title="Mark as read"
             aria-label={`Mark "${alert.title}" as read`}
-            className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground/60 transition-colors hover:bg-positive/10 hover:text-positive focus-ring"
+            className="tap-expand grid h-7 w-7 place-items-center rounded-md text-muted-foreground/60 transition-colors hover:bg-positive/10 hover:text-positive focus-ring"
           >
             <CheckCheck className="h-3.5 w-3.5" strokeWidth={1.8} />
           </button>
@@ -182,7 +182,7 @@ function AlertRow({ alert, onMarkRead, onDelete }: {
           onClick={() => onDelete(alert.id)}
           title="Dismiss"
           aria-label={`Dismiss "${alert.title}"`}
-          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground/60 transition-colors hover:bg-negative/10 hover:text-negative focus-ring"
+          className="tap-expand grid h-7 w-7 place-items-center rounded-md text-muted-foreground/60 transition-colors hover:bg-negative/10 hover:text-negative focus-ring"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={1.7} />
         </button>
