@@ -37,7 +37,7 @@ export async function tokenizePassbookPdf(buf: Buffer): Promise<PassbookTokens> 
   new Uint8Array(standalone).set(buf);
 
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const loadingTask = pdfjs.getDocument({ data: standalone, verbosity: 0, isEvalSupported: false });
+  const loadingTask = pdfjs.getDocument({ data: standalone, verbosity: 0 });
   const doc = await loadingTask.promise;
 
   let rawText = '';
@@ -53,7 +53,7 @@ export async function tokenizePassbookPdf(buf: Buffer): Promise<PassbookTokens> 
   }
 
   await doc.cleanup();
-  await doc.destroy();
+  await loadingTask.destroy();
 
   const lines = rawText
     .split(/\r?\n/)
