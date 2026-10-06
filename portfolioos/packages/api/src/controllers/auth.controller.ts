@@ -27,6 +27,8 @@ import { UnauthorizedError } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { readPan } from '../services/piiAtRest.service.js';
 import { notifyIfLoginBurst, notifyIfNewDevice } from '../services/securityAlerts.service.js';
+import * as twoFactor from '../services/twoFactor.service.js';
+import { completeTwoFactorSignIn } from '../services/auth.service.js';
 
 export const registerSchema = z.object({
   email: z.string().email().toLowerCase(),
@@ -120,6 +122,12 @@ export async function login(req: Request, res: Response) {
   const data = loginSchema.parse(req.body);
   try {
     const result = await loginUser(data.email, data.password, { restore: data.restore });
+    // Two-factor accounts get a challenge here; the sign-in is audited when
+    // the second factor completes it (verifyTwoFactorHandler).
+    if ('mfaRequired' in result) {
+      ok(res, result);
+      return;
+    }
     await writeAuditLog({
       userId: result.user.id,
       action: 'login',
@@ -224,6 +232,10 @@ export const googleSchema = z.object({
 export async function google(req: Request, res: Response) {
   const { idToken, restore } = googleSchema.parse(req.body);
   const result = await loginOrRegisterWithGoogle(idToken, { restore });
+  if ('mfaRequired' in result) {
+    ok(res, result);
+    return;
+  }
   // Google sign-ins were not audited at all; they count for new-device checks.
   await writeAuditLog({ userId: result.user.id, action: 'login', resource: `User:${result.user.id}`, metadata: { method: 'google' }, req });
   if (!result.isNew) notifyIfNewDevice(result.user.id, req);
@@ -265,4 +277,54 @@ export async function requestDeletion(req: Request, res: Response) {
     req,
   });
   ok(res, result);
+}
+
+// ── Two-factor sign-in ───────────────────────────────────────────────
+
+const mfaVerifySchema = z.object({ mfaToken: z.string().min(10), code: z.string().trim().min(6).max(20) });
+const codeSchema = z.object({ code: z.string().trim().min(6).max(20) });
+
+/** Second step of sign-in for accounts with two-factor on. */
+export async function verifyTwoFactorHandler(req: Request, res: Response) {
+  const { mfaToken, code } = mfaVerifySchema.parse(req.body);
+  try {
+    const result = await completeTwoFactorSignIn(mfaToken, code);
+    await writeAuditLog({
+      userId: result.user.id,
+      action: 'login',
+      resource: `User:${result.user.id}`,
+      metadata: { secondFactor: result.via },
+      req,
+    });
+    notifyIfNewDevice(result.user.id, req);
+    const { via: _via, ...session } = result;
+    ok(res, session);
+  } catch (err) {
+    await writeAuditLog({ action: 'login_failed', metadata: { reason: 'second_factor' }, req });
+    throw err;
+  }
+}
+
+export async function twoFactorStatusHandler(req: Request, res: Response) {
+  ok(res, await twoFactor.twoFactorStatus(req.user!.id));
+}
+
+export async function twoFactorSetupHandler(req: Request, res: Response) {
+  ok(res, await twoFactor.beginSetup(req.user!.id));
+}
+
+export async function twoFactorEnableHandler(req: Request, res: Response) {
+  const { code } = codeSchema.parse(req.body);
+  ok(res, await twoFactor.enableTwoFactor(req.user!.id, code, req));
+}
+
+export async function twoFactorDisableHandler(req: Request, res: Response) {
+  const { code } = codeSchema.parse(req.body);
+  await twoFactor.disableTwoFactor(req.user!.id, code, req);
+  ok(res, { enabled: false });
+}
+
+export async function twoFactorBackupCodesHandler(req: Request, res: Response) {
+  const { code } = codeSchema.parse(req.body);
+  ok(res, await twoFactor.regenerateBackupCodes(req.user!.id, code, req));
 }

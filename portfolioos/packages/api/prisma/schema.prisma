@@ -208,6 +208,17 @@ model User {
   // Wrapped per-user data key (lib/userKeys).
   dataKey UserDataKey?
 
+  // Two-factor sign-in (services/twoFactor.service.ts). The TOTP secret is
+  // encrypted under SECRETS_KEY; set only once a code has confirmed it.
+  twoFactorSecretEnc        String?
+  // Secret shown during setup, before the user has proved they saved it.
+  twoFactorPendingSecretEnc String?
+  twoFactorEnabledAt        DateTime?
+  // Last accepted TOTP time step: a code is accepted once, never replayed.
+  twoFactorLastStep         Int?
+  twoFactorBackupCodes      TwoFactorBackupCode[]
+  mfaChallenges             MfaChallenge[]
+
   @@index([deletionScheduledFor])
   @@index([managedById])
 }
@@ -4259,4 +4270,32 @@ model UserDataKey {
   wrappedKey String
   kekVersion Int      @default(1)
   createdAt  DateTime @default(now())
+}
+
+/// One-time backup codes for two-factor sign-in. Stored hashed; single use.
+model TwoFactorBackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// A sign-in that passed the password (or Google) step and is waiting for
+/// the second factor. Single use, short-lived, attempt-capped.
+model MfaChallenge {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  method     String // "password" | "google"
+  restore    Boolean   @default(false)
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
