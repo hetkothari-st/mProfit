@@ -682,8 +682,8 @@ function TrialBalanceReport() {
                   const rows = grouped[type] ?? [];
                   if (rows.length === 0) return null;
                   return [
-                    <tr key={`hdr-${type}`} className="bg-muted/30 border-b">
-                      <td colSpan={6} className="px-4 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{TYPE_LABELS[type]}</td>
+                    <tr key={`hdr-${type}`} data-section className="bg-muted/30 border-b">
+                      <td colSpan={6} data-fullrow className="px-4 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{TYPE_LABELS[type]}</td>
                     </tr>,
                     ...rows.map((r) => (
                       <tr key={r.accountId} className="border-b hover:bg-muted/20">

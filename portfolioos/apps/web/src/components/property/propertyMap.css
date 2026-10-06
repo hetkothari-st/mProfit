@@ -77,6 +77,22 @@
   color: hsl(var(--accent-foreground));
   border-color: transparent;
 }
+/* Phones: nearby pins' labels overlapped. Shorter labels, and the selected
+   or hovered pin rises above its neighbours with its full name. */
+@media (max-width: 639px) {
+  .pos-pin-label {
+    max-width: 104px;
+  }
+}
+/* Leaflet puts an inline z-index on each marker wrapper, so lift the wrapper. */
+.pos-pin-wrap:has(.pos-pin.is-selected),
+.pos-pin-wrap:hover {
+  z-index: 10000 !important;
+}
+.pos-pin.is-selected .pos-pin-label,
+.pos-pin:hover .pos-pin-label {
+  max-width: 220px;
+}
 /* An approximate pin marks an area, not a door: show a wider halo. */
 .pos-pin.is-approx .pos-pin-dot {
   box-shadow: 0 0 0 18px hsl(var(--accent) / 0.15);

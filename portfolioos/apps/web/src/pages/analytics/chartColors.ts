@@ -26,12 +26,22 @@ export const POS_COLOR = 'hsl(130 35% 34%)';
 export const NEG_COLOR = 'hsl(12 50% 44%)';
 export const NEUTRAL_COLOR = 'hsl(220 12% 50%)';
 
+/** "2.0" -> "2", "2.5" -> "2.5". */
+function trimZero(n: string): string {
+  return n.replace(/\.0$/, '');
+}
+
+/**
+ * Compact rupees for chart axes. Thousands below ₹10K keep one decimal: axis
+ * ticks of 1,500 / 2,000 / 2,500 all rounded to "₹2K" before, so the axis
+ * repeated one label.
+ */
 export function shortInr(v: number): string {
-  if (v >= 10_000_000) return `₹${(v / 10_000_000).toFixed(1)}Cr`;
-  if (v >= 100_000) return `₹${(v / 100_000).toFixed(1)}L`;
-  if (v >= 1_000) return `₹${(v / 1_000).toFixed(0)}K`;
-  if (v <= -10_000_000) return `-₹${(Math.abs(v) / 10_000_000).toFixed(1)}Cr`;
-  if (v <= -100_000) return `-₹${(Math.abs(v) / 100_000).toFixed(1)}L`;
-  if (v <= -1_000) return `-₹${(Math.abs(v) / 1_000).toFixed(0)}K`;
-  return `₹${v.toFixed(0)}`;
+  const a = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (a >= 10_000_000) return `${sign}₹${trimZero((a / 10_000_000).toFixed(1))}Cr`;
+  if (a >= 100_000) return `${sign}₹${trimZero((a / 100_000).toFixed(1))}L`;
+  if (a >= 10_000) return `${sign}₹${(a / 1_000).toFixed(0)}K`;
+  if (a >= 1_000) return `${sign}₹${trimZero((a / 1_000).toFixed(1))}K`;
+  return `${sign}₹${a.toFixed(0)}`;
 }
