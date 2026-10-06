@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { documentsApi } from '@/api/documents.api';
 import { apiErrorMessage } from '@/api/client';
 import { DocumentEditorModal } from './DocumentEditorModal';
+import { DocumentViewerModal } from './DocumentViewerModal';
 import type { DocumentDTO, DocumentOwnerType } from '@everypaisa/shared';
 
 interface Props {
@@ -29,13 +30,17 @@ interface Props {
   defaultCategory?: string;
 }
 
+// Office formats edited in-browser via OnlyOffice DocumentServer.
 const EDITABLE_EXTENSIONS = new Set([
   'doc', 'docx', 'odt', 'rtf', 'txt',
   'xls', 'xlsx', 'ods', 'csv',
   'ppt', 'pptx', 'odp',
 ]);
 
-const VIEWABLE_EXTENSIONS = new Set(['pdf', ...EDITABLE_EXTENSIONS]);
+// Rendered natively by the browser — no OnlyOffice needed.
+const IMAGE_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'heic', 'tiff',
+]);
 
 const PDF_CONVERTIBLE = new Set([
   'doc', 'docx', 'odt', 'rtf', 'txt',
@@ -66,6 +71,11 @@ export function DocumentVault({ ownerType, ownerId, title = 'Documents', default
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [editing, setEditing] = useState<{ id: string; fileName: string } | null>(null);
+  const [viewing, setViewing] = useState<{
+    id: string;
+    fileName: string;
+    kind: 'pdf' | 'image';
+  } | null>(null);
   const [renaming, setRenaming] = useState<DocumentDTO | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
@@ -185,7 +195,9 @@ export function DocumentVault({ ownerType, ownerId, title = 'Documents', default
             {docs.map((d) => {
               const ext = extOf(d.fileName);
               const editable = EDITABLE_EXTENSIONS.has(ext);
-              const viewable = VIEWABLE_EXTENSIONS.has(ext);
+              const isPdf = ext === 'pdf';
+              const isImage = IMAGE_EXTENSIONS.has(ext);
+              const nativeViewable = isPdf || isImage;
               const canConvert = PDF_CONVERTIBLE.has(ext);
               const isConverting = converting === d.id;
               const Icon = iconFor(d.fileName);
@@ -240,15 +252,32 @@ export function DocumentVault({ ownerType, ownerId, title = 'Documents', default
                   </div>
                   {!isRenaming && (
                     <div className="ml-8 sm:ml-0 flex flex-wrap items-center gap-1">
-                      {viewable && (
+                      {nativeViewable && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setViewing({
+                              id: d.id,
+                              fileName: d.fileName,
+                              kind: isPdf ? 'pdf' : 'image',
+                            })
+                          }
+                          title="View in browser"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                          View
+                        </Button>
+                      )}
+                      {editable && (
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => setEditing({ id: d.id, fileName: d.fileName })}
-                          title={editable ? 'Open editor' : 'View in browser'}
+                          title="Open editor"
                         >
                           <Edit3 className="h-4 w-4" />
-                          {editable ? 'Edit' : 'View'}
+                          Edit
                         </Button>
                       )}
                       {canConvert && (
@@ -306,6 +335,13 @@ export function DocumentVault({ ownerType, ownerId, title = 'Documents', default
         documentId={editing?.id ?? null}
         fileName={editing?.fileName ?? ''}
         onClose={() => setEditing(null)}
+      />
+
+      <DocumentViewerModal
+        documentId={viewing?.id ?? null}
+        fileName={viewing?.fileName ?? ''}
+        kind={viewing?.kind ?? 'pdf'}
+        onClose={() => setViewing(null)}
       />
     </Card>
   );

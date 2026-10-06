@@ -47,11 +47,15 @@ export const documentsApi = {
     const base = getApiBaseUrl();
     return `${base}/api/documents/${id}/download`;
   },
-  async openDownload(id: string, fileName: string): Promise<void> {
-    // Authed download: fetch via axios so the access token is sent, then
-    // synthesise a download. Avoids relying on cookies.
+  async fetchBlob(id: string): Promise<Blob> {
+    // Authed fetch of the raw bytes (access token sent via axios). Used for
+    // in-browser preview (PDF/image) and downloads. Avoids relying on cookies.
     const res = await api.get(`/api/documents/${id}/download`, { responseType: 'blob' });
-    const url = URL.createObjectURL(res.data as Blob);
+    return res.data as Blob;
+  },
+  async openDownload(id: string, fileName: string): Promise<void> {
+    const blob = await documentsApi.fetchBlob(id);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;
