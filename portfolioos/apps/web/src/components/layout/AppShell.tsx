@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigationType } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -12,6 +12,8 @@ import { usePrivacyStore } from '@/stores/privacy.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { useTokenRefresh } from '@/hooks/useTokenRefresh';
 import { AssistantButton } from '@/components/ai/AssistantButton';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 
 export function AppShell() {
   const { hideSensitive } = usePrivacyStore();
@@ -31,6 +33,16 @@ export function AppShell() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
+
+  // Phones: swipe right anywhere on the page to open the nav drawer, unless
+  // another sheet or dialog is already open over the page.
+  const isPhone = useMediaQuery('(max-width: 767px)');
+  const openOnSwipeRight = useCallback((dir: 'left' | 'right') => {
+    if (dir !== 'right') return;
+    if (document.querySelector('[role="dialog"][data-state="open"]')) return;
+    setDrawerOpen(true);
+  }, []);
+  useSwipeGesture({ enabled: isPhone && !drawerOpen, onSwipe: openOnSwipeRight });
 
   // Close the mobile drawer whenever the route changes (e.g. user taps a nav link).
   useEffect(() => {

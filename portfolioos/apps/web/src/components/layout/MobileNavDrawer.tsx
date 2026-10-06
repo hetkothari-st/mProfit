@@ -1,6 +1,7 @@
-import { useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { SidebarNav } from './SidebarNav';
+import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 
 export function MobileNavDrawer({
   open,
@@ -10,6 +11,15 @@ export function MobileNavDrawer({
   onOpenChange: (open: boolean) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // Swipe left on the open drawer to put it away again.
+  const getPanel = useCallback(() => panelRef.current, []);
+  const closeOnSwipeLeft = useCallback(
+    (dir: 'left' | 'right') => {
+      if (dir === 'left') onOpenChange(false);
+    },
+    [onOpenChange],
+  );
+  useSwipeGesture({ enabled: open, onSwipe: closeOnSwipeLeft, target: getPanel });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
