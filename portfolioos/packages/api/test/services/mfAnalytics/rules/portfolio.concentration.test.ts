@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializePct, type MfMetricStatus } from '@portfolioos/shared';
+import { serializePct, type MfMetricStatus } from '@everypaisa/shared';
 import { portfolioConcentrationRule as rule } from '../../../../src/services/mfAnalytics/rules/portfolio.concentration.js';
 import { SCHEME, makeFacts, makeFundFacts } from './_facts.fixture.js';
 

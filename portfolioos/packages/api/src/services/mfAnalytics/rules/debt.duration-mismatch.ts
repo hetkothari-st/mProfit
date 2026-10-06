@@ -87,13 +87,13 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { serializeRatio, specFor, toDecimal } from '@portfolioos/shared';
+import { serializeRatio, specFor, toDecimal } from '@everypaisa/shared';
 import type {
   MfEvidence,
   MfFinding,
   Ratio,
   SebiSubCategory,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 
 const RULE_ID = 'mf.debt.duration-mismatch';

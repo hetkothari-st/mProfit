@@ -1,4 +1,4 @@
-import type { MfAnalysisScope } from '@portfolioos/shared';
+import type { MfAnalysisScope } from '@everypaisa/shared';
 import { ASSET_CLASS_LABEL, NON_AC_CATEGORY_LABEL } from '@/lib/assetClasses';
 import { RestrictedChip, ScopeRestrictedNotice } from '@/pages/family/widgets/RestrictedNotice';
 

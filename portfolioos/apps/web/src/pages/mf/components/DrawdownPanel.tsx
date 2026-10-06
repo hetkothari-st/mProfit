@@ -1,4 +1,4 @@
-import type { MfHorizonMetrics } from '@portfolioos/shared';
+import type { MfHorizonMetrics } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { MetricStat, MetricValue } from './MetricValue';
 import { formatRatioAsPct, ratioToChartNumber, resolveMetric } from '../mfFormat';

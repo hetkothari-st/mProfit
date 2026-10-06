@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializePct, serializeRatio, type MfMetricStatus } from '@portfolioos/shared';
+import { serializePct, serializeRatio, type MfMetricStatus } from '@everypaisa/shared';
 import { costHighTerRule as rule } from '../../../../src/services/mfAnalytics/rules/cost.high-ter.js';
 import { SCHEME, makeFacts, makeFundFacts } from './_facts.fixture.js';
 

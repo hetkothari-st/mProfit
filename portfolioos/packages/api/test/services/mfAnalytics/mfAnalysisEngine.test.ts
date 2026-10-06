@@ -29,8 +29,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { serializeRatio } from '@portfolioos/shared';
-import type { MfFinding } from '@portfolioos/shared';
+import { serializeRatio } from '@everypaisa/shared';
+import type { MfFinding } from '@everypaisa/shared';
 
 import { prisma } from '../../../src/lib/prisma.js';
 import { runAsSystem } from '../../../src/lib/requestContext.js';

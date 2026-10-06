@@ -30,7 +30,7 @@ import { formatIsoDate } from './mfFormat';
  * selling any lot would cost today.
  *
  * **No type is declared in this file or in any component it renders.** Every
- * shape comes from `@portfolioos/shared`. CONTEXT.md §11 records why: the
+ * shape comes from `@everypaisa/shared`. CONTEXT.md §11 records why: the
  * `/advisor` page crashed on first load because the client declared its own
  * version of a server shape — the API returned `{profile, history}` while the
  * UI destructured a bare profile — and `tsc`, having only the client's word for

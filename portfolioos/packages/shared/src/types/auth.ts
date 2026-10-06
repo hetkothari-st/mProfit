@@ -5,7 +5,14 @@ export interface AuthUser {
   email: string;
   name: string;
   phone?: string | null;
-  pan?: string | null;
+  /**
+   * Masked PAN for display (XXXXX1234F). The full value is never part of the
+   * profile payload — it was, and it ended up persisted in localStorage next
+   * to the auth tokens. Fetch the real one from POST /api/auth/pan/reveal,
+   * which is authenticated, rate-limited and audited.
+   */
+  panMasked?: string | null;
+  hasPan?: boolean;
   dob?: string | null;
   role: UserRole;
   plan: PlanTier;
@@ -23,6 +30,8 @@ export interface AuthTokens {
 export interface LoginRequest {
   email: string;
   password: string;
+  /** Cancel a scheduled account deletion and sign in. */
+  restore?: boolean;
 }
 
 export interface RegisterRequest {
@@ -32,7 +41,19 @@ export interface RegisterRequest {
   phone?: string;
   role?: UserRole;
   // No client-supplied `plan` — every new account starts FREE and upgrades
-  // only through the billing flow (see @portfolioos/shared/entitlements).
+  // only through the billing flow (see @everypaisa/shared/entitlements).
+}
+
+/** Returned by register/resend: a code was emailed, no account exists yet. */
+export interface PendingRegistration {
+  email: string;
+  expiresAt: string;
+  resendAvailableAt: string;
+}
+
+export interface VerifyRegistrationRequest {
+  email: string;
+  code: string;
 }
 
 export interface LoginResponse {
@@ -49,7 +70,8 @@ export interface ForgotPasswordRequest {
 }
 
 export interface ResetPasswordRequest {
-  token: string;
+  email: string;
+  code: string;
   newPassword: string;
 }
 

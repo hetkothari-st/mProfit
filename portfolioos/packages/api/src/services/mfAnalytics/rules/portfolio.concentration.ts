@@ -32,7 +32,7 @@ import {
   type MfEvidence,
   type MfFinding,
   type SebiSubCategory,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 
 const RULE_ID = 'mf.portfolio.concentration';

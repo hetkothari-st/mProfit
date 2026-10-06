@@ -1,5 +1,5 @@
 import { api, unwrap } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 export type BankAccountType = 'SAVINGS' | 'CURRENT' | 'SALARY' | 'NRE' | 'NRO' | 'OD';
 export type BankAccountStatus = 'ACTIVE' | 'DORMANT' | 'CLOSED';
@@ -24,9 +24,12 @@ export interface BankAccountDTO {
   accountType: BankAccountType;
   accountHolder: string;
   last4: string;
+  /** A full account number is saved (encrypted); fetch it via `revealAccountNumber`. */
+  hasAccountNumber: boolean;
   customerId: string | null;
   ifsc: string | null;
   branch: string | null;
+  branchAddress: string | null;
   nickname: string | null;
   jointHolders: string[];
   nomineeName: string | null;
@@ -55,15 +58,27 @@ export interface BankAccountCashFlowDTO {
   currency: string | null;
 }
 
+export interface IfscDetailsDTO {
+  ifsc: string;
+  bank: string | null;
+  branch: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+}
+
 export interface CreateBankAccountInput {
   bankName: string;
   accountType: BankAccountType;
   accountHolder: string;
   last4: string;
+  /** Full account number. Write-only: stored encrypted, never returned by list/get. */
+  accountNumber?: string | null;
   customerId?: string | null;
   portfolioId?: string | null;
   ifsc?: string | null;
   branch?: string | null;
+  branchAddress?: string | null;
   nickname?: string | null;
   jointHolders?: string[];
   nomineeName?: string | null;
@@ -105,6 +120,26 @@ export const bankAccountsApi = {
   },
   async remove(id: string): Promise<void> {
     await api.delete(`/api/bank-accounts/${id}`);
+  },
+  /** Audited + rate-limited server-side. Deliberately not cached in react-query. */
+  async revealAccountNumber(id: string): Promise<{ accountNumber: string | null }> {
+    const { data } = await api.post<ApiResponse<{ accountNumber: string | null }>>(
+      `/api/bank-accounts/${id}/reveal`,
+    );
+    return unwrap(data);
+  },
+  /** Ready-to-send bank details text (includes the full number). Audited server-side. */
+  async shareDetails(id: string): Promise<{ text: string }> {
+    const { data } = await api.post<ApiResponse<{ text: string }>>(
+      `/api/bank-accounts/${id}/share`,
+    );
+    return unwrap(data);
+  },
+  async lookupIfsc(code: string): Promise<IfscDetailsDTO> {
+    const { data } = await api.get<ApiResponse<IfscDetailsDTO>>(
+      `/api/bank-accounts/ifsc/${encodeURIComponent(code)}`,
+    );
+    return unwrap(data);
   },
   async addSnapshot(id: string, input: AddSnapshotInput): Promise<BankBalanceSnapshotDTO> {
     const { data } = await api.post<ApiResponse<BankBalanceSnapshotDTO>>(

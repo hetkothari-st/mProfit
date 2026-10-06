@@ -1,7 +1,0 @@
-{
-  "name": "eslint-plugin-portfolioos",
-  "version": "0.1.0",
-  "private": true,
-  "main": "index.cjs",
-  "description": "Custom ESLint rules enforcing PortfolioOS §3 architectural invariants."
-}

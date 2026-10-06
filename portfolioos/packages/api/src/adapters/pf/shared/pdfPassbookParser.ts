@@ -53,7 +53,7 @@ export async function tokenizePassbookPdf(buf: Buffer): Promise<PassbookTokens> 
   }
 
   await doc.cleanup();
-  await doc.destroy();
+  await loadingTask.destroy();
 
   const lines = rawText
     .split(/\r?\n/)

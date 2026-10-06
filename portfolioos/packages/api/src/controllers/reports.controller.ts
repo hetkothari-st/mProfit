@@ -1,8 +1,10 @@
 import type { Request, Response } from 'express';
 import type ExcelJSType from 'exceljs';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 import { ok } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { Decimal, isValidFinancialYear } from '@everypaisa/shared';
 import {
   intradayReport,
   stcgReport,
@@ -24,10 +26,12 @@ import {
 import {
   computePortfolioXirr,
   computeRollingXirr,
+  computeUserRollingXirr,
   computeUserXirr,
 } from '../services/xirr.service.js';
 import { persistCapitalGainsForPortfolio } from '../services/capitalGains.service.js';
 import { streamExcel, streamPdf, fmtNum, fmtDate, type ExportColumn, type ExportPayload } from '../services/export.service.js';
+import { parseThemeQuery, themeFor, hexToArgb } from '../services/charts/pdfTheme.js';
 import { buildHoldingsExport } from '../services/reportBuilder/holdingsReport.js';
 import { streamDashboardPdf, streamDashboardExcel, type DashboardScope } from '../services/reportBuilder/dashboardReport.js';
 import { buildHoldingsStatement } from '../services/reportBuilder/statement/holdings.js';
@@ -37,6 +41,8 @@ import {
 } from '../services/reportBuilder/statement/capitalGains.js';
 import { buildIncomeStatement } from '../services/reportBuilder/statement/income.js';
 import { buildLedgerStatement } from '../services/reportBuilder/statement/ledger.js';
+import { buildProvidentFundStatement } from '../services/reportBuilder/statement/providentFund.js';
+import { buildFyBundle } from '../services/reports/fyBundle.service.js';
 import type { AssetClass } from '@prisma/client';
 
 async function assertOwnedPortfolio(req: Request): Promise<string> {
@@ -83,8 +89,9 @@ async function resolveScope(req: Request, subjectUserId?: string): Promise<Repor
 }
 
 function getFy(req: Request): string | undefined {
-  const fy = req.query.fy as string | undefined;
-  return fy?.trim() || undefined;
+  const fy = (req.query.fy as string | undefined)?.trim() || undefined;
+  if (fy && !isValidFinancialYear(fy)) throw new BadRequestError(`Invalid financial year "${fy}" — expected consecutive years like 2025-26`);
+  return fy;
 }
 
 function getFormat(req: Request): 'json' | 'xlsx' | 'pdf' {
@@ -196,8 +203,8 @@ function incomePayload(data: Awaited<ReturnType<typeof userIncomeReport>>, fy?: 
     footer: {
       Dividends: fmtNum(data.dividend),
       Interest: fmtNum(data.interest),
-      Maturity: fmtNum(data.maturity),
-      Total: fmtNum(data.total),
+      'Total income': fmtNum(data.total),
+      'Maturity proceeds (not income)': fmtNum(data.maturity),
     },
   };
 }
@@ -268,17 +275,13 @@ export async function getUnrealised(req: Request, res: Response) {
 export async function getXirr(req: Request, res: Response) {
   const scope = await resolveScope(req);
   if (scope.kind === 'all') {
-    const overall = await computeUserXirr(scope.userId);
-    // Per-period XIRR across portfolios uses computeUserXirr-style aggregation
-    // by re-running with a windowed cashflow set; the simplest path is to
-    // expose only the headline number for "all" and leave 1/3/5Y rolling
-    // figures null. The Reports page already tolerates nulls (`fmtPct`).
-    ok(res, {
-      overall,
-      oneYear: { xirr: null, totalInvested: '0', terminalValue: '0', cashflowCount: 0 },
-      threeYear: { xirr: null, totalInvested: '0', terminalValue: '0', cashflowCount: 0 },
-      fiveYear: { xirr: null, totalInvested: '0', terminalValue: '0', cashflowCount: 0 },
-    });
+    const [overall, oneYear, threeYear, fiveYear] = await Promise.all([
+      computeUserXirr(scope.userId),
+      computeUserRollingXirr(scope.userId, 1),
+      computeUserRollingXirr(scope.userId, 3),
+      computeUserRollingXirr(scope.userId, 5),
+    ]);
+    ok(res, { overall, oneYear, threeYear, fiveYear });
     return;
   }
   const overall = await computePortfolioXirr(scope.portfolioId);
@@ -330,10 +333,12 @@ export async function getHoldingsExport(req: Request, res: Response) {
 
   // Verify ownership of every requested portfolio
   if (portfolioIds.length > 0) {
-    const owned = await prisma.portfolio.findMany({
-      where: { id: { in: portfolioIds }, userId },
-      select: { id: true },
-    });
+    const owned = await runForSubject(resolved.via, userId, () =>
+      prisma.portfolio.findMany({
+        where: { id: { in: portfolioIds }, userId },
+        select: { id: true },
+      }),
+    );
     const ownedSet = new Set(owned.map(p => p.id));
     for (const id of portfolioIds) {
       if (!ownedSet.has(id)) throw new ForbiddenError();
@@ -352,20 +357,27 @@ export async function getHoldingsExport(req: Request, res: Response) {
   }
 
   const format = getFormat(req);
-  const { holdingsPayload, transactionsPayload, summaryTitle } = await buildHoldingsExport({
-    userId,
-    portfolioIds,
-    assetClasses,
-  });
+  const theme = parseThemeQuery(req.query.theme);
+  // A family member's books are readable only as that member (RLS).
+  const { holdingsPayload, transactionsPayload, summaryTitle } = await runForSubject(resolved.via, userId, () =>
+    buildHoldingsExport({
+      userId,
+      portfolioIds,
+      assetClasses,
+    }),
+  );
+  holdingsPayload.theme = theme;
+  transactionsPayload.theme = theme;
 
   if (format === 'xlsx') {
     // Multi-sheet workbook
     const ExcelJS = (await import('exceljs')).default;
     const wb = new ExcelJS.Workbook();
-    wb.creator = 'PortfolioOS';
+    wb.creator = 'EveryPaisa';
     wb.created = new Date();
+    const C = themeFor(theme);
 
-    function addSheet(ws: ExcelJSType.Worksheet, payload: ExportPayload) {
+    const addSheet = (ws: ExcelJSType.Worksheet, payload: ExportPayload): void => {
       ws.getCell(1, 1).value = payload.title;
       ws.getCell(1, 1).font = { bold: true, size: 13 };
       let row = 2;
@@ -382,8 +394,10 @@ export async function getHoldingsExport(req: Request, res: Response) {
       payload.columns.forEach((col, i) => {
         const cell = headerRow.getCell(i + 1);
         cell.value = col.header;
-        cell.font = { bold: true };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF20240F' } };
+        // Themed, like streamExcel's header — a fixed near-black fill sat
+        // under text Excel always renders dark, unreadable either way.
+        cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(C.tableHeaderBg) } };
         if (col.width) ws.getColumn(i + 1).width = col.width;
       });
       row++;
@@ -402,7 +416,7 @@ export async function getHoldingsExport(req: Request, res: Response) {
           ws.getCell(row, 2).value = String(v); row++;
         }
       }
-    }
+    };
 
     addSheet(wb.addWorksheet('Holdings'), holdingsPayload);
     addSheet(wb.addWorksheet('Transactions'), transactionsPayload);
@@ -460,32 +474,36 @@ export async function getDashboardExport(req: Request, res: Response) {
   }
 
   const format = getFormat(req);
+  const theme = parseThemeQuery(req.query.theme);
 
+  // A family member's books are readable only as that member (RLS), so the
+  // whole build runs in their context — not the caller's, which would see nothing.
   if (format === 'xlsx') {
-    await streamDashboardExcel(res, { userId, portfolioId, scope });
+    await runForSubject(resolved.via, userId, () => streamDashboardExcel(res, { userId, portfolioId, scope, theme }));
     return;
   }
 
   // PDF (default)
-  await streamDashboardPdf(res, { userId, portfolioId, scope });
+  await runForSubject(resolved.via, userId, () => streamDashboardPdf(res, { userId, portfolioId, scope, theme }));
 }
 
-// ─── Specialized section exports (Vehicles / Insurance / Loans / Credit Cards / Rental) ─────
+// ─── Specialized section exports (Vehicles / Insurance / Loans / Credit Cards / Rental / Real Estate) ─────
 
-type SectionType = 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental';
+type SectionType = 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental' | 'real-estate';
 
 export async function getSectionExport(req: Request, res: Response) {
   const section = (req.query.section as string | undefined) as SectionType | undefined;
   const format  = getFormat(req);
 
-  if (!section || !['vehicles', 'insurance', 'loans', 'credit-cards', 'rental'].includes(section)) {
-    throw new BadRequestError('section must be one of: vehicles, insurance, loans, credit-cards, rental');
+  if (!section || !['vehicles', 'insurance', 'loans', 'credit-cards', 'rental', 'real-estate'].includes(section)) {
+    throw new BadRequestError('section must be one of: vehicles, insurance, loans, credit-cards, rental, real-estate');
   }
 
   const resolved = await resolveReportSubjects(req);
   const payload = await buildPayloadForSubjects(resolved, (userId) =>
     sectionPayload(userId, section),
   );
+  payload.theme = parseThemeQuery(req.query.theme);
 
   if (format === 'xlsx') return streamExcel(res, payload);
   if (format === 'pdf')  return streamPdf(res, payload);
@@ -518,11 +536,9 @@ async function sectionPayload(
           { key: 'fitnessExpiry',  header: 'Fitness Expiry',width: 12, formatter: fmtDate },
         ],
         rows: rows.map(v => ({
-          ...v,
+          ...revealVehicle(v),
           // Mask all but last 4 chars per §15.1 PII rules
-          registrationNo: v.registrationNo.length > 4
-            ? `XXXX${v.registrationNo.slice(-4)}`
-            : v.registrationNo,
+          registrationNo: `XXXX${v.registrationNoLast4 ?? plateOf(v).slice(-4)}`,
           purchasePrice: v.purchasePrice?.toString(),
           currentValue: v.currentValue?.toString(),
         })),
@@ -592,6 +608,47 @@ async function sectionPayload(
           interestRate: r.interestRate?.toString() ?? '',
           annualFee:    r.annualFee?.toString() ?? '',
         })),
+      };
+      break;
+    }
+    case 'real-estate': {
+      // Owned properties are not holdings, so the holdings export filtered to
+      // REAL_ESTATE came back empty (null / 0 everywhere). Read them directly.
+      const rows = await prisma.ownedProperty.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
+      payload = {
+        title: 'Real Estate',
+        meta: { 'Generated On': new Date().toISOString().slice(0, 10), 'Total': String(rows.length) },
+        columns: [
+          { key: 'name',             header: 'Property',       width: 24 },
+          { key: 'propertyType',     header: 'Type',           width: 16 },
+          { key: 'city',             header: 'City',           width: 14 },
+          { key: 'status',           header: 'Status',         width: 14 },
+          { key: 'purchaseDate',     header: 'Purchased',      width: 12, formatter: fmtDate },
+          { key: 'purchasePrice',    header: 'Purchase Price', width: 14, formatter: v => fmtNum(v) },
+          { key: 'costBasis',        header: 'Cost Basis',     width: 14, formatter: v => fmtNum(v) },
+          { key: 'currentValue',     header: 'Current Value',  width: 14, formatter: v => fmtNum(v) },
+          { key: 'gain',             header: 'Gain',           width: 14, formatter: v => fmtNum(v) },
+          { key: 'ownershipPercent', header: 'My Share %',     width: 10, formatter: v => fmtNum(v, 2) },
+        ],
+        rows: rows.map(r => {
+          const cost = new Decimal(r.purchasePrice ?? 0)
+            .plus(r.stampDuty ?? 0)
+            .plus(r.registrationFee ?? 0)
+            .plus(r.brokerage ?? 0)
+            .plus(r.otherCosts ?? 0);
+          return {
+            name: r.name,
+            propertyType: r.propertyType.replace(/_/g, ' '),
+            city: r.city ?? '',
+            status: r.status.replace(/_/g, ' '),
+            purchaseDate: r.purchaseDate,
+            purchasePrice: r.purchasePrice?.toString() ?? '',
+            costBasis: cost.toString(),
+            currentValue: r.currentValue?.toString() ?? '',
+            gain: r.currentValue ? new Decimal(r.currentValue).minus(cost).toString() : '',
+            ownershipPercent: r.ownershipPercent.toString(),
+          };
+        }),
       };
       break;
     }
@@ -732,6 +789,12 @@ async function emit(
   payload: Parameters<typeof streamExcel>[1],
 ): Promise<void> {
   const format = getFormat(req);
+  // Single chokepoint: every report that flows through here (intraday/stcg/
+  // ltcg/112A/income/unrealised, the four statement-style reports, and the
+  // provident-fund download) picks up `?theme=` without each handler having
+  // to read it itself. `?theme=` only matters for pdf/xlsx; the json branch
+  // ignores it.
+  payload.theme = payload.theme ?? parseThemeQuery(req.query.theme);
   if (format === 'xlsx') return streamExcel(res, payload);
   if (format === 'pdf') return streamPdf(res, payload);
   ok(res, payload);
@@ -740,7 +803,7 @@ async function emit(
 // ─── Statement-style reports (Indian portfolio reporting conventions) ───────
 //
 // Four reports — Holdings, Capital Gains, Income, Ledger — rendered through
-// the shared streamPdf/streamExcel pipeline so PortfolioOS branding stays
+// the shared streamPdf/streamExcel pipeline so EveryPaisa branding stays
 // consistent. Each accepts comma-separated portfolioIds (empty = all owned
 // portfolios for the user); ownership is verified before any data load.
 
@@ -844,7 +907,7 @@ import {
   dematHoldingReport,
   m2mReport,
 } from '../services/specialReports.service.js';
-import { generateVouchersFromActivity } from '../services/accounting.service.js';
+import { projectBooks, caProjectionAudit } from '../services/ca/caProjection.service.js';
 
 /**
  * Trial Balance / P&L / Balance Sheet / Account Ledger all read from
@@ -857,14 +920,17 @@ import { generateVouchersFromActivity } from '../services/accounting.service.js'
  * via the voucherNo seen-set), so the cost is one cheap query when
  * nothing's outstanding.
  */
-async function ensureAccountingProjected(userId: string): Promise<void> {
+async function ensureAccountingProjected(req: Request, userId: string): Promise<void> {
   try {
-    await generateVouchersFromActivity(userId);
-  } catch (e) {
+    // When a CA triggered this, the vouchers it creates land in someone
+    // else's ledger, so the projection goes on that client's audit trail
+    // rather than happening invisibly behind a download.
+    await projectBooks(userId, await caProjectionAudit(req, userId));
+  } catch (err) {
     // Don't block the download — surface the bug via logs and continue
-    // with whatever vouchers already exist.
-    // eslint-disable-next-line no-console
-    console.error('[accounting] auto-project failed', e);
+    // with whatever vouchers already exist. console.error never reached the
+    // pino pipeline, so this failure was invisible in production.
+    logger.error({ err, userId }, 'reports.auto_project_failed');
   }
 }
 
@@ -943,19 +1009,24 @@ import {
 import {
   streamMprofitPdf,
   streamMprofitExcel,
-  streamTallyXml,
   type MprofitLayout,
 } from '../services/reportBuilder/mprofitStyle.js';
-import { buildTallyMastersXml, buildTallyVouchersXml } from '../services/reportBuilder/tally/tallyExport.service.js';
+import { TallyExportBlockedError } from '../services/tally/tallyPackage.js';
+import { buildTallyZip } from '../services/tally/tallyZip.service.js';
 import {
   resolveReportSubjects,
   buildLayoutForSubjects,
   buildPayloadForSubjects,
   requireSingleSubject,
+  runForSubject,
 } from '../services/reports/reportSubjects.js';
+import { plateOf, revealVehicle } from '../services/piiAtRest.service.js';
 
 async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {
   const format = getFormat(req);
+  // Threads `?theme=` through to every one of the ~40 mprofit-style
+  // downloads below without touching each `downloadXxx` handler.
+  layout.theme = layout.theme ?? parseThemeQuery(req.query.theme);
   if (format === 'xlsx') return streamMprofitExcel(res, layout);
   return streamMprofitPdf(res, layout);
 }
@@ -1001,26 +1072,24 @@ export async function downloadM2M(req: Request, res: Response) {
 export async function downloadTrialBalance(req: Request, res: Response) {
   const asOf = (req.query.asOf as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildTrialBalanceLayout(userId, asOf);
   });
 }
 
 export async function downloadAccountLedger(req: Request, res: Response) {
   const accountId = (req.query.accountId as string | undefined)?.trim() || undefined;
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildAccountLedgerLayout(userId, { accountId, from, to });
   });
 }
 
 export async function downloadProfitLoss(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildProfitLossLayout(userId, { from, to });
   });
 }
@@ -1028,7 +1097,7 @@ export async function downloadProfitLoss(req: Request, res: Response) {
 export async function downloadBalanceSheet(req: Request, res: Response) {
   const asOf = (req.query.asOf as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildBalanceSheetLayout(userId, asOf);
   });
 }
@@ -1046,8 +1115,7 @@ export async function downloadMFCapitalGain(req: Request, res: Response) {
 }
 
 export async function downloadDailyTransactions(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildDailyTransactionsLayout(userId, { from, to }));
 }
 
@@ -1071,6 +1139,21 @@ export async function downloadHoldingsSummary(req: Request, res: Response) {
   await emitForSubjects(req, res, (userId) => buildPortfolioHoldingsSummaryLayout(userId, pid));
 }
 
+/** `from` / `to` query dates, validated: a bad date or a reversed range is a 400, not a 500. */
+function dateRangeQuery(req: Request): { from?: string; to?: string } {
+  const read = (name: 'from' | 'to') => {
+    const v = (req.query[name] as string | undefined)?.trim() || undefined;
+    if (v && Number.isNaN(new Date(v).getTime())) throw new BadRequestError(`Invalid \`${name}\` date`);
+    return v;
+  };
+  const from = read('from');
+  const to = read('to');
+  if (from && to && new Date(from).getTime() > new Date(to).getTime()) {
+    throw new BadRequestError('`from` date is after `to` date');
+  }
+  return { from, to };
+}
+
 export async function downloadPerformance(req: Request, res: Response) {
   await emitForSubjects(req, res, (userId) => buildPerformanceLayout(userId));
 }
@@ -1081,8 +1164,7 @@ export async function downloadTaxSummary(req: Request, res: Response) {
 }
 
 export async function downloadCashFlow(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildCashFlowStatementLayout(userId, { from, to }));
 }
 
@@ -1101,8 +1183,7 @@ export async function downloadFamilyWiseHoldings(req: Request, res: Response) {
 }
 
 export async function downloadScriptwiseQtywise(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildScriptwiseQtywiseLayout(userId, { from, to }));
 }
 
@@ -1121,11 +1202,10 @@ export async function downloadMfM2M(req: Request, res: Response) {
 }
 
 export async function downloadFinancialLedger(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   const accountId = (req.query.accountId as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildFinancialLedgerLayout(userId, { from, to, accountId });
   });
 }
@@ -1154,14 +1234,12 @@ export async function downloadContractNotesSummary(req: Request, res: Response) 
 }
 
 export async function downloadBrokerwiseCapitalGain(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildBrokerwiseCapitalGainLayout(userId, { from, to }));
 }
 
 export async function downloadTaxPnL(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildTaxPnLLayout(userId, { from, to }));
 }
 
@@ -1169,12 +1247,12 @@ export async function downloadStt10Db(req: Request, res: Response) {
   const asOfStr = (req.query.asOf as string | undefined)?.trim();
   const asOf = asOfStr ? new Date(asOfStr) : undefined;
   if (asOf && Number.isNaN(asOf.getTime())) throw new BadRequestError('Invalid `asOf` date');
-  await emitForSubjects(req, res, (userId) => buildStt10DbLayout(userId, asOf));
+  const fy = getFy(req);
+  await emitForSubjects(req, res, (userId) => buildStt10DbLayout(userId, asOf, fy));
 }
 
 export async function downloadCapitalGainsFifo(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildCapitalGainsFifoLayout(userId, { from, to }));
 }
 
@@ -1206,23 +1284,21 @@ export async function downloadScriptLedger(req: Request, res: Response) {
 
 export async function downloadChartOfAccounts(req: Request, res: Response) {
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildChartOfAccountsLayout(userId);
   });
 }
 
 export async function downloadFundFlow(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildFundFlowLayout(userId, { from, to });
   });
 }
 
 export async function downloadBrokerBillRegister(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildBrokerBillRegisterLayout(userId, { from, to }));
 }
 
@@ -1236,43 +1312,111 @@ export async function downloadPortfolioSnapshot(req: Request, res: Response) {
 export async function downloadDayBook(req: Request, res: Response) {
   const date = (req.query.asOf as string | undefined)?.trim() || (req.query.date as string | undefined)?.trim() || undefined;
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildDayBookLayout(userId, { date });
   });
 }
 
 export async function downloadDividendReport(req: Request, res: Response) {
   const fy = (req.query.fy as string | undefined)?.trim() || undefined;
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, (userId) => buildDividendReportLayout(userId, { fy, from, to }));
 }
 
 export async function downloadBankReconciliation(req: Request, res: Response) {
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
+  const { from, to } = dateRangeQuery(req);
   await emitForSubjects(req, res, async (userId) => {
-    await ensureAccountingProjected(userId);
+    await ensureAccountingProjected(req, userId);
     return buildBankReconciliationLayout(userId, { from, to });
   });
 }
 
-// ─── Tally XML export — file download only, no live ODBC/HTTP push ──
-// See services/reportBuilder/tally/. XML-only format: bypasses
-// emitMprofit/MprofitLayout entirely (not a banded report).
+// ─── Tally export — one ZIP, file download only (no live push) ──
+// See services/tally/. Not a banded report: bypasses emitMprofit.
 
-export async function downloadTallyMasters(req: Request, res: Response) {
-  const userId = req.user!.id;
-  await ensureAccountingProjected(userId);
-  const { xml, filenameStem } = await buildTallyMastersXml(userId);
-  streamTallyXml(res, xml, filenameStem);
+/**
+ * "Export to Tally": the whole record as one ZIP — masters, one transactions
+ * file per financial year, holdings at each year end, and an import guide —
+ * built straight from the user's records (services/tally/) and checked
+ * against Tally's import rules before it is sent.
+ *
+ * Subject-aware, and `requireSingleSubject` because a Tally company file
+ * describes one set of books. A merged one is not a company file for anybody,
+ * the same reason a combined Schedule 112A is not a filing.
+ *
+ * A book that would break a Tally rule is refused with the list of problems:
+ * handing over a file Tally will partly reject is exactly what this must not do.
+ */
+export async function downloadTallyExport(req: Request, res: Response) {
+  const resolved = await resolveReportSubjects(req);
+  const subject = requireSingleSubject(resolved, 'The Tally export');
+
+  let result: Awaited<ReturnType<typeof buildTallyZip>>;
+  try {
+    result = await runForSubject(resolved.via, subject.userId, () => buildTallyZip(subject.userId));
+  } catch (err) {
+    if (err instanceof TallyExportBlockedError) throw new BadRequestError(err.message);
+    throw err;
+  }
+
+  const stem = subject.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${stem || 'everypaisa'}-tally-export.zip"`);
+  // Surfaced in a header too, so a caller can tell there are notes to read
+  // without unzipping the guide.
+  res.setHeader('X-Tally-Notes', String(result.book.issues.length));
+  res.send(result.zip);
 }
 
-export async function downloadTallyVouchers(req: Request, res: Response) {
-  const userId = req.user!.id;
-  const from = (req.query.from as string | undefined)?.trim() || undefined;
-  const to = (req.query.to as string | undefined)?.trim() || undefined;
-  await ensureAccountingProjected(userId);
-  const { xml, filenameStem } = await buildTallyVouchersXml(userId, { from, to });
-  streamTallyXml(res, xml, filenameStem);
+/**
+ * Provident fund statement — the first export this data has ever had.
+ *
+ * Subject-aware from the outset rather than retrofitted, which is the lesson
+ * the Tally handlers taught: a download added without going through
+ * `resolveReportSubjects` silently works for its author and nobody else.
+ */
+export async function downloadProvidentFund(req: Request, res: Response) {
+  const resolved = await resolveReportSubjects(req);
+  const fromStr = (req.query.from as string | undefined)?.trim();
+  const toStr = (req.query.to as string | undefined)?.trim();
+  const from = fromStr ? new Date(fromStr) : undefined;
+  const to = toStr ? new Date(toStr) : undefined;
+  if (from && Number.isNaN(from.getTime())) throw new BadRequestError('Invalid `from` date');
+  if (to && Number.isNaN(to.getTime())) throw new BadRequestError('Invalid `to` date');
+
+  const payload = await buildPayloadForSubjects(resolved, (userId) =>
+    buildProvidentFundStatement({ userId, from, to }),
+  );
+  await emit(req, res, payload);
+}
+
+/**
+ * One financial year, one zip, for whoever `?subject=` names.
+ *
+ * `requireSingleSubject` because a bundle is a year of one person's affairs.
+ * Merging two people's filings into one archive would produce something that
+ * looks like a submission and is not one for either of them — the same reason
+ * Schedule 112A and the Tally company file are single-subject.
+ */
+export async function downloadFyBundle(req: Request, res: Response) {
+  const fy = (req.query.fy as string | undefined)?.trim();
+  if (!fy) throw new BadRequestError('fy query param required (e.g. 2025-26)');
+  if (fy && !isValidFinancialYear(fy)) throw new BadRequestError(`Invalid financial year "${fy}" — expected consecutive years like 2025-26`);
+
+  const resolved = await resolveReportSubjects(req);
+  const subject = requireSingleSubject(resolved, 'The financial-year bundle');
+  const theme = parseThemeQuery(req.query.theme);
+
+  const result = await runForSubject(resolved.via, subject.userId, () =>
+    buildFyBundle(subject.userId, fy, theme),
+  );
+
+  const stem = subject.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${stem || 'everypaisa'}-FY${fy}.zip"`);
+  // Surfaced in headers too, so a caller scripting this can tell a complete
+  // bundle from a partial one without unzipping it.
+  res.setHeader('X-Bundle-Included', String(result.included.length));
+  res.setHeader('X-Bundle-Failed', String(result.failed.length));
+  res.send(result.zip);
 }

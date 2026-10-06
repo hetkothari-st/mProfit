@@ -1,5 +1,5 @@
-import { Decimal, toDecimal } from '@portfolioos/shared';
-import type { AssetClass } from '@prisma/client';
+import { CAPITAL_GAINS_KEY_DATES, Decimal, isOnOrAfter, toDecimal } from '@everypaisa/shared';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
@@ -9,18 +9,21 @@ import {
   GRANDFATHERING_CUTOFF,
 } from './capitalGains.service.js';
 
-// Section 112A grandfathering only applies to these asset classes — debt
-// MFs/bonds have their own indexation path (capitalGains.service.ts).
-const GRANDFATHERING_ASSET_CLASSES: ReadonlySet<AssetClass> = new Set([
-  'EQUITY',
-  'ETF',
-  'MUTUAL_FUND',
-]);
-
 // fmvPerUnit validation: positive Decimal, max 8 digits before the point,
 // max 4 after (matches FmvOverride.fmvPerUnit's Decimal(18,4) column, with
 // a tighter integer-digit cap since no real scrip trades in the trillions).
 const FMV_PATTERN = /^\d{1,8}(\.\d{1,4})?$/;
+
+/**
+ * Optional transaction client, so a caller can write an FMV override and its
+ * audit entry on one transaction. Defaults to the global client, leaving the
+ * user's own path unchanged. The cache invalidation and background recompute
+ * below deliberately stay outside it: both are best-effort refreshes that read
+ * committed state, and holding a transaction open across a full FIFO replay
+ * would lock a client's books for no benefit.
+ */
+type Db = Prisma.TransactionClient;
+const defaultDb = prisma as unknown as Db;
 
 export interface FmvRecord {
   isin: string;
@@ -137,6 +140,7 @@ export async function upsertUserFmv(
   isin: string,
   fmvPerUnit: string,
   scripName?: string,
+  db: Db = defaultDb,
 ): Promise<FmvRecord> {
   if (!FMV_PATTERN.test(fmvPerUnit)) {
     throw new BadRequestError(
@@ -149,7 +153,7 @@ export async function upsertUserFmv(
     throw new BadRequestError('fmvPerUnit must be positive', { fmvPerUnit });
   }
 
-  const saved = await prisma.fmvOverride.upsert({
+  const saved = await db.fmvOverride.upsert({
     where: { userId_isin: { userId, isin } },
     create: { userId, isin, fmvPerUnit, scripName: scripName ?? null, source: 'USER' },
     update: { fmvPerUnit, scripName: scripName ?? null, source: 'USER' },
@@ -166,8 +170,8 @@ export async function upsertUserFmv(
   };
 }
 
-export async function deleteUserFmv(userId: string, isin: string): Promise<void> {
-  await prisma.fmvOverride.deleteMany({ where: { userId, isin } });
+export async function deleteUserFmv(userId: string, isin: string, db: Db = defaultDb): Promise<void> {
+  await db.fmvOverride.deleteMany({ where: { userId, isin } });
   invalidateCache(userId);
   triggerFifoRecompute(userId);
 }
@@ -186,7 +190,11 @@ export async function listGrandfatheringRows(
       (r) =>
         r.capitalGainType === 'LONG_TERM' &&
         r.buyDate <= GRANDFATHERING_CUTOFF &&
-        GRANDFATHERING_ASSET_CLASSES.has(r.assetClass) &&
+        // Sec 55(2)(ac) covers 112A assets only — equity shares, equity-oriented
+        // fund units, business-trust units — never debt funds, which index instead.
+        r.isEquityOriented &&
+        // 112A (and so grandfathering) applies to transfers from 1-Apr-2018.
+        isOnOrAfter(r.sellDate, CAPITAL_GAINS_KEY_DATES.listedEquityLtcgTaxableFrom) &&
         (fy === undefined || r.financialYear === fy),
     )
     .map((r): GrandfatheringRow => {

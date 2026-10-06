@@ -1,4 +1,4 @@
-import type { MfCostSummary, MfHeldFundDto } from '@portfolioos/shared';
+import type { MfCostSummary, MfHeldFundDto } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { MetricStat } from './MetricValue';
 import {

@@ -14,7 +14,7 @@
  * one of these keys; this file closes the loop from the key to the weights.
  */
 
-import type { MfModelKey } from '@portfolioos/shared';
+import type { MfModelKey } from '@everypaisa/shared';
 import type { ScoringModel } from '../mfScoreMath.js';
 
 import { ACTIVE_EQUITY_MODEL } from './activeEquity.js';

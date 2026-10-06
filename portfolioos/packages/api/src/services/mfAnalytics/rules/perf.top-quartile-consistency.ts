@@ -25,7 +25,7 @@
  *     rolling horizon, so it is fixed at the 3-year row here.
  */
 
-import { toDecimal, type MfEvidence, type MfFinding, type Ratio } from '@portfolioos/shared';
+import { toDecimal, type MfEvidence, type MfFinding, type Ratio } from '@everypaisa/shared';
 import {
   MF_HORIZON_KEYS,
   confidenceFor,

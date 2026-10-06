@@ -1,0 +1,258 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { prisma } from '../../../../src/lib/prisma.js';
+import { runAsSystem } from '../../../../src/lib/requestContext.js';
+import { runFundScoring } from '../../../../src/services/advisor/fundRanking/scoringRun.service.js';
+import {
+  currentMethodology,
+  snapshotIsFresh,
+} from '../../../../src/services/advisor/fundRanking/methodology.service.js';
+import type { MethodologyConfig } from '../../../../src/services/advisor/fundRanking/types.js';
+
+/**
+ * The scoring pass against a real database: idempotency on re-run, and the
+ * rule that an unsigned methodology never advises.
+ *
+ * These use `runAsSystem` because every table involved is market-level
+ * reference data with no owner — there is no user context to run them under.
+ */
+
+const SUFFIX = randomUUID().slice(0, 8);
+const ASOF = new Date('2026-09-20T00:00:00Z');
+
+let methodologyId: string;
+const schemeCodes: string[] = [];
+const fundIds: string[] = [];
+
+function monthlyNavs(months: number, monthlyPct: number, start = 100) {
+  const out: Array<{ date: Date; nav: string }> = [];
+  let nav = start;
+  for (let i = months; i >= 0; i -= 1) {
+    out.push({
+      date: new Date(Date.UTC(2026, 8 - i, 15)),
+      nav: nav.toFixed(4),
+    });
+    nav *= 1 + monthlyPct / 100;
+  }
+  return out;
+}
+
+async function makeFund(
+  label: string,
+  name: string,
+  category: 'EQUITY' | 'INDEX_FUND',
+  growthPct: number,
+  opts: { plan?: string; option?: string; aumInr?: string | null; terPct?: string | null } = {},
+) {
+  const schemeCode = `TEST${label}${SUFFIX}`;
+  const fund = await prisma.mutualFundMaster.create({
+    data: {
+      schemeCode,
+      schemeName: name,
+      amcName: `Test AMC ${label}`,
+      category,
+      subCategory: 'Open Ended Schemes(Equity Scheme - Flexi Cap Fund)',
+      isActive: true,
+      planType: opts.plan ?? 'Direct Plan',
+      optionType: opts.option ?? 'Growth Option',
+      // v2 requires a size: a scheme we cannot size is ineligible, so the
+      // fixtures that are meant to be scored carry one.
+      aumInr: opts.aumInr === undefined ? '50000000000' : opts.aumInr,
+      terPct: opts.terPct === undefined ? '0.5000' : opts.terPct,
+      navHistory: { create: monthlyNavs(48, growthPct) },
+    },
+  });
+  schemeCodes.push(schemeCode);
+  fundIds.push(fund.id);
+  return fund;
+}
+
+beforeAll(async () => {
+  await runAsSystem(async () => {
+    const seeded = await currentMethodology();
+    if (seeded) {
+      methodologyId = seeded.id;
+    } else {
+      // The migration seeds v1 unsigned; sign a throwaway copy for the test
+      // rather than mutating the seeded row other tests may assert on.
+      const row = await prisma.rankingMethodologyVersion.findFirst({ orderBy: { version: 'desc' } });
+      const config = (row?.config ?? {}) as unknown as MethodologyConfig;
+      const created = await prisma.rankingMethodologyVersion.create({
+        data: {
+          version: (row?.version ?? 0) + 1000,
+          config: config as object,
+          description: `test methodology ${SUFFIX}`,
+          signedOffBy: 'Test Principal Officer',
+          signedOffAt: new Date(),
+        },
+      });
+      methodologyId = created.id;
+    }
+
+    await makeFund('A', `Alpha Flexi Cap Fund ${SUFFIX}`, 'EQUITY', 1.2);
+    await makeFund('B', `Beta Flexi Cap Fund ${SUFFIX}`, 'EQUITY', 0.6);
+    // A regular plan, which must never be scored however well it performed.
+    await makeFund('C', `Gamma Flexi Cap Fund ${SUFFIX}`, 'EQUITY', 2.0, { plan: 'Regular Plan' });
+    // No AUM: ineligible under v2, where a scheme we cannot size is one we
+    // cannot honestly rank.
+    await makeFund('D', `Delta Flexi Cap Fund ${SUFFIX}`, 'EQUITY', 1.0, { aumInr: null });
+  });
+}, 120_000);
+
+afterAll(async () => {
+  await runAsSystem(async () => {
+    await prisma.fundScoreSnapshot.deleteMany({ where: { schemeCode: { in: schemeCodes } } });
+    await prisma.mFNav.deleteMany({ where: { fundId: { in: fundIds } } });
+    await prisma.mutualFundMaster.deleteMany({ where: { id: { in: fundIds } } });
+    await prisma.rankingMethodologyVersion.deleteMany({
+      where: { description: `test methodology ${SUFFIX}` },
+    });
+  });
+}, 120_000);
+
+describe('runFundScoring', () => {
+  it('scores the universe and records ineligible schemes with reasons', async () => {
+    const methodology = await runAsSystem(async () => {
+      const row = await prisma.rankingMethodologyVersion.findUniqueOrThrow({
+        where: { id: methodologyId },
+      });
+      const config = row.config as unknown as MethodologyConfig;
+      // These fixtures publish ONE NAV A MONTH — 48 points is what makes four
+      // years of rolling returns cheap to build in a test. The market they
+      // share this database with publishes daily, and the trading calendar is
+      // derived from the whole universe, so `nav_history_gap` correctly reads
+      // a monthly fund as one with a twenty-day hole between every pair of
+      // observations.
+      //
+      // That is the rule working, not a bug in it, and it is covered properly
+      // in navGaps.test.ts against a fixture with a real calendar. Here it
+      // would exclude every fixture before scoring ran, so the rule is turned
+      // off for this test and only this test.
+      //
+      // The calendar-integrity check is turned off here for a related but
+      // distinct reason, and the exact number is recorded so nobody has to
+      // re-measure it to decide whether the relaxation is still earned:
+      //
+      //   Measured 2026-09-21 against the shared development database —
+      //   191 trading days across the five-year scoring window, with a
+      //   99-consecutive-weekday hole from 2023-09-14 to 2024-02-01.
+      //
+      // That hole is under-population, not fabrication: nothing seeds MFNav,
+      // so the dev database only holds the days a real AMFI sync happened to
+      // run. Closing it means loading roughly sixty monthly AMFI historical
+      // reports (~1.4 GB, ~11 million rows), which is not something a test
+      // fixture can arrange. The recent window has been backfilled with real
+      // AMFI history; the 2023–24 hole remains.
+      //
+      // PRODUCTION HAS THE SAME HOLE. Measured the same day: 314 trading
+      // days, the same 99-weekday span. So this is not a dev-only artefact
+      // to be waved away — it is the reason the calendar check currently
+      // refuses to score in production, which is the check working.
+      //
+      // Its own coverage is in calendarIntegrity.test.ts and
+      // calendarRefusal.integration.test.ts.
+      return {
+        ...config,
+        eligibility: {
+          ...config.eligibility,
+          maxNavGapTradingDays: 100_000,
+          maxCalendarGapWeekdays: 100_000,
+        },
+      } as MethodologyConfig;
+    });
+
+    await runAsSystem(() =>
+      runFundScoring({ methodologyVersionId: methodologyId, config: methodology, asOf: ASOF }),
+    );
+
+    const rows = await runAsSystem(() =>
+      prisma.fundScoreSnapshot.findMany({
+        where: { methodologyVersionId: methodologyId, schemeCode: { in: schemeCodes } },
+      }),
+    );
+
+    const regular = rows.find((r) => r.schemeCode === `TESTC${SUFFIX}`);
+    expect(regular?.eligible).toBe(false);
+    expect(regular?.exclusionReasons).toContain('regular_plan');
+    // Ineligible means unscored: a score would imply it was a candidate.
+    expect(regular?.score).toBeNull();
+
+    const unsized = rows.find((r) => r.schemeCode === `TESTD${SUFFIX}`);
+    expect(unsized?.eligible).toBe(false);
+    expect(unsized?.exclusionReasons).toContain('aum_unknown');
+
+    const direct = rows.filter((r) => r.eligible);
+    expect(direct.length).toBeGreaterThanOrEqual(2);
+    for (const row of direct) {
+      expect(row.score).not.toBeNull();
+      expect(row.rankInBucket).not.toBeNull();
+    }
+  }, 180_000);
+
+  it('is idempotent: a re-run upserts rather than duplicating', async () => {
+    const config = await runAsSystem(async () => {
+      const row = await prisma.rankingMethodologyVersion.findUniqueOrThrow({
+        where: { id: methodologyId },
+      });
+      // Same two relaxations, and for the same reasons, as the test above.
+      const base = row.config as unknown as MethodologyConfig;
+      return {
+        ...base,
+        eligibility: {
+          ...base.eligibility,
+          maxNavGapTradingDays: 100_000,
+          maxCalendarGapWeekdays: 100_000,
+        },
+      } as MethodologyConfig;
+    });
+
+    const countBefore = await runAsSystem(() =>
+      prisma.fundScoreSnapshot.count({
+        where: { methodologyVersionId: methodologyId, schemeCode: { in: schemeCodes } },
+      }),
+    );
+
+    await runAsSystem(() =>
+      runFundScoring({ methodologyVersionId: methodologyId, config, asOf: ASOF }),
+    );
+
+    const countAfter = await runAsSystem(() =>
+      prisma.fundScoreSnapshot.count({
+        where: { methodologyVersionId: methodologyId, schemeCode: { in: schemeCodes } },
+      }),
+    );
+    expect(countAfter).toBe(countBefore);
+  }, 180_000);
+});
+
+describe('methodology gating', () => {
+  it('never returns an unsigned methodology for advice', async () => {
+    const unsignedVersion = 9_000 + Math.floor(Math.random() * 900);
+    const created = await runAsSystem(() =>
+      prisma.rankingMethodologyVersion.create({
+        data: {
+          version: unsignedVersion,
+          config: {} as object,
+          description: `unsigned test ${SUFFIX}`,
+        },
+      }),
+    );
+    try {
+      const current = await runAsSystem(() => currentMethodology());
+      // Either there is no signed methodology at all, or it is not this one.
+      expect(current?.id).not.toBe(created.id);
+    } finally {
+      await runAsSystem(() =>
+        prisma.rankingMethodologyVersion.delete({ where: { id: created.id } }),
+      );
+    }
+  }, 120_000);
+
+  it('treats a snapshot older than the configured window as stale', () => {
+    const config = { snapshotMaxAgeDays: 3 } as MethodologyConfig;
+    const now = new Date('2026-09-21T00:00:00Z');
+    expect(snapshotIsFresh(new Date('2026-09-20T00:00:00Z'), config, now)).toBe(true);
+    expect(snapshotIsFresh(new Date('2026-09-10T00:00:00Z'), config, now)).toBe(false);
+    expect(snapshotIsFresh(null, config, now)).toBe(false);
+  });
+});

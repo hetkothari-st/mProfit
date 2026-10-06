@@ -60,7 +60,7 @@ light background instead of black.
   import, `useThemeStore` import and hook call, the toggle button block (top-right of the form
   panel), and the `cn` import (needed again once the button returns).
 - **`portfolioos/apps/web/index.html`**: replace the hardcoded `class="dark"` with a real
-  pre-hydration script that reads `localStorage['portfolioos.theme']` and applies `dark` unless
+  pre-hydration script that reads `localStorage['everypaisa.theme']` and applies `dark` unless
   the stored value explicitly says otherwise — defaulting to dark when nothing is stored yet
   (first-time visitors). `<meta name="theme-color">` reverts to a static dark-mode default
   (`#0d0d0d`) since the inline script can't easily pre-compute the light value before paint

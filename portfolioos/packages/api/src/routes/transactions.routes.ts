@@ -2,8 +2,10 @@ import { Router } from 'express';
 import {
   create,
   detail,
+  duplicates,
   list,
   remove,
+  removeDuplicateRows,
   update,
 } from '../controllers/transaction.controller.js';
 import {
@@ -21,6 +23,11 @@ transactionsRouter.use(authenticate);
 
 transactionsRouter.get('/', asyncHandler(list));
 transactionsRouter.post('/', asyncHandler(create));
+
+// Ahead of '/:id' — otherwise "duplicates" reads as a transaction id.
+transactionsRouter.get('/duplicates', asyncHandler(duplicates));
+transactionsRouter.post('/duplicates/remove', asyncHandler(removeDuplicateRows));
+
 transactionsRouter.get('/:id', asyncHandler(detail));
 transactionsRouter.patch('/:id', asyncHandler(update));
 transactionsRouter.delete('/:id', asyncHandler(remove));

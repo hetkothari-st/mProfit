@@ -4,7 +4,7 @@ import type {
   MfFinding,
   MfFindingCategory,
   MfFundVerdictDto,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { SectionUnavailable } from './MetricValue';
 import { FindingsList } from './FindingsList';

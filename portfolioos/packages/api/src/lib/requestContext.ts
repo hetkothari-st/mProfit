@@ -39,14 +39,14 @@ export interface RequestContext {
  * fails to propagate context into queries.
  */
 const globalForUserContext = globalThis as unknown as {
-  __portfolioos_userContext?: AsyncLocalStorage<RequestContext>;
+  __everypaisa_userContext?: AsyncLocalStorage<RequestContext>;
 };
 
 export const userContext: AsyncLocalStorage<RequestContext> =
-  globalForUserContext.__portfolioos_userContext ??
+  globalForUserContext.__everypaisa_userContext ??
   new AsyncLocalStorage<RequestContext>();
 
-globalForUserContext.__portfolioos_userContext = userContext;
+globalForUserContext.__everypaisa_userContext = userContext;
 
 export function getCurrentUserId(): string | null {
   const store = userContext.getStore();

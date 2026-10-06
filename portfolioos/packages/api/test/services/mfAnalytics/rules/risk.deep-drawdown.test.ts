@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializeRatio, type MfHorizonMetrics, type MfMetricStatus } from '@portfolioos/shared';
+import { serializeRatio, type MfHorizonMetrics, type MfMetricStatus } from '@everypaisa/shared';
 import { riskDeepDrawdownRule as rule } from '../../../../src/services/mfAnalytics/rules/risk.deep-drawdown.js';
 import type { MfHorizonKey } from '../../../../src/services/mfAnalytics/types.js';
 import {

@@ -77,7 +77,9 @@ async function collectMessageIds(scanJobId: string): Promise<string[]> {
   const query = buildScanQuery(job.lookbackFrom, job.lookbackTo);
   logger.info({ scanJobId, query, lookbackFrom: job.lookbackFrom, lookbackTo: job.lookbackTo }, '[gmailScan] LISTING start');
 
-  while (true) {
+  // The cursor is the loop's own condition: Gmail returns a nextPageToken
+  // until the last page, and there is always a first page to fetch.
+  do {
     if (await isCancelled(scanJobId)) return ids;
     const page = await listMessageIdsPage(job.mailboxId, query, cursor);
     ids.push(...page.ids);
@@ -86,8 +88,7 @@ async function collectMessageIds(scanJobId: string): Promise<string[]> {
       where: { id: scanJobId },
       data: { nextPageToken: cursor },
     });
-    if (!cursor) break;
-  }
+  } while (cursor);
   logger.info({ scanJobId, total: ids.length }, '[gmailScan] LISTING done');
   return ids;
 }

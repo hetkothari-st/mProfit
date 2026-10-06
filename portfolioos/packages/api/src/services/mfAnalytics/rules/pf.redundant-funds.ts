@@ -42,7 +42,7 @@ import {
   toDecimal,
   type MfEvidence,
   type MfFinding,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 

@@ -20,7 +20,7 @@
  *
  * 1. **No hand-written response shape for the portfolio read.**
  *    `computeMfPortfolioAnalysis` already returns `MfPortfolioAnalysisDto` from
- *    `@portfolioos/shared`; the handler hands it to `ok()` untouched. Nothing
+ *    `@everypaisa/shared`; the handler hands it to `ok()` untouched. Nothing
  *    here re-serialises a numeric — every `Money`, `Ratio` and `Pct` in that
  *    DTO is already a Decimal string, and a round trip through `JSON.parse`
  *    would be the IEEE-754 loss the brands exist to prevent (CONTEXT.md §16.1).
@@ -44,7 +44,7 @@ import {
   type MfModelKey,
   type MfPortfolioAnalysisDto,
   type Ratio,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
@@ -96,7 +96,7 @@ export async function getPortfolioAnalysis(req: Request, res: Response) {
  * The wire shape of `GET /api/mf-analytics/methodology`.
  *
  * **This is the one response shape in the MF layer with no type in
- * `@portfolioos/shared`, and that is a compromise, not a design.** The model
+ * `@everypaisa/shared`, and that is a compromise, not a design.** The model
  * tables live in `packages/api/src/services/mfAnalytics/mfScoring/models/*` —
  * server-side by necessity, since the scorer runs there — and `06 §5` requires
  * the public methodology page to render them "from the same constants the

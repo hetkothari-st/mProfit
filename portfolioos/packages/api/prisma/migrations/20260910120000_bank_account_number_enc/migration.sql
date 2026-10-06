@@ -1,0 +1,11 @@
+-- Optional full bank account number, AES-256-GCM encrypted at the app layer
+-- (pfCredentials.encryptIdentifier, keyed by APP_ENCRYPTION_KEY per §15.1).
+--
+-- Additive and nullable: existing rows keep working on `last4` alone, and the
+-- UI tells the user to add the full number via Edit before it can be revealed.
+-- The column is never serialized by the API; plaintext only leaves the server
+-- through the audited, rate-limited POST /api/bank-accounts/:id/reveal.
+--
+-- No policy changes needed: the existing `bankaccount_owner` RLS policy and the
+-- `portfolioos_app` grant already cover every column on "BankAccount".
+ALTER TABLE "BankAccount" ADD COLUMN "accountNumberEnc" TEXT;

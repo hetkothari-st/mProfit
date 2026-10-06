@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, CircleAlert } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { intelligenceApi, type NetWorthHistoryPeriod } from '@/api/intelligence.api';
-import { formatINR, toDecimal } from '@portfolioos/shared';
+import { formatINR, toDecimal } from '@everypaisa/shared';
+import { EstimatedChip } from '@/pages/family/widgets/RestrictedNotice';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
   { label: '1M', value: '1M' },
@@ -24,6 +26,9 @@ const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
  */
 export function NetWorthTrendChart() {
   const [period, setPeriod] = useState<NetWorthHistoryPeriod>('1Y');
+  // Phones: a narrower value axis, and room on the right for the last date,
+  // which is centred on the final point and otherwise gets cut in half.
+  const isPhone = useMediaQuery('(max-width: 767px)');
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['intelligence', 'net-worth-history', period],
@@ -34,7 +39,17 @@ export function NetWorthTrendChart() {
   const chartData = points.map((p) => ({
     label: new Date(p.asOf).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }),
     value: toDecimal(p.netWorthAfterLiabilities).toNumber(),
+    estimated: p.estimated,
   }));
+
+  // Points whose prices were stale. They stay on the chart with the number we
+  // recorded — hiding them would be a different lie — but they are drawn
+  // hollow, called out above the chart, and named in the tooltip.
+  const estimatedCount = data?.summary.estimatedPointCount ?? 0;
+  const estimatedReason = points.find((p) => p.estimated)?.estimatedReason ?? null;
+  const changeIsEstimated =
+    estimatedCount > 0 &&
+    (points[0]?.estimated === true || points[points.length - 1]?.estimated === true);
 
   const changeAbsolute = data ? toDecimal(data.summary.changeAbsolute) : null;
   const changePct = data?.summary.changePct ?? null;
@@ -44,7 +59,7 @@ export function NetWorthTrendChart() {
 
   return (
     <Card className="reveal">
-      <CardHeader className="flex-row items-center justify-between pb-2">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-2">
         <div>
           <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Trend</p>
           <CardTitle className="text-[16px]">Net worth over time</CardTitle>
@@ -55,7 +70,7 @@ export function NetWorthTrendChart() {
               key={opt.value}
               type="button"
               onClick={() => setPeriod(opt.value)}
-              className={`px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all ${
+              className={`px-2.5 py-1.5 sm:py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all ${
                 period === opt.value
                   ? 'bg-foreground text-background shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
@@ -91,7 +106,29 @@ export function NetWorthTrendChart() {
               </span>
             )}
             <span className="text-muted-foreground">this {periodLabel}</span>
+            {/* The change is measured between the two ends of the window, so
+                an estimate at either end makes the change an estimate too. */}
+            {changeIsEstimated && <EstimatedChip />}
           </div>
+        )}
+
+        {/* One quiet line rather than a banner. The disclosure has to be here
+            — those days really were priced from stale NAVs — but it describes
+            a window that has already closed, and it will sit on this card for
+            as long as the window stays inside the period. A paragraph in a
+            warning box every time you open the dashboard reads as something
+            being wrong now; it is not. The full explanation is a hover away. */}
+        {estimatedCount > 0 && (
+          <p
+            title={
+              estimatedReason ??
+              'Fund prices did not reach us on those dates, so those figures were calculated from the last prices we had. The trend still shows what we recorded.'
+            }
+            className="mb-3 inline-flex cursor-help items-center gap-1.5 text-[11.5px] text-muted-foreground"
+          >
+            <CircleAlert className="h-3.5 w-3.5 opacity-70" strokeWidth={1.8} />
+            {estimatedCount} of these days were priced from the last NAVs we had
+          </p>
         )}
 
         {isError ? (
@@ -111,7 +148,7 @@ export function NetWorthTrendChart() {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 8, right: isPhone ? 32 : 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="gradNetWorthTrend" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="hsl(var(--foreground))" stopOpacity={0.22} />
@@ -133,7 +170,7 @@ export function NetWorthTrendChart() {
                 tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
                 axisLine={false}
                 tickLine={false}
-                width={72}
+                width={isPhone ? 52 : 72}
                 tickFormatter={(v: number) =>
                   v >= 10_000_000
                     ? `₹${(v / 10_000_000).toFixed(1)}Cr`
@@ -153,7 +190,12 @@ export function NetWorthTrendChart() {
                   fontSize: 12,
                   padding: '10px 12px',
                 }}
-                formatter={(v: number) => [formatINR(v.toFixed(4)), 'Net worth']}
+                formatter={(v: number, _name, item) => [
+                  formatINR(v.toFixed(4)),
+                  (item?.payload as { estimated?: boolean } | undefined)?.estimated
+                    ? 'Net worth (estimate)'
+                    : 'Net worth',
+                ]}
                 labelStyle={{
                   color: 'hsl(var(--muted-foreground))',
                   marginBottom: 4,
@@ -168,7 +210,13 @@ export function NetWorthTrendChart() {
                 stroke="hsl(var(--foreground))"
                 strokeWidth={2}
                 fill="url(#gradNetWorthTrend)"
-                dot={chartData.length <= 10 ? { r: 2.5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 1.5 } : false}
+                /* No markers. Ringing every estimated day turned a trend line
+                   into a dotted scribble — a month of stale prices is a run of
+                   days, not a handful of outliers worth pointing at one by one.
+                   The estimate is still disclosed: the notice above says how
+                   many there are, and the tooltip names the one under the
+                   cursor. */
+                dot={false}
                 activeDot={{ r: 5, fill: 'hsl(var(--foreground))', stroke: 'hsl(var(--card))', strokeWidth: 2 }}
               />
             </AreaChart>

@@ -104,8 +104,8 @@ export async function initiateCamsMailback(input: CamsInitiateInput): Promise<Ca
           { key: input.sessionKey, ts },
           '[cams] PAN input missing — wrote cams_debug_<ts>.{png,html}',
         );
-      } catch {
-        /* best-effort */
+      } catch (err) {
+        logger.debug({ err, key: input.sessionKey }, '[cams] could not write PAN-missing debug artefacts');
       }
       throw new CamsMailbackError(
         'FORM_NOT_FOUND',
@@ -307,8 +307,8 @@ export async function submitCamsMailback(input: CamsSubmitInput): Promise<CamsSu
         return out;
       })()`);
       logger.info({ key: input.sessionKey, btns: btnsRaw }, '[cams] visible buttons before submit');
-    } catch {
-      /* best-effort */
+    } catch (err) {
+      logger.debug({ err, key: input.sessionKey }, '[cams] could not enumerate buttons before submit');
     }
 
     // CAMS reuses class `check-now-btn` for both the landing CTA and the form
@@ -345,8 +345,8 @@ export async function submitCamsMailback(input: CamsSubmitInput): Promise<CamsSu
           { key: input.sessionKey, ts },
           '[cams] submit button not found — wrote cams_submit_debug_<ts>.{png,html}',
         );
-      } catch {
-        /* best-effort */
+      } catch (err) {
+        logger.debug({ err, key: input.sessionKey }, '[cams] could not write submit-missing debug artefacts');
       }
       throw new CamsMailbackError(
         'FORM_NOT_FOUND',
@@ -361,19 +361,26 @@ export async function submitCamsMailback(input: CamsSubmitInput): Promise<CamsSu
     await dismissOverlays(page);
     await nukeOverlays(page);
     let clicked = false;
+    // Three escalating strategies. Falling through one is ordinary — CAMS puts
+    // a CDK overlay over the button — but which ones failed and why is the
+    // whole diagnosis when all three do, so each reason is kept and reported
+    // rather than dropped on the floor.
+    const clickFailures: string[] = [];
+    const reasonOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
     try {
       await submitBtn.click({ timeout: 8000 });
       clicked = true;
-    } catch {
-      /* fall through */
+    } catch (err) {
+      clickFailures.push(`plain: ${reasonOf(err)}`);
     }
     if (!clicked) {
       try {
         await nukeOverlays(page);
         await submitBtn.click({ timeout: 8000, force: true });
         clicked = true;
-      } catch {
-        /* fall through */
+      } catch (err) {
+        clickFailures.push(`force: ${reasonOf(err)}`);
       }
     }
     if (!clicked) {
@@ -384,14 +391,18 @@ export async function submitCamsMailback(input: CamsSubmitInput): Promise<CamsSu
           await handle.evaluate(`(el) => el.click()`);
           clicked = true;
         }
-      } catch {
-        /* fall through */
+      } catch (err) {
+        clickFailures.push(`js-dispatch: ${reasonOf(err)}`);
       }
     }
     if (!clicked) {
+      logger.error(
+        { key: input.sessionKey, clickFailures },
+        '[cams] every submit strategy failed',
+      );
       throw new CamsMailbackError(
         'SUBMIT_FAILED',
-        'Could not click form submit even after force-click + JS dispatch (CDK overlay persists).',
+        `Could not click form submit even after force-click + JS dispatch (CDK overlay persists). Tried — ${clickFailures.join('; ')}`,
       );
     }
     await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => undefined);

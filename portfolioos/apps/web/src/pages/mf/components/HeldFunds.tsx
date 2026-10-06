@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { AmcLogo } from '@/components/mf/AmcLogo';
 import { Star } from 'lucide-react';
-import type { MfHeldFundDto, MfSchemeScoreDto } from '@portfolioos/shared';
+import type { MfHeldFundDto, MfSchemeScoreDto } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 import { SectionUnavailable } from './MetricValue';

@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   Bitcoin, Plus, Loader2, TrendingUp, TrendingDown, Sparkles, Pencil, ArrowUpRight,
 } from 'lucide-react';
-import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@portfolioos/shared';
+import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { assetsApi, type LiveCryptoCoin } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
 import { CryptoFormDialog } from './CryptoFormDialog';
 import { formatUSD } from './cryptoUtils';
+import { useScrollFade } from '@/hooks/useScrollFade';
 
 // ── Coin avatar (colored gradient w/ symbol) ─────────────────────
 const SYMBOL_GRADIENTS: Record<string, string> = {
@@ -51,10 +52,12 @@ function LiveTicker({ coins }: { coins: LiveCryptoCoin[] }) {
   const featured = coins
     .filter((c) => c.priceInr)
     .slice(0, 8);
+  const tickerRef = useRef<HTMLDivElement>(null);
+  useScrollFade(tickerRef, featured.length);
   if (featured.length === 0) return null;
   return (
     <div className="mb-6 overflow-hidden rounded-xl border bg-gradient-to-r from-amber-50/40 via-background to-violet-50/40 dark:from-amber-950/10 dark:to-violet-950/10">
-      <div className="flex gap-6 px-4 py-3 overflow-x-auto scrollbar-none">
+      <div ref={tickerRef} className="flex gap-6 px-4 py-3 overflow-x-auto scrollbar-none">
         {featured.map((c) => {
           const up = (c.change24h ?? 0) >= 0;
           return (
@@ -455,12 +458,12 @@ export function CryptoPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-1 justify-end">
-                            <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0"
+                            <Button type="button" variant="ghost" size="sm" className="tap-expand h-7 w-7 p-0"
                               onClick={() => openEdit(txn)} title="Edit">
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
                             <Button type="button" variant="ghost" size="sm"
-                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                              className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                               onClick={() => setConfirmDeleteId(txn.id)} title="Delete">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                             </Button>

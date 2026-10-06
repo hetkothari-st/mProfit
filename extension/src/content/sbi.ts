@@ -13,11 +13,11 @@
  */
 
 function showDetectionBanner(): void {
-  const existing = document.getElementById('portfolioos-sbi-banner');
+  const existing = document.getElementById('everypaisa-sbi-banner');
   if (existing) return;
 
   const banner = document.createElement('div');
-  banner.id = 'portfolioos-sbi-banner';
+  banner.id = 'everypaisa-sbi-banner';
   banner.style.cssText = `
     position: fixed;
     bottom: 16px;
@@ -32,14 +32,14 @@ function showDetectionBanner(): void {
     box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     max-width: 320px;
   `;
-  banner.textContent = 'PortfolioOS: SBI portal detected. Auto-sync coming soon (Plan E).';
+  banner.textContent = 'EveryPaisa: SBI portal detected. Auto-sync coming soon (Plan E).';
   document.body.appendChild(banner);
 
   setTimeout(() => banner.remove(), 8000);
 }
 
 // Log detection for debugging
-console.log('[PortfolioOS] SBI content script loaded — placeholder mode');
+console.log('[EveryPaisa] SBI content script loaded — placeholder mode');
 showDetectionBanner();
 
 export {};

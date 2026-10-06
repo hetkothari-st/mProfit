@@ -3,7 +3,7 @@
  * needs and that nothing currently produces.
  *
  * Run:
- *   pnpm --filter @portfolioos/api exec tsx scripts/backfill-mf-metrics-history.ts
+ *   pnpm --filter @everypaisa/api exec tsx scripts/backfill-mf-metrics-history.ts
  *
  * Options (env):
  *   MFMH_FIRST_MONTH      first month-end, YYYY-MM-DD (default 2016-01-31)

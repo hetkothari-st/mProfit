@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { MfSchemeScoreDto } from '@portfolioos/shared';
+import type { MfSchemeScoreDto } from '@everypaisa/shared';
 import { dataInsufficientHistoryRule } from '../../../../src/services/mfAnalytics/rules/data.insufficient-history.js';
 import { factsForFund, makeScore } from './_facts.fixture.js';
 

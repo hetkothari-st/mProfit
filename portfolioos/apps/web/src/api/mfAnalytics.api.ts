@@ -1,5 +1,5 @@
 import { api, unwrap } from './client';
-import type { MfAlternativesDto } from '@portfolioos/shared';
+import type { MfAlternativesDto } from '@everypaisa/shared';
 import type {
   ApiResponse,
   MfAnalysisRunDto,
@@ -13,12 +13,12 @@ import type {
   MfPortfolioAnalysisDto,
   MfSchemeMetaDto,
   MfSchemeScoreDto,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 /**
  * Client for `/api/mf-analytics` (`07-IMPLEMENTATION-PLAN.md` Task 3.1/3.2).
  *
- * **Every type in this file is imported from `@portfolioos/shared`. Nothing is
+ * **Every type in this file is imported from `@everypaisa/shared`. Nothing is
  * redeclared here, and nothing may be.** This is not stylistic. The `/advisor`
  * page crashed on first load because the client declared its own version of a
  * server shape — the API returned `{ profile, history }` while the UI destructured

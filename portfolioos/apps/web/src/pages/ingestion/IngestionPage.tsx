@@ -192,6 +192,8 @@ export function IngestionPage() {
       <div className="space-y-6 mt-6">
         <ConnectStep mailboxes={gmailMailboxes} loading={mailboxesQuery.isLoading} />
 
+        {!hasGmail && !mailboxesQuery.isLoading && <SendersStepLocked />}
+
         {hasGmail && (
           <SendersStep
             gmailMailboxes={gmailMailboxes}
@@ -264,15 +266,19 @@ function StatusStrip({
           hasSenders ? `${senderCount} sender${senderCount === 1 ? '' : 's'}` : 'Add senders'
         }
       />
-      <StatusChip
-        done={pendingCount === 0 && hasSenders}
-        label={
-          pendingCount > 0
-            ? `${pendingCount} event${pendingCount === 1 ? '' : 's'} to review`
-            : 'Inbox clear'
-        }
-        tone={pendingCount > 0 ? 'attention' : 'done'}
-      />
+      {/* A green "Inbox clear" before anything is connected claimed a state
+          that doesn't exist yet — only show review status once polling can run. */}
+      {hasGmail && hasSenders && (
+        <StatusChip
+          done={pendingCount === 0}
+          label={
+            pendingCount > 0
+              ? `${pendingCount} event${pendingCount === 1 ? '' : 's'} to review`
+              : 'Inbox clear'
+          }
+          tone={pendingCount > 0 ? 'attention' : 'done'}
+        />
+      )}
       <div className="ml-auto">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/ingestion/senders">
@@ -306,6 +312,26 @@ function StatusChip({
       <Icon className="h-3 w-3" />
       {label}
     </span>
+  );
+}
+
+/** Keeps the numbering 1 → 2 → 3 before Gmail is connected, instead of jumping 1 → 3. */
+function SendersStepLocked() {
+  return (
+    <Card className="opacity-60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground text-xs font-bold">
+            2
+          </span>
+          Senders to monitor
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Available once Gmail is connected — you&apos;ll pick which bank, broker and
+          insurer addresses we watch.
+        </p>
+      </CardHeader>
+    </Card>
   );
 }
 
@@ -355,7 +381,7 @@ function ConnectStep({
           <EmptyState
             icon={Chrome}
             title="No Gmail connected yet"
-            description="PortfolioOS scans Gmail for financial emails (read-only) and turns them into transactions. Connect once — we never scan anything except the senders you explicitly allow."
+            description="EveryPaisa scans Gmail for financial emails (read-only) and turns them into transactions. Connect once — we never scan anything except the senders you explicitly allow."
             action={
               <Button onClick={() => connectMut.mutate()} disabled={connectMut.isPending}>
                 {connectMut.isPending ? (
@@ -945,8 +971,8 @@ function ReviewStep({
           <div className="divide-y">
             {groups.map(([sender, group]) => (
               <div key={sender}>
-                <div className="flex items-center justify-between bg-muted/30 px-4 py-2">
-                  <div className="text-xs font-mono text-muted-foreground">
+                <div className="flex items-center justify-between gap-2 bg-muted/30 px-3 py-2 sm:px-4">
+                  <div className="min-w-0 break-all text-xs font-mono text-muted-foreground">
                     {sender} · {group.length} event
                     {group.length === 1 ? '' : 's'}
                   </div>
@@ -962,7 +988,7 @@ function ReviewStep({
                     </Button>
                   )}
                 </div>
-                <table className="w-full text-sm">
+                <table className="w-full table-fixed text-sm">
                   <tbody className="divide-y">
                     {group.map((r) => (
                       <tr
@@ -970,15 +996,16 @@ function ReviewStep({
                         className="hover:bg-muted/30 cursor-pointer"
                         onClick={() => onRowClick(r)}
                       >
-                        <td className="px-4 py-2 w-28 text-xs text-muted-foreground">
+                        <td className="hidden px-4 py-2 w-28 text-xs text-muted-foreground sm:table-cell">
                           {r.eventDate}
                         </td>
-                        <td className="px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-block px-1.5 py-0.5 rounded bg-muted text-[10px] font-medium tracking-wide">
+                        <td className="px-3 py-2 sm:px-4">
+                          <div className="mb-0.5 text-[11px] text-muted-foreground sm:hidden">{r.eventDate}</div>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="inline-block shrink-0 px-1.5 py-0.5 rounded bg-muted text-[10px] font-medium tracking-wide">
                               {r.eventType}
                             </span>
-                            <span className="text-sm truncate">
+                            <span className="min-w-0 text-sm truncate">
                               {r.counterparty ??
                                 r.instrumentSymbol ??
                                 r.instrumentName ??
@@ -991,10 +1018,10 @@ function ReviewStep({
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right font-mono text-sm">
+                        <td className="w-24 whitespace-nowrap px-1 py-2 text-right font-mono text-xs sm:w-32 sm:px-4 sm:text-sm">
                           {r.amount ? `₹${r.amount}` : '—'}
                         </td>
-                        <td className="px-4 py-2 w-32 text-right">
+                        <td className="w-[84px] px-2 py-2 text-right sm:w-32 sm:px-4">
                           <div
                             className="flex justify-end gap-1"
                             onClick={(e) => e.stopPropagation()}
@@ -1017,7 +1044,7 @@ function ReviewStep({
                             </Button>
                           </div>
                         </td>
-                        <td className="px-4 py-2 text-muted-foreground w-8">
+                        <td className="hidden px-4 py-2 text-muted-foreground w-10 sm:table-cell">
                           <ChevronRight className="h-3 w-3" />
                         </td>
                       </tr>

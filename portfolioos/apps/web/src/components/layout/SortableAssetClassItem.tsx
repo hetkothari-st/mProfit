@@ -1,9 +1,9 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { NavLink } from 'react-router-dom';
-import { Eye, EyeOff, GripVertical } from 'lucide-react';
+import { Eye, EyeOff, GripVertical, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import type { AssetSectionPref } from '@portfolioos/shared';
+import type { AssetSectionPref } from '@everypaisa/shared';
 
 interface NavItem {
   label: string;
@@ -17,9 +17,13 @@ interface Props {
   isEditing: boolean;
   collapsed: boolean;
   onToggleVisibility: (key: string) => void;
+  /** Only for optional sections (bonds, crypto…): takes it off the sidebar. */
+  onRemove?: (key: string) => void;
+  /** Nothing recorded in this class yet: shown lighter, still clickable. */
+  dimmed?: boolean;
 }
 
-export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onToggleVisibility }: Props) {
+export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onToggleVisibility, onRemove, dimmed = false }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.to,
     disabled: !isEditing,
@@ -61,12 +65,14 @@ export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onTog
                     ? 'bg-accent/15 ring-1 ring-accent/40 text-accent'
                     : 'hover:bg-sidebar-accent/70',
                   isEditing && !pref.visible && 'opacity-40',
+                  dimmed && !isActive && !isEditing && 'opacity-50',
                 )
               : cn(
                   'flex items-center gap-3 rounded-md px-3 py-2 text-[14px] flex-1 min-w-0',
                   'hover:bg-sidebar-accent/70',
                   isActive && !isEditing && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
                   isEditing && !pref.visible && 'opacity-40',
+                  dimmed && !isActive && !isEditing && 'opacity-50',
                 ),
           )
         }
@@ -113,6 +119,18 @@ export function SortableAssetClassItem({ item, pref, isEditing, collapsed, onTog
           ) : (
             <EyeOff className="h-3.5 w-3.5" strokeWidth={1.5} />
           )}
+        </button>
+      )}
+
+      {isEditing && !collapsed && onRemove && (
+        <button
+          type="button"
+          className="flex-shrink-0 p-1 text-sidebar-foreground/25 hover:text-red-400 focus:outline-none"
+          aria-label={`Remove ${item.label}`}
+          title={`Remove ${item.label} from the sidebar`}
+          onClick={() => onRemove(item.to)}
+        >
+          <X className="h-3.5 w-3.5" strokeWidth={1.5} />
         </button>
       )}
     </li>

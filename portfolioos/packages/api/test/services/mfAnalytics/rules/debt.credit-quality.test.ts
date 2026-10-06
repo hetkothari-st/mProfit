@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializePct } from '@portfolioos/shared';
-import type { Pct, SebiSubCategory } from '@portfolioos/shared';
+import { serializePct } from '@everypaisa/shared';
+import type { Pct, SebiSubCategory } from '@everypaisa/shared';
 import { debtCreditQualityRule } from '../../../../src/services/mfAnalytics/rules/debt.credit-quality.js';
 import { DEBT_PROFILE_BASE, factsForFund } from './_facts.fixture.js';
 

@@ -10,8 +10,8 @@ import { useMutation } from '@tanstack/react-query';
 import { Plus, Pencil, Loader2, ImageIcon, ChevronDown, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatINR, Decimal, type HoldingRow } from '@portfolioos/shared';
-import type { AssetClass, TransactionDTO } from '@portfolioos/shared';
+import { formatINR, Decimal, type HoldingRow } from '@everypaisa/shared';
+import type { AssetClass, TransactionDTO } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -296,7 +296,8 @@ export function SimpleAssetPage({
       {!isLoading && allHoldings.length === 0 && allTransactions.length === 0 && (
         <EmptyState
           icon={Icon}
-          title={`No ${title.toLowerCase()} yet`}
+          // Acronym titles (NPS) stay as written; "No nps yet" read as a typo.
+          title={`No ${title === title.toUpperCase() ? title : title.toLowerCase()} yet`}
           description="Add a transaction to start tracking this asset class."
           action={
             <Button onClick={() => openAdd()}>

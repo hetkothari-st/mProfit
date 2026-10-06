@@ -159,7 +159,7 @@ The service merges saved preferences with the master list of sidebar items so ne
 ```ts
 // packages/api/src/services/userPreferences.service.ts
 import { prisma } from '../lib/prisma.js';
-import type { UserPreferences, AssetSectionPref } from '@portfolioos/shared';
+import type { UserPreferences, AssetSectionPref } from '@everypaisa/shared';
 
 // Master list of asset class nav keys — must match NAV_SECTIONS in Sidebar.tsx.
 const ASSET_SECTION_KEYS: string[] = [
@@ -324,7 +324,7 @@ git commit -m "feat(api): GET/PATCH /api/user/preferences endpoint"
 ```ts
 // apps/web/src/api/userPreferences.api.ts
 import { api } from './client';
-import type { UserPreferences, ApiResponse } from '@portfolioos/shared';
+import type { UserPreferences, ApiResponse } from '@everypaisa/shared';
 
 export const userPreferencesApi = {
   async get(): Promise<UserPreferences> {
@@ -360,7 +360,7 @@ git commit -m "feat(web): userPreferences API client"
 ```ts
 // apps/web/src/stores/assetSections.store.ts
 import { create } from 'zustand';
-import type { AssetSectionPref } from '@portfolioos/shared';
+import type { AssetSectionPref } from '@everypaisa/shared';
 import { userPreferencesApi } from '@/api/userPreferences.api';
 
 interface AssetSectionsState {
@@ -471,7 +471,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { NavLink } from 'react-router-dom';
 import { Eye, EyeOff, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import type { AssetSectionPref } from '@portfolioos/shared';
+import type { AssetSectionPref } from '@everypaisa/shared';
 
 interface Props {
   item: {

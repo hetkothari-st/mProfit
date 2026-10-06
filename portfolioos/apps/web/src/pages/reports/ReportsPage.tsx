@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import { useQuery } from '@tanstack/react-query';
 import {
   FileDown,
@@ -21,7 +22,7 @@ import { useReportSubject } from '@/components/reports/useReportSubject';
 import { useAuthStore } from '@/stores/auth.store';
 import { InboxImportsTab } from './InboxImportsTab';
 import { TaxMisDownloads, REPORTS as TAX_MIS_REPORTS, type ReportHighlight } from './TaxMisDownloads';
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 
 type Tab =
   | 'summary'
@@ -364,7 +365,7 @@ export function ReportsPage() {
         </CardContent>
       </Card>
 
-      <div className="flex gap-1 mb-4 border-b overflow-x-auto scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
+      <HScroll className="flex gap-1 mb-4 border-b overflow-x-auto scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -379,7 +380,7 @@ export function ReportsPage() {
             {t.label}
           </button>
         ))}
-      </div>
+      </HScroll>
 
       {tab === 'inbox-imports' ? (
         <InboxImportsTab />
@@ -830,8 +831,8 @@ function IncomeView({
     <Card>
       <CardHeader>
         <CardTitle className="text-sm">
-          Dividends ₹{fmt(data.dividend)} · Interest ₹{fmt(data.interest)} · Maturity ₹
-          {fmt(data.maturity)} · Total ₹{fmt(data.total)}
+          Dividends ₹{fmt(data.dividend)} · Interest ₹{fmt(data.interest)} · Total income ₹
+          {fmt(data.total)} · Maturity proceeds ₹{fmt(data.maturity)} (principal, not income)
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -906,7 +907,13 @@ function XirrView({
             {rows.map((r) => (
               <tr key={r.label} className="border-b">
                 <td data-label="Window" className="p-2">{r.label}</td>
-                <td data-label="XIRR" className="p-2 text-right font-medium">{fmtPct(r.b.xirr)}</td>
+                <td
+                  data-label="XIRR"
+                  className="p-2 text-right font-medium"
+                  title={r.b.reliable === false ? 'Less history than needed for a meaningful annual rate' : undefined}
+                >
+                  {r.b.reliable === false ? '—' : fmtPct(r.b.xirr)}
+                </td>
                 <td data-label="Invested" className="p-2 text-right">₹{fmt(r.b.totalInvested)}</td>
                 <td data-label="Terminal Value" className="p-2 text-right">₹{fmt(r.b.terminalValue)}</td>
                 <td data-label="Cashflows" className="p-2 text-right">{r.b.cashflowCount}</td>
@@ -1076,7 +1083,7 @@ function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsV
                 size="sm"
                 disabled={busy === c.key}
                 onClick={() =>
-                  fetchAndSave(c.buildUrl('pdf'), `portfolioos-${c.key}-${fy}.pdf`, c.key)
+                  fetchAndSave(c.buildUrl('pdf'), `everypaisa-${c.key}-${fy}.pdf`, c.key)
                 }
               >
                 {busy === c.key ? (
@@ -1091,7 +1098,7 @@ function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsV
                 size="sm"
                 disabled={busy === c.key}
                 onClick={() =>
-                  fetchAndSave(c.buildUrl('xlsx'), `portfolioos-${c.key}-${fy}.xlsx`, c.key)
+                  fetchAndSave(c.buildUrl('xlsx'), `everypaisa-${c.key}-${fy}.xlsx`, c.key)
                 }
               >
                 {busy === c.key ? (

@@ -108,7 +108,7 @@ async function buildSample(ctx: ParserContext): Promise<SampleResult> {
         kind: 'ok',
         filePath: tmpPath,
         fileName: ctx.fileName,
-        // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort cleanup
+        // eslint-disable-next-line everypaisa/no-silent-catch -- best-effort cleanup
         cleanup: async () => { try { await unlink(tmpPath); } catch { /* ignore */ } },
         sample: decrypted.buffer.subarray(0, 4096).toString('utf8'),
       };

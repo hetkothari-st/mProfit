@@ -3,7 +3,7 @@
  * `07-IMPLEMENTATION-PLAN.md` Task 1.2, `01-DATA-FOUNDATION.md §3`.
  *
  * Run:
- *   pnpm --filter @portfolioos/api exec tsx scripts/backfill-mf-scheme-meta.ts
+ *   pnpm --filter @everypaisa/api exec tsx scripts/backfill-mf-scheme-meta.ts
  *
  * Options (env):
  *   AMFI_MASTER_FILE      path to a saved NAVAll.txt; omit to fetch live

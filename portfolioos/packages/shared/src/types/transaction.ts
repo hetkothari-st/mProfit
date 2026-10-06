@@ -92,6 +92,57 @@ export interface CreateTransactionRequest {
   currency?: string;
   fxRateAtTrade?: number | string;
   inrEquivalent?: number | string;
+  /**
+   * Sent only after the user has seen the duplicate the server found and
+   * confirmed this is a second, genuine trade. Without it the server answers
+   * 409 DUPLICATE_TRANSACTION.
+   */
+  allowDuplicate?: boolean;
+}
+
+/** One row inside a duplicate group. */
+export interface DuplicateRowDTO {
+  kind: 'TRANSACTION' | 'RENT_ENTRY';
+  id: string;
+  /** Transactions. */
+  portfolioName?: string;
+  assetName?: string;
+  assetClass?: string;
+  transactionType?: string;
+  tradeDate?: string;
+  quantity?: string;
+  price?: string;
+  netAmount?: Money;
+  broker?: string | null;
+  orderNo?: string | null;
+  tradeNo?: string | null;
+  importFileName?: string | null;
+  sourceAdapter?: string | null;
+  /** Rent ledger entries. */
+  property?: string;
+  tenant?: string;
+  entryType?: string;
+  entryDate?: string;
+  amount?: Money;
+  forMonth?: string | null;
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface DuplicateGroupDTO {
+  kind: 'TRANSACTION' | 'RENT_ENTRY';
+  fingerprint: string;
+  label: string;
+  rows: DuplicateRowDTO[];
+  keepId: string;
+  suggestedRemovalIds: string[];
+  confidence: 'high' | 'low';
+  reason: string;
+}
+
+export interface DuplicateScanResponse {
+  groups: DuplicateGroupDTO[];
+  scanned: { transactions: number; rentEntries: number };
 }
 
 export type UpdateTransactionRequest = Partial<CreateTransactionRequest>;

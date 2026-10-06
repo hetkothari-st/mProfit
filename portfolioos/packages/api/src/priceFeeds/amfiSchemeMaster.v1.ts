@@ -50,7 +50,7 @@ import {
   type MfPlanType,
   type MfOptionType,
   type SebiCategory,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 export { AMFI_SCHEME_MASTER_ADAPTER_ID, AMFI_SCHEME_MASTER_ADAPTER_VERSION };
 
@@ -278,7 +278,7 @@ export function toSchemeMeta(row: ParsedSchemeRow): MappedSchemeMeta {
  * two rows cannot both land; upserting both in file order would make the
  * winner depend on line order, and the row would flip category every time AMFI
  * reshuffled the file. The LAST occurrence wins, matching how the existing
- * `loadAmfiNavToDb` de-duplicates its master rows, and the collision is
+ * the NAV loader in `amfi.service.ts` de-duplicates its master rows, and the collision is
  * returned so the job can put it in the DLQ instead of resolving it silently.
  */
 export interface MappedSchemeMasterResult {

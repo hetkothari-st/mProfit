@@ -66,7 +66,7 @@ describe('xirr reliability', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run src/services/xirr.reliability.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run src/services/xirr.reliability.test.ts`
 Expected: FAIL — cannot find module `./xirr.reliability.js`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -100,7 +100,7 @@ export function isXirrReliable(span: number): boolean {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run src/services/xirr.reliability.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run src/services/xirr.reliability.test.ts`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Wire reliability into XirrResult**
@@ -148,7 +148,7 @@ In `computeUserXirr` (replace return at ~251-256):
 
 - [ ] **Step 6: Run typecheck + xirr tests**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run src/services/` then `pnpm --filter @portfolioos/api exec tsc -p tsconfig.json --noEmit`
+Run: `pnpm --filter @everypaisa/api exec vitest run src/services/` then `pnpm --filter @everypaisa/api exec tsc -p tsconfig.json --noEmit`
 Expected: PASS; no type errors. (Fix any other XirrResult consumers the compiler flags by reading `reliable`/`spanDays` as optional or supplying them.)
 
 - [ ] **Step 7: Commit**
@@ -216,7 +216,7 @@ In `KpiCards.tsx`, replace the "XIRR overall" `MetricCard` (lines 35-40):
 
 - [ ] **Step 5: Typecheck web + api**
 
-Run: `pnpm --filter @portfolioos/web exec tsc -b --noEmit` and `pnpm --filter @portfolioos/api exec tsc -p tsconfig.json --noEmit`
+Run: `pnpm --filter @everypaisa/web exec tsc -b --noEmit` and `pnpm --filter @everypaisa/api exec tsc -p tsconfig.json --noEmit`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
@@ -264,7 +264,7 @@ describe('isPriceStale', () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run src/services/priceStaleness.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run src/services/priceStaleness.test.ts`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -304,7 +304,7 @@ export function isPriceStale(
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run src/services/priceStaleness.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run src/services/priceStaleness.test.ts`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Add `priceAsOf` to HoldingProjection schema**
@@ -337,7 +337,7 @@ In `holdingsProjection.ts` `refreshPricesForRows` (~563-572), the price feeds re
 
 - [ ] **Step 7: Run api tests + typecheck**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run src/services/ test/` then `pnpm --filter @portfolioos/api exec tsc -p tsconfig.json --noEmit`
+Run: `pnpm --filter @everypaisa/api exec vitest run src/services/ test/` then `pnpm --filter @everypaisa/api exec tsc -p tsconfig.json --noEmit`
 Expected: PASS; no type errors.
 
 - [ ] **Step 8: Commit**
@@ -392,7 +392,7 @@ In `apps/web/src/pages/assetClasses/` Stocks page row, render `<PriceAsOf asOf={
 
 - [ ] **Step 4: Typecheck + web test**
 
-Run: `pnpm --filter @portfolioos/web exec tsc -b --noEmit`
+Run: `pnpm --filter @everypaisa/web exec tsc -b --noEmit`
 Expected: no errors.
 
 - [ ] **Step 5: Commit**
@@ -444,7 +444,7 @@ describe('valuationMethodFor', () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run src/services/valuationMethod.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run src/services/valuationMethod.test.ts`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -477,7 +477,7 @@ export function valuationMethodFor(assetClass: AssetClass): ValuationMethod {
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run src/services/valuationMethod.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run src/services/valuationMethod.test.ts`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Add valuationMethod to holdings response**
@@ -490,7 +490,7 @@ In the holdings table row: when `valuationMethod !== 'MARKET'`, render the P&L c
 
 - [ ] **Step 7: Typecheck (web + api)**
 
-Run: `pnpm --filter @portfolioos/api exec tsc -p tsconfig.json --noEmit && pnpm --filter @portfolioos/web exec tsc -b --noEmit`
+Run: `pnpm --filter @everypaisa/api exec tsc -p tsconfig.json --noEmit && pnpm --filter @everypaisa/web exec tsc -b --noEmit`
 Expected: no errors.
 
 - [ ] **Step 8: Commit**
@@ -526,7 +526,7 @@ In `DashboardPage.tsx`, pass each `scope.*` string as a `title`/tooltip on the m
 
 - [ ] **Step 3: Typecheck**
 
-Run: `pnpm --filter @portfolioos/api exec tsc -p tsconfig.json --noEmit && pnpm --filter @portfolioos/web exec tsc -b --noEmit`
+Run: `pnpm --filter @everypaisa/api exec tsc -p tsconfig.json --noEmit && pnpm --filter @everypaisa/web exec tsc -b --noEmit`
 Expected: no errors.
 
 - [ ] **Step 4: Commit**
@@ -580,14 +580,14 @@ describe('corporate action auto-apply', () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run test/services/corporateActionApply.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run test/services/corporateActionApply.test.ts`
 Expected: FAIL — `applyCorporateActionsForPortfolio` not exported.
 
 - [ ] **Step 3: Implement the apply service**
 
 ```ts
 // packages/api/src/services/corporateActionApply.service.ts
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { prisma } from '../lib/prisma.js';
 import { recomputeForAsset } from './holdingsProjection.js';
 import { assetKeyFromTransaction } from './assetKey.js';
@@ -663,7 +663,7 @@ function buildCaTx(h: any, ca: any, type: string, qty: any, sourceHash: string) 
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run test/services/corporateActionApply.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run test/services/corporateActionApply.test.ts`
 Expected: PASS — qty 20, totalCost 10000, avgCost 500.
 
 - [ ] **Step 5: Add the scheduled job**
@@ -685,7 +685,7 @@ Wire into the existing scheduler the same way `priceJobs`/`catalogJobs` register
 
 - [ ] **Step 6: Full api test run + typecheck**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run && pnpm --filter @portfolioos/api exec tsc -p tsconfig.json --noEmit`
+Run: `pnpm --filter @everypaisa/api exec vitest run && pnpm --filter @everypaisa/api exec tsc -p tsconfig.json --noEmit`
 Expected: PASS; no errors.
 
 - [ ] **Step 7: Commit**

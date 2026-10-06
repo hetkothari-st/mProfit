@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { useNextPath } from '@/hooks/useNextPath';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
+import { isOnboardingUnfinished } from '@/lib/onboardingProgress';
+import { RestoreAccountNotice, pendingDeletionDate } from './RestoreAccountNotice';
 
 /**
  * Google Identity Services (GSI) button.
@@ -74,28 +77,55 @@ function loadGsiScript(): Promise<void> {
 export interface GoogleSignInButtonProps {
   /** "signin" / "signup" / "continue" — controls button label only. */
   text?: 'signin_with' | 'signup_with' | 'continue_with';
+  /** The page's "Remember me" choice. Remembered unless told otherwise. */
+  remember?: boolean;
 }
 
-export function GoogleSignInButton({ text = 'continue_with' }: GoogleSignInButtonProps) {
+export function GoogleSignInButton({
+  text = 'continue_with',
+  remember = true,
+}: GoogleSignInButtonProps) {
   const navigate = useNavigate();
+  const nextPath = useNextPath();
   const setSession = useAuthStore((s) => s.setSession);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
+  const [pendingRestore, setPendingRestore] = useState<{ idToken: string; scheduledFor: string } | null>(null);
+
   const googleMutation = useMutation({
-    mutationFn: (idToken: string) => authApi.loginWithGoogle(idToken),
-    onSuccess: (data) => {
-      setSession(data.user, data.tokens);
+    mutationFn: ({ idToken, restore }: { idToken: string; restore?: boolean }) =>
+      authApi.loginWithGoogle(idToken, restore),
+    onSuccess: (data, { restore }) => {
+      setPendingRestore(null);
+      if (restore) toast.success('Your account has been restored.');
+      setSession(data.user, data.tokens, { remember });
       toast.success(
         data.isNew
-          ? `Welcome to PortfolioOS, ${data.user.name.split(' ')[0]}!`
+          ? `Welcome to EveryPaisa, ${data.user.name.split(' ')[0]}!`
           : `Welcome back, ${data.user.name.split(' ')[0]}!`,
       );
-      navigate('/dashboard', { replace: true });
+      // A brand-new account goes through setup, whatever this browser saw before.
+      // New accounts, and accounts that left setup unfinished, go to onboarding.
+      // As on the password paths: an explicit destination means they were
+      // part-way through something else.
+      navigate(
+        nextPath ??
+          (data.isNew || isOnboardingUnfinished(data.user.id) ? '/onboarding' : '/dashboard'),
+        {
+        replace: true,
+      });
     },
-    onError: (err) => toast.error(apiErrorMessage(err, 'Google sign-in failed')),
+    onError: (err, { idToken }) => {
+      const scheduledFor = pendingDeletionDate(err);
+      if (scheduledFor !== null) {
+        setPendingRestore({ idToken, scheduledFor });
+        return;
+      }
+      toast.error(apiErrorMessage(err, 'Google sign-in failed'));
+    },
   });
 
   useEffect(() => {
@@ -115,7 +145,7 @@ export function GoogleSignInButton({ text = 'continue_with' }: GoogleSignInButto
         gsi.initialize({
           client_id: clientId,
           callback: (response) => {
-            if (response?.credential) googleMutation.mutate(response.credential);
+            if (response?.credential) googleMutation.mutate({ idToken: response.credential });
           },
           ux_mode: 'popup',
           auto_select: false,
@@ -144,6 +174,14 @@ export function GoogleSignInButton({ text = 'continue_with' }: GoogleSignInButto
 
   return (
     <div className="space-y-2">
+      {pendingRestore && (
+        <RestoreAccountNotice
+          scheduledFor={pendingRestore.scheduledFor}
+          pending={googleMutation.isPending}
+          onRestore={() => googleMutation.mutate({ idToken: pendingRestore.idToken, restore: true })}
+          onCancel={() => setPendingRestore(null)}
+        />
+      )}
       <div ref={containerRef} className="flex justify-center min-h-[40px]" />
       {loadError && (
         <p className="text-xs text-negative text-center">{loadError}</p>

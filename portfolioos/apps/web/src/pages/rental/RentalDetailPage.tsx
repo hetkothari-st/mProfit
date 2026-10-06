@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  ArrowUpRight,
   Plus,
   CheckCircle2,
   Clock,
@@ -19,8 +20,9 @@ import {
   Users,
   Calendar,
   Receipt,
+  MapPin,
 } from 'lucide-react';
-import { Decimal, formatINR } from '@portfolioos/shared';
+import { Decimal, formatINR } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,7 +43,12 @@ import {
   type MarkReceivedInput,
   type CreateExpenseInput,
 } from '@/api/rental.api';
+import { invalidateRentalCaches } from '@/api/rentalCache';
+import { RentAccountPicker } from '@/components/rental/RentAccountPicker';
+import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import { DocumentVault } from '@/components/documents/DocumentVault';
+import { PropertyGallery } from '@/components/property/PropertyGallery';
+import { PropertyLocationCard } from '@/components/property/PropertyLocationCard';
 
 // ── Status badge ──────────────────────────────────────────────────────
 
@@ -108,18 +115,23 @@ function MarkReceivedDialog({
     notes: '',
   });
 
+  // The server refuses a second identical payment on the same day unless we
+  // say we meant it — the khata used to collect ten copies of one rent from a
+  // button pressed ten times.
+  const [duplicate, setDuplicate] = useState<string | null>(null);
+
   const mutation = useMutation({
     mutationFn: (input: MarkReceivedInput) =>
       rentalApi.markReceived(receipt.id, input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-property', id] });
-      qc.invalidateQueries({ queryKey: ['rental-properties'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
-      qc.invalidateQueries({ queryKey: ['rental-reminders'] });
-      qc.invalidateQueries({ queryKey: ['alerts'] });
-      qc.invalidateQueries({ queryKey: ['alerts-unread'] });
-      qc.invalidateQueries({ queryKey: ['notifications'] });
+      invalidateRentalCaches(qc);
+      setDuplicate(null);
       onOpenChange(false);
+    },
+    onError: (err) => {
+      if (apiErrorCode(err) === 'DUPLICATE_RENT_PAYMENT') {
+        setDuplicate(apiErrorMessage(err, 'This rent is already recorded for that day'));
+      }
     },
   });
 
@@ -153,16 +165,32 @@ function MarkReceivedDialog({
             />
           </div>
         </div>
-        {mutation.isError && (
-          <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Error'}
-          </p>
+        {duplicate ? (
+          <div className="rounded-lg border border-negative/40 bg-negative/5 p-3 text-sm space-y-2">
+            <p className="font-medium">This rent is already on the khata</p>
+            <p className="text-muted-foreground">{duplicate}</p>
+          </div>
+        ) : (
+          mutation.isError && (
+            <p className="text-sm text-negative">
+              {apiErrorMessage(mutation.error, 'Could not record the payment')}
+            </p>
+          )
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => mutation.mutate(form)} disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : 'Mark received'}
-          </Button>
+          {duplicate ? (
+            <Button
+              onClick={() => mutation.mutate({ ...form, allowDuplicate: true })}
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending ? 'Saving…' : 'Record it anyway'}
+            </Button>
+          ) : (
+            <Button onClick={() => mutation.mutate(form)} disabled={mutation.isPending}>
+              {mutation.isPending ? 'Saving…' : 'Mark received'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -197,13 +225,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
   const [markOpen, setMarkOpen] = useState(false);
 
   const invalidateAll = () => {
-    qc.invalidateQueries({ queryKey: ['rental-property', id] });
-    qc.invalidateQueries({ queryKey: ['rental-properties'] });
-    qc.invalidateQueries({ queryKey: ['dashboard'] });
-    qc.invalidateQueries({ queryKey: ['rental-reminders'] });
-    qc.invalidateQueries({ queryKey: ['alerts'] });
-    qc.invalidateQueries({ queryKey: ['alerts-unread'] });
-    qc.invalidateQueries({ queryKey: ['notifications'] });
+    invalidateRentalCaches(qc);
   };
   const skipMutation = useMutation({
     mutationFn: () => rentalApi.skipReceipt(receipt.id),
@@ -297,7 +319,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                   title="Mark as received"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Received</span>
+                  <span className="ml-1">Received</span>
                 </Button>
                 <Button
                   size="sm"
@@ -308,7 +330,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                   title="Skip this month"
                 >
                   <SkipForward className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Skip</span>
+                  <span className="ml-1">Skip</span>
                 </Button>
               </>
             )}
@@ -322,7 +344,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                 title="Undo auto-match"
               >
                 <Undo2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Undo</span>
+                <span className="ml-1">Undo</span>
               </Button>
             )}
             {isReceived && !receipt.autoMatchedFromEventId && (
@@ -335,7 +357,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                 title="Undo mark-received (also deletes cashflow)"
               >
                 <Undo2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Undo</span>
+                <span className="ml-1">Undo</span>
               </Button>
             )}
             {isSkipped && (
@@ -348,7 +370,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
                 title="Undo skip"
               >
                 <Undo2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Undo</span>
+                <span className="ml-1">Undo</span>
               </Button>
             )}
           </div>
@@ -402,13 +424,11 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
 
   return (
     <div className="rounded-xl border border-border/70 bg-card/40 overflow-hidden">
-      <button
-        type="button"
-        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors text-left"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-      >
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors">
+        <Link
+          to={`/rental/tenancies/${tenancy.id}`}
+          className="group/tenancy-link flex items-center gap-3 min-w-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-md"
+        >
           <div
             aria-hidden="true"
             className={`h-10 w-10 rounded-full grid place-items-center shrink-0 text-[11px] font-semibold tracking-wide ring-1 ${
@@ -436,6 +456,7 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
                   {overdueCount} overdue
                 </span>
               )}
+              <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover/tenancy-link:text-accent transition-colors shrink-0" />
             </div>
             <div className="text-[11.5px] text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
               <span className="font-medium text-foreground tabular-nums">
@@ -461,8 +482,13 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
               )}
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4 text-right shrink-0">
+        </Link>
+        <button
+          type="button"
+          className="flex items-center gap-4 text-right shrink-0"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+        >
           <div className="hidden sm:block">
             <p className="text-[10px] uppercase tracking-kerned text-muted-foreground">
               Total received
@@ -478,8 +504,8 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
           >
             <ChevronDown className="h-4 w-4" />
           </div>
-        </div>
-      </button>
+        </button>
+      </div>
 
       {expanded && (
         <>
@@ -516,7 +542,7 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
           )}
 
           {receipts.length > 0 ? (
-            <div className="border-t border-border/60 max-h-[420px] overflow-y-auto overflow-x-auto">
+            <div className="border-t border-border/60 overflow-x-auto md:max-h-[420px] md:overflow-y-auto">
               <table className="w-full text-sm rtable">
                 <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
                   <tr className="border-b border-border/60 text-[10.5px] uppercase tracking-kerned text-muted-foreground">
@@ -591,7 +617,7 @@ function SummaryTile({
           />
         </div>
       )}
-      {hint && <div className="mt-1 text-[10.5px] text-muted-foreground truncate">{hint}</div>}
+      {hint && <div className="mt-1 text-[10.5px] text-muted-foreground sm:truncate">{hint}</div>}
     </div>
   );
 }
@@ -624,7 +650,7 @@ function AddTenancyDialog({
     mutationFn: (input: CreateTenancyInput) =>
       rentalApi.createTenancy(propertyId, input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-property', propertyId] });
+      invalidateRentalCaches(qc);
       onOpenChange(false);
       setForm({ tenantName: '', startDate: '', monthlyRent: '', rentDueDay: 1 });
     },
@@ -666,7 +692,7 @@ function AddTenancyDialog({
               <p className="text-xs text-negative mt-1">{errors.tenantName}</p>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tenant email</Label>
               <Input
@@ -700,7 +726,7 @@ function AddTenancyDialog({
               placeholder="Alt phone, alternate email, etc."
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Start date *</Label>
               <Input
@@ -721,7 +747,7 @@ function AddTenancyDialog({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Monthly rent (₹) *</Label>
               <Input
@@ -750,6 +776,10 @@ function AddTenancyDialog({
               onChange={(e) => setForm((f) => ({ ...f, securityDeposit: e.target.value }))}
             />
           </div>
+          <RentAccountPicker
+            value={form.bankAccountId}
+            onChange={(bankAccountId) => setForm((f) => ({ ...f, bankAccountId }))}
+          />
         </div>
         {mutation.isError && (
           <p className="text-sm text-negative">
@@ -811,7 +841,7 @@ function AddExpenseDialog({
     mutationFn: (input: CreateExpenseInput) =>
       rentalApi.addExpense(propertyId, input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rental-property', propertyId] });
+      invalidateRentalCaches(qc);
       onOpenChange(false);
       setForm({ expenseType: 'MAINTENANCE', amount: '', paidOn: new Date().toISOString().slice(0, 10) });
     },
@@ -964,7 +994,7 @@ export function RentalDetailPage() {
 
   const deleteExpense = useMutation({
     mutationFn: (expenseId: string) => rentalApi.removeExpense(expenseId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rental-property', id] }),
+    onSuccess: () => invalidateRentalCaches(qc),
   });
 
   if (isLoading) {
@@ -1025,6 +1055,9 @@ export function RentalDetailPage() {
         }
       />
 
+      {/* Catalogue */}
+      <PropertyGallery ownerType="RENTAL_PROPERTY" ownerId={property.id} propertyName={property.name} />
+
       {/* P&L */}
       <section>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
@@ -1055,7 +1088,7 @@ export function RentalDetailPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="max-h-[600px] overflow-y-auto pr-1 space-y-3">
+          <div className="space-y-3 md:max-h-[600px] md:overflow-y-auto md:pr-1">
             {(property.tenancies ?? []).map((t) => (
               <TenancyCard key={t.id} tenancy={t} />
             ))}
@@ -1110,7 +1143,7 @@ export function RentalDetailPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="tap-expand h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={() => deleteExpense.mutate(e.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -1123,6 +1156,18 @@ export function RentalDetailPage() {
             </CardContent>
           )}
         </Card>
+      </section>
+
+      {/* Where it is */}
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+          <MapPin className="h-4 w-4" /> Location
+        </h2>
+        <PropertyLocationCard
+          ownerType="RENTAL_PROPERTY"
+          ownerId={property.id}
+          addressLines={property.address ? [property.address] : []}
+        />
       </section>
 
       {/* Documents */}

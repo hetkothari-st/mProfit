@@ -21,8 +21,8 @@
  * carried as corroborating evidence instead.
  */
 
-import { serializeRatio } from '@portfolioos/shared';
-import type { MfEvidence, MfFinding } from '@portfolioos/shared';
+import { serializeRatio } from '@everypaisa/shared';
+import type { MfEvidence, MfFinding } from '@everypaisa/shared';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 
 const RULE_ID = 'mf.people.manager-change';
@@ -33,7 +33,7 @@ const RULE_VERSION = '1.0.0';
  *
  * Written out here rather than imported because a rule may only import the
  * contract, calibration and pure maths (`test/invariants/mf-rules-pure.test.ts`),
- * and every date helper in `@portfolioos/shared` builds a `Date` — which is
+ * and every date helper in `@everypaisa/shared` builds a `Date` — which is
  * fine for *them* but would make this module's intent harder to audit. Integer
  * arithmetic on the ISO text is exact, needs no timezone and cannot read the
  * clock by accident.

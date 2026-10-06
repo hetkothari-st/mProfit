@@ -23,7 +23,8 @@ import {
   type AttentionUrgency,
   type AttentionItem,
   type FamilyAttention,
-} from '@portfolioos/shared';
+  premiumToAnnual,
+} from '@everypaisa/shared';
 import { runAsUser } from '../../lib/requestContext.js';
 import {
   getEffectiveScope,
@@ -34,6 +35,7 @@ import {
 } from '../familyScope.service.js';
 import {
   getDashboardNetWorth,
+  memberPortfolioWhere,
   type MemberVisibilityCaps,
   type DashboardNetWorth,
 } from '../dashboard.service.js';
@@ -104,7 +106,7 @@ import { isPriceStale } from '../priceStaleness.js';
 
 /**
  * The closed sets a family goal's `category` / `priority` / `status` can take.
- * Declared once in `@portfolioos/shared` and reached here through
+ * Declared once in `@everypaisa/shared` and reached here through
  * goals.service, so a client can map every token to a label exhaustively
  * instead of falling back to a raw enum name.
  */
@@ -112,7 +114,7 @@ export { GOAL_CATEGORIES, GOAL_PRIORITIES, GOAL_STATUSES };
 export type { GoalCategory, GoalPriority, GoalStatus };
 
 /**
- * The response contract lives in `@portfolioos/shared`
+ * The response contract lives in `@everypaisa/shared`
  * (types/familyDashboard.ts) so this service and the web client are typed by
  * ONE declaration of every field name — a rename here that the client has not
  * followed becomes a compile error instead of an `undefined` on the page.
@@ -148,31 +150,12 @@ function daysUntil(date: Date, from: Date = new Date()): number {
   return Math.ceil((date.getTime() - from.getTime()) / 86_400_000);
 }
 
-/**
- * Annualised premium for a stored frequency token.
- *
- * NOTE: dashboard.service has a byte-identical private `premiumToAnnual`. It
- * is not exported, and this module must not modify that file, so the switch is
- * repeated here. Worth hoisting into a shared insuranceMath module — see the
- * hand-off notes.
- */
-function premiumToAnnual(amount: Decimal, frequency: string): Decimal {
-  switch (frequency) {
-    case 'MONTHLY': return amount.times(12);
-    case 'QUARTERLY': return amount.times(4);
-    case 'HALF_YEARLY': return amount.times(2);
-    case 'ANNUAL': return amount;
-    // A single-premium policy has no recurring outgo; counting it as an annual
-    // cost would overstate the household's premium burden every year.
-    case 'SINGLE': return ZERO;
-    default: return amount;
-  }
-}
-
 // ── Member resolution ────────────────────────────────────────────────────
 
 interface MemberContext extends FamilyMemberRef {
   caps: MemberVisibilityCaps;
+  /** The family in view; bounds which of this member's portfolios count. */
+  familyId: string;
 }
 
 const NO_CAPS: MemberVisibilityCaps = { assetClasses: null, categories: null };
@@ -211,6 +194,7 @@ async function resolveMembers(
       isSelf,
       restricted: !isSelf && hasCaps,
       caps: isSelf ? NO_CAPS : caps,
+      familyId,
     };
   });
 
@@ -296,7 +280,7 @@ export async function getFamilyWealth(callerId: string, familyId: string): Promi
   const { scope, members } = await resolveMembers(callerId, familyId);
 
   const slices = await Promise.all(
-    members.map((m) => runFor(m, () => getDashboardNetWorth(m.userId, undefined, m.caps))),
+    members.map((m) => runFor(m, () => getDashboardNetWorth(m.userId, undefined, m.caps, m.familyId))),
   );
 
   const householdNetWorth = slices.reduce((s, r) => s.plus(toDecimal(r.totalNetWorth)), ZERO);
@@ -928,7 +912,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
       ? Promise.resolve([])
       : prisma.transaction.findMany({
           where: {
-            portfolio: { userId: m.userId },
+            portfolio: memberPortfolioWhere(m.userId, m.familyId),
             assetClass: { in: depositClasses },
             transactionType: { in: ['BUY', 'DEPOSIT', 'OPENING_BALANCE'] },
             maturityDate: {
@@ -967,7 +951,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
     }),
     prisma.holdingProjection.findMany({
       where: {
-        portfolio: { userId: m.userId },
+        portfolio: memberPortfolioWhere(m.userId, m.familyId),
         ...(m.caps.assetClasses === null ? {} : { assetClass: { in: m.caps.assetClasses } }),
       },
       select: { id: true, assetClass: true, assetName: true, priceAsOf: true },
@@ -1068,7 +1052,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
   if (!m.restricted) {
     const [bankCount, holdingCount] = await Promise.all([
       prisma.bankAccount.count({ where: { userId: m.userId, status: 'ACTIVE' } }),
-      prisma.holdingProjection.count({ where: { portfolio: { userId: m.userId } } }),
+      prisma.holdingProjection.count({ where: { portfolio: memberPortfolioWhere(m.userId, m.familyId) } }),
     ]);
     if (bankCount === 0 && holdingCount === 0) {
       items.push({
@@ -1128,7 +1112,7 @@ export async function getFamilyMemberDetail(
   // from. The cost is computing for every member and keeping one — cheap
   // beside the per-query round trips these already make.
   const [netWorth, holdings, goalsAll, protectionAll, attentionAll] = await Promise.all([
-    runFor(m, () => getDashboardNetWorth(m.userId, undefined, m.caps)),
+    runFor(m, () => getDashboardNetWorth(m.userId, undefined, m.caps, m.familyId)),
     loadMemberHoldings(m),
     getFamilyGoals(callerId, familyId),
     getFamilyProtection(callerId, familyId),
@@ -1161,7 +1145,7 @@ async function loadMemberHoldings(m: MemberContext): Promise<FamilyMemberHolding
   return runFor(m, async () => {
     const rows = await prisma.holdingProjection.findMany({
       where: {
-        portfolio: { userId: m.userId },
+        portfolio: memberPortfolioWhere(m.userId, m.familyId),
         // `[]` is deny-all and `{ in: [] }` matches nothing, which is right.
         ...(m.caps.assetClasses === null ? {} : { assetClass: { in: m.caps.assetClasses } }),
       },

@@ -374,6 +374,7 @@ async function runUanLookupJob(payload: PfUanLookupJobPayload): Promise<void> {
       await transition(sessionId, 'SCRAPING');
       const outcome = await runUanLookup({
         sessionId,
+        userId,
         input,
         prompt: makeSessionPrompt(sessionId),
       });
@@ -416,6 +417,7 @@ async function runPasswordResetJob(payload: PfPasswordResetJobPayload): Promise<
       await transition(sessionId, 'SCRAPING');
       const outcome = await runPasswordReset({
         sessionId,
+        userId,
         input,
         prompt: makeSessionPrompt(sessionId),
       });

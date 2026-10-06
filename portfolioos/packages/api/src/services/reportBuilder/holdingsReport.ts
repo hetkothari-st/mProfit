@@ -1,6 +1,8 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import { derivativePositionValue } from '../derivativePosition.service.js';
+import { logger } from '../../lib/logger.js';
 import { fmtNum, fmtDate, type ExportPayload, type ExportColumn } from '../export.service.js';
 import type { BarDatum } from '../charts/pdfCharts.js';
 
@@ -39,9 +41,9 @@ function sectionLabel(classes: AssetClass[] | undefined): string {
 }
 
 function filenameStem(classes: AssetClass[] | undefined): string {
-  if (!classes || classes.length === 0) return 'portfolioos-all-holdings';
-  if (classes.length === 1) return `portfolioos-${classes[0]!.toLowerCase().replace(/_/g, '-')}`;
-  return `portfolioos-${classes.map(c => c.toLowerCase().replace(/_/g, '-')).join('_')}`;
+  if (!classes || classes.length === 0) return 'everypaisa-all-holdings';
+  if (classes.length === 1) return `everypaisa-${classes[0]!.toLowerCase().replace(/_/g, '-')}`;
+  return `everypaisa-${classes.map(c => c.toLowerCase().replace(/_/g, '-')).join('_')}`;
 }
 
 // ─── Holdings sheet payload ──────────────────────────────────────────────────
@@ -109,7 +111,7 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
       const qty   = new Decimal(p.netQuantity.toString());
       const cost  = new Decimal(p.totalCost.toString());
       const price = p.mtmPrice ? new Decimal(p.mtmPrice.toString()) : null;
-      const value = price ? qty.times(price).times(p.lotSize) : null;
+      const value = derivativePositionValue(p);
       const optTag = p.instrumentType === 'FUTURES'
         ? 'FUT'
         : `${p.instrumentType === 'CALL' ? 'CE' : 'PE'} ${p.strikePrice?.toString() ?? ''}`;
@@ -196,8 +198,8 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
       portfolioId: { in: resolvedIds },
       ...(classFilter ? { assetClass: { in: classFilter } } : {}),
     },
+    // Every transaction: income received below is built from this list too.
     orderBy: { tradeDate: 'desc' },
-    take: 2000,
   });
 
   const txnColumns: ExportColumn[] = [
@@ -228,7 +230,7 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
 
   const additionalSections: NonNullable<ExportPayload['additionalSections']> = [];
   let footerOverride: Record<string, string> | null = null;
-  let metaOverride: Record<string, string> = {
+  const metaOverride: Record<string, string> = {
     Portfolio: portfolioLabel,
     Section: section,
     Holdings: String(holdings.length),
@@ -308,7 +310,9 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
           exist.trades += r.closedTradeCount;
           fySummary.set(r.financialYear, exist);
         });
-      } catch { /* portfolio may have no F&O */ }
+      } catch (err) {
+        logger.warn({ err, portfolioId: pid }, '[holdingsReport] F&O section omitted');
+      }
     }
 
     if (foRows.length > 0) {
@@ -393,7 +397,9 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
             taxableGain:   r.taxableGain.toString(),
             financialYear: r.financialYear,
           }));
-        } catch { /* no CG for this portfolio */ }
+        } catch (err) {
+          logger.warn({ err, portfolioId: pid }, '[holdingsReport] capital-gains rows omitted');
+        }
       }
       if (cgRows.length > 0) {
         additionalSections.push({
@@ -415,7 +421,9 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
           emptyMessage: 'No realised gains.',
         });
       }
-    } catch { /* CG service may fail for non-applicable asset classes */ }
+    } catch (err) {
+      logger.warn({ err }, '[holdingsReport] capital-gains section omitted');
+    }
   }
 
   // ────────────────────────────────────────────────────────────────────

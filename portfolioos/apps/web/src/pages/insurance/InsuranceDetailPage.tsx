@@ -1,587 +1,180 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  Plus,
-  Trash2,
-  Car,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-} from 'lucide-react';
-import { Decimal, formatINR } from '@portfolioos/shared';
-import { PageHeader } from '@/components/layout/PageHeader';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import { ArrowLeft, Car, Pencil, Trash2 } from 'lucide-react';
+import { formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import {
-  insuranceApi,
-  type InsurancePolicyDTO,
-  type InsuranceClaimDTO,
-  type PremiumPaymentDTO,
-  type AddPremiumInput,
-  type AddClaimInput,
-} from '@/api/insurance.api';
+import { apiErrorMessage } from '@/api/client';
+import { insuranceApi, type AddPremiumInput, type InsurancePolicyDTO } from '@/api/insurance.api';
 import { DocumentVault } from '@/components/documents/DocumentVault';
+import { Figure, Guilloche } from '@/components/receipt/Receipt';
 import { CatalogBrief, inferCatalogId } from '@/components/insurance/InsuranceCatalogPicker';
+import { ClaimsSection } from '@/components/insurance/ClaimsSection';
+import { ContactsCard } from '@/components/insurance/ContactsCard';
+import { InsurerLogo } from '@/components/insurance/InsurerLogo';
+import { NomineesCard } from '@/components/insurance/NomineesCard';
+import { PolicyFormDialog } from '@/components/insurance/PolicyFormDialog';
+import { PolicyNumberReveal } from '@/components/insurance/PolicyNumberReveal';
+import { PremiumScheduleCard } from '@/components/insurance/PremiumScheduleCard';
+import { ImportedPremiumsCard } from '@/components/insurance/ImportedPremiumsCard';
+import { SurrenderValueCard } from '@/components/insurance/SurrenderValueCard';
+import { RecordPremiumDialog } from '@/components/insurance/RecordPremiumDialog';
+import { useInsurerLook } from '@/components/insurance/useInsurerLook';
 import { findCatalogProduct } from '@/data/insuranceCatalog';
+import {
+  FREQUENCY_LABELS,
+  LIFE_POLICY_TYPES,
+  POLICY_STATUS_LABELS,
+  TONE_TEXT,
+  criticalIllnessMeta,
+  formatDay,
+  nextPremiumPrefill,
+  plural,
+  policyTitle,
+  policyTypeLabel,
+  premiumDueMeta,
+  type DueMeta,
+} from '@/lib/insurance';
 
-// ── Helpers ───────────────────────────────────────────────────────────
+// ── Hero: the policy as a certificate ─────────────────────────────────
 
-const CLAIM_STATUS_COLORS: Record<string, string> = {
-  SUBMITTED: 'text-blue-500',
-  UNDER_REVIEW: 'text-amber-500',
-  APPROVED: 'text-positive',
-  REJECTED: 'text-negative',
-  SETTLED: 'text-positive',
-};
-
-function formatDate(iso: string | null | undefined) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-// ── Add premium dialog ────────────────────────────────────────────────
-
-function AddPremiumDialog({
-  policyId,
-  open,
-  onOpenChange,
-  initial,
-}: {
-  policyId: string;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  initial?: Partial<AddPremiumInput> | null;
-}) {
-  const qc = useQueryClient();
-  const [form, setForm] = useState<AddPremiumInput>({
-    paidOn: initial?.paidOn ?? '',
-    amount: initial?.amount ?? '',
-    periodFrom: initial?.periodFrom ?? '',
-    periodTo: initial?.periodTo ?? '',
-  });
-  const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
-
-  useEffect(() => {
-    if (open) {
-      setForm({
-        paidOn: initial?.paidOn ?? new Date().toISOString().slice(0, 10),
-        amount: initial?.amount ?? '',
-        periodFrom: initial?.periodFrom ?? '',
-        periodTo: initial?.periodTo ?? '',
-      });
-      setErrors({});
-    }
-  }, [open, initial]);
-
-  const mutation = useMutation({
-    mutationFn: (input: AddPremiumInput) => insuranceApi.addPremium(policyId, input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['insurance-policy', policyId] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
-      onOpenChange(false);
-      setForm({ paidOn: '', amount: '', periodFrom: '', periodTo: '' });
-    },
-  });
-
-  function validate(): boolean {
-    const errs: Record<string, string> = {};
-    if (!form.paidOn) errs['paidOn'] = 'Required';
-    if (!form.amount || isNaN(Number(form.amount))) errs['amount'] = 'Required';
-    if (!form.periodFrom) errs['periodFrom'] = 'Required';
-    if (!form.periodTo) errs['periodTo'] = 'Required';
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  }
-
+function PolicyHero({ policy }: { policy: InsurancePolicyDTO }) {
+  const { panel } = useInsurerLook(policy.insurer, policy.type);
+  const active = policy.status === 'ACTIVE';
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Record premium payment</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label>Paid on *</Label>
-            <Input type="date" value={form.paidOn}
-              onChange={(e) => setForm((f) => ({ ...f, paidOn: e.target.value }))}
-              className={errors['paidOn'] ? 'border-negative' : ''} />
+    <div
+      className="relative overflow-hidden rounded-xl px-6 pb-5 pt-6 text-white shadow-elev-lg"
+      style={{ backgroundImage: `linear-gradient(135deg, ${panel.from} 0%, ${panel.via} 60%, ${panel.to} 100%)` }}
+    >
+      <Guilloche />
+      <div className="relative flex flex-wrap items-start justify-between gap-6">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <InsurerLogo insurer={policy.insurer} type={policy.type} size={38} maxWidth={170} className="shadow-md ring-1 ring-white/25" />
+            <span className="text-sm text-white/80">{policy.insurer}</span>
           </div>
-          <div>
-            <Label>Amount (₹) *</Label>
-            <Input placeholder="25000" value={form.amount}
-              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-              className={errors['amount'] ? 'border-negative' : ''} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Period from *</Label>
-              <Input type="date" value={form.periodFrom}
-                onChange={(e) => setForm((f) => ({ ...f, periodFrom: e.target.value }))}
-                className={errors['periodFrom'] ? 'border-negative' : ''} />
-            </div>
-            <div>
-              <Label>Period to *</Label>
-              <Input type="date" value={form.periodTo}
-                onChange={(e) => setForm((f) => ({ ...f, periodTo: e.target.value }))}
-                className={errors['periodTo'] ? 'border-negative' : ''} />
-            </div>
-          </div>
-        </div>
-        {mutation.isError && (
-          <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Error recording payment'}
+          <h1 className="mt-4 font-display text-[34px] leading-tight">{policyTitle(policy)}</h1>
+          <p className="mt-1 text-sm text-white/75">
+            {policyTypeLabel(policy.type)} · {policy.policyHolder}
           </p>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => { if (validate()) mutation.mutate(form); }} disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : 'Save'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-white/70">{LIFE_POLICY_TYPES.has(policy.type) ? 'Sum assured' : 'Cover'}</p>
+          <p className="mt-0.5 font-display text-[46px] leading-none tabular-nums">
+            {formatINR(policy.sumAssured, { compact: true })}
+          </p>
+          <p className="mt-1 text-xs tabular-nums text-white/70">{formatINR(policy.sumAssured, { fractionDigits: 0 })}</p>
+        </div>
+      </div>
+      <div className="relative mt-5 flex items-center gap-2 text-xs text-white/75">
+        <span>Policy no.</span>
+        <PolicyNumberReveal policy={policy} variant="onDark" />
+      </div>
+      {!active && (
+        <div className="pointer-events-none absolute bottom-6 right-8 -rotate-12 rounded-sm border-2 border-white/70 px-3 py-1 font-display text-lg text-white/85">
+          {POLICY_STATUS_LABELS[policy.status] ?? policy.status}
+        </div>
+      )}
+    </div>
   );
 }
 
-// ── Add claim dialog ──────────────────────────────────────────────────
-
-function AddClaimDialog({
-  policyId,
-  open,
-  onOpenChange,
+function KeyFacts({
+  policy,
+  due,
+  ciOptionalInPlan,
 }: {
-  policyId: string;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
+  policy: InsurancePolicyDTO;
+  due: DueMeta;
+  /** The catalogue lists critical illness as an add-on for this plan. */
+  ciOptionalInPlan: boolean;
 }) {
-  const qc = useQueryClient();
-  const [form, setForm] = useState<AddClaimInput>({
-    claimDate: '',
-    claimType: '',
-    claimedAmount: '',
-    status: 'SUBMITTED',
-  });
-  const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
-
-  const mutation = useMutation({
-    mutationFn: (input: AddClaimInput) => insuranceApi.addClaim(policyId, input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['insurance-policy', policyId] });
-      onOpenChange(false);
-      setForm({ claimDate: '', claimType: '', claimedAmount: '', status: 'SUBMITTED' });
-    },
-  });
-
-  function validate(): boolean {
-    const errs: Record<string, string> = {};
-    if (!form.claimDate) errs['claimDate'] = 'Required';
-    if (!form.claimType.trim()) errs['claimType'] = 'Required';
-    if (!form.claimedAmount || isNaN(Number(form.claimedAmount))) errs['claimedAmount'] = 'Required';
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  }
-
+  const life = LIFE_POLICY_TYPES.has(policy.type);
+  const ci = criticalIllnessMeta(policy);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Add claim</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Claim date *</Label>
-              <Input type="date" value={form.claimDate}
-                onChange={(e) => setForm((f) => ({ ...f, claimDate: e.target.value }))}
-                className={errors['claimDate'] ? 'border-negative' : ''} />
-            </div>
-            <div>
-              <Label>Status</Label>
-              <select
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.status}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as AddClaimInput['status'] }))}
-              >
-                {['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'SETTLED'].map((s) => (
-                  <option key={s} value={s}>{s.replace('_', ' ').toLowerCase()}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div>
-            <Label>Claim type *</Label>
-            <Input placeholder="Hospitalisation, Accident…" value={form.claimType}
-              onChange={(e) => setForm((f) => ({ ...f, claimType: e.target.value }))}
-              className={errors['claimType'] ? 'border-negative' : ''} />
-          </div>
-          <div>
-            <Label>Claimed amount (₹) *</Label>
-            <Input placeholder="100000" value={form.claimedAmount}
-              onChange={(e) => setForm((f) => ({ ...f, claimedAmount: e.target.value }))}
-              className={errors['claimedAmount'] ? 'border-negative' : ''} />
-          </div>
-          <div>
-            <Label>Claim number</Label>
-            <Input placeholder="Optional" value={form.claimNumber ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, claimNumber: e.target.value || null }))} />
-          </div>
-        </div>
-        {mutation.isError && (
-          <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Error adding claim'}
+    <Card>
+      <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 px-5 py-4 md:grid-cols-3 xl:grid-cols-6">
+        <Figure label="Premium">
+          {formatINR(policy.premiumAmount, { fractionDigits: 0 })}{' '}
+          <span className="text-xs text-muted-foreground">{FREQUENCY_LABELS[policy.premiumFrequency] ?? ''}</span>
+        </Figure>
+        {/* The date only — the banner above spells out what it means. */}
+        <Figure label="Next premium" className={TONE_TEXT[due.tone]} hint={due.label}>
+          {policy.status !== 'ACTIVE' || !policy.premiumDue.dueDate ? '—' : formatDay(policy.premiumDue.dueDate)}
+        </Figure>
+        <Figure label="Started">{formatDay(policy.startDate)}</Figure>
+        <Figure label={life ? 'Matures' : 'Cover ends'}>{formatDay(policy.maturityDate)}</Figure>
+        <Figure label="Grace period">
+          {policy.premiumFrequency === 'SINGLE' ? '—' : policy.graceDays > 0 ? plural(policy.graceDays, 'day') : 'None'}
+        </Figure>
+        {ci && (
+          <Figure
+            label="Critical illness"
+            className={TONE_TEXT[ci.tone]}
+            hint={
+              policy.criticalIllnessCover == null && ciOptionalInPlan
+                ? 'This plan offers critical illness as an add-on — your policy schedule shows whether you took it.'
+                : undefined
+            }
+          >
+            {policy.criticalIllnessCover === true
+              ? policy.criticalIllnessSumAssured
+                ? formatINR(policy.criticalIllnessSumAssured, { compact: true })
+                : 'Covered'
+              : policy.criticalIllnessCover === false
+                ? 'Not covered'
+                : 'Not recorded'}
+          </Figure>
+        )}
+        {ci && policy.criticalIllnessCover == null && ciOptionalInPlan && (
+          <p className="col-span-2 text-xs text-muted-foreground md:col-span-3 xl:col-span-6">
+            This plan offers critical illness cover as an add-on — your policy schedule shows whether you took it. Record
+            it with Edit.
           </p>
         )}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => { if (validate()) mutation.mutate(form); }} disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : 'Save'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        {policy.vehicle && (
+          <div className="col-span-2 min-w-0 md:col-span-3 xl:col-span-6">
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Car className="h-3 w-3" /> Vehicle
+            </p>
+            <Link to={`/vehicles/${policy.vehicle.id}`} className="mt-0.5 block truncate text-[15px] text-accent hover:underline">
+              {[policy.vehicle.make, policy.vehicle.model].filter(Boolean).join(' ')} · {policy.vehicle.registrationNo}
+            </Link>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
-// ── Health coverage panel (§9.3) ──────────────────────────────────────
+// ── Health cover (§9.3) ───────────────────────────────────────────────
 
 function HealthCoverPanel({ policy }: { policy: InsurancePolicyDTO }) {
   const hc = policy.healthCoverDetails;
   if (!hc) return null;
-
+  const rows: Array<[string, string]> = [];
+  if (hc.members?.length) rows.push(['Members', hc.members.join(', ')]);
+  if (hc.roomRent) rows.push(['Room rent limit', hc.roomRent]);
+  if (hc.coPay != null) rows.push(['Co-pay', `${hc.coPay}%`]);
+  if (hc.preExistingWait != null) rows.push(['Pre-existing disease wait', `${hc.preExistingWait} months`]);
+  for (const [k, v] of Object.entries(hc.subLimits ?? {})) rows.push([k.replace(/_/g, ' '), v]);
+  if (rows.length === 0) return null;
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-xl sm:text-2xl">Health coverage details</CardTitle>
+        <CardTitle className="font-display text-xl">Health cover</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm">
-        {hc.members && hc.members.length > 0 && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Members</span>
-            <span>{hc.members.join(', ')}</span>
-          </div>
-        )}
-        {hc.roomRent && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Room rent limit</span>
-            <span>{hc.roomRent}</span>
-          </div>
-        )}
-        {hc.coPay != null && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Co-pay</span>
-            <span>{hc.coPay}%</span>
-          </div>
-        )}
-        {hc.preExistingWait != null && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Pre-existing wait</span>
-            <span>{hc.preExistingWait} months</span>
-          </div>
-        )}
-        {hc.subLimits && Object.keys(hc.subLimits).length > 0 && (
-          <div>
-            <p className="text-muted-foreground mb-1">Sub-limits</p>
-            <div className="space-y-1 pl-2">
-              {Object.entries(hc.subLimits).map(([k, v]) => (
-                <div key={k} className="flex justify-between">
-                  <span className="text-muted-foreground capitalize">{k.replace(/_/g, ' ')}</span>
-                  <span>{v}</span>
-                </div>
-              ))}
+      <CardContent>
+        <dl className="space-y-2 text-sm">
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-4">
+              <dt className="capitalize text-muted-foreground">{k}</dt>
+              <dd className="text-right">{v}</dd>
             </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Claims table ──────────────────────────────────────────────────────
-
-function ClaimsTable({
-  claims,
-  policyId,
-  onAdd,
-}: {
-  claims: InsuranceClaimDTO[];
-  policyId: string;
-  onAdd: () => void;
-}) {
-  const qc = useQueryClient();
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => insuranceApi.removeClaim(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['insurance-policy', policyId] }),
-  });
-
-  return (
-    <Card>
-      <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-xl sm:text-2xl">Claims</CardTitle>
-        <Button size="sm" variant="outline" onClick={onAdd}>
-          <Plus className="h-3.5 w-3.5 mr-1" /> Add
-        </Button>
-      </CardHeader>
-      <CardContent>
-        {claims.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No claims recorded</p>
-        ) : (
-          <div className="space-y-2">
-            {claims.map((c) => (
-              <div key={c.id} className="flex items-start justify-between gap-2 border rounded-md px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{c.claimType}</span>
-                    <span className={`text-xs font-medium ${CLAIM_STATUS_COLORS[c.status] ?? ''}`}>
-                      {c.status.replace('_', ' ').toLowerCase()}
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5 flex gap-3 flex-wrap">
-                    <span>{formatDate(c.claimDate)}</span>
-                    <span>Claimed: {formatINR(c.claimedAmount)}</span>
-                    {c.settledAmount && <span>Settled: {formatINR(c.settledAmount)}</span>}
-                    {c.claimNumber && <span>#{c.claimNumber}</span>}
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="shrink-0 text-muted-foreground hover:text-negative"
-                  onClick={() => deleteMutation.mutate(c.id)}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Premium history ───────────────────────────────────────────────────
-
-const FREQUENCY_MONTHS: Record<string, number> = {
-  MONTHLY: 1,
-  QUARTERLY: 3,
-  HALF_YEARLY: 6,
-  ANNUAL: 12,
-};
-
-interface ScheduleRow {
-  index: number;
-  periodFrom: Date;
-  periodTo: Date;
-  dueDate: Date;
-  payment: PremiumPaymentDTO | null;
-  status: 'PAID' | 'OVERDUE' | 'UPCOMING';
-}
-
-function addMonths(d: Date, months: number): Date {
-  const next = new Date(d);
-  next.setMonth(next.getMonth() + months);
-  return next;
-}
-
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function buildSchedule(policy: InsurancePolicyDTO): ScheduleRow[] {
-  const freq = FREQUENCY_MONTHS[policy.premiumFrequency];
-  const history = policy.premiumHistory ?? [];
-
-  // SINGLE premium → no schedule, just show what's recorded.
-  if (!freq) {
-    return history.map((p, i) => ({
-      index: i + 1,
-      periodFrom: new Date(p.periodFrom),
-      periodTo: new Date(p.periodTo),
-      dueDate: new Date(p.periodFrom),
-      payment: p,
-      status: 'PAID' as const,
-    }));
-  }
-
-  const start = new Date(policy.startDate);
-  const today = new Date();
-  const maturity = policy.maturityDate ? new Date(policy.maturityDate) : null;
-  // Show schedule up to 12 periods past today, capped at maturity.
-  const horizon = addMonths(today, freq * 12);
-  const end = maturity && maturity < horizon ? maturity : horizon;
-
-  const rows: ScheduleRow[] = [];
-  let cursor = new Date(start);
-  let i = 1;
-  while (cursor <= end && i <= 240) {
-    const next = addMonths(cursor, freq);
-    const periodFromStr = isoDate(cursor);
-    // Match payment whose periodFrom falls in same calendar month.
-    const matched = history.find((p) => p.periodFrom.slice(0, 7) === periodFromStr.slice(0, 7));
-    const status: ScheduleRow['status'] = matched
-      ? 'PAID'
-      : cursor <= today
-        ? 'OVERDUE'
-        : 'UPCOMING';
-    rows.push({
-      index: i,
-      periodFrom: new Date(cursor),
-      periodTo: new Date(next),
-      dueDate: new Date(cursor),
-      payment: matched ?? null,
-      status,
-    });
-    cursor = next;
-    i += 1;
-  }
-  return rows;
-}
-
-function PremiumHistory({
-  policy,
-  onMarkPaid,
-}: {
-  policy: InsurancePolicyDTO;
-  onMarkPaid: (initial: Partial<AddPremiumInput>) => void;
-}) {
-  const qc = useQueryClient();
-  const schedule = buildSchedule(policy);
-  const paidRows = schedule.filter((r) => r.status === 'PAID');
-  const overdueRows = schedule.filter((r) => r.status === 'OVERDUE');
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => insuranceApi.removePremium(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['insurance-policy', policy.id] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
-    },
-  });
-
-  const totalPaid = paidRows.reduce(
-    (s, r) => (r.payment ? s.plus(new Decimal(r.payment.amount)) : s),
-    new Decimal(0),
-  );
-
-  return (
-    <Card>
-      <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-xl sm:text-2xl">
-          Premium history
-          {paidRows.length > 0 && (
-            <span className="ml-3 text-xs font-normal text-muted-foreground">
-              Total paid: {formatINR(totalPaid.toString())}
-            </span>
-          )}
-          {overdueRows.length > 0 && (
-            <span className="ml-3 text-xs font-medium text-negative">
-              {overdueRows.length} overdue
-            </span>
-          )}
-        </CardTitle>
-        <Button size="sm" variant="outline" onClick={() => onMarkPaid({})}>
-          <Plus className="h-3.5 w-3.5 mr-1" /> Record
-        </Button>
-      </CardHeader>
-      <CardContent>
-        {schedule.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No premium schedule (single-premium or no start date).</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="rtable w-full text-xs">
-              <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="text-left font-medium py-2 px-2 w-8">#</th>
-                  <th className="text-left font-medium py-2 px-2">Period</th>
-                  <th className="text-left font-medium py-2 px-2">Due date</th>
-                  <th className="text-right font-medium py-2 px-2">Amount</th>
-                  <th className="text-left font-medium py-2 px-2">Status</th>
-                  <th className="text-right font-medium py-2 px-2">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {schedule.map((row) => {
-                  const periodFromIso = isoDate(row.periodFrom);
-                  const periodToIso = isoDate(row.periodTo);
-                  return (
-                    <tr key={row.index} className="border-b last:border-0 hover:bg-muted/30">
-                      <td data-label="#" className="py-2 px-2 text-muted-foreground tabular-nums">{row.index}</td>
-                      <td data-label="Period" className="py-2 px-2">
-                        {formatDate(periodFromIso)} → {formatDate(periodToIso)}
-                      </td>
-                      <td data-label="Due date" className="py-2 px-2 text-muted-foreground">
-                        {formatDate(periodFromIso)}
-                      </td>
-                      <td data-label="Amount" className="py-2 px-2 text-right font-medium tabular-nums">
-                        {row.payment
-                          ? formatINR(row.payment.amount)
-                          : <span className="text-muted-foreground">{formatINR(policy.premiumAmount)}</span>}
-                      </td>
-                      <td data-label="Status" className="py-2 px-2">
-                        {row.status === 'PAID' && (
-                          <span className="inline-flex items-center gap-1 text-positive">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Paid {row.payment ? formatDate(row.payment.paidOn) : ''}
-                          </span>
-                        )}
-                        {row.status === 'OVERDUE' && (
-                          <span className="inline-flex items-center gap-1 text-negative">
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                            Overdue
-                          </span>
-                        )}
-                        {row.status === 'UPCOMING' && (
-                          <span className="inline-flex items-center gap-1 text-muted-foreground">
-                            <Clock className="h-3.5 w-3.5" />
-                            Upcoming
-                          </span>
-                        )}
-                      </td>
-                      <td data-label="Action" className="py-2 px-2 text-right">
-                        {row.payment ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-muted-foreground hover:text-negative"
-                            onClick={() => deleteMutation.mutate(row.payment!.id)}
-                            disabled={deleteMutation.isPending}
-                            title="Remove payment"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant={row.status === 'OVERDUE' ? 'default' : 'outline'}
-                            className="h-7 px-3 text-xs"
-                            onClick={() =>
-                              onMarkPaid({
-                                paidOn: isoDate(new Date()),
-                                amount: policy.premiumAmount,
-                                periodFrom: periodFromIso,
-                                periodTo: periodToIso,
-                              })
-                            }
-                          >
-                            Mark paid
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+          ))}
+        </dl>
       </CardContent>
     </Card>
   );
@@ -591,10 +184,11 @@ function PremiumHistory({
 
 export function InsuranceDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
-  const [premiumOpen, setPremiumOpen] = useState(false);
-  const [premiumInitial, setPremiumInitial] = useState<Partial<AddPremiumInput> | null>(null);
-  const [claimOpen, setClaimOpen] = useState(false);
+  const [record, setRecord] = useState<Partial<AddPremiumInput> | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const { data: policy, isLoading } = useQuery({
     queryKey: ['insurance-policy', id],
@@ -602,184 +196,130 @@ export function InsuranceDetailPage() {
     enabled: !!id,
   });
 
+  // "/insurance/:id#claims" (from the open-claims list) lands on the claims.
+  useEffect(() => {
+    if (policy && location.hash === '#claims') {
+      document.getElementById('claims')?.scrollIntoView({ block: 'start' });
+    }
+  }, [policy, location.hash]);
+
   const deleteMutation = useMutation({
     mutationFn: () => insuranceApi.deletePolicy(id!),
-    onSuccess: () => { window.location.href = '/insurance'; },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['insurance-policies'] });
+      toast.success('Policy deleted');
+      navigate('/insurance');
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Could not delete the policy')),
   });
 
   if (isLoading) {
     return (
-      <div>
-        <PageHeader title="Loading…" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="h-32 animate-pulse bg-muted/60" />
-          ))}
+      <div className="space-y-4">
+        <Card className="h-48 animate-pulse bg-muted/60" />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Card className="h-32 animate-pulse bg-muted/60" />
+          <Card className="h-32 animate-pulse bg-muted/60" />
         </div>
       </div>
     );
   }
 
-  if (!policy) return <div className="p-8 text-muted-foreground">Policy not found.</div>;
+  if (!policy) {
+    return (
+      <div className="p-8 text-muted-foreground">
+        Policy not found. <Link to="/insurance" className="text-accent hover:underline">Back to your policies</Link>
+      </div>
+    );
+  }
 
-  const statusColor =
-    policy.status === 'ACTIVE' ? 'text-positive' :
-    policy.status === 'LAPSED' ? 'text-negative' : 'text-muted-foreground';
+  const due = premiumDueMeta(policy);
+  const product = findCatalogProduct(inferCatalogId(policy.insurer, policy.planName));
 
   return (
-    <div>
-      <PageHeader
-        title={`${policy.insurer} — ${policy.planName ?? policy.type}`}
-        description={`${policy.policyHolder} · ${policy.policyNumber}`}
-        actions={
-          <div className="flex gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link to="/insurance"><ArrowLeft className="h-4 w-4" /> Back</Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-negative hover:bg-negative/10"
-              onClick={() => {
-                if (confirm('Delete this policy and all its data?')) deleteMutation.mutate();
-              }}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <Button asChild variant="ghost" size="sm">
+          <Link to="/insurance">
+            <ArrowLeft className="h-4 w-4" /> All policies
+          </Link>
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil className="h-4 w-4" /> Edit
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-negative hover:bg-negative/10"
+            aria-label="Delete policy"
+            onClick={() => {
+              if (window.confirm('Delete this policy, with its premiums and claims?')) deleteMutation.mutate();
+            }}
+            disabled={deleteMutation.isPending}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <PolicyHero policy={policy} />
+
+      {due.urgent && (
+        <div
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 ${
+            due.tone === 'danger' ? 'border-negative/30 bg-negative/5' : 'border-amber-500/30 bg-amber-500/5'
+          }`}
+        >
+          <div className="min-w-0">
+            <p className={`text-sm font-medium ${TONE_TEXT[due.tone]}`}>{due.label}</p>
+            {due.detail && <p className="text-sm text-muted-foreground">{due.detail}</p>}
           </div>
-        }
+          <Button size="sm" onClick={() => setRecord(nextPremiumPrefill(policy))}>
+            Record payment
+          </Button>
+        </div>
+      )}
+
+      <KeyFacts
+        policy={policy}
+        due={due}
+        ciOptionalInPlan={Boolean(product?.coverageTags.some((t) => /critical illness/i.test(t)))}
       />
 
-      {/* Catalog brief — shown when policy maps to a known product */}
-      {(() => {
-        const catalogId = inferCatalogId(policy.insurer, policy.planName);
-        const product = findCatalogProduct(catalogId);
-        return product ? (
-          <div className="mb-6">
-            <CatalogBrief product={product} />
-          </div>
-        ) : null;
-      })()}
+      {product && <CatalogBrief product={product} />}
 
-      {/* Overview.
-          `Next due` is derived from the same schedule that powers the
-          premium-history table — picking the earliest non-PAID row.
-          Falls back to `policy.nextPremiumDue` (stored field) only when
-          the schedule is empty (e.g. SINGLE premium policies). Without
-          this, the tile and the table were free to disagree because
-          the stored field is manual and gets stale. */}
-      {(() => {
-        const sched = buildSchedule(policy);
-        const nextUnpaid = sched.find((r) => r.status !== 'PAID');
-        const nextDueDate = nextUnpaid?.dueDate ?? (policy.nextPremiumDue ? new Date(policy.nextPremiumDue) : null);
-        const nextDueLabel = nextDueDate ? formatDate(nextDueDate.toISOString()) : '—';
-        const nextDueClass =
-          nextUnpaid?.status === 'OVERDUE' ? 'text-negative' : 'text-foreground';
-        const nextDueHint =
-          nextUnpaid?.status === 'OVERDUE'
-            ? 'Overdue'
-            : nextUnpaid?.status === 'UPCOMING'
-            ? 'Upcoming'
-            : null;
-        const tiles = [
-          { label: 'Status', value: policy.status.toLowerCase(), className: statusColor, hint: null as string | null },
-          { label: 'Sum assured', value: formatINR(policy.sumAssured), className: '', hint: null },
-          {
-            label: 'Premium',
-            value: `${formatINR(policy.premiumAmount)} / ${policy.premiumFrequency.toLowerCase()}`,
-            className: '',
-            hint: null,
-          },
-          { label: 'Next due', value: nextDueLabel, className: nextDueClass, hint: nextDueHint },
-        ];
-        return (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            {tiles.map((m) => (
-              <Card key={m.label}>
-                <CardContent className="px-4 py-3">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">{m.label}</p>
-                  <p className={`text-sm font-semibold mt-1 tabular-nums capitalize ${m.className}`}>
-                    {m.value}
-                  </p>
-                  {m.hint && (
-                    <p className="text-[10.5px] text-muted-foreground mt-0.5 normal-case">{m.hint}</p>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        );
-      })()}
-
-      {/* Dates row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-        <Card><CardContent className="px-4 py-3">
-          <p className="text-xs text-muted-foreground">Start date</p>
-          <p className="text-sm font-medium mt-1">{formatDate(policy.startDate)}</p>
-        </CardContent></Card>
-        {policy.maturityDate && (
-          <Card><CardContent className="px-4 py-3">
-            <p className="text-xs text-muted-foreground">Maturity date</p>
-            <p className="text-sm font-medium mt-1">{formatDate(policy.maturityDate)}</p>
-          </CardContent></Card>
-        )}
-        {policy.vehicle && (
-          <Card><CardContent className="px-4 py-3">
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Car className="h-3 w-3" /> Linked vehicle
-            </p>
-            <Link
-              to={`/vehicles/${policy.vehicle.id}`}
-              className="text-sm font-medium mt-1 text-accent hover:underline block"
-            >
-              {policy.vehicle.make} {policy.vehicle.model} · {policy.vehicle.registrationNo}
-            </Link>
-          </CardContent></Card>
-        )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <NomineesCard policy={policy} />
+        <ContactsCard policy={policy} />
       </div>
 
-      {/* Health cover panel */}
-      {policy.type === 'HEALTH' && <div className="mb-4"><HealthCoverPanel policy={policy} /></div>}
+      <ClaimsSection policy={policy} />
 
-      {/* Premium history */}
-      <div className="mb-4">
-        <PremiumHistory
-          policy={policy}
-          onMarkPaid={(initial) => {
-            setPremiumInitial(initial);
-            setPremiumOpen(true);
-          }}
-        />
-      </div>
+      {policy.type === 'HEALTH' && <HealthCoverPanel policy={policy} />}
 
-      {/* Claims */}
-      <ClaimsTable
-        claims={policy.claims ?? []}
+      {/* Renders nothing when no imported premium needs reviewing. */}
+      <ImportedPremiumsCard policyId={policy.id} />
+
+      <PremiumScheduleCard policy={policy} onRecord={setRecord} />
+
+      {/* Renders nothing for policy types without a surrender value. */}
+      <SurrenderValueCard policy={policy} />
+
+      <DocumentVault
+        ownerType="INSURANCE_POLICY"
+        ownerId={policy.id}
+        title="Policy documents"
+        defaultCategory="policy_document"
+      />
+
+      <RecordPremiumDialog
         policyId={policy.id}
-        onAdd={() => setClaimOpen(true)}
+        open={record !== null}
+        onOpenChange={(v) => !v && setRecord(null)}
+        initial={record}
       />
-
-      {/* Document vault — uploaded brochures & supporting documents */}
-      <div className="mt-6">
-        <DocumentVault
-          ownerType="INSURANCE_POLICY"
-          ownerId={policy.id}
-          title="Policy documents"
-          defaultCategory="policy_document"
-        />
-      </div>
-
-      <AddPremiumDialog
-        policyId={policy.id}
-        open={premiumOpen}
-        onOpenChange={(v) => {
-          setPremiumOpen(v);
-          if (!v) setPremiumInitial(null);
-        }}
-        initial={premiumInitial}
-      />
-      <AddClaimDialog policyId={policy.id} open={claimOpen} onOpenChange={setClaimOpen} />
+      <PolicyFormDialog open={editOpen} onOpenChange={setEditOpen} initial={policy} />
     </div>
   );
 }

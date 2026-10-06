@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 export type Period = '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y' | 'All';
 
@@ -176,6 +176,20 @@ export interface RiskMetrics {
   maxDrawdownPct: number | null;
   betaVsNifty: number | null;
   observations: number;
+  /** Optional so a web build talking to an older API still renders. */
+  classCorrelation?: ClassCorrelation;
+}
+
+/** Correlation of monthly returns between asset classes. */
+export interface ClassCorrelation {
+  /** Asset class keys, e.g. EQUITY, MUTUAL_FUND. */
+  classes: string[];
+  /** matrix[i][j] in [-1, 1]; null where it can't be computed. */
+  matrix: Array<Array<number | null>>;
+  /** Shared monthly returns behind each cell. */
+  observations: number[][];
+  /** Fewest shared months the API requires before reporting a value. */
+  minObservations: number;
 }
 
 // ─── Insights ───────────────────────────────────────────────────────
@@ -323,13 +337,28 @@ export const analyticsApi = {
   },
 };
 
+/** One term's share of a simulated sale (the matched lots of that term). */
+export interface WhatIfBucket {
+  quantity: string;
+  costBasis: string;
+  proceeds: string;
+  realisedPnL: string;
+  taxRatePct: number | null;
+  estTax: string;
+}
+
 export interface WhatIfResult {
   holding: { id: string; assetName: string | null; assetClass: string; quantityHeld: string; avgCost: string; currentPrice: string };
   input: { sellQty: string; sellPrice: string };
   sale: {
     proceeds: string; costBasis: string; realisedPnL: string;
-    term: 'SHORT' | 'LONG'; equityType: boolean; isLoss: boolean;
+    term: 'SHORT' | 'LONG' | 'MIXED'; equityType: boolean; isLoss: boolean;
     estTax: string; taxRatePct: number | null; taxIndicative: boolean;
+    /** Gain taxed at the slab rate rather than a capital-gains rate. */
+    slabTaxableGain: string;
+    slabRatePct: number | null; slabRateIsEstimate: boolean;
+    longTerm: WhatIfBucket; shortTerm: WhatIfBucket;
+    lotsMatched: number; oldestMatchedBuyDate: string | null; lotsIncomplete: boolean;
   };
   deltas: {
     proceeds: string; estTax: string; netCashAfterTax: string;

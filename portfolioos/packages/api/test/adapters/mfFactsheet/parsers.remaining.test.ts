@@ -21,7 +21,7 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { csvToGrid, buildAmfiMarketCapLookup } from '../../../src/adapters/mfFactsheet/normalise.js';
 import {
   parseNipponPortfolio,

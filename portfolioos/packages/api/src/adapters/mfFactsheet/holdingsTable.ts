@@ -25,8 +25,8 @@
  * number by a few points.
  */
 
-import { Decimal, serializePct, serializeQuantity } from '@portfolioos/shared';
-import type { Pct } from '@portfolioos/shared';
+import { Decimal, serializePct, serializeQuantity } from '@everypaisa/shared';
+import type { Pct } from '@everypaisa/shared';
 import {
   classifyHoldingKind,
   headerKey,

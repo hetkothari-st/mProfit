@@ -16,12 +16,15 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { Money } from '@/components/ui/money';
 import { AutoFitText } from '@/components/ui/AutoFitText';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { portfoliosApi } from '@/api/portfolios.api';
+import { isOnboardingUnfinished } from '@/lib/onboardingProgress';
+import { useAuthStore } from '@/stores/auth.store';
 import { transactionsApi } from '@/api/transactions.api';
 import { assetsApi } from '@/api/assets.api';
 import { dashboardApi } from '@/api/dashboard.api';
@@ -46,7 +49,7 @@ import {
   Decimal,
   toDecimal,
   valuationMethodFor,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 const PERIOD_OPTIONS = [
   { label: '1M', days: 30 },
@@ -68,6 +71,8 @@ function alertHref(type: string): string {
     case 'LOAN_EMI_OVERDUE':
     case 'LOAN_EMI_DUE':
       return '/loans';
+    case 'LOAN_GIVEN_DUE':
+      return '/loans?view=given';
     default:
       return '/alerts';
   }
@@ -245,6 +250,7 @@ function assetClassSidebarKey(cls: string): string {
     case 'REAL_ESTATE':       return '/real-estate';
     case 'ULIP':
     case 'INSURANCE':         return '/insurance';
+    case 'LOAN_GIVEN':        return '/loans';
     default:                  return '/others';
   }
 }
@@ -301,6 +307,8 @@ function holdingRoute(h: { id: string; assetClass: string }): string | null {
 export function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string>('ALL');
   const [period, setPeriod] = useState<number>(365);
+  // Phones: narrower value axis + room for the last date label on the chart.
+  const isPhone = useMediaQuery('(max-width: 767px)');
   // Net-worth-only privacy toggle. Hidden by default so a screen-share or
   // co-worker glance doesn't reveal the headline number; everything else on
   // the page (MetricCards, charts, holdings) stays visible. This is local to
@@ -354,6 +362,13 @@ export function DashboardPage() {
       navigate('/onboarding', { replace: true });
     }
   }, [portfoliosQuery.isLoading, portfolios.length, navigate]);
+
+  // An account that left onboarding unfinished (e.g. reloaded mid-setup)
+  // goes back to it rather than an empty dashboard.
+  const signedInUserId = useAuthStore((s) => s.user?.id);
+  useEffect(() => {
+    if (isOnboardingUnfinished(signedInUserId)) navigate('/onboarding', { replace: true });
+  }, [signedInUserId, navigate]);
 
   const netWorthQuery = useQuery({
     queryKey: ['dashboard', 'net-worth', selectedId],
@@ -535,7 +550,7 @@ export function DashboardPage() {
                     aria-label={netWorthHidden ? 'Show net worth' : 'Hide net worth'}
                     aria-pressed={!netWorthHidden}
                     title={netWorthHidden ? 'Show net worth' : 'Hide net worth'}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-accent-ink/70 hover:text-foreground hover:bg-foreground/5 transition-colors"
+                    className="tap-expand inline-flex h-6 w-6 items-center justify-center rounded-md text-accent-ink/70 hover:text-foreground hover:bg-foreground/5 transition-colors"
                   >
                     {netWorthHidden
                       ? <Eye className="h-3.5 w-3.5" strokeWidth={1.7} />
@@ -636,11 +651,13 @@ export function DashboardPage() {
                   <div key={i} className={`flex items-stretch rounded-lg border text-sm ${urgencyBg(a.urgency, dark)}`}>
                     <Link
                       to={alertHref(a.type)}
-                      className="flex flex-1 items-start gap-3 px-4 py-2.5 min-w-0 rounded-l-lg transition-colors hover:bg-foreground/[0.03] focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      className="flex flex-1 items-center sm:items-start gap-2.5 sm:gap-3 px-3 sm:px-4 py-2.5 min-w-0 rounded-l-lg transition-colors hover:bg-foreground/[0.03] focus:outline-none focus:ring-2 focus:ring-primary/40"
                       title="Open section"
                     >
                       <UrgencyIcon urgency={a.urgency} dark={dark} />
-                      <div className="flex-1 min-w-0">
+                      {/* Phones: one line per alert, cut with an ellipsis; the
+                          full text is a tap away on the section it opens. */}
+                      <div className="flex-1 min-w-0 truncate sm:whitespace-normal sm:overflow-visible">
                         <span className="font-medium">{a.title}</span>
                         <span className="text-muted-foreground ml-2">{a.description}</span>
                       </div>
@@ -649,7 +666,7 @@ export function DashboardPage() {
                           {a.daysUntil <= 0 ? 'Overdue' : `${a.daysUntil}d`}
                         </span>
                       )}
-                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" strokeWidth={1.8} />
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 sm:mt-0.5" strokeWidth={1.8} />
                     </Link>
                     {i === 0 && (
                       <button
@@ -902,7 +919,7 @@ export function DashboardPage() {
       {/* Chart + Full Allocation Pie */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-2">
             <div>
               <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Trajectory</p>
               <CardTitle className="text-[16px]">Portfolio value over time</CardTitle>
@@ -912,7 +929,7 @@ export function DashboardPage() {
                 <button
                   key={opt.label}
                   onClick={() => setPeriod(opt.days)}
-                  className={`px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all ${
+                  className={`px-2.5 py-1.5 sm:py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all ${
                     period === opt.days
                       ? 'bg-foreground text-background shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'
@@ -932,7 +949,7 @@ export function DashboardPage() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <AreaChart data={chartData} margin={{ top: 8, right: isPhone ? 32 : 8, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="gradValue" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%"  stopColor="hsl(var(--foreground))" stopOpacity={0.22} />
@@ -957,7 +974,7 @@ export function DashboardPage() {
                   />
                   <YAxis
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'JetBrains Mono' }}
-                    axisLine={false} tickLine={false} width={72}
+                    axisLine={false} tickLine={false} width={isPhone ? 52 : 72}
                     tickFormatter={(v: number) =>
                       hideSensitive ? '•••'
                         : v >= 10_000_000 ? `₹${(v / 10_000_000).toFixed(1)}Cr`
@@ -1055,7 +1072,7 @@ export function DashboardPage() {
             {/* Compact mobile list — two lines per holding (name + value, then
                 class + return). Replaces the card-ified table below md so the
                 10-row list stays tight. */}
-            <ul className="md:hidden divide-y divide-border/40">
+            <ul className="md:hidden divide-y divide-border/40 px-[var(--card-pad)]">
               {topHoldings.map((h, idx) => {
                 const pnlD = toDecimal(h.unrealisedPnL ?? '0');
                 const pos = pnlD.greaterThan(0), neg = pnlD.lessThan(0);

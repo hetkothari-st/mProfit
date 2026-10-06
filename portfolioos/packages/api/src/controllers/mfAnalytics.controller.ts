@@ -7,7 +7,7 @@ import { loadAlternatives } from '../services/mfAnalytics/mfAlternatives.service
  * constraint rather than a stylistic preference.
  *
  * 1. **It declares no types of its own.** Every handler's return value is a
- *    type imported verbatim from `@portfolioos/shared/mfAnalytics.types`, or an
+ *    type imported verbatim from `@everypaisa/shared/mfAnalytics.types`, or an
  *    indexed access into one (`MfFundAnalyticsDto['metrics']`). This is not
  *    pedantry: the `/advisor` page crashed on first load because the client had
  *    locally-declared shapes and `tsc` therefore had nothing to compare against
@@ -68,7 +68,7 @@ import {
   type MfOptionType,
   type MfSchemeStatus,
   type MfRatingStatus,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import type { MfSchemeMeta } from '@prisma/client';
 

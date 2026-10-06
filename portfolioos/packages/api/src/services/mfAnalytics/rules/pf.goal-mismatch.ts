@@ -34,7 +34,7 @@
  * counting the rest.
  */
 
-import { serializeRatio, toDecimal, type MfEvidence, type MfFinding, type MfGoalFitDto } from '@portfolioos/shared';
+import { serializeRatio, toDecimal, type MfEvidence, type MfFinding, type MfGoalFitDto } from '@everypaisa/shared';
 
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 

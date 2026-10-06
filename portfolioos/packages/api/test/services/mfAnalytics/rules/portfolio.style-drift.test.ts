@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializePct, serializeRatio, type MfMetricStatus } from '@portfolioos/shared';
+import { serializePct, serializeRatio, type MfMetricStatus } from '@everypaisa/shared';
 import { portfolioStyleDriftRule as rule } from '../../../../src/services/mfAnalytics/rules/portfolio.style-drift.js';
 import { SCHEME, makeFacts, makeFundFacts, makeProfile } from './_facts.fixture.js';
 

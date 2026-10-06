@@ -1,4 +1,4 @@
-import { EyeOff, Lock } from 'lucide-react';
+import { CircleAlert, EyeOff, Lock } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { NON_AC_CATEGORY_LABEL } from '@/lib/assetClasses';
 import { pluralMembers } from './money';
@@ -215,5 +215,79 @@ export function NotSharedPanel({
         </span>
       </span>
     </div>
+  );
+}
+
+/**
+ * ─── A number we recorded, from prices we did not have ──────────────────
+ *
+ * The markers above answer "how much of this is missing". This one answers a
+ * different question with the same honesty: the figure is complete, but the
+ * prices behind it were stale, so its accuracy is unknown.
+ *
+ * It exists because the AMFI NAV sync spent a stretch of 2026 importing zero
+ * rows while reporting success. Every nightly net-worth snapshot taken in
+ * that window was computed from the last NAVs we happened to hold. Those
+ * snapshots are NOT recomputed — `getDashboardNetWorth()` reads live holdings
+ * and takes no asOf, so revaluing a past day would stamp today's prices onto
+ * it and destroy the record of what the user was actually shown. The numbers
+ * stay; this says what they are worth.
+ *
+ * Same amber as the partial-data family, because it is the same promise: a
+ * number whose meaning is qualified never renders bare.
+ */
+export function EstimatedDataNotice({
+  estimatedCount,
+  what,
+  reason,
+  className,
+}: {
+  /** `summary.estimatedPointCount` from the payload this sits above. */
+  estimatedCount: number;
+  /** What the estimates sit inside, e.g. "This trend". */
+  what: string;
+  /** The server's own explanation, when it sent one. */
+  reason?: string | null;
+  className?: string;
+}) {
+  if (estimatedCount <= 0) return null;
+  const plural = estimatedCount !== 1;
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-2.5 rounded-lg border border-amber-300/70 bg-amber-50/70 px-3 py-2.5 text-[12.5px] leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
+        className,
+      )}
+    >
+      <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.8} />
+      <span>
+        <strong className="font-medium">
+          {estimatedCount} {plural ? 'points are estimates' : 'point is an estimate'}.
+        </strong>{' '}
+        {reason ??
+          'Fund prices did not reach us on those dates, so those figures were calculated from the last prices we had.'}{' '}
+        {what} still shows what we recorded — we have not rewritten it — but treat{' '}
+        {plural ? 'those points' : 'that point'} as approximate.
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Inline chip for a single figure computed from stale prices. The counterpart
+ * to `RestrictedChip`: the number is there, its accuracy is not vouched for.
+ */
+export function EstimatedChip({ className }: { className?: string }) {
+  return (
+    <span
+      title="Fund prices did not reach us on this date, so this figure was calculated from the last prices we had."
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full border border-amber-400/50 bg-amber-400/10 px-1.5 py-px text-[9.5px] font-medium uppercase tracking-kerned text-amber-700 dark:text-amber-300',
+        className,
+      )}
+    >
+      <CircleAlert className="h-2.5 w-2.5" strokeWidth={2.2} />
+      Estimate
+    </span>
   );
 }

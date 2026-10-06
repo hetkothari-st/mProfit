@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import type { ApiError, ApiSuccess, PaginationMeta } from '@portfolioos/shared';
+import type { ApiError, ApiSuccess, PaginationMeta } from '@everypaisa/shared';
 
 export function ok<T>(res: Response, data: T, meta?: PaginationMeta) {
   const body: ApiSuccess<T> = meta ? { success: true, data, meta } : { success: true, data };

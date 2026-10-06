@@ -45,7 +45,7 @@ import type {
   MfFindingCategory,
   MfFindingSeverity,
   MfRuleRunRecord,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { logger } from '../../lib/logger.js';
 import { runInTransaction } from '../../lib/prisma.js';
 import { enqueueMfProse } from '../../jobs/mfProseJob.js';

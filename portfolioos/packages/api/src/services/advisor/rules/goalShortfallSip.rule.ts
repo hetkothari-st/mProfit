@@ -19,7 +19,7 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { INVESTABLE_BUCKETS } from '../assetBuckets.js';
 import { CATEGORY_BASE_PRIORITY, MIN_SIP_TOPUP_INR } from '../constants.js';
 import { computeDrift, unitsFor, type DriftRow } from '../allocationMath.js';

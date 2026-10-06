@@ -10,8 +10,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeRatio } from '@portfolioos/shared';
-import type { MfHorizonMetrics, MfModelKey, Ratio } from '@portfolioos/shared';
+import { serializeRatio } from '@everypaisa/shared';
+import type { MfHorizonMetrics, MfModelKey, Ratio } from '@everypaisa/shared';
 import { indexTrackingErrorRule } from '../../../../src/services/mfAnalytics/rules/index.tracking-error.js';
 import { factsForFund, makeMetricsRow, makePeer, makeScore } from './_facts.fixture.js';
 import type { MfHorizonKey } from '../../../../src/services/mfAnalytics/types.js';

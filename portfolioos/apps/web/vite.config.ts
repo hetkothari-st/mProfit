@@ -7,7 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      '@portfolioos/shared': path.resolve(__dirname, '../../packages/shared/src'),
+      '@everypaisa/shared': path.resolve(__dirname, '../../packages/shared/src'),
     },
   },
   server: {

@@ -1,6 +1,7 @@
 import { api } from './client';
 import { getApiBaseUrl } from './baseUrl';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
+import { currentReportTheme } from '@/lib/reportTheme';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);
@@ -24,12 +25,17 @@ export interface TaxSummary {
     slabPct: number;
   };
   capitalGains: {
-    section111A_stcgEquity: { gain: string; tax: string };
+    section111A_stcgEquity: { gain: string; taxable: string; tax: string };
     section112A_ltcgEquity: { gain: string; exemption: string; taxable: string; tax: string };
     section112_ltcgOther: { gain: string; taxable: string; tax: string };
-    stcgOther: { gain: string; tax: string };
-    intradaySpeculative: { gain: string; tax: string };
+    stcgOther: { gain: string; taxable: string; tax: string };
+    intradaySpeculative: { gain: string; taxable: string; tax: string };
+    virtualDigitalAssets: { gain: string; taxable: string; tax: string };
   };
+  /** Losses left after this FY's set-off, available to carry forward. */
+  carryForward: { shortTermLoss: string; longTermLoss: string; speculativeLoss: string };
+  /** True when slab-rate figures use a stand-in rate because no income-tax slab is on file. */
+  slabIsEstimate: boolean;
   fnoBusinessIncome: { netPnl: string; turnover: string; tax: string; auditApplicable: boolean };
   otherIncome: { dividend: string; interest: string; maturity: string };
   totalRealisedGain: string;
@@ -129,6 +135,7 @@ export interface TaxHarvestReport {
     unrealisedPnL: string;
     pctReturn: string;
     longTermEligible: boolean;
+    equityOriented: boolean;
     oldestBuyDate: string;   // ISO date, oldest BUY for this holding
     classification: 'STCG_LOSS' | 'LTCG_LOSS' | 'STCG_GAIN' | 'LTCG_GAIN';
   }>;
@@ -180,7 +187,46 @@ export interface FmvOverride {
   source: 'SEED' | 'USER';
 }
 
+export type InstalmentStatus = 'upcoming' | 'due' | 'met';
+
+export interface AdvanceTaxInstalment {
+  label: string;
+  dueDate: string;
+  cumulativePct: number;
+  cumulativeDue: string;
+  shortfall: string;
+  interest: string;
+  status: InstalmentStatus;
+}
+
+export interface AdvanceTaxReport {
+  financialYear: string;
+  instalments: AdvanceTaxInstalment[];
+  totalTax: string;
+  payableNow: string;
+  estimatedInterest: string;
+  /** Under the sec 208 threshold, so no advance tax is payable at all. */
+  belowThreshold: boolean;
+  /** Gains booked this year before exemptions — zero tax and zero gains differ. */
+  bookedGains: string;
+  slabPct: number;
+  slabIsEstimate: boolean;
+  components: {
+    stcgEquity: string;
+    ltcgEquity: string;
+    ltcgOther: string;
+    stcgOther: string;
+    intraday: string;
+    crypto: string;
+  };
+  asOf: string;
+}
+
 export const taxApi = {
+  advance: async (fy: string): Promise<AdvanceTaxReport> => {
+    const { data } = await api.get<ApiResponse<AdvanceTaxReport>>('/api/tax/advance' + qs({ fy }));
+    return unwrap(data);
+  },
   availableFys: async (): Promise<{ fys: string[] }> => {
     const { data } = await api.get<ApiResponse<{ fys: string[] }>>('/api/tax/available-fys');
     return unwrap(data);
@@ -226,7 +272,7 @@ export const taxApi = {
   },
   capitalGainsTaxReportUrl: (fy: string, portfolioIds?: string[]): string => {
     const base = getApiBaseUrl();
-    const params = new URLSearchParams({ fy });
+    const params = new URLSearchParams({ fy, theme: currentReportTheme() });
     if (portfolioIds && portfolioIds.length > 0) {
       params.set('portfolioIds', portfolioIds.join(','));
     }

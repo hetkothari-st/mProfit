@@ -5,7 +5,7 @@
  * section owns: verified prose, unverified prose, a `PARTIAL` run, an
  * RIA-gated verdict, and a fund the run examined and said nothing about.
  *
- * Everything is typed as the real DTO from `@portfolioos/shared`. That is as
+ * Everything is typed as the real DTO from `@everypaisa/shared`. That is as
  * much the point of the fixtures as of the components: a field renamed on the
  * contract breaks this file at compile time, which is precisely what did NOT
  * happen on `/advisor` because the client had shapes of its own (CONTEXT.md
@@ -25,7 +25,7 @@ import type {
   Money,
   Pct,
   Ratio,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 const r = (s: string) => s as Ratio;
 const p = (s: string) => s as Pct;

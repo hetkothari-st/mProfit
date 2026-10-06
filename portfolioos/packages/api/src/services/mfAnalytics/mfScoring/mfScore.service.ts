@@ -69,7 +69,7 @@ import {
   MIN_RATING_HISTORY_MONTHS,
   MIN_UNIVERSE_SIZE,
   UNMAPPED_SUBCATEGORY,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import type {
   MfCurrentProfile,
   MfHorizonMetrics,
@@ -83,7 +83,7 @@ import type {
   Ratio,
   SebiSubCategory,
   SebiSubCategorySpec,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import type { Prisma } from '@prisma/client';
 
 import { prisma, runInTransaction } from '../../../lib/prisma.js';

@@ -18,6 +18,7 @@ import {
   listPfAccounts,
   createPfAccount,
   getPfAccountById,
+  resolveEpfoAccountForExtension,
   forgetPfCredentials,
 } from '../services/pfAccounts.service.js';
 import {
@@ -451,8 +452,13 @@ export async function uploadManualPassbookHandler(req: Request, res: Response) {
           update: {},
         });
         inserted++;
-      } catch {
-        // P2002 unique constraint = duplicate → skip
+      } catch (err) {
+        // Only a duplicate is a skip. Everything else — a bad enum, a failed
+        // constraint, a dropped connection — used to be counted as one too,
+        // so an import could drop events and still report success.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue;
+        logger.error({ err, userId: e.userId, sourceHash: e.sourceHash }, '[pf] canonical event insert failed');
+        throw err;
       }
     }
   });
@@ -600,7 +606,11 @@ export async function extensionRawPayloadHandler(req: Request, res: Response): P
   const userId = req.user!.id;
 
   const schema = z.object({
-    accountId: z.string().min(1),
+    // Optional. The EPFO content script deliberately omits it — it cannot
+    // know our account id — and documents that the server resolves the
+    // account. The schema used to require it anyway, so every extension
+    // submission failed validation and auto-sync never worked.
+    accountId: z.string().min(1).optional(),
     sessionId: z.string().optional(),
     payload: z.record(z.unknown()),
   });
@@ -610,15 +620,31 @@ export async function extensionRawPayloadHandler(req: Request, res: Response): P
     return;
   }
 
-  const { accountId, payload } = parsed.data;
+  const { payload } = parsed.data;
   let { sessionId } = parsed.data;
 
-  // Verify account ownership
-  const account = await getPfAccountById(userId, accountId);
+  // Both paths are scoped to the authenticated user: an explicit id is
+  // ownership-checked, and resolution only ever considers this user's own
+  // accounts.
+  let account;
+  if (parsed.data.accountId) {
+    account = await getPfAccountById(userId, parsed.data.accountId);
+  } else {
+    const members = (payload as { members?: Array<{ accountIdentifier?: string }> }).members;
+    account = await resolveEpfoAccountForExtension(userId, members?.[0]?.accountIdentifier);
+  }
   if (!account) {
-    error(res, 404, 'PF account not found', 'NOT_FOUND');
+    error(
+      res,
+      404,
+      parsed.data.accountId
+        ? 'PF account not found'
+        : 'Could not match this passbook to one of your EPF accounts. Add the account first, or open it from the app.',
+      'NOT_FOUND',
+    );
     return;
   }
+  const accountId = account.id;
 
   // Create or reuse a PfFetchSession
   if (!sessionId) {
@@ -694,8 +720,13 @@ export async function extensionRawPayloadHandler(req: Request, res: Response): P
           update: {},
         });
         eventsCreated++;
-      } catch {
-        // P2002 unique — duplicate, skip
+      } catch (err) {
+        // Only a duplicate is a skip. Everything else — a bad enum, a failed
+        // constraint, a dropped connection — used to be counted as one too,
+        // so an import could drop events and still report success.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue;
+        logger.error({ err, userId: e.userId, sourceHash: e.sourceHash }, '[pf] canonical event insert failed');
+        throw err;
       }
     }
   });

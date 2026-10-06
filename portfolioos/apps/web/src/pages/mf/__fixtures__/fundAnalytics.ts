@@ -7,7 +7,7 @@
  * `NOT_APPLICABLE` metric case, which is the one most likely to be rendered as
  * a zero by a well-meaning consumer following the older five-value status list.
  *
- * Everything here is typed as the real DTO from `@portfolioos/shared`. That is
+ * Everything here is typed as the real DTO from `@everypaisa/shared`. That is
  * the point of the fixtures as much as of the page: a field renamed on the
  * contract breaks this file at compile time, which is exactly what did NOT
  * happen on `/advisor` because the client had its own shapes (CONTEXT.md §11).
@@ -25,7 +25,7 @@ import type {
   Money,
   Pct,
   Ratio,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 const r = (s: string) => s as Ratio;
 const p = (s: string) => s as Pct;

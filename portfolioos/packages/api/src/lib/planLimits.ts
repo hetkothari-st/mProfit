@@ -1,4 +1,4 @@
-import { PLAN_LIMITS, PLAN_TIER_ORDER, planRank, type PlanTierValue } from '@portfolioos/shared';
+import { PLAN_LIMITS, PLAN_TIER_ORDER, planRank, type PlanTierValue } from '@everypaisa/shared';
 import { ForbiddenError } from './errors.js';
 
 /**

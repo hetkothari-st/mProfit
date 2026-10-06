@@ -55,13 +55,13 @@ const ALLOWED_RELATIVE_IMPORTS = new Set(['../types.js', '../constants.js']);
 /**
  * Bare specifiers a rule may import.
  *
- * `@portfolioos/shared` is types, branded-string helpers and `decimal.js`
+ * `@everypaisa/shared` is types, branded-string helpers and `decimal.js`
  * re-exports — no I/O anywhere in it. `decimal.js` itself is arithmetic.
  * `@prisma/client` is deliberately absent even though it is mostly types: a
  * rule that imports it can import `PrismaClient`, and a type-only need is
- * satisfied by `@portfolioos/shared`'s DTOs, which is what facts are made of.
+ * satisfied by `@everypaisa/shared`'s DTOs, which is what facts are made of.
  */
-const ALLOWED_BARE_IMPORTS = new Set(['@portfolioos/shared', 'decimal.js']);
+const ALLOWED_BARE_IMPORTS = new Set(['@everypaisa/shared', 'decimal.js']);
 
 /**
  * Modules that make a file impure no matter how it is used. Matched as

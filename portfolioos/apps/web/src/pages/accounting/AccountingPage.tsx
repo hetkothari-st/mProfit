@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpenCheck, ChevronRight, ChevronDown, Plus, Trash2,
   FileText, Scale, TrendingDown, Landmark, Sparkles, Loader2,
+  Eye, Download, FolderDown, Sheet,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -13,8 +15,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { formatINR } from '@portfolioos/shared';
+import { financialYearOf, financialYearRange, formatINR, toDecimal } from '@everypaisa/shared';
 import { LockedFeature } from '@/components/common/LockedFeature';
+import { TallyExportButton } from '@/components/tally/TallyExportButton';
 import {
   accountingApi,
   type AccountNode,
@@ -43,24 +46,25 @@ function AccountTreeNode({ node, depth, onAdd, onDelete }: {
     <div>
       <div
         className="flex items-center gap-1 py-1.5 px-2 rounded hover:bg-muted/50 group"
-        style={{ paddingLeft: `${8 + depth * 20}px` }}
+        // Phones indent each level less (--tree-indent is set on the tree).
+        style={{ paddingLeft: `calc(8px + ${depth} * var(--tree-indent, 20px))` }}
       >
-        <button type="button" onClick={() => setOpen((v) => !v)} className="w-4 shrink-0 text-muted-foreground">
+        <button type="button" onClick={() => setOpen((v) => !v)} aria-label={open ? 'Collapse' : 'Expand'} className="tap-expand w-4 shrink-0 text-muted-foreground">
           {hasChildren
             ? (open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />)
             : <span className="w-3 inline-block" />}
         </button>
-        <span className="text-xs text-muted-foreground w-16 shrink-0 font-mono">{node.code}</span>
-        <span className="flex-1 text-sm">{node.name}</span>
-        <span className={`text-xs font-medium ${typeColors[node.type]} w-20 text-right`}>{node.type}</span>
-        <span className="text-xs tabular-nums text-muted-foreground w-28 text-right">
-          {parseFloat(node.openingBalance) !== 0 ? formatINR(node.openingBalance) : '—'}
+        <span className="text-xs text-muted-foreground w-10 sm:w-16 shrink-0 font-mono">{node.code}</span>
+        <span className="flex-1 min-w-0 text-sm">{node.name}</span>
+        <span className={`text-xs font-medium ${typeColors[node.type]} hidden sm:inline w-20 text-right`}>{node.type}</span>
+        <span className="text-xs tabular-nums text-muted-foreground sm:w-28 shrink-0 text-right">
+          {!toDecimal(node.openingBalance).isZero() ? formatINR(node.openingBalance) : '—'}
         </span>
         <div className="opacity-0 group-hover:opacity-100 flex gap-1 ml-2">
-          <button type="button" onClick={() => onAdd(node.id)} className="p-0.5 hover:text-primary">
+          <button type="button" onClick={() => onAdd(node.id)} aria-label={`Add account under ${node.name}`} className="p-1.5 sm:p-0.5 hover:text-primary">
             <Plus className="h-3 w-3" />
           </button>
-          <button type="button" onClick={() => onDelete(node.id, node.name)} className="p-0.5 hover:text-destructive">
+          <button type="button" onClick={() => onDelete(node.id, node.name)} aria-label={`Delete ${node.name}`} className="p-1.5 sm:p-0.5 hover:text-destructive">
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
@@ -125,13 +129,16 @@ function ChartOfAccountsTab() {
       </div>
       <Card>
         <CardContent className="p-0 overflow-x-auto">
-          <div className="min-w-[480px]">
+          <div className="sm:min-w-[480px] [--tree-indent:12px] sm:[--tree-indent:20px]">
             <div className="flex items-center gap-1 py-2 px-2 border-b text-xs text-muted-foreground font-medium uppercase tracking-wider">
               <span className="w-4 shrink-0" />
-              <span className="w-16 shrink-0">Code</span>
-              <span className="flex-1">Name</span>
-              <span className="w-20 text-right">Type</span>
-              <span className="w-28 text-right">Opening Balance</span>
+              <span className="w-10 sm:w-16 shrink-0">Code</span>
+              <span className="flex-1 min-w-0">Name</span>
+              <span className="hidden sm:inline w-20 text-right">Type</span>
+              <span className="sm:w-28 shrink-0 text-right">
+                <span className="sm:hidden">Opening</span>
+                <span className="hidden sm:inline">Opening Balance</span>
+              </span>
               <span className="w-12" />
             </div>
             {tree.map((n) => (
@@ -237,7 +244,13 @@ function VoucherFormDialog({ open, onOpenChange, accounts, initial }: {
   const updateEntry = (i: number, field: keyof VoucherEntryInput, value: string) =>
     setEntries((es) => es.map((e, idx) => idx === i ? { ...e, [field]: value } : e));
 
-  const totalAmount = entries.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const totalAmount = entries.reduce((s, e) => {
+    try {
+      return s.plus(e.amount || 0);
+    } catch {
+      return s; // amount still being typed
+    }
+  }, toDecimal(0));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -270,8 +283,10 @@ function VoucherFormDialog({ open, onOpenChange, accounts, initial }: {
               <Label>Entries</Label>
               <Button type="button" variant="outline" size="sm" onClick={addEntry}><Plus className="h-3 w-3" /> Add row</Button>
             </div>
-            <div className="rounded-md border overflow-x-auto">
-              <table className="w-full text-sm">
+            {/* Below md each entry becomes a stacked card (.rtable): four
+                selects/inputs side by side left each about 60px on a phone. */}
+            <div className="md:rounded-md md:border md:overflow-x-auto">
+              <table className="rtable w-full text-sm">
                 <thead className="bg-muted/40">
                   <tr>
                     <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Debit Account</th>
@@ -284,27 +299,27 @@ function VoucherFormDialog({ open, onOpenChange, accounts, initial }: {
                 <tbody>
                   {entries.map((e, i) => (
                     <tr key={i} className="border-t">
-                      <td className="px-2 py-1.5">
+                      <td data-label="Debit" className="px-2 py-1.5">
                         <Select value={e.debitAccountId} onChange={(ev) => updateEntry(i, 'debitAccountId', ev.target.value)} className="h-8 text-xs">
                           <option value="">Select…</option>
                           {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
                         </Select>
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td data-label="Credit" className="px-2 py-1.5">
                         <Select value={e.creditAccountId} onChange={(ev) => updateEntry(i, 'creditAccountId', ev.target.value)} className="h-8 text-xs">
                           <option value="">Select…</option>
                           {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
                         </Select>
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td data-label="Amount" className="px-2 py-1.5">
                         <Input className="h-8 text-xs text-right" type="number" value={e.amount} onChange={(ev) => updateEntry(i, 'amount', ev.target.value)} placeholder="0" />
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td data-label="Narration" className="px-2 py-1.5">
                         <Input className="h-8 text-xs" value={e.narration ?? ''} onChange={(ev) => updateEntry(i, 'narration', ev.target.value)} placeholder="Optional" />
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td data-label="" className="px-2 py-1.5">
                         {entries.length > 1 && (
-                          <button type="button" onClick={() => removeEntry(i)} className="text-muted-foreground hover:text-destructive">
+                          <button type="button" onClick={() => removeEntry(i)} aria-label="Remove row" className="tap-expand text-muted-foreground hover:text-destructive">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
@@ -314,9 +329,9 @@ function VoucherFormDialog({ open, onOpenChange, accounts, initial }: {
                 </tbody>
                 <tfoot>
                   <tr className="border-t bg-muted/20">
-                    <td colSpan={2} className="px-3 py-2 text-xs font-medium text-right text-muted-foreground">Total</td>
-                    <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums">{formatINR(totalAmount.toFixed(4))}</td>
-                    <td colSpan={2} />
+                    <td colSpan={2} className="px-3 py-2 text-xs font-medium text-right text-muted-foreground max-md:hidden">Total</td>
+                    <td data-label="Total" className="px-3 py-2 text-right text-sm font-semibold tabular-nums">{formatINR(totalAmount.toFixed(4))}</td>
+                    <td colSpan={2} className="max-md:hidden" />
                   </tr>
                 </tfoot>
               </table>
@@ -348,6 +363,38 @@ function VouchersTab() {
     queryKey: ['vouchers', filterType, page],
     queryFn: () => accountingApi.listVouchers({ type: filterType || undefined, page, limit: 50 }),
   });
+
+  // Receipts. `view` opens the PDF in a tab, `download` saves it; the bundle
+  // buttons take whatever the type filter is currently showing, so the file
+  // matches the screen.
+  const [bundling, setBundling] = useState<'zip' | 'xlsx' | null>(null);
+
+  const receipt = async (action: 'view' | 'download', v: VoucherDTO) => {
+    try {
+      if (action === 'view') {
+        await accountingApi.viewReceipt(v.id);
+      } else {
+        await accountingApi.downloadReceipt(v.id, `${v.date}-${v.voucherNo}.pdf`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not produce that receipt');
+    }
+  };
+
+  const bundle = async (format: 'zip' | 'xlsx') => {
+    setBundling(format);
+    try {
+      await accountingApi.downloadReceiptBundle(format, {
+        ...(filterType ? { type: filterType as VoucherType } : {}),
+      });
+    } catch (e) {
+      // A 404 here means the range genuinely holds no receipts, which is worth
+      // saying plainly rather than handing over an empty archive.
+      toast.error(e instanceof Error ? e.message : 'Could not build that download');
+    } finally {
+      setBundling(null);
+    }
+  };
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => accountingApi.deleteVoucher(id),
@@ -383,7 +430,27 @@ function VouchersTab() {
           <option value="">All types</option>
           {VOUCHER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </Select>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => bundle('zip')}
+            disabled={bundling !== null}
+            title="Every rent, premium and loan receipt in view, one PDF each, as a ZIP"
+          >
+            {bundling === 'zip' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderDown className="h-4 w-4" />}
+            Receipts (ZIP)
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => bundle('xlsx')}
+            disabled={bundling !== null}
+            title="The same receipts as one spreadsheet, totalled"
+          >
+            {bundling === 'xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sheet className="h-4 w-4" />}
+            Receipts (Excel)
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -419,7 +486,7 @@ function VouchersTab() {
               </thead>
               <tbody>
                 {(data?.vouchers ?? []).map((v: VoucherDTO) => {
-                  const total = v.entries.reduce((s, e) => s + parseFloat(e.amount), 0);
+                  const total = v.entries.reduce((s, e) => s.plus(e.amount), toDecimal(0));
                   return (
                     <tr key={v.id} className="border-b last:border-0 hover:bg-muted/20">
                       <td data-label="Date" className="px-4 py-3 tabular-nums text-sm">{v.date}</td>
@@ -434,9 +501,30 @@ function VouchersTab() {
                       <td data-label="Amount" className="px-4 py-3 text-right tabular-nums font-medium">{formatINR(total.toFixed(4))}</td>
                       <td data-label="Entries" className="px-4 py-3 text-muted-foreground text-xs hidden sm:table-cell">{v.entries.length} entr{v.entries.length === 1 ? 'y' : 'ies'}</td>
                       <td data-label="" className="px-4 py-3">
-                        <button type="button" onClick={() => { if (confirm('Delete this voucher?')) deleteMut.mutate(v.id); }} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2.5">
+                          {/* Rent, premiums and loan instalments are the ones
+                              people actually need on paper; every voucher can
+                              still produce one, it is just plainer. */}
+                          <button
+                            type="button"
+                            title="View receipt"
+                            onClick={() => receipt('view', v)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Download receipt (PDF)"
+                            onClick={() => receipt('download', v)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </button>
+                          <button type="button" title="Delete voucher" onClick={() => { if (confirm('Delete this voucher?')) deleteMut.mutate(v.id); }} className="text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -562,8 +650,8 @@ function TrialBalanceReport() {
     queryFn: () => accountingApi.getTrialBalance(asOf || undefined),
   });
 
-  const totalDebit = data.reduce((s, r) => s + parseFloat(r.totalDebit), 0);
-  const totalCredit = data.reduce((s, r) => s + parseFloat(r.totalCredit), 0);
+  const totalDebit = data.reduce((s, r) => s.plus(r.totalDebit), toDecimal(0));
+  const totalCredit = data.reduce((s, r) => s.plus(r.totalCredit), toDecimal(0));
 
   const grouped = TYPE_SECTION_ORDER.reduce<Record<string, typeof data>>((acc, t) => {
     acc[t] = data.filter((r) => r.type === t);
@@ -594,26 +682,26 @@ function TrialBalanceReport() {
                   const rows = grouped[type] ?? [];
                   if (rows.length === 0) return null;
                   return [
-                    <tr key={`hdr-${type}`} className="bg-muted/30 border-b">
-                      <td colSpan={6} className="px-4 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{TYPE_LABELS[type]}</td>
+                    <tr key={`hdr-${type}`} data-section className="bg-muted/30 border-b">
+                      <td colSpan={6} data-fullrow className="px-4 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{TYPE_LABELS[type]}</td>
                     </tr>,
                     ...rows.map((r) => (
                       <tr key={r.accountId} className="border-b hover:bg-muted/20">
                         <td data-label="Code" className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.code}</td>
                         <td data-label="Account" className="px-4 py-2">{r.name}</td>
                         <td data-label="Opening" className="px-4 py-2 text-right tabular-nums text-muted-foreground hidden lg:table-cell">{formatINR(r.openingBalance)}</td>
-                        <td data-label="Debit" className="px-4 py-2 text-right tabular-nums">{parseFloat(r.totalDebit) ? formatINR(r.totalDebit) : '—'}</td>
-                        <td data-label="Credit" className="px-4 py-2 text-right tabular-nums">{parseFloat(r.totalCredit) ? formatINR(r.totalCredit) : '—'}</td>
+                        <td data-label="Debit" className="px-4 py-2 text-right tabular-nums">{!toDecimal(r.totalDebit).isZero() ? formatINR(r.totalDebit) : '—'}</td>
+                        <td data-label="Credit" className="px-4 py-2 text-right tabular-nums">{!toDecimal(r.totalCredit).isZero() ? formatINR(r.totalCredit) : '—'}</td>
                         <td data-label="Balance" className="px-4 py-2 text-right tabular-nums font-medium">{formatINR(r.closingBalance)}</td>
                       </tr>
                     )),
                   ];
                 })}
                 <tr className="border-t-2 bg-muted/30 font-semibold">
-                  <td colSpan={3} className="px-4 py-2.5 text-sm">Total</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalDebit.toFixed(4))}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalCredit.toFixed(4))}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{formatINR((totalDebit - totalCredit).toFixed(4))}</td>
+                  <td colSpan={3} data-label="" className="px-4 py-2.5 text-sm">Total</td>
+                  <td data-label="Debit" className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalDebit.toFixed(4))}</td>
+                  <td data-label="Credit" className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalCredit.toFixed(4))}</td>
+                  <td data-label="Balance" className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalDebit.minus(totalCredit).toFixed(4))}</td>
                 </tr>
               </tbody>
             </table>
@@ -625,14 +713,15 @@ function TrialBalanceReport() {
 }
 
 function PnLReport() {
-  const currentYear = new Date().getFullYear();
-  const [from, setFrom] = useState(`${currentYear}-04-01`);
-  const [to, setTo] = useState(`${currentYear + 1}-03-31`);
+  // Default to the current Indian financial year (Jan–Mar belong to the year that began last April).
+  const currentFy = financialYearRange(financialYearOf(new Date()));
+  const [from, setFrom] = useState(currentFy.from);
+  const [to, setTo] = useState(currentFy.to);
   const { data, isLoading } = useQuery({
     queryKey: ['pnl', from, to],
     queryFn: () => accountingApi.getPnL(from || undefined, to || undefined),
   });
-  const netClass = data ? (parseFloat(data.netProfit) >= 0 ? 'text-positive' : 'text-negative') : '';
+  const netClass = data ? (toDecimal(data.netProfit).gte(0) ? 'text-positive' : 'text-negative') : '';
 
   return (
     <div className="space-y-4">
@@ -684,7 +773,7 @@ function PnLReport() {
           </Card>
           <Card className="md:col-span-2">
             <CardContent className="flex items-center justify-between py-4 px-6">
-              <span className="text-lg font-semibold">Net {parseFloat(data.netProfit) >= 0 ? 'Profit' : 'Loss'}</span>
+              <span className="text-lg font-semibold">Net {toDecimal(data.netProfit).gte(0) ? 'Profit' : 'Loss'}</span>
               <span className={`text-xl sm:text-2xl font-bold tabular-nums break-words ${netClass}`}>{formatINR(data.netProfit)}</span>
             </CardContent>
           </Card>
@@ -719,9 +808,17 @@ function BalanceSheetReport() {
                       <td className="px-4 py-2 text-right tabular-nums">{formatINR(r.closingBalance)}</td>
                     </tr>
                   ))}
+                  {toDecimal(data.openingDifference ?? 0).lt(0) && (
+                    <tr className="border-b italic">
+                      <td className="px-4 py-2 text-xs text-muted-foreground">Difference in Opening Balances</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{formatINR(toDecimal(data.openingDifference ?? 0).abs().toFixed(4))}</td>
+                    </tr>
+                  )}
                   <tr className="border-t-2 font-semibold bg-muted/20">
                     <td className="px-4 py-2.5">Total Assets</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(data.totalAssets)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      {formatINR(toDecimal(data.totalAssets).plus(toDecimal(data.openingDifference ?? 0).lt(0) ? toDecimal(data.openingDifference ?? 0).abs() : 0).toFixed(4))}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -748,10 +845,21 @@ function BalanceSheetReport() {
                     <td className="px-4 py-2 text-xs text-muted-foreground">Retained Earnings</td>
                     <td className="px-4 py-2 text-right tabular-nums">{formatINR(data.retainedEarnings)}</td>
                   </tr>
+                  {toDecimal(data.openingDifference ?? 0).gt(0) && (
+                    <tr className="border-b italic">
+                      <td className="px-4 py-2 text-xs text-muted-foreground">Difference in Opening Balances</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{formatINR(toDecimal(data.openingDifference ?? 0).toFixed(4))}</td>
+                    </tr>
+                  )}
                   <tr className="border-t-2 font-semibold bg-muted/20">
                     <td className="px-4 py-2.5">Total Liabilities + Equity</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
-                      {formatINR((parseFloat(data.totalLiabilities) + parseFloat(data.totalEquity)).toFixed(4))}
+                      {formatINR(
+                        toDecimal(data.totalLiabilities)
+                          .plus(data.totalEquity)
+                          .plus(toDecimal(data.openingDifference ?? 0).gt(0) ? toDecimal(data.openingDifference ?? 0) : 0)
+                          .toFixed(4),
+                      )}
                     </td>
                   </tr>
                 </tbody>
@@ -767,13 +875,13 @@ function BalanceSheetReport() {
 function ReportsTab() {
   return (
     <Tabs defaultValue="trial-balance">
-      <div className="overflow-x-auto">
+      <HScroll className="overflow-x-auto">
         <TabsList className="flex-nowrap w-max min-w-full">
           <TabsTrigger value="trial-balance" className="shrink-0 whitespace-nowrap"><Scale className="h-3.5 w-3.5 mr-1.5" />Trial Balance</TabsTrigger>
           <TabsTrigger value="pnl" className="shrink-0 whitespace-nowrap"><TrendingDown className="h-3.5 w-3.5 mr-1.5" />P&L Statement</TabsTrigger>
           <TabsTrigger value="balance-sheet" className="shrink-0 whitespace-nowrap"><Landmark className="h-3.5 w-3.5 mr-1.5" />Balance Sheet</TabsTrigger>
         </TabsList>
-      </div>
+      </HScroll>
       <div className="mt-4">
         <TabsContent value="trial-balance"><TrialBalanceReport /></TabsContent>
         <TabsContent value="pnl"><PnLReport /></TabsContent>
@@ -791,18 +899,23 @@ export function AccountingPage() {
       <PageHeader
         title="Accounting"
         description="Double-entry bookkeeping — chart of accounts, vouchers, ledger, and financial statements"
-        actions={<BookOpenCheck className="h-5 w-5 text-muted-foreground" />}
+        actions={
+          <div className="flex items-center gap-3">
+            <TallyExportButton />
+            <BookOpenCheck className="h-5 w-5 text-muted-foreground" />
+          </div>
+        }
       />
       <LockedFeature requiredTier="PRO_ADVISOR" featureName="Accounting Module">
         <Tabs defaultValue="chart">
-          <div className="overflow-x-auto">
+          <HScroll className="overflow-x-auto">
             <TabsList className="flex-nowrap w-max min-w-full">
               <TabsTrigger value="chart" className="shrink-0 whitespace-nowrap"><Landmark className="h-3.5 w-3.5 mr-1.5" />Chart of Accounts</TabsTrigger>
               <TabsTrigger value="vouchers" className="shrink-0 whitespace-nowrap"><FileText className="h-3.5 w-3.5 mr-1.5" />Vouchers</TabsTrigger>
               <TabsTrigger value="ledger" className="shrink-0 whitespace-nowrap"><BookOpenCheck className="h-3.5 w-3.5 mr-1.5" />Ledger</TabsTrigger>
               <TabsTrigger value="reports" className="shrink-0 whitespace-nowrap"><Scale className="h-3.5 w-3.5 mr-1.5" />Reports</TabsTrigger>
             </TabsList>
-          </div>
+          </HScroll>
           <div className="mt-6">
             <TabsContent value="chart"><ChartOfAccountsTab /></TabsContent>
             <TabsContent value="vouchers"><VouchersTab /></TabsContent>

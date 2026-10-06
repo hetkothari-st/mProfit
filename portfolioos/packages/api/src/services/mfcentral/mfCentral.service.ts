@@ -13,6 +13,7 @@ import {
   MFCentralError,
 } from '../../adapters/mfcentral/mfCentralPlaywright.js';
 import type { ParsedTransaction } from '../imports/parsers/types.js';
+import { readPan } from '../piiAtRest.service.js';
 
 const SOURCE_ADAPTER = 'mfcentral.cas.v1';
 const SOURCE_ADAPTER_VER = '1.0.0';
@@ -171,9 +172,9 @@ export async function submitOtpAndSync(input: SubmitOtpInput): Promise<SubmitOtp
     // getUserPdfPasswords returns all candidates ordered most→least likely.
     const user = await prisma.user.findUnique({
       where: { id: input.userId },
-      select: { pan: true, dob: true },
+      select: { pan: true, panEnc: true, dob: true },
     });
-    const userPan = user?.pan?.trim().toUpperCase() ?? '';
+    const userPan = (await readPan(user)) ?? '';
     if (!userPan) {
       throw new BadRequestError(
         'No PAN saved on user profile — cannot decrypt CAS PDF. Save your PAN in Settings.',
@@ -219,8 +220,7 @@ export async function submitOtpAndSync(input: SubmitOtpInput): Promise<SubmitOtp
     for (const tx of parsed) {
       try {
         const sourceHash = mfCentralTxnHash(userPan, tx);
-        const existing = await prisma.transaction.findUnique({ where: { sourceHash } });
-        const before = existing?.id;
+        let existed = false;
         await createTransaction(input.userId, {
           portfolioId: job.portfolioId!,
           assetClass: tx.assetClass,
@@ -235,8 +235,11 @@ export async function submitOtpAndSync(input: SubmitOtpInput): Promise<SubmitOtp
           sourceAdapter: SOURCE_ADAPTER,
           sourceAdapterVer: SOURCE_ADAPTER_VER,
           sourceHash,
+        }, {
+          onDuplicate: 'skip',
+          onExisting: () => { existed = true; },
         });
-        if (!before) inserted++;
+        if (!existed) inserted++;
         const fundKey = tx.isin ?? tx.assetName ?? '';
         if (fundKey) fundsSeen.add(fundKey);
       } catch (err) {

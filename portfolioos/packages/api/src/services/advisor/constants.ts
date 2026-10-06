@@ -8,7 +8,7 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { REBALANCE_BAND_PP, EMERGENCY_FUND_MONTHS } from '@portfolioos/shared';
+import { REBALANCE_BAND_PP, EMERGENCY_FUND_MONTHS } from '@everypaisa/shared';
 import type { AdvisorAssetBucketValue, AdvisorRecommendationCategoryValue } from './types.js';
 import type { RiskCategoryValue } from '../riskProfileMath.js';
 
@@ -22,7 +22,7 @@ export const MIN_TRADE_INR = new Decimal(5_000);
 /** Drift beyond this many percentage points is worth acting on. Tighter and
  *  the user is nagged by noise; looser and real drift sits uncorrected.
  *
- *  Defined in `@portfolioos/shared` (finance/planningBands.ts) and re-exported
+ *  Defined in `@everypaisa/shared` (finance/planningBands.ts) and re-exported
  *  here so existing importers keep their path. It moved down into shared
  *  because the MF analytics ALLOCATION_DRIFT rule must use the same band
  *  (`docs/mf-analytics/04-PORTFOLIO-ANALYSIS.md §3`) — a portfolio called
@@ -59,7 +59,7 @@ export const MIN_SIP_TOPUP_INR = new Decimal(500);
 export const MIN_CASH_SURPLUS_INR = new Decimal(25_000);
 
 /** Months of expenses the emergency fund should cover. Now defined once in
- *  `@portfolioos/shared` and re-exported, so healthScoreMath, this engine and
+ *  `@everypaisa/shared` and re-exported, so healthScoreMath, this engine and
  *  the MF analytics NO_LIQUID_BUFFER rule cannot disagree about the target. */
 export { EMERGENCY_FUND_MONTHS };
 

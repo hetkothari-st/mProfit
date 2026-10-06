@@ -49,7 +49,7 @@ export function LinkedAccountsView({ data }: { data: unknown }) {
             className="rounded-xl border border-border/70 bg-card/40 overflow-hidden"
           >
             <div className="px-4 py-3 border-b bg-muted/30 flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 basis-40">
                 <div className="text-sm font-semibold text-foreground">
                   {asString(fip['fipName']) ?? '—'}
                 </div>
@@ -85,7 +85,7 @@ function LinkedAccountRow({ account }: { account: Record<string, unknown> }) {
   return (
     <div className="px-4 py-3 hover:bg-muted/20">
       <div className="flex flex-wrap items-start gap-3">
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 basis-40">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-foreground">
               {asString(account['amc']) ?? '—'}

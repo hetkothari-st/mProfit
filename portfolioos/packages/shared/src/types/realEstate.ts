@@ -212,7 +212,7 @@ export interface PropertyCapitalGainDTO {
   netSaleProceeds: string; // salePrice − saleBrokerage
   totalCostBasis: string;  // purchasePrice + stampDuty + registrationFee + brokerage + otherCosts
   holdingMonths: number;
-  isLongTerm: boolean;     // ≥ 24 months for property
+  isLongTerm: boolean;     // held more than 24 months
 
   /** Owner's share factor applied to gains (ownershipPercent / 100). */
   ownershipShare: string;
@@ -230,6 +230,13 @@ export interface PropertyCapitalGainDTO {
   indexedGain: string | null;
   estimatedTaxIndexed: string | null;
 
-  /** True when the buy date is on/before 2024-07-23 — user may pick either method. */
+  /** True when sold on/after 23-Jul-2024 but bought before it — the user may pick either method. */
   hasIndexationChoice: boolean;
+  /**
+   * Which LTCG regime applies: indexed 20% (sold before 23-Jul-2024), a choice
+   * (sold on/after, bought before), non-indexed 12.5% (bought on/after), or short-term.
+   */
+  regime: 'SHORT_TERM' | 'INDEXED_20' | 'CHOICE' | 'NON_INDEXED_12_5';
+  /** The indexed figure applies but a CII value is missing, so it could not be computed. */
+  ciiUnavailable: boolean;
 }

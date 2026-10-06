@@ -29,8 +29,8 @@
  * This is a deliberate narrowing of `05 §4` and is reported as such.
  */
 
-import { serializeRatio, specFor, toDecimal } from '@portfolioos/shared';
-import type { MfEvidence, MfFinding, SebiSubCategory } from '@portfolioos/shared';
+import { serializeRatio, specFor, toDecimal } from '@everypaisa/shared';
+import type { MfEvidence, MfFinding, SebiSubCategory } from '@everypaisa/shared';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 
 const RULE_ID = 'mf.debt.issuer-concentration';

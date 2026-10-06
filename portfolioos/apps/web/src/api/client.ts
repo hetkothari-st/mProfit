@@ -1,7 +1,8 @@
 import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
+import { useActingAsStore, isAccountRoute } from '@/stores/actingAs.store';
 import { getApiBaseUrl } from './baseUrl';
 
 const baseURL = getApiBaseUrl();
@@ -22,18 +23,53 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (familyId) {
     config.headers.set('X-Viewing-As-Family', familyId);
   }
+  // Managing a family member's account: data requests run as them. The
+  // server re-checks every one; account routes always run as you.
+  const acting = useActingAsStore.getState().profile;
+  if (acting && !isAccountRoute(config.url ?? '')) {
+    config.headers.set('X-Act-As', acting.id);
+  }
   return config;
 });
 
-let refreshPromise: Promise<string> | null = null;
+class NoRefreshTokenError extends Error {
+  constructor() {
+    super('No refresh token');
+  }
+}
 
-export async function doRefresh(): Promise<string> {
+/**
+ * True when the server rejected the session itself (401/403), or there is no
+ * refresh token to try. Only this may sign the user out: a 429, a 5xx or a
+ * dropped mobile connection says nothing about whether the session is valid.
+ */
+export function isAuthRejection(err: unknown): boolean {
+  if (err instanceof NoRefreshTokenError) return true;
+  const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+  return status === 401 || status === 403;
+}
+
+async function doRefresh(): Promise<string> {
   const refreshToken = useAuthStore.getState().refreshToken;
-  if (!refreshToken) throw new Error('No refresh token');
+  if (!refreshToken) throw new NoRefreshTokenError();
   const response = await axios.post(`${baseURL}/api/auth/refresh`, { refreshToken });
   const { user, tokens } = response.data.data;
   useAuthStore.getState().setSession(user, tokens);
   return tokens.accessToken as string;
+}
+
+let refreshPromise: Promise<string> | null = null;
+
+/**
+ * Refresh the session, one request at a time. Refresh tokens are single-use,
+ * so a second concurrent refresh (the proactive timer racing a 401 retry)
+ * would present an already-rotated token and be rejected.
+ */
+export function refreshSession(): Promise<string> {
+  refreshPromise ??= doRefresh().finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
 }
 
 api.interceptors.response.use(
@@ -44,14 +80,11 @@ api.interceptors.response.use(
     if (status === 401 && !original._retry && !original.url?.includes('/api/auth/')) {
       original._retry = true;
       try {
-        refreshPromise = refreshPromise ?? doRefresh();
-        const newToken = await refreshPromise;
-        refreshPromise = null;
+        const newToken = await refreshSession();
         original.headers.set('Authorization', `Bearer ${newToken}`);
         return api.request(original);
       } catch (refreshError) {
-        refreshPromise = null;
-        useAuthStore.getState().clearSession();
+        if (isAuthRejection(refreshError)) useAuthStore.getState().clearSession();
         return Promise.reject(refreshError);
       }
     }
@@ -75,6 +108,37 @@ function sanitizeMsg(s: string): string {
 export function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);
   return data.data;
+}
+
+/**
+ * The server's own error code (`DUPLICATE_TRANSACTION`, `RATE_LIMIT`, …), for
+ * the few places that need to react to one rather than just show the message.
+ */
+export function apiErrorCode(err: unknown): string | undefined {
+  if (!axios.isAxiosError(err)) return undefined;
+  const data = err.response?.data as { code?: string } | undefined;
+  return data?.code;
+}
+
+/**
+ * A request made with `responseType: 'blob'` gets its error body as a Blob
+ * too, so `apiErrorMessage` can't see the server's `error` field and shows
+ * axios's generic "Request failed with status code 404". Decode a JSON error
+ * body back into an object in place, then rethrow-ready.
+ */
+export async function decodeBlobError(err: unknown): Promise<unknown> {
+  if (!axios.isAxiosError(err)) return err;
+  const data = err.response?.data;
+  if (typeof Blob === 'undefined' || !(data instanceof Blob)) return err;
+  if (!/json/i.test(data.type)) return err;
+  const text = await data.text();
+  try {
+    err.response!.data = JSON.parse(text);
+  } catch {
+    // Labelled JSON but isn't: keep the original error and its generic message.
+    return err;
+  }
+  return err;
 }
 
 export function apiErrorMessage(err: unknown, fallback = 'Something went wrong'): string {

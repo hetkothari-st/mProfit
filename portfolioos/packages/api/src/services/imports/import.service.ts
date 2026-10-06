@@ -1,5 +1,5 @@
 import { readFile, unlink } from 'node:fs/promises';
-import type { ImportType } from '@prisma/client';
+import type { AssetClass, ImportType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { NotFoundError, ForbiddenError } from '../../lib/errors.js';
@@ -10,6 +10,7 @@ import { hashBytes, positionalHash } from '../sourceHash.js';
 import { getImportQueue } from '../../lib/queue.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
+import { hookAutoLinkImportedPremium } from '../insuranceExtras.service.js';
 
 export interface CreateImportJobInput {
   userId: string;
@@ -25,6 +26,8 @@ export interface CreateImportJobInput {
   /** When this import was promoted from a Gmail discovered doc, the
    *  doc's id so the worker can mirror the final status back. */
   gmailDocId?: string | null;
+  /** A class-limited CA's grant: the asset classes this job may write. */
+  caAllowedAssetClasses?: AssetClass[] | null;
 }
 
 export async function createImportJob(input: CreateImportJobInput) {
@@ -79,6 +82,7 @@ export async function createImportJob(input: CreateImportJobInput) {
         contentHash: input.contentHash ?? null,
         gmailMessageId: input.gmailMessageId ?? null,
         gmailDocId: input.gmailDocId ?? null,
+        ...(input.caAllowedAssetClasses ? { caAllowedAssetClasses: input.caAllowedAssetClasses } : {}),
       },
     });
 
@@ -131,7 +135,7 @@ export async function deleteImportJob(userId: string, id: string) {
   // Best-effort delete of the uploaded file. The job and its transactions
   // are already gone from the DB; a stale file on disk is a cleanup gap,
   // not a correctness bug.
-  // eslint-disable-next-line portfolioos/no-silent-catch -- best-effort cleanup
+  // eslint-disable-next-line everypaisa/no-silent-catch -- best-effort cleanup
   try { await unlink(job.filePath); } catch { /* ignore */ }
 }
 
@@ -296,8 +300,25 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
     };
   }
 
+  // A class-limited CA's upload is parsed under the client's identity, so
+  // RLS would let it write any class (F6). Hold it to the grant here.
+  const allowedClasses = Array.isArray(job.caAllowedAssetClasses)
+    ? new Set(job.caAllowedAssetClasses as string[])
+    : null;
+
   for (const [i, event] of events.entries()) {
     try {
+      if (allowedClasses) {
+        const cls = projectTransactionEvent(event, portfolioId).assetClass;
+        if (!allowedClasses.has(cls)) {
+          failed++;
+          errors.push({
+            row: i + 1,
+            reason: `Asset class ${cls} is outside what your professional may edit for this client.`,
+          });
+          continue;
+        }
+      }
       // Per §6.2 preference order: adapter-supplied hash → broker natural
       // key (derived inside createTransaction) → file+row positional
       // fallback. For adapters like CAS/CSV that don't emit orderNo+tradeNo,
@@ -314,14 +335,22 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
         ? { ...event, sourceHash: rowHash }
         : event;
 
-      const before = await prisma.transaction.count({ where: { portfolioId } });
+      let existed = false;
       const created = await createTransaction(
         job.userId,
         projectTransactionEvent(eventForProjection, portfolioId),
+        {
+          // A file the user re-uploads under a new name gets a new positional
+          // hash, and the same trade can also arrive from a broker sync or a
+          // CAS. Rows this job wrote are exempt: a file that lists the same
+          // trade twice is listing two real fills.
+          onDuplicate: 'skip',
+          ignoreImportJobId: importJobId,
+          onExisting: () => { existed = true; },
+        },
       );
-      const after = await prisma.transaction.count({ where: { portfolioId } });
 
-      if (after === before) {
+      if (existed) {
         // createTransaction returned an existing row (idempotent short-circuit).
         // Don't rewrite its importJobId — the first ingestion owns the lineage.
         skipped++;
@@ -331,6 +360,12 @@ export async function processImportJob(importJobId: string, pdfPassword?: string
           data: { importJobId },
         });
         success++;
+        if (created.assetClass === 'INSURANCE') {
+          // Fire-and-forget, never throws: links the premium to a policy
+          // only on an exact policy-number match; the rest are suggested
+          // on the policy page.
+          void hookAutoLinkImportedPremium(job.userId, created.id);
+        }
       }
     } catch (err) {
       failed++;

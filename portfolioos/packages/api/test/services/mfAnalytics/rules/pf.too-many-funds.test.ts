@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeRatio } from '@portfolioos/shared';
+import { serializeRatio } from '@everypaisa/shared';
 
 import { pfTooManyFundsRule } from '../../../../src/services/mfAnalytics/rules/pf.too-many-funds.js';
 import { MF_HEADLINE_MAX_CHARS } from '../../../../src/services/mfAnalytics/types.js';

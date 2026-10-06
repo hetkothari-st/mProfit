@@ -1,4 +1,4 @@
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 
 /**

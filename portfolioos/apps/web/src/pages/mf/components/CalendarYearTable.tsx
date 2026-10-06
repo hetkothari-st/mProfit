@@ -1,4 +1,4 @@
-import type { MfCalendarYearRow, Ratio } from '@portfolioos/shared';
+import type { MfCalendarYearRow, Ratio } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 import { SectionUnavailable } from './MetricValue';

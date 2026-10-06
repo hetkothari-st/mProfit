@@ -49,7 +49,7 @@ export function LifeInsuranceView({ data }: { data: unknown }) {
           >
             <div className="px-4 py-3 border-b bg-muted/30 flex flex-wrap items-center gap-3">
               <Heart className="h-4 w-4 text-accent shrink-0" />
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 basis-40">
                 <div className="text-sm font-semibold text-foreground">
                   {asString(fip['fipName']) ?? '—'}
                 </div>
@@ -86,7 +86,7 @@ function LifePolicyRow({ account }: { account: Record<string, unknown> }) {
   return (
     <div className="px-4 py-3 hover:bg-muted/20">
       <div className="flex flex-wrap items-start gap-3">
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 basis-40">
           <div className="flex items-center gap-2 flex-wrap">
             <Pill tone="accent" size="xs">{policyType}</Pill>
             <Pill tone={policyStatus === 'ACTIVE' ? 'positive' : 'neutral'} size="xs">

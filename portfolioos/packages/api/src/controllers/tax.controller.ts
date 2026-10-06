@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { ok } from '../lib/response.js';
 import { BadRequestError } from '../lib/errors.js';
+import { isValidFinancialYear } from '@everypaisa/shared';
 import { prisma } from '../lib/prisma.js';
 import {
   buildTaxSummary,
@@ -16,11 +17,14 @@ import {
 } from '../services/tax.service.js';
 import { buildSchedule43Report } from '../services/reports/schedule43.report.js';
 import { streamCapitalGainsTaxReport } from '../services/reportBuilder/statement/capitalGainsTaxReport.js';
+import { parseThemeQuery } from '../services/charts/pdfTheme.js';
 import {
   resolveReportSubjects,
   requireSingleSubject,
 } from '../services/reports/reportSubjects.js';
 import { runAsUser } from '../lib/requestContext.js';
+import { advanceTaxReport } from '../services/advanceTax.service.js';
+import { readPan } from '../services/piiAtRest.service.js';
 
 /**
  * Whose tax position this request is about.
@@ -45,12 +49,20 @@ async function asSubject<T>(req: Request, fn: (userId: string) => Promise<T>): P
 function getFy(req: Request, required = false): string | undefined {
   const fy = (req.query.fy as string | undefined)?.trim();
   if (required && !fy) throw new BadRequestError('fy query param required (e.g. 2024-25)');
+  if (fy && !isValidFinancialYear(fy)) throw new BadRequestError(`Invalid financial year "${fy}" — expected consecutive years like 2025-26`);
   return fy || undefined;
 }
 
 export async function getTaxSummary(req: Request, res: Response) {
   const fy = getFy(req, true)!;
   const data = await asSubject(req, (userId) => buildTaxSummary(userId, fy));
+  ok(res, data);
+}
+
+/** What is owed, and by which instalment date, on gains booked so far. */
+export async function getAdvanceTax(req: Request, res: Response) {
+  const fy = getFy(req, true)!;
+  const data = await asSubject(req, (userId) => advanceTaxReport(userId, fy));
   ok(res, data);
 }
 
@@ -121,16 +133,18 @@ export async function downloadCapitalGainsTaxReport(req: Request, res: Response)
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, pan: true },
+    select: { name: true, pan: true, panEnc: true },
   });
 
+  const pan = (await readPan(user)) ?? undefined;
   await runAsUser(userId, () =>
     streamCapitalGainsTaxReport(res, {
       userId,
       portfolioIds,
       fy,
       userName: user?.name ?? undefined,
-      pan: user?.pan ?? undefined,
+      pan,
+      theme: parseThemeQuery(req.query.theme),
     }),
   );
 }

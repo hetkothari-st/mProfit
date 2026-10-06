@@ -1,3 +1,4 @@
+import './lib/legacyStorageKeys';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -5,6 +6,9 @@ import { QueryClient, QueryClientProvider, hashKey } from '@tanstack/react-query
 import { Toaster } from 'react-hot-toast';
 import { App } from './App';
 import { useFamilyScopeStore } from './stores/familyScope.store';
+import { useActingAsStore } from './stores/actingAs.store';
+import { bindSessionBoundary } from './lib/sessionBoundary';
+import { installNoAutoKeyboard } from './lib/noAutoKeyboard';
 import './styles/globals.css';
 
 /**
@@ -40,11 +44,20 @@ const queryClient = new QueryClient({
       queryKeyHashFn: (queryKey) =>
         hashKey([
           useFamilyScopeStore.getState().viewingAsFamilyId ?? '__personal__',
+          // Whose account: yours, or a managed family member's.
+          useActingAsStore.getState().profile?.id ?? '__self__',
           ...queryKey,
         ]),
     },
   },
 });
+
+// Empty the cache whenever the signed-in account ends or changes, so no
+// screen can render another account's data. See lib/sessionBoundary.ts.
+bindSessionBoundary(queryClient);
+
+// Touch devices: no keyboard pop-up from auto-focused dialog fields.
+installNoAutoKeyboard();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

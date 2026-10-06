@@ -1,4 +1,4 @@
-import type { MfEvidence, MfFinding, MfFindingSeverity } from '@portfolioos/shared';
+import type { MfEvidence, MfFinding, MfFindingSeverity } from '@everypaisa/shared';
 import { cn } from '@/lib/cn';
 import { SectionUnavailable } from './MetricValue';
 import { MoneyCell, PctCell, PercentileCell, RatioCell } from './MetricCells';

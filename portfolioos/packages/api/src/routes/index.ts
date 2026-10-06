@@ -32,9 +32,11 @@ import { foRouter } from './fo.routes.js';
 import { catalogRouter, valuationRouter } from './valuation.routes.js';
 import { documentsRouter } from './documents.routes.js';
 import { loansRouter } from './loans.routes.js';
+import { loansGivenRouter } from './loansGiven.routes.js';
 import { creditCardsRouter } from './creditCards.routes.js';
 import { bankAccountsRouter } from './bankAccounts.routes.js';
 import { realEstateRouter } from './realEstate.routes.js';
+import { propertyPhotosRouter, propertyLocationRouter } from './propertyMedia.routes.js';
 import { pfRouter } from './pf.routes.js';
 import { forexRouter } from './forex.routes.js';
 import { taxRouter } from './tax.routes.js';
@@ -46,8 +48,10 @@ import { goalsRouter } from './goals.routes.js';
 import { advisorRouter } from './advisor.routes.js';
 import { incomeRouter } from './income.routes.js';
 import { intelligenceRouter } from './intelligence.routes.js';
-import { finfactorRouter, finfactorWebhookRouter } from './finfactor.routes.js';
+import { mountFinfactorRoutes } from './finfactor.routes.js';
+import { caRouter, professionalAccessRouter, professionalInviteRouter } from './ca.routes.js';
 import { familiesRouter } from './families.routes.js';
+import { managedProfilesRouter } from './managedProfiles.routes.js';
 import { aiAssistantRouter } from './aiAssistant.routes.js';
 import { billingRouter } from './billing.routes.js';
 import { env } from '../config/env.js';
@@ -96,9 +100,12 @@ export function registerRoutes(app: Express): void {
   app.use('/api/valuations', valuationRouter);
   app.use('/api/documents', documentsRouter);
   app.use('/api/loans', loansRouter);
+  app.use('/api/loans-given', loansGivenRouter);
   app.use('/api/credit-cards', creditCardsRouter);
   app.use('/api/bank-accounts', bankAccountsRouter);
   app.use('/api/real-estate', realEstateRouter);
+  app.use('/api/property-photos', propertyPhotosRouter);
+  app.use('/api/property-location', propertyLocationRouter);
   app.use('/api/epfppf', pfRouter);
   app.use('/api/forex', forexRouter);
   app.use('/api/tax', taxRouter);
@@ -110,10 +117,16 @@ export function registerRoutes(app: Express): void {
   app.use('/api/advisor', advisorRouter);
   app.use('/api/income', incomeRouter);
   app.use('/api/intelligence', intelligenceRouter);
-  app.use('/api/integrations/finfactor', finfactorRouter);
-  app.use('/api/integrations/finfactor/webhook', finfactorWebhookRouter);
+  mountFinfactorRoutes(app);
   if (env.ENABLE_FAMILY === 'true') {
     app.use('/api/families', familiesRouter);
+    app.use('/api/managed-profiles', managedProfilesRouter);
+    app.use('/api/ca', caRouter);
+    app.use('/api/me/professional-access', professionalAccessRouter);
+    // Inside the same flag as the rest of the relationship, but carrying no
+    // plan gate of its own: this is how a professional accepts an invitation
+    // from someone who already pays for the product.
+    app.use('/api/professional-invitations', professionalInviteRouter);
   }
   app.use('/api/assistant', aiAssistantRouter);
   app.use('/api/billing', billingRouter);

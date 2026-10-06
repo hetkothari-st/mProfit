@@ -38,7 +38,7 @@
  * comment declares; there is no single global flip.
  */
 
-import { toDecimal, type MfEvidence, type MfFinding, type Ratio } from '@portfolioos/shared';
+import { toDecimal, type MfEvidence, type MfFinding, type Ratio } from '@everypaisa/shared';
 import {
   MF_HORIZON_KEYS,
   confidenceFor,
@@ -56,7 +56,7 @@ const CODE = 'RISK_PROFILE_MISMATCH';
  * The profiles `05 §4`'s "<= MODERATE" covers, as plain strings.
  *
  * Deliberately not typed against `RiskCategoryValue`: a rule may only import
- * `../types.js`, `../constants.js`, `@portfolioos/shared` and `decimal.js`
+ * `../types.js`, `../constants.js`, `@everypaisa/shared` and `decimal.js`
  * (`test/invariants/mf-rules-pure.test.ts`), and `facts.userProfile
  * .riskProfile.category` is already that type at the call site, so the
  * comparison is checked where it matters.

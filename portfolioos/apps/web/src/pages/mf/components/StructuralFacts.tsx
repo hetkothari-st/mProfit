@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { formatINR, type MfCurrentProfile, type MfSchemeMetaDto } from '@portfolioos/shared';
+import { formatINR, type MfCurrentProfile, type MfSchemeMetaDto } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
 import { MetricStat, MetricValue, SectionUnavailable } from './MetricValue';

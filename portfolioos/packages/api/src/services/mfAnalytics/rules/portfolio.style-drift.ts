@@ -62,7 +62,7 @@ import {
   type MfFinding,
   type Pct,
   type SebiSubCategory,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 
 const RULE_ID = 'mf.portfolio.style-drift';

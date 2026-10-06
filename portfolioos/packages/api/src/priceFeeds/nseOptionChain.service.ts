@@ -15,6 +15,7 @@
 
 import { request } from 'undici';
 import { logger } from '../lib/logger.js';
+import { followRedirects } from '../lib/httpDispatcher.js';
 
 const NSE_HOME = 'https://www.nseindia.com';
 const BROWSER_UA =
@@ -35,7 +36,7 @@ async function fetchSession(): Promise<string> {
       accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'accept-language': 'en-US,en;q=0.9',
     },
-    maxRedirections: 5,
+    dispatcher: followRedirects,
     bodyTimeout: 20_000,
     headersTimeout: 15_000,
   });

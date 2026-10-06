@@ -3,10 +3,11 @@ import { getApiBaseUrl } from './baseUrl';
 import type {
   ApiResponse,
   CreateTransactionRequest,
+  DuplicateScanResponse,
   TransactionDTO,
   TransactionListResponse,
   UpdateTransactionRequest,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);
@@ -47,6 +48,21 @@ export const transactionsApi = {
   },
   async remove(id: string): Promise<void> {
     await api.delete(`/api/transactions/${id}`);
+  },
+  async duplicates(): Promise<DuplicateScanResponse> {
+    const { data } = await api.get<ApiResponse<DuplicateScanResponse>>(
+      '/api/transactions/duplicates',
+    );
+    return unwrap(data);
+  },
+  async removeDuplicates(ids: {
+    transactionIds?: string[];
+    rentEntryIds?: string[];
+  }): Promise<{ removedTransactions: number; removedRentEntries: number }> {
+    const { data } = await api.post<
+      ApiResponse<{ removedTransactions: number; removedRentEntries: number }>
+    >('/api/transactions/duplicates/remove', ids);
+    return unwrap(data);
   },
   async uploadPhoto(txnId: string, file: File): Promise<{ id: string; fileName: string }> {
     const form = new FormData();

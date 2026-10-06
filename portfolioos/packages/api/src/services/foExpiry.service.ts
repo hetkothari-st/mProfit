@@ -1,8 +1,10 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { BadRequestError } from '../lib/errors.js';
 import { recomputeDerivativePosition } from './derivativePosition.service.js';
 import { getLatestFoContractPrice } from '../priceFeeds/nseFoMaster.service.js';
+import { findDuplicateTransaction } from './duplicateMatch.js';
 
 /**
  * Expiry-day lifecycle. Run by cron at 17:30 IST (after bhavcopy job at
@@ -73,7 +75,8 @@ export async function scanExpiringPositions(): Promise<{
       jobsCreated += 1;
 
       const autoApprove = p.portfolio?.portfolioSetting?.autoApproveExpiryClose ?? false;
-      if (autoApprove) {
+      // Without a settlement price the close would be booked at 0 — leave it for review.
+      if (autoApprove && settlementPrice) {
         await approveExpiryClose(job.id);
         autoClosed += 1;
       }
@@ -93,9 +96,12 @@ export async function approveExpiryClose(jobId: string): Promise<void> {
   const position = await prisma.derivativePosition.findUnique({ where: { id: job.positionId } });
   if (!position) throw new Error('Position not found');
 
-  const settlement = job.settlementPrice
-    ? new Decimal(job.settlementPrice.toString())
-    : new Decimal(0);
+  if (!job.settlementPrice) {
+    throw new BadRequestError(
+      'No settlement price for this contract yet — add it before closing the position at expiry.',
+    );
+  }
+  const settlement = new Decimal(job.settlementPrice.toString());
   const netQty = new Decimal(position.netQuantity.toString());
   if (netQty.isZero()) {
     await prisma.expiryCloseJob.update({
@@ -105,33 +111,47 @@ export async function approveExpiryClose(jobId: string): Promise<void> {
     return;
   }
 
-  const totalUnits = netQty.times(position.lotSize).abs();
+  // netQuantity is already in units (lots × lot size at import).
+  const totalUnits = netQty.abs();
   const grossAmount = totalUnits.times(settlement);
   // Long position settles via SELL at settlement; short via BUY at settlement.
   const closingType = netQty.isPositive() ? 'SELL' : 'BUY';
 
-  await prisma.transaction.create({
-    data: {
-      portfolioId: position.portfolioId,
-      assetClass: position.instrumentType === 'FUTURES' ? 'FUTURES' : 'OPTIONS',
-      transactionType: closingType,
-      assetName: `${position.underlying}-EXPIRY`,
-      tradeDate: position.expiryDate,
-      quantity: totalUnits.toString(),
-      price: settlement.toString(),
-      grossAmount: grossAmount.toString(),
-      netAmount: grossAmount.toString(),
-      strikePrice: position.strikePrice?.toString() ?? null,
-      expiryDate: position.expiryDate,
-      optionType: position.instrumentType === 'CALL' ? 'CALL' : position.instrumentType === 'PUT' ? 'PUT' : null,
-      lotSize: position.lotSize,
-      exchange: 'NFO',
-      assetKey: position.assetKey,
-      sourceAdapter: 'fno.expiry.v1',
-      sourceAdapterVer: '1',
-      narration: 'Auto-generated expiry close',
-    },
+  // A position closed by hand before the job was approved already carries the
+  // closing trade; writing a second one would book the settlement twice.
+  const alreadyClosed = await findDuplicateTransaction({
+    portfolioId: position.portfolioId,
+    assetKey: position.assetKey,
+    transactionType: closingType,
+    tradeDate: position.expiryDate,
+    quantity: totalUnits.toString(),
+    price: settlement.toString(),
   });
+
+  if (!alreadyClosed) {
+    await prisma.transaction.create({
+      data: {
+        portfolioId: position.portfolioId,
+        assetClass: position.instrumentType === 'FUTURES' ? 'FUTURES' : 'OPTIONS',
+        transactionType: closingType,
+        assetName: `${position.underlying}-EXPIRY`,
+        tradeDate: position.expiryDate,
+        quantity: totalUnits.toString(),
+        price: settlement.toString(),
+        grossAmount: grossAmount.toString(),
+        netAmount: grossAmount.toString(),
+        strikePrice: position.strikePrice?.toString() ?? null,
+        expiryDate: position.expiryDate,
+        optionType: position.instrumentType === 'CALL' ? 'CALL' : position.instrumentType === 'PUT' ? 'PUT' : null,
+        lotSize: position.lotSize,
+        exchange: 'NFO',
+        assetKey: position.assetKey,
+        sourceAdapter: 'fno.expiry.v1',
+        sourceAdapterVer: '1',
+        narration: 'Auto-generated expiry close',
+      },
+    });
+  }
 
   await prisma.expiryCloseJob.update({
     where: { id: job.id },

@@ -15,8 +15,8 @@
  * every semantic decision here.
  */
 
-import { Decimal, toDecimal, serializeMoney, serializePct } from '@portfolioos/shared';
-import type { Money, Pct, MfHoldingKind } from '@portfolioos/shared';
+import { Decimal, toDecimal, serializeMoney, serializePct } from '@everypaisa/shared';
+import type { Money, Pct, MfHoldingKind } from '@everypaisa/shared';
 import type { MarketCapBucket, AmfiMarketCapLookup, ParsedExitLoadRule } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ import type { MarketCapBucket, AmfiMarketCapLookup, ParsedExitLoadRule } from '.
  *
  * The re-export is here so adapters have a single import surface and never
  * reach across into `services/` themselves — if the ladder ever needs to move
- * into `@portfolioos/shared`, this is the only line that changes.
+ * into `@everypaisa/shared`, this is the only line that changes.
  */
 export {
   CREDIT_RATING_SCALE,

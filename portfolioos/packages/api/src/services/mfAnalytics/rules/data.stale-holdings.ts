@@ -18,8 +18,8 @@
  * days stale" would have to invent N.
  */
 
-import { daysBetween, serializeRatio } from '@portfolioos/shared';
-import type { MfEvidence, MfFinding } from '@portfolioos/shared';
+import { daysBetween, serializeRatio } from '@everypaisa/shared';
+import type { MfEvidence, MfFinding } from '@everypaisa/shared';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 
 const RULE_ID = 'mf.data.stale-holdings';

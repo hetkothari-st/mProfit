@@ -1,7 +1,7 @@
 /**
  * PfExtensionPairPage.tsx
  *
- * Web UI for pairing the PortfolioOS browser extension to the user's account.
+ * Web UI for pairing the EveryPaisa browser extension to the user's account.
  * Flow:
  *   1. User clicks "Generate code" → POST /epfppf/extension/pair-init
  *   2. Page shows the 8-char code + 5-min countdown
@@ -88,8 +88,9 @@ export function PfExtensionPairPage() {
           toast.success('Extension connected!');
         }
       }
+      // eslint-disable-next-line everypaisa/no-silent-catch -- this is one tick of a poll that keeps running; interrupting a user who is mid-pairing over a single failed request would be worse than waiting for the next one
     } catch {
-      // Silent — don't interrupt the user
+      /* the next poll retries */
     }
   }, [codeId]);
 
@@ -156,14 +157,14 @@ export function PfExtensionPairPage() {
   const codeExpired = countdown === 0 && code !== null;
 
   return (
-    <div className="max-w-lg mx-auto space-y-6 py-6 px-4">
+    <div className="max-w-lg mx-auto space-y-6 py-6 sm:px-4">
       {/* Header */}
       <div className="flex items-center gap-3">
         <PlugZap className="h-6 w-6 text-primary" />
         <div>
           <h1 className="text-xl font-semibold">Browser Extension</h1>
           <p className="text-sm text-muted-foreground">
-            Connect the PortfolioOS browser extension to auto-fetch your EPF and PPF data.
+            Connect the EveryPaisa browser extension to auto-fetch your EPF and PPF data.
           </p>
         </div>
       </div>
@@ -182,7 +183,7 @@ export function PfExtensionPairPage() {
           ) : code && !codeExpired ? (
             <>
               <p className="text-sm text-muted-foreground">
-                Open the PortfolioOS extension popup, click <strong>Pair</strong>, and enter this
+                Open the EveryPaisa extension popup, click <strong>Pair</strong>, and enter this
                 code:
               </p>
               {/* Big monospace code display */}
@@ -222,7 +223,7 @@ export function PfExtensionPairPage() {
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                1. Install the PortfolioOS browser extension from the Chrome Web Store.
+                1. Install the EveryPaisa browser extension from the Chrome Web Store.
                 <br />
                 2. Click <strong>Generate code</strong> below.
                 <br />

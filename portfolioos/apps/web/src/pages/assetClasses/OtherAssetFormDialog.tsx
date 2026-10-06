@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
-import type { TransactionDTO, AssetClass } from '@portfolioos/shared';
+import type { TransactionDTO, AssetClass } from '@everypaisa/shared';
 import type { FormDialogProps } from './FDFormDialog';
 
 const n = (v: unknown) => (v === '' || v == null ? undefined : v);

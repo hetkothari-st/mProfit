@@ -1,5 +1,6 @@
 import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
+import { currentReportTheme } from '@/lib/reportTheme';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);
@@ -27,6 +28,7 @@ export interface RentReceiptDTO {
   dueDate: string;
   receivedOn: string | null;
   status: 'EXPECTED' | 'RECEIVED' | 'PARTIAL' | 'OVERDUE' | 'SKIPPED';
+  isSkipped: boolean;
   cashFlowId: string | null;
   notes: string | null;
   autoMatchedFromEventId: string | null;
@@ -52,6 +54,8 @@ export interface TenancyDTO {
   isActive: boolean;
   notes: string | null;
   createdAt: string;
+  /** Bank account this tenant's rent is credited to; null = not tracked. */
+  bankAccountId: string | null;
   rentReceipts?: RentReceiptDTO[];
 }
 
@@ -85,6 +89,63 @@ export interface PropertyPnLDTO {
   expenseCount: number;
 }
 
+export type LedgerEntryType =
+  | 'PAYMENT'
+  | 'DISCOUNT'
+  | 'LATE_FEE'
+  | 'OTHER_CHARGE'
+  | 'DEPOSIT'
+  | 'DEPOSIT_REFUND';
+
+export interface LedgerRowDTO {
+  id: string;
+  kind: 'CHARGE' | 'CREDIT';
+  source: 'RECEIPT' | 'ENTRY';
+  /** 'RENT_CHARGE' for receipt rows, otherwise a LedgerEntryType. */
+  entryType: string;
+  date: string;
+  amount: string;
+  note: string | null;
+  attachmentUrl: string | null;
+  forMonth: string | null;
+  runningBalance: string;
+}
+
+export interface TenancyLedgerDTO {
+  tenancyId: string;
+  tenantName: string;
+  tenantPhone: string | null;
+  propertyId: string;
+  propertyName: string;
+  monthlyRent: string;
+  balanceDue: string;
+  depositHeld: string;
+  /** Bank account this rent is credited to; null = not tracked. */
+  bankAccountId: string | null;
+  /** Newest first. */
+  rows: LedgerRowDTO[];
+}
+
+export interface CollectionRowDTO {
+  tenancyId: string;
+  tenantName: string;
+  tenantPhone: string | null;
+  propertyId: string;
+  propertyName: string;
+  balanceDue: string;
+  oldestUnpaidMonth: string | null;
+  oldestUnpaidDueDate: string | null;
+}
+
+export interface CreateLedgerEntryInput {
+  entryType: LedgerEntryType;
+  amount: string;
+  entryDate: string;
+  forMonth?: string | null;
+  note?: string | null;
+  attachmentUrl?: string | null;
+}
+
 // ── Input types ───────────────────────────────────────────────────────
 
 export interface CreatePropertyInput {
@@ -113,6 +174,8 @@ export interface CreateTenancyInput {
   securityDeposit?: string | null;
   rentDueDay?: number;
   notes?: string | null;
+  /** Bank account the rent is credited to. null clears it. */
+  bankAccountId?: string | null;
 }
 
 export type UpdateTenancyInput = Partial<CreateTenancyInput> & {
@@ -123,6 +186,12 @@ export interface MarkReceivedInput {
   receivedAmount: string;
   receivedOn: string;
   notes?: string | null;
+  /**
+   * Sent only after the user has seen the payment already on the khata and
+   * confirmed a second one really came in that day. Without it the server
+   * answers 409 DUPLICATE_RENT_PAYMENT.
+   */
+  allowDuplicate?: boolean;
 }
 
 export interface CreateExpenseInput {
@@ -320,6 +389,70 @@ export const rentalApi = {
       '/api/rental/reminders/scan',
     );
     return unwrap(data);
+  },
+
+  // Khata ledger
+  async getTenancyLedger(tenancyId: string): Promise<TenancyLedgerDTO> {
+    const { data } = await api.get<ApiResponse<TenancyLedgerDTO>>(
+      `/api/rental/tenancies/${tenancyId}/ledger`,
+    );
+    return unwrap(data);
+  },
+  async createLedgerEntry(
+    tenancyId: string,
+    input: CreateLedgerEntryInput,
+  ): Promise<{ id: string }> {
+    const { data } = await api.post<ApiResponse<{ id: string }>>(
+      `/api/rental/tenancies/${tenancyId}/entries`,
+      input,
+    );
+    return unwrap(data);
+  },
+  async updateLedgerEntry(
+    entryId: string,
+    patch: Partial<CreateLedgerEntryInput>,
+  ): Promise<{ id: string }> {
+    const { data } = await api.patch<ApiResponse<{ id: string }>>(
+      `/api/rental/entries/${entryId}`,
+      patch,
+    );
+    return unwrap(data);
+  },
+  async deleteLedgerEntry(entryId: string): Promise<void> {
+    await api.delete(`/api/rental/entries/${entryId}`);
+  },
+  async listCollections(): Promise<CollectionRowDTO[]> {
+    const { data } = await api.get<ApiResponse<CollectionRowDTO[]>>('/api/rental/collections');
+    return unwrap(data);
+  },
+  async getReminderLink(tenancyId: string): Promise<{ text: string; waUrl: string | null }> {
+    const { data } = await api.get<ApiResponse<{ text: string; waUrl: string | null }>>(
+      `/api/rental/tenancies/${tenancyId}/reminder-link`,
+    );
+    return unwrap(data);
+  },
+  /**
+   * Authed PDF download, same pattern as documentsApi.openDownload and
+   * useDownloadReport. A plain `<a href>` cannot work here: the API lives on
+   * a different origin (see api/baseUrl.ts) and auth is a Bearer token with
+   * `withCredentials: false` (api/client.ts), so a browser navigation to a
+   * relative path hits the SPA and an absolute one 401s. Fetch through the
+   * axios client instead, then synthesise the download.
+   */
+  async downloadStatement(tenancyId: string, fileName: string): Promise<void> {
+    const res = await api.get(`/api/rental/tenancies/${tenancyId}/statement`, {
+      params: { theme: currentReportTheme() },
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(res.data as Blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   },
 };
 

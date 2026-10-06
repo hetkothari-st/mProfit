@@ -50,7 +50,7 @@ import {
   type MfPublishedReturnsFetchOutcome,
 } from '../../src/priceFeeds/mfPublishedReturns.v1.js';
 import type { HttpTextOutcome } from '../../src/priceFeeds/nseIndices.v1.js';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 

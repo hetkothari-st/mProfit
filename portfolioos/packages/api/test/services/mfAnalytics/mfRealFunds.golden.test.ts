@@ -45,7 +45,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 
 import {
   toDailySeries,

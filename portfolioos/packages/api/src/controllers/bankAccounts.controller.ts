@@ -9,12 +9,16 @@ import {
   createAccount,
   updateAccount,
   deleteAccount,
+  revealAccountNumber,
+  shareAccountDetails,
   addSnapshot,
   deleteSnapshot,
   listAccountCashFlows,
+  type RevealAuditContext,
 } from '../services/bankAccounts.service.js';
+import { lookupIfsc, normaliseIfsc } from '../services/ifscLookup.service.js';
 import { ok } from '../lib/response.js';
-import { UnauthorizedError } from '../lib/errors.js';
+import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import { isoDate, signedMoneyString, last4Digits, mmYY } from '../lib/zodMoney.js';
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
@@ -24,10 +28,14 @@ const createSchema = z.object({
   accountType: z.enum(BANK_ACCOUNT_TYPES),
   accountHolder: z.string().min(1).max(200),
   last4: last4Digits,
+  // Digit/length rules live in the service (normaliseAccountNumber) so they
+  // hold for every caller; this only bounds the payload.
+  accountNumber: z.string().max(40).nullable().optional(),
   customerId: z.string().max(64).nullable().optional(),
   portfolioId: z.string().nullable().optional(),
   ifsc: z.string().max(20).nullable().optional(),
   branch: z.string().max(200).nullable().optional(),
+  branchAddress: z.string().max(500).nullable().optional(),
   nickname: z.string().max(120).nullable().optional(),
   jointHolders: z.array(z.string().max(200)).optional(),
   nomineeName: z.string().max(200).nullable().optional(),
@@ -49,6 +57,10 @@ const snapshotSchema = z.object({
   source: z.enum(BANK_BALANCE_SOURCES).optional().default('manual'),
   note: z.string().max(500).nullable().optional(),
 });
+
+function auditContext(req: Request): RevealAuditContext {
+  return { ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null };
+}
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -83,6 +95,30 @@ export async function deleteAccountHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   await deleteAccount(req.user.id, req.params['id']!);
   res.status(204).end();
+}
+
+export async function revealAccountNumberHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const accountNumber = await revealAccountNumber(req.user.id, req.params['id']!, auditContext(req));
+  // Plaintext PII: keep it out of browser and proxy caches.
+  res.set('Cache-Control', 'no-store');
+  ok(res, { accountNumber });
+}
+
+export async function shareAccountDetailsHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const result = await shareAccountDetails(req.user.id, req.params['id']!, auditContext(req));
+  res.set('Cache-Control', 'no-store');
+  ok(res, result);
+}
+
+export async function lookupIfscHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const code = normaliseIfsc(req.params['code'] ?? '');
+  if (!code) throw new BadRequestError('Invalid IFSC — expected 11 characters like HDFC0001234');
+  const info = await lookupIfsc(code);
+  if (!info) throw new NotFoundError(`IFSC ${code} not found`);
+  ok(res, info);
 }
 
 export async function addSnapshotHandler(req: Request, res: Response) {

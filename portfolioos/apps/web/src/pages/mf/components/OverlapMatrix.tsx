@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { MfHeldFundDto, MfOverlapPair, MfPortfolioAnalysisDto } from '@portfolioos/shared';
+import type { MfHeldFundDto, MfOverlapPair, MfPortfolioAnalysisDto } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { SectionUnavailable } from './MetricValue';
 import { PctCell } from './MetricCells';

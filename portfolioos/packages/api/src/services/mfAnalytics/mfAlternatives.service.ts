@@ -40,7 +40,7 @@ import type {
   MfRollingStats,
   Pct,
   Ratio,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 /**
  * How many to return.

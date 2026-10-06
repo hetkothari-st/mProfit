@@ -37,7 +37,7 @@ import {
   type MfSchemeMetaDto,
   type MfSchemeScoreDto,
   type Ratio,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import type { EffectiveScope } from '../../../../src/services/familyScope.service.js';
 import type {
   AdvisorApprovedProductFacts,
@@ -506,7 +506,7 @@ export function makeFacts(options: FactsOptions = {}): MfAnalysisFacts {
 //   - `factsForFund`, a one-fund convenience over `makeFacts`/`makeFundFacts`.
 // ---------------------------------------------------------------------------
 
-import type { MfLotDto, MfQualitativeFactDto } from '@portfolioos/shared';
+import type { MfLotDto, MfQualitativeFactDto } from '@everypaisa/shared';
 
 /**
  * `YYYY-MM-DD` for `AS_OF` shifted by whole days.

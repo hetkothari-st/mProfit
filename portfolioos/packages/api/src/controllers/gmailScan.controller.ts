@@ -1,10 +1,10 @@
 import type { Request, Response } from 'express';
-import fs from 'node:fs';
 import { z } from 'zod';
 import type { GmailDocStatus } from '@prisma/client';
 import { ok, created } from '../lib/response.js';
 import { UnauthorizedError, BadRequestError } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
+import { streamFileTo } from '../lib/documentStorage.js';
 import {
   createScanJob,
   listScanJobs,
@@ -118,7 +118,7 @@ export async function getDocRaw(req: Request, res: Response) {
     'Content-Disposition',
     `inline; filename="${encodeURIComponent(doc.fileName)}"`,
   );
-  fs.createReadStream(doc.storagePath).pipe(res);
+  await streamFileTo(res, doc.storagePath);
 }
 
 export async function listSenders(req: Request, res: Response) {

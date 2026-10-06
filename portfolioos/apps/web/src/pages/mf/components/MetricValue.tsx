@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { MfMetricStatus } from '@portfolioos/shared';
+import type { MfMetricStatus } from '@everypaisa/shared';
 import { cn } from '@/lib/cn';
 import type { ResolvedMetric } from '../mfFormat';
 

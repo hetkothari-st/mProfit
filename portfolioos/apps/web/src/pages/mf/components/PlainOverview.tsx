@@ -42,7 +42,7 @@ import type {
   MfHorizonMetrics,
   MfHorizonYears,
   MfPillarScore,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 // ---------------------------------------------------------------------------
 // Formatting

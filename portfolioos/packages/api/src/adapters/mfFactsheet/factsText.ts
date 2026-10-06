@@ -16,8 +16,8 @@
  * cost against a number nobody published.
  */
 
-import { serializeMoney } from '@portfolioos/shared';
-import type { Money, Pct } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
+import type { Money, Pct } from '@everypaisa/shared';
 import {
   croreToInr,
   lakhToInr,

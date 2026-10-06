@@ -11,6 +11,7 @@ import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { uploadImportFile } from '../middleware/upload.js';
 import { rebindUserContext } from '../middleware/rebindUserContext.js';
+import { importLimiter } from '../middleware/rateLimit.js';
 
 export const importsRouter = Router();
 
@@ -20,9 +21,9 @@ importsRouter.use(authenticate);
 // plumbing can drop the ALS store set by `authenticate`, which makes the
 // Prisma RLS hook skip `set_config('app.current_user_id', ...)` and every
 // user-scoped INSERT fails with Postgres code 42501.
-importsRouter.post('/', uploadImportFile, rebindUserContext, asyncHandler(upload));
+importsRouter.post('/', importLimiter, uploadImportFile, rebindUserContext, asyncHandler(upload));
 importsRouter.get('/', asyncHandler(list));
 importsRouter.get('/:id', asyncHandler(get));
 importsRouter.delete('/:id', asyncHandler(remove));
-importsRouter.post('/:id/reprocess', asyncHandler(reprocess));
+importsRouter.post('/:id/reprocess', importLimiter, asyncHandler(reprocess));
 importsRouter.get('/:id/download', asyncHandler(download));

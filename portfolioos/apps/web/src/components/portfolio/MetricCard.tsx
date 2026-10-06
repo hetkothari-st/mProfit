@@ -14,22 +14,25 @@ interface MetricCardProps {
     direction: 'up' | 'down' | 'flat';
   };
   hint?: string;
+  /** Optional element beside the label, e.g. an InfoTip explaining the metric. */
+  info?: React.ReactNode;
 }
 
 function looksLikeMoney(s: string) {
   return /[₹]|^Rs\.?/.test(s) || /^[+-]?[\d,]+(\.\d+)?$/.test(s);
 }
 
-export function MetricCard({ label, value, icon: Icon, trend, hint }: MetricCardProps) {
+export function MetricCard({ label, value, icon: Icon, trend, hint, info }: MetricCardProps) {
   const isMoney = looksLikeMoney(value);
 
   return (
-    <Card className="group relative overflow-hidden p-5 transition-shadow hover:shadow-elev-lg hover:ring-2 hover:ring-accent/40">
+    <Card className="group relative overflow-hidden p-4 sm:p-5 transition-shadow hover:shadow-elev-lg hover:ring-2 hover:ring-accent/40">
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
-            {label}
+          <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
+            <span>{label}</span>
+            {info}
           </div>
           <AutoFitText className="mt-3">
             {isMoney ? (
@@ -50,7 +53,7 @@ export function MetricCard({ label, value, icon: Icon, trend, hint }: MetricCard
           )}
         </div>
         {Icon && (
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border/70 bg-background/40 transition-colors group-hover:border-accent/50">
+          <div className="hidden sm:grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border/70 bg-background/40 transition-colors group-hover:border-accent/50">
             <Icon className="h-4 w-4 text-accent-ink" strokeWidth={1.6} />
           </div>
         )}

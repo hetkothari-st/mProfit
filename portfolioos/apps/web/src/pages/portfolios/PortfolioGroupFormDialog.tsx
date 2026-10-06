@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { portfolioGroupsApi } from '@/api/portfolioGroups.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
-import type { PortfolioGroupListItem } from '@portfolioos/shared';
+import type { PortfolioGroupListItem } from '@everypaisa/shared';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required').max(100),

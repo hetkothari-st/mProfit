@@ -1,6 +1,6 @@
 import { ArrowLeftRight } from 'lucide-react';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { Decimal, type HoldingRow, formatINR } from '@portfolioos/shared';
+import { Decimal, type HoldingRow, formatINR } from '@everypaisa/shared';
 import { SimpleAssetPage } from '@/pages/assetClasses/SimpleAssetPage';
 import { Card, CardContent } from '@/components/ui/card';
 import { forexApi } from '@/api/forex.api';

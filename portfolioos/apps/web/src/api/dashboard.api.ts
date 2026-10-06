@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 export interface VehicleAlert {
   vehicleId: string;

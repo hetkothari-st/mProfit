@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializeRatio, type MfHorizonMetrics, type MfMetricStatus } from '@portfolioos/shared';
+import { serializeRatio, type MfHorizonMetrics, type MfMetricStatus } from '@everypaisa/shared';
 import { riskVolatilityMismatchRule as rule } from '../../../../src/services/mfAnalytics/rules/risk.volatility-mismatch.js';
 import type { MfHorizonKey } from '../../../../src/services/mfAnalytics/types.js';
 import type { RiskCategoryValue } from '../../../../src/services/riskProfileMath.js';

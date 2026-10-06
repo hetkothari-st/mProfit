@@ -74,7 +74,7 @@ Updated 2026-05-07. Inputs needed to unblock the remaining work on each track.
 1. **Sentry DSN** — sign up free at sentry.io → create project → set `SENTRY_DSN` in Railway env. Unlocks Track 8 telemetry. Zero cost.
 2. **Live netbanking discovery walks** — schedule one focused session per institution (45–90 min each). Unlocks Tracks 1, 2 (per-bank), and the rest of 3 (content scripts).
 3. **Chrome Web Store dev account** ($5) + **Firefox AMO** (free). Unlocks Track 3 final submission.
-4. **Real privacy email** + **support email** — register `privacy@portfolio-os.in` and `support@portfolio-os.in` (or pick alternates). Unlocks store submission listing.
+4. **Real privacy email** + **support email** — register `privacy@everypaisa.in` and `support@everypaisa.in` (or pick alternates). Unlocks store submission listing.
 5. **Designer hand-off** — icons (16/48/128 + svg) + store hero (1280×800) + screenshots (1280×800 × 4–5). Unlocks store submission visuals.
 6. **TSP partnership decision** for AA (Track 7) — multi-month, separate planning cycle.
 

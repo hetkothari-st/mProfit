@@ -13,8 +13,8 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { Decimal, toDecimal, universeKey } from '@portfolioos/shared';
-import type { MfPlanType, MfOptionType, MfSchemeStatus } from '@portfolioos/shared';
+import { Decimal, toDecimal, universeKey } from '@everypaisa/shared';
+import type { MfPlanType, MfOptionType, MfSchemeStatus } from '@everypaisa/shared';
 import { prisma } from '../../../src/lib/prisma.js';
 import { runAsSystem } from '../../../src/lib/requestContext.js';
 import {

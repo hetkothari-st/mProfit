@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   RotateCcw,
   Filter,
+  Radio,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -33,11 +34,12 @@ import { apiErrorMessage } from '@/api/client';
 import type {
   IngestionFailureDTO,
   IngestionResolveAction,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
+import { feedLabel } from '@everypaisa/shared';
 import {
   INGESTION_RESOLVE_ACTIONS,
   INGESTION_RESOLVE_ACTION_LABELS,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 type Filter = 'unresolved' | 'resolved' | 'all';
 
@@ -172,9 +174,15 @@ export function FailuresPage() {
         </div>
       </div>
 
+      <FeedFailures />
+
       <Card>
         <CardHeader>
           <CardTitle>Dead-letter queue</CardTitle>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            Your own documents and emails. Each row has a payload you can
+            inspect and retry.
+          </p>
         </CardHeader>
         <CardContent className="p-0">
           {listQuery.isLoading && allRows.length === 0 ? (
@@ -217,8 +225,10 @@ export function FailuresPage() {
                         onClick={() => setDetail(r)}
                       >
                         <td data-label="Adapter" className="px-4 py-2 font-mono text-xs">
-                          <div>{r.sourceAdapter}</div>
-                          <div className="text-muted-foreground">v{r.adapterVersion}</div>
+                          <div className="min-w-0 break-words text-right md:text-left">
+                            {r.sourceAdapter}
+                            <span className="block text-muted-foreground">v{r.adapterVersion}</span>
+                          </div>
                         </td>
                         <td data-label="Source" className="px-4 py-2 text-xs text-muted-foreground max-w-[28ch] truncate">
                           {r.sourceRef}
@@ -402,5 +412,140 @@ function Field({
         {value}
       </div>
     </div>
+  );
+}
+
+/**
+ * Market-feed failures, above the user's own.
+ *
+ * Kept as its own card rather than merged into the dead-letter queue, because
+ * the two are different kinds of failure and want different reactions. A row
+ * in the queue below is one of YOUR documents that did not parse: it has a
+ * payload, an owner, and a Retry button that does something. A row here is a
+ * market feed that returned less than it should have — it belongs to nobody,
+ * there is nothing to retry by hand, and the fix is upstream or in our parser.
+ *
+ * Merging them would put a Retry button on a row where "retry" means waiting
+ * for tomorrow's AMFI file, which is worse than no button at all.
+ *
+ * It exists because a feed can fail in a way nobody notices: AMFI's NAV file
+ * gained two columns, the parser read a plan name where the NAV belonged, and
+ * the sync imported zero rows nightly while reporting success. The canary that
+ * now catches that writes here.
+ */
+function FeedFailures() {
+  const query = useQuery({
+    queryKey: ['ingestion-failures', 'feeds'],
+    queryFn: () => ingestionFailuresApi.listFeedFailures(25),
+  });
+
+  const items = query.data?.items ?? [];
+
+  // A page with no feed failures should not carry an empty card claiming
+  // there is a section here; silence is the correct rendering of "nothing has
+  // gone wrong". The loading and error states are still worth showing, so a
+  // failure to LOAD the failures is not mistaken for having none.
+  if (!query.isLoading && !query.isError && items.length === 0) return null;
+
+  return (
+    <Card className="mb-4 border-amber-300/70 dark:border-amber-900/60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Radio className="h-4 w-4 text-amber-600 dark:text-amber-400" strokeWidth={1.8} />
+          Market data & scoring failures
+        </CardTitle>
+        <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+          Price feeds that returned less than they should have, and fund-scoring
+          runs that declined to rank on data they did not trust. These are not
+          yours to fix — they affect every account, and there is nothing to
+          retry by hand. Listed so a quiet feed cannot go unnoticed.
+        </p>
+      </CardHeader>
+      <CardContent className="p-0">
+        {query.isLoading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading feed runs…</div>
+        ) : query.isError ? (
+          <div className="p-6 text-sm text-negative">
+            Couldn&apos;t load market feed failures.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="rtable w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-[11px] uppercase tracking-kerned text-muted-foreground">
+                  <th className="px-4 py-2 font-medium">Source</th>
+                  <th className="px-4 py-2 font-medium">When</th>
+                  <th className="px-4 py-2 font-medium">Imported</th>
+                  <th className="px-4 py-2 font-medium">What happened</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((row) => (
+                  <tr key={row.id} className="border-b last:border-0 align-top">
+                    <td data-label="Source" className="px-4 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium">{feedLabel(row.feed)}</span>
+                        {/* A scoring refusal is a different animal from a thin
+                            feed and is fixed somewhere else, so it says so
+                            rather than blending into the list. */}
+                        {row.kind === 'SCORING' && (
+                          <span className="rounded-full border border-amber-400/50 bg-amber-400/10 px-1.5 py-px text-[9.5px] font-medium uppercase tracking-kerned text-amber-700 dark:text-amber-300">
+                            Scoring
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-mono text-[10.5px] text-muted-foreground">
+                        {row.feed}
+                        {row.check ? ` · ${row.check}` : ''}
+                      </div>
+                    </td>
+                    <td data-label="When" className="whitespace-nowrap px-4 py-2.5 text-muted-foreground tabular-nums">
+                      {new Date(row.startedAt).toLocaleString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td data-label="Imported" className="whitespace-nowrap px-4 py-2.5 tabular-nums">
+                      {/* The comparison IS the finding, so both numbers are
+                          shown rather than a single count that looks fine. A
+                          scoring refusal has no row counts; its finding is the
+                          gap that caused it. */}
+                      {row.kind === 'SCORING' ? (
+                        <span className="text-muted-foreground">
+                          {row.gapWeekdays === null
+                            ? 'refused'
+                            : `${row.gapWeekdays}-weekday gap`}
+                        </span>
+                      ) : row.rowsImported === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        // One span, so a phone card (cells are flex rows there)
+                        // keeps "0 of 2" together instead of spreading it out.
+                        <span>
+                          <span className="font-medium">
+                            {row.rowsImported.toLocaleString('en-IN')}
+                          </span>
+                          {row.previousImported !== null && (
+                            <span className="text-muted-foreground">
+                              {' '}
+                              of {row.previousImported.toLocaleString('en-IN')}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                    <td data-fullrow className="px-4 py-2.5 text-muted-foreground">
+                      {row.reason ?? 'The run failed without a reason recorded.'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

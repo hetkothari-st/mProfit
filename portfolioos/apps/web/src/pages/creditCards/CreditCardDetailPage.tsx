@@ -10,13 +10,14 @@ import {
   Loader2,
   CreditCard,
 } from 'lucide-react';
-import { Decimal, formatINR } from '@portfolioos/shared';
+import { Decimal, formatINR } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -136,6 +137,7 @@ function AddStatementDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Add statement</DialogTitle>
+          <DialogDescription>One month's bill: what was billed, the minimum due and the due date.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
@@ -227,6 +229,7 @@ function MarkPaidDialog({
       <DialogContent className="max-w-xs">
         <DialogHeader>
           <DialogTitle>Mark statement paid</DialogTitle>
+          <DialogDescription>Record what you paid against this statement, and when.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
@@ -361,14 +364,14 @@ function StatementTable({ card }: { card: CreditCardDTO }) {
                             <div className="flex gap-1 justify-end">
                               {s.status !== 'PAID' && (
                                 <Button size="sm" variant="ghost"
-                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-positive"
+                                  className="tap-expand h-6 w-6 p-0 text-muted-foreground hover:text-positive"
                                   title="Mark paid"
                                   onClick={() => setMarkPaidId(s.id)}>
                                   <CheckCircle2 className="h-3.5 w-3.5" />
                                 </Button>
                               )}
                               <Button size="sm" variant="ghost"
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-negative"
+                                className="tap-expand h-6 w-6 p-0 text-muted-foreground hover:text-negative"
                                 title="Delete"
                                 onClick={() => setConfirmDeleteId(s.id)}>
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -453,7 +456,7 @@ export function CreditCardDetailPage() {
 
       {/* Card visual */}
       <div className="mb-4 w-full max-w-md">
-        <CreditCardVisual card={card} size="lg" />
+        <CreditCardVisual card={card} size="lg" revealable />
       </div>
 
       {/* Summary metrics */}

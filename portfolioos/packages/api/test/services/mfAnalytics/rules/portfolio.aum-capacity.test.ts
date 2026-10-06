@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializeMoney, type MfMetricStatus } from '@portfolioos/shared';
+import { serializeMoney, type MfMetricStatus } from '@everypaisa/shared';
 import { portfolioAumCapacityRule as rule } from '../../../../src/services/mfAnalytics/rules/portfolio.aum-capacity.js';
 import { SCHEME, makeFacts, makeFundFacts } from './_facts.fixture.js';
 

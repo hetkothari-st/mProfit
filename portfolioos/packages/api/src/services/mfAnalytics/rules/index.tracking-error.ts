@@ -40,8 +40,8 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { serializeRatio, toDecimal } from '@portfolioos/shared';
-import type { MfEvidence, MfFinding, MfHorizonYears } from '@portfolioos/shared';
+import { serializeRatio, toDecimal } from '@everypaisa/shared';
+import type { MfEvidence, MfFinding, MfHorizonYears } from '@everypaisa/shared';
 import {
   MF_HORIZON_KEYS,
   confidenceFor,

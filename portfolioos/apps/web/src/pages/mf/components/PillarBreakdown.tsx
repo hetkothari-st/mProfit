@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { MF_HORIZONS, type MfPillarInput, type MfPillarScore } from '@portfolioos/shared';
+import { MF_HORIZONS, type MfPillarInput, type MfPillarScore } from '@everypaisa/shared';
 import { cn } from '@/lib/cn';
 import { MetricValue } from './MetricValue';
 import {

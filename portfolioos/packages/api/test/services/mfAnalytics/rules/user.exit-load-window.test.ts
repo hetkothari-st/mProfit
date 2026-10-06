@@ -9,8 +9,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeMoney, serializePct } from '@portfolioos/shared';
-import type { MfExitLoadRule, Pct } from '@portfolioos/shared';
+import { serializeMoney, serializePct } from '@everypaisa/shared';
+import type { MfExitLoadRule, Pct } from '@everypaisa/shared';
 import { userExitLoadWindowRule } from '../../../../src/services/mfAnalytics/rules/user.exit-load-window.js';
 import { factsForFund, isoDaysFromAsOf, makeLot } from './_facts.fixture.js';
 

@@ -147,5 +147,5 @@ start a task until the previous task's tests pass. Run the API suite in the
 background — it is sequential and ~26 minutes (`CONTEXT.md §12`).
 
 After every task that touches `packages/shared`, rebuild it (`CONTEXT.md §2`).
-After every frontend page, reconcile fields against `@portfolioos/shared`
+After every frontend page, reconcile fields against `@everypaisa/shared`
 (`CONTEXT.md §11`).

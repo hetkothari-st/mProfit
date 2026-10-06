@@ -10,8 +10,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Decimal, MIN_RATING_HISTORY_MONTHS, MIN_UNIVERSE_SIZE } from '@portfolioos/shared';
-import type { MfMetricStatus } from '@portfolioos/shared';
+import { Decimal, MIN_RATING_HISTORY_MONTHS, MIN_UNIVERSE_SIZE } from '@everypaisa/shared';
+import type { MfMetricStatus } from '@everypaisa/shared';
 
 import {
   percentileRank,

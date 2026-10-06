@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Coins, Loader2 } from 'lucide-react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Decimal, type HoldingRow } from '@portfolioos/shared';
+import { Decimal, type HoldingRow } from '@everypaisa/shared';
 import { SimpleAssetPage } from './SimpleAssetPage';
 import { GoldFormDialog } from './GoldFormDialog';
 import { GoldSilverTopBar } from './GoldSilverTopBar';

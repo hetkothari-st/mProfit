@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { analyticsApi, type MfSchemeRow, type PlanType } from '@/api/analytics.api';

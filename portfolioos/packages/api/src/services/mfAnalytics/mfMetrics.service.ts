@@ -6,7 +6,7 @@
  * `mfMetricsMath.ts`. It loads three series (NAV, benchmark, risk-free) plus
  * the latest portfolio disclosure and the meta tables, hands them to the math
  * module, and serialises the answers onto the `MfHorizonMetrics` /
- * `MfCurrentProfile` shapes from `@portfolioos/shared`.
+ * `MfCurrentProfile` shapes from `@everypaisa/shared`.
  *
  * **It contains no formulas.** Every arithmetic operation on a metric lives in
  * `mfMetricsMath.ts`; if a number in this file is computed rather than
@@ -58,7 +58,7 @@ import {
   type MfCreditQualitySplit,
   type MfTopHolding,
   type MfHoldingKind,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError } from '../../lib/errors.js';

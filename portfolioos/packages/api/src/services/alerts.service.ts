@@ -2,8 +2,12 @@ import { prisma } from '../lib/prisma.js';
 import { NotFoundError } from '../lib/errors.js';
 import type { AlertType, AssetClass } from '@prisma/client';
 import { generateLoanEmiAlerts } from './loans.service.js';
+import { generateLoanGivenAlerts } from './loansGiven.service.js';
 import { generateCreditCardAlerts } from './creditCards.service.js';
 import { generateRealEstateAlerts } from './realEstateAlerts.js';
+import { generateDepositReminderAlerts } from './depositReminders.service.js';
+import { generateClaimAlerts, generateRenewalAlerts } from './insurance.service.js';
+import { PLATE_SELECT, plateOf } from './piiAtRest.service.js';
 
 const EXPIRY_THRESHOLDS = [30, 15, 7, 1] as const;
 
@@ -125,7 +129,7 @@ export async function generateVehicleExpiryAlerts(userId?: string): Promise<numb
       })),
     },
     select: {
-      id: true, userId: true, registrationNo: true,
+      id: true, userId: true, registrationNoLast4: true, ...PLATE_SELECT,
       pucExpiry: true, insuranceExpiry: true, fitnessExpiry: true, roadTaxExpiry: true,
     },
   });
@@ -152,7 +156,8 @@ export async function generateVehicleExpiryAlerts(userId?: string): Promise<numb
           userId: vehicle.userId,
           type: 'CUSTOM',
           title: `${label} expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
-          description: `Vehicle ${vehicle.registrationNo} — ${label} expires on ${expiryDate.toISOString().slice(0, 10)}`,
+          // Last four only: alert text is stored in plain text.
+          description: `Vehicle ending ${vehicle.registrationNoLast4 ?? plateOf(vehicle).slice(-4)} — ${label} expires on ${expiryDate.toISOString().slice(0, 10)}`,
           triggerDate: new Date(),
           metadata: { key: metaKey, vehicleId: vehicle.id, field, daysLeft },
         },
@@ -335,16 +340,24 @@ export async function runAllAlertScans(userId?: string): Promise<{
   rent: number;
   poMaturity: number;
   loan: number;
+  loanGiven: number;
   creditCard: number;
   realEstate: number;
+  deposit: number;
+  insurance: number;
+  insuranceClaims: number;
 }> {
-  const [vehicle, rent, poMaturity, loan, creditCard, realEstate] = await Promise.all([
+  const [vehicle, rent, poMaturity, loan, loanGiven, creditCard, realEstate, deposit, insurance, insuranceClaims] = await Promise.all([
     generateVehicleExpiryAlerts(userId),
     generateRentOverdueAlerts(userId),
     generatePoMaturityAlerts(userId),
     generateLoanEmiAlerts(userId),
+    generateLoanGivenAlerts(userId),
     generateCreditCardAlerts(userId),
     generateRealEstateAlerts(userId),
+    generateDepositReminderAlerts(userId),
+    generateRenewalAlerts(userId),
+    generateClaimAlerts(userId),
   ]);
-  return { vehicle, rent, poMaturity, loan, creditCard, realEstate };
+  return { vehicle, rent, poMaturity, loan, loanGiven, creditCard, realEstate, deposit, insurance, insuranceClaims };
 }

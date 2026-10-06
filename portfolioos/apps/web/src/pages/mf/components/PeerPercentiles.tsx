@@ -1,4 +1,4 @@
-import { MIN_UNIVERSE_SIZE, type MfPeerPercentiles } from '@portfolioos/shared';
+import { MIN_UNIVERSE_SIZE, type MfPeerPercentiles } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { SectionUnavailable } from './MetricValue';
 import { formatPercentileOrdinal, formatRatio, humanizeKey } from '../mfFormat';

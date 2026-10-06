@@ -3,6 +3,7 @@ import { Sparkles, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { AIAssistant } from './AIAssistant';
 import { aiAssistantApi } from '@/api/aiAssistant.api';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 /**
  * Floating AI-assistant launcher.
@@ -26,7 +27,7 @@ import { aiAssistantApi } from '@/api/aiAssistant.api';
 // v2 — the v1 key persisted a dismissal on every teaser click, which
 // wiped the bubble for the rest of the session even for engaged users.
 // Renaming resets existing dismissals so they see the teaser again.
-const DISMISS_KEY = 'portfolioos.ai-teaser-seen.v2';
+const DISMISS_KEY = 'everypaisa.ai-teaser-seen.v2';
 const ROTATE_MS = 12_000;
 const FIRST_VISIT_HOLD_MS = 6_000;
 
@@ -66,12 +67,45 @@ export function AssistantButton() {
     return fromApi.length > 0 ? fromApi : FALLBACK_QUESTIONS;
   }, [suggestedQuery.data]);
 
-  // Move welcome → suggested rotation after a short hold.
+  // On a phone the bubble sits over the content, so it shows the welcome
+  // once per session and then gets out of the way instead of rotating.
+  const isPhone = useMediaQuery('(max-width: 767px)');
+
+  // On phones the FAB floats over page content (row actions, right-aligned
+  // values, toggles). Tuck it away while the user scrolls down and bring it
+  // back on any scroll up, so nothing stays covered.
+  const [tucked, setTucked] = useState(false);
+  useEffect(() => {
+    if (!isPhone) {
+      setTucked(false);
+      return;
+    }
+    const main = document.querySelector('main');
+    if (!main) return;
+    let last = main.scrollTop;
+    const onScroll = () => {
+      const y = main.scrollTop;
+      if (Math.abs(y - last) < 8) return;
+      setTucked(y > last && y > 40);
+      last = y;
+    };
+    main.addEventListener('scroll', onScroll, { passive: true });
+    return () => main.removeEventListener('scroll', onScroll);
+  }, [isPhone]);
+
+  // Move welcome → suggested rotation after a short hold (phones: hide).
   useEffect(() => {
     if (dismissed || open) return;
-    const t = setTimeout(() => setPhase('suggested'), FIRST_VISIT_HOLD_MS);
+    const t = setTimeout(() => {
+      if (!isPhone) {
+        setPhase('suggested');
+        return;
+      }
+      setDismissed(true);
+      window.sessionStorage.setItem(DISMISS_KEY, '1');
+    }, FIRST_VISIT_HOLD_MS);
     return () => clearTimeout(t);
-  }, [dismissed, open]);
+  }, [dismissed, open, isPhone]);
 
   // Rotate teaser question every ROTATE_MS while visible.
   useEffect(() => {
@@ -101,8 +135,8 @@ export function AssistantButton() {
 
   return (
     <>
-      {!open && !dismissed && (
-        <div className="fixed z-30 bottom-[9.5rem] md:bottom-[5rem] right-4 sm:right-6 flex flex-col items-end gap-2 pointer-events-none">
+      {!open && !dismissed && !tucked && (
+        <div className="fixed z-30 bottom-[calc(7.25rem+env(safe-area-inset-bottom))] md:bottom-[5rem] right-4 sm:right-6 flex flex-col items-end gap-2 pointer-events-none">
           <TeaserBubble
             phase={phase}
             question={currentQuestion.question}
@@ -116,7 +150,9 @@ export function AssistantButton() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-24 md:bottom-6 right-4 sm:right-6 z-30 h-12 w-12 rounded-full bg-accent text-accent-foreground shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center group"
+          // Phones: 40px, just above the 3.5rem tab bar. At 48px floating 2.5rem
+          // higher it covered tiles and buttons at the right edge on load.
+          className={`fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] md:bottom-6 right-3 sm:right-6 z-30 h-10 w-10 md:h-12 md:w-12 rounded-full bg-accent text-accent-foreground shadow-lg hover:shadow-xl transition-[box-shadow,transform,opacity] duration-200 flex items-center justify-center group ${tucked ? 'pointer-events-none translate-x-20 opacity-0' : ''}`}
           aria-label="Open AI Assistant"
           title="Ask the AI Assistant"
         >
@@ -163,7 +199,7 @@ function TeaserBubble({
         <button
           type="button"
           onClick={onDismiss}
-          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shadow"
+          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shadow before:absolute before:-inset-2.5 before:content-['']"
           aria-label="Dismiss"
         >
           <X className="h-3 w-3" strokeWidth={2} />

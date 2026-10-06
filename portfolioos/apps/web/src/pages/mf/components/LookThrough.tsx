@@ -6,7 +6,7 @@ import type {
   MfLookThrough,
   MfMarketCapSplit,
   Pct,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { MetricStat, SectionUnavailable } from './MetricValue';
 import { NullablePctCell, PctCell } from './MetricCells';

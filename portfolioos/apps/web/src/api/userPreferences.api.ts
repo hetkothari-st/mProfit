@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { UserPreferences, ApiResponse } from '@portfolioos/shared';
+import type { UserPreferences, ApiResponse } from '@everypaisa/shared';
 
 export const userPreferencesApi = {
   async get(): Promise<UserPreferences> {

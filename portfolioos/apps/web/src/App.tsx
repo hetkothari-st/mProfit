@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { NotFoundPage } from './pages/notFound/NotFoundPage';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
+import { NotWhileManaging } from './components/family/NotWhileManaging';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
@@ -11,7 +13,13 @@ import { PortfolioGroupDetailPage } from './pages/portfolios/PortfolioGroupDetai
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { AcceptInvitationPage } from './pages/family/AcceptInvitationPage';
+import { ClaimProfilePage } from './pages/family/ClaimProfilePage';
 import { FamilyPage } from './pages/family/FamilyPage';
+import { CaWorkspacePage } from './pages/ca/CaWorkspacePage';
+import { ClientBooksPage } from './pages/ca/ClientBooksPage';
+import { AcceptCaInvitationPage } from './pages/ca/AcceptCaInvitationPage';
+import { AcceptProfessionalInvitePage } from './pages/ca/AcceptProfessionalInvitePage';
+import { ProfessionalAccessPage } from './pages/settings/ProfessionalAccessPage';
 import { FamilyMemberPage } from './pages/family/FamilyMemberPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
 import { StocksPage } from './pages/assetClasses/StocksPage';
@@ -40,10 +48,15 @@ import { VehicleValuePage } from './pages/vehicles/VehicleValuePage';
 import { CashFlowsPage } from './pages/cashflows/CashFlowsPage';
 import { RentalListPage } from './pages/rental/RentalListPage';
 import { RentalDetailPage } from './pages/rental/RentalDetailPage';
+import { TenantKhataPage } from './pages/rental/TenantKhataPage';
 import { InsuranceListPage } from './pages/insurance/InsuranceListPage';
 import { InsuranceDetailPage } from './pages/insurance/InsuranceDetailPage';
+import { EmergencySheetPage } from './pages/insurance/EmergencySheetPage';
+import { HelpLibraryPage } from './pages/insurance/HelpLibraryPage';
+import { CoveragePage } from './pages/insurance/CoveragePage';
 import { LoanListPage } from './pages/loans/LoanListPage';
 import { LoanDetailPage } from './pages/loans/LoanDetailPage';
+import { LoanGivenDetailPage } from './pages/loans/given/LoanGivenDetailPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
 import { IncomePage } from './pages/income/IncomePage';
 import { HealthScorePage } from './pages/intelligence/HealthScorePage';
@@ -86,11 +99,23 @@ export function App() {
         path="/families/invitations/:token/accept"
         element={<AcceptInvitationPage />}
       />
+      {/* Outside the protected tree on purpose: the person taking over the
+          account kept for them has no login yet — that is the point. */}
+      <Route path="/family/claims/:token" element={<ClaimProfilePage />} />
+      {/* Outside the protected tree on purpose: a professional opening this
+          link may not have an account yet, and has to be told who is asking
+          before being asked to make one. */}
+      <Route
+        path="/professional-invitations/:token"
+        element={<AcceptProfessionalInvitePage />}
+      />
       <Route
         path="/onboarding"
         element={
           <ProtectedRoute>
-            <OnboardingWizard onComplete={() => localStorage.setItem('onboarding_v2_done', '1')} />
+            <NotWhileManaging to="/portfolios">
+              <OnboardingWizard onComplete={() => localStorage.setItem('onboarding_v2_done', '1')} />
+            </NotWhileManaging>
           </ProtectedRoute>
         }
       />
@@ -110,6 +135,12 @@ export function App() {
         <Route path="/portfolio-groups/:id" element={<PortfolioGroupDetailPage />} />
         <Route path="/family" element={<FamilyPage />} />
         <Route path="/family/members/:userId" element={<FamilyMemberPage />} />
+        {/* CA workspace. The client-facing routes deliberately sit outside it:
+            seeing and withdrawing access must not depend on a plan. */}
+        <Route path="/ca" element={<CaWorkspacePage />} />
+        <Route path="/ca/clients/:clientId" element={<ClientBooksPage />} />
+        <Route path="/ca/invitations/:token/accept" element={<AcceptCaInvitationPage />} />
+        <Route path="/settings/professional-access" element={<ProfessionalAccessPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/stocks" element={<StocksPage />} />
         <Route path="/mutual-funds" element={<MutualFundsPage />} />
@@ -157,10 +188,15 @@ export function App() {
         <Route path="/vehicles/value" element={<VehicleValuePage />} />
         <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
         <Route path="/rental" element={<RentalListPage />} />
+        <Route path="/rental/tenancies/:tenancyId" element={<TenantKhataPage />} />
         <Route path="/rental/:id" element={<RentalDetailPage />} />
         <Route path="/insurance" element={<InsuranceListPage />} />
+        <Route path="/insurance/emergency-sheet" element={<EmergencySheetPage />} />
+        <Route path="/insurance/help" element={<HelpLibraryPage />} />
+        <Route path="/insurance/coverage" element={<CoveragePage />} />
         <Route path="/insurance/:id" element={<InsuranceDetailPage />} />
         <Route path="/loans" element={<LoanListPage />} />
+        <Route path="/loans/given/:id" element={<LoanGivenDetailPage />} />
         <Route path="/loans/:id" element={<LoanDetailPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/income" element={<IncomePage />} />
@@ -196,9 +232,9 @@ export function App() {
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        {/* Inside the protected shell: signed-out visitors still go to login. */}
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
-
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

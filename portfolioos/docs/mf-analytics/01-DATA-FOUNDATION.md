@@ -287,7 +287,7 @@ and is registered in `router.service.ts` only if the router needs to route to it
 ### `amfiSchemeMaster.ts`
 - AMFI scheme master + NAV file give scheme code, ISIN, name, AMC, category text.
 - Map AMFI category text → `sebiCategory` + `sebiSubCategory` via a maintained
-  lookup table `SEBI_SUBCATEGORY_MAP` in `@portfolioos/shared` (36 SEBI
+  lookup table `SEBI_SUBCATEGORY_MAP` in `@everypaisa/shared` (36 SEBI
   sub-categories). Unknown category text → `IngestionFailure` with reason
   `unmapped_sebi_category`, scheme stored with `sebiSubCategory: 'UNMAPPED'` and
   excluded from universes.

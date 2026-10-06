@@ -17,8 +17,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeMoney, serializePct } from '@portfolioos/shared';
-import type { Money, Pct } from '@portfolioos/shared';
+import { serializeMoney, serializePct } from '@everypaisa/shared';
+import type { Money, Pct } from '@everypaisa/shared';
 import { taxHarvestRule } from '../../../../src/services/mfAnalytics/rules/tax.harvest.js';
 import { factsForFund, makeLot } from './_facts.fixture.js';
 

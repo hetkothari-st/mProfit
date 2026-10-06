@@ -24,8 +24,8 @@
  * of the others is carried as evidence.
  */
 
-import { serializeRatio } from '@portfolioos/shared';
-import type { MfEvidence, MfFinding, MfQualitativeFactDto } from '@portfolioos/shared';
+import { serializeRatio } from '@everypaisa/shared';
+import type { MfEvidence, MfFinding, MfQualitativeFactDto } from '@everypaisa/shared';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 
 const RULE_ID = 'mf.people.amc-action';

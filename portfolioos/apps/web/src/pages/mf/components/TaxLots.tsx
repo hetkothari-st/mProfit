@@ -1,4 +1,4 @@
-import type { MfLotDto, MfTaxSummary } from '@portfolioos/shared';
+import type { MfLotDto, MfTaxSummary } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 import { MetricStat, SectionUnavailable } from './MetricValue';

@@ -9,7 +9,7 @@
  * reference tables (`MfSchemeMeta`, `MfPortfolioSnapshot`, `MfSchemeTer`,
  * `MfSchemeMetrics`, `MfSchemeScore`) and returns one
  * `MfPortfolioAnalysisDto` — the exact shape declared in
- * `@portfolioos/shared/mfAnalytics.types.ts`, never a locally-declared
+ * `@everypaisa/shared/mfAnalytics.types.ts`, never a locally-declared
  * near-copy. A page rendering a locally-declared shape is how the `/advisor`
  * page shipped broken (`CONTEXT.md §11`).
  *
@@ -103,7 +103,7 @@ import {
   type MfPortfolioTotals,
   type MfAnalysisScope,
   type MfPortfolioAnalysisDto,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import { prisma } from '../../lib/prisma.js';
 import { runAsUser } from '../../lib/requestContext.js';
@@ -1680,7 +1680,7 @@ function buildCreditSplit(byRating: ReadonlyMap<string, Decimal>): MfCreditQuali
  * Target-vs-actual against the user's active `ModelPortfolioVersion`
  * (`04 §3`).
  *
- * The tolerance is `REBALANCE_BAND_PP`, imported from `@portfolioos/shared`
+ * The tolerance is `REBALANCE_BAND_PP`, imported from `@everypaisa/shared`
  * and re-exported by `services/advisor/constants.ts`, because `04 §3` requires
  * this page and the advisor's REBALANCE rule to use one band. A portfolio
  * called drifted on one page and not the other is worse than either answer.

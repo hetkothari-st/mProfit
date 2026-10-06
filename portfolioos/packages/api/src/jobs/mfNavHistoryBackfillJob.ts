@@ -281,7 +281,7 @@ interface SchemeUniverseRow {
  * Resolve `schemeCode -> MutualFundMaster.id`, creating the row if absent.
  *
  * The create is `createMany({ skipDuplicates })` of one rather than `create`
- * so a concurrent run (the daily `loadAmfiNavToDb`, another backfill worker)
+ * so a concurrent run (the daily AMFI NAV sync, another backfill worker)
  * that inserted the same scheme a millisecond earlier is a no-op instead of a
  * unique-constraint throw that would DLQ a perfectly good scheme.
  */

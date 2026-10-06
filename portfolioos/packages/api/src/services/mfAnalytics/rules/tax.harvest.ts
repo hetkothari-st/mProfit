@@ -50,8 +50,8 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { formatINR, serializeRatio, toDecimal } from '@portfolioos/shared';
-import type { MfEvidence, MfFinding, MfLotDto } from '@portfolioos/shared';
+import { formatINR, serializeRatio, toDecimal } from '@everypaisa/shared';
+import type { MfEvidence, MfFinding, MfLotDto } from '@everypaisa/shared';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 
 const RULE_ID = 'mf.tax.harvest';

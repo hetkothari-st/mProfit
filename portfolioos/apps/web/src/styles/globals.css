@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────
-   PortfolioOS — CRED theme
+   EveryPaisa — CRED theme
    Light : near-white canvas, deep indigo accent (lime doesn't read on white)
    Dark  : near-black canvas, signature bright-lime accent
    Both  : Fraunces display serif, pill buttons
@@ -11,6 +11,8 @@
 
 @layer base {
   :root {
+    /* Card inner padding: 16px on phones, 24px from sm up. */
+    --card-pad: 1rem;
     /* Surfaces — near-white, card brighter than bg (mirrors dark mode's lift) */
     --background: 0 0% 98%;
     --foreground: 0 0% 8%;
@@ -44,6 +46,18 @@
     --positive: 100 65% 30%;              /* darker green, distinct hue from accent */
     --negative: 4 75% 45%;
     --warning: 35 85% 38%;
+    --brand-sage: 135 10% 36%;            /* logo "Paisa" sage, deepened to read on white */
+
+    /* Family tree — one hue per line of descent. Deep enough that a label
+       and a hairline both hold up on white; the dark theme lifts them. */
+    --tree-1: 199 90% 34%;                /* cyan */
+    --tree-2: 28 88% 40%;                 /* amber */
+    --tree-3: 265 70% 52%;                /* violet */
+    --tree-4: 158 62% 30%;                /* emerald */
+    --tree-5: 342 68% 44%;                /* rose */
+    --tree-6: 218 80% 46%;                /* blue */
+    --tree-spouse: 340 62% 48%;           /* the dashed married link */
+    --tree-line: 0 0% 72%;                /* a line with no branch of its own */
 
     --sidebar: 0 0% 97%;
     --sidebar-foreground: 0 0% 10%;
@@ -100,6 +114,17 @@
     --positive: 85 75% 58%;               /* greener-lime, on-brand for gains */
     --negative: 4 85% 62%;
     --warning: 40 90% 60%;
+    --brand-sage: 115 7% 63%;             /* logo "Paisa" sage, as drawn (#9CA89B) */
+
+    /* Family tree — the same six lines, lifted for a near-black board. */
+    --tree-1: 190 72% 58%;                /* cyan */
+    --tree-2: 32 92% 62%;                 /* amber */
+    --tree-3: 268 72% 70%;                /* violet */
+    --tree-4: 155 60% 55%;                /* emerald */
+    --tree-5: 345 78% 66%;                /* rose */
+    --tree-6: 215 85% 68%;                /* blue */
+    --tree-spouse: 340 65% 70%;           /* the dashed married link */
+    --tree-line: 0 0% 42%;                /* a line with no branch of its own */
 
     /* Sidebar — same near-black family, no separate warm tint */
     --sidebar: 0 0% 6%;
@@ -282,6 +307,28 @@
   /* Hairlines & paper texture */
   .hairline-b { box-shadow: inset 0 -1px 0 hsl(var(--border)); }
   .hairline-t { box-shadow: inset 0 1px 0 hsl(var(--border)); }
+
+  /* Light-mode card lift for image-led tiles (property cards). A white card on
+     the 98% page with the stock 10% shadow-elev reads as flat paper; this adds
+     a crisp 1px edge, a contact shadow and a soft ambient drop. The paper grain
+     is dropped too — on white it greys the card down to the page's own tone.
+     Dark mode keeps its own .dark .shadow-elev lift below. */
+  html:not(.dark) .card-lift {
+    background-image: none;
+    border-color: hsl(215 16% 84%);
+    box-shadow:
+      0 1px 2px hsl(215 25% 15% / 0.08),
+      0 4px 10px -4px hsl(215 25% 15% / 0.10),
+      0 14px 32px -12px hsl(215 25% 15% / 0.20),
+      0 28px 56px -28px hsl(215 25% 15% / 0.24);
+  }
+  html:not(.dark) .group:hover .card-lift {
+    box-shadow:
+      0 2px 4px hsl(215 25% 15% / 0.09),
+      0 8px 18px -6px hsl(215 25% 15% / 0.14),
+      0 22px 44px -14px hsl(215 25% 15% / 0.26),
+      0 40px 72px -32px hsl(215 25% 15% / 0.30);
+  }
 
   /* Dark-mode card lift — stock shadow-elev disappears on dark surfaces.
      Add a top inset highlight + ambient shadow so cards sit cleanly above bg. */
@@ -473,6 +520,12 @@
    shown via ::before. Use data-fullrow on a <td> to make it span
    the whole card (e.g. an actions cell) without a label.
    ─────────────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+  :root {
+    --card-pad: 1.5rem;
+  }
+}
+
 @media (max-width: 767px) {
   table.rtable thead {
     position: absolute;
@@ -488,6 +541,7 @@
 
   table.rtable,
   table.rtable tbody,
+  table.rtable tfoot,
   table.rtable tr,
   table.rtable td {
     display: block;
@@ -515,6 +569,28 @@
     overflow-wrap: anywhere;
   }
 
+  /* Let a cell's content shrink so truncate/wrap works instead of
+     pushing the card wider than the screen. */
+  table.rtable td > * {
+    min-width: 0;
+  }
+
+  /* Every card gets the same outline, including the last one: desktop
+     row classes like last:border-0 would otherwise strip it. */
+  table.rtable tr:nth-child(n) {
+    border: 1px solid hsl(var(--border));
+  }
+
+  /* Desktop truncation (truncate / max-w-[..]) clips a card cell mid-word
+     with no ellipsis; in card mode let it wrap instead. */
+  table.rtable td {
+    max-width: none;
+  }
+  table.rtable td.truncate {
+    white-space: normal;
+    overflow: visible;
+  }
+
   table.rtable td::before {
     content: attr(data-label);
     flex-shrink: 0;
@@ -536,6 +612,16 @@
   table.rtable td[data-fullrow] {
     justify-content: flex-start;
     text-align: left;
+  }
+
+  /* Group-heading rows (<tr data-section>): a heading above the cards that
+     follow, not a card of their own — they rendered as an empty bordered box. */
+  table.rtable tr[data-section],
+  table.rtable tr[data-section]:nth-child(n) {
+    border: 0;
+    background: transparent;
+    padding: 0.75rem 0 0.25rem;
+    margin-bottom: 0.25rem;
   }
 
   /* Columns explicitly hidden on small screens (Tailwind `hidden sm:table-cell`
@@ -587,5 +673,81 @@
     margin-top: 0.35rem;
     padding-top: 0.5rem;
     border-top: 1px solid hsl(var(--border) / 0.6);
+  }
+}
+
+/* Printing a sheet (the family insurance sheet): only `.print-sheet` prints,
+   black on white whatever the theme, with the app's chrome hidden. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible;
+  }
+  .print-sheet {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  .print-sheet * {
+    color: #000 !important;
+    border-color: #bbb !important;
+  }
+}
+
+/* Touch screens have no hover, so controls revealed only on group-hover
+   (row edit/delete icons etc.) would stay invisible. Show them there.
+   Limited to interactive elements so hover-only decoration stays hidden. */
+@media (hover: none) {
+  .group-hover\:opacity-100:is(button, a, [role='button']),
+  .group-hover\:opacity-100:has(button, a, [role='button']) {
+    opacity: 1;
+  }
+}
+
+/* iOS Safari zooms the whole page when a field under 16px gets focus.
+   Pin form text to 16px on iOS phones only; desktop and Android keep
+   the designed sizes. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 767px) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* Edge fade on horizontal scrollers with hidden content (see hooks/useScrollFade). */
+[data-scroll-fade='right'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+[data-scroll-fade='left'] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+[data-scroll-fade='both'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+/* Small icon buttons: invisible, larger hit area on touch screens only, so a
+   24px edit/delete icon is still easy to tap without changing how it looks. */
+@media (pointer: coarse) {
+  .tap-expand {
+    position: relative;
+  }
+  .tap-expand::before {
+    content: '';
+    position: absolute;
+    inset: -5px;
   }
 }

@@ -1,4 +1,4 @@
-# PortfolioOS — Full Context Document
+# EveryPaisa — Full Context Document
 
 > Single-file orientation for an LLM or a new engineer. Read this before touching
 > anything. It describes what the system is, how it is put together, which
@@ -12,7 +12,7 @@
 
 ## 1. What this is
 
-**PortfolioOS** (product name *mProfit*) is a full-stack, multi-asset portfolio
+**EveryPaisa** is a full-stack, multi-asset portfolio
 management and accounting platform for Indian investors — retail, HNI, family
 offices, advisors, CAs and traders. It is positioned as a modern replacement for
 the legacy mProfit desktop product, with additions the desktop app never had
@@ -38,7 +38,7 @@ Recharts, React Hook Form + Zod, axios, date-fns.
 over PostgreSQL 15 (Neon in production), Redis 7 + Bull (queues), JWT + bcrypt,
 Zod, pino, decimal.js, Playwright (portal automation), Sentry.
 
-**Shared** — `@portfolioos/shared`: types, money primitives, formatters, finance
+**Shared** — `@everypaisa/shared`: types, money primitives, formatters, finance
 math, entitlements. Imported by both sides. **This is the contract layer.**
 
 **Infra** — pnpm workspaces monorepo, Docker Compose locally, Railway in
@@ -67,7 +67,7 @@ portfolioos/
 │   ├── src/services/            Business logic (162 files)
 │   └── test/                    85 test files
 ├── packages/shared/             Types, money, entitlements, finance math
-├── eslint-plugin-portfolioos/   Two custom lint rules (see §12)
+├── eslint-plugin-everypaisa/   Two custom lint rules (see §12)
 └── pnpm-workspace.yaml
 ```
 
@@ -443,7 +443,7 @@ Grouped by purpose. Full definitions in `packages/api/prisma/schema.prisma`.
 
 **Advisor engine** — `RiskProfileAssessment`, `ModelPortfolio`,
 `ModelPortfolioVersion`, `AdvisorApprovedProduct`, `AdvisorRun`,
-`AdvisorRecommendation`.
+`AdvisorRecommendation`, `RankingMethodologyVersion`, `FundScoreSnapshot`.
 
 `AssetClass` enum (39 values) spans equity, F&O, funds, bonds, deposits, NPS/PPF/EPF,
 PMS/AIF, REIT/InvIT, gold/silver, ULIP/insurance, real estate, PE, crypto, art,
@@ -462,7 +462,7 @@ Transaction CRUD → `recomputeForTransaction` → FIFO replay → `HoldingProje
 `services/capitalGains.service.ts` implements Indian CG law: STCG/LTCG
 classification by asset class and holding period, indexation via CII, §112A
 grandfathering. **CII is derived from the single shared table `CII_BY_FY` in
-`@portfolioos/shared`** — there used to be a second hand-maintained copy here
+`@everypaisa/shared`** — there used to be a second hand-maintained copy here
 that silently drifted. Two ingestion paths can produce indexation-eligible rows
 (`OwnedProperty` sales via `propertyCapitalGain.ts`, and plain `Transaction` rows
 with `assetClass: REAL_ESTATE` via the FIFO engine) and they must share one CII
@@ -621,8 +621,43 @@ writes prose.**
      inputs refreshed; a materially changed one gets a **new row** with the old
      row's `supersededById` pointed at it. Figures a user was shown are never
      edited.
-- Buy-side universe: a curated `AdvisorApprovedProduct` list, with NAV-based
-  ranking (`fallbackRankingMath.ts`) as fallback.
+- Buy-side universe, in precedence order:
+  1. `AdvisorApprovedProduct` — an OPTIONAL per-adviser override. Empty means
+     "no override", which is the normal case; it is not a prerequisite.
+  2. `services/advisor/fundRanking/` — the deterministic, versioned methodology
+     that names funds for everyone. Eligibility (direct plan, growth option,
+     open-ended, track record) → metrics from NAV history → separate scoring
+     models for index and active funds → percentile rank within the bucket,
+     written nightly to `FundScoreSnapshot` by `jobs/fundScoring.job.ts`.
+     `selection.ts` then fits the ranking to one client: prefer a held fund in
+     band, penalise overlap, cap AMC concentration, and apply hysteresis so a
+     nightly NAV wobble cannot churn the recommendation. Every pick stores
+     `namedSchemeCode`, `methodologyVersionId` and `selectionEvidence`.
+  3. NAV-based `fallbackRankingMath.ts` — past performance only, for buckets
+     the methodology cannot rank.
+- Named funds require ALL of: `RIA_VERDICTS_ENABLED=true`, a signed-off
+  `RankingMethodologyVersion` with a snapshot no older than its configured
+  window, and a current `RiskProfileAssessment`. Any gate closed means
+  category-level advice and a reason recorded on `AdvisorRun.namedFundGate` —
+  never a silent downgrade.
+- **Release gate (boot).** With the flag on, `assertNamedFundReleaseGate()`
+  refuses to start the process unless TER and AUM coverage each clear the
+  methodology's threshold (default 95% of active direct-growth schemes) and the
+  signed methodology is the newest version that exists. Coverage is logged on
+  every boot either way. A deployment that cannot name funds honestly must not
+  start and quietly serve something else.
+- **Cost and size** come from AMFI and are refreshed nightly, before scoring, by
+  `priceFeeds/amfiCostAndSize.service.ts`: scheme-wise AAUM joins on **AMFI
+  scheme code** (exact); the TER workbook carries no AMFI code and no ISIN, so
+  it joins on a normalised **base scheme name** (96.7% of direct-growth schemes,
+  effectively unique — measured, see `V2-METHODOLOGY-REPORT.md`).
+- **v2 of the methodology** scores TER again for both models and makes a scheme
+  with no AUM ineligible (`aum_unknown`) rather than scoring it without size.
+  Switch recommendations are suppressed for lots held under 365 days while no
+  exit-load source exists.
+- **The LLM never selects a fund.** Rules select; the prose guard
+  (`proseConsistency.ts`) rejects any scheme name or figure the engine did not
+  produce.
 - `proseConsistency.ts` — verifies the generated prose agrees with the numbers.
 - Risk profile → `ModelPortfolio` / `ModelPortfolioVersion` target allocation.
 - Constraints in `constants.ts`: `MAX_SINGLE_TRADE_PCT = 25`,
@@ -806,7 +841,7 @@ ever weakened.
 detail), `navItems.tsx`. Collapsed rail uses monogram tiles.
 
 **API layer** — one `*.api.ts` module per domain, all over the shared axios
-instance in `api/client.ts`. Types are imported from `@portfolioos/shared`, never
+instance in `api/client.ts`. Types are imported from `@everypaisa/shared`, never
 redeclared locally.
 
 **Money on the frontend** — `<Money>` component and `formatINR`; `moneyToNumber`
@@ -819,19 +854,19 @@ only for chart geometry, never for arithmetic that will be displayed.
 > UI assumed a bare profile object while the API returned `{profile, history}`,
 > plus wholesale field-name drift. **After generating or heavily editing a page,
 > reconcile every field it reads against the actual type in
-> `@portfolioos/shared`.** Typecheck alone did not catch it because the client
+> `@everypaisa/shared`.** Typecheck alone did not catch it because the client
 > had locally-declared shapes.
 
 ---
 
 ## 12. Quality gates
 
-**Custom ESLint rules** (`eslint-plugin-portfolioos/index.cjs`):
+**Custom ESLint rules** (`eslint-plugin-everypaisa/index.cjs`):
 
-- `portfolioos/no-silent-catch` — bans `catch (e) {}` and console-only catches.
+- `everypaisa/no-silent-catch` — bans `catch (e) {}` and console-only catches.
   Every catch must rethrow, return a typed failure, call `logger.*`, write to the
   DLQ, or forward to `next(err)`.
-- `portfolioos/no-money-coercion` — bans `parseFloat` (always wrong for money)
+- `everypaisa/no-money-coercion` — bans `parseFloat` (always wrong for money)
   and `Number(x)` (usually wrong). Use `toDecimal()`. Explicit
   `Number.parseInt`/`Number.parseFloat` are allowed for genuinely non-monetary
   values.
@@ -938,6 +973,27 @@ at boot with a ✅/⚠️ log line).
   by design, but it needs a human-facing follow-up path.
 - Credit cards, bonds/G-Sec, post office and property have no consent-based data
   source in India; all are manual entry or statement parsing.
+- **TER and AUM are now ingested from AMFI** (96.4% / 94.6% coverage of active
+  direct-growth schemes, measured 21 Sept 2026). AUM currently sits **below the
+  95% release gate**, so enabling named-fund advice would refuse to boot until
+  the next quarterly AAUM publication closes the gap — by design, not a defect.
+- **Still missing: benchmark TRI, inception date, manager tenure and exit
+  load.** Consequences: tracking figures are **peer-relative** (median of
+  same-index peers) rather than measured against a real benchmark; track record
+  is measured from the first NAV we hold; manager tenure's weight is
+  redistributed; and switch recommendations still assume a **zero exit load**,
+  which is why they are suppressed entirely for lots held under 12 months. Each
+  is recorded per fund in `FundScoreSnapshot.dataGaps` rather than defaulted.
+- **AMFI's TER file has no AMFI scheme code and no ISIN**, so that join is on a
+  normalised base scheme name. Deterministic and measured, but weaker than the
+  exact code join AUM gets.
+- Portfolio overlap between a candidate and the client's holdings is only known
+  for a fund they already hold; constituent data for the wider universe is not
+  ingested, so `fundRanking/overlap.ts` returns null (unknown, not zero) for
+  everything else.
+- `AdvisorApprovedProduct` is still scoped per user. As an override that is
+  harmless — an empty table means "no override" — but a firm-wide house list
+  would need re-scoping to an admin or firm entity.
 
 ---
 

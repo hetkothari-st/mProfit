@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);
@@ -51,6 +51,8 @@ export interface LoanSummaryDTO {
   totalInterestPaid: string;
   nextEmiDate: string | null;
   nextEmiAmount: string;
+  paidEmiCount: number;
+  scheduledEmiCount: number;
   remainingEmiCount: number;
   remainingTenureMonths: number;
   totalInterestPayable: string;

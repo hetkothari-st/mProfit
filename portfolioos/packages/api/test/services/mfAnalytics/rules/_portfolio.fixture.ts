@@ -42,7 +42,7 @@ import {
   type MfPortfolioTotals,
   type MfSchemeMetaDto,
   type MfTaxSummary,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import type { EffectiveScope } from '../../../../src/services/familyScope.service.js';
 import type { MfAnalysisFacts, MfFundFacts } from '../../../../src/services/mfAnalytics/types.js';

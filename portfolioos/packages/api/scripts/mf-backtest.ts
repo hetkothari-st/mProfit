@@ -2,7 +2,7 @@
  * Methodology backtest — `06-QUALITY-COMPLIANCE.md §3`, `07` Task 2.7.
  *
  * Run:
- *   pnpm --filter @portfolioos/api exec tsx scripts/mf-backtest.ts
+ *   pnpm --filter @everypaisa/api exec tsx scripts/mf-backtest.ts
  *
  * Options (env):
  *   BACKTEST_FIRST_MONTH     first month-end, YYYY-MM-DD (default 2016-01-31)
@@ -96,7 +96,7 @@ import {
   type MfHorizonMetrics,
   type MfModelKey,
   type SebiSubCategory,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import type { MfSchemeStatus } from '@prisma/client';
 
 import { prisma } from '../src/lib/prisma.js';

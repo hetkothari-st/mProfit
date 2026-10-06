@@ -20,11 +20,12 @@ import {
   postAutoApproveRule,
   deleteAutoApproveRule,
 } from '../controllers/gmailScan.controller.js';
+import { costlyOperationLimiter } from '../middleware/rateLimit.js';
 
 export const gmailScanRouter = Router();
 gmailScanRouter.use(authenticate);
 
-gmailScanRouter.post('/scan-jobs', asyncHandler(postScanJob));
+gmailScanRouter.post('/scan-jobs', costlyOperationLimiter, asyncHandler(postScanJob));
 gmailScanRouter.get('/scan-jobs', asyncHandler(listScans));
 gmailScanRouter.get('/scan-jobs/:id', asyncHandler(getScan));
 gmailScanRouter.post('/scan-jobs/:id/cancel', asyncHandler(postCancelScan));

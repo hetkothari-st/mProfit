@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializeRatio, type MfHorizonMetrics, type MfMetricStatus } from '@portfolioos/shared';
+import { serializeRatio, type MfHorizonMetrics, type MfMetricStatus } from '@everypaisa/shared';
 import { riskHighDownCaptureRule as rule } from '../../../../src/services/mfAnalytics/rules/risk.high-down-capture.js';
 import type { MfHorizonKey } from '../../../../src/services/mfAnalytics/types.js';
 import {

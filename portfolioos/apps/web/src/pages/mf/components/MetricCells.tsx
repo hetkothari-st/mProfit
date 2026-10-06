@@ -1,5 +1,5 @@
-import type { Money as MoneyString, Pct, Ratio } from '@portfolioos/shared';
-import { formatINR } from '@portfolioos/shared';
+import type { Money as MoneyString, Pct, Ratio } from '@everypaisa/shared';
+import { formatINR } from '@everypaisa/shared';
 import { Money } from '@/components/ui/money';
 import { MetricValue } from './MetricValue';
 import {

@@ -66,6 +66,25 @@ function dec(v: Prisma.Decimal | string | number | null | undefined): Decimal {
  * This is exactly the engine `foPnl.service` uses for tax — they share this
  * function so position math and tax math can never diverge.
  */
+/**
+ * Market value of an open F&O position. Quantities are stored in units (lots
+ * already multiplied out at import), so no lot-size factor applies. Value =
+ * cost + (mark − average entry) × signed quantity, which is quantity × mark for
+ * a long and keeps value − cost equal to the unrealised P&L for a short.
+ */
+export function derivativePositionValue(p: {
+  netQuantity: { toString(): string };
+  totalCost: { toString(): string };
+  avgEntryPrice: { toString(): string };
+  mtmPrice: { toString(): string } | null;
+}): Decimal | null {
+  if (!p.mtmPrice) return null;
+  const qty = new Decimal(p.netQuantity.toString());
+  const mark = new Decimal(p.mtmPrice.toString());
+  const entry = new Decimal(p.avgEntryPrice.toString());
+  return new Decimal(p.totalCost.toString()).plus(mark.minus(entry).times(qty));
+}
+
 export function replayFoTransactions(txs: Transaction[]): ReplayResult | null {
   const sorted = [...txs].sort((a, b) => {
     const d = a.tradeDate.getTime() - b.tradeDate.getTime();
@@ -198,8 +217,11 @@ export async function recomputeDerivativePosition(
     const liveMap = await getLiveFoPricesBatch([assetKey]);
     const live = liveMap.get(assetKey);
     if (live != null && live > 0) mtmPrice = new Decimal(live);
-  } catch {
-    // live feed best-effort — never block recompute on NSE flakiness
+  } catch (err) {
+    // Never block a recompute on NSE flakiness — the EOD row below is a fine
+    // second choice — but a feed that is always down should be visible rather
+    // than showing up as marks that are silently a day old.
+    logger.debug({ err, assetKey }, '[fno] live quote unavailable, falling back to EOD');
   }
   if (!mtmPrice) {
     const ltp = await getLatestFoContractPrice(assetKey);

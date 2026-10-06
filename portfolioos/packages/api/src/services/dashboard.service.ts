@@ -1,11 +1,14 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { serializeMoney, financialYearFromDate, toDecimal } from '@portfolioos/shared';
+import { financialYearOf, financialYearRange } from '@everypaisa/shared';
+import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@everypaisa/shared';
 import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
+import { outstandingLoansGiven } from './loansGiven.service.js';
 import { computeCardSummary } from './creditCards.service.js';
 import { getEffectiveScope, type EffectiveScope } from './familyScope.service.js';
 import { runAsUser } from '../lib/requestContext.js';
+import { plateOf } from './piiAtRest.service.js';
 
 // Human-readable labels for the AssetClass enum — used in dashboard breakdown.
 // Mirrors the per-class labels in apps/web/src/pages/assetClasses/SimpleAssetPage.tsx
@@ -35,21 +38,9 @@ function d(v: { toString(): string } | null | undefined): Decimal {
   return new Decimal(v.toString());
 }
 
-function premiumToAnnual(amount: Decimal, frequency: string): Decimal {
-  switch (frequency) {
-    case 'MONTHLY': return amount.times(12);
-    case 'QUARTERLY': return amount.times(4);
-    case 'HALF_YEARLY': return amount.times(2);
-    case 'ANNUAL': return amount;
-    case 'SINGLE': return ZERO;
-    default: return amount;
-  }
-}
-
 function fyStart(): Date {
-  const now = new Date();
-  const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-  return new Date(year, 3, 1); // April 1
+  // 1 April of the current Indian financial year, as a UTC date like stored trade dates.
+  return new Date(`${financialYearRange(financialYearOf(new Date())).from}T00:00:00Z`);
 }
 
 function daysUntil(date: Date): number {
@@ -70,6 +61,17 @@ export interface MemberVisibilityCaps {
   categories: readonly string[] | null;
 }
 
+/**
+ * A member's portfolios as seen from one family view: personal ones plus those
+ * shared into that family. Without a family (a personal view) every portfolio
+ * the user created counts, as before.
+ */
+export function memberPortfolioWhere(userId: string, familyId?: string) {
+  return familyId
+    ? { userId, OR: [{ familyId: null }, { familyId }] }
+    : { userId };
+}
+
 /** Deny-all is representable, so this cannot collapse to a truthiness test. */
 function allows(caps: readonly string[] | null, category: string): boolean {
   return caps === null || caps.includes(category);
@@ -79,6 +81,13 @@ export async function getDashboardNetWorth(
   userId: string,
   portfolioId?: string,
   caps: MemberVisibilityCaps = { assetClasses: null, categories: null },
+  /**
+   * The family in view, when this is one member's slice of a family view. The
+   * member's portfolios are then limited to their personal ones plus those
+   * shared into THIS family — not ones they shared into another household,
+   * which hold money that household's members put in.
+   */
+  familyId?: string,
 ) {
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 86_400_000);
@@ -87,7 +96,7 @@ export async function getDashboardNetWorth(
   // ── 1. Financial portfolio ───────────────────────────────────────────
   const holdings = await prisma.holdingProjection.findMany({
     where: {
-      portfolio: { userId },
+      portfolio: memberPortfolioWhere(userId, familyId),
       ...(portfolioId ? { portfolioId } : {}),
       // Intersect with the caller's asset-class grant. `[]` is deny-all and
       // `{ in: [] }` matches nothing, which is exactly right.
@@ -133,7 +142,7 @@ export async function getDashboardNetWorth(
     daysUntil: number;
   }> = [];
   for (const v of vehicles) {
-    const label = [v.make, v.model, v.registrationNo].filter(Boolean).join(' ');
+    const label = [v.make, v.model, plateOf(v)].filter(Boolean).join(' ');
     const checks: Array<[Date | null, string]> = [
       [v.insuranceExpiry, 'Insurance'],
       [v.pucExpiry, 'PUC'],
@@ -165,6 +174,13 @@ export async function getDashboardNetWorth(
   });
 
   const rentalValue = properties.reduce((s, p) => s.plus(d(p.currentValue)), ZERO);
+
+  // Money lent to others and still owed back — an asset, not a liability.
+  // Shares the LOAN visibility grant with loans taken.
+  const loansGiven = canSee('LOAN')
+    ? await outstandingLoansGiven(userId)
+    : { count: 0, total: ZERO };
+  const loansGivenValue = loansGiven.total;
   const monthlyRent = properties.reduce((s, p) => {
     return s.plus(p.tenancies.reduce((t, tn) => t.plus(d(tn.monthlyRent)), ZERO));
   }, ZERO);
@@ -172,16 +188,23 @@ export async function getDashboardNetWorth(
     return n + p.tenancies.reduce((t, tn) => t + tn.rentReceipts.length, 0);
   }, 0);
 
-  // YTD rental income (received receipts since April 1)
+  // YTD rental income: the money that actually arrived since April 1, summed
+  // from PAYMENT ledger entries rather than from `RentReceipt.receivedAmount`.
+  // Those used to be the same number — before the ledger, `receivedAmount`
+  // only moved when cash did. The ledger widened it to "amount settled against
+  // this month", which a DISCOUNT also does, so summing it reported a waiver
+  // as income. DEPOSIT is excluded for the same reason: money held is not
+  // money earned. See test/regressions/rental-discount-not-income.test.ts.
   const fy = fyStart();
-  const receivedReceipts = await prisma.rentReceipt.findMany({
+  const rentPayments = await prisma.rentLedgerEntry.findMany({
     where: {
       tenancy: { property: { userId } },
-      receivedOn: { gte: fy },
-      status: { in: ['RECEIVED', 'PARTIAL'] },
+      entryType: 'PAYMENT',
+      entryDate: { gte: fy },
     },
+    select: { amount: true },
   });
-  const rentalIncomeYTD = receivedReceipts.reduce((s, r) => s.plus(d(r.receivedAmount)), ZERO);
+  const rentalIncomeYTD = rentPayments.reduce((s, p) => s.plus(d(p.amount)), ZERO);
 
   // YTD expenses
   const expenses = await prisma.propertyExpense.findMany({
@@ -314,7 +337,7 @@ export async function getDashboardNetWorth(
   }
 
   // ── 6. Expanded allocation (all tangible assets) ─────────────────────
-  const totalTangible = portfolioValue.plus(vehicleValue).plus(rentalValue);
+  const totalTangible = portfolioValue.plus(vehicleValue).plus(rentalValue).plus(loansGivenValue);
   const allocationBreakdown: Array<{
     key: string;
     label: string;
@@ -357,6 +380,17 @@ export async function getDashboardNetWorth(
       numericValue: rentalValue.toNumber(),
       percent: totalTangible.greaterThan(0) ? rentalValue.dividedBy(totalTangible).times(100).toNumber() : 0,
       category: 'REAL_ESTATE',
+    });
+  }
+
+  if (loansGivenValue.greaterThan(0)) {
+    allocationBreakdown.push({
+      key: 'LOAN_GIVEN',
+      label: 'Loans given',
+      value: serializeMoney(loansGivenValue),
+      numericValue: loansGivenValue.toNumber(),
+      percent: totalTangible.greaterThan(0) ? loansGivenValue.dividedBy(totalTangible).times(100).toNumber() : 0,
+      category: 'FINANCIAL',
     });
   }
 
@@ -444,7 +478,7 @@ export async function getDashboardNetWorth(
   // ── 7. Net worth totals ──────────────────────────────────────────────
   // totalNetWorth = gross assets (unchanged for backward compat)
   // netWorthAfterLiabilities = assets − all outstanding loans & CC balances
-  const totalNetWorth = portfolioValue.plus(vehicleValue).plus(rentalValue);
+  const totalNetWorth = portfolioValue.plus(vehicleValue).plus(rentalValue).plus(loansGivenValue);
   const netWorthAfterLiabilities = totalNetWorth.minus(totalLiabilities);
 
   return {
@@ -549,8 +583,8 @@ export async function getDashboardNetWorthForScope(
   const perMember = await Promise.all(
     scope.readableUserIds.map((uid) =>
       uid === callerId
-        ? getDashboardNetWorth(uid, opts.portfolioId)
-        : runAsUser(uid, () => getDashboardNetWorth(uid, opts.portfolioId, caps)),
+        ? getDashboardNetWorth(uid, opts.portfolioId, undefined, scope.familyId!)
+        : runAsUser(uid, () => getDashboardNetWorth(uid, opts.portfolioId, caps, scope.familyId!)),
     ),
   );
   return mergeNetWorthResults(perMember);

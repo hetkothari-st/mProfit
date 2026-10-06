@@ -5,7 +5,7 @@
  * form dialog share the same labels, rates, ordering, and — new here — a
  * behaviour `family` that drives the detail-page layout.
  */
-import type { AssetClass } from '@portfolioos/shared';
+import type { AssetClass } from '@everypaisa/shared';
 
 export type SchemeType =
   | 'NSC' | 'KVP' | 'SCSS' | 'SSY'

@@ -1,5 +1,5 @@
 /**
- * build.mjs — esbuild entry for the PortfolioOS browser extension.
+ * build.mjs — esbuild entry for the EveryPaisa browser extension.
  *
  * Bundles four entry points (background service worker, two content scripts,
  * popup) to ESM format targeting Chrome 120+. Run with:

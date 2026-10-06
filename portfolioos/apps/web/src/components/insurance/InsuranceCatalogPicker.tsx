@@ -72,7 +72,7 @@ export function InsuranceCatalogPicker({ selectedId, onSelect }: PickerProps) {
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0"
+          className="tap-expand h-7 w-7 p-0"
           onClick={() => {
             onSelect(null);
             setQuery('');

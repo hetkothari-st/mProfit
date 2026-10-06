@@ -3,7 +3,7 @@ import { AmcLogo } from '@/components/mf/AmcLogo';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import { MF_HORIZONS, type MfHorizonYears } from '@portfolioos/shared';
+import { MF_HORIZONS, type MfHorizonYears } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -32,7 +32,7 @@ import { PlainOverview } from './components/PlainOverview';
  * disclosure that must sit beside it.
  *
  * **No type is declared in this file or any of its components.** Every shape
- * is imported from `@portfolioos/shared`. CONTEXT.md §11 records why: `/advisor`
+ * is imported from `@everypaisa/shared`. CONTEXT.md §11 records why: `/advisor`
  * crashed on first load because the client declared its own version of a server
  * shape and `tsc`, having only the client's word for it, certified the drift
  * instead of catching it. A local `interface FundScore { … }` here would do

@@ -3,8 +3,8 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { AuthUser, MfPortfolioAnalysisDto } from '@portfolioos/shared';
-import { MF_ANALYTICS_DISCLAIMER } from '@portfolioos/shared';
+import type { AuthUser, MfPortfolioAnalysisDto } from '@everypaisa/shared';
+import { MF_ANALYTICS_DISCLAIMER } from '@everypaisa/shared';
 import { useAuthStore } from '@/stores/auth.store';
 import {
   emptyFixture,

@@ -25,8 +25,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Decimal, toDecimal } from '@portfolioos/shared';
-import type { MfPortfolioAnalysisDto } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
+import type { MfPortfolioAnalysisDto } from '@everypaisa/shared';
 import type { AssetClass, MFCategory, TransactionType } from '@prisma/client';
 
 import { prisma } from '../../../src/lib/prisma.js';

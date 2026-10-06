@@ -14,6 +14,9 @@ import {
   updateVoucherHandler,
   deleteVoucherHandler,
   nextVoucherNoHandler,
+  receiptPdfHandler,
+  receiptsZipHandler,
+  receiptsWorkbookHandler,
   getLedgerHandler,
   getTrialBalanceHandler,
   getPnLHandler,
@@ -38,6 +41,12 @@ accountingRouter.delete('/accounts/:id', asyncHandler(deleteAccountHandler));
 // Vouchers
 accountingRouter.get('/vouchers', asyncHandler(listVouchersHandler));
 accountingRouter.get('/vouchers/next-no', asyncHandler(nextVoucherNoHandler));
+// Receipts: the same voucher as a document somebody can file or hand over.
+// The bundle routes come before `/vouchers/:id` so their names are never read
+// as voucher ids.
+accountingRouter.get('/receipts.zip', asyncHandler(receiptsZipHandler));
+accountingRouter.get('/receipts.xlsx', asyncHandler(receiptsWorkbookHandler));
+accountingRouter.get('/vouchers/:id/receipt.pdf', asyncHandler(receiptPdfHandler));
 accountingRouter.get('/vouchers/:id', asyncHandler(getVoucherHandler));
 accountingRouter.post('/vouchers', asyncHandler(createVoucherHandler));
 accountingRouter.patch('/vouchers/:id', asyncHandler(updateVoucherHandler));

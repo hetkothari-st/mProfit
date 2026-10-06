@@ -26,7 +26,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializePct } from '@portfolioos/shared';
+import { serializePct } from '@everypaisa/shared';
 
 import { pfNoEmergencyLiquidityRule } from '../../../../src/services/mfAnalytics/rules/pf.no-emergency-liquidity.js';
 import {

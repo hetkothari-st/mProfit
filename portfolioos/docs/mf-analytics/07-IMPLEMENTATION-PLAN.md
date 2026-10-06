@@ -101,7 +101,7 @@ Task sizes: **S** ≤ 2h, **M** ≤ 1 day, **L** 2–3 days.
 ### Task 2.1 — `mfMetricsMath.ts` (L)
 - Implement every function in `02 §2–5, §7–8` as pure Decimal functions.
 - Series builders: `toMonthEndSeries`, `toDailySeries`, `forwardFillRiskFree`.
-- XIRR in `@portfolioos/shared` if absent.
+- XIRR in `@everypaisa/shared` if absent.
 - Tests `02 §10.1–3, 5–9` with synthetic fixtures.
 - **Done when:** all synthetic tests pass to stated tolerances; determinism
   test; no `number` leak test.

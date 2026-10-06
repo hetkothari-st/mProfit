@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -11,7 +11,7 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { Decimal, formatINR } from '@portfolioos/shared';
+import { Decimal, formatINR } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -31,7 +32,13 @@ import {
   type CreditCardDTO,
   type CreateCardInput,
 } from '@/api/creditCards.api';
+import { apiErrorMessage } from '@/api/client';
 import { CreditCardVisual } from '@/components/creditCards/CreditCardVisual';
+import { SuggestInput, type SuggestOption } from '@/components/common/SuggestInput';
+import { INDIAN_BANKS } from '@/data/indianBanks';
+import { CARD_ISSUERS, type CatalogCard } from '@/data/creditCardCatalog';
+import { cardProductsFor } from '@/lib/creditCardDesign';
+import { nextCardDue, todayIso } from '@/lib/creditCardDue';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -44,11 +51,6 @@ const STATUS_COLORS: Record<string, string> = {
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function daysUntil(isoDate: string): number {
-  const due = new Date(isoDate).getTime();
-  return Math.ceil((due - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
 function utilizationClass(pct: number): string {
@@ -117,20 +119,18 @@ function CardCard({
   const utilizationPct = limit.isZero() ? 0 : outstanding.div(limit).mul(100).toNumber();
   const isHighUtilization = utilizationPct >= 80;
 
-  const pendingStatements = card.statements
-    .filter((s) => s.status === 'PENDING' || s.status === 'OVERDUE' || s.status === 'PARTIAL')
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const nextDue = pendingStatements[0] ?? null;
-  const nextDueDays = nextDue ? daysUntil(nextDue.dueDate) : null;
+  // A closed or blocked card has nothing coming due unless a statement is still open.
+  const due = nextCardDue(card, todayIso());
+  const showDue = card.status === 'ACTIVE' || due.fromStatement;
 
   return (
     <div className="group relative">
       {/* Action overlay (top-right, hover-reveal) */}
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity [@media(hover:none)]:rounded-full [@media(hover:none)]:bg-black/45 [@media(hover:none)]:px-1 [@media(hover:none)]:backdrop-blur-sm">
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
           onClick={onEdit}
           title="Edit"
         >
@@ -139,7 +139,7 @@ function CardCard({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-negative/80 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-negative/80 hover:text-white"
           onClick={onDelete}
           disabled={isDeleting}
           title="Delete"
@@ -150,7 +150,7 @@ function CardCard({
           asChild
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
+          className="tap-expand h-7 w-7 p-0 bg-black/30 backdrop-blur text-white hover:bg-black/50 hover:text-white"
           title="Open"
         >
           <Link to={`/credit-cards/${card.id}`}>
@@ -161,7 +161,7 @@ function CardCard({
 
       {/* The credit-card visual itself */}
       <Link to={`/credit-cards/${card.id}`} className="block hover:-translate-y-0.5 transition-transform">
-        <CreditCardVisual card={card} />
+        <CreditCardVisual card={card} revealable />
       </Link>
 
       {/* Stats panel below */}
@@ -181,21 +181,28 @@ function CardCard({
           </div>
         </div>
 
-        {nextDue && (
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Next due</span>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Limit</span>
+          <span className="tabular-nums money-digits">{formatINR(card.creditLimit)}</span>
+        </div>
+
+        {showDue && (
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-muted-foreground">Payment due</span>
             <div className="flex items-center gap-1.5">
-              <span className="tabular-nums">{formatINR(nextDue.statementAmount)}</span>
-              <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
-                nextDueDays !== null && nextDueDays < 0
-                  ? 'bg-negative/10 text-negative'
-                  : nextDueDays !== null && nextDueDays <= 5
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-muted text-muted-foreground'
-              }`}>
-                {nextDueDays !== null && nextDueDays < 0 ? 'Overdue' :
-                 nextDueDays === 0 ? 'Today' :
-                 nextDueDays !== null ? `${nextDueDays}d` : formatDate(nextDue.dueDate)}
+              {due.amount && <span className="tabular-nums money-digits">{formatINR(due.amount)}</span>}
+              <span className="tabular-nums">{formatDate(due.date)}</span>
+              <span
+                title={due.fromStatement ? 'From the latest statement' : `Due on day ${card.dueDay} of the month`}
+                className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
+                  due.daysLeft < 0
+                    ? 'bg-negative/10 text-negative'
+                    : due.daysLeft <= 5
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {due.daysLeft < 0 ? 'Overdue' : due.daysLeft === 0 ? 'Today' : `${due.daysLeft}d`}
               </span>
             </div>
           </div>
@@ -220,6 +227,41 @@ function CardCard({
 }
 
 // ── Create / Edit dialog ──────────────────────────────────────────────
+
+const ISSUER_OPTIONS: SuggestOption[] = [
+  ...CARD_ISSUERS.map((i) => ({ value: i.name, keywords: i.aliases })),
+  ...INDIAN_BANKS.map((b) => ({ value: b.name, keywords: b.keywords })),
+];
+
+/** Generic variants, for cards the catalog doesn't list — drawn in that tier's finish. */
+const TIER_NAMES = ['Classic', 'Gold', 'Platinum', 'Titanium', 'Signature', 'World', 'Infinite', 'Black', 'Metal'];
+
+/** "₹5,00,000" -> "500000": the server takes a plain decimal string. */
+function cleanMoney(raw: string | null | undefined): string {
+  return (raw ?? '').replace(/[^\d.]/g, '');
+}
+
+/** The checksum every card number carries (the server runs the same one). */
+function luhnValid(digits: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = digits.charCodeAt(digits.length - 1 - i) - 48;
+    if (i % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+const NETWORKS: Array<[string, string]> = [
+  ['VISA', 'Visa'],
+  ['MASTERCARD', 'Mastercard'],
+  ['RUPAY', 'RuPay'],
+  ['AMEX', 'American Express'],
+  ['DINERS', 'Diners Club'],
+];
 
 function CreateCardDialog({
   open,
@@ -247,6 +289,8 @@ function CreateCardDialog({
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+  // Kept apart from `form`: it's sent only when typed, never pre-filled.
+  const [cardNumber, setCardNumber] = useState('');
 
   // Re-sync form when dialog opens with a different initial card
   useEffect(() => {
@@ -264,8 +308,50 @@ function CreateCardDialog({
         status: initial?.status ?? 'ACTIVE',
       });
       setErrors({});
+      setCardNumber('');
     }
   }, [open, initial]);
+
+  // The issuer's cards from the catalog, then generic tiers. With no issuer
+  // yet, every card is offered with its issuer so the values stay distinct.
+  const productChoices = useMemo(() => {
+    const hasIssuer = form.issuerBank.trim().length > 0;
+    const byValue = new Map<string, CatalogCard>();
+    const options: SuggestOption[] = cardProductsFor(form.issuerBank).map((c) => {
+      const value = hasIssuer ? c.product : `${c.product} (${c.issuer})`;
+      byValue.set(value, c);
+      return { value, keywords: c.aliases };
+    });
+    for (const t of TIER_NAMES) {
+      if (!byValue.has(t)) options.push({ value: t, hint: 'Any bank' });
+    }
+    return { options, byValue };
+  }, [form.issuerBank]);
+
+  /** A picked catalog card sets its exact name, and its issuer and usual network if blank. */
+  function pickProduct(option: SuggestOption) {
+    const c = productChoices.byValue.get(option.value);
+    if (!c) return;
+    setForm((f) => ({
+      ...f,
+      cardName: c.product,
+      issuerBank: f.issuerBank.trim() ? f.issuerBank : c.issuer,
+      network: f.network || c.network,
+    }));
+  }
+
+  const preview: CreditCardDTO = {
+    ...form,
+    id: 'preview',
+    userId: '',
+    portfolioId: null,
+    cardName: form.cardName.trim() || 'Card name',
+    last4: /^\d{4}$/.test(form.last4) ? form.last4 : '••••',
+    hasCardNumber: false,
+    outstandingBalance: '0',
+    statements: [],
+    createdAt: '',
+  } as CreditCardDTO;
 
   const mutation = useMutation({
     mutationFn: (input: CreateCardInput) =>
@@ -275,7 +361,14 @@ function CreateCardDialog({
       toast.success(isEdit ? 'Card updated' : 'Card added');
       onOpenChange(false);
     },
-    onError: () => toast.error(isEdit ? 'Failed to update card' : 'Failed to add card'),
+    onError: (err) => {
+      // The server explains exactly what it rejected ("a digit may be
+      // mistyped"). Showing "Failed to add card" instead left the reason
+      // visible only as a 400 in the browser console.
+      const message = apiErrorMessage(err, isEdit ? 'Failed to update card' : 'Failed to add card');
+      if (/card number/i.test(message)) setErrors((e) => ({ ...e, cardNumber: message }));
+      toast.error(message);
+    },
   });
 
   function set<K extends keyof CreateCardInput>(key: K, value: CreateCardInput[K]) {
@@ -287,7 +380,13 @@ function CreateCardDialog({
     if (!form.issuerBank.trim()) errs['issuerBank'] = 'Required';
     if (!form.cardName.trim()) errs['cardName'] = 'Required';
     if (!form.last4.trim() || form.last4.length !== 4 || !/^\d{4}$/.test(form.last4)) errs['last4'] = 'Must be 4 digits';
-    if (!form.creditLimit || isNaN(Number(form.creditLimit))) errs['creditLimit'] = 'Required';
+    if (!cleanMoney(form.creditLimit)) errs['creditLimit'] = 'Required';
+    else if (!/^\d+(\.\d+)?$/.test(cleanMoney(form.creditLimit))) errs['creditLimit'] = 'Enter an amount, e.g. 500000';
+    const typedNumber = cardNumber.replace(/[\s-]/g, '');
+    if (typedNumber && !/^\d{12,19}$/.test(typedNumber)) errs['cardNumber'] = 'Enter the 12–19 digits on the card';
+    // Same Luhn check the server runs, so a mistyped digit is caught here.
+    else if (typedNumber && !luhnValid(typedNumber))
+      errs['cardNumber'] = "That card number doesn't check out — check for a mistyped digit";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -299,41 +398,91 @@ function CreateCardDialog({
       issuerBank: form.issuerBank.trim(),
       cardName: form.cardName.trim(),
       last4: form.last4.trim(),
-      interestRate: form.interestRate?.trim() || null,
-      annualFee: form.annualFee?.trim() || null,
+      creditLimit: cleanMoney(form.creditLimit),
+      interestRate: cleanMoney(form.interestRate) || null,
+      annualFee: cleanMoney(form.annualFee) || null,
       network: form.network || null,
+      ...(cardNumber.trim() ? { cardNumber: cardNumber.replace(/[\s-]/g, '') } : {}),
     });
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit credit card' : 'Add credit card'}</DialogTitle>
+          <DialogDescription>
+            The card's limit and billing days. The full number is optional and stored encrypted.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          {(form.issuerBank.trim() || form.cardName.trim()) && (
+            <div className="mx-auto w-full max-w-[18rem]" aria-hidden>
+              <CreditCardVisual card={preview} />
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <Label>Issuer bank *</Label>
-              <Input placeholder="HDFC, ICICI, Axis…" value={form.issuerBank}
-                onChange={(e) => set('issuerBank', e.target.value)}
-                className={errors['issuerBank'] ? 'border-negative' : ''} />
+              <Label htmlFor="cc-issuer">Issuer bank *</Label>
+              <SuggestInput
+                id="cc-issuer"
+                placeholder="Search HDFC, SBI, Amex…"
+                value={form.issuerBank}
+                onValueChange={(v) => set('issuerBank', v)}
+                options={ISSUER_OPTIONS}
+                autoComplete="off"
+                className={errors['issuerBank'] ? 'border-negative' : ''}
+              />
               {errors['issuerBank'] && <p className="text-xs text-negative mt-1">{errors['issuerBank']}</p>}
             </div>
             <div>
-              <Label>Card name *</Label>
-              <Input placeholder="Regalia, Millennia…" value={form.cardName}
-                onChange={(e) => set('cardName', e.target.value)}
-                className={errors['cardName'] ? 'border-negative' : ''} />
+              <Label htmlFor="cc-name">Card *</Label>
+              <SuggestInput
+                id="cc-name"
+                placeholder="Regalia Gold, Platinum…"
+                value={form.cardName}
+                onValueChange={(v) => set('cardName', v)}
+                options={productChoices.options}
+                onPick={pickProduct}
+                maxResults={10}
+                autoComplete="off"
+                className={errors['cardName'] ? 'border-negative' : ''}
+              />
               {errors['cardName'] && <p className="text-xs text-negative mt-1">{errors['cardName']}</p>}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="cc-number">Full card number</Label>
+            <Input
+              id="cc-number"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder={
+                initial?.hasCardNumber ? 'Saved — type a new one to replace it' : 'Optional — lets you reveal it later'
+              }
+              value={cardNumber}
+              onChange={(e) => {
+                setCardNumber(e.target.value);
+                // The last 4 follow the full number so the two can't disagree.
+                const digits = e.target.value.replace(/\D/g, '');
+                if (digits.length >= 4) set('last4', digits.slice(-4));
+              }}
+              className={errors['cardNumber'] ? 'border-negative' : ''}
+            />
+            {errors['cardNumber'] ? (
+              <p className="text-xs text-negative mt-1">{errors['cardNumber']}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">Stored encrypted. CVV and expiry are never asked for.</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <Label>Last 4 digits *</Label>
-              <Input placeholder="1234" maxLength={4} value={form.last4}
+              <Label htmlFor="cc-last4">Last 4 digits *</Label>
+              <Input id="cc-last4" placeholder="1234" maxLength={4} value={form.last4}
                 onChange={(e) => set('last4', e.target.value)}
                 className={errors['last4'] ? 'border-negative' : ''} />
               {errors['last4'] && <p className="text-xs text-negative mt-1">{errors['last4']}</p>}
@@ -346,22 +495,22 @@ function CreateCardDialog({
                 onChange={(e) => set('network', e.target.value || null)}
               >
                 <option value="">— select —</option>
-                {['VISA', 'MASTERCARD', 'AMEX', 'RUPAY'].map((n) => (
-                  <option key={n} value={n}>{n.charAt(0) + n.slice(1).toLowerCase()}</option>
+                {NETWORKS.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
                 ))}
               </select>
             </div>
           </div>
 
           <div>
-            <Label>Credit limit (₹) *</Label>
-            <Input placeholder="500000" value={form.creditLimit}
+            <Label htmlFor="cc-limit">Credit limit (₹) *</Label>
+            <Input id="cc-limit" placeholder="500000" value={form.creditLimit}
               onChange={(e) => set('creditLimit', e.target.value)}
               className={errors['creditLimit'] ? 'border-negative' : ''} />
             {errors['creditLimit'] && <p className="text-xs text-negative mt-1">{errors['creditLimit']}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Statement day</Label>
               <Input type="number" min="1" max="31" value={form.statementDay}
@@ -374,7 +523,7 @@ function CreateCardDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Interest rate (% p.a.)</Label>
               <Input placeholder="42.00" value={form.interestRate ?? ''}

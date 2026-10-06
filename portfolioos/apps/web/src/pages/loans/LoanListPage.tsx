@@ -1,28 +1,31 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { AutoFitText } from '@/components/ui/AutoFitText';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  Landmark,
-  Plus,
-  ArrowUpRight,
-  AlertTriangle,
-  Loader2,
-  Trash2,
-  Pencil,
-  Calculator,
-  Calendar,
-  Home,
-  Car,
-  GraduationCap,
   Briefcase,
+  Calculator,
+  Car,
   Coins,
+  GraduationCap,
+  Home,
+  Landmark,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { Decimal, formatINR } from '@portfolioos/shared';
+import { Decimal, formatINR } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { InstitutionField } from '@/components/common/InstitutionField';
+import { LoansGivenSection } from './given/LoansGivenSection';
+import { LoanSectionHeader, LoanSectionNav, LoansOverview, type LoanSectionKey } from './LoanSections';
+import { loansGivenApi } from '@/api/loansGiven.api';
+import { InstallmentProgress, InstallmentTracker } from './InstallmentTracker';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,7 +39,11 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
+import { Figure, ReceiptShell } from '@/components/receipt/Receipt';
+import { BankLogo } from '@/components/bankAccounts/BankLogo';
+import { useReceiptLook } from '@/components/receipt/useReceiptLook';
 import {
   loansApi,
   type LoanDTO,
@@ -56,46 +63,6 @@ const LOAN_TYPE_LABELS: Record<string, string> = {
   OTHER: 'Other',
 };
 
-interface LoanTypeStyle {
-  icon: LucideIcon;
-  /** Engraved-tone label color, drawn from theme. */
-  accent: 'brass' | 'forest' | 'oxblood' | 'plum' | 'teal' | 'ink';
-}
-
-const LOAN_TYPE_STYLES: Record<string, LoanTypeStyle> = {
-  HOME:      { icon: Home,          accent: 'ink' },
-  CAR:       { icon: Car,           accent: 'oxblood' },
-  PERSONAL:  { icon: Wallet,        accent: 'brass' },
-  EDUCATION: { icon: GraduationCap, accent: 'plum' },
-  BUSINESS:  { icon: Briefcase,     accent: 'forest' },
-  GOLD:      { icon: Coins,         accent: 'brass' },
-  LAS:       { icon: TrendingUp,    accent: 'teal' },
-  OTHER:     { icon: Landmark,      accent: 'ink' },
-};
-
-function getLoanStyle(type: string): LoanTypeStyle {
-  return LOAN_TYPE_STYLES[type] ?? LOAN_TYPE_STYLES.OTHER!;
-}
-
-function accentColor(a: LoanTypeStyle['accent']): string {
-  switch (a) {
-    case 'brass':   return 'hsl(var(--accent))';
-    case 'forest':  return 'hsl(var(--positive))';
-    case 'oxblood': return 'hsl(var(--negative))';
-    case 'plum':    return 'hsl(260 28% 38%)';
-    case 'teal':    return 'hsl(195 40% 32%)';
-    case 'ink':
-    default:        return 'hsl(var(--primary))';
-  }
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  ACTIVE: 'text-positive',
-  CLOSED: 'text-muted-foreground',
-  FORECLOSED: 'text-muted-foreground',
-  DEFAULT: 'text-negative',
-};
-
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -106,92 +73,35 @@ function daysUntil(isoDate: string): number {
   return Math.ceil((due - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
-function emiCountdownBadge(nextEmiDate: string | null | undefined) {
-  if (!nextEmiDate) return null;
-  const days = daysUntil(nextEmiDate);
-  let cls = 'bg-muted text-muted-foreground';
-  let label = `in ${days}d`;
-  if (days < 0) { cls = 'bg-negative/10 text-negative'; label = 'Overdue'; }
-  else if (days === 0) { cls = 'bg-negative/10 text-negative'; label = 'Today'; }
-  else if (days <= 7) { cls = 'bg-amber-100 text-amber-700'; label = `in ${days}d`; }
-  return (
-    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${cls}`}>
-      EMI {label}
-    </span>
-  );
-}
-
-// ── Summary strip ─────────────────────────────────────────────────────
-
-function SummaryStrip({ loans }: { loans: LoanDTO[] }) {
-  const active = loans.filter((l) => l.status === 'ACTIVE');
-  const totalOutstanding = active.reduce(
-    (s, l) => s.plus(new Decimal(l.principalAmount)),
-    new Decimal(0),
-  );
-  const monthlyEmi = active.reduce(
-    (s, l) => s.plus(new Decimal(l.emiAmount)),
-    new Decimal(0),
-  );
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-      {[
-        { label: 'Total disbursed', value: formatINR(totalOutstanding.toString()), sub: 'original principal (active loans)' },
-        { label: 'Monthly EMI', value: formatINR(monthlyEmi.toString()), sub: 'combined across active loans' },
-        { label: 'Active loans', value: String(active.length), sub: `of ${loans.length} total` },
-      ].map((m) => (
-        <Card key={m.label}>
-          <CardContent className="px-4 py-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{m.label}</p>
-            <p className="text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words">{m.value}</p>
-            <p className="text-xs text-muted-foreground">{m.sub}</p>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
+function addMonthsIso(iso: string, months: number): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 10);
 }
 
 // ── Loan card ─────────────────────────────────────────────────────────
+//
+// An EMI coupon: a loan is repaid slip by slip, so the card is a slip with a
+// tear-off stub. The stub is printed in the lender's brand (logo, loan type,
+// rate, a watermark of what the loan bought); a perforated edge with notches
+// separates it from the body, which tracks the payoff — outstanding, a
+// segmented bar that fills as EMIs are paid, and the terms.
 
-// ── Amortization ring (SVG) ───────────────────────────────────────────
+const LOAN_FALLBACK = '#475569'; // slate, for lenders outside the bank list
 
-function AmortizationRing({
-  pct, color, emiCount, tenure,
-}: { pct: number; color: string; emiCount: number; tenure: number }) {
-  const size = 96;
-  const stroke = 6;
-  const radius = (size - stroke) / 2;
-  const circ = 2 * Math.PI * radius;
-  const dash = (Math.min(100, Math.max(0, pct)) / 100) * circ;
+const LOAN_TYPE_ICONS: Record<string, LucideIcon> = {
+  HOME: Home,
+  CAR: Car,
+  PERSONAL: Wallet,
+  EDUCATION: GraduationCap,
+  BUSINESS: Briefcase,
+  GOLD: Coins,
+  LAS: TrendingUp,
+  OTHER: Landmark,
+};
 
-  return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke="hsl(var(--border))" strokeWidth={stroke}
-        />
-        <circle
-          cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={`${dash} ${circ}`}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.22, 0.61, 0.36, 1)' }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="font-display text-2xl leading-none tracking-tight" style={{ color }}>
-          {pct.toFixed(0)}%
-        </span>
-        <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground mt-0.5 font-mono">
-          {emiCount}/{tenure}
-        </span>
-      </div>
-    </div>
-  );
-}
+const STUB_BUTTON =
+  'tap-expand -m-1 rounded p-1 text-white/65 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60';
 
 function LoanCard({
   loan,
@@ -204,161 +114,191 @@ function LoanCard({
   onDelete: () => void;
   isDeleting: boolean;
 }) {
-  const emiCount = loan.payments.filter((p) => p.paymentType === 'EMI').length;
-  const tenure = loan.tenureMonths || 1;
-  const progressPct = Math.min(100, Math.max(0, (emiCount / tenure) * 100));
+  const navigate = useNavigate();
+  const { panel, accent } = useReceiptLook(loan.lenderName, LOAN_FALLBACK);
+  const active = loan.status === 'ACTIVE';
 
-  const nextEmiDateStr: string | null = (() => {
-    if (loan.status !== 'ACTIVE') return null;
-    try {
-      const base = new Date(loan.firstEmiDate);
-      base.setMonth(base.getMonth() + emiCount);
-      return base.toISOString().slice(0, 10);
-    } catch {
-      return null;
-    }
-  })();
+  // Outstanding balance, next due date, EMIs left and amounts paid come from
+  // the server's amortization (prepayments included), not re-derived here.
+  const { data: summary } = useQuery({
+    queryKey: ['loans', loan.id, 'summary'],
+    queryFn: () => loansApi.getSummary(loan.id),
+    enabled: active,
+  });
 
-  const style = getLoanStyle(loan.loanType);
-  const TypeIcon = style.icon;
+  // The list only carries a loan's latest few payments, so the count of EMIs
+  // paid comes from the summary's schedule once it has loaded.
+  const emiCount = summary?.paidEmiCount ?? loan.payments.filter((p) => p.paymentType === 'EMI').length;
+  const tenure = loan.tenureMonths;
+  // A prepayment that reduces tenure shortens the plan; count against that.
+  const plan = summary?.scheduledEmiCount ?? tenure;
+  const progress = active ? (plan > 0 ? Math.min(100, (emiCount / plan) * 100) : 0) : 100;
+  const emisLeft = summary ? summary.remainingEmiCount : Math.max(0, tenure - emiCount);
+
+  const firstEmi = loan.firstEmiDate.slice(0, 10);
+  const nextEmi = !active
+    ? null
+    : summary
+      ? (summary.nextEmiDate?.slice(0, 10) ?? null)
+      : emiCount < tenure
+        ? addMonthsIso(firstEmi, emiCount)
+        : null;
+  const lastEmi = summary?.effectiveEndDate?.slice(0, 10) ?? (tenure > 0 ? addMonthsIso(firstEmi, tenure - 1) : null);
+  const dueIn = nextEmi ? daysUntil(nextEmi) : null;
+  const paidSoFar = summary
+    ? new Decimal(summary.totalPrincipalPaid).plus(summary.totalInterestPaid)
+    : null;
+
   const typeLabel = LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType;
-  const ringColor = accentColor(style.accent);
+  const TypeIcon = LOAN_TYPE_ICONS[loan.loanType] ?? Landmark;
+  const stamp = loan.status === 'DEFAULT' ? 'Default' : active ? null : 'Closed';
+  const rate = loan.interestRate ? new Decimal(loan.interestRate).toString() : null;
+  const owner = [
+    loan.borrowerName,
+    loan.accountNumber ? `a/c ending ${loan.accountNumber.slice(-4)}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
-  // Bond serial — pseudo-certificate marker.
-  const serial = loan.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
-  const isClosed = loan.status === 'CLOSED' || loan.status === 'FORECLOSED';
-  const isDefault = loan.status === 'DEFAULT';
-
-  const stop = (e: React.MouseEvent) => {
+  // The card is a link; its buttons must not also open it.
+  const act = (fn: () => void) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    fn();
   };
 
   return (
-    <Link
-      to={`/loans/${loan.id}`}
-      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg"
+    <ReceiptShell
+      label={`${loan.lenderName} ${typeLabel.toLowerCase()} loan`}
+      onClick={() => navigate(`/loans/${loan.id}`)}
     >
-      <Card
-        className={`overflow-hidden p-0 cursor-pointer transition-all duration-300 paper relative
-          group-hover:shadow-elev-lg group-hover:-translate-y-0.5
-          ${isClosed ? 'opacity-70' : ''}`}
-        style={{ borderTop: `3px solid ${ringColor}` }}
-      >
-        {/* Engraved bond header */}
-        <div className="relative px-5 pt-3 pb-2 border-b border-border/70">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.22em] font-medium">
-            <span className="flex items-center gap-1.5" style={{ color: ringColor }}>
-              <TypeIcon className="h-3 w-3" strokeWidth={1.8} />
-              {typeLabel} loan
-            </span>
-            <span className="font-mono normal-case tracking-normal text-muted-foreground">
-              № {serial}
-            </span>
+      <div className="flex flex-col sm:flex-row">
+        {/* Stub */}
+        <div
+          className="relative flex flex-col justify-between gap-5 overflow-hidden p-5 text-white sm:w-[38%] sm:shrink-0"
+          style={{
+            backgroundImage: `linear-gradient(160deg, ${panel.from} 0%, ${panel.via} 55%, ${panel.to} 100%)`,
+          }}
+        >
+          <TypeIcon
+            aria-hidden
+            strokeWidth={1.1}
+            className="pointer-events-none absolute -bottom-5 -right-5 h-32 w-32 text-white/[0.09]"
+          />
+          <div className="relative space-y-3">
+            <BankLogo bankName={loan.lenderName} size={28} maxWidth={130} className="shadow-md" />
+            <div>
+              <h3 className="break-words font-display text-[22px] leading-tight">{loan.lenderName}</h3>
+              <p className="mt-1 text-[13px] text-white/75">{typeLabel} loan</p>
+            </div>
           </div>
-          {/* Lender + borrower */}
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h3 className="font-sans font-semibold text-[28px] leading-[1.1] tracking-[-0.02em] text-foreground truncate">
-                {loan.lenderName}
-              </h3>
-              <div className="flex items-center gap-1.5 mt-2.5 text-base text-muted-foreground">
-                {loan.accountNumber && (
-                  <>
-                    <span className="font-mono tabular-nums">●●●● {loan.accountNumber.slice(-4)}</span>
-                    <span className="text-accent/60">·</span>
-                  </>
-                )}
-                <span className="font-display-italic truncate">{loan.borrowerName}</span>
+          <div className="relative flex items-end justify-between gap-2">
+            {rate ? (
+              <div>
+                <p className="font-display text-[34px] leading-none tabular-nums">
+                  {rate}
+                  <span className="text-xl">%</span>
+                </p>
+                <p className="mt-1 text-xs text-white/70">interest a year</p>
               </div>
-            </div>
-            <div className="flex items-center gap-0.5 shrink-0 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                onClick={(e) => { stop(e); onEdit(); }} title="Edit">
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={act(onEdit)} aria-label="Edit loan" className={STUB_BUTTON}>
                 <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button variant="ghost" size="sm"
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                onClick={(e) => { stop(e); onDelete(); }} disabled={isDeleting} title="Delete">
+              </button>
+              <button
+                type="button"
+                onClick={act(onDelete)}
+                disabled={isDeleting}
+                aria-label="Delete loan"
+                className={STUB_BUTTON}
+              >
                 {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-              </Button>
+              </button>
             </div>
           </div>
+          {stamp && (
+            <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rotate-12 rounded-sm border-2 border-white/75 px-2 py-0.5 font-display text-sm text-white/90">
+              {stamp}
+            </div>
+          )}
         </div>
 
-        {/* Body — ring + ledger grid */}
-        <CardContent className="p-5 relative">
-          <div className="grid grid-cols-[auto_1fr] gap-5 items-center">
-            <AmortizationRing
-              pct={progressPct} color={ringColor}
-              emiCount={emiCount} tenure={tenure}
-            />
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
-                Principal
+        {/* Perforation: dashed tear line with a notch bitten out at each edge */}
+        <div aria-hidden className="relative hidden sm:block">
+          <div className="absolute inset-y-3 left-0 border-l-2 border-dashed border-border" />
+          <span className="absolute -left-2.5 -top-2.5 h-5 w-5 rounded-full bg-background" />
+          <span className="absolute -bottom-2.5 -left-2.5 h-5 w-5 rounded-full bg-background" />
+        </div>
+
+        {/* Body */}
+        <div className="min-w-0 flex-1 space-y-4 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-muted-foreground">{active ? 'Outstanding' : 'Loan amount'}</p>
+              <AutoFitText>
+                <p className="money-digits font-display text-[28px] leading-tight tabular-nums text-foreground">
+                  {active ? (summary ? formatINR(summary.outstandingBalance) : '—') : formatINR(loan.principalAmount)}
+                </p>
+              </AutoFitText>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="font-display text-[28px] leading-tight tabular-nums" style={{ color: accent }}>
+                {Math.round(progress)}%
               </p>
-              <p className="numeric-display-lg money-digits text-2xl mt-0.5">
-                {formatINR(loan.principalAmount)}
-              </p>
-              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">EMI</p>
-                  <p className="font-medium tabular-nums">{formatINR(loan.emiAmount)}</p>
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">Rate</p>
-                  <p className="font-medium tabular-nums">{loan.interestRate}%</p>
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">Tenure</p>
-                  <p className="font-medium tabular-nums">{loan.tenureMonths}m</p>
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 font-mono">Status</p>
-                  <p className={`font-medium capitalize ${STATUS_COLORS[loan.status] ?? ''}`}>
-                    {loan.status.toLowerCase()}
-                  </p>
-                </div>
-              </div>
+              <p className="text-xs text-muted-foreground">repaid</p>
             </div>
           </div>
 
-          {/* Footer rule + next EMI / status */}
-          <div className="mt-4 pt-3 border-t border-dashed border-border/70 flex items-center justify-between text-xs">
-            {nextEmiDateStr ? (
-              <>
-                <span className="text-muted-foreground flex items-center gap-1.5">
-                  <Calendar className="h-3 w-3" />
-                  <span className="font-display-italic">Next EMI</span>
-                  <span className="tabular-nums text-foreground">{formatDate(nextEmiDateStr)}</span>
-                </span>
-                {emiCountdownBadge(nextEmiDateStr)}
-              </>
-            ) : (
-              <span className="text-muted-foreground font-display-italic">
-                {isClosed ? 'Loan closed' : isDefault ? 'In default' : '—'}
-              </span>
-            )}
-            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-accent transition-colors ml-auto" />
+          <div>
+            <InstallmentTracker done={active ? emiCount : plan} total={plan} accent={accent} />
+            <div className="mt-2 flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
+              <span>First EMI {formatDate(firstEmi)}</span>
+              {lastEmi && <span>Last EMI {formatDate(lastEmi)}</span>}
+            </div>
           </div>
 
-          {/* DEFAULT stamp overlay */}
-          {isDefault && (
-            <div className="absolute top-3 right-3 -rotate-6 border-2 border-negative px-2 py-0.5 rounded-sm font-display text-xs tracking-[0.18em] text-negative pointer-events-none flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" />
-              DEFAULT
-            </div>
-          )}
-          {isClosed && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="font-display text-3xl tracking-[0.25em] text-muted-foreground/50 -rotate-12 border-4 border-muted-foreground/40 px-3 py-1 rounded-sm">
-                CLOSED
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </Link>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <Figure label="Principal">
+              <span className="money-digits">{formatINR(loan.principalAmount)}</span>
+            </Figure>
+            <Figure label="Tenure">{tenure ? `${tenure} months` : '—'}</Figure>
+            <Figure label="EMI">
+              <span className="money-digits">{formatINR(loan.emiAmount)}</span>
+            </Figure>
+            <Figure
+              label="Next EMI"
+              hint={
+                dueIn == null
+                  ? undefined
+                  : dueIn < 0
+                    ? 'Overdue — record the payment once made'
+                    : dueIn === 0
+                      ? 'Due today'
+                      : dueIn <= 7
+                        ? `Due in ${dueIn} days`
+                        : undefined
+              }
+              className={dueIn != null && dueIn <= 7 ? (dueIn < 0 ? 'text-negative' : 'text-warning') : undefined}
+            >
+              {nextEmi ? formatDate(nextEmi) : active ? '—' : 'None'}
+            </Figure>
+            <Figure label="EMIs left">{active ? emisLeft : 0}</Figure>
+            <Figure label="Paid so far">
+              <span className="money-digits">{paidSoFar ? formatINR(paidSoFar.toString()) : '—'}</span>
+            </Figure>
+          </div>
+
+          <InstallmentProgress done={active ? emiCount : plan} total={plan} accent={accent} />
+
+          <p className="truncate border-t border-dashed border-border/70 pt-3 text-xs text-muted-foreground">
+            {owner}
+          </p>
+        </div>
+      </div>
+    </ReceiptShell>
   );
 }
 
@@ -492,33 +432,40 @@ function CreateLoanDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit loan' : 'Add loan'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="col-span-2">
               <Label>Lender name *</Label>
-              <Input placeholder="HDFC Bank, SBI…" {...inp('lenderName')} />
+              <div className="mt-1">
+                <InstitutionField
+                  kind="lender"
+                  value={form.lenderName}
+                  onChange={(v) => set('lenderName', v)}
+                  placeholder="Search or pick your bank / lender"
+                />
+              </div>
               {errors['lenderName'] && <p className="text-xs text-negative mt-1">{errors['lenderName']}</p>}
             </div>
             <div>
               <Label>Loan type</Label>
-              <select
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              <Select
+                className="mt-1"
                 value={form.loanType}
                 onChange={(e) => set('loanType', e.target.value)}
               >
                 {Object.entries(LOAN_TYPE_LABELS).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Borrower name *</Label>
               <Input placeholder="Full name" {...inp('borrowerName')} />
@@ -530,7 +477,7 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Principal amount (₹) *</Label>
               <Input placeholder="1000000" {...inp('principalAmount')} />
@@ -543,7 +490,7 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tenure (months) *</Label>
               <Input placeholder="240" type="number" min="1"
@@ -565,7 +512,7 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>EMI due day (1-28)</Label>
               <Input type="number" min="1" max="28"
@@ -574,18 +521,18 @@ function CreateLoanDialog({
             </div>
             <div>
               <Label>Prepayment option</Label>
-              <select
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              <Select
+                className="mt-1"
                 value={form.prepaymentOption}
                 onChange={(e) => set('prepaymentOption', e.target.value)}
               >
                 <option value="REDUCE_TENURE">Reduce tenure</option>
                 <option value="REDUCE_EMI">Reduce EMI</option>
-              </select>
+              </Select>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Disbursement date *</Label>
               <Input {...inp('disbursementDate', 'date')} />
@@ -598,30 +545,30 @@ function CreateLoanDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tax benefit section</Label>
-              <select
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              <Select
+                className="mt-1"
                 value={form.taxBenefitSection ?? ''}
                 onChange={(e) => set('taxBenefitSection', e.target.value || null)}
               >
                 <option value="">None</option>
                 <option value="80C+24B">80C + 24B (Home loan)</option>
                 <option value="80E">80E (Education loan)</option>
-              </select>
+              </Select>
             </div>
             <div>
               <Label>Status</Label>
-              <select
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              <Select
+                className="mt-1"
                 value={form.status}
                 onChange={(e) => set('status', e.target.value)}
               >
                 {['ACTIVE', 'CLOSED', 'FORECLOSED', 'DEFAULT'].map((s) => (
                   <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -656,15 +603,38 @@ function CreateLoanDialog({
 
 // ── Page ──────────────────────────────────────────────────────────────
 
+const SECTION_IDS: Record<LoanSectionKey, string> = { taken: 'loans-taken', given: 'loans-given' };
+
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === 'auto' || overflowY === 'scroll') return node;
+  }
+  return null;
+}
+
+/**
+ * Loans taken and loans given on one page: an overview of both sides, a sticky
+ * switcher that scrolls between them, then each section in turn. `?view=given`
+ * (reminders, the given-loan pages) lands on the given section.
+ */
 export function LoanListPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requested: LoanSectionKey = searchParams.get('view') === 'given' ? 'given' : 'taken';
+  const [activeSection, setActiveSection] = useState<LoanSectionKey>(requested);
   const [createOpen, setCreateOpen] = useState(false);
   const [editLoan, setEditLoan] = useState<LoanDTO | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const qc = useQueryClient();
+  const landedOnRequested = useRef(false);
 
   const { data: loans, isLoading } = useQuery({
     queryKey: ['loans'],
     queryFn: () => loansApi.list(),
+  });
+  const { data: givenLoans, isLoading: givenLoading } = useQuery({
+    queryKey: ['loans-given'],
+    queryFn: () => loansGivenApi.list(),
   });
 
   const deleteMutation = useMutation({
@@ -680,87 +650,147 @@ export function LoanListPage() {
   const list = loans ?? [];
   const active = list.filter((l) => l.status === 'ACTIVE');
   const inactive = list.filter((l) => l.status !== 'ACTIVE');
+  const given = givenLoans ?? [];
+  const givenActive = given.filter((l) => l.status === 'ACTIVE');
+
+  // Same query keys as each card, so these share one request per loan.
+  const summaries = useQueries({
+    queries: active.map((l) => ({
+      queryKey: ['loans', l.id, 'summary'],
+      queryFn: () => loansApi.getSummary(l.id),
+    })),
+  });
+
+  const owed = active.reduce(
+    (s, l, i) => s.plus(summaries[i]?.data?.outstandingBalance ?? l.principalAmount),
+    new Decimal(0),
+  );
+  const emiOut = active.reduce((s, l) => s.plus(l.emiAmount), new Decimal(0));
+  const owedToYou = givenActive.reduce(
+    (s, l) => s.plus(l.summary.outstandingPrincipal),
+    new Decimal(0),
+  );
+  const emiIn = givenActive.reduce(
+    (s, l) => (l.repaymentMode === 'EMI' && l.emiAmount ? s.plus(l.emiAmount) : s),
+    new Decimal(0),
+  );
+  const givenOverdue = givenActive.filter((l) => l.summary.overdueDays > 0).length;
+
+  const jump = (section: LoanSectionKey) => {
+    setActiveSection(section);
+    setSearchParams(section === 'given' ? { view: 'given' } : {}, { replace: true });
+    document.getElementById(SECTION_IDS[section])?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Deep link to the given section: scroll once both halves have rendered, so
+  // loans taken loading in above it can't push it back out of view.
+  useEffect(() => {
+    if (landedOnRequested.current || isLoading || givenLoading) return;
+    landedOnRequested.current = true;
+    if (requested !== 'given') return;
+    requestAnimationFrame(() =>
+      document.getElementById(SECTION_IDS.given)?.scrollIntoView({ block: 'start' }),
+    );
+  }, [requested, isLoading, givenLoading]);
+
+  // Highlight the section being read. The given section sits last and may be
+  // too short to reach the top, so reaching the bottom also counts as given.
+  useEffect(() => {
+    const givenEl = document.getElementById(SECTION_IDS.given);
+    const scroller = scrollParent(givenEl);
+    if (!givenEl || !scroller) return;
+    const update = () => {
+      if (scroller.scrollHeight <= scroller.clientHeight + 4) return;
+      const top = givenEl.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      const atBottom =
+        scroller.scrollTop > 0 &&
+        scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4;
+      setActiveSection(atBottom || top <= scroller.clientHeight * 0.45 ? 'given' : 'taken');
+    };
+    scroller.addEventListener('scroll', update, { passive: true });
+    return () => scroller.removeEventListener('scroll', update);
+  }, [isLoading, givenLoading]);
 
   return (
     <div>
-      <PageHeader
-        title="Loans"
-        description="Track home, car, personal, and other loans"
-        actions={
-          <div className="flex gap-2">
-            <DownloadReportButton type="loans" />
-            <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
-              <Plus className="h-4 w-4" /> Add loan
-            </Button>
-          </div>
-        }
+      <PageHeader title="Loans" description="Money you owe and money owed to you, in one place" />
+
+      <LoansOverview
+        onJump={jump}
+        taken={{
+          headline: isLoading ? '…' : formatINR(owed.toString()),
+          lines: [
+            { label: 'EMIs / month', value: isLoading ? '…' : formatINR(emiOut.toString()) },
+            { label: 'Active loans', value: isLoading ? '…' : String(active.length) },
+            { label: 'Closed', value: isLoading ? '…' : String(inactive.length) },
+          ],
+        }}
+        given={{
+          headline: givenLoading ? '…' : formatINR(owedToYou.toString()),
+          lines: [
+            { label: 'EMIs in / month', value: givenLoading ? '…' : formatINR(emiIn.toString()) },
+            { label: 'Active loans', value: givenLoading ? '…' : String(givenActive.length) },
+            {
+              label: 'Overdue',
+              value: givenLoading ? '…' : String(givenOverdue),
+              warn: givenOverdue > 0,
+            },
+          ],
+        }}
       />
 
-      {!isLoading && list.length > 0 && <SummaryStrip loans={list} />}
+      <LoanSectionNav
+        active={activeSection}
+        counts={{
+          taken: isLoading ? undefined : list.length,
+          given: givenLoading ? undefined : given.length,
+        }}
+        onJump={jump}
+      />
 
-      {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="h-44 animate-pulse bg-muted/60" />
-          ))}
-        </div>
-      )}
-
-      {!isLoading && list.length === 0 && (
-        <EmptyState
-          icon={Landmark}
-          title="No loans yet"
-          description="Track your home, car, personal, and education loans — payments, amortization, and tax benefits."
-          action={
-            <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
-              <Plus className="h-4 w-4" /> Add first loan
-            </Button>
+      <section id={SECTION_IDS.taken} aria-label="Loans taken" className="scroll-mt-20">
+        <LoanSectionHeader
+          section="taken"
+          title="Loans taken"
+          subtitle="Home, car, personal and other loans you are repaying"
+          count={isLoading ? undefined : active.length}
+          actions={
+            <>
+              <DownloadReportButton type="loans" />
+              <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
+                <Plus className="h-4 w-4" /> Add loan
+              </Button>
+            </>
           }
         />
-      )}
+        {isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} className="h-44 animate-pulse bg-muted/60" />
+            ))}
+          </div>
+        )}
 
-      {!isLoading && active.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {active.map((loan) =>
-            confirmDeleteId === loan.id ? (
-              <Card key={loan.id} className="border-destructive">
-                <CardContent className="p-5 flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium truncate">Delete "{loan.lenderName}" loan?</p>
-                  <div className="flex gap-2 shrink-0">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(loan.id)}
-                    >
-                      {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <LoanCard
-                key={loan.id}
-                loan={loan}
-                onEdit={() => { setEditLoan(loan); setCreateOpen(true); }}
-                onDelete={() => setConfirmDeleteId(loan.id)}
-                isDeleting={deleteMutation.isPending && confirmDeleteId === loan.id}
-              />
-            )
-          )}
-        </div>
-      )}
+        {!isLoading && list.length === 0 && (
+          <EmptyState
+            icon={Landmark}
+            title="No loans yet"
+            description="Track your home, car, personal, and education loans — payments, amortization, and tax benefits."
+            action={
+              <Button onClick={() => { setEditLoan(null); setCreateOpen(true); }}>
+                <Plus className="h-4 w-4" /> Add first loan
+              </Button>
+            }
+          />
+        )}
 
-      {!isLoading && inactive.length > 0 && (
-        <>
-          <h2 className="text-sm font-medium text-muted-foreground mt-8 mb-3">Closed / Foreclosed</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 opacity-60">
-            {inactive.map((loan) =>
+        {!isLoading && active.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {active.map((loan) =>
               confirmDeleteId === loan.id ? (
                 <Card key={loan.id} className="border-destructive">
                   <CardContent className="p-5 flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium truncate">Delete "{loan.lenderName}"?</p>
+                    <p className="text-sm font-medium truncate">Delete "{loan.lenderName}" loan?</p>
                     <div className="flex gap-2 shrink-0">
                       <Button
                         variant="destructive"
@@ -785,8 +815,50 @@ export function LoanListPage() {
               )
             )}
           </div>
-        </>
-      )}
+        )}
+
+        {!isLoading && inactive.length > 0 && (
+          <>
+            <h3 className="text-sm font-medium text-muted-foreground mt-8 mb-3">Closed / Foreclosed</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-60">
+              {inactive.map((loan) =>
+                confirmDeleteId === loan.id ? (
+                  <Card key={loan.id} className="border-destructive">
+                    <CardContent className="p-5 flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium truncate">Delete "{loan.lenderName}"?</p>
+                      <div className="flex gap-2 shrink-0">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => deleteMutation.mutate(loan.id)}
+                        >
+                          {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <LoanCard
+                    key={loan.id}
+                    loan={loan}
+                    onEdit={() => { setEditLoan(loan); setCreateOpen(true); }}
+                    onDelete={() => setConfirmDeleteId(loan.id)}
+                    isDeleting={deleteMutation.isPending && confirmDeleteId === loan.id}
+                  />
+                )
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
+      <div aria-hidden className="my-10 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+
+      <section id={SECTION_IDS.given} aria-label="Loans given" className="scroll-mt-20">
+        <LoansGivenSection />
+      </section>
 
       <CreateLoanDialog
         open={createOpen}

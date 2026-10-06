@@ -14,7 +14,7 @@ import { Loader2, Scale } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { useThemeStore } from '@/stores/theme.store';
 import { bucketLabel, type AllocationResponse } from '@/api/advisor.api';
 
@@ -242,7 +242,7 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
 
             {/* Readable fallback — the chart shows shape, the table carries the numbers. */}
             <div className="-mx-1 overflow-x-auto">
-              <table className="w-full min-w-[460px] border-collapse text-[13px]">
+              <table className="w-full border-collapse text-[12px] sm:min-w-[460px] sm:text-[13px]">
                 <thead>
                   <tr className="border-b border-border/70">
                     <th className="px-1 py-2 text-left text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
@@ -257,7 +257,8 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
                     <th className="px-1 py-2 text-right text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
                       Drift
                     </th>
-                    <th className="px-1 py-2 text-right text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
+                    {/* Narrow phones fold the rupees under the drift figure. */}
+                    <th className="hidden px-1 py-2 text-right text-[10px] font-medium uppercase tracking-kerned text-muted-foreground min-[400px]:table-cell">
                       In rupees
                     </th>
                   </tr>
@@ -284,10 +285,17 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
                                 : 'text-positive',
                           )}
                         >
-                          {r.driftPp > 0 ? '+' : ''}
-                          {r.driftPp.toFixed(1)} pp
+                          <span className="whitespace-nowrap">
+                            {r.driftPp > 0 ? '+' : ''}
+                            {r.driftPp.toFixed(1)} pp
+                          </span>
+                          {r.driftValue && (
+                            <span className="block whitespace-nowrap text-[11px] font-normal text-muted-foreground min-[400px]:hidden">
+                              <Money>{formatINR(r.driftValue, { showSign: true })}</Money>
+                            </span>
+                          )}
                         </td>
-                        <td className="px-1 py-2 text-right text-muted-foreground">
+                        <td className="hidden whitespace-nowrap px-1 py-2 text-right text-muted-foreground min-[400px]:table-cell">
                           {r.driftValue ? (
                             <Money>{formatINR(r.driftValue, { showSign: true })}</Money>
                           ) : (

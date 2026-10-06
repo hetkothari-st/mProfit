@@ -5,7 +5,7 @@
  * all seeded indices locally").
  *
  * Run:
- *   pnpm --filter @portfolioos/api exec tsx scripts/backfill-benchmarks.ts
+ *   pnpm --filter @everypaisa/api exec tsx scripts/backfill-benchmarks.ts
  *
  * Options (env):
  *   BACKFILL_YEARS=10          how far back to go

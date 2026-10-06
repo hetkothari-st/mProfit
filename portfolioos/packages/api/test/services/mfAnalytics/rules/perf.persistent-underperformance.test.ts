@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializeRatio, type MfHorizonMetrics } from '@portfolioos/shared';
+import { serializeRatio, type MfHorizonMetrics } from '@everypaisa/shared';
 import { perfPersistentUnderperformanceRule as rule } from '../../../../src/services/mfAnalytics/rules/perf.persistent-underperformance.js';
 import {
   SCHEME,

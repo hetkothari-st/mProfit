@@ -4,7 +4,7 @@ Date: 2026-07-01
 
 ## Goal
 
-Reskin PortfolioOS to match the visual language of cred.club (bold high-contrast
+Reskin EveryPaisa to match the visual language of cred.club (bold high-contrast
 serif headlines, near-black canvas, signature lime accent, pill CTAs, hairline
 borders) — starting with the Dashboard page as the proving ground. Because
 the app's styling runs entirely through Tailwind semantic tokens backed by CSS

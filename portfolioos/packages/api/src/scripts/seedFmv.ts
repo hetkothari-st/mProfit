@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
+import { opsPrisma } from '../lib/opsDatabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -53,20 +54,18 @@ export async function seedFmv(prisma: PrismaClient): Promise<SeedFmvResult> {
   return { totalRows: seedData.length, stockRows: stockRows.length, mfRows: mfRows.length };
 }
 
-// Still runnable standalone: `pnpm --filter @portfolioos/api run seed:fmv`.
+// Still runnable standalone: `pnpm --filter @everypaisa/api run seed:fmv`.
 // Uses the direct (superuser) URL so it bypasses RLS, same pattern as
 // prisma/seed.ts — SystemFmvSeed has no userId column to filter on.
 async function runStandalone() {
-  const prisma = new PrismaClient({
-    datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '' } },
-  });
+  const { prisma: prisma, disconnect } = opsPrisma();
   try {
     const result = await seedFmv(prisma);
     console.log(
       `Seeded ${result.totalRows} FMV records (${result.stockRows} stocks + ${result.mfRows} mutual funds).`,
     );
   } finally {
-    await prisma.$disconnect();
+    await disconnect();
   }
 }
 

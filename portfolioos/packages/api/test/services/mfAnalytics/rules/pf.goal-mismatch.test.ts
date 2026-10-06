@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeMoney, serializeRatio } from '@portfolioos/shared';
+import { serializeMoney, serializeRatio } from '@everypaisa/shared';
 
 import { pfGoalMismatchRule } from '../../../../src/services/mfAnalytics/rules/pf.goal-mismatch.js';
 import { MF_HEADLINE_MAX_CHARS } from '../../../../src/services/mfAnalytics/types.js';

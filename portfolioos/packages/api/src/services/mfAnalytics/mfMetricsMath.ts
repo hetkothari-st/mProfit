@@ -3,7 +3,7 @@
  * (`docs/mf-analytics/02-METRICS.md`).
  *
  * **This module is deliberately sterile.** No I/O, no Prisma, no imports from
- * sibling services, no clock, no randomness. It imports `@portfolioos/shared`
+ * sibling services, no clock, no randomness. It imports `@everypaisa/shared`
  * and `decimal.js` and nothing else. `06-QUALITY-COMPLIANCE.md §1` enforces the
  * same shape on the rules layer (`mf-rules-pure`), and the reason is the same
  * here: every number this file produces has to be reproducible from a fixture
@@ -37,7 +37,7 @@ import {
   toDecimal,
   sipXirr,
   type XirrFlow,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 // `02 §1`: set once, at module load, before any constant below is computed.
 //
@@ -810,7 +810,7 @@ export function worstCalendarYear(rows: readonly CalendarYearReturn[]): MetricRe
  * lives in `mfPortfolioAnalysis.service.ts`; conflating them is how a fund gets
  * blamed for an investor's entry point.
  *
- * The solver is `sipXirr` from `@portfolioos/shared`, which works in JS numbers
+ * The solver is `sipXirr` from `@everypaisa/shared`, which works in JS numbers
  * by necessity — rate search is transcendental and has no exact decimal form.
  * Its output is a dimensionless rate, never summed into a balance, and it is
  * lifted straight back into `Decimal` here via `toDecimal`.
@@ -1877,5 +1877,5 @@ export function aumGrowth12mPct(
 }
 
 // Re-exported so callers that build SIP cash flows by hand use the same type the
-// solver expects, without reaching into `@portfolioos/shared/finance` directly.
+// solver expects, without reaching into `@everypaisa/shared/finance` directly.
 export type { XirrFlow };

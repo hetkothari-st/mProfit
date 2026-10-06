@@ -17,7 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { incomeApi, type IncomeDTO, type IncomeInput, type IncomeType, type IncomeSuggestion } from '@/api/income.api';
 import { INCOME_TYPE_LABEL, INCOME_TYPE_SOURCE_LABEL, INCOME_TYPE_SOURCE_PLACEHOLDER } from './incomeTypeMeta';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR, toDecimal } from '@portfolioos/shared';
+import { formatINR, toDecimal } from '@everypaisa/shared';
 
 interface Props {
   open: boolean;

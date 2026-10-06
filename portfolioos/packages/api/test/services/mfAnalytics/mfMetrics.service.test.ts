@@ -20,8 +20,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Decimal } from '@portfolioos/shared';
-import type { MfHorizonMetrics, MfCurrentProfile } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
+import type { MfHorizonMetrics, MfCurrentProfile } from '@everypaisa/shared';
 
 import { prisma } from '../../../src/lib/prisma.js';
 import { runAsSystem } from '../../../src/lib/requestContext.js';

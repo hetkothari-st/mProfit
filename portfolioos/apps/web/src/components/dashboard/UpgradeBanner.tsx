@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { Button } from '@/components/ui/button';
 
 function dismissKey(userId: string): string {
-  return `portfolioos.dismissedUpgradeBanner.${userId}`;
+  return `everypaisa.dismissedUpgradeBanner.${userId}`;
 }
 
 /**

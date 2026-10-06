@@ -3,6 +3,7 @@ import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/c
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';
 import { getLatestFxRate } from '../priceFeeds/fx.service.js';
+import { istCalendarDate } from '@everypaisa/shared';
 import { assetKeyFromTransaction } from './assetKey.js';
 import { resolveMutualFundId, resolveStockMasterId } from './masterData.service.js';
 
@@ -47,13 +48,23 @@ const FREQ_PERIODS_PER_YEAR: Record<string, number> = {
 };
 
 /**
+ * Accrual runs to the start of today's Indian calendar date, not "now". With
+ * a millisecond clock every recompute produced a slightly different value, so
+ * the dashboard, portfolio page and reports (computed moments apart) showed
+ * figures a few paise apart for the same deposit.
+ */
+function accrualValuationDay(): Date {
+  return new Date(`${istCalendarDate(new Date())}T00:00:00Z`);
+}
+
+/**
  * FDs and similar bank-deposit assets: compound each DEPOSIT row independently
  * using its own interestRate + interestFrequency. Falls back to null (caller
  * uses totalCost) when no rates are recorded so the column never shows blank
  * for legacy entries.
  */
 function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
-  const today = new Date();
+  const today = accrualValuationDay();
   const deposits = txs.filter(
     (t) =>
       ['DEPOSIT', 'BUY', 'OPENING_BALANCE'].includes(t.transactionType) &&
@@ -93,7 +104,7 @@ function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
  * Returns null if no interest rates are recorded (will show invested only).
  */
 function computePoAccruedValue(txs: Transaction[], assetClass: AssetClass): Decimal | null {
-  const today = new Date();
+  const today = accrualValuationDay();
   const deposits = txs.filter(
     (t) =>
       ['DEPOSIT', 'BUY', 'OPENING_BALANCE'].includes(t.transactionType) &&
@@ -203,16 +214,32 @@ export interface ProjectionAggregate {
 }
 
 /**
- * Replay a set of transactions under a weighted-average cost model. (The
- * separate FIFO-based CapitalGain computation lives in `capitalGains.service`
- * — this function cares only about the ending holding state, not the lot-by-
- * lot matching used for tax reports.) Returns zero quantity + zero cost once
- * cumulative SELLs have cleared the position.
+ * Replay a set of transactions, first-in-first-out, and return the ending
+ * holding state.
+ *
+ * FIFO, not weighted average, because the lot-based reports (M2M, the script
+ * ledger, closing balance) and the books all sell the oldest lots — under a
+ * weighted average the same holding shows a different cost here than there,
+ * and a partial exit makes them drift apart with nothing to explain the gap.
+ *
+ * Cost is what was paid, every charge included. The capital-gains engine
+ * carries a second, lower figure for the same lots because sec 48 disallows
+ * STT; that one belongs to the tax reports and nowhere else.
  */
+/**
+ * Units held going into `exDate` — what a corporate action on that date
+ * applies to. Trades on the ex-date itself don't qualify (they settle after the
+ * record date), and the action's own booked row is on the ex-date so it's
+ * excluded too.
+ */
+export function quantityHeldBefore(txs: Transaction[], exDate: Date): Decimal {
+  return replayTransactions(txs.filter((t) => t.tradeDate.getTime() < exDate.getTime())).quantity;
+}
+
 export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
-  let quantity = new Decimal(0);
-  let totalCost = new Decimal(0);
+  const lots: Array<{ qty: Decimal; costPerUnit: Decimal }> = [];
   let realisedPnL = new Decimal(0);
+  const openQuantity = () => lots.reduce((s, l) => s.plus(l.qty), new Decimal(0));
 
   const sorted = [...txs].sort(
     (a, b) => a.tradeDate.getTime() - b.tradeDate.getTime(),
@@ -242,40 +269,43 @@ export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
       : rawNet;
 
     if (BUY_TYPES.has(tx.transactionType)) {
-      if (tx.transactionType === 'BONUS') {
-        // Bonus shares land at zero cost — qty goes up, cost stays.
-        quantity = quantity.plus(qty);
-      } else {
-        quantity = quantity.plus(qty);
-        totalCost = totalCost.plus(net);
-      }
+      // Bonus shares land at zero cost — units go up, cost stays.
+      const costPerUnit = tx.transactionType === 'BONUS' ? new Decimal(0) : net.dividedBy(qty);
+      lots.push({ qty, costPerUnit });
     } else if (SELL_TYPES.has(tx.transactionType)) {
-      if (quantity.isZero()) continue;
-      const sellQty = Decimal.min(qty, quantity);
-      const avgCost = totalCost.dividedBy(quantity);
-      const costSold = avgCost.times(sellQty);
-      realisedPnL = realisedPnL.plus(net.minus(costSold));
-      quantity = quantity.minus(sellQty);
-      totalCost = totalCost.minus(costSold);
-      if (quantity.isZero() || quantity.isNegative()) {
-        quantity = new Decimal(0);
-        totalCost = new Decimal(0);
+      // Oldest lots first, as the capital-gains engine and the books do.
+      let remaining = Decimal.min(qty, openQuantity());
+      while (remaining.greaterThan(0) && lots.length > 0) {
+        const lot = lots[0]!;
+        const take = Decimal.min(lot.qty, remaining);
+        const costSold = lot.costPerUnit.times(take);
+        // Proceeds for the units this lot covers, pro rata to the sale.
+        realisedPnL = realisedPnL.plus(net.times(take).dividedBy(qty).minus(costSold));
+        lot.qty = lot.qty.minus(take);
+        remaining = remaining.minus(take);
+        if (lot.qty.lessThanOrEqualTo(0)) lots.shift();
       }
     } else if (tx.transactionType === 'SPLIT') {
-      // SPLIT rows carry the *post-split* delta-quantity (e.g. +10 units on a
-      // 1:2 split of 10). Cost basis is unchanged; only qty grows.
-      quantity = quantity.plus(qty);
+      // SPLIT rows carry the extra units (e.g. +10 on a 1:2 split of 10):
+      // spread them over the open lots, so each keeps its total cost.
+      const open = openQuantity();
+      if (open.greaterThan(0)) {
+        const factor = open.plus(qty).dividedBy(open);
+        for (const lot of lots) {
+          lot.qty = lot.qty.times(factor);
+          lot.costPerUnit = lot.costPerUnit.dividedBy(factor);
+        }
+      }
     }
   }
 
-  const avgCostPrice = quantity.isZero()
-    ? new Decimal(0)
-    : totalCost.dividedBy(quantity);
+  const quantity = openQuantity();
+  const totalCost = lots.reduce((s, l) => s.plus(l.qty.times(l.costPerUnit)), new Decimal(0));
 
   return {
     quantity,
     totalCost,
-    avgCostPrice,
+    avgCostPrice: quantity.isZero() ? new Decimal(0) : totalCost.dividedBy(quantity),
     realisedPnL,
     sourceTxCount: sorted.length,
   };

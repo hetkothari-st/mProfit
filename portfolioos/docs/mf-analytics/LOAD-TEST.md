@@ -338,17 +338,17 @@ export DATABASE_URL="postgresql://portfolioos_app:portfolioos_app_dev@localhost:
 export DIRECT_URL="postgresql://postgres:postgres@localhost:55433/portfolioos"
 
 # seed → cold pass → warm per-scheme pass → whole-job pass → peer rank → cleanup
-pnpm --filter @portfolioos/api run loadtest:mf-metrics
+pnpm --filter @everypaisa/api run loadtest:mf-metrics
 
 # or one phase at a time
-pnpm --filter @portfolioos/api run loadtest:mf-metrics seed
-pnpm --filter @portfolioos/api run loadtest:mf-metrics measure
-pnpm --filter @portfolioos/api run loadtest:mf-metrics cleanup
+pnpm --filter @everypaisa/api run loadtest:mf-metrics seed
+pnpm --filter @everypaisa/api run loadtest:mf-metrics measure
+pnpm --filter @everypaisa/api run loadtest:mf-metrics cleanup
 
 # peer rank at the top of its band (seed first at the same size)
-LOADTEST_SCHEMES=70 pnpm --filter @portfolioos/api run loadtest:mf-metrics seed
-LOADTEST_SCHEMES=70 pnpm --filter @portfolioos/api run loadtest:mf-metrics peer
-pnpm --filter @portfolioos/api run loadtest:mf-metrics cleanup
+LOADTEST_SCHEMES=70 pnpm --filter @everypaisa/api run loadtest:mf-metrics seed
+LOADTEST_SCHEMES=70 pnpm --filter @everypaisa/api run loadtest:mf-metrics peer
+pnpm --filter @everypaisa/api run loadtest:mf-metrics cleanup
 ```
 
 Cleanup is prefix-scoped — there is no unscoped `deleteMany` in the harness, so it is safe

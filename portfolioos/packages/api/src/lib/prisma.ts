@@ -6,6 +6,7 @@ import {
   isInTransaction,
   runWithTransactionFlag,
 } from './requestContext.js';
+import { markUserDataChanged, shouldMarkUserData } from './userDataVersion.js';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: ExtendedPrismaClient | undefined;
@@ -42,6 +43,12 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'Tenancy',
   'RentReceipt',
   'PropertyExpense',
+  // Khatabook ledger (20260908000000_rental_ledger). Same owner-join RLS
+  // pattern as RentReceipt/RentReminder (Tenancy → RentalProperty → User) —
+  // must be registered here or the policy's WITH CHECK never sees
+  // app.current_user_id and every write fails 42501, per the Goal/BankAccount
+  // incident documented below.
+  'RentLedgerEntry',
   'InsurancePolicy',
   'PremiumPayment',
   'InsuranceClaim',
@@ -59,6 +66,8 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   // AI Assistant — conversation history + daily usage counter.
   'AiConversation',
   'AiUsage',
+  // Billing — consumed Razorpay payments (20261006120000_billing_payment).
+  'BillingPayment',
   // Sec 55(2)(ac) grandfathering — user-entered FMV overrides. SystemFmvSeed
   // is deliberately excluded: it's shared reference data, not user-scoped.
   'FmvOverride',
@@ -108,6 +117,9 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'BrokerCredential',
   'DerivativePosition',
   'Document',
+  // Vault file bytes (20261006170000_document_blob) — same owner policy.
+  'DocumentBlob',
+  'UserDataKey',
   'ExpiryCloseJob',
   'ExtensionPairing',
   'ForexBalance',
@@ -141,6 +153,16 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'VehicleValuationLog',
   'SipPlan',
   'Loan',
+  // Children of a user-owned row. Their own tables have no policy, but a query
+  // that filters through the parent ("payments of my loans") runs a subquery
+  // against the parent's policy — with no context set that subquery matches
+  // nothing and the query silently returns zero rows. See
+  // test/invariants/rls-context-coverage.test.ts.
+  'LoanPayment',
+  'LoanGivenEntry',
+  'CreditCardStatement',
+  'TransactionPhoto',
+  'LoanGiven',
   'CreditCard',
   'Income',
   'HealthScoreSnapshot',
@@ -165,6 +187,22 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'MfAnalysisRun',
   'MfFinding',
   'MfFundVerdict',
+  // CA workspace. Client carries the grant itself (both sides may read their
+  // own rows); CaAuditLog is the two-sided trail. Both have policies in
+  // 20260908120000_ca_workspace_foundation, so both must be registered here —
+  // a policy without a registration issues no session variable and silently
+  // reads zero rows.
+  'Client',
+  'CaAuditLog',
+  // ClientPortfolioScope narrows a grant to named portfolios; its policies are
+  // in 20260923090000_ca_grant_scope. Unregistered, the client's scope picker
+  // would read as "no portfolios selected" and saving one would fail 42501.
+  'ClientPortfolioScope',
+  // Owner policies in 20260910180000_property_photos_and_location and
+  // 20260913100000_insurance_extras. Unregistered, property photos read as
+  // empty and uploads failed 42501; dismissed premium suggestions never stuck.
+  'PropertyPhoto',
+  'InsuranceImportDismissal',
 ]);
 
 /**
@@ -243,6 +281,16 @@ const extended = basePrisma.$extends({
       if (!model || !USER_SCOPED_MODELS.has(model)) {
         return query(args);
       }
+      const result = await runUserScoped();
+      // Anything cached about this user's finances (the AI adviser's facts)
+      // must see the write on its next read. A write with no known user — a
+      // background job under system context — counts as a change for everyone.
+      if (shouldMarkUserData(model, operation)) {
+        markUserDataChanged(isSystemContext() ? null : (getCurrentUserId() ?? null));
+      }
+      return result;
+
+      async function runUserScoped() {
       // Already inside runInTransaction: `set_config` has been issued on THAT
       // transaction and, being transaction-local, applies to this query too.
       // Opening another transaction here would put the write on a different
@@ -280,11 +328,12 @@ const extended = basePrisma.$extends({
           // typed generically — cast to `any` locally for the reflective
           // invocation.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const delegate = (tx as any)[modelToDelegate(model)];
+          const delegate = (tx as any)[modelToDelegate(model!)];
           return delegate[operation](args);
         },
         { maxWait: 15_000, timeout: 30_000 },
       );
+      }
     },
   },
 });

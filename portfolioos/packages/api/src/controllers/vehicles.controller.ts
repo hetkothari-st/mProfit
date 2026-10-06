@@ -19,6 +19,12 @@ import { listUniqueStates } from '../priceFeeds/fuelStates.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError, BadRequestError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
+import {
+  engineNoColumns,
+  findVehicleByPlate,
+  registrationNoColumns,
+  revealVehicle,
+} from '../services/piiAtRest.service.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.string().regex(/^-?\d+(\.\d+)?$/, 'Expected decimal string');
@@ -136,7 +142,7 @@ const carInfoVerifySchema = z.object({
 export async function carInfoInit(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const body = carInfoInitSchema.parse(req.body ?? {});
-  const sessionId = await initiateCarInfoScrape(body.registrationNo, body.mobileNo);
+  const sessionId = await initiateCarInfoScrape(body.registrationNo, body.mobileNo, req.user.id);
   ok(res, { sessionId });
 }
 
@@ -146,7 +152,7 @@ export async function carInfoVerify(req: Request, res: Response) {
   const userId = req.user.id;
 
   try {
-    const data = await verifyCarInfoOtp(body.sessionId, body.otp);
+    const data = await verifyCarInfoOtp(body.sessionId, body.otp, req.user.id);
     const parsed = (data?.parsed ?? null) as
       | (typeof data extends { parsed: infer P } ? P : null)
       | null;
@@ -161,9 +167,7 @@ export async function carInfoVerify(req: Request, res: Response) {
       return;
     }
 
-    const existing = await prisma.vehicle.findUnique({
-      where: { userId_registrationNo: { userId, registrationNo: cleanRegNo } },
-    });
+    const existing = await findVehicleByPlate(userId, cleanRegNo);
 
     type ParsedRecord = {
       make?: string;
@@ -215,7 +219,7 @@ export async function carInfoVerify(req: Request, res: Response) {
       normsType: p.normsType ?? null,
       seatingCapacity: p.seatingCapacity ?? null,
       unloadedWeight: p.unloadedWeight ?? null,
-      engineNo: p.engineNo ?? null,
+      ...(await engineNoColumns(p.engineNo)),
       hypothecation: p.hypothecation ?? null,
       registrationDate: isoDate(p.registrationDate),
       photoUrl: photo?.url ?? null,
@@ -234,16 +238,16 @@ export async function carInfoVerify(req: Request, res: Response) {
       vehicle = await prisma.vehicle.update({
         where: { id: existing.id },
         data: patch,
-        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: true },
+        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: { select: { id: true, insurer: true, type: true, planName: true, policyNumberLast4: true, nextPremiumDue: true, status: true } } },
       });
     } else {
       vehicle = await prisma.vehicle.create({
-        data: { userId, registrationNo: cleanRegNo, ...data_ },
-        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: true },
+        data: { userId, ...(await registrationNoColumns(cleanRegNo)), ...data_ },
+        include: { challans: { orderBy: { offenceDate: 'desc' } }, insurancePolicies: { select: { id: true, insurer: true, type: true, planName: true, policyNumberLast4: true, nextPremiumDue: true, status: true } } },
       });
     }
 
-    ok(res, { vehicle, parsed, source: data?.source });
+    ok(res, { vehicle: revealVehicle(vehicle), parsed, source: data?.source });
   } catch (error: any) {
     logger.error({ error, sessionId: body.sessionId }, 'CarInfo verification failed');
     res.status(400).json({

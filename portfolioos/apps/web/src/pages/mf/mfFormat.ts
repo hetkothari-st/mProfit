@@ -11,7 +11,7 @@
  * number we computed. Everything here goes through `toDecimal` and
  * `Decimal.toFixed(..., ROUND_HALF_EVEN)` — banker's rounding, matching
  * `serializeRatio` on the server so the two never disagree on a half-way case.
- * `formatPercent` from `@portfolioos/shared` is deliberately NOT used: its
+ * `formatPercent` from `@everypaisa/shared` is deliberately NOT used: its
  * signature takes a JS `number`, which is exactly the coercion we are avoiding.
  *
  * **2. Turning a null into a sentence.** `02-METRICS.md §1` and
@@ -30,7 +30,7 @@ import {
   type MfMetricStatus,
   type Pct,
   type Ratio,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 // ---------------------------------------------------------------------------
 // Number formatting — Decimal in, string out, no JS number anywhere

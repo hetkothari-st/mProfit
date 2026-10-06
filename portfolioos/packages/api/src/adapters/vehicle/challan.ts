@@ -151,6 +151,11 @@ async function fetchEchallanHttp(regNo: string): Promise<ChallanRow[]> {
     `https://echallan.parivahan.gov.in/index/accused-challan?regNo=${encodeURIComponent(clean)}`,
   ];
 
+  // Each endpoint's reason for failing is kept: when all of them fail the
+  // thrown error should say whether Parivahan timed out, 404'd, or answered
+  // with HTML, because those are three different problems.
+  const failures: string[] = [];
+
   for (const url of urls) {
     try {
       const res = await fetch(url, {
@@ -172,9 +177,14 @@ async function fetchEchallanHttp(regNo: string): Promise<ChallanRow[]> {
         const arr = obj['data'] ?? obj['challans'] ?? obj['challanList'] ?? obj['result'];
         if (Array.isArray(arr)) return parseChallanPayload(arr);
       }
-    } catch { /* try next */ }
+    } catch (err) {
+      failures.push(`${url}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
-  throw new Error('echallan HTTP: no JSON response from any endpoint');
+  logger.warn({ regNo: clean, failures }, '[echallan] every HTTP endpoint failed');
+  throw new Error(
+    `echallan HTTP: no JSON response from any endpoint${failures.length ? ` — ${failures.join('; ')}` : ''}`,
+  );
 }
 
 function loadFromFixture(regNo: string): unknown {

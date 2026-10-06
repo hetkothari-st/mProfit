@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializePct } from '@portfolioos/shared';
+import { serializePct } from '@everypaisa/shared';
 
 import { pfRedundantFundsRule } from '../../../../src/services/mfAnalytics/rules/pf.redundant-funds.js';
 import { MF_HEADLINE_MAX_CHARS } from '../../../../src/services/mfAnalytics/types.js';

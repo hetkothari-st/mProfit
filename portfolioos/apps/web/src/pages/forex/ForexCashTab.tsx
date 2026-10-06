@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatCurrency, formatINR, Decimal } from '@portfolioos/shared';
+import { formatCurrency, formatINR, Decimal } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';

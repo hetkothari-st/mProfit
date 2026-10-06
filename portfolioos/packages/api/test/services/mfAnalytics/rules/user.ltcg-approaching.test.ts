@@ -9,8 +9,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeMoney } from '@portfolioos/shared';
-import type { MfGainType, Money } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
+import type { MfGainType, Money } from '@everypaisa/shared';
 import { userLtcgApproachingRule } from '../../../../src/services/mfAnalytics/rules/user.ltcg-approaching.js';
 import { factsForFund, isoDaysFromAsOf, makeLot } from './_facts.fixture.js';
 

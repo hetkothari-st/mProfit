@@ -5,7 +5,7 @@
  * month arithmetic, and chart formatting identically. Money math uses
  * decimal.js throughout (project invariant §3.2) — never JS Number.
  */
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 
 export const TOOLTIP_STYLE: React.CSSProperties = {
   background: 'hsl(var(--popover))',

@@ -153,7 +153,7 @@ function FamilyNode({
     // The caller leads — it is the row they will click most.
     if (a.userId === currentUserId) return -1;
     if (b.userId === currentUserId) return 1;
-    return (a.name || a.email).localeCompare(b.name || b.email);
+    return (a.name || a.email || '').localeCompare(b.name || b.email || '');
   });
 
   return (
@@ -241,7 +241,7 @@ function FamilyNode({
                   // isn't — so the family we came from rides along and saves
                   // the page a search across every family the caller is in.
                   to={`/family/members/${m.userId}?familyId=${family.id}`}
-                  title={m.userId === currentUserId ? 'You' : m.name || m.email}
+                  title={m.userId === currentUserId ? 'You' : m.name || m.email || undefined}
                   className={({ isActive }) =>
                     cn(
                       'group/mem flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors focus-ring',

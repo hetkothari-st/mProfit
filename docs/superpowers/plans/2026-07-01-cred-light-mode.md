@@ -65,7 +65,7 @@ export const useThemeStore = create<ThemeState>()(
         }),
     }),
     {
-      name: 'portfolioos.theme',
+      name: 'everypaisa.theme',
       onRehydrateStorage: () => (state) => {
         if (state) applyClass(state.dark);
       },
@@ -95,7 +95,7 @@ Replace with:
     <meta charset="UTF-8" />
     <script>
       try {
-        var t = JSON.parse(localStorage.getItem('portfolioos.theme') || '{}');
+        var t = JSON.parse(localStorage.getItem('everypaisa.theme') || '{}');
         var dark = t.state ? t.state.dark !== false : true;
         if (dark) document.documentElement.classList.add('dark');
       } catch (e) {
@@ -370,7 +370,7 @@ Find:
 
 ```css
 /* ─────────────────────────────────────────────────────────────────────────
-   PortfolioOS — CRED-dark theme
+   EveryPaisa — CRED-dark theme
    Near-black canvas, signature lime accent, Fraunces display serif.
    Dark-only — no light mode.
    ───────────────────────────────────────────────────────────────────────── */
@@ -380,7 +380,7 @@ Replace with:
 
 ```css
 /* ─────────────────────────────────────────────────────────────────────────
-   PortfolioOS — CRED theme
+   EveryPaisa — CRED theme
    Light : near-white canvas, darker olive accent-ink for text contrast
    Dark  : near-black canvas, signature bright-lime accent
    Both  : Fraunces display serif, lime fills, pill buttons

@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeMoney, serializePct } from '@portfolioos/shared';
+import { serializeMoney, serializePct } from '@everypaisa/shared';
 
 import { pfDirectSavingsRule } from '../../../../src/services/mfAnalytics/rules/pf.direct-savings.js';
 import { MF_HEADLINE_MAX_CHARS } from '../../../../src/services/mfAnalytics/types.js';

@@ -40,8 +40,8 @@
  * cannot move them.
  */
 
-import { serializeRatio } from '@portfolioos/shared';
-import type { MfEvidence, MfFinding } from '@portfolioos/shared';
+import { serializeRatio } from '@everypaisa/shared';
+import type { MfEvidence, MfFinding } from '@everypaisa/shared';
 import { MIN_RATING_HISTORY_MONTHS, MIN_UNIVERSE_SIZE } from '../constants.js';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 

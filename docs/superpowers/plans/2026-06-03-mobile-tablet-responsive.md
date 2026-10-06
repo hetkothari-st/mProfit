@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the PortfolioOS web app usable on phones (<768px) without changing the desktop (≥768px) experience at all.
+**Goal:** Make the EveryPaisa web app usable on phones (<768px) without changing the desktop (≥768px) experience at all.
 
 **Architecture:** All mobile behavior is additive and gated below the Tailwind `md` breakpoint (`md:hidden`) or inside a `@media (max-width:767px)` CSS block. A non-visual refactor extracts the Sidebar's nav body into a reusable `SidebarNav` so a mobile drawer can reuse it. A bottom tab bar + hamburger drawer provide navigation. Wide tables become stacked "cards" on phones via a CSS-only `.rtable` transform driven by `data-label` attributes.
 

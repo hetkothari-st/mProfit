@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializeMoney, serializePct } from '@portfolioos/shared';
+import { serializeMoney, serializePct } from '@everypaisa/shared';
 import { costRegularPlanRule as rule } from '../../../../src/services/mfAnalytics/rules/cost.regular-plan.js';
 import { SCHEME, makeFacts, makeFundFacts } from './_facts.fixture.js';
 

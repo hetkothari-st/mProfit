@@ -1,7 +1,10 @@
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
 import { logger } from '../lib/logger.js';
 
-yahooFinance.suppressNotices(['yahooSurvey']);
+// v3+ is instance-based; v2 (a module singleton) is unmaintained and logs a
+// deprecation notice on every boot.
+// historical() is served via chart() in v3+; the notice saying so is expected.
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 
 const MIN_GAP_MS = 250;
 const CHUNK_SIZE = 40;

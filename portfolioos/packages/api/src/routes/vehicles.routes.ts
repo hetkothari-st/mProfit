@@ -16,6 +16,7 @@ import {
 } from '../controllers/vehicles.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
+import { scrapeLimiter } from '../middleware/rateLimit.js';
 
 export const vehiclesRouter = Router();
 
@@ -31,8 +32,8 @@ vehiclesRouter.get('/prices', asyncHandler(fuelPrices));
 vehiclesRouter.get('/:id', asyncHandler(get));
 vehiclesRouter.patch('/:id', asyncHandler(update));
 vehiclesRouter.delete('/:id', asyncHandler(remove));
-vehiclesRouter.post('/:id/refresh', asyncHandler(refresh));
+vehiclesRouter.post('/:id/refresh', scrapeLimiter, asyncHandler(refresh));
 vehiclesRouter.post('/:id/refresh-photo', asyncHandler(refreshPhoto));
-vehiclesRouter.post('/:id/challans/scan', asyncHandler(scanChallans));
-vehiclesRouter.post('/carinfo/init', asyncHandler(carInfoInit));
+vehiclesRouter.post('/:id/challans/scan', scrapeLimiter, asyncHandler(scanChallans));
+vehiclesRouter.post('/carinfo/init', scrapeLimiter, asyncHandler(carInfoInit));
 vehiclesRouter.post('/carinfo/verify', asyncHandler(carInfoVerify));

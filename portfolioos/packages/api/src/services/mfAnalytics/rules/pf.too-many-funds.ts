@@ -17,7 +17,7 @@
  * the second case's holder counting their funds and finding nothing wrong.
  */
 
-import { serializeRatio, toDecimal, type MfEvidence, type MfFinding } from '@portfolioos/shared';
+import { serializeRatio, toDecimal, type MfEvidence, type MfFinding } from '@everypaisa/shared';
 
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 

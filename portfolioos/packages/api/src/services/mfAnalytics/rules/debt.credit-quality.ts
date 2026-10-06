@@ -28,8 +28,8 @@
  * suppression follows automatically instead of needing someone to remember.
  */
 
-import { serializeRatio, specFor, toDecimal } from '@portfolioos/shared';
-import type { MfEvidence, MfFinding, SebiSubCategory } from '@portfolioos/shared';
+import { serializeRatio, specFor, toDecimal } from '@everypaisa/shared';
+import type { MfEvidence, MfFinding, SebiSubCategory } from '@everypaisa/shared';
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 
 const RULE_ID = 'mf.debt.credit-quality';

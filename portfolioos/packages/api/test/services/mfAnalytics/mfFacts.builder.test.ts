@@ -37,7 +37,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Decimal, MIN_UNIVERSE_SIZE, toDecimal } from '@portfolioos/shared';
+import { Decimal, MIN_UNIVERSE_SIZE, toDecimal } from '@everypaisa/shared';
 import type { MFCategory } from '@prisma/client';
 
 import { prisma } from '../../../src/lib/prisma.js';

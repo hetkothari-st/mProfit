@@ -60,4 +60,16 @@ describe('computeHarvestSavings', () => {
     });
     expect(Number(r.taxSaved)).toBe(0);
   });
+  it('sets off a realised short-term loss against realised LTCG before counting any saving', () => {
+    const r = computeHarvestSavings({
+      ...base,
+      realisedStcg: D(-50000),
+      realisedLtcg: D(175000),
+      stcgLossAvailable: D(0),
+      ltcgLossAvailable: D(50000),
+    });
+    // 1,75,000 − 50,000 = 1,25,000: already within the exemption.
+    expect(Number(r.taxBefore)).toBe(0);
+    expect(Number(r.taxSaved)).toBe(0);
+  });
 });

@@ -18,12 +18,13 @@ import {
   Check,
   Undo2,
 } from 'lucide-react';
-import { Decimal, formatINR } from '@portfolioos/shared';
+import { Decimal, formatINR } from '@everypaisa/shared';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { InstitutionField } from '@/components/common/InstitutionField';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -69,6 +70,18 @@ const PAYMENT_TYPE_COLORS: Record<string, string> = {
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/** Top-left way back to the loans list, where the eye looks first. */
+function BackToLoans() {
+  return (
+    <Link
+      to="/loans"
+      className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+    >
+      <ArrowLeft className="h-4 w-4" /> Back to loans
+    </Link>
+  );
 }
 
 // ── Summary metric card ───────────────────────────────────────────────
@@ -330,17 +343,22 @@ function EditLoanDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit loan</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="col-span-2">
               <Label>Lender name *</Label>
-              <Input value={form.lenderName}
-                onChange={(e) => set('lenderName', e.target.value)}
-                className={errors['lenderName'] ? 'border-negative' : ''} />
+              <div className="mt-1">
+                <InstitutionField
+                  kind="lender"
+                  value={form.lenderName}
+                  onChange={(v) => set('lenderName', v)}
+                  placeholder="Search or pick your bank / lender"
+                />
+              </div>
               {errors['lenderName'] && <p className="text-xs text-negative mt-1">{errors['lenderName']}</p>}
             </div>
             <div>
@@ -356,7 +374,7 @@ function EditLoanDialog({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Principal (₹) *</Label>
               <Input value={form.principalAmount}
@@ -371,7 +389,7 @@ function EditLoanDialog({
                 className={errors['interestRate'] ? 'border-negative' : ''} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tenure (months) *</Label>
               <Input type="number" value={form.tenureMonths}
@@ -394,7 +412,7 @@ function EditLoanDialog({
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Status</Label>
               <select
@@ -492,7 +510,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
+        <div className="overflow-x-auto md:max-h-[400px] md:overflow-y-auto">
           <table className="rtable w-full text-xs">
             <thead className="sticky top-0 bg-card z-10">
               <tr className="border-b">
@@ -535,7 +553,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-negative"
+                        className="tap-expand h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-negative"
                         onClick={() => setConfirmDeletePayId(p.id)}
                       >
                         <Trash2 className="h-3 w-3" />
@@ -642,7 +660,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
         )}
       </CardHeader>
       <CardContent>
-        <div ref={scrollRef} className="max-h-[600px] overflow-y-auto overflow-x-auto">
+        <div ref={scrollRef} className="overflow-x-auto md:max-h-[600px] md:overflow-y-auto">
           <table className="rtable w-full text-xs">
             <thead className="sticky top-0 bg-card z-10">
               <tr className="border-b">
@@ -813,7 +831,7 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={balanceData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+            <AreaChart data={balanceData} margin={{ top: 5, right: 22, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="gradBalance" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="hsl(var(--foreground))" stopOpacity={0.22} />
@@ -865,7 +883,7 @@ function LoanCharts({ rows, summary }: { rows: AmortizationRowDTO[]; summary: Lo
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={splitData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }} stackOffset="none">
+              <AreaChart data={splitData} margin={{ top: 5, right: 22, left: 0, bottom: 0 }} stackOffset="none">
                 <defs>
                   <linearGradient id="gradPrincipal" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="hsl(var(--positive))" stopOpacity={0.5} />
@@ -1048,6 +1066,7 @@ export function LoanDetailPage() {
   if (loanLoading) {
     return (
       <div>
+        <BackToLoans />
         <PageHeader title="Loading…" />
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -1058,29 +1077,37 @@ export function LoanDetailPage() {
     );
   }
 
-  if (!loan) return <div className="p-8 text-muted-foreground">Loan not found.</div>;
+  if (!loan) {
+    return (
+      <div>
+        <BackToLoans />
+        <p className="p-8 text-muted-foreground">Loan not found.</p>
+      </div>
+    );
+  }
 
   // Progress calculations
   const emisPaid = loan.payments.filter((p) => p.paymentType === 'EMI').length;
   const tenureElapsedPct = Math.min(100, Math.round((emisPaid / loan.tenureMonths) * 100));
 
-  const totalPrincipalPaid = loan.payments
-    .filter((p) => p.principalPart)
-    .reduce((s, p) => s.plus(new Decimal(p.principalPart!)), new Decimal(0));
+  // The summary fills in the split for payments saved without one.
+  const totalPrincipalPaid = summary
+    ? new Decimal(summary.totalPrincipalPaid)
+    : loan.payments
+        .filter((p) => p.principalPart)
+        .reduce((s, p) => s.plus(new Decimal(p.principalPart!)), new Decimal(0));
   const principalRepaidPct = new Decimal(loan.principalAmount).isZero()
     ? 0
     : Math.min(100, totalPrincipalPaid.div(new Decimal(loan.principalAmount)).mul(100).toNumber());
 
   return (
     <div>
+      <BackToLoans />
       <PageHeader
         title={loan.lenderName}
         description={`${LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType} loan · ${loan.borrowerName}${loan.accountNumber ? ` · ●●●● ${loan.accountNumber.slice(-4)}` : ''}`}
         actions={
           <div className="flex gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link to="/loans"><ArrowLeft className="h-4 w-4" /> Back</Link>
-            </Button>
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4" /> Edit
             </Button>

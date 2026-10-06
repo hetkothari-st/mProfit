@@ -53,7 +53,7 @@
  * already threshold-driven.
  */
 
-import { serializeRatio, type MfEvidence, type MfFinding } from '@portfolioos/shared';
+import { serializeRatio, type MfEvidence, type MfFinding } from '@everypaisa/shared';
 import type { Decimal } from 'decimal.js';
 
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';

@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);
@@ -95,6 +95,8 @@ export interface BalanceSheetResult {
   equity: TrialBalanceRow[];
   retainedEarnings: string;
   totalAssets: string;
+  /** Opening balances that don't net to zero: positive = liabilities side short. */
+  openingDifference?: string;
   totalLiabilities: string;
   totalEquity: string;
 }
@@ -186,4 +188,54 @@ export const accountingApi = {
     const { data } = await api.post<ApiResponse<{ created: number; skipped: number; errors: number; total: number }>>('/api/accounting/generate-from-activity');
     return unwrap(data);
   },
+  // ── Receipts ────────────────────────────────────────────────────────
+  //
+  // The same voucher as a document. `view` opens it in a tab (the server
+  // sends it inline); `download` saves it. Both hit one endpoint one header
+  // apart, so the thing you looked at is the thing you filed.
+
+  /** Opens the receipt in a new tab. Returns the object URL's revoke handle. */
+  async viewReceipt(voucherId: string): Promise<void> {
+    const res = await api.get(`/api/accounting/vouchers/${voucherId}/receipt.pdf`, {
+      params: { inline: 'true' },
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(res.data as Blob);
+    window.open(url, '_blank', 'noopener');
+    // Not revoked immediately: the new tab still needs to read it. Browsers
+    // release it when the document that owns it is discarded.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
+
+  async downloadReceipt(voucherId: string, fileName: string): Promise<void> {
+    const res = await api.get(`/api/accounting/vouchers/${voucherId}/receipt.pdf`, {
+      responseType: 'blob',
+    });
+    saveBlob(res.data as Blob, fileName);
+  },
+
+  async downloadReceiptBundle(
+    format: 'zip' | 'xlsx',
+    params: { from?: string; to?: string; type?: VoucherType } = {},
+  ): Promise<void> {
+    const res = await api.get(`/api/accounting/receipts.${format}`, {
+      params,
+      responseType: 'blob',
+    });
+    saveBlob(res.data as Blob, `receipts.${format}`);
+  },
 };
+
+/** Save a blob under a filename, the way every other download here does. */
+function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+

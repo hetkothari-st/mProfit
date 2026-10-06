@@ -17,8 +17,8 @@ import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi, type CryptoSearchHit } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
-import { Decimal } from '@portfolioos/shared';
-import type { TransactionDTO, AssetClass } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
+import type { TransactionDTO, AssetClass } from '@everypaisa/shared';
 import type { FormDialogProps } from './FDFormDialog';
 import { buildCryptoNarration, parseCryptoNarration } from './cryptoUtils';
 

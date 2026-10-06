@@ -3,7 +3,7 @@
  * Task 1.4, `01-DATA-FOUNDATION.md §2`.
  *
  * Run:
- *   pnpm --filter @portfolioos/api exec tsx scripts/backfill-mf-nav-history.ts
+ *   pnpm --filter @everypaisa/api exec tsx scripts/backfill-mf-nav-history.ts
  *
  * Options (env):
  *   NAVBF_SCHEME_CODES    comma-separated scheme codes; overrides all selection
@@ -49,7 +49,7 @@
 import { prisma } from '../src/lib/prisma.js';
 import { runAsSystem } from '../src/lib/requestContext.js';
 import type { Prisma, MfPlanType, MfOptionType } from '@prisma/client';
-import { SEBI_SUBCATEGORY_MAP } from '@portfolioos/shared';
+import { SEBI_SUBCATEGORY_MAP } from '@everypaisa/shared';
 import {
   runMfNavHistoryBackfill,
   type MfNavHistoryBackfillResult,

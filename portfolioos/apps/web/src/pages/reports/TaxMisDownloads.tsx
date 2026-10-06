@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, FileDown, FileText, Sparkles, ArrowRight } from 'lucide-react';
-import { meetsMinTier, type PlanTierValue } from '@portfolioos/shared';
+import { meetsMinTier, type PlanTierValue } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,7 @@ import { getApiBaseUrl } from '@/api/baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { useReportSubject } from '@/components/reports/useReportSubject';
+import { currentReportTheme } from '@/lib/reportTheme';
 import { cn } from '@/lib/cn';
 
 // Accounting-specific exports (Trial Balance, P&L, Balance Sheet, Chart of
@@ -30,8 +31,7 @@ const ACCOUNTING_REPORT_KEYS = new Set([
   'profit-loss',
   'balance-sheet',
   'chart-of-accounts',
-  'tally-masters',
-  'tally-vouchers',
+  'tally-export',
 ]);
 const FREE_REPORT_KEYS = new Set(['holdings-summary', 'cash-flow']);
 
@@ -51,7 +51,7 @@ export interface ReportDef {
   params: Param[]; // params this report accepts
   filename: string;
   /** Which download buttons render for this card. Defaults to ['pdf', 'xlsx']. */
-  formats?: Array<'pdf' | 'xlsx' | 'xml'>;
+  formats?: Array<'pdf' | 'xlsx' | 'xml' | 'zip'>;
 }
 
 export interface ReportHighlight {
@@ -430,24 +430,14 @@ export const REPORTS: ReportDef[] = [
     filename: 'bank-reconciliation',
   },
   {
-    key: 'tally-masters',
-    title: 'Tally Import — Chart of Accounts (Masters)',
+    key: 'tally-export',
+    title: 'Export to Tally',
     description:
-      'Ledgers and groups, ready to import into Tally via Gateway of Tally → Import Data. Import this before Vouchers so opening balances and custom accounts are in place first.',
-    endpoint: 'tally-masters',
+      'Your complete books as one ZIP for TallyPrime: groups and ledgers (one per bank account, loan, card and holding), vouchers split by financial year, holdings at each year end, and a step-by-step import guide. Checked against Tally’s import rules before it downloads.',
+    endpoint: 'tally-export',
     params: [],
-    filename: 'tally-masters',
-    formats: ['xml'],
-  },
-  {
-    key: 'tally-vouchers',
-    title: 'Tally Import — Vouchers',
-    description:
-      'Purchase, Sales, Payment, Receipt, Contra and Journal vouchers, ready to import into Tally. Self-contained (embeds the ledgers each voucher needs), but import Masters first for complete opening balances. If a same-named ledger already exists in the destination Tally company, Tally applies its own default duplicate-handling (combine/prompt) — built to Tally/TallyPrime’s documented XML import format; do a small trial import in your own Tally company before relying on this for real bookkeeping.',
-    endpoint: 'tally-vouchers',
-    params: ['from', 'to'],
-    filename: 'tally-vouchers',
-    formats: ['xml'],
+    filename: 'tally-export',
+    formats: ['zip'],
   },
 ];
 
@@ -557,14 +547,14 @@ export function TaxMisDownloads({
     return () => clearTimeout(t);
   }, [highlight]);
 
-  async function download(report: ReportDef, format: 'pdf' | 'xlsx' | 'xml') {
+  async function download(report: ReportDef, format: 'pdf' | 'xlsx' | 'xml' | 'zip') {
     if (!accessToken) {
       alert('Not signed in');
       return;
     }
     setBusy(`${report.key}-${format}`);
     try {
-      const params = new URLSearchParams({ format });
+      const params = new URLSearchParams({ format, theme: currentReportTheme() });
       if (report.params.includes('fy') && fy) params.set('fy', fy);
       if (report.params.includes('asOf') && asOf) params.set('asOf', asOf);
       if (report.params.includes('from') && from) params.set('from', from);
@@ -578,7 +568,9 @@ export function TaxMisDownloads({
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `${report.filename}-${fy}${reportSubject.filenameSuffix}.${format}`;
+      // A ZIP spans every year, so it is not named after the selected one.
+      const stem = format === 'zip' ? report.filename : `${report.filename}-${fy}`;
+      a.download = `${stem}${reportSubject.filenameSuffix}.${format}`;
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {

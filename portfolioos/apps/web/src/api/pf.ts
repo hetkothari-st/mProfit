@@ -1,5 +1,6 @@
 import { api } from './client';
 import { getApiBaseUrl } from './baseUrl';
+import { AuthedEventSource } from '@/lib/authedEventSource';
 
 // ---------------------------------------------------------------------------
 // Extension Pairing DTOs
@@ -98,17 +99,18 @@ export const pfApi = {
     api.post(`/api/epfppf/sessions/${sessionId}/otp`, { promptId, value }),
 
   /**
-   * Opens a native EventSource for the SSE stream of a fetch session.
-   * The Authorization header cannot be set on EventSource; the server relies
-   * on cookies or the query-param token fallback. If your setup requires a
-   * bearer token here, switch to a polyfill that supports custom headers.
+   * Opens the SSE stream for a fetch session, authenticated with the Bearer
+   * token.
+   *
+   * This used to be `new EventSource(url, { withCredentials: true })`. The API
+   * has no cookie session and EventSource cannot set headers, so no
+   * credentials were ever sent and the route's `authenticate` middleware
+   * returned 401: the captcha/OTP flow could not work. See AuthedEventSource
+   * for why the token is not put in the query string instead.
    */
-  eventStream: (sessionId: string): EventSource => {
+  eventStream: (sessionId: string): AuthedEventSource => {
     const base = getApiBaseUrl();
-    return new EventSource(
-      `${base}/api/epfppf/sessions/${sessionId}/events`,
-      { withCredentials: true },
-    );
+    return new AuthedEventSource(`${base}/api/epfppf/sessions/${sessionId}/events`);
   },
 
   // ── Extension pairing ──────────────────────────────────────────────────

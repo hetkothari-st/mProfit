@@ -8,7 +8,7 @@ import {
   deleteMonitoredSender,
 } from '../services/monitoredSenders.service.js';
 import { ok } from '../lib/response.js';
-import { UnauthorizedError } from '../lib/errors.js';
+import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 
 const createBodySchema = z.object({
   address: z.string().min(1),
@@ -45,6 +45,22 @@ export async function create(req: Request, res: Response) {
 export async function update(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const body = updateBodySchema.parse(req.body ?? {});
+
+  // Enforce the 5-event trust threshold server-side. §12 documents it as a
+  // product invariant and the UI honoured it, but the endpoint accepted
+  // autoCommitEnabled:true unconditionally — so the gate that decides whether
+  // a sender's parsed emails bypass human review and write straight to the
+  // ledger existed only in the client.
+  if (body.autoCommitEnabled === true) {
+    const existing = await getMonitoredSender(req.user.id, req.params.id!);
+    if (existing.confirmedEventCount < existing.autoCommitAfter) {
+      throw new BadRequestError(
+        `Approve ${existing.autoCommitAfter - existing.confirmedEventCount} more event(s) ` +
+          `from this sender before enabling auto-commit.`,
+      );
+    }
+  }
+
   const row = await updateMonitoredSender(req.user.id, req.params.id!, body);
   ok(res, row);
 }

@@ -1,4 +1,4 @@
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import type { Parser, ParserResult, ParsedTransaction } from './types.js';
 import { logger } from '../../../lib/logger.js';
 import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../lib/pdf.js';

@@ -9,8 +9,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeRatio } from '@portfolioos/shared';
-import type { MfMetricStatus, Ratio } from '@portfolioos/shared';
+import { serializeRatio } from '@everypaisa/shared';
+import type { MfMetricStatus, Ratio } from '@everypaisa/shared';
 import { userTimingGapRule } from '../../../../src/services/mfAnalytics/rules/user.timing-gap.js';
 import { factsForFund } from './_facts.fixture.js';
 

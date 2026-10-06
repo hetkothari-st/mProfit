@@ -1,5 +1,5 @@
 import { Decimal } from 'decimal.js';
-import { EMERGENCY_FUND_MONTHS } from '@portfolioos/shared';
+import { EMERGENCY_FUND_MONTHS, LIFE_COVER_INCOME_MULTIPLE, requiredLifeCover } from '@everypaisa/shared';
 import { ageBasedEquityGuidelinePct } from './riskProfileMath.js';
 
 /**
@@ -17,7 +17,7 @@ function clampScore(n: number): number {
  * Liquid assets ÷ (EMERGENCY_FUND_MONTHS × monthly expenses) × 100, capped
  * [0,100].
  *
- * The 6-month target comes from `@portfolioos/shared` rather than a literal
+ * The 6-month target comes from `@everypaisa/shared` rather than a literal
  * here: the advisor's CASH_DEPLOYMENT rule and the MF analytics
  * NO_LIQUID_BUFFER finding both reason about the same buffer, and a `6` typed
  * separately into three files is how they end up disagreeing about whether a
@@ -112,15 +112,11 @@ export function isLifePolicyType(type: string): boolean {
 
 /**
  * The rule-of-thumb life cover an earner should carry: ten times annual
- * income. Exported so every surface that shows a "cover gap" derives it from
- * the same multiple as `insuranceScore` below — the number used to be written
- * out as `annualIncome.times(10)` in three places.
+ * income. The maths lives in @everypaisa/shared (insurance/coverage) so the
+ * web's coverage check recomputes with the same multiple; re-exported here
+ * so the health score and family protection keep importing it from this file.
  */
-export const LIFE_COVER_INCOME_MULTIPLE = 10;
-
-export function requiredLifeCover(annualIncome: Decimal): Decimal {
-  return annualIncome.times(LIFE_COVER_INCOME_MULTIPLE);
-}
+export { LIFE_COVER_INCOME_MULTIPLE, requiredLifeCover };
 
 /** Sum-assured (life-type policies only) ÷ 10x annual income. 50 if no policies at all. */
 export function insuranceScore(

@@ -44,7 +44,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { Decimal } from 'decimal.js';
-import type { MfFinding, MfVerdictKind } from '@portfolioos/shared';
+import type { MfFinding, MfVerdictKind } from '@everypaisa/shared';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { prisma, runInTransaction } from '../lib/prisma.js';

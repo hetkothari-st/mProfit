@@ -17,7 +17,7 @@
  *
  *   DATABASE_URL="postgresql://portfolioos_app:portfolioos_app_dev@localhost:55433/portfolioos" \
  *   DIRECT_URL="postgresql://postgres:postgres@localhost:55433/portfolioos" \
- *   pnpm --filter @portfolioos/api run loadtest:mf-metrics
+ *   pnpm --filter @everypaisa/api run loadtest:mf-metrics
  *
  * The repo `.env` points at production Neon and `dotenv` does not override an
  * already-set variable, so the shell prefix above is what keeps this off the
@@ -46,7 +46,7 @@
  * would measure the cheap path and report it as the cost of the job.
  */
 
-import { Decimal, toDecimal, MF_HORIZONS } from '@portfolioos/shared';
+import { Decimal, toDecimal, MF_HORIZONS } from '@everypaisa/shared';
 import type { Prisma, MfHoldingKind } from '@prisma/client';
 
 import { prisma } from '../lib/prisma.js';
@@ -57,7 +57,7 @@ import {
 } from '../services/mfAnalytics/mfMetrics.service.js';
 import { CHUNK_SIZE, runMfMetricsJob } from '../jobs/mfMetricsJob.js';
 import { UNIVERSE_CHUNK_SIZE, runMfPeerRankForUniverses } from '../jobs/mfPeerRankJob.js';
-import { universeKey } from '@portfolioos/shared';
+import { universeKey } from '@everypaisa/shared';
 
 // ---------------------------------------------------------------------------
 // Namespace + shape of the synthetic universe

@@ -7,7 +7,7 @@ import {
   serializeQuantity,
   type Money,
   type Quantity,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import type { Transaction } from '@prisma/client';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
@@ -20,7 +20,7 @@ import {
   portfolioReadableWhere,
   type EffectiveScope,
 } from './familyScope.service.js';
-import { runAsUser } from '../lib/requestContext.js';
+import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 import { computePortfolioXirr, computeHoldingXirrs } from './xirr.service.js';
 
 function toPortfolioDTO(p: Portfolio) {
@@ -108,13 +108,32 @@ async function listPortfoliosWithScope(scope: EffectiveScope) {
         ),
       ),
     );
+    // Deliberately NOT portfolioReadableWhere: that asks for every readable
+    // member's personal rows, which the fan-out above has already fetched.
+    // Relying on row-level security to trim the overlap put the same portfolio
+    // in the list twice wherever policies do not bite — as on a connection
+    // that bypasses RLS, which is what production uses today.
     const own = await prisma.portfolio.findMany({
-      where: portfolioReadableWhere(scope),
+      where: {
+        OR: [
+          { userId: scope.callerId, familyId: null },
+          ...(scope.readableFamilyIds.length > 0
+            ? [{ familyId: { in: scope.readableFamilyIds } }]
+            : []),
+        ],
+      },
       include: {
         _count: { select: { holdingProjections: true, transactions: true } },
       },
     });
-    const all = [...own, ...perMember.flat()];
+    // One row per portfolio whatever the queries overlap on: two sources and
+    // a concatenation is exactly how the list grew duplicate cards before.
+    const seen = new Set<string>();
+    const all = [...own, ...perMember.flat()].filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
     return all.sort((a, b) => {
       if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
       return a.createdAt.getTime() - b.createdAt.getTime();
@@ -180,8 +199,25 @@ export async function getPortfolio(userId: string, id: string) {
   return toPortfolioDTO(p);
 }
 
+/**
+ * The row an access check is about to judge, read as the system identity.
+ *
+ * Row-level security hides another member's personal portfolio from the
+ * caller, so reading it in the caller's context returns null and the checks
+ * below never get to run: a portfolio the caller is allowed to see comes back
+ * "not found". That is what family pages did the moment the app stopped
+ * connecting as a superuser — every peer portfolio 404'd.
+ *
+ * Reading it here decides nothing. `ensureReadable` and `ensureOwnership`
+ * still have to accept the row, and both throw when they do not; this only
+ * lets them see what they are judging.
+ */
+function loadPortfolioForAccessCheck(id: string) {
+  return runAsSystem(() => prisma.portfolio.findUnique({ where: { id } }));
+}
+
 async function ensureOwnership(userId: string, id: string) {
-  const p = await prisma.portfolio.findUnique({ where: { id } });
+  const p = await loadPortfolioForAccessCheck(id);
   if (!p) throw new NotFoundError('Portfolio not found');
   if (p.userId === userId) return p;
   // Family-shared portfolios: any ACTIVE OWNER (or the CONTRIBUTOR
@@ -213,7 +249,7 @@ async function ensureOwnership(userId: string, id: string) {
  * flows, etc.).
  */
 export async function ensureReadable(userId: string, id: string) {
-  const p = await prisma.portfolio.findUnique({ where: { id } });
+  const p = await loadPortfolioForAccessCheck(id);
   if (!p) throw new NotFoundError('Portfolio not found');
   if (p.userId === userId) return p;
 
@@ -590,7 +626,12 @@ export async function getPortfolioHoldings(userId: string, id: string) {
       valuationMethod: valuationMethodFor(h.assetClass),
       priceAsOf: h.priceAsOf ? h.priceAsOf.toISOString() : null,
       stale: isPriceStale(h.assetClass, h.priceAsOf),
-      xirr: xirrForHolding && xirrForHolding.reliable ? xirrForHolding.xirr : null,
+      // No price yet → the terminal value above is just cost, so the solved
+      // rate is ~0% and reads as a real (flat or negative) return. Hide it.
+      xirr:
+        h.currentValue !== null && xirrForHolding && xirrForHolding.reliable
+          ? xirrForHolding.xirr
+          : null,
       holdingPeriodDays:
         xirrForHolding && xirrForHolding.cashflowCount >= 2 ? xirrForHolding.spanDays : null,
     };

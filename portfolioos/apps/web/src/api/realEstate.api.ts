@@ -7,7 +7,7 @@ import type {
   PropertyCapitalGainDTO,
   RefreshValueInput,
   UpdateOwnedPropertyInput,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);

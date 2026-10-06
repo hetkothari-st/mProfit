@@ -1,4 +1,4 @@
-import { MF_ANALYTICS_DISCLAIMER } from '@portfolioos/shared';
+import { MF_ANALYTICS_DISCLAIMER } from '@everypaisa/shared';
 
 /**
  * The mandatory disclaimer (`06-QUALITY-COMPLIANCE.md §4`).

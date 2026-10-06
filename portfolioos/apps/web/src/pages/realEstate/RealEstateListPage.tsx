@@ -21,6 +21,7 @@ import {
   Car,
   Construction,
   Building,
+  Camera,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -29,8 +30,8 @@ import {
   totalCostBasisOf,
   PROPERTY_TYPE_LABELS,
   PROPERTY_STATUS_LABELS,
-} from '@portfolioos/shared';
-import type { OwnedPropertyDTO, PropertyType } from '@portfolioos/shared';
+} from '@everypaisa/shared';
+import type { OwnedPropertyDTO, PropertyType } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,11 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { realEstateApi } from '@/api/realEstate.api';
 import { apiErrorMessage } from '@/api/client';
 import { PropertyFormDialog } from './PropertyFormDialog';
+import { propertyPhotosApi, type PhotoCover } from '@/api/propertyMedia.api';
+import { PropertySlideshow } from '@/components/property/PropertySlideshow';
+import { PropertiesMap } from '@/components/property/PropertiesMap';
+import { ViewToggle } from '@/components/property/ViewToggle';
+import { useListView } from '@/components/property/useListView';
 
 // ── Per-type identity: icon (used in nameplate strip) ────────────────
 
@@ -571,33 +577,40 @@ function PropertyScene({ type }: SceneProps) {
 interface PropertyBannerProps {
   property: OwnedPropertyDTO;
   isSold: boolean;
+  /** The property's own photo, shown instead of the illustration. */
+  cover?: PhotoCover;
 }
 
-function PropertyBanner({ property, isSold }: PropertyBannerProps) {
+function PropertyBanner({ property, isSold, cover }: PropertyBannerProps) {
   const TypeIcon = TYPE_ICON[property.propertyType] ?? Building;
   const typeLabel = PROPERTY_TYPE_LABELS[property.propertyType] ?? property.propertyType;
   const serial = property.id.replace(/[^A-Z0-9]/gi, '').slice(-6).toUpperCase();
   const locationLabel = property.city ?? property.address ?? null;
 
   return (
-    <div className="relative h-32 overflow-hidden border-b border-border/70">
-      {/* Composed scene */}
+    <div className={`relative ${cover ? 'h-48' : 'h-32'} overflow-hidden border-b border-border/70`}>
+      {/* The property's cover photo when it has one; otherwise its type's scene */}
       <div className="absolute inset-0">
-        <PropertyScene type={property.propertyType} />
+        {cover ? (
+          <PropertySlideshow photoIds={cover.photoIds} className="h-full w-full" />
+        ) : (
+          <PropertyScene type={property.propertyType} />
+        )}
       </div>
 
       {/* Top + bottom haze — keeps overlay text readable */}
-      <div className="absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-card/85 via-card/40 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-card/85 via-card/40 to-transparent" />
+      {/* Overlays let clicks through to the slideshow's arrows and dots below. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-card/85 via-card/40 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-card/85 via-card/40 to-transparent" />
 
       {/* Brass corner brackets */}
-      <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-accent/70" />
-      <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-accent/70" />
-      <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-accent/70" />
-      <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-accent/70" />
+      <div className="pointer-events-none absolute top-2 left-2 w-3 h-3 border-t border-l border-accent/70" />
+      <div className="pointer-events-none absolute top-2 right-2 w-3 h-3 border-t border-r border-accent/70" />
+      <div className="pointer-events-none absolute bottom-2 left-2 w-3 h-3 border-b border-l border-accent/70" />
+      <div className="pointer-events-none absolute bottom-2 right-2 w-3 h-3 border-b border-r border-accent/70" />
 
       {/* Top: type label + serial */}
-      <div className="absolute top-2.5 left-5 right-5 flex items-center justify-between">
+      <div className="pointer-events-none absolute top-2.5 left-5 right-5 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] font-semibold text-foreground">
           <TypeIcon className="h-3 w-3" strokeWidth={2} />
           {typeLabel}
@@ -609,12 +622,18 @@ function PropertyBanner({ property, isSold }: PropertyBannerProps) {
 
       {/* Bottom: city stamp */}
       {locationLabel && (
-        <div className="absolute bottom-2.5 left-5 right-5 flex items-center">
+        <div className="pointer-events-none absolute bottom-2.5 left-5 right-5 flex items-center">
           <span className="flex items-center gap-1 text-[10px] uppercase tracking-[0.18em] font-semibold text-foreground">
             <MapPin className="h-3 w-3 text-accent" />
             <span className="truncate max-w-[14rem]">{locationLabel}</span>
           </span>
         </div>
+      )}
+
+      {cover && cover.count > 1 && (
+        <span className="pointer-events-none absolute bottom-2.5 right-5 flex items-center gap-1 rounded-full bg-card/85 px-2 py-0.5 text-[10px] font-semibold text-foreground backdrop-blur">
+          <Camera className="h-3 w-3" /> {cover.count}
+        </span>
       )}
 
       {/* SOLD overlay */}
@@ -639,11 +658,13 @@ function appreciation(p: OwnedPropertyDTO): { gain: Decimal; pct: Decimal | null
 
 function PropertyCard({
   property,
+  cover,
   onEdit,
   onDelete,
   isDeleting,
 }: {
   property: OwnedPropertyDTO;
+  cover?: PhotoCover;
   onEdit: () => void;
   onDelete: () => void;
   isDeleting: boolean;
@@ -665,12 +686,12 @@ function PropertyCard({
       to={`/real-estate/${property.id}`}
       className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 rounded-lg"
     >
-      <Card className={`overflow-hidden p-0 cursor-pointer transition-all duration-300 paper relative
-        group-hover:shadow-elev-lg group-hover:-translate-y-0.5
+      <Card className={`card-lift overflow-hidden p-0 cursor-pointer transition-all duration-300 paper relative
+        group-hover:shadow-elev-lg group-hover:-translate-y-1
         ${isSold ? 'opacity-75' : ''}`}>
 
         {/* Type-relevant banner */}
-        <PropertyBanner property={property} isSold={isSold} />
+        <PropertyBanner property={property} isSold={isSold} cover={cover} />
 
         {/* Body */}
         <CardContent className="p-5 relative">
@@ -687,7 +708,7 @@ function PropertyCard({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0"
+                className="tap-expand h-7 w-7 p-0"
                 onClick={(e) => { stop(e); onEdit(); }}
                 title="Edit"
               >
@@ -696,7 +717,7 @@ function PropertyCard({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                 onClick={(e) => { stop(e); onDelete(); }}
                 disabled={isDeleting}
                 title="Delete"
@@ -811,6 +832,11 @@ export function RealEstateListPage() {
     queryKey: ['real-estate'],
     queryFn: () => realEstateApi.listProperties(),
   });
+  const { data: covers } = useQuery({
+    queryKey: ['property-photo-covers', 'OWNED_PROPERTY'],
+    queryFn: () => propertyPhotosApi.covers('OWNED_PROPERTY'),
+  });
+  const [view, setView] = useListView('real-estate');
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => realEstateApi.deleteProperty(id),
@@ -832,7 +858,7 @@ export function RealEstateListPage() {
         description="Properties you own — homes, plots, commercial. Manual current value, capital-gain on sale, document vault."
         actions={
           <div className="flex flex-wrap gap-2">
-            <DownloadReportButton type="holdings" assetClasses={['REAL_ESTATE']} />
+            <DownloadReportButton type="real-estate" />
             <Button onClick={() => { setEditProperty(null); setCreateOpen(true); }}>
               <Plus className="h-4 w-4" /> Add property
             </Button>
@@ -864,6 +890,26 @@ export function RealEstateListPage() {
       )}
 
       {!isLoading && list.length > 0 && (
+        <div className="mb-4 flex justify-end">
+          <ViewToggle value={view} onChange={setView} />
+        </div>
+      )}
+
+      {!isLoading && list.length > 0 && view === 'map' && (
+        <PropertiesMap
+          ownerType="OWNED_PROPERTY"
+          covers={covers}
+          items={list.map((p) => ({
+            id: p.id,
+            name: p.name,
+            subtitle: [p.city, p.state].filter(Boolean).join(', ') || p.address,
+            meta: p.currentValue ? formatINR(p.currentValue) : null,
+            href: `/real-estate/${p.id}`,
+          }))}
+        />
+      )}
+
+      {!isLoading && list.length > 0 && view === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {list.map((p) => (
             <div key={p.id}>
@@ -889,6 +935,7 @@ export function RealEstateListPage() {
               ) : (
                 <PropertyCard
                   property={p}
+                  cover={covers?.[p.id]}
                   onEdit={() => { setEditProperty(p); setCreateOpen(true); }}
                   onDelete={() => setConfirmDeleteId(p.id)}
                   isDeleting={deleteMutation.isPending && confirmDeleteId === p.id}

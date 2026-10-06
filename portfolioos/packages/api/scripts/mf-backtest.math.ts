@@ -29,14 +29,14 @@
  * fourth decimal place, and IEEE-754 noise at that magnitude flips months.
  */
 
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 import type {
   MfCurrentProfile,
   MfHorizonMetrics,
   MfMetricStatus,
   MfModelKey,
   MfRatingStatus,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import {
   cagr,
   maxDrawdown,

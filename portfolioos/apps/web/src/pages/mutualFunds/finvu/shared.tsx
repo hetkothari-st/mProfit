@@ -5,7 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { Decimal, formatINR, toDecimal } from '@portfolioos/shared';
+import { Decimal, formatINR, toDecimal } from '@everypaisa/shared';
 
 export function isObj(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);

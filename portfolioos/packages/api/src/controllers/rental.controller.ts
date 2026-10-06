@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import {
   listProperties,
   getProperty,
@@ -65,6 +66,8 @@ const createTenancySchema = z.object({
   securityDeposit: moneyString.nullable().optional(),
   rentDueDay: z.number().int().min(1).max(31).optional(),
   notes: z.string().max(2000).nullable().optional(),
+  // The account this tenant's rent is credited to. null = not tracked.
+  bankAccountId: z.string().cuid().nullable().optional(),
 });
 
 const updateTenancySchema = z.object({
@@ -78,12 +81,14 @@ const updateTenancySchema = z.object({
   rentDueDay: z.number().int().min(1).max(31).optional(),
   notes: z.string().max(2000).nullable().optional(),
   isActive: z.boolean().optional(),
+  bankAccountId: z.string().cuid().nullable().optional(),
 });
 
 const markReceivedSchema = z.object({
   receivedAmount: moneyString,
   receivedOn: isoDate,
   notes: z.string().max(2000).nullable().optional(),
+  allowDuplicate: z.boolean().optional(),
 });
 
 const skipReceiptSchema = z.object({
@@ -256,4 +261,190 @@ export async function markOverdueHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const count = await markOverdueReceipts(req.user.id);
   ok(res, { flipped: count });
+}
+
+// ── Khata ledger handlers ────────────────────────────────────────────
+
+import {
+  createLedgerEntry,
+  updateLedgerEntry,
+  deleteLedgerEntry,
+  getTenancyLedger,
+  listCollections,
+  buildReminderMessage,
+  LEDGER_ENTRY_TYPES,
+} from '../services/rentalLedger.service.js';
+import { streamPdf, fmtNum, fmtDate, type ExportColumn } from '../services/export.service.js';
+import { parseThemeQuery } from '../services/charts/pdfTheme.js';
+
+const ledgerEntrySchema = z.object({
+  entryType: z.enum(LEDGER_ENTRY_TYPES),
+  amount: moneyString,
+  entryDate: isoDate,
+  forMonth: z.string().regex(/^\d{4}-\d{2}$/).nullable().optional(),
+  note: z.string().max(2000).nullable().optional(),
+  attachmentUrl: z.string().max(2000).nullable().optional(),
+});
+const ledgerEntryPatchSchema = ledgerEntrySchema.partial();
+
+export async function getTenancyLedgerHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  ok(res, await getTenancyLedger(userId, req.params.tenancyId!));
+}
+
+export async function createLedgerEntryHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  const input = ledgerEntrySchema.parse(req.body);
+  ok(res, await createLedgerEntry(userId, req.params.tenancyId!, input));
+}
+
+export async function updateLedgerEntryHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  const patch = ledgerEntryPatchSchema.parse(req.body);
+  ok(res, await updateLedgerEntry(userId, req.params.entryId!, patch));
+}
+
+export async function deleteLedgerEntryHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  await deleteLedgerEntry(userId, req.params.entryId!);
+  ok(res, { deleted: true });
+}
+
+export async function listCollectionsHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  ok(res, await listCollections(userId));
+}
+
+export async function getReminderLinkHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  ok(res, await buildReminderMessage(userId, req.params.tenancyId!));
+}
+
+export async function getTenancyStatementHandler(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) throw new UnauthorizedError();
+  const ledger = await getTenancyLedger(userId, req.params.tenancyId!);
+
+  // Sentence case, so a system label never sits next to a user's own note
+  // looking like a different class of thing ("rent charge" beside "Security
+  // deposit"). Rent rows name their month, which is what makes a statement
+  // line reconcilable against a receipt.
+  const label = (r: (typeof ledger.rows)[number]): string => {
+    if (r.source === 'RECEIPT') return `Rent — ${r.forMonth ?? ''}`.trim();
+    const typeName = r.entryType.charAt(0) + r.entryType.slice(1).toLowerCase().replace(/_/g, ' ');
+    return r.note ? `${typeName} — ${r.note}` : typeName;
+  };
+
+  const oldestFirst = [...ledger.rows].reverse();
+
+  const period =
+    oldestFirst.length > 0
+      ? `${fmtDate(oldestFirst[0]!.date)} to ${fmtDate(oldestFirst.at(-1)!.date)}`
+      : 'No activity yet';
+
+  const columns: ExportColumn[] = [
+    { key: 'date',           header: 'Date',    width: 13, formatter: fmtDate },
+    { key: 'description',    header: 'Details', width: 37 },
+    { key: 'youGave',        header: 'Charged', width: 16, formatter: (v) => fmtNum(v), align: 'right' },
+    { key: 'youGot',         header: 'Paid',    width: 16, formatter: (v) => fmtNum(v), align: 'right' },
+    { key: 'runningBalance', header: 'Balance', width: 18, formatter: (v) => fmtNum(v), align: 'right' },
+  ];
+
+  const { totals, note } = buildStatementTotals(oldestFirst, ledger.balanceDue);
+
+  await streamPdf(res, {
+    // Follows `?theme=light|dark` like every other report — defaults to the
+    // app's own dark skin, but a landlord printing this for a tenant will
+    // usually want the light, ink-on-paper version instead.
+    theme: parseThemeQuery(req.query.theme),
+    title: `Rent statement — ${ledger.tenantName}`,
+    subtitle: `${ledger.propertyName} · ${period}`,
+    // Identity in the thin meta strip; the money as metric cards, which is
+    // what `footer` renders as and what a reader looks for first.
+    meta: {
+      Property: ledger.propertyName,
+      Tenant: ledger.tenantName,
+      Period: period,
+    },
+    footer: {
+      // Through fmtNum like every table cell below — a raw "380000" beside a
+      // formatted "3,80,000.00" reads as a different number at a glance.
+      'Balance Due': fmtNum(ledger.balanceDue),
+      'Deposit Held': fmtNum(ledger.depositHeld),
+      'Monthly Rent': fmtNum(ledger.monthlyRent),
+    },
+    columns,
+    // Oldest first reads better on a statement than the screen's newest-first.
+    rows: oldestFirst.map((r) => ({
+      date: r.date,
+      description: label(r),
+      youGave: r.kind === 'CHARGE' ? r.amount : '',
+      youGot: r.kind === 'CREDIT' ? r.amount : '',
+      runningBalance: r.runningBalance,
+    })),
+    mainSectionLabel: 'Statement of account',
+    totals,
+    note,
+  });
+}
+
+/**
+ * Totals for the statement table, plus the reconciliation line explaining
+ * why (Charged total) − (Paid total) is NOT the closing balance whenever a
+ * security deposit moved during the period.
+ *
+ * The Charged/Paid totals are the honest sum of exactly what's displayed in
+ * those two columns — deposits are never quietly dropped to force the
+ * arithmetic to close, because then the column wouldn't equal the cells
+ * printed above it. The Balance cell instead carries the actual closing
+ * balance (`balanceDue`), which is what a totals row on a running-balance
+ * ledger is supposed to show — not a sum of a running balance, which is
+ * meaningless.
+ */
+export function buildStatementTotals(
+  rows: Array<{ kind: 'CHARGE' | 'CREDIT'; amount: string; entryType: string }>,
+  balanceDue: string,
+): { totals: Record<string, unknown>; note: string | undefined } {
+  let totalCharged = new Prisma.Decimal(0);
+  let totalPaid = new Prisma.Decimal(0);
+  let depositIn = new Prisma.Decimal(0);   // DEPOSIT — lands in the Paid column
+  let depositOut = new Prisma.Decimal(0);  // DEPOSIT_REFUND — lands in the Charged column
+
+  for (const r of rows) {
+    const amt = new Prisma.Decimal(r.amount);
+    if (r.kind === 'CHARGE') totalCharged = totalCharged.plus(amt);
+    else totalPaid = totalPaid.plus(amt);
+
+    if (r.entryType === 'DEPOSIT') depositIn = depositIn.plus(amt);
+    if (r.entryType === 'DEPOSIT_REFUND') depositOut = depositOut.plus(amt);
+  }
+
+  const totals: Record<string, unknown> = {
+    date: '',
+    description: 'Total',
+    youGave: totalCharged.toString(),
+    youGot: totalPaid.toString(),
+    runningBalance: balanceDue,
+  };
+
+  let note: string | undefined;
+  if (depositIn.greaterThan(0) && depositOut.greaterThan(0)) {
+    note = `Paid includes a Rs ${fmtNum(depositIn)} security deposit, and Charged includes a ` +
+      `Rs ${fmtNum(depositOut)} deposit refund. Deposits are held separately and are not ` +
+      'applied to the rent balance.';
+  } else if (depositIn.greaterThan(0)) {
+    note = `Paid includes Rs ${fmtNum(depositIn)} of security deposit, which is held separately ` +
+      'and is not applied to the rent balance.';
+  } else if (depositOut.greaterThan(0)) {
+    note = `Charged includes Rs ${fmtNum(depositOut)} of security deposit refund, which is held ` +
+      'separately and is not applied to the rent balance.';
+  }
+
+  return { totals, note };
 }

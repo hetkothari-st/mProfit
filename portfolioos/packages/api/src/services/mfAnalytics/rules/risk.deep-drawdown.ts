@@ -44,7 +44,7 @@
  * comparing this file to `05 §4` will otherwise think it is simply wrong.
  */
 
-import { toDecimal, type MfEvidence, type MfFinding, type Ratio } from '@portfolioos/shared';
+import { toDecimal, type MfEvidence, type MfFinding, type Ratio } from '@everypaisa/shared';
 import {
   MF_HORIZON_KEYS,
   confidenceFor,

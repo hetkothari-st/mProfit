@@ -1,11 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
 import { redactForLlm } from '../ingestion/pii.js';
 import { checkBudget, type BudgetStatus } from '../ingestion/llm/budget.js';
-import { checkLlmGate, recordSpend } from '../ingestion/llm/client.js';
+import { checkLlmGate, recordSpend, warnIfZeroRetentionUnconfirmed } from '../ingestion/llm/client.js';
 
 /**
  * Per-attachment financial-document classifier. Wraps Claude Haiku
@@ -125,6 +125,7 @@ export async function classifyAttachmentWithLlm(
     };
   }
 
+  warnIfZeroRetentionUnconfirmed('gmail.classify');
   const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY! });
 
   const redacted = redactForLlm(input.first4kbText);

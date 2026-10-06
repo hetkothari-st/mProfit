@@ -1,4 +1,4 @@
 packages:
   - "apps/*"
   - "packages/*"
-  - "eslint-plugin-portfolioos"
+  - "eslint-plugin-everypaisa"

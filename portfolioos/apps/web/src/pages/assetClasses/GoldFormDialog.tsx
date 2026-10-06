@@ -13,12 +13,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
-import type { TransactionDTO } from '@portfolioos/shared';
+import type { TransactionDTO } from '@everypaisa/shared';
 import type { FormDialogProps } from './FDFormDialog';
 
 const n = (v: unknown) => (v === '' || v == null ? undefined : v);
@@ -347,7 +347,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Coins className="h-5 w-5 text-muted-foreground" />
@@ -382,7 +382,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
           </div>
 
           {/* Transaction type + date */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Transaction</Label>
               <Select {...register('transactionType')} className="w-full">
@@ -425,7 +425,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
           )}
 
           {/* Name + ISIN */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Name / Description <span className="text-destructive">*</span></Label>
               <Input {...register('assetName')}
@@ -443,7 +443,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
           </div>
 
           {/* Quantity + Price */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>
                 {txnType === 'INTEREST_RECEIVED' ? 'Units held' : QUANTITY_LABEL[assetClass]}
@@ -489,7 +489,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                 <Info className="h-3.5 w-3.5" /> SGB Details
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label>Interest Rate (% p.a.)</Label>
                   <Input type="number" step="0.01" min="0" max="100" {...register('interestRate')} placeholder="2.50" />

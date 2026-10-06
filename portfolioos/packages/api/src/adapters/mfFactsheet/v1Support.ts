@@ -12,7 +12,7 @@
  * is a verified static URL and what still needs a listing call.
  */
 
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import * as XLSX from 'xlsx';
 import { logger } from '../../lib/logger.js';
 import { csvToGrid } from './normalise.js';

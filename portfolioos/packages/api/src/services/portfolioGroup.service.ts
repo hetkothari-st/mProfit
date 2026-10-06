@@ -18,7 +18,7 @@ import {
   serializeQuantity,
   type Money,
   type Quantity,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { ForbiddenError, NotFoundError, BadRequestError } from '../lib/errors.js';

@@ -1,14 +1,25 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
-import { Decimal, toDecimal } from '@portfolioos/shared';
-import { BRAND, drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
+import { Decimal, toDecimal } from '@everypaisa/shared';
+import { drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
+import { themeFor, hexToArgb, type PdfTheme, type ThemeName } from './charts/pdfTheme.js';
+import { drawBrandLockup } from './charts/pdfBrand.js';
+import { excelSheetName, setExcelValue } from './excelCells.js';
+
+export type { PdfTheme, ThemeName } from './charts/pdfTheme.js';
 
 export interface ExportColumn {
   key: string;
   header: string;
   width?: number;
   formatter?: (value: unknown) => string;
+  /**
+   * Alignment for the header AND every cell in the column. Omit to infer it
+   * from the column's own data: a column whose first non-empty value looks
+   * numeric aligns right, anything else left.
+   */
+  align?: 'left' | 'right';
 }
 
 export interface ExportSection {
@@ -16,6 +27,13 @@ export interface ExportSection {
   columns: ExportColumn[];
   rows: Array<Record<string, unknown>>;
   emptyMessage?: string;
+  /**
+   * Optional final row, keyed the same as `rows`, rendered distinct from the
+   * data rows (top rule, bold, the theme's table-header background).
+   * Formatted through each column's own `formatter`, same as any other row.
+   * Omit entirely to render no totals row.
+   */
+  totals?: Record<string, unknown>;
 }
 
 export interface ExportPayload {
@@ -29,6 +47,12 @@ export interface ExportPayload {
   // Optional bar chart of top items by value.
   chartRows?: BarDatum[];
   chartTitle?: string;
+  /**
+   * 'light' switches to the printable ink-on-paper theme; 'dark' is the
+   * app's own brand skin. Defaults to 'dark' — every caller that never
+   * opted into a theme keeps rendering exactly as it always has.
+   */
+  theme?: ThemeName;
   // Optional explicit filename (no extension). Falls back to slugified title.
   filenameStem?: string;
   // Additional sections rendered after the main table (e.g. Transactions,
@@ -36,15 +60,28 @@ export interface ExportPayload {
   additionalSections?: ExportSection[];
   // Optional label shown on the main table band (defaults to "Details").
   mainSectionLabel?: string;
+  /**
+   * Optional final row for the MAIN table only, keyed the same as `rows`.
+   * See `ExportSection.totals` for the rendering contract.
+   */
+  totals?: Record<string, unknown>;
+  /**
+   * Optional short line rendered in muted text directly beneath the main
+   * table — for a caveat the totals row alone can't carry (e.g. "Paid
+   * includes a security deposit not applied to this balance"). Omit when
+   * there's nothing to explain.
+   */
+  note?: string;
 }
 
 // ─── Excel (XLSX) ───────────────────────────────────────────────────
 
 export async function streamExcel(res: Response, payload: ExportPayload): Promise<void> {
+  const C = themeFor(payload.theme);
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'PortfolioOS';
+  wb.creator = 'EveryPaisa';
   wb.created = new Date();
-  const ws = wb.addWorksheet(payload.title.slice(0, 31));
+  const ws = wb.addWorksheet(excelSheetName(payload.title));
 
   let row = 1;
   ws.getCell(row, 1).value = payload.title;
@@ -61,15 +98,24 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
     row += 1;
   }
 
+  const writeValue = (cell: ExcelJS.Cell, col: ExportColumn, raw: unknown) => {
+    if (col.formatter) setExcelValue(cell, raw, col.formatter(raw));
+    else cell.value = raw as ExcelJS.CellValue;
+  };
+
   const headerRow = ws.getRow(row);
   payload.columns.forEach((col, i) => {
     const cell = headerRow.getCell(i + 1);
     cell.value = col.header;
-    cell.font = { bold: true };
+    // Fill + font both come from the theme so the header reads whichever
+    // theme was requested — the previous fixed near-black fill (`FF20240F`)
+    // sat under cell text that Excel always renders dark, making the header
+    // unreadable regardless of theme.
+    cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
     cell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FF20240F' },
+      fgColor: { argb: hexToArgb(C.tableHeaderBg) },
     };
     if (col.width) ws.getColumn(i + 1).width = col.width;
   });
@@ -77,12 +123,65 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
 
   for (const data of payload.rows) {
     const r = ws.getRow(row);
+    payload.columns.forEach((col, i) => writeValue(r.getCell(i + 1), col, data[col.key]));
+    row += 1;
+  }
+
+  if (payload.totals) {
+    const r = ws.getRow(row);
     payload.columns.forEach((col, i) => {
-      const raw = data[col.key];
-      r.getCell(i + 1).value = col.formatter
-        ? col.formatter(raw)
-        : (raw as ExcelJS.CellValue);
+      const cell = r.getCell(i + 1);
+      writeValue(cell, col, payload.totals![col.key]);
+      cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(C.tableHeaderBg) } };
+      cell.border = { top: { style: 'thin', color: { argb: hexToArgb(C.border) } } };
     });
+    row += 1;
+  }
+
+  // Every additional section the PDF shows (capital-gains buckets, interest,
+  // maturity, PF ledgers…) goes into the workbook too, in order.
+  for (const section of payload.additionalSections ?? []) {
+    row += 1;
+    ws.getCell(row, 1).value = section.title;
+    ws.getCell(row, 1).font = { bold: true, size: 12 };
+    row += 1;
+    const head = ws.getRow(row);
+    section.columns.forEach((col, i) => {
+      const cell = head.getCell(i + 1);
+      cell.value = col.header;
+      cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(C.tableHeaderBg) } };
+      const width = ws.getColumn(i + 1).width ?? 0;
+      if (col.width && col.width > width) ws.getColumn(i + 1).width = col.width;
+    });
+    row += 1;
+    if (section.rows.length === 0 && section.emptyMessage) {
+      ws.getCell(row, 1).value = section.emptyMessage;
+      ws.getCell(row, 1).font = { italic: true, color: { argb: hexToArgb(C.muted) } };
+      row += 1;
+    }
+    for (const data of section.rows) {
+      const r = ws.getRow(row);
+      section.columns.forEach((col, i) => writeValue(r.getCell(i + 1), col, data[col.key]));
+      row += 1;
+    }
+    if (section.totals) {
+      const r = ws.getRow(row);
+      section.columns.forEach((col, i) => {
+        const cell = r.getCell(i + 1);
+        writeValue(cell, col, section.totals![col.key]);
+        cell.font = { bold: true, color: { argb: hexToArgb(C.ink) } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(C.tableHeaderBg) } };
+      });
+      row += 1;
+    }
+  }
+
+  if (payload.note) {
+    row += 1;
+    ws.getCell(row, 1).value = payload.note;
+    ws.getCell(row, 1).font = { italic: true, color: { argb: hexToArgb(C.muted) } };
     row += 1;
   }
 
@@ -96,7 +195,7 @@ export async function streamExcel(res: Response, payload: ExportPayload): Promis
     }
   }
 
-  const safeTitle = payload.title.replace(/[^a-z0-9-_]+/gi, '_');
+  const safeTitle = (payload.filenameStem ?? payload.title).replace(/[^a-z0-9-_]+/gi, '_');
   res.setHeader(
     'Content-Type',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -133,6 +232,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.pdf"`);
 
+    const C = themeFor(payload.theme);
     const doc = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape', bufferPages: true });
     doc.on('end', resolve);
     doc.on('error', reject);
@@ -146,17 +246,17 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     const BOT   = pageH - 40;  // bottom safe y for content
 
     function renderPageHeader(): void {
-      doc.rect(0, 0, doc.page.width, doc.page.height).fill(BRAND.pageBg);
-      doc.rect(0, 0, doc.page.width, 56).fill(BRAND.headerBarBg);
-      doc.font('Helvetica-Bold').fontSize(17).fillColor(BRAND.white)
-         .text('PortfolioOS', ML, 14, { lineBreak: false });
-      doc.font('Helvetica').fontSize(10).fillColor(BRAND.muted)
-         .text(pdfSafe(payload.title), ML, 36, { lineBreak: false });
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill(C.pageBg);
+      doc.rect(0, 0, doc.page.width, 56).fill(C.headerBarBg);
+      if (C.headerRule) doc.rect(0, 55.5, doc.page.width, 0.5).fill(C.border);
+      const brandX = drawBrandLockup(doc, C, ML, 12, 17);
+      doc.font('Helvetica').fontSize(10).fillColor(C.muted)
+         .text(pdfSafe(payload.title), brandX, 32, { lineBreak: false });
       const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
-      doc.font('Helvetica').fontSize(8.5).fillColor(BRAND.muted)
+      doc.font('Helvetica').fontSize(8.5).fillColor(C.muted)
          .text(genStr, ML, 22, { align: 'right', width: pageW, lineBreak: false });
       if (payload.subtitle) {
-        doc.font('Helvetica').fontSize(8).fillColor(BRAND.muted)
+        doc.font('Helvetica').fontSize(8).fillColor(C.muted)
            .text(pdfSafe(payload.subtitle), ML, 38, { align: 'right', width: pageW, lineBreak: false });
       }
     }
@@ -171,7 +271,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       const parts = Object.entries(payload.meta)
         .map(([k, v]) => `${pdfSafe(k)}: ${pdfSafe(String(v))}`);
       const fullStr = parts.join('   ·   ');
-      doc.font('Helvetica').fontSize(8.5).fillColor(BRAND.muted);
+      doc.font('Helvetica').fontSize(8.5).fillColor(C.muted);
       const fitted = fitText(doc, fullStr, pageW);
       doc.text(fitted, ML, cy, { width: pageW, lineBreak: false });
       cy += 16;
@@ -186,13 +286,13 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       const cardH = 44;
       entries.forEach(([k, v], i) => {
         const cx = ML + i * (cardW + gap);
-        doc.rect(cx, cy, cardW, cardH).fill(BRAND.headerBg);
-        doc.rect(cx, cy, 3, cardH).fill(BRAND.accent);
-        doc.font('Helvetica').fontSize(7.5).fillColor(BRAND.muted)
+        doc.rect(cx, cy, cardW, cardH).fill(C.headerBg);
+        if (C.accentBar) doc.rect(cx, cy, 3, cardH).fill(C.accent);
+        doc.font('Helvetica').fontSize(7.5).fillColor(C.muted)
            .text(pdfSafe(k).toUpperCase(), cx + 10, cy + 8, { width: cardW - 14, characterSpacing: 0.5, lineBreak: false });
         const valStr = pdfSafe(String(v));
         const isNeg = valStr.startsWith('-') && (k.toLowerCase().includes('p&l') || k.toLowerCase().includes('gain') || k.toLowerCase().includes('loss'));
-        doc.font('Helvetica-Bold').fontSize(13).fillColor(isNeg ? BRAND.negative : BRAND.ink)
+        doc.font('Helvetica-Bold').fontSize(13).fillColor(isNeg ? C.negative : C.ink)
            .text(valStr, cx + 10, cy + 22, { width: cardW - 16, ellipsis: true, lineBreak: false });
       });
       cy += cardH + 14;
@@ -200,7 +300,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
 
     // ─── CHART (top N items, horizontal bars) ────────────────────────
     if (payload.chartRows && payload.chartRows.length > 0) {
-      cy = drawSectionBand(doc, ML, pageW, cy, payload.chartTitle ?? 'Top items by value');
+      cy = drawSectionBand(doc, ML, pageW, cy, payload.chartTitle ?? 'Top items by value', C);
       const chartH = Math.min(payload.chartRows.length * 18 + 8, 200);
       const bottom = drawHorizontalBarChart(doc, payload.chartRows, {
         x: ML, y: cy, width: pageW, height: chartH,
@@ -216,8 +316,24 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       rows: payload.rows,
       emptyMessage: 'No records to display.',
       onPageBreak: () => { doc.addPage(); renderPageHeader(); return 72; },
+      C,
+      totals: payload.totals,
+      // 34pt covers the note's two wrapped lines plus its leading gap.
+      reserveBelow: payload.note ? 34 : 0,
     });
     cy += 10;
+
+    // ─── RECONCILIATION NOTE — directly beneath the main table only ──
+    if (payload.note) {
+      if (cy + 30 > BOT) {
+        doc.addPage();
+        renderPageHeader();
+        cy = 72;
+      }
+      doc.font('Helvetica-Oblique').fontSize(7.5).fillColor(C.muted)
+         .text(pdfSafe(payload.note), ML, cy, { width: pageW });
+      cy = doc.y + 10;
+    }
 
     // ─── ADDITIONAL SECTIONS (e.g. Transactions, Realised Trades) ────
     for (const section of payload.additionalSections ?? []) {
@@ -234,6 +350,8 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
         rows: section.rows,
         emptyMessage: section.emptyMessage ?? 'None.',
         onPageBreak: () => { doc.addPage(); renderPageHeader(); return 72; },
+        C,
+        totals: section.totals,
       });
       cy += 10;
     }
@@ -251,10 +369,10 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
     doc.font('Helvetica').fontSize(7);
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(range.start + i);
-      const txt = `PortfolioOS  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`;
+      const txt = `EveryPaisa  ·  ${safeTitle}  ·  Page ${i + 1} of ${range.count}`;
       const tw  = doc.widthOfString(txt);
       const tx  = ML + (pageW - tw) / 2;
-      doc.fillColor(BRAND.muted).text(txt, tx, pageH - 22, { lineBreak: false });
+      doc.fillColor(C.muted).text(txt, tx, pageH - 22, { lineBreak: false });
     }
 
     doc.flushPages();
@@ -271,11 +389,12 @@ function drawSectionBand(
   width: number,
   y: number,
   label: string,
+  C: PdfTheme,
 ): number {
   const H = 20;
-  doc.rect(x, y, width, H).fill(BRAND.headerBg);
-  doc.rect(x, y, 3, H).fill(BRAND.accent);
-  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(BRAND.ink)
+  doc.rect(x, y, width, H).fill(C.headerBg);
+  if (C.accentBar) doc.rect(x, y, 3, H).fill(C.accent);
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.ink)
      .text(pdfSafe(label), x + 10, y + 6, { width: width - 18, lineBreak: false });
   return y + H + 4;
 }
@@ -290,15 +409,26 @@ interface RenderTableOpts {
   rows: Array<Record<string, unknown>>;
   emptyMessage: string;
   onPageBreak: () => number;  // returns new cy after adding page + header
+  C: PdfTheme;
+  /** Vertical space to keep free below the table, e.g. for a following note. */
+  reserveBelow?: number;
+  /** Optional final row — see `ExportSection.totals`. Skipped when there are no rows. */
+  totals?: Record<string, unknown>;
 }
 
 function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts): number {
-  let cy = drawSectionBand(doc, o.x, o.width, o.y, o.label);
-  const BOT = o.pageH - 40;
+  const C = o.C;
+  let cy = drawSectionBand(doc, o.x, o.width, o.y, o.label, C);
+  // Reserve the note's strip when one follows this table, so the table breaks a
+  // row early rather than filling the page and stranding the note alone on the
+  // next one. A second page carrying nothing but a caveat reads as a printing
+  // accident — and that caveat is exactly what stops a reader concluding the
+  // totals are wrong.
+  const BOT = o.pageH - 40 - (o.reserveBelow ?? 0);
 
   if (o.rows.length === 0) {
-    doc.rect(o.x, cy, o.width, 36).fill(BRAND.rowAlt);
-    doc.font('Helvetica').fontSize(9).fillColor(BRAND.muted)
+    doc.rect(o.x, cy, o.width, 36).fill(C.rowAlt);
+    doc.font('Helvetica').fontSize(9).fillColor(C.muted)
        .text(o.emptyMessage, o.x, cy + 12, { width: o.width, align: 'center', lineBreak: false });
     return cy + 40;
   }
@@ -307,16 +437,37 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
   const colWidths   = o.columns.map(c => ((c.width ?? 10) / totalWeight) * o.width);
   const ROW_H       = 16;
 
+  const looksNumeric = (s: string): boolean =>
+    /^[+-]?[\d,.]+%?$/.test(s.trim()) || /^[+-]?Rs/.test(s.trim());
+
+  const cellText = (col: ExportColumn, row: Record<string, unknown>): string => {
+    const raw = row[col.key];
+    return pdfSafe(col.formatter ? col.formatter(raw) : raw == null ? '' : String(raw));
+  };
+
+  // One alignment per column, shared by the header and every cell. Previously
+  // each cell decided for itself while the header was always left — so the
+  // header of a money column floated left of its own right-aligned figures,
+  // in every report this renderer produces.
+  const colAlign: Array<'left' | 'right'> = o.columns.map((c) => {
+    if (c.align) return c.align;
+    for (const row of o.rows) {
+      const s = cellText(c, row).trim();
+      if (s) return looksNumeric(s) ? 'right' : 'left';
+    }
+    return 'left';
+  });
+
   const drawHeader = (yy: number): void => {
     // Table column header — dark slate background, ink text. Distinct from
     // section header (headerBg) and row background (rowAlt).
-    doc.rect(o.x, yy, o.width, ROW_H).fill(BRAND.tableHeaderBg);
-    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND.ink);
+    doc.rect(o.x, yy, o.width, ROW_H).fill(C.tableHeaderBg);
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.ink);
     let x = o.x;
     for (let i = 0; i < o.columns.length; i++) {
       const cellW = (colWidths[i] ?? 80) - 8;
       doc.text(fitText(doc, pdfSafe(o.columns[i]!.header), cellW), x + 4, yy + 5, {
-        width: cellW, lineBreak: false,
+        width: cellW, align: colAlign[i] ?? 'left', lineBreak: false,
       });
       x += colWidths[i] ?? 80;
     }
@@ -328,28 +479,25 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
   for (let idx = 0; idx < o.rows.length; idx++) {
     if (cy + ROW_H > BOT) {
       cy = o.onPageBreak();
-      cy = drawSectionBand(doc, o.x, o.width, cy, `${o.label} (continued)`);
+      cy = drawSectionBand(doc, o.x, o.width, cy, `${o.label} (continued)`, C);
       drawHeader(cy);
       cy += ROW_H;
     }
 
-    if (idx % 2 === 1) doc.rect(o.x, cy, o.width, ROW_H).fill(BRAND.rowAlt);
+    if (idx % 2 === 1) doc.rect(o.x, cy, o.width, ROW_H).fill(C.rowAlt);
     let x = o.x;
     doc.font('Helvetica').fontSize(8);
     for (let i = 0; i < o.columns.length; i++) {
       const col = o.columns[i]!;
-      const raw = o.rows[idx]![col.key];
-      const rawVal = col.formatter ? col.formatter(raw) : (raw == null ? '' : String(raw));
-      const safe = pdfSafe(rawVal);
-      const isNumeric = /^[+-]?[\d,.]+%?$/.test(safe.trim()) || /^[+-]?Rs/.test(safe.trim());
+      const safe = cellText(col, o.rows[idx]!);
       const isNeg = safe.trim().startsWith('-');
-      const align = isNumeric ? 'right' : 'left';
+      const align = colAlign[i] ?? 'left';
       const cellW = (colWidths[i] ?? 80) - 8;
       // Manually truncate so we can guarantee single-line — PDFKit's
       // lineBreak:false + ellipsis:true combo is unreliable when text is
       // far wider than the column. doc.widthOfString uses real font metrics.
       const display = fitText(doc, safe, cellW);
-      doc.fillColor(isNeg ? BRAND.negative : BRAND.ink)
+      doc.fillColor(isNeg ? C.negative : C.ink)
          .text(display, x + 4, cy + 5, {
            width: cellW, align, lineBreak: false,
          });
@@ -358,8 +506,39 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
     cy += ROW_H;
   }
 
+  // ─── TOTALS ROW — visually distinct from the data above it: a top rule,
+  // bold text, the theme's table-header background. Skipped when the caller
+  // didn't supply one, so every other report is unaffected.
+  if (o.totals) {
+    if (cy + ROW_H > BOT) {
+      cy = o.onPageBreak();
+      cy = drawSectionBand(doc, o.x, o.width, cy, `${o.label} (continued)`, C);
+      drawHeader(cy);
+      cy += ROW_H;
+    }
+    doc.rect(o.x, cy, o.width, 0.75).fill(C.border);  // top rule
+    cy += 1;                                          // nudge past the rule
+    doc.rect(o.x, cy, o.width, ROW_H).fill(C.tableHeaderBg);
+    let tx = o.x;
+    doc.font('Helvetica-Bold').fontSize(8);
+    for (let i = 0; i < o.columns.length; i++) {
+      const col = o.columns[i]!;
+      const safe = cellText(col, o.totals);
+      const isNeg = safe.trim().startsWith('-');
+      const align = colAlign[i] ?? 'left';
+      const cellW = (colWidths[i] ?? 80) - 8;
+      const display = fitText(doc, safe, cellW);
+      doc.fillColor(isNeg ? C.negative : C.ink)
+         .text(display, tx + 4, cy + 5, {
+           width: cellW, align, lineBreak: false,
+         });
+      tx += colWidths[i] ?? 80;
+    }
+    cy += ROW_H;
+  }
+
   // Thin bottom border
-  doc.rect(o.x, cy, o.width, 0.5).fill(BRAND.border);
+  doc.rect(o.x, cy, o.width, 0.5).fill(C.border);
   return cy;
 }
 

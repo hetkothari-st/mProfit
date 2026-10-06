@@ -2,7 +2,7 @@
  * CLI wrapper around `crawlCardekhoCatalog` (src/services/catalog/).
  *
  * Run:
- *   pnpm --filter @portfolioos/api exec tsx scripts/crawl-cardekho-catalog.ts
+ *   pnpm --filter @everypaisa/api exec tsx scripts/crawl-cardekho-catalog.ts
  *
  * Flags:
  *   --brand=maruti     only crawl this brand-slug

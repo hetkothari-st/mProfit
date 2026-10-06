@@ -65,8 +65,9 @@ import {
   downloadDayBook,
   downloadDividendReport,
   downloadBankReconciliation,
-  downloadTallyMasters,
-  downloadTallyVouchers,
+  downloadProvidentFund,
+  downloadFyBundle,
+  downloadTallyExport,
 } from '../controllers/reports.controller.js';
 
 export const reportsRouter = Router();
@@ -74,7 +75,7 @@ export const reportsRouter = Router();
 reportsRouter.use(authenticate);
 
 // Free tier gets basic reports only (holdings summary, XIRR, cash flow —
-// see PLAN_LIMITS / FEATURE_MIN_TIER in @portfolioos/shared). Everything
+// see PLAN_LIMITS / FEATURE_MIN_TIER in @everypaisa/shared). Everything
 // else in this file's /download catalog requires TAX_REPORT_CATALOG
 // (Plus) or ACCOUNTING_MODULE (Pro/Advisor) for the accounting-specific
 // exports. The non-download endpoints above (/summary, /xirr, /statement/*,
@@ -101,6 +102,10 @@ reportsRouter.get('/statement/holdings', asyncHandler(getStatementHoldings));
 reportsRouter.get('/statement/capital-gains', asyncHandler(getStatementCapitalGains));
 reportsRouter.get('/statement/income', asyncHandler(getStatementIncome));
 reportsRouter.get('/statement/ledger', asyncHandler(getStatementLedger));
+reportsRouter.get('/statement/provident-fund', gateTax, asyncHandler(downloadProvidentFund));
+
+// Everything for a financial year, as one archive.
+reportsRouter.get('/fy-bundle', gateTax, asyncHandler(downloadFyBundle));
 
 // Specialised reports — Indian-broker layouts (grandfathering / demat / M2M).
 reportsRouter.get('/grandfathering', asyncHandler(getGrandfatheringReport));
@@ -160,5 +165,6 @@ reportsRouter.get('/download/portfolio-snapshot', gateTax, asyncHandler(download
 reportsRouter.get('/download/day-book', gateTax, asyncHandler(downloadDayBook));
 reportsRouter.get('/download/dividend-report', gateTax, asyncHandler(downloadDividendReport));
 reportsRouter.get('/download/bank-reconciliation', gateTax, asyncHandler(downloadBankReconciliation));
-reportsRouter.get('/download/tally-masters', gateAccounting, asyncHandler(downloadTallyMasters));
-reportsRouter.get('/download/tally-vouchers', gateAccounting, asyncHandler(downloadTallyVouchers));
+// Everything, as one ZIP ready for Tally: masters, one transactions file per
+// financial year, holdings at each year end, and an import guide.
+reportsRouter.get('/download/tally-export', gateAccounting, asyncHandler(downloadTallyExport));

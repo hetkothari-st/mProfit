@@ -18,8 +18,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@portfolioos/shared';
-import type { TransactionDTO } from '@portfolioos/shared';
+import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@everypaisa/shared';
+import type { TransactionDTO } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { transactionsApi } from '@/api/transactions.api';
 import { assetsApi } from '@/api/assets.api';
@@ -27,6 +27,7 @@ import { api, apiErrorMessage } from '@/api/client';
 import { NEUTRAL_COLOR, POS_COLOR, NEG_COLOR } from '../analytics/chartColors';
 import { INR_COMPACT, TOOLTIP_STYLE, TOOLTIP_LABEL_STYLE, formatDate } from '@/lib/depositMath';
 import { GoldFormDialog } from './GoldFormDialog';
+import { MetalIngot } from './GoldSilverTopBar';
 
 const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
   PHYSICAL_GOLD: 'Physical Gold',
@@ -73,6 +74,14 @@ function PhotoCarousel({
 }) {
   const [idx, setIdx] = useState(0);
   const [srcs, setSrcs] = useState<Record<string, string>>({});
+  /**
+   * Photos whose blob fetch failed.
+   *
+   * Swallowing that error left the frame showing "Loading" for as long as the
+   * page stayed open, which reads as a slow network rather than a photo that
+   * is never going to arrive.
+   */
+  const [failed, setFailed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (idx >= photos.length) setIdx(0);
@@ -80,14 +89,20 @@ function PhotoCarousel({
 
   useEffect(() => {
     const loaded: Record<string, string> = {};
+    const missing = new Set<string>();
     Promise.all(
       photos.map(async (p) => {
         try {
           const { data } = await api.get(`/api/transactions/${p.txnId}/photos/${p.id}`, { responseType: 'blob' });
           loaded[p.id] = URL.createObjectURL(data);
-        } catch {}
+        } catch {
+          missing.add(p.id);
+        }
       }),
-    ).then(() => setSrcs({ ...loaded }));
+    ).then(() => {
+      setSrcs({ ...loaded });
+      setFailed(missing);
+    });
     return () => Object.values(loaded).forEach(URL.revokeObjectURL);
   }, [photos]);
 
@@ -108,7 +123,9 @@ function PhotoCarousel({
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
               <ImageIcon className="h-10 w-10 opacity-30" />
-              <span className="text-xs tracking-widest uppercase">Loading</span>
+              <span className="text-xs tracking-widest uppercase">
+                {current && failed.has(current.id) ? 'Unavailable' : 'Loading'}
+              </span>
             </div>
           )}
 
@@ -718,7 +735,7 @@ export function GoldAssetDetailPage() {
                           ${accent === 'gold'
                             ? 'bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-amber-950/30'
                             : 'bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-800/40 dark:to-slate-900/30'}`}>
-                          {accent === 'silver' ? '🥈' : '🪙'}
+                          <MetalIngot metal={accent === 'silver' ? 'SILVER' : 'GOLD'} />
                         </div>
                       )}
 

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { CalendarClock, Loader2, Target, TrendingUp } from 'lucide-react';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Money } from '@/components/ui/money';

@@ -208,3 +208,54 @@ export async function retryIngestionFailure(
   // Unknown adapter
   throw new BadRequestError(`Retry not implemented for adapter "${adapter}".`);
 }
+
+/**
+ * Scheduled runs that failed or refused, newest first — market feeds and
+ * fund scoring alike, since they share one table now.
+ *
+ * NOT user-scoped, and deliberately so. `FeedRunLog` describes a feed, not
+ * anyone's money: it has no `userId`, no RLS policy and no entry in
+ * `USER_SCOPED_MODELS` (CONTEXT.md §5), like `StockMaster` and `MFNav`. Every
+ * authenticated user sees the same rows, because a stale AMFI file is the same
+ * fact for all of them.
+ *
+ * There is no resolve and no retry. A feed failure is fixed upstream or in our
+ * parser, and "retry" means waiting for tomorrow's file — a button that did
+ * nothing would be worse than no button.
+ */
+export async function listFeedRunFailures(opts: { since?: Date; limit?: number } = {}) {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  const rows = await prisma.feedRunLog.findMany({
+    where: {
+      // REFUSED as well as FAILED: a scoring run that declined to write is a
+      // decision rather than an error, but it has the same consequence for
+      // whoever is looking at this page — today's ranking is not there.
+      status: { in: ['FAILED', 'REFUSED'] },
+      ...(opts.since ? { startedAt: { gte: opts.since } } : {}),
+    },
+    orderBy: { startedAt: 'desc' },
+    take: limit,
+  });
+  return {
+    items: rows.map((r) => {
+      const details = (r.details ?? {}) as Record<string, unknown>;
+      return {
+        id: r.id,
+        kind: r.kind === 'SCORING' ? ('SCORING' as const) : ('FEED' as const),
+        feed: r.feed,
+        check: r.check,
+        startedAt: r.startedAt.toISOString(),
+        finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+        status: r.status,
+        rowsParsed: r.rowsParsed,
+        rowsImported: r.rowsImported,
+        parseFailures: r.parseFailures,
+        previousImported: r.previousImported,
+        reason: r.reason,
+        // A scoring refusal has no row counts; what it has is the gap that
+        // caused it, which is the only number worth showing on the card.
+        gapWeekdays: typeof details.gapWeekdays === 'number' ? details.gapWeekdays : null,
+      };
+    }),
+  };
+}

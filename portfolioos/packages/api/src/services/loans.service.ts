@@ -13,7 +13,9 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
-import { serializeMoney } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
+import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from './piiAtRest.service.js';
+import { last4 } from './pfCredentials.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -106,6 +108,10 @@ export interface LoanSummary {
   totalInterestPaid: string;
   nextEmiDate: string | null;
   nextEmiAmount: string;
+  /** Scheduled EMIs marked paid, across the whole loan (not capped like list payments). */
+  paidEmiCount: number;
+  /** EMIs in the current plan; shorter than tenure after a tenure-reducing prepayment. */
+  scheduledEmiCount: number;
   remainingEmiCount: number;
   remainingTenureMonths: number;
   totalInterestPayable: string;
@@ -343,6 +349,31 @@ export function buildAmortizationSchedule(
 }
 
 /**
+ * Principal and interest in one payment. The split is optional when a payment
+ * is recorded, so a payment saved without one takes it from the schedule: an
+ * EMI pays that month's interest first and the rest goes to principal; a
+ * prepayment or foreclosure is all principal.
+ */
+export function splitLoanPayment(
+  payment: Pick<StoredPayment, 'paymentType' | 'paidOn' | 'amount' | 'principalPart' | 'interestPart' | 'forMonth'>,
+  schedule: AmortizationRow[],
+): { principal: Decimal; interest: Decimal } {
+  const ZERO = new Decimal(0);
+  if (payment.principalPart || payment.interestPart) {
+    return {
+      principal: payment.principalPart ? new Decimal(payment.principalPart.toString()) : ZERO,
+      interest: payment.interestPart ? new Decimal(payment.interestPart.toString()) : ZERO,
+    };
+  }
+  const amount = new Decimal(payment.amount.toString());
+  if (payment.paymentType !== 'EMI') return { principal: amount, interest: ZERO };
+  const month = payment.forMonth ?? dateToIso(payment.paidOn).slice(0, 7);
+  const row = schedule.find((r) => r.date.slice(0, 7) === month);
+  const interest = row ? Decimal.min(new Decimal(row.interestPart), amount) : ZERO;
+  return { principal: amount.minus(interest), interest };
+}
+
+/**
  * Compute a high-level summary of the current loan state.
  */
 export function computeLoanSummary(loan: StoredLoan): LoanSummary {
@@ -358,8 +389,9 @@ export function computeLoanSummary(loan: StoredLoan): LoanSummary {
   let totalInterestPaid = ZERO;
 
   for (const p of emiPayments) {
-    if (p.principalPart) totalPrincipalPaid = totalPrincipalPaid.plus(new Decimal(p.principalPart.toString()));
-    if (p.interestPart) totalInterestPaid = totalInterestPaid.plus(new Decimal(p.interestPart.toString()));
+    const split = splitLoanPayment(p, schedule);
+    totalPrincipalPaid = totalPrincipalPaid.plus(split.principal);
+    totalInterestPaid = totalInterestPaid.plus(split.interest);
   }
 
   // Outstanding balance: last closing balance in schedule before today (or principal if no schedule)
@@ -418,6 +450,9 @@ export function computeLoanSummary(loan: StoredLoan): LoanSummary {
     totalInterestPaid: serializeMoney(totalInterestPaid),
     nextEmiDate,
     nextEmiAmount: serializeMoney(nextEmiAmount),
+    paidEmiCount: schedule.filter((r) => r.isPaid).length,
+    // Rounding can leave a last few-rupee row past the tenure; it is not an EMI.
+    scheduledEmiCount: Math.min(schedule.length, loan.tenureMonths),
     remainingEmiCount,
     remainingTenureMonths,
     totalInterestPayable: serializeMoney(totalInterestPayable),
@@ -511,18 +546,68 @@ type LoanWithPayments = Awaited<ReturnType<typeof prisma.loan.findFirst>> & {
   }>;
 };
 
+
+/**
+ * Loan account numbers are returned masked.
+ *
+ * They used to ship in full on every list and detail response while the UI
+ * only ever rendered the last four digits — so the complete number sat in the
+ * network response, the React Query cache and devtools for a value nobody was
+ * displaying. Bank accounts, credit cards and insurance policies in this same
+ * codebase already mask and expose a separate audited reveal endpoint; loans
+ * did not.
+ */
+/**
+ * The edit dialog pre-fills the masked value it was given and sends it back
+ * unchanged. Treating that as a new number overwrote the real one with
+ * "••••6789", so a masked value means "unchanged".
+ */
+export function isMaskedAccountNumber(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.includes('•');
+}
+
+function maskAccountNumber(last4: string | null): string | null {
+  return last4 ? `••••${last4}` : null;
+}
+
+/**
+ * The response shape for a loan: the account number masked from its last
+ * four, the ciphertext and last-4 columns never serialized.
+ */
+export function withMaskedAccount<
+  T extends { accountNumber: string | null; accountNumberEnc: string | null; accountNumberLast4: string | null },
+>(loan: T): Omit<T, 'accountNumberEnc' | 'accountNumberLast4'> {
+  const { accountNumberEnc: _enc, accountNumberLast4, ...rest } = loan;
+  const tail = accountNumberLast4 ?? (loan.accountNumber ? last4(loan.accountNumber) : null);
+  return { ...rest, accountNumber: maskAccountNumber(tail) };
+}
+
+/**
+ * Full loan account number, for the explicit reveal action only. Mirrors
+ * bankAccounts.service: ownership-checked, and the caller audits.
+ */
+export async function revealLoanAccountNumber(userId: string, loanId: string): Promise<string | null> {
+  const loan = await prisma.loan.findFirst({
+    where: { id: loanId, userId },
+    select: { accountNumber: true, accountNumberEnc: true },
+  });
+  if (!loan) throw new NotFoundError(`Loan ${loanId} not found`);
+  return readLoanAccountNumber(loan);
+}
+
 // ── Loan CRUD ────────────────────────────────────────────────────────────────
 
 export async function listLoans(userId: string) {
-  return prisma.loan.findMany({
+  const loans = await prisma.loan.findMany({
     where: { userId },
     include: {
       payments: { orderBy: { paidOn: 'desc' }, take: 5 },
-      vehicle: { select: { id: true, registrationNo: true, make: true, model: true } },
+      vehicle: { select: { id: true, ...PLATE_SELECT, make: true, model: true } },
       rentalProperty: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
+  return loans.map((l) => ({ ...withMaskedAccount(l), vehicle: l.vehicle ? revealVehicle(l.vehicle) : null }));
 }
 
 export async function getLoan(userId: string, loanId: string) {
@@ -530,20 +615,20 @@ export async function getLoan(userId: string, loanId: string) {
     where: { id: loanId, userId },
     include: {
       payments: { orderBy: { paidOn: 'asc' } },
-      vehicle: { select: { id: true, registrationNo: true, make: true, model: true } },
+      vehicle: { select: { id: true, ...PLATE_SELECT, make: true, model: true } },
       rentalProperty: { select: { id: true, name: true } },
     },
   });
   if (!loan) throw new NotFoundError(`Loan ${loanId} not found`);
-  return loan;
+  return { ...withMaskedAccount(loan), vehicle: loan.vehicle ? revealVehicle(loan.vehicle) : null };
 }
 
 export async function createLoan(userId: string, input: CreateLoanInput) {
-  return prisma.loan.create({
+  const loan = await prisma.loan.create({
     data: {
       userId,
       lenderName: input.lenderName,
-      accountNumber: input.accountNumber ?? null,
+      ...(await loanAccountNumberColumns(input.accountNumber)),
       loanType: input.loanType,
       borrowerName: input.borrowerName,
       principalAmount: new Prisma.Decimal(input.principalAmount),
@@ -563,6 +648,7 @@ export async function createLoan(userId: string, input: CreateLoanInput) {
       lenderMatchKey: input.lenderMatchKey ?? null,
     },
   });
+  return withMaskedAccount(loan);
 }
 
 export async function updateLoan(
@@ -573,11 +659,13 @@ export async function updateLoan(
   const existing = await prisma.loan.findFirst({ where: { id: loanId, userId } });
   if (!existing) throw new NotFoundError(`Loan ${loanId} not found`);
 
-  return prisma.loan.update({
+  const loan = await prisma.loan.update({
     where: { id: loanId },
     data: {
       ...(input.lenderName !== undefined && { lenderName: input.lenderName }),
-      ...(input.accountNumber !== undefined && { accountNumber: input.accountNumber }),
+      ...(input.accountNumber !== undefined &&
+        !isMaskedAccountNumber(input.accountNumber) &&
+        (await loanAccountNumberColumns(input.accountNumber))),
       ...(input.loanType !== undefined && { loanType: input.loanType }),
       ...(input.borrowerName !== undefined && { borrowerName: input.borrowerName }),
       ...(input.principalAmount !== undefined && {
@@ -605,6 +693,7 @@ export async function updateLoan(
       ...(input.lenderMatchKey !== undefined && { lenderMatchKey: input.lenderMatchKey }),
     },
   });
+  return withMaskedAccount(loan);
 }
 
 export async function deleteLoan(userId: string, loanId: string) {
@@ -620,8 +709,31 @@ export async function addPayment(
   loanId: string,
   input: AddPaymentInput,
 ) {
-  const loan = await prisma.loan.findFirst({ where: { id: loanId, userId } });
+  const loan = await prisma.loan.findFirst({
+    where: { id: loanId, userId },
+    include: { payments: { orderBy: { paidOn: 'asc' } } },
+  });
   if (!loan) throw new NotFoundError(`Loan ${loanId} not found`);
+
+  // Store the split even when the form left it blank, so every reader of
+  // principalPart / interestPart (dashboard, accounting, tax) sees real parts.
+  let principalPart = input.principalPart ?? null;
+  let interestPart = input.interestPart ?? null;
+  if (!principalPart && !interestPart && (input.paymentType === 'EMI' || input.paymentType === 'PREPAYMENT')) {
+    const split = splitLoanPayment(
+      {
+        paymentType: input.paymentType,
+        paidOn: toDate(input.paidOn),
+        amount: new Prisma.Decimal(input.amount),
+        principalPart: null,
+        interestPart: null,
+        forMonth: input.forMonth ?? null,
+      },
+      buildAmortizationSchedule(loan as unknown as StoredLoan),
+    );
+    principalPart = split.principal.toFixed(2);
+    interestPart = split.interest.toFixed(2);
+  }
 
   return prisma.loanPayment.create({
     data: {
@@ -629,8 +741,8 @@ export async function addPayment(
       paymentType: input.paymentType,
       paidOn: toDate(input.paidOn),
       amount: new Prisma.Decimal(input.amount),
-      principalPart: input.principalPart ? new Prisma.Decimal(input.principalPart) : null,
-      interestPart: input.interestPart ? new Prisma.Decimal(input.interestPart) : null,
+      principalPart: principalPart ? new Prisma.Decimal(principalPart) : null,
+      interestPart: interestPart ? new Prisma.Decimal(interestPart) : null,
       forMonth: input.forMonth ?? null,
       canonicalEventId: input.canonicalEventId ?? null,
       notes: input.notes ?? null,
@@ -652,7 +764,7 @@ export async function deletePayment(userId: string, paymentId: string) {
 // ── Computed views ───────────────────────────────────────────────────────────
 
 export async function getLoanSummary(userId: string, loanId: string): Promise<LoanSummary> {
-  const loan = await getLoan(userId, loanId) as LoanWithPayments;
+  const loan = (await getLoan(userId, loanId)) as unknown as LoanWithPayments;
   return computeLoanSummary(loan as unknown as StoredLoan);
 }
 
@@ -660,7 +772,7 @@ export async function getAmortization(
   userId: string,
   loanId: string,
 ): Promise<AmortizationRow[]> {
-  const loan = await getLoan(userId, loanId) as LoanWithPayments;
+  const loan = (await getLoan(userId, loanId)) as unknown as LoanWithPayments;
   return buildAmortizationSchedule(loan as unknown as StoredLoan);
 }
 

@@ -3,7 +3,7 @@
  * implementation plan Task 1.4, `01-DATA-FOUNDATION.md §2, §6`.
  *
  * Run:
- *   pnpm --filter @portfolioos/api exec tsx scripts/backfill-adjusted-nav.ts
+ *   pnpm --filter @everypaisa/api exec tsx scripts/backfill-adjusted-nav.ts
  *
  * Options (env):
  *   BACKFILL_FUND_BATCH   funds per job invocation (default 200)

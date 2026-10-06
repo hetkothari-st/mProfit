@@ -24,7 +24,7 @@ export const useThemeStore = create<ThemeState>()(
         }),
     }),
     {
-      name: 'portfolioos.theme',
+      name: 'everypaisa.theme',
       onRehydrateStorage: () => (state) => {
         if (state) applyClass(state.dark);
       },

@@ -72,7 +72,7 @@ Also add `sipPlans SipPlan[]` to the `User` model's relation list.
 
 ```bash
 cd portfolioos
-pnpm --filter @portfolioos/api exec prisma migrate dev --name sip_plan
+pnpm --filter @everypaisa/api exec prisma migrate dev --name sip_plan
 ```
 
 Expected output: `The following migration(s) have been created and applied: 20260424_sip_plan`
@@ -80,7 +80,7 @@ Expected output: `The following migration(s) have been created and applied: 2026
 - [ ] **Step 3: Verify migration applied**
 
 ```bash
-pnpm --filter @portfolioos/api exec prisma db pull --print | grep -A 15 "SipPlan"
+pnpm --filter @everypaisa/api exec prisma db pull --print | grep -A 15 "SipPlan"
 ```
 
 Expected: SipPlan table columns listed.
@@ -88,7 +88,7 @@ Expected: SipPlan table columns listed.
 - [ ] **Step 4: Regenerate Prisma client**
 
 ```bash
-pnpm --filter @portfolioos/api exec prisma generate
+pnpm --filter @everypaisa/api exec prisma generate
 ```
 
 Expected: `✔ Generated Prisma Client`
@@ -216,7 +216,7 @@ export * from './mf.js';
 - [ ] **Step 3: Build shared package to verify no type errors**
 
 ```bash
-pnpm --filter @portfolioos/shared run build
+pnpm --filter @everypaisa/shared run build
 ```
 
 Expected: exits 0, no TS errors.
@@ -241,8 +241,8 @@ Create `packages/api/src/services/mfInsights.service.ts` with this first functio
 
 ```typescript
 import { prisma } from '../lib/prisma.js';
-import { serializeMoney, serializeQuantity, toDecimal } from '@portfolioos/shared';
-import type { MfSchemeRow, MfSchemeDetail, MfCapGainsSummary, MfCapGainRow } from '@portfolioos/shared';
+import { serializeMoney, serializeQuantity, toDecimal } from '@everypaisa/shared';
+import type { MfSchemeRow, MfSchemeDetail, MfCapGainsSummary, MfCapGainRow } from '@everypaisa/shared';
 import Decimal from 'decimal.js';
 
 export async function listMfSchemes(userId: string): Promise<MfSchemeRow[]> {
@@ -377,7 +377,7 @@ export async function getMfScheme(userId: string, fundId: string): Promise<MfSch
 Append to the same file:
 
 ```typescript
-import type { TransactionDTO } from '@portfolioos/shared';
+import type { TransactionDTO } from '@everypaisa/shared';
 import { toTransactionDTO } from './transaction.service.js';
 
 export async function getSchemeTransactions(userId: string, fundId: string): Promise<TransactionDTO[]> {
@@ -405,7 +405,7 @@ export async function getSchemeTransactions(userId: string, fundId: string): Pro
 - [ ] **Step 4: TypeCheck the file**
 
 ```bash
-pnpm --filter @portfolioos/api run typecheck 2>&1 | head -40
+pnpm --filter @everypaisa/api run typecheck 2>&1 | head -40
 ```
 
 Fix any type errors (common: `toDecimal` expects `Decimal | string`, Prisma Decimal fields come as `Prisma.Decimal` — pass directly or call `.toString()` first).
@@ -559,7 +559,7 @@ export async function getSchemeCapitalGains(
 Append to the same file:
 
 ```typescript
-import type { NavPoint, ValuePoint } from '@portfolioos/shared';
+import type { NavPoint, ValuePoint } from '@everypaisa/shared';
 
 export async function getNavHistory(fundId: string, days = 365): Promise<NavPoint[]> {
   const since = new Date();
@@ -676,7 +676,7 @@ export async function getSchemeValueHistory(userId: string, fundId: string): Pro
 - [ ] **Step 5: TypeCheck**
 
 ```bash
-pnpm --filter @portfolioos/api run typecheck 2>&1 | head -60
+pnpm --filter @everypaisa/api run typecheck 2>&1 | head -60
 ```
 
 Fix any errors. Common issues:
@@ -702,7 +702,7 @@ git commit -m "feat(mf): mfInsights — XIRR, capital gains, NAV history, value 
 Append to `mfInsights.service.ts`:
 
 ```typescript
-import type { SipInfo, SipDetection, SipPlan as SipPlanDTO } from '@portfolioos/shared';
+import type { SipInfo, SipDetection, SipPlan as SipPlanDTO } from '@everypaisa/shared';
 
 const SIP_BUY_TYPES = new Set(['BUY', 'SIP', 'DEPOSIT']);
 
@@ -792,7 +792,7 @@ export async function detectSips(userId: string, fundId: string): Promise<SipDet
 Append to `mfInsights.service.ts`:
 
 ```typescript
-import type { RegisterSipPayload } from '@portfolioos/shared';
+import type { RegisterSipPayload } from '@everypaisa/shared';
 import { BadRequestError } from '../lib/errors.js';
 
 function serializeSipPlan(p: {
@@ -870,7 +870,7 @@ export async function deleteSipPlan(userId: string, fundId: string, sipId: strin
 - [ ] **Step 3: TypeCheck**
 
 ```bash
-pnpm --filter @portfolioos/api run typecheck 2>&1 | head -40
+pnpm --filter @everypaisa/api run typecheck 2>&1 | head -40
 ```
 
 - [ ] **Step 4: Commit**
@@ -998,8 +998,8 @@ app.use('/api/mf', mfRouter);
 - [ ] **Step 4: TypeCheck and build**
 
 ```bash
-pnpm --filter @portfolioos/api run typecheck 2>&1 | head -40
-pnpm --filter @portfolioos/api run build 2>&1 | tail -20
+pnpm --filter @everypaisa/api run typecheck 2>&1 | head -40
+pnpm --filter @everypaisa/api run build 2>&1 | tail -20
 ```
 
 Fix any errors. Common issue: `getSchemeValueHistory` is imported both as a controller and from mfInsights — rename the controller wrapper to `getSchemeValueHistoryHandler` in controller to avoid clash.
@@ -1010,7 +1010,7 @@ Start the API dev server and hit one endpoint:
 
 ```bash
 # In one terminal:
-pnpm --filter @portfolioos/api run dev
+pnpm --filter @everypaisa/api run dev
 # In another (replace TOKEN with a real JWT from login):
 curl -H "Authorization: Bearer $TOKEN" http://localhost:3001/api/mf/schemes
 ```
@@ -1040,8 +1040,8 @@ import { apiClient } from './client.js';
 import type {
   MfSchemeRow, MfSchemeDetail, NavPoint, ValuePoint,
   SipInfo, SipPlan, MfCapGainsSummary, RegisterSipPayload,
-} from '@portfolioos/shared';
-import type { TransactionDTO } from '@portfolioos/shared';
+} from '@everypaisa/shared';
+import type { TransactionDTO } from '@everypaisa/shared';
 
 export const mutualFundsApi = {
   listSchemes(): Promise<MfSchemeRow[]> {
@@ -1100,7 +1100,7 @@ Adjust the `deleteSip` call in step 1 to match the actual method name.
 - [ ] **Step 3: TypeCheck frontend**
 
 ```bash
-pnpm --filter @portfolioos/web run typecheck 2>&1 | head -40
+pnpm --filter @everypaisa/web run typecheck 2>&1 | head -40
 ```
 
 - [ ] **Step 4: Commit**
@@ -1127,7 +1127,7 @@ import { ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Clock, Loader2 } fro
 import { importsApi } from '../../../api/imports.api.js';
 import { Card, CardContent } from '../../../components/ui/card.js';
 import { Badge } from '../../../components/ui/badge.js';
-import type { ImportJobDTO } from '@portfolioos/shared';
+import type { ImportJobDTO } from '@everypaisa/shared';
 
 const MF_IMPORT_TYPES = new Set(['CAS_PDF', 'NSDL_CAS']);
 const ACTIVE_STATUSES = new Set(['PENDING', 'PROCESSING']);
@@ -1203,7 +1203,7 @@ export function ImportHistoryPanel() {
 - [ ] **Step 2: TypeCheck**
 
 ```bash
-pnpm --filter @portfolioos/web run typecheck 2>&1 | grep ImportHistoryPanel
+pnpm --filter @everypaisa/web run typecheck 2>&1 | grep ImportHistoryPanel
 ```
 
 - [ ] **Step 3: Commit**
@@ -1229,7 +1229,7 @@ grep "recharts" apps/web/package.json
 If not found:
 
 ```bash
-pnpm --filter @portfolioos/web add recharts
+pnpm --filter @everypaisa/web add recharts
 ```
 
 - [ ] **Step 2: Write SchemeCharts.tsx**
@@ -1245,7 +1245,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { Button } from '../../../components/ui/button.js';
 import { Skeleton } from '../../../components/ui/skeleton.js';
 import { mutualFundsApi } from '../../../api/mutualFunds.api.js';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 type NavDays = 90 | 180 | 365 | 1095;
 const NAV_OPTIONS: { label: string; days: NavDays }[] = [
@@ -1370,7 +1370,7 @@ export function SchemeCharts({ fundId }: Props) {
 - [ ] **Step 3: TypeCheck**
 
 ```bash
-pnpm --filter @portfolioos/web run typecheck 2>&1 | grep SchemeCharts
+pnpm --filter @everypaisa/web run typecheck 2>&1 | grep SchemeCharts
 ```
 
 - [ ] **Step 4: Commit**
@@ -1402,7 +1402,7 @@ import { Label } from '../../../components/ui/label.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select.js';
 import { Skeleton } from '../../../components/ui/skeleton.js';
 import { mutualFundsApi } from '../../../api/mutualFunds.api.js';
-import type { RegisterSipPayload } from '@portfolioos/shared';
+import type { RegisterSipPayload } from '@everypaisa/shared';
 
 interface Props {
   fundId: string;
@@ -1547,7 +1547,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Skeleton } from '../../../components/ui/skeleton.js';
 import { Badge } from '../../../components/ui/badge.js';
 import { mutualFundsApi } from '../../../api/mutualFunds.api.js';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 interface Props {
   fundId: string;
@@ -1659,7 +1659,7 @@ export function CapGainsSection({ fundId }: Props) {
 - [ ] **Step 3: TypeCheck both**
 
 ```bash
-pnpm --filter @portfolioos/web run typecheck 2>&1 | grep -E "SipSection|CapGainsSection"
+pnpm --filter @everypaisa/web run typecheck 2>&1 | grep -E "SipSection|CapGainsSection"
 ```
 
 - [ ] **Step 4: Commit**
@@ -1698,8 +1698,8 @@ import { ImportHistoryPanel } from './components/ImportHistoryPanel.js';
 import { mutualFundsApi } from '../../api/mutualFunds.api.js';
 import { importsApi } from '../../api/imports.api.js';
 import { ImportDropzone } from '../imports/ImportDropzone.js';
-import { toDecimal } from '@portfolioos/shared';
-import type { MfSchemeRow } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
+import type { MfSchemeRow } from '@everypaisa/shared';
 
 type SortKey = 'value' | 'pnlPct' | 'name';
 type GroupKey = 'none' | 'amc' | 'category';
@@ -1975,7 +1975,7 @@ export function MutualFundsPage() {
 - [ ] **Step 2: TypeCheck**
 
 ```bash
-pnpm --filter @portfolioos/web run typecheck 2>&1 | head -60
+pnpm --filter @everypaisa/web run typecheck 2>&1 | head -60
 ```
 
 Fix any errors. Common issues:
@@ -2013,7 +2013,7 @@ import { SchemeCharts } from './components/SchemeCharts.js';
 import { SipSection } from './components/SipSection.js';
 import { CapGainsSection } from './components/CapGainsSection.js';
 import { mutualFundsApi } from '../../api/mutualFunds.api.js';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 function MetricCard({ label, value, loading, ariaLabel }: {
   label: string; value: string | null; loading?: boolean; ariaLabel?: string;
@@ -2212,7 +2212,7 @@ Add directly below it:
 - [ ] **Step 3: TypeCheck full frontend**
 
 ```bash
-pnpm --filter @portfolioos/web run typecheck 2>&1 | head -80
+pnpm --filter @everypaisa/web run typecheck 2>&1 | head -80
 ```
 
 Fix errors. Common:
@@ -2222,7 +2222,7 @@ Fix errors. Common:
 - [ ] **Step 4: Build full web app**
 
 ```bash
-pnpm --filter @portfolioos/web run build 2>&1 | tail -20
+pnpm --filter @everypaisa/web run build 2>&1 | tail -20
 ```
 
 Expected: exits 0.
@@ -2230,7 +2230,7 @@ Expected: exits 0.
 - [ ] **Step 5: Start dev server and manually test the golden path**
 
 ```bash
-pnpm --filter @portfolioos/web run dev
+pnpm --filter @everypaisa/web run dev
 ```
 
 Open `http://localhost:5173/mutual-funds`. Verify:
@@ -2274,7 +2274,7 @@ git commit -m "feat(mf): MutualFundDetailPage + App.tsx route — completes MF r
 
 **Type consistency:**
 - `MfSchemeRow` defined in Task 2, used in Tasks 3, 7, 11 ✅
-- `serializeMoney` / `serializeQuantity` from `@portfolioos/shared` used consistently ✅
+- `serializeMoney` / `serializeQuantity` from `@everypaisa/shared` used consistently ✅
 - `toDecimal` used for all Prisma Decimal → Decimal.js conversions ✅
 - `CashFlow` type from xirr.service — note: if not exported, add `export type CashFlow` in Task 4 ✅
 

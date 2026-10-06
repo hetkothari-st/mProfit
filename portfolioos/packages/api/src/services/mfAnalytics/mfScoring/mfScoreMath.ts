@@ -4,7 +4,7 @@
  *
  * **This module is sterile, like `mfMetricsMath.ts` beside it.** No I/O, no
  * Prisma, no clock, no randomness, no sibling-service imports. It imports
- * `@portfolioos/shared` and `decimal.js` and nothing else. The reason is the
+ * `@everypaisa/shared` and `decimal.js` and nothing else. The reason is the
  * one `03 §9` states obliquely: a score row is append-only and is compared
  * against a backtest months later. If reproducing "this fund scored 71.4 on
  * 2026-03-31 under `score-active-equity-v1`" requires standing up a database,
@@ -43,12 +43,12 @@ import {
   toDecimal,
   MIN_RATING_HISTORY_MONTHS,
   MIN_UNIVERSE_SIZE,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import type {
   MfMetricStatus,
   MfRatingStatus,
   MfModelKey,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 // Match `mfMetricsMath.ts`. decimal.js precision is global, not per-call, so
 // setting it here keeps this module reproducible when it is loaded first (a

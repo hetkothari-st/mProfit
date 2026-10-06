@@ -10,7 +10,7 @@ import {
   PROPERTY_STATUSES,
   OWNERSHIP_TYPES,
   MAINTENANCE_FREQUENCIES,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const decimalString = z

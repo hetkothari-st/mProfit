@@ -22,7 +22,7 @@
  * `mfAnalytics.constants.ts` says it does ("which rolling window is tested").
  */
 
-import { toDecimal, type MfEvidence, type MfFinding, type Ratio } from '@portfolioos/shared';
+import { toDecimal, type MfEvidence, type MfFinding, type Ratio } from '@everypaisa/shared';
 import {
   MF_HORIZON_KEYS,
   confidenceFor,

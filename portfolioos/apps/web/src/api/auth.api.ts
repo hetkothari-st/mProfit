@@ -4,11 +4,18 @@ import type {
   AuthTokens,
   LoginRequest,
   RegisterRequest,
+  PendingRegistration,
+  VerifyRegistrationRequest,
   ForgotPasswordRequest,
   ResetPasswordRequest,
   UpdateProfileRequest,
   ApiResponse,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
+
+export interface AccountDeletionStatus {
+  blockers: Array<{ familyId: string; familyName: string; otherMembers: number }>;
+  graceDays: number;
+}
 
 export interface AuthResult {
   user: AuthUser;
@@ -21,15 +28,35 @@ export const authApi = {
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
-  async register(payload: RegisterRequest): Promise<AuthResult> {
-    const { data } = await api.post<ApiResponse<AuthResult>>('/api/auth/register', payload);
+  /** Emails a verification code. The account is created by `verifyRegistration`. */
+  async register(payload: RegisterRequest): Promise<PendingRegistration> {
+    const { data } = await api.post<ApiResponse<PendingRegistration>>(
+      '/api/auth/register',
+      payload,
+    );
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
-  async loginWithGoogle(idToken: string): Promise<AuthResult & { isNew?: boolean }> {
+  async verifyRegistration(payload: VerifyRegistrationRequest): Promise<AuthResult> {
+    const { data } = await api.post<ApiResponse<AuthResult>>(
+      '/api/auth/register/verify',
+      payload,
+    );
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async resendRegistrationCode(email: string): Promise<PendingRegistration> {
+    const { data } = await api.post<ApiResponse<PendingRegistration>>(
+      '/api/auth/register/resend',
+      { email },
+    );
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async loginWithGoogle(idToken: string, restore?: boolean): Promise<AuthResult & { isNew?: boolean }> {
     const { data } = await api.post<ApiResponse<AuthResult & { isNew?: boolean }>>(
       '/api/auth/google',
-      { idToken },
+      restore ? { idToken, restore } : { idToken },
     );
     if (!data.success) throw new Error(data.error);
     return data.data;
@@ -53,6 +80,18 @@ export const authApi = {
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
+  /**
+   * Fetch the caller's full PAN. Separate from the profile on purpose: the
+   * profile is cached and the full value should not be. Rate-limited and
+   * audited server-side.
+   */
+  async revealPan(): Promise<string | null> {
+    const { data } = await api.post<ApiResponse<{ pan: string | null }>>(
+      '/api/auth/pan/reveal',
+    );
+    if (!data.success) throw new Error(data.error);
+    return data.data.pan;
+  },
   async me(): Promise<AuthUser> {
     const { data } = await api.get<ApiResponse<AuthUser>>('/api/auth/me');
     if (!data.success) throw new Error(data.error);
@@ -60,6 +99,26 @@ export const authApi = {
   },
   async updateProfile(payload: UpdateProfileRequest): Promise<AuthUser> {
     const { data } = await api.patch<ApiResponse<AuthUser>>('/api/auth/me', payload);
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  /** What would block deleting the account right now. */
+  async deletionStatus(): Promise<AccountDeletionStatus> {
+    const { data } = await api.get<ApiResponse<AccountDeletionStatus>>('/api/auth/me/deletion');
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async sendDeletionCode(): Promise<{ sentTo: string }> {
+    const { data } = await api.post<ApiResponse<{ sentTo: string }>>('/api/auth/me/deletion/code');
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async requestDeletion(payload: {
+    confirmText: string;
+    password?: string;
+    code?: string;
+  }): Promise<{ scheduledFor: string }> {
+    const { data } = await api.post<ApiResponse<{ scheduledFor: string }>>('/api/auth/me/deletion', payload);
     if (!data.success) throw new Error(data.error);
     return data.data;
   },

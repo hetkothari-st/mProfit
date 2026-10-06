@@ -22,6 +22,11 @@ model User {
   name                  String
   phone                 String?
   pan                   String?
+  /// Encrypted PAN (AES-256-GCM). See migration 20260918100000.
+  panEnc                String?
+  /// Keyed HMAC fingerprint for exact lookups; not reversible.
+  panHash               String?
+  panLast4              String?
   dob                   DateTime?
   // Encrypted JSON array of passwords the user has supplied to unlock
   // PDF/XLSX uploads. Tried automatically on every locked file.
@@ -31,6 +36,33 @@ model User {
   plan                  PlanTier  @default(FREE)
   planExpiresAt         DateTime?
   isActive              Boolean   @default(true)
+  /// A CA-owned client record: a real User row that exists so the client's
+  /// books have an owner, but which can NEVER authenticate. Every auth entry
+  /// point refuses these outright — see auth.service.ts. Deliberately its own
+  /// column rather than an overload of `isActive`, which already means
+  /// "deactivated account" in ~60 places and would silently drag this into
+  /// gates it was never meant to affect.
+  isShadowClient        Boolean   @default(false)
+  /// Set on a MANAGED family profile: someone without an email or login (a
+  /// grandparent, a child) whose finances a family member keeps for them.
+  /// Always paired with `isShadowClient = true`, so every sign-in path refuses
+  /// it. The manager enters it with the `X-Act-As` header, which
+  /// `authenticate` honours only for this user's manager, while both are
+  /// active members of a shared family. Kept on the profile rather than the
+  /// membership so the profile can later be handed over to its own email.
+  managedById           String?
+  managedBy             User?     @relation("ManagedProfiles", fields: [managedById], references: [id])
+  managedProfiles       User[]    @relation("ManagedProfiles")
+  /// Account deletion (30-day grace). While `deletionScheduledFor` is set the
+  /// account cannot sign in without explicitly restoring it, and the purge job
+  /// erases everything once the date passes. See accountDeletion.service.ts.
+  deletionRequestedAt   DateTime?
+  deletionScheduledFor  DateTime?
+  /// Emailed code for confirming deletion when the user has no usable password
+  /// (Google sign-in). HMAC-hashed, expiring, attempt-capped.
+  deletionCodeHash      String?
+  deletionCodeExpiresAt DateTime?
+  deletionCodeAttempts  Int       @default(0)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -54,7 +86,9 @@ model User {
   vehicles            Vehicle[]
   rentalProperties    RentalProperty[]
   insurancePolicies   InsurancePolicy[]
+  insuranceImportDismissals InsuranceImportDismissal[]
   auditLogs           AuditLog[]
+  billingPayments     BillingPayment[]
   healthScoreSnapshot HealthScoreSnapshot?
 
   // Phase 5-A — per-call LLM spend ledger (§8, §16 gate G5). Every
@@ -80,8 +114,10 @@ model User {
   // Generic document vault (rental agreements, vehicle RC scans, insurance
   // policy PDFs, …). Reusable across modules via {ownerType, ownerId}.
   documents Document[]
+  documentBlobs       DocumentBlob[]
 
   loans        Loan[]
+  loansGiven   LoanGiven[]
   creditCards  CreditCard[]
   bankAccounts BankAccount[]
 
@@ -89,6 +125,7 @@ model User {
   // Distinct from RentalProperty (which models the tenancy/receipts side);
   // see §Property docs.
   ownedProperties OwnedProperty[]
+  propertyPhotos  PropertyPhoto[]
 
   // Phase 5-PF — EPF / PPF auto-fetch accounts (§6 EPF/PPF spec).
   pfAccounts      ProvidentFundAccount[]
@@ -139,6 +176,7 @@ model User {
   familyInvitesReceived       FamilyMember[]        @relation("FamilyMemberInvitedBy")
   familyInvitationsSent       FamilyInvitation[]    @relation("FamilyInvitationInviter")
   pendingFamilyInvitesCreated PendingFamilyInvite[] @relation("PendingFamilyInviteCreator")
+  pendingManagedMembers       PendingFamilyInvite[] @relation("PendingFamilyInviteManager")
 
   // AI Assistant — conversational Q&A over the user's portfolio, grouped
   // into ChatGPT-style sessions. History capped at 50 rows per user;
@@ -168,6 +206,16 @@ model User {
   // comparison instead of a join back through MfAnalysisRun. See the MF
   // ANALYTICS — USER-SCOPED section below.
   mfAnalysisRuns MfAnalysisRun[]
+  // CA workspace. `clients` above is the ADVISOR side (rows this user owns as
+  // a CA). These two are the other side: the Client rows where this user IS
+  // the subject, and both ends of the CA audit trail.
+  clientRecords Client[] @relation("ClientSubject")
+
+  // Wrapped per-user data key (lib/userKeys).
+  dataKey UserDataKey?
+
+  @@index([deletionScheduledFor])
+  @@index([managedById])
 }
 
 model UserNotificationConfig {
@@ -290,7 +338,11 @@ enum PlanTier {
 
 model RefreshToken {
   id        String    @id @default(cuid())
-  token     String    @unique
+  /// Legacy plaintext. Never written from 20260918110000 on; cleared and
+  /// dropped by a follow-up migration that needs explicit approval.
+  token     String?   @unique
+  /// SHA-256 of the bearer value. The only thing looked up.
+  tokenHash String    @unique
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
@@ -300,6 +352,8 @@ model RefreshToken {
   @@index([userId])
 }
 
+/// A password reset in progress. `token` holds the HMAC of the 6-digit code
+/// emailed to the user (bound to their address), never the code itself.
 model PasswordResetToken {
   id        String    @id @default(cuid())
   token     String    @unique
@@ -307,27 +361,172 @@ model PasswordResetToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   usedAt    DateTime?
+  /// Wrong codes entered against this reset; locked at 5.
+  attempts  Int       @default(0)
   createdAt DateTime  @default(now())
 
   @@index([userId])
 }
 
+/// A signup waiting on its emailed verification code. The `User` row is not
+/// created until the code is confirmed, so an address nobody has proven they
+/// own never becomes an account. Deliberately no `userId` and no RLS: like
+/// PasswordResetToken it is read before anyone is authenticated, and its
+/// security is the code itself — HMAC-hashed, expiring, attempt-capped.
+model PendingRegistration {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  phone        String?
+  passwordHash String
+  role         UserRole @default(INVESTOR)
+  codeHash     String
+  attempts     Int      @default(0)
+  expiresAt    DateTime
+  lastSentAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+}
+
 // ─── CLIENTS (for Advisor/CA role) ──────────────────────────────
 
+/// A CA's client, in both directions the product supports.
+///
+/// SHADOW  — the CA created this record for someone with no login. A shadow
+///           `User` is provisioned immediately and `userId` points at it, so
+///           the client's books have a real owner and every per-userId table,
+///           RLS policy and report builder in the app works on them unchanged.
+/// INVITED — a real, independently-logging-in user consented to the CA. The
+///           row is PENDING with no `userId` until they accept.
+///
+/// There are deliberately NO visibility-cap columns here. A CA grant is
+/// all-or-nothing, and the absence of a field to widen is what enforces that
+/// — there is nothing for a CA to escalate into.
 model Client {
   id        String   @id @default(cuid())
-  advisorId String
-  advisor   User     @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+  /// Null while a CLIENT-initiated invitation is still open: the account
+  /// holder has named an email, and nobody has accepted it yet. Every CA
+  /// policy keys off `advisorId = app_current_user_id()`, and null matches
+  /// nobody, so an unaccepted invitation grants nothing to anyone.
+  advisorId String?
+  advisor   User?    @relation(fields: [advisorId], references: [id], onDelete: Cascade)
   name      String
   email     String?
   pan       String?
+  panEnc    String?
+  panHash   String?
+  panLast4  String?
   phone     String?
   category  String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  portfolios Portfolio[]
+  /// The User whose books this record grants access to. Null only while an
+  /// INVITED grant is still PENDING — there is no data to reach before the
+  /// invitee accepts, so nothing needs backfilling on acceptance.
+  userId     String?
+  clientUser User?   @relation("ClientSubject", fields: [userId], references: [id], onDelete: SetNull)
 
-  @@index([advisorId])
+  kind   ClientKind   @default(SHADOW)
+  status ClientStatus @default(PENDING)
+
+  /// Who asked. CLIENT is the ordinary path — an account holder inviting
+  /// their accountant — and is free for the professional who accepts.
+  /// ADVISOR is a practice onboarding its own client, which is a paid
+  /// feature. The distinction decides the gate, the wording of the email and
+  /// which side may reinstate a revoked grant, so it is recorded rather than
+  /// inferred from whether `advisorId` happened to be set first.
+  initiatedBy ClientInitiator @default(ADVISOR)
+
+  // Consent flow (INVITED only). Shaped like FamilyInvitation's token/expiry
+  // rather than a second table: there is at most one pending invite per row,
+  // no multi-invitee choice and no seat billing.
+  invitedEmail    String?
+  inviteToken     String?   @unique
+  inviteExpiresAt DateTime?
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  /// Who ended it — the client or the CA. Both can, and the audit trail must
+  /// not be ambiguous about which.
+  revokedByUserId String?
+
+  /// DPDP lawful-basis capture for SHADOW records, where the subject is a real
+  /// person who never agreed to anything in this product. The platform cannot
+  /// verify this; recording it puts the CA's basis on the record instead of
+  /// leaving the obligation with nobody.
+  consentBasis CaConsentBasis?
+  consentNote  String?
+
+  /// The window the grant is usable in. Null on either side means unbounded
+  /// there. Enforced inside `app_is_active_ca_for`, so an expired grant stops
+  /// reading at the database rather than relying on every caller to check.
+  accessFrom  DateTime?
+  accessUntil DateTime?
+
+  /// What the grant covers. `scopeAll*` true — the default, and what every
+  /// grant made before this existed keeps — means unrestricted. False makes
+  /// the matching list an allowlist, and an empty list then denies everything:
+  /// the same contract as `FamilyMember.visibleAssetClasses`, chosen so the
+  /// two cannot be read as meaning opposite things.
+  /// What they may CHANGE, as opposed to see. All false for a new grant: a
+  /// professional reads until the account holder decides otherwise. Grants
+  /// that existed before this was added were backfilled to true, because that
+  /// is what they already had.
+  canEditBooks        Boolean @default(false)
+  canEditTransactions Boolean @default(false)
+  canEditImports      Boolean @default(false)
+  canEditFmv          Boolean @default(false)
+
+  scopeAllPortfolios   Boolean      @default(true)
+  scopeAllAssetClasses Boolean      @default(true)
+  scopeAllCategories   Boolean      @default(true)
+  visibleAssetClasses  AssetClass[]
+  visibleCategories    String[]
+
+  portfolios      Portfolio[]
+  portfolioScopes ClientPortfolioScope[]
+
+  @@index([advisorId, status])
+  @@index([userId, status])
+}
+
+/// One portfolio a CA grant is allowed to reach, when the grant is not set to
+/// cover all of them. Rows only ever narrow: with `scopeAllPortfolios` true
+/// they are ignored entirely.
+model ClientPortfolioScope {
+  id          String    @id @default(cuid())
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([clientId, portfolioId])
+  @@index([portfolioId])
+}
+
+enum ClientKind {
+  /// Books kept for someone with no login. No longer creatable — existing
+  /// rows stay readable so a practice does not lose work already done.
+  SHADOW
+  INVITED
+}
+
+enum ClientInitiator {
+  ADVISOR
+  CLIENT
+}
+
+enum ClientStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
+enum CaConsentBasis {
+  ENGAGEMENT_LETTER
+  WRITTEN_CONSENT
+  EXISTING_CLIENT_RELATIONSHIP
+  OTHER
 }
 
 // ─── PORTFOLIOS & GROUPS ─────────────────────────────────────────
@@ -343,6 +542,9 @@ model Portfolio {
   family      Family?       @relation(fields: [familyId], references: [id])
   clientId    String?
   client      Client?       @relation(fields: [clientId], references: [id])
+  /// Grants that have been narrowed to include this portfolio. Unrelated to
+  /// `clientId`, which records the engagement a portfolio was created under.
+  caScopes    ClientPortfolioScope[]
   name        String
   description String?
   type        PortfolioType @default(INVESTMENT)
@@ -455,12 +657,39 @@ enum Exchange {
 model MutualFundMaster {
   id          String     @id @default(cuid())
   schemeCode  String     @unique
+  /// AMFI's base scheme name, without the plan/option suffix — since the 2026
+  /// NAVAll format carries Plan and Option as their own columns. This is the
+  /// key AMFI's TER file joins on, because that file carries neither an AMFI
+  /// scheme code nor an ISIN.
   schemeName  String
   amcName     String
   category    MFCategory
   subCategory String?
   isin        String?
   isActive    Boolean    @default(true)
+  /// "Direct Plan" / "Regular Plan" as published, rather than guessed from the
+  /// scheme name. Null for rows loaded before the 8-column NAVAll format.
+  planType    String?
+  /// "Growth Option" / "IDCW ..." as published.
+  optionType  String?
+  /// Direct-plan total expense ratio, in percent, from AMFI's published TER
+  /// file. Null means we do not have it — never zero, which would rank an
+  /// unknown fund as the cheapest in its bucket.
+  terPct      Decimal?   @db.Decimal(8, 4)
+  terAsOf     DateTime?  @db.Date
+  /// How the last TER refresh resolved this scheme: MATCHED, UNMATCHED or
+  /// AMBIGUOUS. The TER file has no scheme code and no ISIN, so the join is
+  /// made on (AMC, scheme name) and can legitimately fail; recording HOW it
+  /// failed is what lets the ranking report a `ter_unmatched` gap instead of
+  /// a bare "no TER", which would read the same whether the file omitted the
+  /// scheme or the name turned out not to identify one. Set for the
+  /// direct-growth population only � nothing else is joined.
+  terJoinStatus String?
+  /// Average AUM in rupees, from AMFI's scheme-wise AAUM data (published in
+  /// lakh; converted on ingest so the column is in the same unit as money
+  /// everywhere else).
+  aumInr      Decimal?   @db.Decimal(20, 4)
+  aumAsOf     DateTime?  @db.Date
   updatedAt   DateTime   @updatedAt
 
   holdings                Holding[]
@@ -506,6 +735,11 @@ model MFNav {
   date   DateTime         @db.Date
   /// The NAV as published by AMFI. Display uses this; return math does NOT.
   nav    Decimal          @db.Decimal(18, 4)
+  /// Which historical backfill inserted this row, so a reversal is an exact
+  /// delete by batch rather than a date range that would also take the
+  /// nightly sync's rows. Null on everything the nightly sync wrote, and on
+  /// any row the backfill found already present.
+  backfillBatchId String?
 
   /// NAV with IDCW distributions reinvested. For a GROWTH option this equals
   /// `nav`; for an IDCW option it is the series that would have resulted had
@@ -533,6 +767,7 @@ model MFNav {
 
   @@unique([fundId, date])
   @@index([fundId])
+  @@index([backfillBatchId])
 }
 
 // ─── CORPORATE ACTIONS ───────────────────────────────────────────
@@ -1072,6 +1307,9 @@ model ImportJob {
   successRows    Int?
   failedRows     Int?
   errorLog       Json?
+  /// Set when a CA with an asset-class-limited grant uploaded the file: the
+  /// classes the job may write (JSON array). Null = not limited.
+  caAllowedAssetClasses Json?
   // Phase C: content-hash dedup. SHA-256 of file bytes — replaces the
   // filename-only check that silently dropped same-named PDFs from
   // different emails (e.g. `Contract Note.pdf` daily).
@@ -1260,6 +1498,7 @@ enum AlertType {
   MF_LOCK_IN_EXPIRY
   SIP_DUE
   INSURANCE_PREMIUM
+  INSURANCE_CLAIM
   DIVIDEND_RECEIVED
   CORPORATE_ACTION
   PRICE_TARGET
@@ -1267,6 +1506,7 @@ enum AlertType {
   FO_EXPIRY_SOON
   FO_MARGIN_CALL
   LOAN_EMI_DUE
+  LOAN_GIVEN_DUE
   CREDIT_CARD_DUE
   PROPERTY_TAX_DUE
   PROPERTY_POSSESSION_DUE
@@ -1458,6 +1698,51 @@ enum InstitutionKind {
 // Parse failures never crash the job (§3.5, BUG-006). Raw payload is
 // redacted per §15.9 before being stored here.
 
+/// One run of one market data feed, and whether it looked sane.
+///
+/// Market-level reference data like StockMaster and MFNav: it describes a feed,
+/// not a user's money, so no RLS policy and no USER_SCOPED_MODELS entry
+/// (CONTEXT.md §5).
+///
+/// It exists because `IngestionFailure` — the DLQ every other failure goes to —
+/// is user-scoped and REQUIRES a userId. A market feed has no user, so a feed
+/// failure has nowhere to go there. This is the same contract in the same
+/// spirit: recorded, never swallowed, and queryable afterwards.
+///
+/// It also carries the baseline the proportionality canary compares against:
+/// "20% fewer rows than last time" needs a last time.
+model FeedRunLog {
+  id         String   @id @default(cuid())
+  /// FEED | SCORING. One table because both answer the same question — did a
+  /// scheduled run produce what it should have — and splitting them meant two
+  /// tables, two Sentry helpers and an ops page that only knew about one.
+  kind       String   @default("FEED")
+  /// The subject: a feed key like "amfi_nav", or "fund_scoring" for a
+  /// scoring run.
+  feed       String
+  /// Which check reported, e.g. "canary" or "calendar_integrity". Null on
+  /// rows written before the checks were named.
+  check      String?
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  /// OK | FAILED | SKIPPED | REFUSED. FAILED covers a thrown error and a
+  /// canary trip; REFUSED is a run that declined to write on purpose.
+  status     String
+  rowsParsed   Int?
+  rowsImported Int?
+  parseFailures Int?
+  /// Imported rows on the previous OK run, for the drop check.
+  previousImported Int?
+  /// Why it failed, in one human sentence.
+  reason     String?
+  details    Json?
+
+  @@index([feed, startedAt])
+  @@index([feed, status, startedAt])
+  /// The ops page reads failures newest-first across both kinds.
+  @@index([kind, status, startedAt])
+}
+
 model IngestionFailure {
   id             String    @id @default(cuid())
   userId         String
@@ -1518,7 +1803,12 @@ model Vehicle {
   userId             String
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   portfolioId        String?
-  registrationNo     String
+  // Legacy plaintext; null once encrypted. Read via piiAtRest.plateOf.
+  registrationNo     String?
+  /// Encrypted registration (AES-256-GCM). See migration 20260918100000.
+  registrationNoEnc   String?
+  registrationNoHash  String?
+  registrationNoLast4 String?
   make               String?
   model              String?
   variant            String?
@@ -1545,6 +1835,7 @@ model Vehicle {
   seatingCapacity    Int?
   unloadedWeight     Int? // kg
   engineNo           String?
+  engineNoEnc        String?
   hypothecation      String? // financier name or "NONE"
   registrationDate   DateTime? @db.Date
   // ── Stock photo (make+model lookup) ──
@@ -1561,6 +1852,7 @@ model Vehicle {
   loans             Loan[]
 
   @@unique([userId, registrationNo])
+  @@unique([userId, registrationNoHash])
   @@index([userId, insuranceExpiry])
   @@index([userId, pucExpiry])
 }
@@ -1706,10 +1998,19 @@ model RentalProperty {
   paymentInstructions String?   @db.Text
   createdAt           DateTime  @default(now())
 
+  // Map pin — see services/propertyLocation.service. Looked up once per
+  // address (OpenStreetMap Nominatim) or placed by hand ("manual").
+  latitude        Float?
+  longitude       Float?
+  locationSource  String? // geocoded | approximate | manual
+  geocodedAddress String? // the address the pin was looked up from
+  geocodedAt      DateTime?
+
   tenancies       Tenancy[]
   expenses        PropertyExpense[]
   loans           Loan[]
   ownedProperties OwnedProperty[]
+  photos          PropertyPhoto[]
 }
 
 model Tenancy {
@@ -1720,8 +2021,11 @@ model Tenancy {
   // Legacy single-line contact (free text). Retained for back-compat with
   // tenancies created before tenantEmail/tenantPhone were split out.
   tenantContact   String?
+  tenantContactEnc String?
   tenantEmail     String?
+  tenantEmailEnc  String?
   tenantPhone     String?
+  tenantPhoneEnc  String?
   startDate       DateTime       @db.Date
   endDate         DateTime?      @db.Date
   monthlyRent     Decimal        @db.Decimal(12, 2)
@@ -1731,10 +2035,25 @@ model Tenancy {
   notes           String?
   createdAt       DateTime       @default(now())
 
-  rentReceipts RentReceipt[]
-  reminders    RentReminder[]
+  // Where this tenant's rent lands. Set on the tenancy so every payment,
+  // reminder and Tally receipt knows the account without asking again; null
+  // means the money is not tracked against an account, and rent then books to
+  // the suspense ledger on export exactly as it did before.
+  bankAccountId String?
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+
+  // Derived by rentalLedger.service.recomputeTenancyLedger — never hand-edited.
+  // Positive means the tenant owes; negative means they are in advance.
+  balanceDue        Decimal   @db.Decimal(12, 2) @default(0)
+  depositHeld       Decimal   @db.Decimal(12, 2) @default(0)
+  balanceComputedAt DateTime?
+
+  rentReceipts  RentReceipt[]
+  reminders     RentReminder[]
+  ledgerEntries RentLedgerEntry[]
 
   @@index([propertyId, isActive])
+  @@index([bankAccountId])
 }
 
 model RentReceipt {
@@ -1751,10 +2070,43 @@ model RentReceipt {
   notes                  String?
   autoMatchedFromEventId String?
 
+  // User intent to skip this month (moved out of `status`, which is now
+  // derived from the ledger). `status` renders SKIPPED when this is true.
+  isSkipped Boolean @default(false)
+
   reminders RentReminder[]
 
   @@unique([tenancyId, forMonth])
   @@index([dueDate, status])
+}
+
+// Khatabook-style ledger row for a tenancy. Everything except the monthly
+// rent charge lives here; the rent charge stays in RentReceipt. Payments
+// allocate to charges (pinned month first, then FIFO) inside
+// rentalLedger.service.recomputeTenancyLedger — there is no allocation table.
+model RentLedgerEntry {
+  id        String  @id @default(cuid())
+  tenancyId String
+  tenancy   Tenancy @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
+
+  // PAYMENT | DISCOUNT | LATE_FEE | OTHER_CHARGE | DEPOSIT | DEPOSIT_REFUND
+  entryType     String
+  amount        Decimal  @db.Decimal(12, 2)
+  entryDate     DateTime @db.Date
+  // "YYYY-MM" pin. Null means allocate FIFO to the oldest open charge.
+  forMonth      String?
+  note          String?
+  attachmentUrl String?
+
+  cashFlowId       String?
+  canonicalEventId String?
+  sourceHash       String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenancyId, entryDate])
+  @@index([tenancyId, forMonth])
 }
 
 // Tenant rent reminder queue. The cron creates one row per (receipt,
@@ -1822,7 +2174,15 @@ model InsurancePolicy {
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   portfolioId        String?
   insurer            String
-  policyNumber       String
+  // Legacy plaintext — no longer written or read. Kept until every row is
+  // encrypted into policyNumberEnc, then dropped in a later migration.
+  policyNumber       String?
+  // AES-256-GCM via pfCredentials.encryptIdentifier; never serialized.
+  policyNumberEnc    String?
+  // HMAC fingerprint of the normalised number, for duplicate checks and
+  // premium-email matching without decrypting anything.
+  policyNumberHash   String?
+  policyNumberLast4  String?
   type               String
   planName           String?
   policyHolder       String
@@ -1836,14 +2196,33 @@ model InsurancePolicy {
   vehicleId          String?
   vehicle            Vehicle?  @relation("VehicleInsurance", fields: [vehicleId], references: [id])
   healthCoverDetails Json?
+  // Helpline, claim email, TPA, agent — shape in insurance.service (PolicyContacts).
+  contacts            Json?
+  // Days to pay a missed premium; null = the IRDAI default for the type.
+  gracePeriodDays     Int?
+  // Premiums due before this date aren't tracked here (treated as settled).
+  premiumsTrackedFrom DateTime? @db.Date
+  // Health premiums under section 126 (Income-tax Act, 2025): who the cover
+  // is for — SELF_FAMILY (you, spouse, dependent children) or PARENTS — and
+  // whether the insured is a senior citizen (raises the limit).
+  taxBucket           String?
+  seniorCitizen       Boolean?
+  // Surrender value as quoted by the insurer, entered by the user.
+  surrenderValue      Decimal?  @db.Decimal(14, 2)
+  surrenderValueAsOf  DateTime? @db.Date
+  // Critical illness cover (rider or benefit): null = not recorded.
+  criticalIllnessCover      Boolean?
+  criticalIllnessSumAssured Decimal?  @db.Decimal(14, 2)
   status             String    @default("ACTIVE")
   createdAt          DateTime  @default(now())
 
-  premiumHistory  PremiumPayment[]
-  claims          InsuranceClaim[]
-  ownedProperties OwnedProperty[]
+  premiumHistory   PremiumPayment[]
+  claims           InsuranceClaim[]
+  ownedProperties  OwnedProperty[]
+  importDismissals InsuranceImportDismissal[]
 
   @@unique([userId, insurer, policyNumber])
+  @@unique([userId, insurer, policyNumberHash])
   @@index([userId, nextPremiumDue])
 }
 
@@ -1856,6 +2235,24 @@ model PremiumPayment {
   periodFrom       DateTime        @db.Date
   periodTo         DateTime        @db.Date
   canonicalEventId String?
+  // The imported Transaction (insurance statement) this payment came from —
+  // unique, so a statement premium is linked at most once.
+  sourceTransactionId String? @unique
+}
+
+// An imported premium the user said is "not this policy", so it isn't
+// suggested for it again.
+model InsuranceImportDismissal {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  policyId      String
+  policy        InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  transactionId String
+  createdAt     DateTime        @default(now())
+
+  @@unique([policyId, transactionId])
+  @@index([userId])
 }
 
 model InsuranceClaim {
@@ -1870,9 +2267,45 @@ model InsuranceClaim {
   status        String
   settledOn     DateTime?       @db.Date
   documents     Json?
+
+  // ── Claim tracker (insurance hub phase 2) ──
+  // Which claims guide this follows (shared CLAIM_GUIDES id), e.g. HEALTH_CASHLESS.
+  kind                 String?
+  // The day the insurer had every document it asked for — IRDAI time limits
+  // for some claims run from here.
+  documentsCompletedOn DateTime? @db.Date
+  // General insurance: when a surveyor was appointed (report due 15 days on).
+  surveyorAllocatedOn  DateTime? @db.Date
+  // Guide document ids the user has ticked off: { "<docId>": true }.
+  checklist            Json?
+  // The user's own log of calls and letters: [{ on: "YYYY-MM-DD", note }].
+  timeline             Json?
+  rejectionReason      String?
+  // Escalation: the insurer's grievance cell, then the Insurance Ombudsman.
+  grievanceFiledOn     DateTime? @db.Date
+  grievanceRef         String?
+  ombudsmanFiledOn     DateTime? @db.Date
+  ombudsmanRef         String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @default(now()) @updatedAt
 }
 
 // ─── §4.9 AUDIT LOG + APP SETTINGS ───────────────────────────────
+
+/// One row per Razorpay payment that activated a plan. The unique payment id
+/// is what stops a verified payment from being replayed to renew a plan again.
+model BillingPayment {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razorpayOrderId   String
+  razorpayPaymentId String   @unique
+  tier              PlanTier
+  billingCycle      String
+  createdAt         DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
 
 model AuditLog {
   id        String   @id @default(cuid())
@@ -2330,6 +2763,23 @@ model Document {
   @@index([userId, createdAt])
 }
 
+/// The bytes of a vault document, keyed by Document.storageKey. Kept out of
+/// Document so listing a vault never loads file contents. Lived on the API
+/// container's disk until 2026-10, which every deploy wiped.
+model DocumentBlob {
+  storageKey String   @id
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data       Bytes
+  /// True when `data` is sealed with the owner's data key (lib/userKeys).
+  /// Legacy rows are plaintext until the boot backfill reaches them.
+  keyed      Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+}
+
 enum DocumentOwnerType {
   RENTAL_PROPERTY
   TENANCY
@@ -2337,10 +2787,70 @@ enum DocumentOwnerType {
   INSURANCE_POLICY
   PORTFOLIO
   OWNED_PROPERTY
+  LOAN_GIVEN
   OTHER
 }
 
 // ─── LOANS ────────────────────────────────────────────────────────
+
+/// Money the user has lent to someone else — a receivable, the mirror image
+/// of Loan (which is money owed). Kept separate from Loan on purpose: every
+/// reader of Loan (dashboard liabilities, cash-flow forecast, family view,
+/// reports, Tally export) treats a row as debt.
+///
+/// FLEXIBLE: repaid whenever, optional simple interest, optional due date.
+/// EMI: fixed instalments (emiAmount × tenureMonths from firstEmiDate).
+model LoanGiven {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  borrowerName    String
+  borrowerContact String?
+  relationship    String? // FRIEND | FAMILY | COLLEAGUE | BUSINESS | OTHER
+
+  principalAmount Decimal  @db.Decimal(14, 2)
+  lentOn          DateTime @db.Date
+  /// Annual simple interest %, 0 for interest-free.
+  interestRate    Decimal  @default(0) @db.Decimal(6, 4)
+  dueDate         DateTime? @db.Date
+
+  repaymentMode String    @default("FLEXIBLE") // FLEXIBLE | EMI
+  emiAmount     Decimal?  @db.Decimal(12, 2)
+  tenureMonths  Int?
+  firstEmiDate  DateTime? @db.Date
+
+  status    String    @default("ACTIVE") // ACTIVE | SETTLED | WRITTEN_OFF
+  closedOn  DateTime? @db.Date
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries LoanGivenEntry[]
+
+  @@index([userId, status])
+}
+
+/// One movement on a LoanGiven. No userId: reached only through its loan,
+/// whose ownership the service checks (same shape as LoanPayment).
+model LoanGivenEntry {
+  id     String    @id @default(cuid())
+  loanId String
+  loan   LoanGiven @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  /// REPAYMENT (principal back) | INTEREST_RECEIVED | ADDITIONAL_LENT | WAIVER (forgiven)
+  kind   String
+  amount Decimal  @db.Decimal(14, 2)
+  date   DateTime @db.Date
+  notes  String?
+  /// EMI loans: the instalment (1-based) this payment or waiver was marked against.
+  /// Null = not tied to one; counts toward the schedule oldest instalment first.
+  installmentNo Int?
+  createdAt DateTime @default(now())
+
+  @@index([loanId, date])
+  @@index([loanId, installmentNo])
+}
 
 model Loan {
   id          String  @id @default(cuid())
@@ -2349,7 +2859,12 @@ model Loan {
   portfolioId String?
 
   lenderName    String
-  accountNumber String?
+  // Legacy plaintext; no longer written when APP_ENCRYPTION_KEY is set and
+  // cleared by the PII backfill under PII_BACKFILL_CLEAR_PLAINTEXT=true.
+  accountNumber      String?
+  // AES-256-GCM via pfCredentials.encryptIdentifier; never serialized.
+  accountNumberEnc   String?
+  accountNumberLast4 String?
   loanType      String // HOME | CAR | PERSONAL | EDUCATION | BUSINESS | GOLD | LAS | OTHER
   borrowerName  String
 
@@ -2409,6 +2924,10 @@ model CreditCard {
   issuerBank         String
   cardName           String
   last4              String
+  // Full card number — AES-256-GCM via pfCredentials.encryptIdentifier
+  // (APP_ENCRYPTION_KEY). Never serialized; plaintext only via the audited
+  // POST /api/credit-cards/:id/reveal. CVV and expiry are never stored.
+  cardNumberEnc      String?
   network            String?
   creditLimit        Decimal  @db.Decimal(12, 2)
   outstandingBalance Decimal? @db.Decimal(12, 2)
@@ -2460,15 +2979,24 @@ model BankAccount {
   portfolioId String?
   portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
 
-  // Core identity — last 4 digits only; no full-PAN/account-no storage.
+  // Core identity. `last4` drives display and auto-attribution; the optional
+  // full number lives encrypted in `accountNumberEnc` below.
   bankName      String // "HDFC Bank"
   accountType   String // SAVINGS | CURRENT | SALARY | NRE | NRO | OD
   accountHolder String
   last4         String // last 4 digits of the account number
   customerId    String? // bank-issued customer identification number (CIF / CustID)
+  // Encrypted CIF (AES-256-GCM); `customerId` is legacy plaintext, read via piiAtRest.openText.
+  customerIdEnc String?
   ifsc          String?
   branch        String?
+  branchAddress String? // auto-filled from IFSC (ifscLookup.service), user-editable
   nickname      String? // user-given label e.g. "Primary salary"
+
+  // Full account number — AES-256-GCM via pfCredentials.encryptIdentifier
+  // (APP_ENCRYPTION_KEY). Never serialized; plaintext only via the audited
+  // POST /api/bank-accounts/:id/reveal.
+  accountNumberEnc String?
 
   // Joint holder / nominee
   jointHolders    String[] @default([])
@@ -2493,6 +3021,7 @@ model BankAccount {
 
   snapshots BankBalanceSnapshot[]
   cashFlows CashFlow[]
+  tenancies Tenancy[]
 
   @@unique([userId, bankName, last4])
   @@index([userId, status])
@@ -2608,12 +3137,49 @@ model OwnedProperty {
   notes    String?
   isActive Boolean @default(true)
 
+  // Map pin — see services/propertyLocation.service.
+  latitude        Float?
+  longitude       Float?
+  locationSource  String? // geocoded | approximate | manual
+  geocodedAddress String?
+  geocodedAt      DateTime?
+
+  photos PropertyPhoto[]
+
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([userId, status])
   @@index([userId, propertyTaxDueMonth])
   @@index([userId, expectedPossessionDate])
+}
+
+// Photos of a property (Real Estate or Rentals), stored in the database — no
+// file storage. The browser uploads a ~1600px image and a ~480px thumbnail;
+// services/propertyPhotos.service verifies both are real images and caps size
+// and count. Exactly one owner (CHECK constraint in the migration).
+model PropertyPhoto {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ownedPropertyId  String?
+  ownedProperty    OwnedProperty?  @relation(fields: [ownedPropertyId], references: [id], onDelete: Cascade)
+  rentalPropertyId String?
+  rentalProperty   RentalProperty? @relation(fields: [rentalPropertyId], references: [id], onDelete: Cascade)
+
+  mimeType      String
+  data          Bytes
+  thumbMimeType String
+  thumb         Bytes
+  width         Int
+  height        Int
+  sizeBytes     Int
+  caption       String?
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@index([userId, ownedPropertyId, sortOrder])
+  @@index([userId, rentalPropertyId, sortOrder])
 }
 
 // ─── §6 PROVIDENT FUND AUTO-FETCH ──────────────────────────────────────────
@@ -3054,6 +3620,18 @@ model FamilyMember {
 
   invitedById String?
   invitedBy   User?    @relation("FamilyMemberInvitedBy", fields: [invitedById], references: [id])
+  /// Where to reach a member who has no login: noted when they are added,
+  /// used to pre-fill the hand-over invitation later. Deliberately NOT the
+  /// `User.email`, which stays an unroutable placeholder — a real address on
+  /// a profile nobody can sign into would take that address away from the
+  /// person if they ever registered themselves.
+  contactEmail String?
+  /// How this person is related to `relatedToId` ("Father" of Akshay).
+  /// Shown on the tree; free text because families name themselves.
+  relation    String?
+  /// The member `relation` is measured against. Not a foreign key: a
+  /// relation outlives the person leaving, and the label just drops the name.
+  relatedToId String?
   joinedAt    DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -3071,6 +3649,15 @@ model FamilyInvitation {
   role                FamilyRole   @default(CONTRIBUTOR)
   visibleAssetClasses AssetClass[] @default([])
   visibleCategories   String[]     @default([])
+  /// Carried onto the membership, and used to place them on the tree, when
+  /// the invitation is accepted.
+  relation            String?
+  relatedToId         String?
+  /// Set when this invitation hands a MANAGED profile to the person it
+  /// belongs to: accepting turns that profile into their own account —
+  /// their email, their password — rather than creating a second one.
+  /// Their history, holdings and place in the family stay as they are.
+  claimForUserId      String?
   invitedById         String
   invitedBy           User         @relation("FamilyInvitationInviter", fields: [invitedById], references: [id])
 
@@ -3099,8 +3686,16 @@ model PendingFamilyInvite {
   id                  String       @id @default(cuid())
   familyId            String
   family              Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  invitedEmail        String
+  /// INVITE: an email invitation waiting on its seat payment.
+  /// MANAGED: a managed profile (no email) waiting on its seat payment —
+  /// `invitedEmail` is then null and `managedById` names its manager.
+  kind                String       @default("INVITE")
+  invitedEmail        String?
   invitedName         String?
+  relation            String?
+  relatedToId         String?
+  managedById         String?
+  managedBy           User?        @relation("PendingFamilyInviteManager", fields: [managedById], references: [id])
   role                FamilyRole   @default(CONTRIBUTOR)
   visibleAssetClasses AssetClass[] @default([])
   visibleCategories   String[]     @default([])
@@ -3250,6 +3845,23 @@ model NetWorthSnapshot {
   // Snapshot of getDashboardNetWorth().allocationBreakdown at asOf — lets a
   // future stacked-by-asset-class chart render without widening this schema.
   breakdownJson            Json
+  // Whether this snapshot was computed from complete price data.
+  //
+  // "OK" means the prices behind it were current. "ESTIMATED" means they were
+  // not: the AMFI NAV sync imported zero rows for a stretch in 2026, so
+  // mutual-fund holdings were carried at stale NAVs and the total is a figure
+  // of unknown accuracy.
+  //
+  // These rows are NEVER recomputed in place. getDashboardNetWorth() reads
+  // live HoldingProjection and takes no asOf, so "recomputing" a past date
+  // would stamp today's prices onto last month and destroy the only record of
+  // what the user was actually shown. The flag is the honest alternative:
+  // keep the number, say what it is worth.
+  dataQuality              String    @default("OK")
+  // Plain-English reason, shown to the user. Null when dataQuality is OK.
+  dataQualityReason        String?
+  // When the flag was applied, so a backfill run can be audited.
+  dataQualityAt            DateTime?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -3271,9 +3883,9 @@ model SystemFmvSeed {
 //
 // The system acts as the investor's adviser: deterministic TypeScript rules
 // compute every number (trigger, trade size, priority); an optional LLM layer
-// only narrates figures the rules already decided. Prescriptive output lives
-// here and ONLY here — analytics.insights.ts and ai/systemPrompt.ts stay
-// descriptive-only and must not be loosened to match (see advisorSystemPrompt.ts).
+// only narrates figures the rules already decided. analytics.insights.ts stays
+// descriptive-only; the in-app assistant (ai/systemPrompt.ts) advises within
+// its own guard rails (see advisorSystemPrompt.ts, point 3).
 //
 // Everything below is user-owned: each model is listed in USER_SCOPED_MODELS
 // (src/lib/prisma.ts) AND carries an RLS policy in the advisor_engine migration.
@@ -3404,6 +4016,59 @@ enum AdvisorRunTrigger {
 /// One row per engine execution. Exists so that "why did no rule flag X" is as
 /// answerable as "why was Y recommended": ruleVersionsSnapshot records every
 /// rule that ran, including the ones that emitted nothing.
+/// The fund-ranking methodology, versioned and signed off by a person.
+///
+/// Firm-level reference data, like StockMaster or MFNav: it describes the
+/// market and the firm's method, not any one user's money, so it carries no
+/// userId, no RLS policy and no USER_SCOPED_MODELS entry. Every threshold and
+/// weight lives in `config` rather than in code so that "why was this fund
+/// picked in March?" is answered by reading the row that was in force, not by
+/// reading a git history of constants.
+///
+/// A row with signedOffAt null must never be used for advice.
+model RankingMethodologyVersion {
+  id          String   @id @default(cuid())
+  version     Int      @unique
+  /// Thresholds, weights, hysteresis parameters, category→bucket map.
+  config      Json
+  description String   @db.Text
+  signedOffBy String?
+  signedOffAt DateTime?
+  createdAt   DateTime @default(now())
+
+  snapshots       FundScoreSnapshot[]
+  recommendations AdvisorRecommendation[]
+}
+
+/// One scheme's score in one bucket on one day under one methodology.
+///
+/// Market-level reference data, not user-scoped. Ineligible funds are stored
+/// too, with their reasons: "why was this fund NOT recommended?" is as much a
+/// question we have to answer as "why was that one?".
+model FundScoreSnapshot {
+  id                   String                    @id @default(cuid())
+  asOfDate             DateTime                  @db.Date
+  methodologyVersionId String
+  methodologyVersion   RankingMethodologyVersion @relation(fields: [methodologyVersionId], references: [id], onDelete: Cascade)
+  schemeCode           String
+  bucket               AdvisorAssetBucket
+  eligible             Boolean
+  /// Typed reasons, e.g. ["regular_plan", "track_record_too_short"].
+  exclusionReasons     Json
+  /// The computed metrics behind the score, each with the window it used.
+  metrics              Json
+  score                Decimal?                  @db.Decimal(10, 4)
+  rankInBucket         Int?
+  /// Metrics excluded for want of data, and the weight each one gave up.
+  dataGaps             Json
+
+  createdAt DateTime @default(now())
+
+  @@unique([asOfDate, methodologyVersionId, schemeCode, bucket])
+  @@index([asOfDate, bucket, rankInBucket])
+  @@index([schemeCode])
+}
+
 model AdvisorRun {
   id                      String            @id @default(cuid())
   userId                  String
@@ -3416,6 +4081,9 @@ model AdvisorRun {
   /// { [ruleId]: message } — a throwing rule is recorded and skipped, never
   /// allowed to fail the run or block the other rules.
   ruleErrors              Json?
+  /// Whether this run could name funds, and which gate closed if not:
+  /// flag_disabled | no_signed_methodology | snapshot_stale | no_risk_profile.
+  namedFundGate           Json?
   riskProfileAssessmentId String?
   recommendationCount     Int               @default(0)
   startedAt               DateTime          @default(now())
@@ -3446,6 +4114,8 @@ enum AdvisorRecommendationStatus {
 
 enum AdvisorProvenance {
   APPROVED_LIST
+  /// Chosen by the signed-off ranking methodology, narrowed to this client.
+  RANKED_UNIVERSE
   FALLBACK_RANKING
   NONE
 }
@@ -3488,6 +4158,19 @@ model AdvisorRecommendation {
 
   provenance    AdvisorProvenance @default(NONE)
   provenanceRef Json?
+
+  /// Which signed-off ranking methodology chose the named scheme. Null on
+  /// category-level advice. Kept as an FK so a recommendation made under v1
+  /// stays explainable after v2 ships.
+  methodologyVersionId String?
+  methodologyVersion   RankingMethodologyVersion? @relation(fields: [methodologyVersionId], references: [id])
+  /// AMFI scheme code of the fund this recommendation names, if any.
+  namedSchemeCode      String?
+  /// Why this scheme and not the runner-up: score, rank, the metrics behind
+  /// it, data gaps, portfolio-fit adjustments and whether hysteresis held an
+  /// incumbent. Frozen at generation time like inputsSnapshot — the figures a
+  /// user was shown are never edited.
+  selectionEvidence    Json?
 
   /// Stable per-issue identity within a ruleId. Lets a re-run supersede an
   /// existing recommendation instead of duplicating it.
@@ -4152,4 +4835,92 @@ model MfFundVerdict {
   createdAt DateTime @default(now())
 
   @@index([userId, schemeCode, createdAt])
+}
+
+// ─── CA workspace audit trail ────────────────────────────────────────
+//
+// A separate table from AuditLog on purpose. AuditLog's `userId` is the ACTOR
+// and its policy reads on that column alone, so a client could never see rows
+// their CA wrote about them without widening that policy for every actor in
+// the system. This table is two-sided from the start: the CA reads their own
+// actions, the client reads everything done to their books, and both read the
+// same row so the two accounts can never disagree.
+//
+// It is structurally append-only. The migration gives it SELECT and INSERT
+// policies and NO update or delete policy at all, so under FORCE ROW LEVEL
+// SECURITY those commands match nothing and affect zero rows — for every role
+// the application can use, including system context. Removing a row takes a
+// superuser migration, which is the right bar for a record that exists to hold
+// a professional accountable.
+model CaAuditLog {
+  id String @id @default(cuid())
+
+  /// Who did it — always the CA's real user id, never a client's.
+  ///
+  /// Deliberately NOT a foreign key, for the same reason as `clientId` below.
+  /// An onDelete: Cascade relation here would let deleting either party's
+  /// account erase every entry naming them — precisely the erasure this table
+  /// is built to prevent, reached by a different column. Referential integrity
+  /// is worth less here than the record surviving the people in it.
+  actorUserId String
+
+  /// Whose books it was done to. Not a foreign key, same reasoning.
+  subjectUserId String
+
+  /// The Client row that authorised it, kept for provenance. Not a foreign key
+  /// so that revoking or deleting a grant can never erase the record of what
+  /// was done under it.
+  clientId String
+
+  action       CaAuditAction
+  resourceType String?
+  resourceId   String?
+  /// Rendered verbatim in the client's activity feed, so it must read as a
+  /// sentence to a non-technical person.
+  summary      String
+  /// { before, after } for corrections; parameters for reads. Without a before
+  /// state the trail cannot answer "what did this used to say", which is most
+  /// of the point.
+  metadata     Json?
+
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([subjectUserId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([clientId, createdAt])
+}
+
+enum CaAuditAction {
+  CLIENT_RECORD_CREATED
+  CLIENT_INVITED
+  GRANT_ACCEPTED
+  GRANT_REVOKED
+  ACCOUNT_CREATED
+  ACCOUNT_UPDATED
+  ACCOUNT_DELETED
+  VOUCHER_CREATED
+  VOUCHER_UPDATED
+  VOUCHER_DELETED
+  TRANSACTION_CORRECTED
+  FMV_OVERRIDE_SET
+  FMV_OVERRIDE_DELETED
+  TRANSACTION_CREATED
+  IMPORT_JOB_CREATED
+  PORTFOLIO_CREATED
+  GRANT_SCOPE_CHANGED
+  GRANT_REINSTATED
+  INVITATION_EMAILED
+}
+
+/// A user's data-encryption key, wrapped by the KEK (lib/userKeys). Never
+/// stored unwrapped. Deleting the row makes everything sealed under it
+/// unreadable; it goes with the user (cascade).
+model UserDataKey {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wrappedKey String
+  kekVersion Int      @default(1)
+  createdAt  DateTime @default(now())
 }

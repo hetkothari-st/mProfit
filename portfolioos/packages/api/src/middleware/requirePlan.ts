@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { FEATURE_MIN_TIER, hasFeature, type FeatureFlag, type PlanTierValue } from '@portfolioos/shared';
+import { FEATURE_MIN_TIER, hasFeature, type FeatureFlag, type PlanTierValue } from '@everypaisa/shared';
 import { ForbiddenError, UnauthorizedError } from '../lib/errors.js';
 
 /**

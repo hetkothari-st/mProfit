@@ -1,18 +1,34 @@
-import { Activity, TrendingDown, Shield, Scale } from 'lucide-react';
+import { Activity, TrendingDown } from 'lucide-react';
+import { ASSET_CLASS_LABELS } from '@everypaisa/shared';
 import { MetricCard } from '@/components/portfolio/MetricCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import type { RiskMetrics, ValuationPoint, AllocationSlice } from '@/api/analytics.api';
+import type { RiskMetrics, AllocationSlice, ClassCorrelation } from '@/api/analytics.api';
+import { AnalyticsInfo } from '../AnalyticsInfo';
 
 interface RiskProps {
   metrics: RiskMetrics | undefined;
   loading: boolean;
 }
 
+/**
+ * Two risk numbers, not four.
+ *
+ * Sharpe and beta are gone. Both are computed on TOTAL PORTFOLIO VALUE, so a
+ * regular SIP feeds contributions into them: Sharpe's return leg is the CAGR of
+ * total value, which means saving hard manufactures a "strong" score, and beta
+ * regresses that same contaminated series against NIFTY. Neither survived the
+ * question "what would a reader do differently because of this number?".
+ *
+ * Volatility and max drawdown carry the same contribution caveat, but they at
+ * least describe something a holder recognises — how bumpy it felt, and the
+ * worst fall — so they stay, on the detailed tab, with the caveat in their
+ * explanation.
+ */
 export function RiskMetricsCards({ metrics, loading }: RiskProps) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {Array.from({ length: 2 }).map((_, i) => (
           <Card key={i} className="h-28 animate-pulse bg-muted/60" />
         ))}
       </div>
@@ -20,119 +36,135 @@ export function RiskMetricsCards({ metrics, loading }: RiskProps) {
   }
   if (!metrics) return null;
   const fmt = (v: number | null, suffix = '%') => (v == null ? '—' : `${v.toFixed(2)}${suffix}`);
-  const sharpeBucket =
-    metrics.sharpe == null
-      ? 'flat'
-      : metrics.sharpe >= 1
-      ? 'up'
-      : metrics.sharpe < 0
-      ? 'down'
-      : 'flat';
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <MetricCard
-        label="Volatility (annualised)"
+        label="How much it swings"
+        info={<AnalyticsInfo k="volatility" />}
         value={fmt(metrics.volatilityPct)}
         icon={Activity}
-        hint={`${metrics.observations} monthly returns`}
+        hint={`Annualised, from ${metrics.observations} monthly changes`}
       />
       <MetricCard
-        label="Sharpe ratio"
-        value={metrics.sharpe == null ? '—' : metrics.sharpe.toFixed(2)}
-        icon={Shield}
-        trend={{
-          direction: sharpeBucket as 'up' | 'down' | 'flat',
-          value: metrics.sharpe == null ? '' : metrics.sharpe >= 1 ? 'Strong' : metrics.sharpe >= 0 ? 'Modest' : 'Weak',
-        }}
-      />
-      <MetricCard
-        label="Max drawdown"
+        label="Worst fall"
+        info={<AnalyticsInfo k="maxDrawdown" />}
         value={fmt(metrics.maxDrawdownPct == null ? null : -Math.abs(metrics.maxDrawdownPct))}
         icon={TrendingDown}
-        hint="Peak-to-trough"
-      />
-      <MetricCard
-        label="Beta vs NIFTY"
-        value={metrics.betaVsNifty == null ? '—' : metrics.betaVsNifty.toFixed(2)}
-        icon={Scale}
-        hint={
-          metrics.betaVsNifty == null
-            ? 'Need more history'
-            : metrics.betaVsNifty > 1
-            ? 'More volatile than market'
-            : metrics.betaVsNifty < 0.5
-            ? 'Defensive vs market'
-            : 'Tracks market'
-        }
+        hint="Peak to trough"
       />
     </div>
   );
 }
 
-/**
- * Light client-side correlation heatmap derived from portfolio monthly
- * returns split by asset class. For v1 we approximate by simply showing
- * correlation between each class's monthly weight (proxy) and the
- * overall portfolio — full per-asset return matrix is deferred.
- *
- * The heatmap here renders a simple class-by-class diversification grid
- * coloured by the class's percentage weight, with a diagonal flagged.
- */
-export function AllocationCorrelationGrid({
+export function ReturnCorrelationGrid({
+  correlation,
+  loading,
   allocation,
-  valueLine,
 }: {
+  correlation: ClassCorrelation | undefined;
+  loading: boolean;
   allocation: AllocationSlice[];
-  valueLine: ValuationPoint[];
 }) {
-  // Tiny heuristic correlation matrix: each cell = min(weight_i, weight_j),
-  // so concentrated pairs stand out visually. Real return correlation
-  // requires daily per-asset price history (deferred).
-  const classes = allocation.filter((a) => a.pct >= 1).slice(0, 8);
-  const n = classes.length;
-  if (n === 0) return null;
+  const header = (
+    <CardHeader className="pb-2">
+      <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Diversification</p>
+      <CardTitle className="flex items-center gap-1.5">
+        Return correlation by asset class
+        <AnalyticsInfo k="returnCorrelation" />
+      </CardTitle>
+    </CardHeader>
+  );
+
+  if (loading) {
+    return <Card className="h-72 animate-pulse bg-muted/60" />;
+  }
+
+  const labelOf = (key: string) =>
+    allocation.find((a) => a.key === key)?.label ??
+    ASSET_CLASS_LABELS[key as keyof typeof ASSET_CLASS_LABELS] ??
+    key;
+  const weightOf = (key: string) => allocation.find((a) => a.key === key)?.pct ?? 0;
+
+  const classes = correlation?.classes ?? [];
+  const idx = new Map(classes.map((c, i) => [c, i]));
+  const hasReturns = (c: string) => {
+    const i = idx.get(c)!;
+    return correlation?.matrix[i]?.[i] != null;
+  };
+  // Largest holdings first; cap the grid so it stays readable on a phone.
+  const shown = classes
+    .filter(hasReturns)
+    .sort((a, b) => weightOf(b) - weightOf(a))
+    .slice(0, 8);
+  const noPriceHistory = classes.filter((c) => !hasReturns(c) && weightOf(c) > 0);
+  const minObs = correlation?.minObservations ?? 6;
+
+  const noHistoryNote =
+    noPriceHistory.length > 0 ? (
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Not shown — no price history: {noPriceHistory.map(labelOf).join(', ')}.
+      </p>
+    ) : null;
+
+  if (!correlation || shown.length < 2) {
+    return (
+      <Card>
+        {header}
+        <CardContent>
+          <div className="h-48 grid place-items-center text-center text-sm text-muted-foreground border border-dashed rounded-md px-6">
+            Needs at least two asset classes with price history and {minObs}+ months of data in the
+            selected period.
+          </div>
+          {noHistoryNote}
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <p className="text-[10px] uppercase tracking-kerned text-accent-ink/80 mb-1">Diversification</p>
-        <CardTitle>Asset class weight grid</CardTitle>
-      </CardHeader>
+      {header}
       <CardContent>
         <div className="overflow-x-auto">
           <table className="text-xs border-collapse mx-auto">
             <thead>
               <tr>
-                <th className="pr-2"></th>
-                {classes.map((c) => (
-                  <th key={c.key} className="px-1.5 py-1 font-medium text-[10px] text-muted-foreground rotate-[-30deg] origin-bottom-left whitespace-nowrap">
-                    {c.label}
+                <th className="pr-2" />
+                {shown.map((c) => (
+                  <th
+                    key={c}
+                    className="px-1 pb-1 align-bottom font-medium text-[10px] text-muted-foreground whitespace-nowrap"
+                  >
+                    <span className="inline-block max-w-[5.5rem] truncate" title={labelOf(c)}>
+                      {labelOf(c)}
+                    </span>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {classes.map((row) => (
-                <tr key={row.key}>
+              {shown.map((row) => (
+                <tr key={row}>
                   <th className="pr-2 py-1 text-left font-medium text-[10px] text-muted-foreground whitespace-nowrap">
-                    {row.label}
+                    {labelOf(row)}
                   </th>
-                  {classes.map((col) => {
-                    const score = Math.min(row.pct, col.pct);
-                    const isDiag = row.key === col.key;
-                    const opacity = Math.min(score / 40, 1); // saturate around 40%
+                  {shown.map((col) => {
+                    const i = idx.get(row)!;
+                    const j = idx.get(col)!;
+                    const r = correlation.matrix[i]?.[j] ?? null;
+                    const n = correlation.observations[i]?.[j] ?? 0;
                     return (
                       <td
-                        key={`${row.key}-${col.key}`}
-                        className="border border-border/40 w-8 h-8 text-center align-middle"
-                        title={`${row.label} × ${col.label}: ${score.toFixed(1)}%`}
-                        style={{
-                          background: isDiag
-                            ? `hsl(213 53% 22% / ${0.4 + opacity * 0.6})`
-                            : `hsl(213 53% 22% / ${opacity * 0.65})`,
-                          color: opacity > 0.55 ? '#fff' : 'hsl(var(--muted-foreground))',
-                        }}
+                        key={`${row}-${col}`}
+                        className="border border-border/40 w-12 h-9 text-center align-middle tabular-nums"
+                        title={
+                          r == null
+                            ? `${labelOf(row)} × ${labelOf(col)}: not enough shared history (${n} of ${minObs} months)`
+                            : `${labelOf(row)} × ${labelOf(col)}: ${r.toFixed(2)} over ${n} months`
+                        }
+                        style={cellStyle(r, row === col)}
                       >
-                        {score >= 5 ? score.toFixed(0) : ''}
+                        {r == null ? '–' : r.toFixed(2)}
                       </td>
                     );
                   })}
@@ -141,12 +173,33 @@ export function AllocationCorrelationGrid({
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          Darker = larger combined exposure. Diagonal cells show single-class concentration.
-          {valueLine.length < 6 && ' Insufficient history for return-based correlation.'}
-        </p>
+
+        <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
+          <span>Move opposite</span>
+          <span
+            className="h-2 w-28 rounded-full"
+            style={{
+              background: `linear-gradient(to right, ${negativeTint(1)}, hsl(var(--muted)), ${positiveTint(1)})`,
+            }}
+          />
+          <span>Move together</span>
+        </div>
+        {noHistoryNote}
       </CardContent>
     </Card>
   );
 }
 
+const positiveTint = (alpha: number) => `hsl(213 53% 32% / ${alpha})`;
+const negativeTint = (alpha: number) => `hsl(24 78% 46% / ${alpha})`;
+
+function cellStyle(r: number | null, isDiagonal: boolean): React.CSSProperties {
+  if (r == null) return { color: 'hsl(var(--muted-foreground))' };
+  // A class always correlates perfectly with itself — show it, but quietly.
+  if (isDiagonal) return { background: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' };
+  const strength = Math.min(Math.abs(r), 1);
+  return {
+    background: r >= 0 ? positiveTint(0.12 + strength * 0.78) : negativeTint(0.12 + strength * 0.78),
+    color: strength > 0.55 ? '#fff' : 'hsl(var(--foreground))',
+  };
+}

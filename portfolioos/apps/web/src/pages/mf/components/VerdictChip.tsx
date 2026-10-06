@@ -1,4 +1,4 @@
-import type { MfFundVerdictDto, MfVerdictKind } from '@portfolioos/shared';
+import type { MfFundVerdictDto, MfVerdictKind } from '@everypaisa/shared';
 import { cn } from '@/lib/cn';
 import { MetricStat } from './MetricValue';
 import { MoneyCell, RatioCell } from './MetricCells';

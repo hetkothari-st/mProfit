@@ -8,15 +8,24 @@ import {
   logoutAllSessions,
   logoutSession,
   refreshSession,
-  registerUser,
   requestPasswordReset,
+  resendRegistrationCode,
   resetPassword,
+  startRegistration,
+  getCurrentUserRecord,
   updateProfile,
+  verifyRegistration,
 } from '../services/auth.service.js';
 import { created, noContent, ok } from '../lib/response.js';
-// `created` is used by the Google flow when a new user is registered.
+import {
+  DELETION_GRACE_DAYS,
+  getDeletionBlockers,
+  requestAccountDeletion,
+  sendDeletionCode,
+} from '../services/accountDeletion.service.js';
 import { UnauthorizedError } from '../lib/errors.js';
-import { logger } from '../lib/logger.js';
+import { writeAuditLog } from '../lib/audit.js';
+import { readPan } from '../services/piiAtRest.service.js';
 
 export const registerSchema = z.object({
   email: z.string().email().toLowerCase(),
@@ -37,6 +46,8 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(1),
+  /** Cancel a scheduled account deletion and sign in. */
+  restore: z.boolean().optional(),
 });
 
 export const refreshSchema = z.object({
@@ -53,7 +64,8 @@ export const forgotPasswordSchema = z.object({
 });
 
 export const resetPasswordSchema = z.object({
-  token: z.string().min(10),
+  email: z.string().email().toLowerCase(),
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code'),
   newPassword: z.string().min(8).max(100),
 });
 
@@ -74,16 +86,53 @@ export const updateProfileSchema = z.object({
     .or(z.literal('')),
 });
 
+export const verifyRegistrationSchema = z.object({
+  email: z.string().email().toLowerCase(),
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code'),
+});
+
+export const resendRegistrationSchema = z.object({
+  email: z.string().email().toLowerCase(),
+});
+
+/** Signup step 1: stash the details and email a code. No account yet. */
 export async function register(req: Request, res: Response) {
   const data = registerSchema.parse(req.body);
-  const result = await registerUser(data);
+  const result = await startRegistration(data);
+  ok(res, result);
+}
+
+/** Signup step 2: the code checks out, so create the account and sign in. */
+export async function verifyRegistrationHandler(req: Request, res: Response) {
+  const { email, code } = verifyRegistrationSchema.parse(req.body);
+  const result = await verifyRegistration(email, code);
   created(res, result);
+}
+
+export async function resendRegistrationHandler(req: Request, res: Response) {
+  const { email } = resendRegistrationSchema.parse(req.body);
+  const result = await resendRegistrationCode(email);
+  ok(res, result);
 }
 
 export async function login(req: Request, res: Response) {
   const data = loginSchema.parse(req.body);
-  const result = await loginUser(data.email, data.password);
-  ok(res, result);
+  try {
+    const result = await loginUser(data.email, data.password, { restore: data.restore });
+    await writeAuditLog({
+      userId: result.user.id,
+      action: 'login',
+      resource: `User:${result.user.id}`,
+      req,
+    });
+    ok(res, result);
+  } catch (err) {
+    // A failed sign-in is the single most useful thing to have in an audit
+    // trail, so record it before rethrowing. Email only — never the password,
+    // and no indication of whether the account exists.
+    await writeAuditLog({ action: 'login_failed', metadata: { email: data.email }, req });
+    throw err;
+  }
 }
 
 export async function refresh(req: Request, res: Response) {
@@ -99,22 +148,55 @@ export async function logout(req: Request, res: Response) {
   } else if (refreshToken) {
     await logoutSession(refreshToken);
   }
+  if (req.user) {
+    await writeAuditLog({
+      userId: req.user.id,
+      action: 'logout',
+      resource: `User:${req.user.id}`,
+      metadata: { everywhere: Boolean(everywhere) },
+      req,
+    });
+  }
   noContent(res);
 }
 
 export async function forgotPassword(req: Request, res: Response) {
   const { email } = forgotPasswordSchema.parse(req.body);
-  const result = await requestPasswordReset(email);
-  if (result) {
-    logger.info({ email, token: result.token }, 'Password reset requested');
-  }
-  ok(res, { message: 'If an account with that email exists, a reset link has been sent.' });
+  // The result is deliberately unused: the response is the same whether or
+  // not a code went out, so it can't be used to probe for accounts.
+  await requestPasswordReset(email);
+  // Audited on every request, not only when an account matched, so the audit
+  // write adds no behaviour that differs by whether the address exists.
+  await writeAuditLog({ action: 'password_reset_requested', metadata: { email }, req });
+  ok(res, { message: 'If an account with that email exists, a reset code has been sent.' });
 }
 
 export async function resetPasswordHandler(req: Request, res: Response) {
   const data = resetPasswordSchema.parse(req.body);
-  await resetPassword(data.token, data.newPassword);
+  await resetPassword(data.email, data.code, data.newPassword);
   ok(res, { message: 'Password updated successfully.' });
+}
+
+/**
+ * Return the caller's full PAN.
+ *
+ * Deliberately a separate, POST-only, rate-limited (piiLimiter) and audited
+ * endpoint rather than a field on /me: the profile payload is cached and
+ * persisted by the client, and a government identifier should not be along
+ * for that ride. Every call leaves an AuditLog row, so "when was my PAN last
+ * viewed" has an answer.
+ */
+export async function revealPan(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const user = await getCurrentUserRecord(req.user.id);
+  await writeAuditLog({
+    userId: req.user.id,
+    action: 'pii_view',
+    resource: `User:${req.user.id}`,
+    metadata: { field: 'pan' },
+    req,
+  });
+  ok(res, { pan: await readPan(user) });
 }
 
 export async function me(req: Request, res: Response) {
@@ -132,11 +214,48 @@ export async function patchMe(req: Request, res: Response) {
 
 export const googleSchema = z.object({
   idToken: z.string().min(20),
+  restore: z.boolean().optional(),
 });
 
 export async function google(req: Request, res: Response) {
-  const { idToken } = googleSchema.parse(req.body);
-  const result = await loginOrRegisterWithGoogle(idToken);
+  const { idToken, restore } = googleSchema.parse(req.body);
+  const result = await loginOrRegisterWithGoogle(idToken, { restore });
   if (result.isNew) created(res, result);
   else ok(res, result);
+}
+
+// ── Account deletion ─────────────────────────────────────────────────
+
+export const accountDeletionSchema = z.object({
+  confirmText: z.string(),
+  password: z.string().min(1).optional(),
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code').optional(),
+});
+
+/** What would stop deletion right now (families with other members). */
+export async function deletionStatus(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  ok(res, {
+    blockers: await getDeletionBlockers(req.user.id),
+    graceDays: DELETION_GRACE_DAYS,
+  });
+}
+
+export async function deletionCode(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  ok(res, await sendDeletionCode(req.user.id));
+}
+
+export async function requestDeletion(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const input = accountDeletionSchema.parse(req.body);
+  const result = await requestAccountDeletion(req.user.id, input);
+  await writeAuditLog({
+    userId: req.user.id,
+    action: 'account_deletion_requested',
+    resource: `User:${req.user.id}`,
+    metadata: { scheduledFor: result.scheduledFor, method: input.password ? 'password' : 'email_code' },
+    req,
+  });
+  ok(res, result);
 }

@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Decimal, serializePct } from '@portfolioos/shared';
+import { Decimal, serializePct } from '@everypaisa/shared';
 import {
   CREDIT_RATING_SCALE,
   buildAmfiMarketCapLookup,

@@ -28,7 +28,7 @@
  */
 
 import cron from 'node-cron';
-import type { MfRatingStatus } from '@portfolioos/shared';
+import type { MfRatingStatus } from '@everypaisa/shared';
 import { logger } from '../lib/logger.js';
 import { warnIfNotMonthEnd } from './mfAsOfGuard.js';
 import { prisma } from '../lib/prisma.js';

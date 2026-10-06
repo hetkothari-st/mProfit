@@ -1,7 +1,7 @@
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { loadAmfiNavToDb } from '../priceFeeds/amfi.service.js';
+import { syncAmfiNav } from '../priceFeeds/amfi.service.js';
 import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
 import { syncAllCommodities } from '../priceFeeds/commodity.service.js';
 import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
@@ -84,7 +84,7 @@ async function runStartupSyncInner(): Promise<void> {
   ]);
 
   // AMFI NAV is one file (cheap); refresh if older than 24h
-  await maybeRun('AMFI NAV', 24 * HOUR_MS, navAge, loadAmfiNavToDb);
+  await maybeRun('AMFI NAV', 24 * HOUR_MS, navAge, syncAmfiNav);
 
   // Stock prices: only held stocks on startup (avoid rate-limiting on full 2580)
   await maybeRun('Stock prices (held)', 6 * HOUR_MS, stockAge, () =>

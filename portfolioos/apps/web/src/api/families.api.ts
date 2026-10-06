@@ -1,5 +1,6 @@
+import type { InviteEmailDraft } from './ca.api';
 import { api, unwrap } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse, AuthUser, AuthTokens } from '@everypaisa/shared';
 
 export type FamilyRole = 'OWNER' | 'CONTRIBUTOR' | 'VIEWER';
 export type FamilyMemberStatus = 'PENDING' | 'ACTIVE' | 'REVOKED';
@@ -16,6 +17,14 @@ export const NON_AC_CATEGORIES = [
 ] as const;
 export type NonAcCategory = (typeof NON_AC_CATEGORIES)[number];
 
+/** What is using the family's seats. An open invitation holds one. */
+export interface SeatUsage {
+  includedSeats: number;
+  members: number;
+  openInvitations: number;
+  used: number;
+}
+
 export interface MyFamily {
   id: string;
   name: string;
@@ -23,13 +32,24 @@ export interface MyFamily {
   role: FamilyRole;
   status: FamilyMemberStatus;
   joinedAt: string;
+  seats: SeatUsage | null;
 }
 
 export interface FamilyMemberRow {
   id: string;
   userId: string;
   name: string;
-  email: string;
+  /** Null for a managed member: their address is a placeholder. */
+  email: string | null;
+  /** Someone without an email or login, kept by another member. */
+  managed: boolean;
+  managedBy: { id: string; name: string } | null;
+  /** Where to reach a managed member. Noted when they were added; not a login. */
+  contactEmail: string | null;
+  /** "Father", "Wife" — of `relatedTo`. */
+  relation: string | null;
+  /** Who `relation` is measured against, while they are still in the family. */
+  relatedTo: { id: string; name: string } | null;
   role: FamilyRole;
   status: FamilyMemberStatus;
   visibleAssetClasses: string[];
@@ -75,6 +95,38 @@ export interface SeatPaymentRequiredResult {
 
 export type InviteOutcome = InviteResult | SeatPaymentRequiredResult;
 
+export interface ManagedMemberResult {
+  status: 'managed_added';
+  userId: string;
+  name: string;
+  familyName: string;
+  seatNumber: number;
+  includedSeats: number;
+}
+
+export type ManagedOutcome = ManagedMemberResult | SeatPaymentRequiredResult;
+
+/** One person in a bulk add. */
+export interface BulkManagedRow {
+  name: string;
+  relation?: string | null;
+  /** An existing member… */
+  relatedToId?: string | null;
+  /** …or someone listed earlier in this same batch, by position. */
+  relatedToRow?: number | null;
+  managerId?: string | null;
+  role?: 'CONTRIBUTOR' | 'VIEWER';
+  contactEmail?: string | null;
+}
+
+export interface BulkManagedResult {
+  status: 'managed_added';
+  added: Array<{ userId: string; name: string; row: number }>;
+  familyName: string;
+  includedSeats: number;
+  seatsUsed: number;
+}
+
 export interface FamilyTreeNodePos {
   userId: string;
   x: number;
@@ -88,6 +140,10 @@ export interface FamilyTreeLink {
 export interface FamilyTreeLayout {
   nodes?: FamilyTreeNodePos[];
   links?: FamilyTreeLink[];
+  /** child userId → parent userId, or null for someone at the top of the tree. */
+  parents?: Record<string, string | null>;
+  /** Couples who stand together, as [one, the other]. Order means nothing. */
+  partners?: [string, string][];
 }
 
 export interface InvitationPeek {
@@ -132,6 +188,8 @@ export const familiesApi = {
       role?: FamilyRole;
       visibleAssetClasses?: string[];
       visibleCategories?: NonAcCategory[];
+      relation?: string | null;
+      relatedToId?: string | null;
     },
   ) {
     const { data } = await api.patch<ApiResponse<FamilyMemberRow>>(
@@ -164,6 +222,8 @@ export const familiesApi = {
       role?: FamilyRole;
       visibleAssetClasses?: string[];
       visibleCategories?: NonAcCategory[];
+      relation?: string;
+      relatedToId?: string;
     },
   ): Promise<InviteOutcome> {
     const { data } = await api.post<ApiResponse<InviteOutcome>>(
@@ -182,12 +242,48 @@ export const familiesApi = {
       razorpayPaymentId: string;
       razorpaySignature: string;
     },
-  ): Promise<InviteResult> {
-    const { data } = await api.post<ApiResponse<InviteResult>>(
+  ): Promise<InviteResult | ManagedMemberResult> {
+    const { data } = await api.post<ApiResponse<InviteResult | ManagedMemberResult>>(
       `/api/families/${familyId}/members/invite/verify-payment`,
       payload,
     );
     return unwrap(data);
+  },
+  /** Add someone with no email or login, kept by `managerId` (default: you). */
+  async addManagedMember(
+    familyId: string,
+    input: {
+      name: string;
+      relation?: string;
+      relatedToId?: string;
+      managerId?: string;
+      role?: 'CONTRIBUTOR' | 'VIEWER';
+      contactEmail?: string;
+    },
+  ): Promise<ManagedOutcome> {
+    const { data } = await api.post<ApiResponse<ManagedOutcome>>(
+      `/api/families/${familyId}/members/managed`,
+      input,
+    );
+    return unwrap(data);
+  },
+  /**
+   * Add several people at once. All of them or none, and a row may be
+   * related to someone listed above it (`relatedToRow`) who does not exist
+   * yet — that is how a whole branch goes in at one go.
+   */
+  async addManagedMembers(
+    familyId: string,
+    members: BulkManagedRow[],
+  ): Promise<BulkManagedResult> {
+    const { data } = await api.post<ApiResponse<BulkManagedResult>>(
+      `/api/families/${familyId}/members/managed/bulk`,
+      { members },
+    );
+    return unwrap(data);
+  },
+  async setManager(familyId: string, memberUserId: string, managerId: string): Promise<void> {
+    await api.patch(`/api/families/${familyId}/members/${memberUserId}/manager`, { managerId });
   },
   async cancelInvitation(familyId: string, invitationId: string): Promise<void> {
     await api.delete(`/api/families/${familyId}/invitations/${invitationId}`);
@@ -243,6 +339,80 @@ export const familiesApi = {
       `/api/families/${familyId}/portfolios`,
       input,
     );
+    return unwrap(data);
+  },
+};
+
+/** Handing a managed member the account that was kept for them. */
+export interface ClaimInviteResult {
+  invitationId: string;
+  token: string;
+  invitedEmail: string;
+  expiresAt: string;
+}
+
+export interface ClaimPreview {
+  profileName: string;
+  familyName: string;
+  invitedBy: string;
+  invitedEmail: string;
+  expiresAt: string;
+}
+
+export const familyClaimApi = {
+  /** Invite the person a managed profile belongs to, now that they have an email. */
+  async invite(
+    familyId: string,
+    memberUserId: string,
+    email: string,
+  ): Promise<ClaimInviteResult> {
+    const { data } = await api.post<ApiResponse<ClaimInviteResult>>(
+      `/api/families/${familyId}/members/${memberUserId}/claim-invite`,
+      { email },
+    );
+    return unwrap(data);
+  },
+  /** Public: what the link says, before they have an account. */
+  async peek(token: string): Promise<ClaimPreview> {
+    const { data } = await api.get<ApiResponse<ClaimPreview>>(
+      `/api/families/claims/${token}/peek`,
+    );
+    return unwrap(data);
+  },
+  /** Public: take it over. Returns a session — they are signed in as it. */
+  async claim(
+    token: string,
+    input: { email: string; password: string },
+  ): Promise<{ user: AuthUser; tokens: AuthTokens }> {
+    const { data } = await api.post<ApiResponse<{ user: AuthUser; tokens: AuthTokens }>>(
+      `/api/families/claims/${token}`,
+      input,
+    );
+    return unwrap(data);
+  },
+};
+
+/** The family invitation email: drafted and sent by the server, edited here. */
+export const familyInviteEmailApi = {
+  async preview(
+    familyId: string,
+    invitationId: string,
+    edits: { subject?: string; message?: string } = {},
+  ): Promise<InviteEmailDraft> {
+    const { data } = await api.post<ApiResponse<InviteEmailDraft>>(
+      `/api/families/${familyId}/invitations/${invitationId}/email/preview`,
+      edits,
+    );
+    return unwrap(data);
+  },
+  async send(
+    familyId: string,
+    invitationId: string,
+    edits: { subject?: string; message?: string },
+  ): Promise<{ sent: boolean; to: string; sendsRemaining: number; reason?: string }> {
+    const { data } = await api.post<
+      ApiResponse<{ sent: boolean; to: string; sendsRemaining: number; reason?: string }>
+    >(`/api/families/${familyId}/invitations/${invitationId}/email/send`, edits);
     return unwrap(data);
   },
 };

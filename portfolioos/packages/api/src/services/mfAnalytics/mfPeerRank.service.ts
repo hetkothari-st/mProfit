@@ -33,7 +33,7 @@
  *    which is larger than the return dispersion inside many debt categories.
  *    Ranked together, every direct plan would out-rank every regular plan of
  *    the same fund and the score would be measuring the plan, not the manager.
- *    `universeKey()` from `@portfolioos/shared` builds the key so ranks and
+ *    `universeKey()` from `@everypaisa/shared` builds the key so ranks and
  *    lookups cannot disagree about what a universe is.
  *
  * ## The ranking-vs-median survivorship split (read this before "fixing" it)
@@ -77,7 +77,7 @@ import {
   UNMAPPED_SUBCATEGORY,
   MF_HORIZONS,
   MIN_UNIVERSE_SIZE,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import type {
   MfCurrentProfile,
   MfHorizonMetrics,
@@ -91,7 +91,7 @@ import type {
   SebiSubCategory,
   Pct,
   Ratio,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import type { Prisma } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma.js';

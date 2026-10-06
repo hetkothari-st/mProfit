@@ -201,9 +201,9 @@ export async function getUserPaymentInstructions(userId: string): Promise<string
  * button surfaces a clear error.
  */
 export async function sendTestEmail(userId: string, to: string): Promise<{ ok: boolean; reason?: string }> {
-  const html = `<p>This is a test email from PortfolioOS to confirm your sending setup is working.</p>
+  const html = `<p>This is a test email from EveryPaisa to confirm your sending setup is working.</p>
                 <p>If you received this, you're good to go — rent reminders will be sent from this address.</p>`;
-  const subject = 'PortfolioOS — test email';
+  const subject = 'EveryPaisa — test email';
 
   // The supported path is Gmail OAuth ("Connect Gmail"). When that's
   // not present, refuse the test up-front instead of trying the legacy

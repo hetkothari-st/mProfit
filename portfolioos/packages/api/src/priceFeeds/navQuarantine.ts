@@ -118,7 +118,7 @@ export function isNonBusinessDay(d: Date): boolean {
 /**
  * Coerce a raw NAV into a strictly-positive Decimal, or `null` with a reason.
  *
- * Not using `toDecimal()` from `@portfolioos/shared` directly at the call site
+ * Not using `toDecimal()` from `@everypaisa/shared` directly at the call site
  * because it throws on null/garbage by design, and this module's contract is
  * that garbage becomes a quarantine verdict rather than an exception.
  */

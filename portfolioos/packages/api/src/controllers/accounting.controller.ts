@@ -1,5 +1,5 @@
+import { logger } from '../lib/logger.js';
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import {
   listAccountsTree,
   listAccountsFlat,
@@ -20,39 +20,21 @@ import {
   generateVouchersFromActivity,
 } from '../services/accounting.service.js';
 import { ok } from '../lib/response.js';
-import { UnauthorizedError } from '../lib/errors.js';
+import { NotFoundError, UnauthorizedError } from '../lib/errors.js';
+import { buildReceipt } from '../services/receipts/receiptData.js';
+import { renderReceiptPdf, receiptFileName } from '../services/receipts/receiptPdf.js';
+import {
+  selectReceipts,
+  zipReceipts,
+  receiptsWorkbook,
+  type ReceiptQuery,
+} from '../services/receipts/receiptBundle.js';
 import type { AccountType, VoucherType } from '@prisma/client';
-
-const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'INCOME', 'EXPENSE', 'EQUITY'] as const;
-const VOUCHER_TYPES = ['JOURNAL', 'PAYMENT', 'RECEIPT', 'CONTRA', 'PURCHASE', 'SALES'] as const;
-
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
-const moneyString = z.string().regex(/^\d+(\.\d+)?$/, 'Expected positive decimal string');
-
-const createAccountSchema = z.object({
-  code: z.string().min(1).max(20),
-  name: z.string().min(1).max(200),
-  type: z.enum(ACCOUNT_TYPES),
-  parentId: z.string().nullable().optional(),
-  openingBalance: moneyString.optional(),
-});
-
-const voucherEntrySchema = z.object({
-  debitAccountId: z.string().min(1),
-  creditAccountId: z.string().min(1),
-  amount: moneyString,
-  narration: z.string().max(500).optional(),
-});
-
-const createVoucherSchema = z.object({
-  type: z.enum(VOUCHER_TYPES),
-  voucherNo: z.string().min(1).max(50),
-  date: isoDate,
-  narration: z.string().max(500).optional(),
-  entries: z.array(voucherEntrySchema).min(1),
-});
-
-const updateVoucherSchema = createVoucherSchema.partial();
+import {
+  createAccountSchema,
+  createVoucherSchema,
+  updateVoucherSchema,
+} from '../schemas/accounting.schema.js';
 
 // ─── Accounts ────────────────────────────────────────────────────────────────
 
@@ -152,8 +134,22 @@ export async function nextVoucherNoHandler(req: Request, res: Response) {
 
 // ─── Ledger ────────────────────────────────────────────────────────────────────
 
+/**
+ * Bring the books up to date before a statement is read, as the downloads do,
+ * so the screen and the file never disagree. A failed projection is logged and
+ * the statement is served from the vouchers already booked.
+ */
+async function projectBeforeRead(userId: string): Promise<void> {
+  try {
+    await generateVouchersFromActivity(userId);
+  } catch (err) {
+    logger.error({ err, userId }, 'accounting.project_before_read_failed');
+  }
+}
+
 export async function getLedgerHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
+  await projectBeforeRead(req.user.id);
   const { from, to } = req.query as Record<string, string>;
   const ledger = await getAccountLedger(req.user.id, req.params['accountId']!, { from, to });
   ok(res, ledger);
@@ -163,6 +159,7 @@ export async function getLedgerHandler(req: Request, res: Response) {
 
 export async function getTrialBalanceHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
+  await projectBeforeRead(req.user.id);
   const { asOf } = req.query as Record<string, string>;
   const tb = await getTrialBalance(req.user.id, asOf);
   ok(res, tb);
@@ -170,6 +167,7 @@ export async function getTrialBalanceHandler(req: Request, res: Response) {
 
 export async function getPnLHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
+  await projectBeforeRead(req.user.id);
   const { from, to } = req.query as Record<string, string>;
   const pnl = await getPnL(req.user.id, from, to);
   ok(res, pnl);
@@ -177,6 +175,7 @@ export async function getPnLHandler(req: Request, res: Response) {
 
 export async function getBalanceSheetHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
+  await projectBeforeRead(req.user.id);
   const { asOf } = req.query as Record<string, string>;
   const bs = await getBalanceSheet(req.user.id, asOf);
   ok(res, bs);
@@ -196,4 +195,103 @@ export async function generateFromActivityHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const result = await generateVouchersFromActivity(req.user.id);
   ok(res, result);
+}
+
+// ─── Receipts ─────────────────────────────────────────────────────────────────
+//
+// A voucher is the double-entry record; a receipt is the document somebody
+// actually wants — to hand a tenant, to attach to a return, to keep. These
+// three endpoints are the same selection in three shapes: one PDF, a ZIP of
+// PDFs, and a spreadsheet of the same rows.
+//
+// All of them read under the caller's own identity, so a CA reaching the same
+// handlers through `caAccounting.controller` gets exactly what their grant
+// permits and nothing more.
+
+function receiptQueryFrom(req: Request): ReceiptQuery {
+  const { from, to, type } = req.query as Record<string, string | undefined>;
+  return {
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+    ...(type ? { type: type as VoucherType } : {}),
+    ...(req.query.all === 'true' ? { paymentsOnly: false } : {}),
+  };
+}
+
+/** Content-Disposition, with the filename quoted and stripped of quotes. */
+function attach(res: Response, filename: string, contentType: string): void {
+  res.setHeader('Content-Type', contentType);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${filename.replace(/"/g, '')}"`,
+  );
+}
+
+export async function getReceiptPdf(userId: string, voucherId: string, res: Response) {
+  const receipt = await buildReceipt(userId, voucherId);
+  const pdf = await renderReceiptPdf(receipt);
+  attach(res, receiptFileName(receipt), 'application/pdf');
+  res.end(pdf);
+}
+
+/**
+ * `?inline=true` renders in the browser instead of downloading — the "view"
+ * half of view-or-download, which is one header apart from the same document
+ * rather than a second rendering path that could drift from it.
+ */
+export async function viewReceiptPdf(userId: string, voucherId: string, res: Response) {
+  const receipt = await buildReceipt(userId, voucherId);
+  const pdf = await renderReceiptPdf(receipt);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${receiptFileName(receipt)}"`);
+  res.end(pdf);
+}
+
+export async function getReceiptsZip(userId: string, req: Request, res: Response) {
+  const { receipts, truncated } = await selectReceipts(userId, receiptQueryFrom(req));
+  if (receipts.length === 0) {
+    throw new NotFoundError('No receipts in that range.');
+  }
+  const zip = await zipReceipts(receipts);
+  // Said in a header rather than swallowed: a caller who asked for a decade
+  // and got five hundred should be able to tell.
+  if (truncated) res.setHeader('X-Receipts-Truncated', 'true');
+  attach(res, `receipts-${receipts.length}.zip`, 'application/zip');
+  res.end(zip);
+}
+
+export async function getReceiptsWorkbook(userId: string, req: Request, res: Response) {
+  const { receipts, truncated } = await selectReceipts(userId, receiptQueryFrom(req));
+  if (receipts.length === 0) {
+    throw new NotFoundError('No receipts in that range.');
+  }
+  const xlsx = await receiptsWorkbook(receipts);
+  if (truncated) res.setHeader('X-Receipts-Truncated', 'true');
+  attach(
+    res,
+    `receipts-${receipts.length}.xlsx`,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  );
+  res.end(xlsx);
+}
+
+// The client's own books.
+
+export async function receiptPdfHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  if (req.query.inline === 'true') {
+    await viewReceiptPdf(req.user.id, req.params['id']!, res);
+    return;
+  }
+  await getReceiptPdf(req.user.id, req.params['id']!, res);
+}
+
+export async function receiptsZipHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  await getReceiptsZip(req.user.id, req, res);
+}
+
+export async function receiptsWorkbookHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  await getReceiptsWorkbook(req.user.id, req, res);
 }

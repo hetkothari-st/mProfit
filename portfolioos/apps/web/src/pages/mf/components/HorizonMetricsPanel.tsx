@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import type { MfHorizonMetrics, MfHorizonYears, Ratio } from '@portfolioos/shared';
+import type { MfHorizonMetrics, MfHorizonYears, Ratio } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { MetricStat, MetricValue, SectionUnavailable } from './MetricValue';
 import { RollingDistribution } from './RollingDistribution';

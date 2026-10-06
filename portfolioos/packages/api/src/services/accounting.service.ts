@@ -1,7 +1,35 @@
-import { Decimal as PrismaDecimal } from '@prisma/client/runtime/library';
-import { prisma } from '../lib/prisma.js';
+import { Decimal } from 'decimal.js';
+import { prisma, runInTransaction } from '../lib/prisma.js';
 import { NotFoundError, BadRequestError } from '../lib/errors.js';
-import type { AccountType, VoucherType } from '@prisma/client';
+import { logger } from '../lib/logger.js';
+import type { AccountType, VoucherType, Prisma, TransactionType } from '@prisma/client';
+import { computeUserCapitalGains } from './capitalGains.service.js';
+import { replayForFoPnl } from './foPnl.service.js';
+import { transactionInrNet } from './investmentIncome.service.js';
+
+/**
+ * Optional transaction client for the mutating helpers below.
+ *
+ * The CA workspace writes an audit entry for every change it makes to somebody
+ * else's books, and that entry must share the change's fate: a rolled-back
+ * correction cannot leave a record claiming it happened, and a committed one
+ * cannot go unrecorded. Both writes therefore have to land on ONE transaction,
+ * so these functions accept the caller's client.
+ *
+ * Defaults to the global client, leaving the user's own accounting path
+ * untouched — each call still gets its own short transaction from the
+ * $allOperations hook, exactly as before.
+ */
+type Db = Prisma.TransactionClient;
+
+/**
+ * The global client stands in for a transaction client when no caller supplies
+ * one. The two are structurally identical for the plain delegate calls below;
+ * they differ only in the `$extends` machinery TypeScript cannot reconcile
+ * into a callable union. `canonicalEvents.service.ts` documents the same
+ * equivalence for the same reason.
+ */
+const defaultDb = prisma as unknown as Db;
 
 // ─── Default Chart of Accounts ───────────────────────────────────────────────
 
@@ -20,6 +48,7 @@ const DEFAULT_COA: Array<{
   { code: '1103', name: 'Fixed Deposits', type: 'ASSET', parentCode: '1100' },
   { code: '1104', name: 'Bonds & Debentures', type: 'ASSET', parentCode: '1100' },
   { code: '1105', name: 'Gold Holdings', type: 'ASSET', parentCode: '1100' },
+  { code: '1106', name: 'Other Investments', type: 'ASSET', parentCode: '1100' },
   { code: '2000', name: 'Liabilities', type: 'LIABILITY' },
   { code: '2001', name: 'Loans & Borrowings', type: 'LIABILITY', parentCode: '2000' },
   { code: '3000', name: 'Equity & Capital', type: 'EQUITY' },
@@ -32,6 +61,9 @@ const DEFAULT_COA: Array<{
   { code: '4004', name: 'Long-term Capital Gains', type: 'INCOME', parentCode: '4000' },
   { code: '4005', name: 'Rental Income', type: 'INCOME', parentCode: '4000' },
   { code: '4006', name: 'Other Income', type: 'INCOME', parentCode: '4000' },
+  // Intraday equity is speculative business income (sec 43(5)), not a capital gain.
+  { code: '4007', name: 'Speculative Income', type: 'INCOME', parentCode: '4000' },
+  { code: '4008', name: 'F&O Income', type: 'INCOME', parentCode: '4000' },
   { code: '5000', name: 'Expenses', type: 'EXPENSE' },
   { code: '5001', name: 'Brokerage & Charges', type: 'EXPENSE', parentCode: '5000' },
   { code: '5002', name: 'STT & Transaction Tax', type: 'EXPENSE', parentCode: '5000' },
@@ -41,25 +73,61 @@ const DEFAULT_COA: Array<{
   { code: '5006', name: 'Capital Losses', type: 'EXPENSE', parentCode: '5000' },
   { code: '5007', name: 'Other Expenses', type: 'EXPENSE', parentCode: '5000' },
   { code: '5008', name: 'Loan Interest', type: 'EXPENSE', parentCode: '5000' },
+  { code: '5009', name: 'Speculative Loss', type: 'EXPENSE', parentCode: '5000' },
+  { code: '5010', name: 'Loan Charges', type: 'EXPENSE', parentCode: '5000' },
+  { code: '5011', name: 'F&O Loss', type: 'EXPENSE', parentCode: '5000' },
 ];
 
 // Additively ensure every default code exists for this user. Existing rows
 // are left untouched; only missing codes are created. This way new defaults
 // (e.g. "5008 Loan Interest") roll out to users created before the addition.
-export async function ensureDefaultAccounts(userId: string): Promise<void> {
-  const existing = await prisma.account.findMany({
+/**
+ * Seed the default chart if it is missing. Idempotent — existing codes are
+ * skipped.
+ *
+ * Returns the codes it actually created, which matters on the CA path: this
+ * runs when a books tab is merely OPENED, so a professional looking at a
+ * client's chart for the first time writes twenty-odd rows into that client's
+ * books as a side effect. Silent creation is fine for your own account and
+ * wrong for somebody else's, so the caller needs to know whether anything
+ * happened in order to record it.
+ */
+/** Prisma's "unique constraint failed" — the row is already there. */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
+}
+
+export async function ensureDefaultAccounts(
+  userId: string,
+  db: Db = defaultDb,
+): Promise<string[]> {
+  const existing = await db.account.findMany({
     where: { userId },
     select: { id: true, code: true },
   });
   const codeToId = new Map(existing.map((a) => [a.code, a.id]));
+  const createdCodes: string[] = [];
   for (const acct of DEFAULT_COA) {
     if (codeToId.has(acct.code)) continue;
     const parentId = acct.parentCode ? codeToId.get(acct.parentCode) : undefined;
-    const created = await prisma.account.create({
-      data: { userId, code: acct.code, name: acct.name, type: acct.type, parentId },
-    });
-    codeToId.set(acct.code, created.id);
+    try {
+      const created = await db.account.create({
+        data: { userId, code: acct.code, name: acct.name, type: acct.type, parentId },
+      });
+      codeToId.set(acct.code, created.id);
+      createdCodes.push(acct.code);
+    } catch (err) {
+      // Another request seeded this code between the read above and this
+      // write — two page loads, or a read that projects the books while the
+      // chart is being fetched. The row exists, which is all the caller
+      // needs; failing here turned an ordinary page load into a 409.
+      if (!isUniqueViolation(err)) throw err;
+      const raced = await db.account.findFirst({ where: { userId, code: acct.code }, select: { id: true } });
+      if (!raced) throw err;
+      codeToId.set(acct.code, raced.id);
+    }
   }
+  return createdCodes;
 }
 
 // ─── Chart of Accounts ───────────────────────────────────────────────────────
@@ -125,16 +193,17 @@ export async function listAccountsFlat(userId: string) {
 export async function createAccount(
   userId: string,
   data: { code: string; name: string; type: AccountType; parentId?: string | null; openingBalance?: string },
+  db: Db = defaultDb,
 ) {
-  const existing = await prisma.account.findFirst({ where: { userId, code: data.code } });
+  const existing = await db.account.findFirst({ where: { userId, code: data.code } });
   if (existing) throw new BadRequestError(`Account code ${data.code} already exists`);
 
   if (data.parentId) {
-    const parent = await prisma.account.findFirst({ where: { id: data.parentId, userId } });
+    const parent = await db.account.findFirst({ where: { id: data.parentId, userId } });
     if (!parent) throw new NotFoundError(`Parent account ${data.parentId} not found`);
   }
 
-  const account = await prisma.account.create({
+  const account = await db.account.create({
     data: {
       userId,
       code: data.code,
@@ -151,16 +220,17 @@ export async function updateAccount(
   userId: string,
   id: string,
   data: Partial<{ code: string; name: string; type: AccountType; parentId: string | null; openingBalance: string }>,
+  db: Db = defaultDb,
 ) {
-  const account = await prisma.account.findFirst({ where: { id, userId } });
+  const account = await db.account.findFirst({ where: { id, userId } });
   if (!account) throw new NotFoundError(`Account ${id} not found`);
 
   if (data.code && data.code !== account.code) {
-    const conflict = await prisma.account.findFirst({ where: { userId, code: data.code } });
+    const conflict = await db.account.findFirst({ where: { userId, code: data.code } });
     if (conflict) throw new BadRequestError(`Account code ${data.code} already exists`);
   }
 
-  const updated = await prisma.account.update({
+  const updated = await db.account.update({
     where: { id },
     data: {
       ...(data.code && { code: data.code }),
@@ -173,21 +243,21 @@ export async function updateAccount(
   return { ...updated, openingBalance: updated.openingBalance.toString() };
 }
 
-export async function deleteAccount(userId: string, id: string) {
-  const account = await prisma.account.findFirst({ where: { id, userId } });
+export async function deleteAccount(userId: string, id: string, db: Db = defaultDb) {
+  const account = await db.account.findFirst({ where: { id, userId } });
   if (!account) throw new NotFoundError(`Account ${id} not found`);
 
-  const entryCount = await prisma.voucherEntry.count({
+  const entryCount = await db.voucherEntry.count({
     where: { OR: [{ debitAccountId: id }, { creditAccountId: id }] },
   });
   if (entryCount > 0) {
     throw new BadRequestError('Cannot delete account with existing voucher entries');
   }
-  const childCount = await prisma.account.count({ where: { parentId: id } });
+  const childCount = await db.account.count({ where: { parentId: id } });
   if (childCount > 0) {
     throw new BadRequestError('Cannot delete account with sub-accounts');
   }
-  await prisma.account.delete({ where: { id } });
+  await db.account.delete({ where: { id } });
 }
 
 // ─── Vouchers ────────────────────────────────────────────────────────────────
@@ -207,9 +277,9 @@ export interface VoucherInput {
   entries: VoucherEntryInput[];
 }
 
-async function assertAccountsOwnedByUser(userId: string, ids: string[]) {
+async function assertAccountsOwnedByUser(userId: string, ids: string[], db: Db = defaultDb) {
   const unique = [...new Set(ids)];
-  const found = await prisma.account.findMany({ where: { id: { in: unique }, userId } });
+  const found = await db.account.findMany({ where: { id: { in: unique }, userId } });
   if (found.length !== unique.length) {
     throw new BadRequestError('One or more account IDs not found');
   }
@@ -219,7 +289,7 @@ function formatVoucher(v: {
   id: string; type: VoucherType; voucherNo: string; date: Date; narration: string | null;
   isAutoGenerated: boolean; createdAt: Date;
   entries: Array<{
-    id: string; debitAccountId: string; creditAccountId: string; amount: PrismaDecimal;
+    id: string; debitAccountId: string; creditAccountId: string; amount: { toString(): string };
     narration: string | null; transactionId: string | null;
     debitAccount: { code: string; name: string };
     creditAccount: { code: string; name: string };
@@ -291,15 +361,15 @@ export async function getVoucher(userId: string, id: string) {
   return formatVoucher(v);
 }
 
-export async function createVoucher(userId: string, data: VoucherInput) {
+export async function createVoucher(userId: string, data: VoucherInput, db: Db = defaultDb) {
   if (data.entries.length === 0) throw new BadRequestError('Voucher must have at least one entry');
   const accountIds = data.entries.flatMap((e) => [e.debitAccountId, e.creditAccountId]);
-  await assertAccountsOwnedByUser(userId, accountIds);
+  await assertAccountsOwnedByUser(userId, accountIds, db);
 
-  const existing = await prisma.voucher.findFirst({ where: { userId, type: data.type, voucherNo: data.voucherNo } });
+  const existing = await db.voucher.findFirst({ where: { userId, type: data.type, voucherNo: data.voucherNo } });
   if (existing) throw new BadRequestError(`Voucher number ${data.voucherNo} already exists for type ${data.type}`);
 
-  const voucher = await prisma.voucher.create({
+  const voucher = await db.voucher.create({
     data: {
       userId,
       type: data.type,
@@ -320,16 +390,16 @@ export async function createVoucher(userId: string, data: VoucherInput) {
   return formatVoucher(voucher);
 }
 
-export async function updateVoucher(userId: string, id: string, data: Partial<VoucherInput>) {
-  const existing = await prisma.voucher.findFirst({ where: { id, userId } });
+export async function updateVoucher(userId: string, id: string, data: Partial<VoucherInput>, db: Db = defaultDb) {
+  const existing = await db.voucher.findFirst({ where: { id, userId } });
   if (!existing) throw new NotFoundError(`Voucher ${id} not found`);
 
   if (data.entries) {
     const accountIds = data.entries.flatMap((e) => [e.debitAccountId, e.creditAccountId]);
-    await assertAccountsOwnedByUser(userId, accountIds);
+    await assertAccountsOwnedByUser(userId, accountIds, db);
   }
 
-  const voucher = await prisma.voucher.update({
+  const voucher = await db.voucher.update({
     where: { id },
     data: {
       ...(data.type && { type: data.type }),
@@ -353,10 +423,10 @@ export async function updateVoucher(userId: string, id: string, data: Partial<Vo
   return formatVoucher(voucher);
 }
 
-export async function deleteVoucher(userId: string, id: string) {
-  const existing = await prisma.voucher.findFirst({ where: { id, userId } });
+export async function deleteVoucher(userId: string, id: string, db: Db = defaultDb) {
+  const existing = await db.voucher.findFirst({ where: { id, userId } });
   if (!existing) throw new NotFoundError(`Voucher ${id} not found`);
-  await prisma.voucher.delete({ where: { id } });
+  await db.voucher.delete({ where: { id } });
 }
 
 // ─── Next voucher number ──────────────────────────────────────────────────────
@@ -385,6 +455,22 @@ export interface LedgerEntry {
   balance: string;
 }
 
+const ZERO = new Decimal(0);
+const dec = (v: { toString(): string } | null | undefined): Decimal => (v == null ? ZERO : new Decimal(v.toString()));
+const isDebitNature = (type: AccountType) => type === 'ASSET' || type === 'EXPENSE';
+/** Movement on an account's own side: debits raise asset/expense balances, credits the rest. */
+const signedMovement = (type: AccountType, debit: Decimal, credit: Decimal) =>
+  isDebitNature(type) ? debit.minus(credit) : credit.minus(debit);
+
+/** Voucher date filter: on or before `to`, and strictly before `before` when given. */
+function voucherDateFilter(range: { from?: string; to?: string; before?: string }) {
+  const date: Record<string, Date> = {};
+  if (range.from) date.gte = new Date(range.from);
+  if (range.to) date.lte = new Date(range.to);
+  if (range.before) date.lt = new Date(range.before);
+  return Object.keys(date).length ? { date } : {};
+}
+
 export async function getAccountLedger(
   userId: string,
   accountId: string,
@@ -393,55 +479,52 @@ export async function getAccountLedger(
   const account = await prisma.account.findFirst({ where: { id: accountId, userId } });
   if (!account) throw new NotFoundError(`Account ${accountId} not found`);
 
+  // Opening = the account's opening balance plus every voucher before the period.
+  let opening = dec(account.openingBalance);
+  if (params?.from) {
+    const prior = await prisma.voucherEntry.findMany({
+      where: {
+        OR: [{ debitAccountId: accountId }, { creditAccountId: accountId }],
+        voucher: { userId, ...voucherDateFilter({ before: params.from }) },
+      },
+      select: { debitAccountId: true, amount: true },
+    });
+    for (const e of prior) {
+      const amount = dec(e.amount);
+      const isDebit = e.debitAccountId === accountId;
+      opening = opening.plus(signedMovement(account.type, isDebit ? amount : ZERO, isDebit ? ZERO : amount));
+    }
+  }
+
   const entries = await prisma.voucherEntry.findMany({
     where: {
       OR: [{ debitAccountId: accountId }, { creditAccountId: accountId }],
-      voucher: {
-        userId,
-        ...(params?.from || params?.to
-          ? {
-              date: {
-                ...(params.from && { gte: new Date(params.from) }),
-                ...(params.to && { lte: new Date(params.to) }),
-              },
-            }
-          : {}),
-      },
+      voucher: { userId, ...voucherDateFilter({ from: params?.from, to: params?.to }) },
     },
     include: { voucher: { select: { type: true, voucherNo: true, date: true, id: true, narration: true } } },
     orderBy: { voucher: { date: 'asc' } },
   });
 
-  let balance = parseFloat(account.openingBalance.toString());
-  const isDebitNormal = account.type === 'ASSET' || account.type === 'EXPENSE';
-
+  let balance = opening;
   const ledgerEntries: LedgerEntry[] = entries.map((e) => {
-    const amount = parseFloat(e.amount.toString());
+    const amount = dec(e.amount);
     const isDebit = e.debitAccountId === accountId;
-    const debit = isDebit ? amount : null;
-    const credit = isDebit ? null : amount;
-
-    if (isDebitNormal) {
-      balance += isDebit ? amount : -amount;
-    } else {
-      balance += isDebit ? -amount : amount;
-    }
-
+    balance = balance.plus(signedMovement(account.type, isDebit ? amount : ZERO, isDebit ? ZERO : amount));
     return {
       date: e.voucher.date.toISOString().slice(0, 10),
       voucherId: e.voucher.id,
       voucherNo: e.voucher.voucherNo,
       voucherType: e.voucher.type,
       narration: e.narration ?? e.voucher.narration,
-      debit: debit !== null ? debit.toFixed(4) : null,
-      credit: credit !== null ? credit.toFixed(4) : null,
+      debit: isDebit ? amount.toFixed(4) : null,
+      credit: isDebit ? null : amount.toFixed(4),
       balance: balance.toFixed(4),
     };
   });
 
   return {
     account: { id: account.id, code: account.code, name: account.name, type: account.type },
-    openingBalance: account.openingBalance.toString(),
+    openingBalance: opening.toFixed(4),
     entries: ledgerEntries,
     closingBalance: balance.toFixed(4),
   };
@@ -454,44 +537,46 @@ export interface TrialBalanceRow {
   code: string;
   name: string;
   type: AccountType;
+  /** The account's own opening balance, on its normal side. */
   openingBalance: string;
   totalDebit: string;
   totalCredit: string;
+  /** Opening + movements, on the account's normal side (negative = opposite side). */
   closingBalance: string;
 }
 
-export async function getTrialBalance(userId: string, asOfDate?: string): Promise<TrialBalanceRow[]> {
+/**
+ * Balances from the account openings and vouchers on or before `asOfDate`
+ * (inclusive). `options.before` instead takes vouchers strictly before a date —
+ * the balance brought forward into a period starting on that date.
+ */
+export async function getTrialBalance(
+  userId: string,
+  asOfDate?: string,
+  options: { before?: string } = {},
+): Promise<TrialBalanceRow[]> {
   const accounts = await prisma.account.findMany({ where: { userId }, orderBy: { code: 'asc' } });
-
-  const dateFilter = asOfDate ? { lte: new Date(asOfDate) } : undefined;
-
+  const range = options.before ? { before: options.before } : { to: asOfDate };
   const entries = await prisma.voucherEntry.findMany({
     where: {
-      OR: [
-        { debitAccount: { userId } },
-        { creditAccount: { userId } },
-      ],
-      voucher: { userId, ...(dateFilter ? { date: dateFilter } : {}) },
+      OR: [{ debitAccount: { userId } }, { creditAccount: { userId } }],
+      voucher: { userId, ...voucherDateFilter(range) },
     },
     select: { debitAccountId: true, creditAccountId: true, amount: true },
   });
 
-  const debitMap = new Map<string, number>();
-  const creditMap = new Map<string, number>();
-  entries.forEach((e) => {
-    const amt = parseFloat(e.amount.toString());
-    debitMap.set(e.debitAccountId, (debitMap.get(e.debitAccountId) ?? 0) + amt);
-    creditMap.set(e.creditAccountId, (creditMap.get(e.creditAccountId) ?? 0) + amt);
-  });
+  const debitMap = new Map<string, Decimal>();
+  const creditMap = new Map<string, Decimal>();
+  for (const e of entries) {
+    const amt = dec(e.amount);
+    debitMap.set(e.debitAccountId, (debitMap.get(e.debitAccountId) ?? ZERO).plus(amt));
+    creditMap.set(e.creditAccountId, (creditMap.get(e.creditAccountId) ?? ZERO).plus(amt));
+  }
 
   return accounts.map((a) => {
-    const ob = parseFloat(a.openingBalance.toString());
-    const totalDebit = debitMap.get(a.id) ?? 0;
-    const totalCredit = creditMap.get(a.id) ?? 0;
-    const isDebitNormal = a.type === 'ASSET' || a.type === 'EXPENSE';
-    const closingBalance = isDebitNormal
-      ? ob + totalDebit - totalCredit
-      : ob + totalCredit - totalDebit;
+    const ob = dec(a.openingBalance);
+    const totalDebit = debitMap.get(a.id) ?? ZERO;
+    const totalCredit = creditMap.get(a.id) ?? ZERO;
     return {
       accountId: a.id,
       code: a.code,
@@ -500,57 +585,73 @@ export async function getTrialBalance(userId: string, asOfDate?: string): Promis
       openingBalance: ob.toFixed(4),
       totalDebit: totalDebit.toFixed(4),
       totalCredit: totalCredit.toFixed(4),
-      closingBalance: closingBalance.toFixed(4),
+      closingBalance: ob.plus(signedMovement(a.type, totalDebit, totalCredit)).toFixed(4),
     };
   });
 }
 
 export async function getPnL(userId: string, from?: string, to?: string) {
   const tb = await getTrialBalance(userId, to);
-  const tbFrom = from ? await getTrialBalance(userId, from) : null;
-
-  const fromMap = new Map(tbFrom?.map((r) => [r.accountId, parseFloat(r.closingBalance)]) ?? []);
+  // Brought forward = everything strictly before the first day of the period,
+  // so a voucher dated on `from` belongs to this period and no other.
+  const tbBefore = from ? await getTrialBalance(userId, undefined, { before: from }) : null;
+  const baseMap = new Map(tbBefore?.map((r) => [r.accountId, dec(r.closingBalance)]) ?? []);
 
   const income: TrialBalanceRow[] = [];
   const expense: TrialBalanceRow[] = [];
-
   for (const row of tb) {
-    const base = fromMap.get(row.accountId) ?? 0;
-    const periodBalance = parseFloat(row.closingBalance) - base;
+    const periodBalance = dec(row.closingBalance).minus(baseMap.get(row.accountId) ?? ZERO);
     if (row.type === 'INCOME') income.push({ ...row, closingBalance: periodBalance.toFixed(4) });
     if (row.type === 'EXPENSE') expense.push({ ...row, closingBalance: periodBalance.toFixed(4) });
   }
 
-  const totalIncome = income.reduce((s, r) => s + parseFloat(r.closingBalance), 0);
-  const totalExpense = expense.reduce((s, r) => s + parseFloat(r.closingBalance), 0);
-  const netProfit = totalIncome - totalExpense;
-
-  return { income, expense, totalIncome: totalIncome.toFixed(4), totalExpense: totalExpense.toFixed(4), netProfit: netProfit.toFixed(4) };
+  const totalIncome = income.reduce((s, r) => s.plus(r.closingBalance), ZERO);
+  const totalExpense = expense.reduce((s, r) => s.plus(r.closingBalance), ZERO);
+  return {
+    income,
+    expense,
+    totalIncome: totalIncome.toFixed(4),
+    totalExpense: totalExpense.toFixed(4),
+    netProfit: totalIncome.minus(totalExpense).toFixed(4),
+  };
 }
 
 export async function getBalanceSheet(userId: string, asOfDate?: string) {
   const tb = await getTrialBalance(userId, asOfDate);
+  const sum = (rows: TrialBalanceRow[], pick: (r: TrialBalanceRow) => string) =>
+    rows.reduce((s, r) => s.plus(pick(r)), ZERO);
 
   const assets = tb.filter((r) => r.type === 'ASSET');
   const liabilities = tb.filter((r) => r.type === 'LIABILITY');
   const equity = tb.filter((r) => r.type === 'EQUITY');
-
-  // Retained earnings = net income from inception to asOfDate
   const income = tb.filter((r) => r.type === 'INCOME');
   const expense = tb.filter((r) => r.type === 'EXPENSE');
-  const retainedEarnings = (
-    income.reduce((s, r) => s + parseFloat(r.closingBalance), 0) -
-    expense.reduce((s, r) => s + parseFloat(r.closingBalance), 0)
-  ).toFixed(4);
 
-  const totalAssets = assets.reduce((s, r) => s + parseFloat(r.closingBalance), 0).toFixed(4);
-  const totalLiabilities = liabilities.reduce((s, r) => s + parseFloat(r.closingBalance), 0).toFixed(4);
-  const totalEquity = (
-    equity.reduce((s, r) => s + parseFloat(r.closingBalance), 0) +
-    parseFloat(retainedEarnings)
-  ).toFixed(4);
+  // Retained earnings = net income from inception to asOfDate.
+  const retainedEarnings = sum(income, (r) => r.closingBalance).minus(sum(expense, (r) => r.closingBalance));
 
-  return { assets, liabilities, equity, retainedEarnings, totalAssets, totalLiabilities, totalEquity };
+  // Vouchers always balance, so any gap between the two sides comes from
+  // opening balances that don't net to zero. Shown as its own line (as Tally
+  // does) instead of leaving the totals silently unequal.
+  const debitOpenings = sum(tb.filter((r) => isDebitNature(r.type)), (r) => r.openingBalance);
+  const creditOpenings = sum(tb.filter((r) => !isDebitNature(r.type)), (r) => r.openingBalance);
+  const openingDifference = debitOpenings.minus(creditOpenings);
+
+  const totalAssets = sum(assets, (r) => r.closingBalance);
+  const totalLiabilities = sum(liabilities, (r) => r.closingBalance);
+  const totalEquity = sum(equity, (r) => r.closingBalance).plus(retainedEarnings);
+
+  return {
+    assets,
+    liabilities,
+    equity,
+    retainedEarnings: retainedEarnings.toFixed(4),
+    /** Positive: the liabilities side is short by this much; negative: the assets side is. */
+    openingDifference: openingDifference.toFixed(4),
+    totalAssets: totalAssets.toFixed(4),
+    totalLiabilities: totalLiabilities.toFixed(4),
+    totalEquity: totalEquity.toFixed(4),
+  };
 }
 
 // ─── Auto-generate from transaction ──────────────────────────────────────────
@@ -572,7 +673,6 @@ export async function suggestVoucherForTransaction(userId: string, transactionId
   const fdAcct = byCode.get('1103');
   const bondsAcct = byCode.get('1104');
   const goldAcct = byCode.get('1105');
-  const brokerageAcct = byCode.get('5001');
   const stcgAcct = byCode.get('4003');
   const ltcgAcct = byCode.get('4004');
 
@@ -586,18 +686,14 @@ export async function suggestVoucherForTransaction(userId: string, transactionId
     return null;
   })();
 
-  const amount = txn.price && txn.quantity
-    ? (parseFloat(txn.price.toString()) * parseFloat(txn.quantity.toString())).toFixed(4)
-    : txn.netAmount?.toString() ?? '0';
+  // Net amount in INR: charges are part of cost, as in the generated vouchers.
+  const amount = transactionInrNet(txn).toFixed(4);
 
   const entries: VoucherEntryInput[] = [];
 
   if (txn.transactionType === 'BUY') {
     if (investmentAcct && bankAcct) {
       entries.push({ debitAccountId: investmentAcct.id, creditAccountId: bankAcct.id, amount, narration: `Buy ${txn.assetName ?? ''}` });
-    }
-    if (txn.brokerage && parseFloat(txn.brokerage.toString()) > 0 && brokerageAcct && bankAcct) {
-      entries.push({ debitAccountId: brokerageAcct.id, creditAccountId: bankAcct.id, amount: txn.brokerage.toString(), narration: 'Brokerage' });
     }
   } else if (txn.transactionType === 'SELL') {
     if (investmentAcct && bankAcct) {
@@ -620,21 +716,65 @@ export async function suggestVoucherForTransaction(userId: string, transactionId
 
 // ─── Bulk auto-generation from existing activity ─────────────────────────────
 //
-// Turns the user's existing transactional records into idempotent vouchers so
-// the ledger / trial balance / P&L / balance sheet actually reflect reality
-// instead of showing zeros. Sources mapped:
+// Turns the user's transactional records into vouchers so the ledger / trial
+// balance / P&L / balance sheet reflect reality. Postings:
 //
-//   Transaction (BUY)            → Investment Dr, Bank Cr  (+ brokerage Dr / Bank Cr)
-//   Transaction (SELL)           → Bank Dr, Investment Cr (at cost)
-//                                  + per CapitalGain: STCG/LTCG income Cr or Capital Losses Dr
-//   Transaction (DIVIDEND_PAYOUT)→ Bank Dr, Dividend Income Cr
-//   Transaction (INTEREST_RECEIVED) → Bank Dr, Interest Income Cr
-//   LoanPayment                  → Loans Cr (principal) + Interest Expense Dr / Bank Cr
-//   RentReceipt (RECEIVED)       → Bank Dr, Rental Income Cr
-//   PremiumPayment               → Insurance Premiums Dr, Bank Cr
+//   Purchase (BUY, SIP, SWITCH_IN, RIGHTS_ISSUE, DEPOSIT)
+//       → Investment Dr / Bank Cr at the net amount: charges are part of cost,
+//         the same cost the capital-gains engine uses, so nothing counts twice.
+//   Dividend reinvested → Investment Dr / Dividend Income Cr
+//   Opening balance     → Investment Dr / Capital Account Cr
+//   Sale (SELL, SWITCH_OUT, REDEMPTION, MATURITY, WITHDRAWAL)
+//       → Bank Dr proceeds; Investment Cr cost of the lots sold (plus the sale
+//         value of any units with no purchase on file); gain Cr to STCG, LTCG or
+//         Speculative Income; loss Dr to Capital Losses or Speculative Loss.
+//         Assets outside the gains engine (deposits, PF) are credited up to
+//         their book value, the excess being interest / other income.
+//   Dividend / interest received → Bank Dr / Income Cr
+//   F&O closed trade    → realised profit Cr F&O Income / loss Dr F&O Loss
+//   Loan disbursed      → Bank Dr / Loans Cr; EMI → Loans Dr principal +
+//                         Loan Interest Dr / Bank Cr; processing fee → Loan Charges
+//   Rent received       → Bank Dr / Rental Income Cr
+//   Premium paid        → Insurance Premiums Dr / Bank Cr
 //
-// Idempotency: deterministic voucherNo per source row ("AUTO-BUY-<txnId>" etc).
-// Re-runs skip rows already projected. Manual vouchers are never touched.
+// Bonus, split and mergers move units, not money, and post nothing.
+//
+// Vouchers are keyed by a deterministic voucherNo per source row
+// ("AUTO-BUY-<txnId>" etc) and RECONCILED on every run: a source that changed
+// replaces its voucher, a source that no longer exists removes it. Manual
+// vouchers are never touched.
+
+type AccountingRole = 'PURCHASE' | 'SALE' | 'DIVIDEND' | 'INTEREST' | 'REINVEST' | 'OPENING' | 'NONE';
+
+// Typed over every transaction type so a new type has to be placed here.
+const ACCOUNTING_ROLE: Record<TransactionType, AccountingRole> = {
+  BUY: 'PURCHASE',
+  SIP: 'PURCHASE',
+  SWITCH_IN: 'PURCHASE',
+  RIGHTS_ISSUE: 'PURCHASE',
+  DEPOSIT: 'PURCHASE',
+  SELL: 'SALE',
+  SWITCH_OUT: 'SALE',
+  REDEMPTION: 'SALE',
+  MATURITY: 'SALE',
+  WITHDRAWAL: 'SALE',
+  DIVIDEND_PAYOUT: 'DIVIDEND',
+  INTEREST_RECEIVED: 'INTEREST',
+  DIVIDEND_REINVEST: 'REINVEST',
+  OPENING_BALANCE: 'OPENING',
+  BONUS: 'NONE',
+  SPLIT: 'NONE',
+  MERGER_IN: 'NONE',
+  MERGER_OUT: 'NONE',
+  DEMERGER_IN: 'NONE',
+  DEMERGER_OUT: 'NONE',
+};
+
+/** Classes whose sale proceeds above book value are interest, not a capital gain. */
+const DEPOSIT_LIKE = new Set<string>([
+  'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'PPF', 'EPF', 'NPS', 'NSC', 'KVP', 'SCSS', 'SSY',
+  'POST_OFFICE_MIS', 'POST_OFFICE_RD', 'POST_OFFICE_TD', 'POST_OFFICE_SAVINGS',
+]);
 
 function investmentAccountCode(assetClass: string): string | null {
   switch (assetClass) {
@@ -654,16 +794,61 @@ function investmentAccountCode(assetClass: string): string | null {
     case 'GOLD_BOND':
     case 'GOLD_ETF':
       return '1105';
-    default:
+    // F&O books its P&L, not contracts; insurance through premium payments;
+    // cash is the bank itself.
+    case 'FUTURES':
+    case 'OPTIONS':
+    case 'INSURANCE':
+    case 'ULIP':
+    case 'CASH':
       return null;
+    default:
+      return '1106';
   }
 }
 
 export interface GenerateFromActivityResult {
+  /** Vouchers written for sources not booked before. */
   created: number;
+  /** Vouchers rewritten because their source changed. */
+  updated: number;
+  /** Vouchers removed because their source is gone. */
+  removed: number;
+  /** Sources already booked exactly as they are. */
   skipped: number;
   errors: number;
   total: number;
+}
+
+type VEntry = {
+  debitAccountId: string;
+  creditAccountId: string;
+  amount: Decimal;
+  narration?: string;
+  transactionId?: string;
+};
+type V = {
+  type: VoucherType;
+  voucherNo: string;
+  date: Date;
+  narration: string;
+  entries: VEntry[];
+};
+
+function voucherSignature(v: {
+  type: VoucherType;
+  date: Date;
+  narration: string | null;
+  entries: Array<{ debitAccountId: string; creditAccountId: string; amount: { toString(): string }; narration?: string | null; transactionId?: string | null }>;
+}): string {
+  return JSON.stringify([
+    v.type,
+    v.date.toISOString().slice(0, 10),
+    v.narration ?? '',
+    v.entries
+      .map((e) => [e.debitAccountId, e.creditAccountId, dec(e.amount).toFixed(4), e.narration ?? '', e.transactionId ?? ''])
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+  ]);
 }
 
 export async function generateVouchersFromActivity(
@@ -678,234 +863,183 @@ export async function generateVouchersFromActivity(
   const bankId = acctId('1001');
   if (!bankId) {
     // Defaults should always include 1001 — bail loudly if not.
-    return { created: 0, skipped: 0, errors: 0, total: 0 };
+    return { created: 0, updated: 0, removed: 0, skipped: 0, errors: 0, total: 0 };
   }
 
-  const existingAuto = await prisma.voucher.findMany({
-    where: { userId, isAutoGenerated: true },
-    select: { voucherNo: true },
-  });
-  const seenNos = new Set(existingAuto.map((v) => v.voucherNo));
-
-  type VEntry = {
-    debitAccountId: string;
-    creditAccountId: string;
-    amount: string;
-    narration?: string;
-    transactionId?: string;
-  };
-  type V = {
-    type: VoucherType;
-    voucherNo: string;
-    date: Date;
-    narration: string;
-    entries: VEntry[];
-  };
   const queue: V[] = [];
+  const push = (v: V) => {
+    const entries = v.entries.filter((e) => e.amount.greaterThan(0));
+    if (entries.length > 0) queue.push({ ...v, entries });
+  };
 
   // ── Transactions ─────────────────────────────────────────────────────────
   const txns = await prisma.transaction.findMany({
     where: { portfolio: { userId } },
-    include: { capitalGains: true },
+    orderBy: [{ tradeDate: 'asc' }, { createdAt: 'asc' }],
   });
+  // Gains computed live from the transactions, so a sale booked before its
+  // purchases were imported is re-posted once they are.
+  const { rows: gainRows } = await computeUserCapitalGains(userId);
+  const gainsBySale = new Map<string, typeof gainRows>();
+  for (const g of gainRows) {
+    const list = gainsBySale.get(g.sellTransactionId);
+    if (list) list.push(g);
+    else gainsBySale.set(g.sellTransactionId, [g]);
+  }
+  // Book value per holding for assets the gains engine doesn't track.
+  const bookValue = new Map<string, Decimal>();
+  const holdingKey = (t: (typeof txns)[number]) => `${t.portfolioId}|${t.assetKey ?? t.assetName ?? ''}`;
 
   for (const t of txns) {
+    const role = ACCOUNTING_ROLE[t.transactionType];
     const invCode = investmentAccountCode(t.assetClass);
     const investmentAcctId = invCode ? acctId(invCode) : undefined;
+    // What the bank actually moved, every charge included. STT is part of the
+    // cost of the investment here; sec 48 disallows it for capital gains only,
+    // and the tax reports carry that separate figure.
+    const amount = transactionInrNet(t);
+    const name = (t.assetName ?? '').trim();
+    const key = holdingKey(t);
 
-    if (t.transactionType === 'BUY' && investmentAcctId) {
-      const voucherNo = `AUTO-BUY-${t.id}`;
-      if (seenNos.has(voucherNo)) continue;
-      const gross = (t.grossAmount ?? t.netAmount ?? new PrismaDecimal(0)).toString();
-      const entries: VEntry[] = [
-        {
-          debitAccountId: investmentAcctId,
-          creditAccountId: bankId,
-          amount: gross,
-          narration: `Buy ${t.assetName ?? ''}`.trim(),
-          transactionId: t.id,
-        },
-      ];
-      const brokerage = parseFloat(t.brokerage.toString());
-      const brokerageId = acctId('5001');
-      if (brokerage > 0 && brokerageId) {
-        entries.push({
-          debitAccountId: brokerageId,
-          creditAccountId: bankId,
-          amount: brokerage.toFixed(4),
-          narration: 'Brokerage',
-          transactionId: t.id,
-        });
-      }
-      queue.push({
-        type: 'PURCHASE',
-        voucherNo,
+    if (role === 'PURCHASE' || role === 'REINVEST' || role === 'OPENING') {
+      if (!investmentAcctId) continue;
+      const creditId = role === 'PURCHASE' ? bankId : role === 'REINVEST' ? acctId('4001') : acctId('3001');
+      if (!creditId) continue;
+      const cost = amount;
+      bookValue.set(key, (bookValue.get(key) ?? ZERO).plus(cost));
+      const label = role === 'PURCHASE' ? 'Buy' : role === 'REINVEST' ? 'Dividend reinvested' : 'Opening balance';
+      push({
+        type: role === 'PURCHASE' ? 'PURCHASE' : 'JOURNAL',
+        voucherNo: `AUTO-${role === 'PURCHASE' ? 'BUY' : role === 'REINVEST' ? 'REINV' : 'OPEN'}-${t.id}`,
         date: t.tradeDate,
-        narration: `BUY ${t.assetName ?? ''}`.trim(),
-        entries,
+        narration: `${label} ${name}`.trim(),
+        entries: [
+          { debitAccountId: investmentAcctId, creditAccountId: creditId, amount: cost, narration: `${label} ${name}`.trim(), transactionId: t.id },
+        ],
       });
-    } else if (t.transactionType === 'SELL' && investmentAcctId) {
-      const voucherNo = `AUTO-SELL-${t.id}`;
-      if (seenNos.has(voucherNo)) continue;
-      const proceeds = parseFloat((t.netAmount ?? t.grossAmount ?? new PrismaDecimal(0)).toString());
-      const gains = t.capitalGains ?? [];
-      const totalCostBasis = gains.reduce((s, g) => s + parseFloat(g.buyAmount.toString()), 0);
-      const stcgTotal = gains
-        .filter((g) => g.capitalGainType !== 'LONG_TERM')
-        .reduce((s, g) => s + parseFloat(g.gainLoss.toString()), 0);
-      const ltcgTotal = gains
-        .filter((g) => g.capitalGainType === 'LONG_TERM')
-        .reduce((s, g) => s + parseFloat(g.gainLoss.toString()), 0);
-
+    } else if (role === 'SALE') {
+      if (!investmentAcctId) continue;
       const entries: VEntry[] = [];
-      // First leg: book sale proceeds vs cost. If no CG rows are present yet
-      // (FIFO not run), fall back to proceeds — this still keeps the voucher
-      // self-balancing and can be reconciled once CG is computed.
-      const costLeg = totalCostBasis > 0 ? totalCostBasis : proceeds;
-      entries.push({
-        debitAccountId: bankId,
-        creditAccountId: investmentAcctId,
-        amount: costLeg.toFixed(4),
-        narration: `Sell ${t.assetName ?? ''} (cost)`.trim(),
-        transactionId: t.id,
-      });
-      const stcgId = acctId('4003');
-      const ltcgId = acctId('4004');
-      const lossId = acctId('5006');
-      if (stcgTotal > 0 && stcgId) {
+      const rows = gainsBySale.get(t.id) ?? [];
+      if (rows.length > 0) {
+        const proceeds = amount;
+        // Units with no purchase on file come back from the engine at nil cost;
+        // they are credited to the investment at sale value, not booked as gain.
+        const matched = rows.filter((g) => g.buyTransactionId !== g.sellTransactionId);
+        // Book gain per bucket: money received less what those lots cost.
+        const bucket = (type: string) =>
+          matched
+            .filter((g) => g.capitalGainType === type)
+            .reduce((s, g) => s.plus(g.bookSellAmount.minus(g.bookBuyAmount)), ZERO);
+        const legs: Array<[Decimal, string, string, string]> = [
+          [bucket('SHORT_TERM'), '4003', '5006', 'Short-term'],
+          [bucket('LONG_TERM'), '4004', '5006', 'Long-term'],
+          [bucket('INTRADAY'), '4007', '5009', 'Speculative'],
+        ];
+        let bookedGains = ZERO;
+        for (const [g, gainCode, lossCode, label] of legs) {
+          if (g.greaterThan(0) && acctId(gainCode)) {
+            entries.push({ debitAccountId: bankId, creditAccountId: acctId(gainCode)!, amount: g, narration: `${label} gain`, transactionId: t.id });
+            bookedGains = bookedGains.plus(g);
+          } else if (g.lessThan(0) && acctId(lossCode)) {
+            // Loss Dr / Investment Cr: the investment leaves at cost, the bank receives less.
+            entries.push({ debitAccountId: acctId(lossCode)!, creditAccountId: investmentAcctId, amount: g.abs(), narration: `${label} loss`, transactionId: t.id });
+          }
+        }
+        // Bank Dr / Investment Cr for the rest: Bank receives exactly the
+        // proceeds (gains + this), and the investment is relieved of the cost
+        // of the lots sold plus the sale value of any unmatched units.
         entries.push({
           debitAccountId: bankId,
-          creditAccountId: stcgId,
-          amount: stcgTotal.toFixed(4),
-          narration: 'STCG',
-          transactionId: t.id,
-        });
-      }
-      if (ltcgTotal > 0 && ltcgId) {
-        entries.push({
-          debitAccountId: bankId,
-          creditAccountId: ltcgId,
-          amount: ltcgTotal.toFixed(4),
-          narration: 'LTCG',
-          transactionId: t.id,
-        });
-      }
-      if (stcgTotal < 0 && lossId) {
-        entries.push({
-          debitAccountId: lossId,
           creditAccountId: investmentAcctId,
-          amount: Math.abs(stcgTotal).toFixed(4),
-          narration: 'STCL',
+          amount: proceeds.minus(bookedGains),
+          narration: `Sell ${name}`.trim(),
           transactionId: t.id,
         });
+      } else {
+        // Outside the gains engine: return of book value, the excess is income.
+        const book = bookValue.get(key) ?? ZERO;
+        const principal = Decimal.min(amount, book);
+        bookValue.set(key, book.minus(principal));
+        const excess = amount.minus(principal);
+        entries.push({ debitAccountId: bankId, creditAccountId: investmentAcctId, amount: principal, narration: `${t.transactionType === 'SELL' ? 'Sell' : 'Proceeds'} ${name}`.trim(), transactionId: t.id });
+        const incomeId = acctId(DEPOSIT_LIKE.has(t.assetClass) ? '4002' : '4006');
+        if (excess.greaterThan(0) && incomeId) {
+          entries.push({ debitAccountId: bankId, creditAccountId: incomeId, amount: excess, narration: DEPOSIT_LIKE.has(t.assetClass) ? 'Interest' : 'Gain', transactionId: t.id });
+        }
       }
-      if (ltcgTotal < 0 && lossId) {
-        entries.push({
-          debitAccountId: lossId,
-          creditAccountId: investmentAcctId,
-          amount: Math.abs(ltcgTotal).toFixed(4),
-          narration: 'LTCL',
-          transactionId: t.id,
-        });
-      }
-      queue.push({
-        type: 'SALES',
-        voucherNo,
-        date: t.tradeDate,
-        narration: `SELL ${t.assetName ?? ''}`.trim(),
-        entries,
-      });
-    } else if (t.transactionType === 'DIVIDEND_PAYOUT') {
-      const voucherNo = `AUTO-DIV-${t.id}`;
-      if (seenNos.has(voucherNo)) continue;
-      const divId = acctId('4001');
-      if (!divId) continue;
-      const amount = (t.netAmount ?? t.grossAmount ?? new PrismaDecimal(0)).toString();
-      queue.push({
+      push({ type: 'SALES', voucherNo: `AUTO-SELL-${t.id}`, date: t.tradeDate, narration: `${t.transactionType} ${name}`.trim(), entries });
+    } else if (role === 'DIVIDEND' || role === 'INTEREST') {
+      const incomeId = acctId(role === 'DIVIDEND' ? '4001' : '4002');
+      if (!incomeId) continue;
+      const label = role === 'DIVIDEND' ? 'Dividend' : 'Interest';
+      push({
         type: 'RECEIPT',
-        voucherNo,
+        voucherNo: `AUTO-${role === 'DIVIDEND' ? 'DIV' : 'INT'}-${t.id}`,
         date: t.tradeDate,
-        narration: `Dividend ${t.assetName ?? ''}`.trim(),
-        entries: [
-          {
-            debitAccountId: bankId,
-            creditAccountId: divId,
-            amount,
-            narration: `Dividend ${t.assetName ?? ''}`.trim(),
-            transactionId: t.id,
-          },
-        ],
-      });
-    } else if (t.transactionType === 'INTEREST_RECEIVED') {
-      const voucherNo = `AUTO-INT-${t.id}`;
-      if (seenNos.has(voucherNo)) continue;
-      const intId = acctId('4002');
-      if (!intId) continue;
-      const amount = (t.netAmount ?? t.grossAmount ?? new PrismaDecimal(0)).toString();
-      queue.push({
-        type: 'RECEIPT',
-        voucherNo,
-        date: t.tradeDate,
-        narration: `Interest ${t.assetName ?? ''}`.trim(),
-        entries: [
-          {
-            debitAccountId: bankId,
-            creditAccountId: intId,
-            amount,
-            narration: `Interest ${t.assetName ?? ''}`.trim(),
-            transactionId: t.id,
-          },
-        ],
+        narration: `${label} ${name}`.trim(),
+        entries: [{ debitAccountId: bankId, creditAccountId: incomeId, amount, narration: `${label} ${name}`.trim(), transactionId: t.id }],
       });
     }
   }
 
-  // ── Loan payments ────────────────────────────────────────────────────────
-  const loanPayments = await prisma.loanPayment.findMany({
-    where: { loan: { userId } },
-  });
+  // ── F&O: realised P&L per closed trade ───────────────────────────────────
+  const foBooks = new Map<string, typeof txns>();
+  for (const t of txns) {
+    if ((t.assetClass !== 'FUTURES' && t.assetClass !== 'OPTIONS') || !t.assetKey) continue;
+    const k = `${t.portfolioId}|${t.assetKey}`;
+    const list = foBooks.get(k);
+    if (list) list.push(t);
+    else foBooks.set(k, [t]);
+  }
+  const foIncomeId = acctId('4008');
+  const foLossId = acctId('5011');
+  for (const [k, list] of foBooks) {
+    replayForFoPnl(list).forEach((e, i) => {
+      const pnl = new Decimal(e.realizedPnl);
+      const voucherNo = `AUTO-FNO-${k}-${i}`;
+      const narration = `F&O ${e.underlying} ${e.instrumentType} ${e.expiryDate}`;
+      if (pnl.greaterThan(0) && foIncomeId) {
+        push({ type: 'RECEIPT', voucherNo, date: new Date(e.exitDate), narration, entries: [{ debitAccountId: bankId, creditAccountId: foIncomeId, amount: pnl, narration: 'F&O profit' }] });
+      } else if (pnl.lessThan(0) && foLossId) {
+        push({ type: 'PAYMENT', voucherNo, date: new Date(e.exitDate), narration, entries: [{ debitAccountId: foLossId, creditAccountId: bankId, amount: pnl.abs(), narration: 'F&O loss' }] });
+      }
+    });
+  }
+
+  // ── Loans ────────────────────────────────────────────────────────────────
   const loansLiabId = acctId('2001');
   const loanIntId = acctId('5008');
-  for (const p of loanPayments) {
-    const voucherNo = `AUTO-LOAN-${p.id}`;
-    if (seenNos.has(voucherNo)) continue;
-    const principal = p.principalPart ? parseFloat(p.principalPart.toString()) : 0;
-    const interest = p.interestPart ? parseFloat(p.interestPart.toString()) : 0;
-    const entries: VEntry[] = [];
-    if (principal > 0 && loansLiabId) {
-      entries.push({
-        debitAccountId: loansLiabId,
-        creditAccountId: bankId,
-        amount: principal.toFixed(4),
-        narration: 'Loan principal',
-      });
-    }
-    if (interest > 0 && loanIntId) {
-      entries.push({
-        debitAccountId: loanIntId,
-        creditAccountId: bankId,
-        amount: interest.toFixed(4),
-        narration: 'Loan interest',
-      });
-    }
-    // If neither principal nor interest was split, post the full amount
-    // against Loans (treats it as principal repayment by default).
-    if (entries.length === 0 && loansLiabId) {
-      entries.push({
-        debitAccountId: loansLiabId,
-        creditAccountId: bankId,
-        amount: parseFloat(p.amount.toString()).toFixed(4),
-        narration: `Loan ${p.paymentType}`,
-      });
-    }
-    if (entries.length === 0) continue;
-    queue.push({
-      type: 'PAYMENT',
-      voucherNo,
-      date: p.paidOn,
-      narration: `Loan ${p.paymentType}`,
-      entries,
+  const loanChargesId = acctId('5010');
+  const loans = await prisma.loan.findMany({ where: { userId } });
+  for (const l of loans) {
+    if (!loansLiabId) break;
+    push({
+      type: 'RECEIPT',
+      voucherNo: `AUTO-LOANDISB-${l.id}`,
+      date: l.disbursementDate,
+      narration: `Loan disbursed ${l.lenderName}`,
+      entries: [{ debitAccountId: bankId, creditAccountId: loansLiabId, amount: dec(l.principalAmount), narration: 'Loan disbursed' }],
     });
+  }
+  // By loan id, not through the relation: a child table with no policy of its
+  // own cannot be filtered through its parent's policy.
+  const loanPayments = loans.length
+    ? await prisma.loanPayment.findMany({ where: { loanId: { in: loans.map((l) => l.id) } } })
+    : [];
+  for (const p of loanPayments) {
+    const amount = dec(p.amount);
+    const entries: VEntry[] = [];
+    if (p.paymentType === 'PROCESSING_FEE') {
+      if (loanChargesId) entries.push({ debitAccountId: loanChargesId, creditAccountId: bankId, amount, narration: 'Loan processing fee' });
+    } else {
+      // No split on file: all principal. One part on file: the other is the remainder.
+      const principal = p.principalPart != null ? dec(p.principalPart) : p.interestPart != null ? amount.minus(dec(p.interestPart)) : amount;
+      const interest = p.interestPart != null ? dec(p.interestPart) : amount.minus(principal);
+      if (loansLiabId) entries.push({ debitAccountId: loansLiabId, creditAccountId: bankId, amount: principal, narration: 'Loan principal' });
+      if (loanIntId) entries.push({ debitAccountId: loanIntId, creditAccountId: bankId, amount: interest, narration: 'Loan interest' });
+    }
+    push({ type: 'PAYMENT', voucherNo: `AUTO-LOAN-${p.id}`, date: p.paidOn, narration: `Loan ${p.paymentType}`, entries });
   }
 
   // ── Rent receipts (only RECEIVED) ────────────────────────────────────────
@@ -914,82 +1048,85 @@ export async function generateVouchersFromActivity(
   });
   const rentalIncId = acctId('4005');
   for (const r of rentReceipts) {
-    const voucherNo = `AUTO-RENT-${r.id}`;
-    if (seenNos.has(voucherNo) || !rentalIncId || !r.receivedAmount || !r.receivedOn) continue;
-    queue.push({
+    if (!rentalIncId || !r.receivedAmount || !r.receivedOn) continue;
+    push({
       type: 'RECEIPT',
-      voucherNo,
+      voucherNo: `AUTO-RENT-${r.id}`,
       date: r.receivedOn,
       narration: `Rent ${r.forMonth}`,
-      entries: [
-        {
-          debitAccountId: bankId,
-          creditAccountId: rentalIncId,
-          amount: parseFloat(r.receivedAmount.toString()).toFixed(4),
-          narration: `Rent ${r.forMonth}`,
-        },
-      ],
+      entries: [{ debitAccountId: bankId, creditAccountId: rentalIncId, amount: dec(r.receivedAmount), narration: `Rent ${r.forMonth}` }],
     });
   }
 
   // ── Premium payments ─────────────────────────────────────────────────────
-  const premiums = await prisma.premiumPayment.findMany({
-    where: { policy: { userId } },
-  });
+  const premiums = await prisma.premiumPayment.findMany({ where: { policy: { userId } } });
   const insExpId = acctId('5004');
   for (const p of premiums) {
-    const voucherNo = `AUTO-PREM-${p.id}`;
-    if (seenNos.has(voucherNo) || !insExpId) continue;
-    queue.push({
+    if (!insExpId) continue;
+    push({
       type: 'PAYMENT',
-      voucherNo,
+      voucherNo: `AUTO-PREM-${p.id}`,
       date: p.paidOn,
       narration: 'Insurance premium',
-      entries: [
-        {
-          debitAccountId: insExpId,
-          creditAccountId: bankId,
-          amount: parseFloat(p.amount.toString()).toFixed(4),
-          narration: 'Premium',
-        },
-      ],
+      entries: [{ debitAccountId: insExpId, creditAccountId: bankId, amount: dec(p.amount), narration: 'Premium' }],
     });
   }
 
-  // ── Persist. Per-voucher try/catch so one bad row doesn't abort the rest.
+  // ── Reconcile with the auto vouchers already booked ──────────────────────
+  const existing = await prisma.voucher.findMany({
+    where: { userId, isAutoGenerated: true },
+    include: { entries: true },
+  });
+  const existingByNo = new Map(existing.map((v) => [v.voucherNo, v]));
+  const wanted = new Set(queue.map((v) => v.voucherNo));
+
   let created = 0;
+  let updated = 0;
+  let removed = 0;
+  let skipped = 0;
   let errors = 0;
+  for (const v of existing) {
+    if (wanted.has(v.voucherNo)) continue;
+    await prisma.voucher.delete({ where: { id: v.id } });
+    removed += 1;
+  }
   for (const v of queue) {
+    const prior = existingByNo.get(v.voucherNo);
+    if (prior && voucherSignature(prior) === voucherSignature(v)) {
+      skipped += 1;
+      continue;
+    }
+    // Per-voucher failure is counted and the rest still post.
     try {
-      await prisma.voucher.create({
-        data: {
-          userId,
-          type: v.type,
-          voucherNo: v.voucherNo,
-          date: v.date,
-          narration: v.narration,
-          isAutoGenerated: true,
-          entries: {
-            create: v.entries.map((e) => ({
-              debitAccountId: e.debitAccountId,
-              creditAccountId: e.creditAccountId,
-              amount: e.amount,
-              narration: e.narration ?? null,
-              transactionId: e.transactionId ?? null,
-            })),
+      await runInTransaction(async (tx) => {
+        if (prior) await tx.voucher.delete({ where: { id: prior.id } });
+        await tx.voucher.create({
+          data: {
+            userId,
+            type: v.type,
+            voucherNo: v.voucherNo,
+            date: v.date,
+            narration: v.narration,
+            isAutoGenerated: true,
+            entries: {
+              create: v.entries.map((e) => ({
+                debitAccountId: e.debitAccountId,
+                creditAccountId: e.creditAccountId,
+                amount: e.amount.toFixed(4),
+                narration: e.narration ?? null,
+                transactionId: e.transactionId ?? null,
+              })),
+            },
           },
-        },
+        });
       });
-      created += 1;
-    } catch {
+      if (prior) updated += 1;
+      else created += 1;
+    } catch (err) {
+      logger.warn({ err, userId, voucherNo: v.voucherNo }, 'accounting.auto_voucher_failed');
       errors += 1;
     }
   }
 
-  return {
-    created,
-    skipped: queue.length === 0 ? 0 : 0,
-    errors,
-    total: queue.length,
-  };
+  return { created, updated, removed, skipped, errors, total: queue.length };
 }

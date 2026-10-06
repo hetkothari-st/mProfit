@@ -5,7 +5,7 @@ import {
   type MfFundAnalyticsDto,
   type MfSchemeMetaDto,
   type MfSchemeScoreDto,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 import { Riskometer } from './Riskometer';

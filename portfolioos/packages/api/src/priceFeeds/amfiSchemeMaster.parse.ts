@@ -3,7 +3,7 @@
  * `07-IMPLEMENTATION-PLAN.md` Task 1.2).
  *
  * PURE. No Prisma, no network, no filesystem — only node stdlib and
- * `@portfolioos/shared`. The side-effecting half (fetch, upsert `MfSchemeMeta`,
+ * `@everypaisa/shared`. The side-effecting half (fetch, upsert `MfSchemeMeta`,
  * write `IngestionFailure`) lives in the job layer, per the `.parse.ts` /
  * `.v1.ts` split in `CONTEXT.md §14`.
  *
@@ -70,7 +70,7 @@ import {
   type MfPlanType,
   type MfOptionType,
   type Money,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 /**
  * Adapter identity, stamped on everything this parser produces
@@ -154,7 +154,7 @@ export interface AmfiMasterParseResult {
 
 /**
  * Alias for the shared sentinel so the type annotations below read cleanly.
- * The *value* is `UNMAPPED_SUBCATEGORY` from `@portfolioos/shared` — this file
+ * The *value* is `UNMAPPED_SUBCATEGORY` from `@everypaisa/shared` — this file
  * does not define its own, because `MfSchemeMetaDto.sebiSubCategory` and the
  * universe-membership filter in `03 §1` both test against that one constant.
  */
@@ -174,7 +174,7 @@ export interface ResolvedSchemeCategory {
  * AMFI wraps the useful part in parentheses:
  * `Open Ended Schemes(Equity Scheme - Large Cap Fund)`. The outer words
  * ("Open Ended Schemes") describe the *structure* of the scheme, not its SEBI
- * category, and `normaliseCategoryText` in `@portfolioos/shared` only knows how
+ * category, and `normaliseCategoryText` in `@everypaisa/shared` only knows how
  * to strip the inner `"<Broad> Scheme - "` prefix — so the parenthesised part
  * has to be extracted here first.
  */

@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeMoney } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
 
 import { pfLtcgHeadroomRule } from '../../../../src/services/mfAnalytics/rules/pf.ltcg-headroom.js';
 import { MF_HEADLINE_MAX_CHARS } from '../../../../src/services/mfAnalytics/types.js';

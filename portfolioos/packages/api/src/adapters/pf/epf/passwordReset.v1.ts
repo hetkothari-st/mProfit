@@ -46,13 +46,15 @@ const STEP_TIMEOUT_MS = 30_000;
 
 export interface PasswordResetArgs {
   sessionId: string;
+  /** Owner of the scrape session — see lib/playwrightSessions.ts. */
+  userId: string;
   input: PasswordResetInput;
   prompt: SessionPrompt;
 }
 
 export async function runPasswordReset(args: PasswordResetArgs): Promise<PasswordResetOutcome> {
-  const { sessionId, input, prompt } = args;
-  const session = await playwrightSessionManager.createSession(`pwreset-${sessionId}`);
+  const { sessionId, userId, input, prompt } = args;
+  const session = await playwrightSessionManager.createSession(`pwreset-${sessionId}`, userId);
   const { page } = session;
 
   try {

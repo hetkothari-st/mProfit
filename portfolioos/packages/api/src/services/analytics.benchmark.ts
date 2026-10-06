@@ -272,7 +272,7 @@ export async function getNiftyMonthlyCloses(periodDays: number): Promise<Array<{
     if (!cur || r.date > cur.date) {
       // Float conversion for statistical (risk metric) consumption — see
       // analytics.risk.ts module-level note on the boundary.
-      // eslint-disable-next-line portfolioos/no-money-coercion -- statistical computation
+      // eslint-disable-next-line everypaisa/no-money-coercion -- statistical computation
       lastByMonth.set(key, { date: r.date, close: Number(r.close.toString()) });
     }
   }

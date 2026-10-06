@@ -65,7 +65,7 @@
  */
 
 import type { Decimal } from 'decimal.js';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 /**
  * Which curve a set of rows came from. Carried on the result rather than

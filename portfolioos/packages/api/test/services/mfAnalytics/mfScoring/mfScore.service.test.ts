@@ -17,8 +17,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { Decimal, toDecimal, universeKey } from '@portfolioos/shared';
-import type { MfOptionType, MfPillarScore } from '@portfolioos/shared';
+import { Decimal, toDecimal, universeKey } from '@everypaisa/shared';
+import type { MfOptionType, MfPillarScore } from '@everypaisa/shared';
 import { prisma } from '../../../../src/lib/prisma.js';
 import { runAsSystem } from '../../../../src/lib/requestContext.js';
 import {

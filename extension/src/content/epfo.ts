@@ -38,11 +38,11 @@ const UAN_SELECTOR = '.uan_no, .uanno, [data-uan]'; // multiple fallbacks
 // ---------------------------------------------------------------------------
 
 function showBanner(text: string, isError = false): void {
-  const existing = document.getElementById('portfolioos-banner');
+  const existing = document.getElementById('everypaisa-banner');
   if (existing) existing.remove();
 
   const banner = document.createElement('div');
-  banner.id = 'portfolioos-banner';
+  banner.id = 'everypaisa-banner';
   banner.style.cssText = `
     position: fixed;
     bottom: 16px;
@@ -57,7 +57,7 @@ function showBanner(text: string, isError = false): void {
     box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     max-width: 300px;
   `;
-  banner.textContent = `PortfolioOS: ${text}`;
+  banner.textContent = `EveryPaisa: ${text}`;
   document.body.appendChild(banner);
 
   setTimeout(() => banner.remove(), 6000);

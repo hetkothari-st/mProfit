@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
+import { piiLimiter } from '../middleware/rateLimit.js';
 import {
+  revealCardNumberHandler,
   listCardsHandler,
   getCardHandler,
   createCardHandler,
@@ -25,6 +27,9 @@ creditCardsRouter.delete('/:id', asyncHandler(deleteCardHandler));
 
 // Computed summary
 creditCardsRouter.get('/:id/summary', asyncHandler(getCardSummaryHandler));
+
+// Full card number — decrypted, audited, and rate-limited like other PII (§15.7).
+creditCardsRouter.post('/:id/reveal', piiLimiter, asyncHandler(revealCardNumberHandler));
 
 // Statements (scoped under card)
 creditCardsRouter.post('/:id/statements', asyncHandler(addStatementHandler));

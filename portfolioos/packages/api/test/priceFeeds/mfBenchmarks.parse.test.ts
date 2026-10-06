@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 import {
   parseNiftyTriJson,

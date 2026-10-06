@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Money math via `decimal.js` only — no JS `Number` arithmetic on money (§3.2).
-- Path alias `@/` → `apps/web/src`; `@portfolioos/shared` → shared src.
+- Path alias `@/` → `apps/web/src`; `@everypaisa/shared` → shared src.
 - Vitest default (node) env for pure-logic tests; component smoke test uses jsdom + `@testing-library/react`.
 - `xirr` on `HoldingRow` is a fraction — display as `(xirr * 100).toFixed(2)%`.
 
@@ -29,7 +29,7 @@
 - [ ] Move the pure functions/constants verbatim from `FdDetailPage.tsx` into `depositMath.ts`.
 - [ ] Replace them in `FdDetailPage.tsx` with an import; FD renders identically.
 - [ ] Write `depositMath.test.ts`: LUMPSUM compounding, staggered installment accrual, `monthsBetween`/`addMonthsIso` edge cases.
-- [ ] Run `pnpm --filter @portfolioos/web test` → pass. Run `pnpm --filter @portfolioos/web typecheck` → clean.
+- [ ] Run `pnpm --filter @everypaisa/web test` → pass. Run `pnpm --filter @everypaisa/web typecheck` → clean.
 - [ ] Commit `refactor(post-office): extract shared depositMath from FD detail`.
 
 ### Task 2: Scheme config + family map (`poSchemes.ts`)
@@ -64,7 +64,7 @@
 - Modify: `apps/web/src/pages/assetClasses/PostOfficePage.tsx`
 
 - [ ] Rewrite as summary strip + 8-scheme accordion; expanded body lists holdings, row → detail page, per-scheme Add button.
-- [ ] Full `pnpm --filter @portfolioos/web build && typecheck && lint && test` green.
+- [ ] Full `pnpm --filter @everypaisa/web build && typecheck && lint && test` green.
 - [ ] Commit `feat(post-office): expandable scheme-section landing page`.
 
 ---

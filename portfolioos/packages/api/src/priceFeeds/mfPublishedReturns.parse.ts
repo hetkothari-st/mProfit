@@ -77,7 +77,7 @@
  */
 
 import type { Decimal } from 'decimal.js';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 /**
  * Horizons `06 §2` reconciles. Deliberately not every `MF_HORIZONS` value —

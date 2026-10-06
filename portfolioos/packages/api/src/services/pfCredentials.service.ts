@@ -16,7 +16,7 @@
  *   - Node `crypto` (built-in, no extra dep) is the correct choice here.
  */
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
@@ -106,6 +106,15 @@ export async function decryptIdentifier(blob: string): Promise<string> {
 }
 
 /**
+ * Synchronous decrypt, for shaping rows into responses with a plain `.map`.
+ * The cipher work is synchronous already; the async variant stays for its
+ * existing callers.
+ */
+export function decryptIdentifierSync(blob: string): string {
+  return decrypt(blob).toString('utf8');
+}
+
+/**
  * Return the last 4 digits of a string, stripping non-digit characters first.
  * Falls back to the last 4 raw characters if no digits are present.
  *
@@ -117,4 +126,16 @@ export async function decryptIdentifier(blob: string): Promise<string> {
 export function last4(s: string): string {
   const digits = s.replace(/\D/g, '');
   return digits.slice(-4) || s.slice(-4);
+}
+
+/**
+ * Keyed fingerprint of an identifier: equal inputs give equal outputs, so it
+ * can back a unique index or an exact lookup, but it can't be reversed —
+ * unlike a plain SHA-256 of a ten-digit policy number, which could be
+ * brute-forced — without APP_ENCRYPTION_KEY. `purpose` keeps fingerprints of
+ * different kinds of identifier apart.
+ */
+export function hashIdentifier(value: string, purpose: string): string {
+  const subkey = createHmac('sha256', loadKey()).update(`fingerprint:${purpose}`).digest();
+  return createHmac('sha256', subkey).update(value, 'utf8').digest('hex');
 }

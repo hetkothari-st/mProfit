@@ -3,7 +3,7 @@
  * through `recomputeForAsset` to populate `HoldingProjection`. Also runs the
  * parity check against the legacy `Holding` table (§4.10 step 5).
  *
- * Run: `pnpm --filter @portfolioos/api tsx scripts/backfill-holding-projection.ts`
+ * Run: `pnpm --filter @everypaisa/api tsx scripts/backfill-holding-projection.ts`
  *
  * Idempotent — every asset row is upserted, so re-running reconciles any
  * drift that slipped in between runs (e.g. if a worker wrote during backfill).

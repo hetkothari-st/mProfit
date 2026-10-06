@@ -50,7 +50,7 @@
  * would fit in, and every field is scalar.
  */
 
-import type { MfVerdictKind } from '@portfolioos/shared';
+import type { MfVerdictKind } from '@everypaisa/shared';
 
 // ---------------------------------------------------------------------------
 // Tool contract

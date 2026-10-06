@@ -1,7 +1,7 @@
 /**
- * background/index.ts — Service worker for PortfolioOS extension (Plan C).
+ * background/index.ts — Service worker for EveryPaisa extension (Plan C).
  *
- * This is the ONLY place that talks to the PortfolioOS API. Content scripts
+ * This is the ONLY place that talks to the EveryPaisa API. Content scripts
  * and the popup post messages here; the worker dispatches to extApi.
  *
  * Message routing:
@@ -20,7 +20,7 @@ import type { ExtensionMessage, ExtensionResponse } from '../shared/types.js';
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onInstalled.addListener((details) => {
-  console.log(`[PortfolioOS] Extension installed (reason: ${details.reason}), version ${chrome.runtime.getManifest().version}`);
+  console.log(`[EveryPaisa] Extension installed (reason: ${details.reason}), version ${chrome.runtime.getManifest().version}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ async function handleMessage(message: ExtensionMessage): Promise<ExtensionRespon
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[PortfolioOS] Background handler error:', msg);
+    console.error('[EveryPaisa] Background handler error:', msg);
     return { ok: false, error: msg };
   }
 }

@@ -1,0 +1,229 @@
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
+import { ChevronDown } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/cn';
+
+export interface SuggestOption {
+  value: string;
+  /** Secondary text shown on the right (e.g. an IFSC prefix or a relation). */
+  hint?: string;
+  /** Extra search terms: abbreviations, former names. */
+  keywords?: string[];
+}
+
+interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> {
+  value: string;
+  onValueChange: (value: string) => void;
+  options: SuggestOption[];
+  onPick?: (option: SuggestOption) => void;
+  maxResults?: number;
+  /** Optional leading visual per suggestion, e.g. a bank logo. */
+  renderIcon?: (option: SuggestOption) => ReactNode;
+}
+
+/** Prefix matches first, then substring matches, each in list order. */
+function rank(options: SuggestOption[], query: string, max: number): SuggestOption[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return options.slice(0, max);
+  const prefix: SuggestOption[] = [];
+  const contains: SuggestOption[] = [];
+  for (const o of options) {
+    const terms = [o.value, ...(o.keywords ?? [])].map((t) => t.toLowerCase());
+    if (terms.some((t) => t.startsWith(q))) prefix.push(o);
+    else if (terms.some((t) => t.includes(q))) contains.push(o);
+  }
+  return [...prefix, ...contains].slice(0, max);
+}
+
+/**
+ * Text input with a filtered suggestion list (ARIA combobox). Free text is
+ * always allowed — suggestions only speed typing up. Arrow keys move, Enter
+ * picks, Escape closes the list without closing an enclosing dialog.
+ */
+export function SuggestInput({
+  value,
+  onValueChange,
+  options,
+  onPick,
+  maxResults = 8,
+  renderIcon,
+  className,
+  onFocus,
+  onBlur,
+  onKeyDown,
+  ...inputProps
+}: Props) {
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  // Whether the list is narrowed to what's typed. Off after a pick and when
+  // the field is opened again, so a chosen value still shows every option
+  // (like a dropdown) until the user starts typing.
+  const [filtering, setFiltering] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const results = useMemo(
+    () => (filtering ? rank(options, value, maxResults) : options),
+    [filtering, options, value, maxResults],
+  );
+  // While typing, nothing to suggest once the value already is the only match.
+  const exactOnly =
+    filtering &&
+    results.length === 1 &&
+    results[0]!.value.toLowerCase() === value.trim().toLowerCase();
+  const showList = open && results.length > 0 && !exactOnly;
+
+  /** Open the whole list with the current choice highlighted. */
+  function openAll() {
+    setFiltering(false);
+    setOpen(true);
+    const current = value.trim().toLowerCase();
+    setActive(current ? options.findIndex((o) => o.value.toLowerCase() === current) : -1);
+  }
+
+  useEffect(() => {
+    if (showList && active >= 0) {
+      document.getElementById(`${listId}-${active}`)?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [showList, active, listId]);
+
+  // Radix dialogs close on an Escape keydown caught at the document in the
+  // capture phase, before React sees it. While the list is open, intercept
+  // Escape one level higher (window) so it closes only the list.
+  useEffect(() => {
+    if (!showList) return;
+    function onWindowKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
+      setActive(-1);
+    }
+    window.addEventListener('keydown', onWindowKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onWindowKeyDown, { capture: true });
+  }, [showList]);
+
+  function pick(option: SuggestOption) {
+    onValueChange(option.value);
+    onPick?.(option);
+    setFiltering(false);
+    setOpen(false);
+    setActive(-1);
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    onKeyDown?.(e);
+    if (e.defaultPrevented) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOpen(true);
+      setActive((i) => Math.min(i + 1, results.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' && showList && active >= 0 && results[active]) {
+      e.preventDefault();
+      pick(results[active]);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <Input
+        {...inputProps}
+        ref={inputRef}
+        value={value}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={showList}
+        aria-controls={listId}
+        aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
+        autoComplete="off"
+        className={cn('pr-8', className)}
+        onChange={(e) => {
+          onValueChange(e.target.value);
+          setFiltering(true);
+          setOpen(true);
+          setActive(-1);
+        }}
+        // Not opened on focus: a dialog auto-focuses its first field, which
+        // popped the whole list open over the fields below before the user
+        // touched anything. A tap, typing or ArrowDown opens it.
+        onFocus={(e) => {
+          onFocus?.(e);
+        }}
+        onClick={() => {
+          if (!open) openAll();
+        }}
+        onBlur={(e) => {
+          setOpen(false);
+          setActive(-1);
+          onBlur?.(e);
+        }}
+        onKeyDown={handleKeyDown}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Show options"
+        className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-muted-foreground hover:text-foreground"
+        // Keep focus in the field so its blur doesn't race the toggle.
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          if (showList) {
+            setOpen(false);
+            setActive(-1);
+          } else {
+            openAll();
+            inputRef.current?.focus();
+          }
+        }}
+      >
+        <ChevronDown className={cn('h-4 w-4 transition-transform', showList && 'rotate-180')} />
+      </button>
+      {showList && (
+        <ul
+          id={listId}
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md"
+        >
+          {results.map((o, i) => (
+            <li
+              key={o.value}
+              id={`${listId}-${i}`}
+              role="option"
+              aria-selected={i === active}
+              // Keep focus in the input so blur doesn't close the list first.
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => pick(o)}
+              className={cn(
+                'flex cursor-pointer justify-between gap-3 px-3 py-2 text-sm',
+                renderIcon ? 'items-center' : 'items-baseline',
+                i === active && 'bg-accent text-accent-foreground',
+              )}
+            >
+              {renderIcon ? (
+                <span className="flex min-w-0 items-center gap-2">
+                  {renderIcon(o)}
+                  <span className="truncate">{o.value}</span>
+                </span>
+              ) : (
+                <span className="truncate">{o.value}</span>
+              )}
+              {o.hint && <span className="shrink-0 text-xs text-muted-foreground">{o.hint}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

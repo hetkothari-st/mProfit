@@ -58,13 +58,15 @@ const STEP_TIMEOUT_MS = 30_000;
 
 export interface UanLookupArgs {
   sessionId: string;
+  /** Owner of the scrape session — see lib/playwrightSessions.ts. */
+  userId: string;
   input: UanLookupInput;
   prompt: SessionPrompt;
 }
 
 export async function runUanLookup(args: UanLookupArgs): Promise<UanLookupOutcome> {
-  const { sessionId, input, prompt } = args;
-  const session = await playwrightSessionManager.createSession(`uan-${sessionId}`);
+  const { sessionId, userId, input, prompt } = args;
+  const session = await playwrightSessionManager.createSession(`uan-${sessionId}`, userId);
   const { page } = session;
 
   try {

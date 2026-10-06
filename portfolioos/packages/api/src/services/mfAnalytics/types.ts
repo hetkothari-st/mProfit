@@ -45,9 +45,9 @@ import type {
   MfSchemeScoreDto,
   Pct,
   Ratio,
-} from '@portfolioos/shared';
-import { serializeRatio, toDecimal } from '@portfolioos/shared';
-import type { SebiSubCategory } from '@portfolioos/shared';
+} from '@everypaisa/shared';
+import { serializeRatio, toDecimal } from '@everypaisa/shared';
+import type { SebiSubCategory } from '@everypaisa/shared';
 import type { EffectiveScope } from '../familyScope.service.js';
 import type { RiskCategoryValue } from '../riskProfileMath.js';
 
@@ -65,7 +65,7 @@ import type { RiskCategoryValue } from '../riskProfileMath.js';
  * `JSON.parse(JSON.stringify(…))` returns the string-keyed form either way.
  * Declaring numeric keys would therefore describe a shape the snapshot can
  * never hold, and `Object.keys()` over it would be typed `string[]` and need a
- * cast at every use site. `MfFundAnalyticsDto` in `@portfolioos/shared`
+ * cast at every use site. `MfFundAnalyticsDto` in `@everypaisa/shared`
  * already uses exactly this form for the same maps, so this also keeps the
  * facts and the API DTO indexable by the same key.
  */

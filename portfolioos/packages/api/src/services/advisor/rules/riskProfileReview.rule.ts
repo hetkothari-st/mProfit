@@ -16,7 +16,7 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { CATEGORY_BASE_PRIORITY, RISK_PROFILE_REVIEW_MONTHS } from '../constants.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
 

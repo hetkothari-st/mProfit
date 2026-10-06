@@ -44,7 +44,7 @@
  * is an observed fact, not a forecast — and is unaffected.
  */
 
-import { serializeMoney, serializeRatio, toDecimal } from '@portfolioos/shared';
+import { serializeMoney, serializeRatio, toDecimal } from '@everypaisa/shared';
 import type {
   MfFinding,
   MfFindingSeverity,
@@ -52,7 +52,7 @@ import type {
   MfSwitchCost,
   MfVerdictKind,
   SebiSubCategory,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import {
   REPLACEMENT_EXPECTED_EDGE,
   VERDICT_MAX_BREAK_EVEN_MONTHS,

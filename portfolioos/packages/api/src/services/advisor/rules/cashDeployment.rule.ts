@@ -15,7 +15,7 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { INVESTABLE_BUCKETS } from '../assetBuckets.js';
 import {
   CATEGORY_BASE_PRIORITY,

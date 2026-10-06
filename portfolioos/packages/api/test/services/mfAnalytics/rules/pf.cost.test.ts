@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeMoney, serializePct, serializeRatio } from '@portfolioos/shared';
+import { serializeMoney, serializePct, serializeRatio } from '@everypaisa/shared';
 
 import { pfCostRule } from '../../../../src/services/mfAnalytics/rules/pf.cost.js';
 import { MF_HEADLINE_MAX_CHARS } from '../../../../src/services/mfAnalytics/types.js';

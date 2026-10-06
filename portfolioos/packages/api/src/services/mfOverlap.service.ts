@@ -14,7 +14,7 @@
 
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
-import { serializeMoney } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
 
 const ZERO = new Decimal(0);
 

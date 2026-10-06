@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Money is always `decimal.js` `Decimal` on the backend; API responses serialize money as strings via `serializeMoney()` from `@portfolioos/shared` — never raw `Number()`/`parseFloat()` on monetary fields (ESLint rule `portfolioos/no-money-coercion` will flag violations).
+- Money is always `decimal.js` `Decimal` on the backend; API responses serialize money as strings via `serializeMoney()` from `@everypaisa/shared` — never raw `Number()`/`parseFloat()` on monetary fields (ESLint rule `everypaisa/no-money-coercion` will flag violations).
 - Every new user-scoped Prisma model must be added to `USER_SCOPED_MODELS` in `packages/api/src/lib/prisma.ts` AND get a Postgres RLS policy in a migration, following the exact pattern in `prisma/migrations/20260421140000_phase_4_5_rls/migration.sql` (`ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` + `CREATE POLICY ... USING (app_is_system() OR "userId" = app_current_user_id()) WITH CHECK (...)`).
 - System/cron jobs that touch user-scoped tables across all users MUST run inside `runAsSystem()` (cross-tenant reads) or `runAsUser(userId, fn)` (single-user scope) from `packages/api/src/lib/requestContext.ts` — never as an unauthenticated request, or RLS silently returns zero rows / rejects writes.
 - Maintenance/backfill scripts that need to write to an RLS-enabled table without going through the app's `portfolioos_app` DB role use a second `PrismaClient` constructed with `DIRECT_URL` (which connects as the `postgres` superuser role and is exempt from RLS regardless of session context) — see `prisma/migrations/20260421150000_phase_4_5_rls_app_role/migration.sql` for why, and `src/scripts/seedFmv.ts` for the existing pattern.
@@ -94,7 +94,7 @@ Edit `packages/api/src/lib/prisma.ts`. In the `USER_SCOPED_MODELS` set, add the 
 
 Run:
 ```bash
-pnpm --filter @portfolioos/api exec prisma migrate dev --name net_worth_snapshot --create-only
+pnpm --filter @everypaisa/api exec prisma migrate dev --name net_worth_snapshot --create-only
 ```
 Expected: creates `packages/api/prisma/migrations/<timestamp>_net_worth_snapshot/migration.sql` containing a `CREATE TABLE "NetWorthSnapshot" (...)`, a unique index, a non-unique index, and the FK to `User`. It should **not** yet be applied (no `Your database is now in sync` message — that's Step 6).
 
@@ -126,7 +126,7 @@ Expected: prompts to apply the pending `net_worth_snapshot` migration (or applie
 
 Run:
 ```bash
-pnpm --filter @portfolioos/api exec prisma db execute --stdin <<'EOF'
+pnpm --filter @everypaisa/api exec prisma db execute --stdin <<'EOF'
 SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'NetWorthSnapshot';
 EOF
 ```
@@ -148,7 +148,7 @@ git commit -m "feat(db): add NetWorthSnapshot model with RLS"
 - Test: `packages/api/test/services/netWorthHistory.test.ts`
 
 **Interfaces:**
-- Consumes: `prisma.netWorthSnapshot` (Task 1), `serializeMoney`/`toDecimal` from `@portfolioos/shared`, `createTestScope`/`runAsSystem` from test helpers.
+- Consumes: `prisma.netWorthSnapshot` (Task 1), `serializeMoney`/`toDecimal` from `@everypaisa/shared`, `createTestScope`/`runAsSystem` from test helpers.
 - Produces: `export type NetWorthHistoryPeriod = '1M' | '3M' | '6M' | '1Y' | 'ALL'`, `export async function getNetWorthHistory(userId: string, period: NetWorthHistoryPeriod): Promise<NetWorthHistoryResult>` where `NetWorthHistoryResult = { points: NetWorthHistoryPoint[]; summary: { changeAbsolute: string; changePct: number | null; periodLabel: NetWorthHistoryPeriod } }` and `NetWorthHistoryPoint = { asOf: string; totalNetWorth: string; totalLiabilities: string; netWorthAfterLiabilities: string }`. Later tasks (controller, frontend) import these exact names.
 
 - [ ] **Step 1: Write the failing test**
@@ -239,7 +239,7 @@ describe('netWorthHistory.service', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run test/services/netWorthHistory.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run test/services/netWorthHistory.test.ts`
 Expected: FAIL — `Cannot find module '../../src/services/netWorthHistory.service.js'`
 
 - [ ] **Step 3: Write the implementation**
@@ -249,7 +249,7 @@ Create `packages/api/src/services/netWorthHistory.service.ts`:
 ```ts
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { serializeMoney, toDecimal } from '@portfolioos/shared';
+import { serializeMoney, toDecimal } from '@everypaisa/shared';
 
 export type NetWorthHistoryPeriod = '1M' | '3M' | '6M' | '1Y' | 'ALL';
 
@@ -325,7 +325,7 @@ export async function getNetWorthHistory(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run test/services/netWorthHistory.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run test/services/netWorthHistory.test.ts`
 Expected: PASS (4 tests)
 
 - [ ] **Step 5: Commit**
@@ -388,7 +388,7 @@ describe('net worth snapshot idempotency', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run test/invariants/net-worth-snapshot-idempotency.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run test/invariants/net-worth-snapshot-idempotency.test.ts`
 Expected: FAIL — `Cannot find module '../../src/jobs/netWorthSnapshotJob.js'`
 
 - [ ] **Step 3: Write the implementation**
@@ -512,7 +512,7 @@ And add the call in the `server.listen` callback, next to `startAlertJobs()`:
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run test/invariants/net-worth-snapshot-idempotency.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run test/invariants/net-worth-snapshot-idempotency.test.ts`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -610,7 +610,7 @@ describe('invariant: NetWorthSnapshot RLS isolation (§3.6)', () => {
 
 - [ ] **Step 2: Run it**
 
-Run: `pnpm --filter @portfolioos/api exec vitest run test/invariants/net-worth-snapshot-rls.test.ts`
+Run: `pnpm --filter @everypaisa/api exec vitest run test/invariants/net-worth-snapshot-rls.test.ts`
 Expected: PASS (3 tests). If it fails, the RLS policy from Task 1 Step 5 was not applied correctly — go back and re-check `pg_class.relrowsecurity`.
 
 - [ ] **Step 3: Commit**
@@ -659,7 +659,7 @@ import { getNetWorthHistory, type NetWorthHistoryPeriod } from '../services/netW
 import { runNetWorthSnapshotForUser } from '../jobs/netWorthSnapshotJob.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError, BadRequestError } from '../lib/errors.js';
-import { serializeMoney } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
 
 export async function getHealthScore(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
@@ -762,7 +762,7 @@ git commit -m "feat(intelligence): net worth history + manual snapshot trigger e
 
 **Interfaces:**
 - Consumes: `getDashboardNetWorth` (existing), `runAsUser` (existing).
-- Produces: a standalone script runnable via `pnpm --filter @portfolioos/api backfill:net-worth-history`.
+- Produces: a standalone script runnable via `pnpm --filter @everypaisa/api backfill:net-worth-history`.
 
 - [ ] **Step 1: Write the script**
 
@@ -860,7 +860,7 @@ Edit `packages/api/package.json`. In `"scripts"`, add a line after `"seed:fmv": 
 
 Run:
 ```bash
-pnpm --filter @portfolioos/api backfill:net-worth-history
+pnpm --filter @everypaisa/api backfill:net-worth-history
 ```
 Expected: `Backfilling day-1 net worth snapshot for N users...` then `Done. N succeeded, 0 failed.`
 
@@ -892,7 +892,7 @@ Current full file `apps/web/src/api/intelligence.api.ts`:
 
 ```ts
 import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 export interface HealthSubScore {
   score: number;
@@ -933,7 +933,7 @@ Replace with:
 
 ```ts
 import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 export interface HealthSubScore {
   score: number;
@@ -998,7 +998,7 @@ export const intelligenceApi = {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `pnpm --filter @portfolioos/web typecheck`
+Run: `pnpm --filter @everypaisa/web typecheck`
 Expected: 0 new errors.
 
 - [ ] **Step 3: Commit**
@@ -1017,7 +1017,7 @@ git commit -m "feat(web): net worth history API client"
 - Modify: `apps/web/src/pages/dashboard/DashboardPage.tsx` (import + render)
 
 **Interfaces:**
-- Consumes: `intelligenceApi.netWorthHistory` + `NetWorthHistoryPeriod` (Task 7), `formatINR`/`toDecimal` from `@portfolioos/shared`, `Card`/`CardContent`/`CardHeader`/`CardTitle` from `@/components/ui/card`.
+- Consumes: `intelligenceApi.netWorthHistory` + `NetWorthHistoryPeriod` (Task 7), `formatINR`/`toDecimal` from `@everypaisa/shared`, `Card`/`CardContent`/`CardHeader`/`CardTitle` from `@/components/ui/card`.
 - Produces: `export function NetWorthTrendChart(): JSX.Element`, a self-contained widget with its own period state and query — no props.
 
 - [ ] **Step 1: Write the component**
@@ -1033,7 +1033,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { intelligenceApi, type NetWorthHistoryPeriod } from '@/api/intelligence.api';
-import { formatINR, toDecimal } from '@portfolioos/shared';
+import { formatINR, toDecimal } from '@everypaisa/shared';
 
 const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
   { label: '1M', value: '1M' },
@@ -1244,7 +1244,7 @@ Replace with:
 
 - [ ] **Step 3: Typecheck**
 
-Run: `pnpm --filter @portfolioos/web typecheck`
+Run: `pnpm --filter @everypaisa/web typecheck`
 Expected: 0 new errors.
 
 - [ ] **Step 4: Manual QA in the browser**
@@ -1271,7 +1271,7 @@ git commit -m "feat(web): net worth trend chart on dashboard"
 - [ ] **Step 1: Run the full API test suite**
 
 ```bash
-pnpm --filter @portfolioos/api exec vitest run
+pnpm --filter @everypaisa/api exec vitest run
 ```
 Expected: all tests pass, including the new ones from Tasks 2, 3, 4.
 

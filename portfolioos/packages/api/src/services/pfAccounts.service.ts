@@ -129,6 +129,39 @@ export async function listPfAccounts(
  * Fetch a single PF account by ID, scoped to the authenticated user.
  * Returns `null` if not found or owned by a different user.
  */
+/**
+ * Resolve which of the CALLER's EPFO accounts a browser-extension payload
+ * belongs to, when the extension did not name one.
+ *
+ * Scoped to `userId` first, so a payload can only ever land on the
+ * authenticated user's own account. Within that, it matches on the UAN the
+ * extension read off the page (compared against identifierLast4) rather than
+ * taking the most recently created account — with more than one EPF account
+ * that guess would silently post one account's passbook onto another.
+ *
+ * Returns null when nothing matches or the match is ambiguous; the caller
+ * reports that rather than picking one.
+ */
+export async function resolveEpfoAccountForExtension(
+  userId: string,
+  uan: string | null | undefined,
+): Promise<ProvidentFundAccount | null> {
+  const accounts = await prisma.providentFundAccount.findMany({
+    where: { userId, institution: 'EPFO' },
+    include: { memberIds: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (accounts.length === 0) return null;
+
+  const last4 = uan ? uan.replace(/\D/g, '').slice(-4) : '';
+  if (last4.length === 4) {
+    const matches = accounts.filter((a) => a.identifierLast4 === last4);
+    return matches.length === 1 ? matches[0]! : null;
+  }
+  // No usable UAN on the page: only safe when there is exactly one candidate.
+  return accounts.length === 1 ? accounts[0]! : null;
+}
+
 export async function getPfAccountById(
   userId: string,
   id: string,

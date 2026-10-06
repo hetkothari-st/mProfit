@@ -20,7 +20,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { formatINR, toDecimal, Decimal } from '@portfolioos/shared';
+import { formatINR, toDecimal, Decimal } from '@everypaisa/shared';
 import { foApi, brokerApi, type FoPosition, type FoTrade, type BrokerStatus } from '@/api/fo.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
@@ -364,6 +364,7 @@ export function FuturesOptionsPage() {
               title="Recompute derivative positions"
             >
               <RefreshCw className={`h-4 w-4 ${recomputeMut.isPending ? 'animate-spin' : ''}`} />
+              <span className="sm:hidden">Recompute</span>
             </Button>
           </div>
         }
@@ -405,14 +406,14 @@ export function FuturesOptionsPage() {
         </Card>
       )}
 
-      <div className="border-b">
-        <nav className="flex gap-6 -mb-px">
+      <div className="border-b overflow-x-auto">
+        <nav className="flex gap-4 sm:gap-6 -mb-px min-w-max">
           {(['open', 'closed', 'trades', 'pnl', 'expiry'] as const).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+              className={`pb-2 px-1 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                 tab === t
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -1712,7 +1713,7 @@ function BrokerStatusChips({
     );
   }
   return (
-    <div className="flex gap-1.5 items-center text-xs">
+    <div className="flex flex-wrap gap-1.5 items-center text-xs">
       {statuses.map((s) => {
         const b = s.brokerId as BrokerId;
         const cls = !s.configured
@@ -1721,7 +1722,7 @@ function BrokerStatusChips({
             ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300'
             : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300';
         return (
-          <div key={b} className={`inline-flex items-center rounded border px-1.5 py-0.5 gap-1 ${cls}`}>
+          <div key={b} className={`inline-flex items-center whitespace-nowrap rounded border px-1.5 py-0.5 gap-1 ${cls}`}>
             <span className="font-medium">{BROKER_LABEL[b]}</span>
             {!s.configured && (
               <button type="button" className="underline" onClick={() => onConnect(b)}>

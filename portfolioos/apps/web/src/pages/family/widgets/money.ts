@@ -1,14 +1,14 @@
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 /**
  * Money helpers for the family dashboard widgets.
  *
- * Every money field on the family dashboard contract (`@portfolioos/shared`,
+ * Every money field on the family dashboard contract (`@everypaisa/shared`,
  * types/familyDashboard.ts) is a decimal STRING — `netWorth`, `invested`,
  * `shortfall`, `lifeCover`, `amount`, and the rest. These three functions are
  * the only places a widget is allowed to look inside one:
  * `Number(x)` / `parseFloat(x)` on money is banned by
- * `portfolioos/no-money-coercion` (§3.2), and rightly so — a float round-trip
+ * `everypaisa/no-money-coercion` (§3.2), and rightly so — a float round-trip
  * on a ₹4-crore household total is a visible error.
  *
  * `toDecimal` throws on null/undefined, so each guard is explicit rather than

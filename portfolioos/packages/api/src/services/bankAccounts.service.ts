@@ -5,12 +5,21 @@
  * account based on `accountLast4`.
  *
  * Money math uses decimal.js / Prisma.Decimal throughout per §3.2.
+ *
+ * Full account number: optional, AES-256-GCM encrypted via
+ * pfCredentials.encryptIdentifier (APP_ENCRYPTION_KEY, §15.1). Every public
+ * read/write returns through `toBankAccountDto`, which drops the ciphertext;
+ * plaintext only leaves via `revealAccountNumber` / `shareAccountDetails`,
+ * both of which audit-log first.
  */
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { NotFoundError } from '../lib/errors.js';
+import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
+import { encryptIdentifier, decryptIdentifier, last4 as last4Of } from './pfCredentials.service.js';
+import { lookupIfsc, type IfscDetails } from './ifscLookup.service.js';
+import { openText, sealText } from './piiAtRest.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,10 +46,13 @@ export interface CreateBankAccountInput {
   accountType: BankAccountType;
   accountHolder: string;
   last4: string;
+  /** Full account number, plain — encrypted on persist. Overrides `last4`. */
+  accountNumber?: string | null;
   customerId?: string | null;
   portfolioId?: string | null;
   ifsc?: string | null;
   branch?: string | null;
+  branchAddress?: string | null;
   nickname?: string | null;
   jointHolders?: string[];
   nomineeName?: string | null;
@@ -63,6 +75,11 @@ export interface AddSnapshotInput {
   note?: string | null;
 }
 
+export interface RevealAuditContext {
+  ip?: string | null;
+  userAgent?: string | null;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function toDate(s: string): Date {
@@ -74,16 +91,65 @@ function decimal(s: string | null | undefined): Prisma.Decimal | null {
   return new Prisma.Decimal(s);
 }
 
+/**
+ * Users paste account numbers with spaces or hyphens. Indian account numbers
+ * run 9–18 digits; the floor is 6 to admit older co-operative-bank formats.
+ */
+function normaliseAccountNumber(raw: string): string {
+  const n = raw.replace(/[\s-]/g, '');
+  if (!/^\d{6,18}$/.test(n)) {
+    throw new BadRequestError('Account number must be 6–18 digits');
+  }
+  return n;
+}
+
+async function decryptAccountNumber(enc: string, accountId: string): Promise<string> {
+  try {
+    return await decryptIdentifier(enc);
+  } catch (err) {
+    logger.error(
+      { err: (err as Error).message, accountId },
+      '[bankAccounts] account number decrypt failed',
+    );
+    throw new BadRequestError(
+      'Could not decrypt the account number — the encryption key may have changed',
+    );
+  }
+}
+
+/**
+ * Drop the ciphertext before a row leaves this service — `accountNumberEnc`
+ * must never be serialized, even encrypted. The client only learns whether a
+ * full number exists. The customer ID (CIF) is shown to its owner in full, so
+ * it is decrypted here rather than masked.
+ */
+export function toBankAccountDto<
+  T extends { accountNumberEnc: string | null; customerId: string | null; customerIdEnc: string | null },
+>(row: T): Omit<T, 'accountNumberEnc' | 'customerIdEnc'> & { hasAccountNumber: boolean } {
+  const { accountNumberEnc, customerIdEnc, ...rest } = row;
+  return {
+    ...rest,
+    customerId: openText(customerIdEnc, row.customerId),
+    hasAccountNumber: accountNumberEnc !== null,
+  };
+}
+
+async function customerIdColumns(raw: string | null | undefined) {
+  const { plain, enc } = await sealText(raw);
+  return { customerId: plain, customerIdEnc: enc };
+}
+
 // ── Account CRUD ─────────────────────────────────────────────────────────────
 
 export async function listAccounts(userId: string) {
-  return prisma.bankAccount.findMany({
+  const rows = await prisma.bankAccount.findMany({
     where: { userId },
     include: {
       snapshots: { orderBy: { asOfDate: 'desc' }, take: 1 },
     },
     orderBy: [{ status: 'asc' }, { bankName: 'asc' }, { createdAt: 'desc' }],
   });
+  return rows.map(toBankAccountDto);
 }
 
 export async function getAccount(userId: string, accountId: string) {
@@ -94,21 +160,26 @@ export async function getAccount(userId: string, accountId: string) {
     },
   });
   if (!account) throw new NotFoundError(`BankAccount ${accountId} not found`);
-  return account;
+  return toBankAccountDto(account);
 }
 
 export async function createAccount(userId: string, input: CreateBankAccountInput) {
-  return prisma.bankAccount.create({
+  const accountNumber = input.accountNumber ? normaliseAccountNumber(input.accountNumber) : null;
+  const row = await prisma.bankAccount.create({
     data: {
       userId,
       bankName: input.bankName.trim(),
       accountType: input.accountType,
       accountHolder: input.accountHolder.trim(),
-      last4: input.last4.trim(),
-      customerId: input.customerId?.trim() || null,
+      // Last 4 follows the full number when one is given, so the two can't
+      // disagree (auto-attribution matches on last4).
+      last4: accountNumber ? last4Of(accountNumber) : input.last4.trim(),
+      accountNumberEnc: accountNumber ? await encryptIdentifier(accountNumber) : null,
+      ...(await customerIdColumns(input.customerId)),
       portfolioId: input.portfolioId ?? null,
       ifsc: input.ifsc?.trim() || null,
       branch: input.branch?.trim() || null,
+      branchAddress: input.branchAddress?.trim() || null,
       nickname: input.nickname?.trim() || null,
       jointHolders: input.jointHolders ?? [],
       nomineeName: input.nomineeName?.trim() || null,
@@ -123,6 +194,7 @@ export async function createAccount(userId: string, input: CreateBankAccountInpu
       closedOn: input.closedOn ? toDate(input.closedOn) : null,
     },
   });
+  return toBankAccountDto(row);
 }
 
 export async function updateAccount(
@@ -142,13 +214,25 @@ export async function updateAccount(
   if (input.accountType !== undefined) data.accountType = input.accountType;
   if (input.accountHolder !== undefined) data.accountHolder = input.accountHolder.trim();
   if (input.last4 !== undefined) data.last4 = input.last4.trim();
-  if (input.customerId !== undefined) data.customerId = input.customerId?.trim() || null;
+  // After `last4` so a new full number wins over a hand-typed last4.
+  if (input.accountNumber !== undefined) {
+    if (input.accountNumber === null || input.accountNumber.trim() === '') {
+      data.accountNumberEnc = null;
+    } else {
+      const accountNumber = normaliseAccountNumber(input.accountNumber);
+      data.accountNumberEnc = await encryptIdentifier(accountNumber);
+      data.last4 = last4Of(accountNumber);
+    }
+  }
+  if (input.customerId !== undefined) Object.assign(data, await customerIdColumns(input.customerId));
   if (input.portfolioId !== undefined)
     data.portfolio = input.portfolioId
       ? { connect: { id: input.portfolioId } }
       : { disconnect: true };
   if (input.ifsc !== undefined) data.ifsc = input.ifsc?.trim() || null;
   if (input.branch !== undefined) data.branch = input.branch?.trim() || null;
+  if (input.branchAddress !== undefined)
+    data.branchAddress = input.branchAddress?.trim() || null;
   if (input.nickname !== undefined) data.nickname = input.nickname?.trim() || null;
   if (input.jointHolders !== undefined) data.jointHolders = input.jointHolders;
   if (input.nomineeName !== undefined) data.nomineeName = input.nomineeName?.trim() || null;
@@ -169,7 +253,7 @@ export async function updateAccount(
   if (input.closedOn !== undefined)
     data.closedOn = input.closedOn ? toDate(input.closedOn) : null;
 
-  return prisma.bankAccount.update({ where: { id: accountId }, data });
+  return toBankAccountDto(await prisma.bankAccount.update({ where: { id: accountId }, data }));
 }
 
 export async function deleteAccount(userId: string, accountId: string) {
@@ -179,6 +263,136 @@ export async function deleteAccount(userId: string, accountId: string) {
   });
   if (!existing) throw new NotFoundError(`BankAccount ${accountId} not found`);
   await prisma.bankAccount.delete({ where: { id: accountId } });
+}
+
+/**
+ * Decrypt the full account number for its owner. Writes a `pii_view` AuditLog
+ * row before returning (§3.7 / §15.8); if that write fails, the reveal fails
+ * with it. Returns null when only last4 was ever saved (nothing shown, nothing
+ * audited).
+ */
+export async function revealAccountNumber(
+  userId: string,
+  accountId: string,
+  ctx: RevealAuditContext,
+): Promise<string | null> {
+  const row = await prisma.bankAccount.findFirst({
+    where: { id: accountId, userId },
+    select: { id: true, accountNumberEnc: true },
+  });
+  if (!row) throw new NotFoundError(`BankAccount ${accountId} not found`);
+  if (!row.accountNumberEnc) return null;
+
+  const accountNumber = await decryptAccountNumber(row.accountNumberEnc, accountId);
+
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action: 'pii_view',
+      resource: `BankAccount:${accountId}`,
+      ip: ctx.ip ?? null,
+      userAgent: ctx.userAgent ?? null,
+      metadata: { field: 'accountNumber' },
+    },
+  });
+  return accountNumber;
+}
+
+interface BranchDetails {
+  branch: string | null;
+  branchAddress: string | null;
+}
+
+/**
+ * Fill whichever of branch name / address is empty from the IFSC and persist
+ * it, so the next share needs no lookup and the user can correct the (often
+ * messy) upstream text via Edit. A failed lookup degrades to sharing without
+ * them rather than blocking the share.
+ */
+async function fillBranchFromIfsc(
+  ifsc: string,
+  accountId: string,
+  current: BranchDetails,
+): Promise<BranchDetails> {
+  let info: IfscDetails | null;
+  try {
+    info = await lookupIfsc(ifsc);
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message, accountId },
+      '[bankAccounts] IFSC lookup failed — sharing without branch details',
+    );
+    return current;
+  }
+  if (!info) return current;
+
+  const data: { branch?: string; branchAddress?: string } = {};
+  if (!current.branch && info.branch) data.branch = info.branch;
+  if (!current.branchAddress && info.address) data.branchAddress = info.address;
+  if (Object.keys(data).length > 0) {
+    await prisma.bankAccount.update({ where: { id: accountId }, data });
+  }
+  return {
+    branch: current.branch ?? data.branch ?? null,
+    branchAddress: current.branchAddress ?? data.branchAddress ?? null,
+  };
+}
+
+/**
+ * Plain-text bank details for the user to send onward (to receive a
+ * transfer). Contains the full account number, so it's treated like a reveal:
+ * owner-scoped, `pii_share` audit row written before returning, and refused
+ * when only last4 is on file.
+ */
+export async function shareAccountDetails(
+  userId: string,
+  accountId: string,
+  ctx: RevealAuditContext,
+): Promise<{ text: string }> {
+  const row = await prisma.bankAccount.findFirst({
+    where: { id: accountId, userId },
+    select: {
+      id: true,
+      bankName: true,
+      accountHolder: true,
+      accountNumberEnc: true,
+      ifsc: true,
+      branch: true,
+      branchAddress: true,
+    },
+  });
+  if (!row) throw new NotFoundError(`BankAccount ${accountId} not found`);
+  if (!row.accountNumberEnc) {
+    throw new BadRequestError('Add the full account number (Edit account) before sharing bank details');
+  }
+
+  const accountNumber = await decryptAccountNumber(row.accountNumberEnc, accountId);
+
+  let branchDetails: BranchDetails = { branch: row.branch, branchAddress: row.branchAddress };
+  if (row.ifsc && (!row.branch || !row.branchAddress)) {
+    branchDetails = await fillBranchFromIfsc(row.ifsc, accountId, branchDetails);
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action: 'pii_share',
+      resource: `BankAccount:${accountId}`,
+      ip: ctx.ip ?? null,
+      userAgent: ctx.userAgent ?? null,
+      metadata: { fields: ['accountHolder', 'accountNumber', 'ifsc', 'branch', 'branchAddress'] },
+    },
+  });
+
+  const lines = [
+    `${row.bankName} account details`,
+    `Account holder: ${row.accountHolder}`,
+    `Account number: ${accountNumber}`,
+    row.ifsc ? `IFSC: ${row.ifsc}` : null,
+    branchDetails.branch ? `Branch: ${branchDetails.branch}` : null,
+    branchDetails.branchAddress ? `Branch address: ${branchDetails.branchAddress}` : null,
+  ].filter((line): line is string => line !== null);
+  return { text: lines.join('\n') };
 }
 
 // ── Snapshots ────────────────────────────────────────────────────────────────

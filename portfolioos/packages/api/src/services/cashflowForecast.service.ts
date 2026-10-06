@@ -18,7 +18,7 @@ import {
   buildAmortizationSchedule,
   type StoredLoan,
 } from './loans.service.js';
-import { serializeMoney } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
 
 const ZERO = new Decimal(0);
 

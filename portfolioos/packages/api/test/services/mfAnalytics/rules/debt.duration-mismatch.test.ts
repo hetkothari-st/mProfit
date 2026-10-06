@@ -15,8 +15,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializePct, serializeRatio } from '@portfolioos/shared';
-import type { Pct, Ratio, SebiSubCategory } from '@portfolioos/shared';
+import { serializePct, serializeRatio } from '@everypaisa/shared';
+import type { Pct, Ratio, SebiSubCategory } from '@everypaisa/shared';
 import { debtDurationMismatchRule } from '../../../../src/services/mfAnalytics/rules/debt.duration-mismatch.js';
 import { DEBT_PROFILE_BASE, factsForFund } from './_facts.fixture.js';
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { api, unwrap } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 /**
  * Client for `/api/admin/mf-qualitative-facts`
@@ -8,7 +8,7 @@ import type { ApiResponse } from '@portfolioos/shared';
  *
  * **Why this module declares shapes when nothing else in the MF client may.**
  * Same reason, and the same mitigation, as `mfMethodology.api.ts`: this payload
- * has no type in `@portfolioos/shared`, that package is frozen for this change,
+ * has no type in `@everypaisa/shared`, that package is frozen for this change,
  * and the alternative to a shape is no shape. So the shape is a **Zod schema
  * with the type inferred from it**, never a bare `interface` — a bare interface
  * drifts in silence (the server renames a field, `tsc` compares the client

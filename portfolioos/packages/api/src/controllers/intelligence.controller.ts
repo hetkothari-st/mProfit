@@ -4,7 +4,7 @@ import { getNetWorthHistory, type NetWorthHistoryPeriod } from '../services/netW
 import { runNetWorthSnapshotForUser } from '../jobs/netWorthSnapshotJob.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError, BadRequestError } from '../lib/errors.js';
-import { serializeMoney } from '@portfolioos/shared';
+import { serializeMoney } from '@everypaisa/shared';
 
 export async function getHealthScore(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();

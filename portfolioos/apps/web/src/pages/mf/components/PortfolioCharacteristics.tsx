@@ -5,7 +5,7 @@ import type {
   MfCurrentProfile,
   MfMarketCapSplit,
   Pct,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 import { MetricStat, MetricValue, SectionUnavailable } from './MetricValue';

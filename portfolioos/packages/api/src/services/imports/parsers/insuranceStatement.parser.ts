@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { env } from '../../../config/env.js';
 import { logger } from '../../../lib/logger.js';
 import { readPdfText, isPdfPasswordError, getUserPdfPasswords } from '../../../lib/pdf.js';
-import { checkLlmGate, recordSpend } from '../../../ingestion/llm/client.js';
+import { checkLlmGate, recordSpend, warnIfZeroRetentionUnconfirmed } from '../../../ingestion/llm/client.js';
 import { checkBudget } from '../../../ingestion/llm/budget.js';
 import { redactForLlm } from '../../../ingestion/pii.js';
-import { Decimal } from '@portfolioos/shared';
+import { Decimal } from '@everypaisa/shared';
 import type { Parser, ParserContext, ParserResult } from './types.js';
 
 const ADAPTER_ID = 'insurance.statement.pdf';
@@ -129,6 +129,7 @@ export const insuranceStatementParser: Parser = {
     }
 
     const redacted = redactForLlm(pdfText.slice(0, 6000));
+    warnIfZeroRetentionUnconfirmed('import.insurance_statement');
     const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY! });
     let resp;
     try {

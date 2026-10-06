@@ -1,0 +1,385 @@
+import { describe, it, expect, afterEach } from 'vitest';
+import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
+import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
+import {
+  getCaScope,
+  updateGrantScope,
+  reinstateGrant,
+  revokeGrant,
+  getGrantForSubject,
+} from '../../src/services/ca/caAccess.service.js';
+
+/**
+ * What a grant covers, tested where it is enforced.
+ *
+ * The scope lives on `Client` but the enforcement lives in the policies, so
+ * every assertion here reads through Prisma as the CA and checks what comes
+ * back — not what `getCaScope` reports. A cap that only the service honours is
+ * a cap the next endpoint forgets, and these would still pass if that were the
+ * case, which is exactly why they query rows instead.
+ */
+
+const cleanups: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  while (cleanups.length) await cleanups.pop()!();
+});
+
+async function person(label: string): Promise<TestScope> {
+  const scope = await createTestScope(label);
+  cleanups.push(scope.cleanup);
+  return scope;
+}
+
+/** A client with two portfolios, a loan and a car — three scope dimensions. */
+async function clientWithSpread(label: string) {
+  const scope = await person(label);
+  const extra = await runAsSystem(async () => {
+    const p = await prisma.portfolio.create({
+      data: { userId: scope.userId, name: 'Second portfolio', currency: 'INR', type: 'INVESTMENT' },
+    });
+    await prisma.transaction.create({
+      data: {
+        portfolioId: scope.portfolioId, assetClass: 'EQUITY', transactionType: 'BUY',
+        assetName: 'Infosys', assetKey: 'name:Infosys', tradeDate: new Date('2025-05-02'),
+        quantity: '10', price: '1500', grossAmount: '15000', netAmount: '15000',
+      },
+    });
+    await prisma.transaction.create({
+      data: {
+        portfolioId: p.id, assetClass: 'MUTUAL_FUND', transactionType: 'BUY',
+        assetName: 'Parag Parikh Flexi Cap', assetKey: 'name:PPFC',
+        tradeDate: new Date('2025-05-03'), quantity: '100', price: '60',
+        grossAmount: '6000', netAmount: '6000',
+      },
+    });
+    const loan = await prisma.loan.create({
+      data: {
+        userId: scope.userId, lenderName: 'HDFC', loanType: 'HOME', borrowerName: 'Self',
+        principalAmount: '1000000', interestRate: '9', tenureMonths: 120, emiAmount: '12000',
+        disbursementDate: new Date('2025-04-01'), firstEmiDate: new Date('2025-05-01'),
+      },
+    });
+    await prisma.vehicle.create({
+      data: { userId: scope.userId, registrationNo: `MH01${label.slice(0, 4)}`, make: 'Maruti' },
+    });
+    return { secondPortfolioId: p.id, loanId: loan.id };
+  });
+
+  cleanups.push(async () => {
+    await runAsSystem(async () => {
+      await prisma.vehicle.deleteMany({ where: { userId: scope.userId } });
+      await prisma.loan.deleteMany({ where: { userId: scope.userId } });
+      await prisma.transaction.deleteMany({ where: { portfolioId: extra.secondPortfolioId } });
+      await prisma.portfolio.deleteMany({ where: { id: extra.secondPortfolioId } });
+    });
+  });
+
+  return { ...scope, ...extra };
+}
+
+async function grant(advisorId: string, clientUserId: string) {
+  const client = await runAsSystem(() =>
+    prisma.client.create({
+      data: {
+        advisorId, userId: clientUserId, name: 'Scoped Client',
+        kind: 'INVITED', status: 'ACTIVE', acceptedAt: new Date(),
+      },
+    }),
+  );
+  cleanups.push(async () => {
+    await runAsSystem(async () => {
+      await prisma.clientPortfolioScope.deleteMany({ where: { clientId: client.id } });
+      await prisma.caAuditLog.deleteMany({ where: { clientId: client.id } });
+      await prisma.client.deleteMany({ where: { id: client.id } });
+    });
+  });
+  return client;
+}
+
+describe('a grant narrowed to some portfolios', () => {
+  it('shows the CA only those, and only their transactions', async () => {
+    const client = await clientWithSpread('scope-pf-client');
+    const ca = await person('scope-pf-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    const wideOpen = await runAsUser(ca.userId, () =>
+      prisma.portfolio.findMany({ where: { userId: client.userId } }),
+    );
+    expect(wideOpen).toHaveLength(2);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { portfolioIds: [client.portfolioId] }),
+    );
+
+    const narrowed = await runAsUser(ca.userId, () =>
+      prisma.portfolio.findMany({ where: { userId: client.userId } }),
+    );
+    expect(narrowed.map((p) => p.id)).toEqual([client.portfolioId]);
+
+    // The rows inside the excluded portfolio go with it.
+    const txns = await runAsUser(ca.userId, () =>
+      prisma.transaction.findMany({ where: { portfolio: { userId: client.userId } } }),
+    );
+    expect(txns).toHaveLength(1);
+    expect(txns[0]!.portfolioId).toBe(client.portfolioId);
+  });
+
+  it('reports the same narrowing through getCaScope', async () => {
+    const client = await clientWithSpread('scope-report-client');
+    const ca = await person('scope-report-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { portfolioIds: [client.secondPortfolioId] }),
+    );
+
+    const scope = await runAsUser(ca.userId, () => getCaScope(ca.userId, g.id));
+    expect(scope.allowedPortfolioIds).toEqual([client.secondPortfolioId]);
+  });
+});
+
+describe('a grant narrowed by category', () => {
+  it('keeps the included ones and hides the rest', async () => {
+    const client = await clientWithSpread('scope-cat-client');
+    const ca = await person('scope-cat-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { categories: ['LOAN'] }),
+    );
+
+    const seen = await runAsUser(ca.userId, async () => ({
+      loans: await prisma.loan.count({ where: { userId: client.userId } }),
+      vehicles: await prisma.vehicle.count({ where: { userId: client.userId } }),
+    }));
+    expect(seen).toEqual({ loans: 1, vehicles: 0 });
+  });
+
+  it('treats an empty list as deny-all, not as unrestricted', async () => {
+    const client = await clientWithSpread('scope-empty-client');
+    const ca = await person('scope-empty-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { categories: [] }),
+    );
+
+    const loans = await runAsUser(ca.userId, () =>
+      prisma.loan.count({ where: { userId: client.userId } }),
+    );
+    expect(loans).toBe(0);
+  });
+});
+
+describe('a grant narrowed by asset class', () => {
+  it('hides the transactions of every class left out', async () => {
+    const client = await clientWithSpread('scope-ac-client');
+    const ca = await person('scope-ac-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { assetClasses: ['EQUITY'] }),
+    );
+
+    const txns = await runAsUser(ca.userId, () =>
+      prisma.transaction.findMany({ where: { portfolio: { userId: client.userId } } }),
+    );
+    expect(txns.map((t) => t.assetClass)).toEqual(['EQUITY']);
+  });
+
+  // Holdings and capital gains feed the CA's report downloads, which run under
+  // the CA's own identity and so rely on these policies alone. They used to
+  // check only the portfolio, so a CA limited to one class could download the
+  // client's full holdings and gains.
+  it('hides holdings, capital gains and cash flows outside the grant', async () => {
+    const client = await clientWithSpread('scope-achg-client');
+    const ca = await person('scope-achg-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await runAsSystem(async () => {
+      const hold = (portfolioId: string, assetClass: 'EQUITY' | 'MUTUAL_FUND', key: string) =>
+        prisma.holdingProjection.create({
+          data: {
+            portfolioId, assetKey: key, assetClass, assetName: key, sourceTxCount: 1,
+            quantity: '1', avgCostPrice: '100', totalCost: '100', currentValue: '100', unrealisedPnL: '0',
+          },
+        });
+      await hold(client.portfolioId, 'EQUITY', 'name:Infosys');
+      await hold(client.secondPortfolioId, 'MUTUAL_FUND', 'name:PPFC');
+      const txns = await prisma.transaction.findMany({
+        where: { portfolio: { userId: client.userId } },
+        select: { id: true, portfolioId: true, assetClass: true },
+      });
+      for (const t of txns) {
+        await prisma.capitalGain.create({
+          data: {
+            portfolioId: t.portfolioId, sellTransactionId: t.id, buyTransactionId: t.id,
+            assetClass: t.assetClass, assetName: 'x', buyDate: new Date('2024-01-01'),
+            sellDate: new Date('2025-06-01'), quantity: '1', buyPrice: '100', sellPrice: '120',
+            buyAmount: '100', sellAmount: '120', capitalGainType: 'LONG_TERM',
+            gainLoss: '20', taxableGain: '20', financialYear: '2025-26',
+          },
+        });
+      }
+      await prisma.cashFlow.create({
+        data: { portfolioId: client.portfolioId, date: new Date('2025-06-01'), type: 'INFLOW', amount: '500' },
+      });
+    });
+    cleanups.push(() =>
+      runAsSystem(async () => {
+        const ids = [client.portfolioId, client.secondPortfolioId];
+        await prisma.capitalGain.deleteMany({ where: { portfolioId: { in: ids } } });
+        await prisma.holdingProjection.deleteMany({ where: { portfolioId: { in: ids } } });
+        await prisma.cashFlow.deleteMany({ where: { portfolioId: { in: ids } } });
+      }),
+    );
+
+    const readAsCa = () =>
+      runAsUser(ca.userId, () =>
+        Promise.all([
+          prisma.holdingProjection.findMany({ where: { portfolio: { userId: client.userId } } }),
+          prisma.capitalGain.findMany({
+            where: { portfolioId: { in: [client.portfolioId, client.secondPortfolioId] } },
+          }),
+          prisma.cashFlow.findMany({ where: { portfolio: { userId: client.userId } } }),
+        ]),
+      );
+
+    // Unnarrowed, the CA sees everything — proves the rows are reachable.
+    const [allH, allG, allF] = await readAsCa();
+    expect(allH).toHaveLength(2);
+    expect(allG).toHaveLength(2);
+    expect(allF).toHaveLength(1);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { assetClasses: ['MUTUAL_FUND'] }),
+    );
+
+    const [holdings, gains, flows] = await readAsCa();
+    expect(holdings.map((h) => h.assetClass)).toEqual(['MUTUAL_FUND']);
+    expect(gains.map((c) => c.assetClass)).toEqual(['MUTUAL_FUND']);
+    // Cash flows carry no asset class, so a class-narrowed grant cannot say
+    // which of them it covers; it withholds them rather than guess.
+    expect(flows).toHaveLength(0);
+  });
+});
+
+describe('the access window', () => {
+  it('closes the grant once it has passed, in the database', async () => {
+    const client = await clientWithSpread('scope-window-client');
+    const ca = await person('scope-window-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { accessUntil: '2020-01-01' }),
+    );
+
+    const portfolios = await runAsUser(ca.userId, () =>
+      prisma.portfolio.findMany({ where: { userId: client.userId } }),
+    );
+    expect(portfolios).toHaveLength(0);
+
+    // And the service says why, rather than showing an empty page.
+    await expect(runAsUser(ca.userId, () => getCaScope(ca.userId, g.id))).rejects.toThrow(
+      /ended on 2020-01-01/,
+    );
+  });
+
+  // "Until <date>" means through that whole day in India. The window used to
+  // close at 00:00 UTC — 05:30 IST on the last day — and open at 05:30 IST on
+  // the first.
+  it('stays open for the whole of its first and last day (IST)', async () => {
+    const client = await clientWithSpread('scope-lastday-client');
+    const ca = await person('scope-lastday-ca');
+    const g = await grant(ca.userId, client.userId);
+    const istToday = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+
+    await runAsUser(client.userId, () =>
+      updateGrantScope(client.userId, g.id, { accessFrom: istToday, accessUntil: istToday }),
+    );
+
+    const portfolios = await runAsUser(ca.userId, () =>
+      prisma.portfolio.findMany({ where: { userId: client.userId } }),
+    );
+    expect(portfolios.length).toBeGreaterThan(0);
+    await expect(runAsUser(ca.userId, () => getCaScope(ca.userId, g.id))).resolves.toBeTruthy();
+  });
+
+  it('refuses a window that ends before it starts', async () => {
+    const client = await clientWithSpread('scope-badwindow-client');
+    const ca = await person('scope-badwindow-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await expect(
+      runAsUser(client.userId, () =>
+        updateGrantScope(client.userId, g.id, { accessFrom: '2026-06-01', accessUntil: '2026-01-01' }),
+      ),
+    ).rejects.toThrow(/cannot end before it starts/);
+  });
+});
+
+describe('who may change a grant', () => {
+  it('refuses the CA who holds it', async () => {
+    const client = await clientWithSpread('scope-actor-client');
+    const ca = await person('scope-actor-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await expect(
+      runAsUser(ca.userId, () => updateGrantScope(ca.userId, g.id, { categories: null })),
+    ).rejects.toThrow(/not yours to manage/);
+  });
+
+  it('lets the client take access back and give it again', async () => {
+    const client = await clientWithSpread('scope-cycle-client');
+    const ca = await person('scope-cycle-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await runAsUser(client.userId, () => revokeGrant(client.userId, g.id));
+    const duringRevocation = await runAsUser(ca.userId, () =>
+      prisma.portfolio.count({ where: { userId: client.userId } }),
+    );
+    expect(duringRevocation).toBe(0);
+
+    await runAsUser(client.userId, () => reinstateGrant(client.userId, g.id));
+    const after = await runAsUser(ca.userId, () =>
+      prisma.portfolio.count({ where: { userId: client.userId } }),
+    );
+    expect(after).toBe(2);
+  });
+
+  it('will not let a CA reinstate a grant a real client ended', async () => {
+    const client = await clientWithSpread('scope-reinstate-client');
+    const ca = await person('scope-reinstate-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    await runAsUser(client.userId, () => revokeGrant(client.userId, g.id));
+
+    await expect(
+      runAsUser(ca.userId, () => reinstateGrant(ca.userId, g.id)),
+    ).rejects.toThrow(/Only the client can restore/);
+  });
+});
+
+describe('the client’s own view of a grant', () => {
+  it('names the advisor and lists the portfolios they could pick from', async () => {
+    const client = await clientWithSpread('scope-view-client');
+    const ca = await person('scope-view-ca');
+    const g = await grant(ca.userId, client.userId);
+
+    const view = await runAsUser(client.userId, () => getGrantForSubject(client.userId, g.id));
+    expect(view.advisor?.id).toBe(ca.userId);
+    expect(view.availablePortfolios).toHaveLength(2);
+    expect(view.scopeAllPortfolios).toBe(true);
+  });
+
+  it('is refused to anyone else', async () => {
+    const client = await clientWithSpread('scope-view-stranger-client');
+    const ca = await person('scope-view-stranger-ca');
+    const stranger = await person('scope-view-stranger');
+    const g = await grant(ca.userId, client.userId);
+
+    await expect(
+      runAsUser(stranger.userId, () => getGrantForSubject(stranger.userId, g.id)),
+    ).rejects.toThrow();
+  });
+});

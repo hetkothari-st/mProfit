@@ -17,15 +17,16 @@
  *    else removes both halves of that guard and puts unverified prescriptive
  *    text in front of a user under a licence.
  *
- * 3. `services/analytics.insights.ts` and `ai/systemPrompt.ts` MUST NOT be
- *    loosened to match this one. Those two surfaces are deliberately
- *    descriptive-only — insights bans prescriptive wording outright
- *    ("DESCRIBE, never PRESCRIBE") and the assistant prompt states "you are not
- *    a SEBI RIA". Both are consumed by callers that have no deterministic
- *    engine behind them and no consistency guard in front of them; relaxing
- *    either would silently change the compliance posture of every existing
- *    caller. The advisor got a third prompt precisely so that neither of the
- *    other two had to change.
+ * 3. `services/analytics.insights.ts` MUST NOT be loosened to match this one:
+ *    it is deliberately descriptive-only ("DESCRIBE, never PRESCRIBE") and has
+ *    no deterministic engine behind it and no consistency guard in front of
+ *    it. The in-app assistant (`ai/systemPrompt.ts`) was deliberately given an
+ *    adviser persona in 2026-09 at the licence holder's request, with its own
+ *    guard rails in place of this file's: figures only from on-file facts or
+ *    tool results (tools do the arithmetic), products only from the approved
+ *    list, no product-level advice without a risk profile, and every answer
+ *    stored with what it relied on. Neither prompt replaces this one — the
+ *    /advisor prose keeps its stricter, verified contract.
  *
  * Inlined as a string literal rather than read from a sibling `.txt` at
  * runtime, for the same reason analytics.insights.ts documents: `tsc` does not

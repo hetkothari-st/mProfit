@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import {
   listIngestionFailures,
+  listFeedRunFailures,
   getIngestionFailure,
   resolveIngestionFailure,
   retryIngestionFailure,
@@ -29,6 +30,29 @@ export async function list(req: Request, res: Response) {
     adapter: q.adapter,
     since: q.since ? new Date(q.since) : undefined,
     cursor: q.cursor,
+    limit: q.limit,
+  });
+  ok(res, result);
+}
+
+const feedListQuerySchema = z.object({
+  since: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+/**
+ * Market-feed failures, shown beside the user's own on the ops page.
+ *
+ * Authenticated but not user-scoped: `FeedRunLog` belongs to no user, so
+ * there is no `req.user.id` to filter by and nothing to leak between tenants.
+ * The authenticate guard stays because this is operational detail about our
+ * ingestion, not something to serve anonymously.
+ */
+export async function listFeedFailures(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const q = feedListQuerySchema.parse(req.query);
+  const result = await listFeedRunFailures({
+    since: q.since ? new Date(q.since) : undefined,
     limit: q.limit,
   });
   ok(res, result);

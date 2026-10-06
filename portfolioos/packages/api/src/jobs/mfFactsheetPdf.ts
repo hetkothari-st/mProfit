@@ -61,7 +61,9 @@ async function extractPages(bytes: Uint8Array): Promise<string[]> {
   const data = new Uint8Array(standalone);
   data.set(bytes);
 
-  const doc = await pdfjs.getDocument({ data, verbosity: 0 }).promise;
+  // pdfjs v6 tears down through the loading task, not the document.
+  const loadingTask = pdfjs.getDocument({ data, verbosity: 0 });
+  const doc = await loadingTask.promise;
   try {
     const pages: string[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
@@ -78,7 +80,7 @@ async function extractPages(bytes: Uint8Array): Promise<string[]> {
     return pages;
   } finally {
     await doc.cleanup();
-    await doc.destroy();
+    await loadingTask.destroy();
   }
 }
 

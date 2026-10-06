@@ -1,5 +1,5 @@
 // One-time fixture generator. Gated on env so it doesn't run in normal test CI.
-// Usage:  MANUAL_GEN=1 pnpm --filter @portfolioos/api exec tsx test/fixtures/pf/bob/_generate-fixture.ts
+// Usage:  MANUAL_GEN=1 pnpm --filter @everypaisa/api exec tsx test/fixtures/pf/bob/_generate-fixture.ts
 import PDFDocument from 'pdfkit';
 import { createWriteStream } from 'node:fs';
 import { resolve, dirname } from 'node:path';

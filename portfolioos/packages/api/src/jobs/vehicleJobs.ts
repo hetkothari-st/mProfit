@@ -57,7 +57,7 @@ export async function runWeeklyVehicleRefresh(): Promise<WeeklyRefreshOutcome> {
             { lastRefreshedAt: { lt: cutoff } },
           ],
         },
-        select: { id: true, userId: true, registrationNo: true },
+        select: { id: true, userId: true },
       });
       let refreshed = 0;
       let noData = 0;
@@ -72,7 +72,7 @@ export async function runWeeklyVehicleRefresh(): Promise<WeeklyRefreshOutcome> {
         } catch (err) {
           errors += 1;
           logger.warn(
-            { err, vehicleId: v.id, regNo: v.registrationNo },
+            { err, vehicleId: v.id },
             '[cron] weekly refresh threw for vehicle',
           );
         }

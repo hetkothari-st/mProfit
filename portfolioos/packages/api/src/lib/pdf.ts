@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { prisma } from './prisma.js';
 import { logger } from './logger.js';
+import { readPan } from '../services/piiAtRest.service.js';
 
 /**
  * Thin wrapper around pdfjs-dist that tries to read a PDF and, if it's
@@ -41,6 +42,9 @@ export async function readPdfText(
         password: pw || undefined,
         // Silence pdf.js console spam
         verbosity: 0,
+        // No isEvalSupported: pdf.js 6 no longer compiles font programs with
+        // eval at all, which removes the code-execution path malicious PDFs
+        // used (the reason for the 5 -> 6 upgrade).
       });
       const doc = await loadingTask.promise;
       let text = '';
@@ -55,7 +59,7 @@ export async function readPdfText(
         text += '\n';
       }
       await doc.cleanup();
-      await doc.destroy();
+      await loadingTask.destroy();
       return { text, usedPassword: pw || null, encrypted: wasEncrypted };
     } catch (err) {
       const e = err as { name?: string; code?: number; message?: string };
@@ -90,9 +94,11 @@ export async function getUserPdfPasswords(userId: string | null | undefined): Pr
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { pan: true, dob: true, email: true, phone: true },
+      select: { pan: true, panEnc: true, dob: true, email: true, phone: true },
     });
-    const pan = user?.pan?.trim().toUpperCase() ?? '';
+    // Encrypted-first read: PAN is the most common CAS unlock password, and
+    // this must keep working whether or not a row has been migrated yet.
+    const pan = (await readPan(user)) ?? '';
     const dob = user?.dob ?? null;
     const email = user?.email?.trim().toLowerCase() ?? '';
     const phone = user?.phone?.trim().replace(/\D/g, '') ?? '';

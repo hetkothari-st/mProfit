@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Lock, Sparkles, ArrowRight } from 'lucide-react';
-import { meetsMinTier, type PlanTierValue } from '@portfolioos/shared';
+import { meetsMinTier, type PlanTierValue } from '@everypaisa/shared';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth.store';

@@ -27,7 +27,7 @@
  * and the 10y row to `cagr` without either horizon needing a special case.
  */
 
-import { toDecimal, type MfEvidence, type MfFinding, type MfPeerPercentiles, type Ratio } from '@portfolioos/shared';
+import { toDecimal, type MfEvidence, type MfFinding, type MfPeerPercentiles, type Ratio } from '@everypaisa/shared';
 import {
   confidenceFor,
   makeFinding,

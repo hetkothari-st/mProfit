@@ -104,7 +104,7 @@
  * job puts in the DLQ, and the good ones are ingested (`CONTEXT.md §3.5`).
  */
 
-import { toDecimal, serializeMoney, type Money } from '@portfolioos/shared';
+import { toDecimal, serializeMoney, type Money } from '@everypaisa/shared';
 
 export const MFAPI_NAV_HISTORY_ADAPTER_ID = 'mfapi.navHistory';
 export const MFAPI_NAV_HISTORY_ADAPTER_VERSION = '1';

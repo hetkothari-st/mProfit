@@ -15,7 +15,7 @@ export const usePrivacyStore = create<PrivacyState>()(
       setHideSensitive: (value: boolean) => set({ hideSensitive: value }),
     }),
     {
-      name: 'portfolioos.privacy',
+      name: 'everypaisa.privacy',
     },
   ),
 );

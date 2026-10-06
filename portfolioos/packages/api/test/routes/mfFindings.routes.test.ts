@@ -67,7 +67,7 @@ import {
   type MfPortfolioAnalysisDto,
   type MfRuleRunRecord,
   type MfSchemeMetaDto,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';

@@ -1,5 +1,5 @@
 /**
- * types.ts — Shared types for the PortfolioOS browser extension.
+ * types.ts — Shared types for the EveryPaisa browser extension.
  *
  * RawScrapePayload mirrors packages/api/src/adapters/pf/types.ts.
  * If the server type changes, update this mirror too.

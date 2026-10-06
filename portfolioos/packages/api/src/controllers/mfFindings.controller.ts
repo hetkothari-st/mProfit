@@ -85,7 +85,7 @@ import {
   type MfRuleRunRecord,
   type MfSwitchCost,
   type MfVerdictKind,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import type {
   MfAnalysisRun as MfAnalysisRunRow,

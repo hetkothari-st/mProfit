@@ -19,8 +19,12 @@ import { asyncHandler } from '../middleware/validate.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { env } from '../config/env.js';
+import { taxYearOf } from '@everypaisa/shared';
 import { classifyQuery } from '../ai/queryClassifier.js';
 import { buildContext } from '../ai/contextBuilder.js';
+import { loadAdvisorContext } from '../ai/userFacts.js';
+import { searchKnowledge } from '../ai/knowledge/search.js';
+import { CardStreamFilter } from '../ai/cardStream.js';
 import {
   streamAssistantResponse,
   parseResponseForCard,
@@ -40,7 +44,8 @@ import {
   renameSession,
   touchSession,
 } from '../ai/chatSessions.js';
-import { checkQuota, incrementUsage } from '../ai/rateLimit.js';
+import { logger } from '../lib/logger.js';
+import { checkQuota, refundQuota, reserveQuota } from '../ai/rateLimit.js';
 import { computeSuggestedQuestions } from '../ai/suggestedQuestions.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
 
@@ -152,6 +157,21 @@ aiAssistantRouter.get(
 );
 
 aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
+  // Set once a message is reserved, cleared once output starts; a failure in
+  // between gives the reservation back.
+  let reservedFor: string | null = null;
+  const refundReservation = async (): Promise<void> => {
+    if (!reservedFor) return;
+    const id = reservedFor;
+    reservedFor = null;
+    try {
+      await refundQuota(id);
+    } catch (err) {
+      // The request already failed; a lost refund only costs the user one
+      // message of today's allowance, so log it rather than mask the error.
+      logger.warn({ err, userId: id }, '[ai.quota] refund failed');
+    }
+  };
   try {
     if (!req.user) throw new UnauthorizedError();
     const userId = req.user.id;
@@ -230,11 +250,35 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
       return;
     }
 
+    // Take this message from the allowance now, before any work: the check
+    // above alone let parallel requests all through (F9). Given back only if
+    // the request fails before the assistant produced anything.
+    if (!(await reserveQuota(userId, quota.limit))) {
+      res.status(429).json({
+        success: false,
+        error: 'daily_cap',
+        message: `You've hit the daily limit of ${quota.limit} questions. Resets tomorrow.`,
+        used: quota.limit,
+        limit: quota.limit,
+        resetsAt: quota.resetsAt,
+      });
+      return;
+    }
+    reservedFor = userId;
+
     // Persist the user's turn BEFORE calling Claude so we always have a
     // record even if Claude errors mid-stream.
     const classified = classifyQuery(message);
     const context = await buildContext(userId, familyId, classified);
     const history: HistoryMessage[] = await getConversationHistory(sessionId, 10);
+    // The adviser's view of the client (cached a few minutes per user) and
+    // the library passages that fit this question — both in-process.
+    const advisorCtx = await loadAdvisorContext(userId, {
+      familyId,
+      readableUserIds: context.scope.readableUserIds,
+      profile: context.userProfile as unknown as Record<string, unknown>,
+    });
+    const knowledge = searchKnowledge(message, { limit: 3 });
 
     await saveMessage({
       userId,
@@ -260,36 +304,59 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     };
 
     let fullResponse = '';
+    // The card arrives as its own event; its raw JSON never streams as text.
+    const cardFilter = new CardStreamFilter();
     try {
       for await (const chunk of streamAssistantResponse(
         userId,
         message,
         context,
         history,
+        {
+          factsText: advisorCtx.text,
+          facts: advisorCtx.facts,
+          financialYear: taxYearOf(new Date().toISOString().slice(0, 10)),
+          knowledge,
+        },
         async (result) => {
           const { cleanText, card } = parseResponseForCard(result.fullText);
+          // The advice record: what the adviser saw and relied on, so any
+          // answer can be reconstructed later.
+          const snapshot = {
+            ...context,
+            advisor: {
+              model: result.model,
+              userFacts: advisorCtx.text,
+              toolsUsed: result.toolsUsed,
+              knowledgeIds: result.knowledgeIds,
+            },
+          };
           await saveMessage({
             userId,
             sessionId,
             role: 'assistant',
             content: cleanText,
             queryIntent: classified.intent,
-            contextSnapshot: context as unknown as Record<string, unknown>,
+            contextSnapshot: snapshot as unknown as Record<string, unknown>,
             cardData: card as unknown as Record<string, unknown> | null,
             familyId,
           });
           await touchSession(sessionId);
-          await incrementUsage(userId);
           if (card) {
             send({ type: 'card', data: card });
           }
         },
       )) {
         fullResponse += chunk;
-        send({ type: 'token', content: chunk });
+        reservedFor = null; // an answer is coming: the message counts
+        const visible = cardFilter.push(chunk);
+        if (visible) send({ type: 'token', content: visible });
       }
+      const rest = cardFilter.flush();
+      if (rest) send({ type: 'token', content: rest });
       send({ type: 'done' });
     } catch (err) {
+      await refundReservation();
       const message = err instanceof Error ? err.message : 'stream_error';
       send({ type: 'error', message });
     } finally {
@@ -297,6 +364,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     }
     void fullResponse;
   } catch (err) {
+    await refundReservation();
     if (!res.headersSent) {
       const message = err instanceof Error ? err.message : 'assistant_error';
       res.status(500).json({ success: false, error: message });

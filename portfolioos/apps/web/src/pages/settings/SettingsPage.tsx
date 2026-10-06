@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form';
+import { Link } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
@@ -13,6 +14,7 @@ import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
 import { NotificationsSection } from './NotificationsSection';
+import { DeleteAccountSection } from './DeleteAccountSection';
 
 const schema = z.object({
   name: z.string().min(2).max(100),
@@ -41,7 +43,9 @@ export function SettingsPage() {
     defaultValues: {
       name: user?.name ?? '',
       phone: user?.phone ?? '',
-      pan: user?.pan ?? '',
+      // Blank rather than the masked value: submitting a masked string would
+      // overwrite the real PAN with Xs. The user reveals or retypes it.
+      pan: '',
       dob: user?.dob ?? '',
     },
   });
@@ -138,7 +142,11 @@ export function SettingsPage() {
               <div className="font-medium">{user?.role}</div>
             </div>
             <p className="text-xs text-muted-foreground pt-2">
-              Plan upgrades are available in the subscriptions section (Phase 8).
+              To change your plan, go to{' '}
+              <Link to="/pricing" className="underline underline-offset-2 hover:text-foreground">
+                Pricing
+              </Link>
+              .
             </p>
           </CardContent>
         </Card>
@@ -146,6 +154,10 @@ export function SettingsPage() {
 
       <div className="mt-6">
         <NotificationsSection />
+      </div>
+
+      <div className="mt-6">
+        <DeleteAccountSection />
       </div>
     </div>
   );

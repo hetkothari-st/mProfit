@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Sparkles, FlaskConical } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatPaiseAsRupees, planPriceFor, type BillingCycle, type PlanTierValue } from '@portfolioos/shared';
+import { formatPaiseAsRupees, planPriceFor, type BillingCycle, type PlanTierValue } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ interface TierDef {
 
 // Feature copy is pulled directly from the tier descriptions in the
 // pricing-tiers-gating task, not reinvented. Prices come from
-// @portfolioos/shared's PLAN_PRICING (also what Razorpay actually
+// @everypaisa/shared's PLAN_PRICING (also what Razorpay actually
 // charges) — never hardcoded here.
 const TIERS: TierDef[] = [
   {
@@ -128,7 +128,7 @@ export function PricingPage() {
         key: intent.keyId,
         amount: intent.amount,
         currency: intent.currency,
-        name: 'PortfolioOS',
+        name: 'EveryPaisa',
         description: `${tier} plan — ${cycle === 'ANNUAL' ? 'annual' : 'monthly'}`,
         order_id: intent.orderId,
         prefill: { name: user?.name, email: user?.email },
@@ -165,7 +165,7 @@ export function PricingPage() {
                 key={c}
                 onClick={() => setCycle(c)}
                 className={cn(
-                  'px-2.5 py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
+                  'px-2.5 py-1.5 sm:py-1 rounded-[5px] text-[11px] font-medium tracking-wide transition-all',
                   cycle === c
                     ? 'bg-foreground text-background shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',
@@ -178,7 +178,7 @@ export function PricingPage() {
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {TIERS.map((t) => {
           const isCurrent = user?.plan === t.tier;
           const { price, note } = priceDisplay(t.tier, cycle);

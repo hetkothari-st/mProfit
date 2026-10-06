@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { api, unwrap } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 /**
  * Client for `GET /api/mf-analytics/methodology` (`06-QUALITY-COMPLIANCE.md §5`,
@@ -11,7 +11,7 @@ import type { ApiResponse } from '@portfolioos/shared';
  * client is allowed to.**
  *
  * Every other type the MF pages consume is imported verbatim from
- * `@portfolioos/shared`, because `/advisor` crashed on first load when a client
+ * `@everypaisa/shared`, because `/advisor` crashed on first load when a client
  * declared its own version of a server shape and `tsc`, having only the
  * client's word for it, certified the drift instead of catching it
  * (CONTEXT.md §11, §16.6).

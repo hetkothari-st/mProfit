@@ -2,6 +2,7 @@ import { request } from 'undici';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import type { Exchange } from '@prisma/client';
+import { followRedirects } from '../lib/httpDispatcher.js';
 
 const NSE_EQUITY_LIST_URL = 'https://archives.nseindia.com/content/equities/EQUITY_L.csv';
 const NSE_ETF_LIST_URL = 'https://archives.nseindia.com/content/equities/eq_etfseclist.csv';
@@ -26,7 +27,7 @@ const BROWSER_HEADERS = {
 };
 
 async function fetchCsv(url: string): Promise<string> {
-  const res = await request(url, { method: 'GET', headers: BROWSER_HEADERS, maxRedirections: 5 });
+  const res = await request(url, { method: 'GET', headers: BROWSER_HEADERS, dispatcher: followRedirects });
   if (res.statusCode < 200 || res.statusCode >= 300) {
     throw new Error(`NSE fetch failed ${url}: ${res.statusCode}`);
   }
@@ -90,7 +91,10 @@ export interface NseUniverseLoadResult {
   fetchedRows: number;
   created: number;
   updated: number;
+  /** Rows we deliberately ignored — wrong series, no symbol. Not a problem. */
   skipped: number;
+  /** Rows we meant to write and could not. The feed canary watches this one. */
+  failed: number;
 }
 
 export async function loadNseEquityUniverse(): Promise<NseUniverseLoadResult> {
@@ -102,6 +106,7 @@ export async function loadNseEquityUniverse(): Promise<NseUniverseLoadResult> {
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  let failed = 0;
 
   for (const row of rows) {
     if (!row.symbol || !['EQ', 'BE', 'BZ', 'SM', 'ST'].includes(row.series)) {
@@ -134,13 +139,13 @@ export async function loadNseEquityUniverse(): Promise<NseUniverseLoadResult> {
         created++;
       } catch (err) {
         logger.warn({ err, symbol: row.symbol }, '[NSE] create failed — likely duplicate ISIN');
-        skipped++;
+        failed++;
       }
     }
   }
 
-  logger.info({ created, updated, skipped }, '[NSE] equity universe load complete');
-  return { fetchedRows: rows.length, created, updated, skipped };
+  logger.info({ created, updated, skipped, failed }, '[NSE] equity universe load complete');
+  return { fetchedRows: rows.length, created, updated, skipped, failed };
 }
 
 export async function loadNseEtfUniverse(): Promise<NseUniverseLoadResult> {
@@ -150,12 +155,13 @@ export async function loadNseEtfUniverse(): Promise<NseUniverseLoadResult> {
     text = await fetchCsv(NSE_ETF_LIST_URL);
   } catch (err) {
     logger.warn({ err }, '[NSE] ETF list fetch failed');
-    return { fetchedRows: 0, created: 0, updated: 0, skipped: 0 };
+    return { fetchedRows: 0, created: 0, updated: 0, skipped: 0, failed: 0 };
   }
   const rows = parseNseEquityCsv(text);
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  let failed = 0;
 
   for (const row of rows) {
     if (!row.symbol) {
@@ -188,10 +194,11 @@ export async function loadNseEtfUniverse(): Promise<NseUniverseLoadResult> {
         });
         created++;
       } catch (err) {
-        skipped++;
+        logger.warn({ err, symbol: row.symbol }, '[NSE] ETF create failed');
+        failed++;
       }
     }
   }
-  logger.info({ created, updated, skipped }, '[NSE] ETF list load complete');
-  return { fetchedRows: rows.length, created, updated, skipped };
+  logger.info({ created, updated, skipped, failed }, '[NSE] ETF list load complete');
+  return { fetchedRows: rows.length, created, updated, skipped, failed };
 }

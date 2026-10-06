@@ -32,8 +32,8 @@ import type {
   MfFindingCategory,
   MfFindingSeverity,
   MfSchemeMetaDto,
-} from '@portfolioos/shared';
-import { serializeMoney, serializePct, serializeRatio } from '@portfolioos/shared';
+} from '@everypaisa/shared';
+import { serializeMoney, serializePct, serializeRatio } from '@everypaisa/shared';
 
 import {
   CRITICAL_ELIGIBLE_CODES,

@@ -67,7 +67,7 @@
  */
 
 import type { Decimal } from 'decimal.js';
-import { toDecimal } from '@portfolioos/shared';
+import { toDecimal } from '@everypaisa/shared';
 
 /** One accepted observation. `date` is UTC midnight; `value` is the close. */
 export interface IndexPriceRow {

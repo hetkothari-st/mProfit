@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, decodeBlobError } from './client';
 import { getApiBaseUrl } from './baseUrl';
 import type {
   ApiResponse,
@@ -6,7 +6,7 @@ import type {
   DocumentOwnerType,
   OnlyOfficeConfigResponse,
   UpdateDocumentRequest,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);
@@ -47,11 +47,20 @@ export const documentsApi = {
     const base = getApiBaseUrl();
     return `${base}/api/documents/${id}/download`;
   },
+  async fetchBlob(id: string): Promise<Blob> {
+    // Authed fetch of the raw bytes (access token sent via axios). Used for
+    // in-browser preview (PDF/image) and downloads. Avoids relying on cookies.
+    try {
+      const res = await api.get(`/api/documents/${id}/download`, { responseType: 'blob' });
+      return res.data as Blob;
+    } catch (err) {
+      // e.g. "This file is no longer stored on the server. Please upload it again."
+      throw await decodeBlobError(err);
+    }
+  },
   async openDownload(id: string, fileName: string): Promise<void> {
-    // Authed download: fetch via axios so the access token is sent, then
-    // synthesise a download. Avoids relying on cookies.
-    const res = await api.get(`/api/documents/${id}/download`, { responseType: 'blob' });
-    const url = URL.createObjectURL(res.data as Blob);
+    const blob = await documentsApi.fetchBlob(id);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;

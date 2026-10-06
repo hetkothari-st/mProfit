@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializeRatio, type MfMetricStatus } from '@portfolioos/shared';
+import { serializeRatio, type MfMetricStatus } from '@everypaisa/shared';
 import { portfolioClosetIndexRule as rule } from '../../../../src/services/mfAnalytics/rules/portfolio.closet-index.js';
 import { SCHEME, makeFacts, makeFundFacts } from './_facts.fixture.js';
 

@@ -55,7 +55,7 @@ median, fund rank. Stored as an array.
 ### 2.4 Hypothetical SIP return
 Monthly ₹10,000 on the 1st NAV date of each month for the horizon; XIRR of the
 cash flows against terminal value. Reuse the XIRR implementation in
-`@portfolioos/shared` finance math (if absent, add one — Newton with bisection
+`@everypaisa/shared` finance math (if absent, add one — Newton with bisection
 fallback, tolerance 1e-8).
 
 ---

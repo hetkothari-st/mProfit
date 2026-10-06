@@ -14,12 +14,15 @@ import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/cn';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { useDownloadReport, type ReportFormat } from '@/hooks/useDownloadReport';
+import { useThemeStore } from '@/stores/theme.store';
 import { useReportSubject } from './useReportSubject';
 
-export type ReportType = 'holdings' | 'dashboard' | 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental';
+type ReportTheme = 'light' | 'dark';
 
-type SectionReportType = 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental';
-const SECTION_TYPES: SectionReportType[] = ['vehicles', 'insurance', 'loans', 'credit-cards', 'rental'];
+export type ReportType = 'holdings' | 'dashboard' | 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental' | 'real-estate';
+
+type SectionReportType = 'vehicles' | 'insurance' | 'loans' | 'credit-cards' | 'rental' | 'real-estate';
+const SECTION_TYPES: SectionReportType[] = ['vehicles', 'insurance', 'loans', 'credit-cards', 'rental', 'real-estate'];
 
 interface Props {
   /** Which report endpoint to hit */
@@ -37,6 +40,10 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
   const [portfolioId, setPortfolioId] = useState<string>('');
   const [scope, setScope]         = useState<'all' | 'single'>('all');
   const [format, setFormat]       = useState<ReportFormat>('pdf');
+  const appIsDark                 = useThemeStore(s => s.dark);
+  // Starts on the app's current theme; the picker below overrides it for
+  // just this download, same as `format` does.
+  const [theme, setTheme]         = useState<ReportTheme>(appIsDark ? 'dark' : 'light');
   const { download, loading }     = useDownloadReport();
   const reportSubject             = useReportSubject();
 
@@ -51,13 +58,13 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
 
   function sectionFilename(): string {
     const who = reportSubject.filenameSuffix;
-    if (isDashboard) return `portfolioos-dashboard-report${who}.${format}`;
-    if (isSection)   return `portfolioos-${type}-report${who}.${format}`;
+    if (isDashboard) return `everypaisa-dashboard-report${who}.${format}`;
+    if (isSection)   return `everypaisa-${type}-report${who}.${format}`;
     if (assetClasses && assetClasses.length > 0) {
       const slug = assetClasses.map(c => c.toLowerCase().replace(/_/g, '-')).join('_');
-      return `portfolioos-${slug}-report${who}.${format}`;
+      return `everypaisa-${slug}-report${who}.${format}`;
     }
-    return `portfolioos-holdings-report${who}.${format}`;
+    return `everypaisa-holdings-report${who}.${format}`;
   }
 
   function handleDownload() {
@@ -68,6 +75,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
         '/api/reports/dashboard-export',
         {
           format,
+          theme,
           scope,
           ...(scope === 'single' && portfolioId ? { portfolioId } : {}),
           ...reportSubject.params,
@@ -80,7 +88,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
     if (isSection) {
       download(
         '/api/reports/section-export',
-        { format, section: type, ...reportSubject.params },
+        { format, theme, section: type, ...reportSubject.params },
         filename,
       ).then(() => setOpen(false)).catch(err => alert(String(err)));
       return;
@@ -95,6 +103,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
       '/api/reports/holdings-export',
       {
         format,
+        theme,
         portfolioIds: resolvedIds,
         ...(assetClasses && assetClasses.length > 0 ? { assetClasses } : {}),
         ...reportSubject.params,
@@ -204,6 +213,30 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
                     )}
                   >
                     {f === 'pdf' ? 'PDF' : 'Excel (.xlsx)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Theme picker — starts on the app's own theme, overridable
+                for just this download. */}
+            <div className="space-y-1.5">
+              <Label>Appearance</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {(['dark', 'light'] as const).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTheme(t)}
+                    className={cn(
+                      'rounded-md border py-2.5 text-sm font-medium transition-colors',
+                      theme === t
+                        ? 'border-accent bg-accent/10 text-accent-ink'
+                        : 'border-border text-muted-foreground hover:border-accent/50 hover:text-foreground',
+                    )}
+                  >
+                    {t === 'dark' ? 'Dark' : 'Light (print)'}
+                    {t === (appIsDark ? 'dark' : 'light') ? ' · current' : ''}
                   </button>
                 ))}
               </div>

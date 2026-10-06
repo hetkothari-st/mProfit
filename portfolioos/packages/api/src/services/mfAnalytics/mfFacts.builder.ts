@@ -51,7 +51,7 @@ import {
   type MfSchemeScoreDto,
   type Pct,
   type SebiSubCategory,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import { prisma } from '../../lib/prisma.js';
 import type { EffectiveScope } from '../familyScope.service.js';

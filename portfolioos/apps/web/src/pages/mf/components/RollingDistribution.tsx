@@ -1,4 +1,4 @@
-import type { MfRollingStats, Ratio } from '@portfolioos/shared';
+import type { MfRollingStats, Ratio } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { SectionUnavailable } from './MetricValue';
 import { formatRatioAsPct, ratioToChartNumber } from '../mfFormat';

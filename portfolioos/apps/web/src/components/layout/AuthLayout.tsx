@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Sun, Moon, ShieldCheck, TrendingUp, BarChart3 } from 'lucide-react';
 import { useThemeStore } from '@/stores/theme.store';
 import { cn } from '@/lib/cn';
+import { BrandMark, BrandWordmark } from '@/components/brand/BrandLogo';
 
 interface AuthLayoutProps {
   title: string;
@@ -49,19 +50,9 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
 
           <div className="relative z-10 flex h-full flex-col justify-between p-12 xl:p-16">
             {/* Brand mark */}
-            <Link to="/" className="inline-flex items-center gap-3 group w-fit">
-              <div className="relative h-11 w-11 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-md transition-transform group-hover:scale-[1.02]">
-                <svg viewBox="0 0 24 24" className="h-5.5 w-5.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 4v16" />
-                  <path d="M5 4h8a4.5 4.5 0 0 1 0 9H5" />
-                  <path d="M14 13l4 7" />
-                </svg>
-                <span className="absolute -inset-px rounded-md ring-1 ring-inset ring-foreground/10" />
-              </div>
-              <div className="flex items-baseline gap-[1px]">
-                <span className="font-brand text-[24px] leading-none text-foreground">Portfolio</span>
-                <span className="font-brand text-[24px] leading-none text-accent-ink">OS</span>
-              </div>
+            <Link to="/" className="inline-flex items-center gap-[18px] group w-fit">
+              <BrandMark className="h-11 w-11 shadow-md transition-transform group-hover:scale-[1.02]" />
+              <BrandWordmark className="text-[24px]" />
             </Link>
 
             {/* Editorial headline */}
@@ -120,7 +111,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
                 </div>
               ))}
               <p className="pt-4 text-[10px] uppercase tracking-kerned text-muted-foreground/70">
-                © {new Date().getFullYear()} PortfolioOS · A multi-asset ledger for India
+                © {new Date().getFullYear()} EveryPaisa · A multi-asset ledger for India
               </p>
             </div>
           </div>
@@ -145,18 +136,9 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
           </div>
 
           {/* Mobile brand mark — only shows when left panel hidden */}
-          <div className="lg:hidden flex items-center justify-center gap-2.5 pt-10 pb-2">
-            <div className="relative h-10 w-10 rounded-md grid place-items-center bg-gradient-to-br from-accent via-accent/95 to-accent/75 text-accent-foreground shadow-sm">
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 4v16" />
-                <path d="M5 4h8a4.5 4.5 0 0 1 0 9H5" />
-                <path d="M14 13l4 7" />
-              </svg>
-            </div>
-            <div className="flex items-baseline gap-[1px]">
-              <span className="font-brand text-[22px] leading-none text-foreground">Portfolio</span>
-              <span className="font-brand text-[22px] leading-none text-accent-ink">OS</span>
-            </div>
+          <div className="lg:hidden flex items-center justify-center gap-4 pt-10 pb-2">
+            <BrandMark />
+            <BrandWordmark />
           </div>
 
           <div className="flex flex-1 items-center justify-center px-6 sm:px-12 py-10">

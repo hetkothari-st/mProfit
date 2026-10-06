@@ -2,7 +2,7 @@
  * Calibration for the MF analytics findings engine.
  *
  * Most of it is not here. The 38 rule thresholds live in
- * `@portfolioos/shared`'s `mfAnalytics.constants.ts` because the frontend
+ * `@everypaisa/shared`'s `mfAnalytics.constants.ts` because the frontend
  * needs the same numbers to render "would clear at a TER <= …" copy and the
  * threshold markers on charts, and a second copy on the client is how the
  * explanation and the finding start disagreeing. They are re-exported below so
@@ -25,7 +25,7 @@ import {
   MIN_RATING_HISTORY_MONTHS,
   MIN_UNIVERSE_SIZE,
   type MfRuleConstants,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 /**
  * Re-exported so engine modules have one import for calibration, exactly as

@@ -13,18 +13,48 @@ import { useAuthStore } from '@/stores/auth.store';
  *   - Paragraphs (blank-line separated)
  *   - Bullet lists (consecutive `- ` lines → single <ul>)
  *   - Numbered lists (consecutive `1. ` lines → single <ol>)
+ *   - Tables (GitHub-style `| a | b |` rows under a `|---|---|` line) —
+ *     the adviser's scenarios; scrolls sideways rather than squashing
+ *     on a narrow screen
  *   - Bold via **text**
+ *   - Links via [text](/in-app/path) or [text](https://…) — anything else
+ *     (javascript:, protocol-relative //…) stays plain text
  *   - Auto-highlights for numeric tokens (percentages, ₹ amounts,
  *     "p.a.") so the reader can scan without hunting for the numbers.
  */
 
 // ─── Inline pass ─────────────────────────────────────────────────────
 
-type InlineNode = { kind: 'text' | 'bold' | 'num'; text: string };
+type InlineNode =
+  | { kind: 'text' | 'bold' | 'num'; text: string }
+  | { kind: 'link'; text: string; href: string; internal: boolean };
 
 const NUM_RE = /(₹\s?[\d,]+(?:\.\d+)?\s*(?:lakh|crore|cr|k)?|-?\d+(?:\.\d+)?\s*%(?:\s*p\.?a\.?)?)/gi;
+const LINK_RE = /\[([^\]\n]+)\]\(([^)\s]+)\)/g;
+
+/** Only in-app paths and https links are followed; the rest render as their label. */
+function safeLink(href: string): { href: string; internal: boolean } | null {
+  if (href.startsWith('/') && !href.startsWith('//')) return { href, internal: true };
+  if (/^https:\/\/[^\s]+$/i.test(href)) return { href, internal: false };
+  return null;
+}
 
 function tokenizeInline(text: string): InlineNode[] {
+  const out: InlineNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  LINK_RE.lastIndex = 0;
+  while ((m = LINK_RE.exec(text)) !== null) {
+    if (m.index > last) out.push(...tokenizeBoldAndNumbers(text.slice(last, m.index)));
+    const link = safeLink(m[2]!);
+    out.push(link ? { kind: 'link', text: m[1]!, ...link } : { kind: 'text', text: m[1]! });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(...tokenizeBoldAndNumbers(text.slice(last)));
+  return out;
+}
+
+function tokenizeBoldAndNumbers(text: string): InlineNode[] {
   // First split on **bold**; then within each non-bold segment run the
   // number highlighter. Order matters because auto-highlighting inside
   // bold would double-tint the token.
@@ -57,6 +87,18 @@ function pushWithNumbers(out: InlineNode[], chunk: string): void {
 
 function renderInline(text: string, keyBase = 0): JSX.Element[] {
   return tokenizeInline(text).map((n, i) => {
+    if (n.kind === 'link') {
+      const cls = 'text-accent underline underline-offset-2 hover:text-foreground';
+      return n.internal ? (
+        <Link key={`${keyBase}-l-${i}`} to={n.href} className={cls}>
+          {n.text}
+        </Link>
+      ) : (
+        <a key={`${keyBase}-l-${i}`} href={n.href} target="_blank" rel="noopener noreferrer" className={cls}>
+          {n.text}
+        </a>
+      );
+    }
     if (n.kind === 'bold') {
       return (
         <strong
@@ -83,10 +125,30 @@ function renderInline(text: string, keyBase = 0): JSX.Element[] {
 
 // ─── Block pass ──────────────────────────────────────────────────────
 
+type Align = 'left' | 'right' | 'center';
+
 type Block =
   | { kind: 'p'; text: string }
   | { kind: 'ul'; items: string[] }
-  | { kind: 'ol'; items: string[] };
+  | { kind: 'ol'; items: string[] }
+  | { kind: 'table'; header: string[]; align: Align[]; rows: string[][] };
+
+const TABLE_SEPARATOR_RE = /^\|(\s*:?-{3,}:?\s*\|)+$/;
+
+function isTableRow(line: string): boolean {
+  return line.length > 1 && line.startsWith('|') && line.endsWith('|');
+}
+
+function splitRow(line: string): string[] {
+  return line.slice(1, -1).split('|').map((c) => c.trim());
+}
+
+function alignOf(cell: string): Align {
+  const left = cell.startsWith(':');
+  const right = cell.endsWith(':');
+  if (left && right) return 'center';
+  return right ? 'right' : 'left';
+}
 
 function parseBlocks(input: string): Block[] {
   const lines = input.replace(/\r\n/g, '\n').split('\n');
@@ -114,12 +176,30 @@ function parseBlocks(input: string): Block[] {
     }
   };
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!.trim();
     if (line === '') {
       flushPara();
       flushUl();
       flushOl();
+      continue;
+    }
+    // A table: a pipe row directly above a |---|---| separator, then rows.
+    const next = lines[i + 1]?.trim() ?? '';
+    if (isTableRow(line) && TABLE_SEPARATOR_RE.test(next)) {
+      flushPara();
+      flushUl();
+      flushOl();
+      const header = splitRow(line);
+      const align = splitRow(next).map(alignOf);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && isTableRow(lines[i]!.trim())) {
+        rows.push(splitRow(lines[i]!.trim()));
+        i++;
+      }
+      i--; // the for-loop's increment moves past the last row
+      blocks.push({ kind: 'table', header, align, rows });
       continue;
     }
     const bullet = line.match(/^[-•]\s+(.+)$/);
@@ -146,6 +226,12 @@ function parseBlocks(input: string): Block[] {
   return blocks;
 }
 
+const ALIGN_CLASS: Record<Align, string> = {
+  left: 'text-left',
+  right: 'text-right',
+  center: 'text-center',
+};
+
 function renderBlocks(text: string): JSX.Element[] {
   const blocks = parseBlocks(text);
   return blocks.map((b, i) => {
@@ -154,6 +240,41 @@ function renderBlocks(text: string): JSX.Element[] {
         <p key={i} className={i > 0 ? 'mt-2.5' : ''}>
           {renderInline(b.text, i)}
         </p>
+      );
+    }
+    if (b.kind === 'table') {
+      return (
+        <div key={i} className={`overflow-x-auto ${i > 0 ? 'mt-2.5' : ''}`}>
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr className="border-b border-border">
+                {b.header.map((h, j) => (
+                  <th
+                    key={j}
+                    scope="col"
+                    className={`px-2 py-1.5 font-semibold text-foreground whitespace-nowrap ${ALIGN_CLASS[b.align[j] ?? 'left']}`}
+                  >
+                    {renderInline(h, i * 1000 + j)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {b.rows.map((row, r) => (
+                <tr key={r} className="border-b border-border/50 last:border-0">
+                  {b.header.map((_, j) => (
+                    <td
+                      key={j}
+                      className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${ALIGN_CLASS[b.align[j] ?? 'left']}`}
+                    >
+                      {renderInline(row[j] ?? '', i * 1000 + (r + 1) * 50 + j)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       );
     }
     if (b.kind === 'ul') {

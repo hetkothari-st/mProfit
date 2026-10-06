@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Decimal, toDecimal } from '@portfolioos/shared';
+import { Decimal, toDecimal } from '@everypaisa/shared';
 
 import {
   ACCEPTANCE,

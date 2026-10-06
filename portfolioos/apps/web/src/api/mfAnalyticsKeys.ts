@@ -20,7 +20,7 @@
  * literal types are what let TypeScript reject a typo'd leaf at the call site.
  */
 
-import type { MfHorizonYears } from '@portfolioos/shared';
+import type { MfHorizonYears } from '@everypaisa/shared';
 
 export const mfAnalyticsKeys = {
   /** Whole namespace — `invalidateQueries({ queryKey: mfAnalyticsKeys.all })`. */

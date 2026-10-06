@@ -167,8 +167,9 @@ function groupByAssetKey(txs: Transaction[]): Map<string, Transaction[]> {
   const m = new Map<string, Transaction[]>();
   for (const tx of txs) {
     if (tx.assetClass !== 'FUTURES' && tx.assetClass !== 'OPTIONS') continue;
-    const key = tx.assetKey ?? '';
-    if (!key) continue;
+    if (!tx.assetKey) continue;
+    // One book per portfolio: a long in one portfolio never closes a short in another.
+    const key = `${tx.portfolioId}|${tx.assetKey}`;
     const arr = m.get(key);
     if (arr) arr.push(tx);
     else m.set(key, [tx]);
@@ -180,7 +181,8 @@ export function computeFoPnl(txs: Transaction[]): FoPnlResult {
   const groups = groupByAssetKey(txs);
   const rows: FoPnlRow[] = [];
 
-  for (const [assetKey, list] of groups.entries()) {
+  for (const list of groups.values()) {
+    const assetKey = list[0]!.assetKey ?? '';
     const events = buildCloseEvents(list);
     if (events.length === 0) continue;
 

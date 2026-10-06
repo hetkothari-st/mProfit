@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializeRatio } from '@portfolioos/shared';
+import { serializeRatio } from '@everypaisa/shared';
 import { perfRecentReversalRule as rule } from '../../../../src/services/mfAnalytics/rules/perf.recent-reversal.js';
 import { SCHEME, makeFacts, makeFundFacts, makePeer } from './_facts.fixture.js';
 

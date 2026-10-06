@@ -6,7 +6,7 @@
  * number is ABSENT. A fixture where everything resolves exercises none of the
  * branches this page exists to get right.
  *
- * Everything is typed as the real DTO from `@portfolioos/shared` — that is as
+ * Everything is typed as the real DTO from `@everypaisa/shared` — that is as
  * much the point of the fixtures as of the page. A field renamed on the
  * contract breaks this file at compile time, which is precisely what did NOT
  * happen on `/advisor`, where the client had its own shapes and `tsc` had
@@ -27,7 +27,7 @@ import type {
   Money,
   Pct,
   Ratio,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 import { makeMeta, makeScore } from './fundAnalytics';
 
 const r = (s: string) => s as Ratio;

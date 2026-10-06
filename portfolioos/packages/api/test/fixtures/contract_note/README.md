@@ -53,7 +53,7 @@ samples.
 Once samples are present, run:
 
 ```bash
-pnpm --filter @portfolioos/api test test/fixtures/contract_note
+pnpm --filter @everypaisa/api test test/fixtures/contract_note
 ```
 
 The first run snapshots the parsed output to

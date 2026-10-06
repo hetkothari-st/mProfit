@@ -48,9 +48,51 @@ describe('classifyQuery', () => {
 
     ['should I rebalance', QueryIntent.REBALANCE_ADVICE, {}],
 
+    ['is my family covered enough by my term plan', QueryIntent.INSURANCE, {}],
+    ['when is my next premium due', QueryIntent.INSURANCE, {}],
+    ['who is the nominee on my LIC policy', QueryIntent.INSURANCE, {}],
+    ['my health insurance claim was rejected, what can I do', QueryIntent.INSURANCE, {}],
+    ['can I go to the ombudsman', QueryIntent.INSURANCE, {}],
+    ['what is the grace period', QueryIntent.INSURANCE, {}],
+    ['should I surrender my endowment plan', QueryIntent.INSURANCE, {}],
+    ['does my mediclaim work cashless at this hospital', QueryIntent.INSURANCE, {}],
+    ['what is the free-look period', QueryIntent.INSURANCE, {}],
+    ['my policy lapsed, can I revive it', QueryIntent.INSURANCE, {}],
+    ['how do I find unclaimed insurance money', QueryIntent.INSURANCE, {}],
+    ['how much interest will the insurer pay on my late claim', QueryIntent.INSURANCE, {}],
+    ['how do I take a loan against my LIC policy', QueryIntent.INSURANCE, {}],
+    ['is my car insurance renewal due', QueryIntent.INSURANCE, {}],
+
     ['random gibberish question about the weather', QueryIntent.GENERAL, {}],
     ['', QueryIntent.GENERAL, {}],
   ];
+
+  describe('insurance does not steal other intents', () => {
+    const others: Array<[string, QueryIntent]> = [
+      ['how much interest am I paying on my credit card', QueryIntent.DEBT_ANALYSIS],
+      ['what is my monthly emi', QueryIntent.DEBT_ANALYSIS],
+      ['is my health insurance premium tax deductible', QueryIntent.TAX_DRAG],
+      ['what if I stop paying my LIC premium', QueryIntent.WHAT_IF],
+      ["what's my financial health", QueryIntent.PORTFOLIO_HEALTH],
+      ['am I on track to buy a car', QueryIntent.GOAL_PROJECTION],
+    ];
+    for (const [query, expected] of others) {
+      it(`keeps "${query}" → ${expected}`, () => {
+        expect(classifyQuery(query).intent).toBe(expected);
+      });
+    }
+
+    for (const query of [
+      'is infosys trading at a premium',
+      'does my emergency fund cover 6 months of expenses',
+      'can I claim 80C deduction',
+      'how does rbi monetary policy affect my debt funds',
+    ]) {
+      it(`does not read "${query}" as insurance`, () => {
+        expect(classifyQuery(query).intent).not.toBe(QueryIntent.INSURANCE);
+      });
+    }
+  });
 
   for (const [query, expected, expectedExtras] of cases) {
     it(`classifies "${query.slice(0, 60)}" → ${expected}`, () => {

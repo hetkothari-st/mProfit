@@ -1,4 +1,4 @@
-import type { MfAnalysisScope, MfPortfolioTotals } from '@portfolioos/shared';
+import type { MfAnalysisScope, MfPortfolioTotals } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { MetricStat } from './MetricValue';
 import {

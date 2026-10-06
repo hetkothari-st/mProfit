@@ -1,4 +1,4 @@
-import type { MfGoalFitDto, MfHeldFundDto } from '@portfolioos/shared';
+import type { MfGoalFitDto, MfHeldFundDto } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 import { MetricStat } from './MetricValue';

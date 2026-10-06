@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Mail, MessageSquare, X, Pencil, Send, Loader2, BellRing, Save, Check, ChevronDown, AlertTriangle, Clock, CalendarClock } from 'lucide-react';
-import { formatINR } from '@portfolioos/shared';
+import { formatINR } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -61,18 +61,17 @@ function leadCopy(leadDays: number, dueDate?: string): string {
   return `Due in ${leadDays} days`;
 }
 
-// Urgency → notification tone. Mirrors the AlertsPage rail/pill language
-// so a rent reminder reads the same as any other alert in the app instead
-// of looking like a plain form row.
+// Urgency → notification tone. Carried by the icon disc and the status pill.
+// There was a coloured rail down the left edge of every row too; it said
+// nothing the other two did not already say, and three urgency signals on one
+// row is decoration rather than information.
 function reminderTone(leadDays: number): {
-  rail: string;
   icon: typeof AlertTriangle;
   iconClass: string;
   pillClass: string;
 } {
   if (leadDays < 0) {
     return {
-      rail: 'bg-negative',
       icon: AlertTriangle,
       iconClass: 'text-negative',
       pillClass: 'border-negative/30 bg-negative/10 text-negative',
@@ -80,14 +79,12 @@ function reminderTone(leadDays: number): {
   }
   if (leadDays <= 3) {
     return {
-      rail: 'bg-accent',
       icon: Clock,
       iconClass: 'text-accent-ink',
       pillClass: 'border-accent/30 bg-accent/10 text-accent-ink',
     };
   }
   return {
-    rail: 'bg-border',
     icon: CalendarClock,
     iconClass: 'text-muted-foreground',
     pillClass: 'border-border bg-muted/40 text-muted-foreground',
@@ -276,6 +273,7 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
               <iframe
                 title="Email preview"
                 srcDoc={bodyDraft}
+                sandbox=""
                 className="w-full h-64 border-0 bg-white"
               />
             </div>
@@ -430,6 +428,50 @@ function ContactEditor({
         </Button>
       )}
     </div>
+  );
+}
+
+/**
+ * A delivery channel, on or off.
+ *
+ * A native checkbox was the wrong shape for this: choosing Email and SMS is one
+ * two-state decision about how the batch goes out, not two unrelated ticks in a
+ * form. The pressed state is filled so the answer reads from across the row,
+ * and a channel with no recipient on file is disabled rather than hidden —
+ * seeing that SMS is unavailable is what tells you to go add a phone number.
+ */
+function ChannelChip({
+  icon: Icon,
+  label,
+  active,
+  available,
+  unavailableHint,
+  onClick,
+}: {
+  icon: typeof Mail;
+  label: string;
+  active: boolean;
+  available: boolean;
+  unavailableHint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!available}
+      aria-pressed={active}
+      title={available ? undefined : unavailableHint}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors focus-ring',
+        !available && 'cursor-not-allowed border-border/60 text-muted-foreground/50',
+        available && active && 'border-accent/40 bg-accent/15 text-accent-ink',
+        available && !active && 'border-border text-muted-foreground hover:border-foreground/25 hover:text-foreground',
+      )}
+    >
+      <Icon className="h-3 w-3" strokeWidth={2} />
+      {label}
+    </button>
   );
 }
 
@@ -610,25 +652,32 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
 
   return (
     <div className="border border-border rounded-md overflow-hidden">
-      {/* Header */}
+      {/* WHO — the tenant, the property, and whether we can reach them at all.
+          Name and property stack rather than sitting either side of a middle
+          dot: two different facts, so hierarchy carries it. */}
       <div className="px-4 py-3 bg-foreground/[0.02] border-b border-border">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className="font-semibold text-[16px]">{tenancy?.tenantName ?? '—'}</span>
-              <span className="text-sm text-muted-foreground">·</span>
-              <span className="text-sm text-muted-foreground">{property?.name ?? '—'}</span>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {sortedReminders.length} pending reminder{sortedReminders.length === 1 ? '' : 's'}
-              {missingContact && (
-                <span className="ml-2 text-amber-700 font-medium">
-                  ⚠ Tenant contact missing
-                </span>
-              )}
-            </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="min-w-0">
+            <h4 className="font-semibold text-[15px] leading-tight truncate">
+              {tenancy?.tenantName ?? 'Unknown tenant'}
+            </h4>
+            <p className="text-[12.5px] text-muted-foreground truncate">
+              {property?.name ?? 'Unknown property'}
+            </p>
           </div>
+          <span className="shrink-0 text-[12.5px] text-muted-foreground tabular-nums">
+            {sortedReminders.length} queued
+          </span>
         </div>
+        {/* A missing contact is the one thing that blocks sending, so it reads
+            in the same pill vocabulary the rows use for urgency rather than as
+            a loose warning glyph. */}
+        {missingContact && (
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-negative/30 bg-negative/10 px-2.5 py-1 text-[11.5px] font-medium text-negative">
+            <AlertTriangle className="h-3 w-3" strokeWidth={2} />
+            No email or phone on file — add one to send
+          </p>
+        )}
         <div className="mt-3">
           <ContactEditor
             email={tenantEmail}
@@ -647,106 +696,85 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
         </div>
       </div>
 
-      {/* Month picker + channel toggles + actions.
-          On phones each cluster stacks into its own row; from sm: up the
-          wrapper groups use `display:contents` so the children flow into a
-          single flex row exactly as before (desktop unchanged). */}
-      <div className="px-4 py-2 border-b border-border bg-background flex flex-col items-stretch gap-2.5 sm:flex-row sm:items-center sm:gap-3 sm:flex-wrap">
-        {/* Selection cluster */}
-        <div className="flex items-center gap-3 sm:contents">
-          <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
-            <input
-              type="checkbox"
-              checked={selected.size === sortedReminders.length && sortedReminders.length > 0}
-              onChange={toggleAll}
-              className="h-4 w-4"
-            />
-            Select all
-          </label>
-          <span className="hidden sm:inline text-xs text-muted-foreground">·</span>
-          <span className="text-xs text-muted-foreground">
-            {selected.size} selected
-          </span>
-        </div>
-
-        {/* Channel toggles — disabled when the corresponding recipient
-            doesn't exist so the landlord can't pick a channel they
-            haven't filled in. */}
-        <div className="flex items-center gap-3 flex-wrap sm:contents">
-          <span className="text-xs text-muted-foreground sm:ml-2">
-            <span className="hidden sm:inline">· </span>Send via
-          </span>
-          <label
-            className={`flex items-center gap-1.5 text-xs cursor-pointer ${effectiveEmail ? '' : 'opacity-40 cursor-not-allowed'}`}
-            title={effectiveEmail ? undefined : 'Add tenant email above'}
+      {/* HOW — which channels this batch goes out on. A two-state choice, so
+          it reads as a pair of toggles rather than two loose checkboxes; a
+          channel with no recipient on file is disabled and says why. */}
+      <div className="px-4 py-2.5 border-b border-border bg-background flex flex-wrap items-center gap-2">
+        <span className="text-[12px] text-muted-foreground mr-0.5">Send via</span>
+        <ChannelChip
+          icon={Mail}
+          label="Email"
+          active={sendEmail && effectiveEmail}
+          available={effectiveEmail}
+          unavailableHint="Add a tenant email above"
+          onClick={() => setSendEmail(!sendEmail)}
+        />
+        <ChannelChip
+          icon={MessageSquare}
+          label="SMS"
+          active={sendSms && effectivePhone}
+          available={effectivePhone}
+          unavailableHint="Add a tenant phone above"
+          onClick={() => setSendSms(!sendSms)}
+        />
+        {sortedReminders.length > 1 && (
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="ml-auto text-[12px] text-muted-foreground hover:text-foreground focus-ring rounded px-1.5 py-0.5 transition-colors"
           >
-            <input
-              type="checkbox"
-              checked={sendEmail && effectiveEmail}
-              onChange={(e) => setSendEmail(e.target.checked)}
-              disabled={!effectiveEmail}
-              className="h-3.5 w-3.5"
-            />
-            <Mail className="h-3 w-3" /> Email
-          </label>
-          <label
-            className={`flex items-center gap-1.5 text-xs cursor-pointer ${effectivePhone ? '' : 'opacity-40 cursor-not-allowed'}`}
-            title={effectivePhone ? undefined : 'Add tenant phone above'}
-          >
-            <input
-              type="checkbox"
-              checked={sendSms && effectivePhone}
-              onChange={(e) => setSendSms(e.target.checked)}
-              disabled={!effectivePhone}
-              className="h-3.5 w-3.5"
-            />
-            <MessageSquare className="h-3 w-3" /> SMS
-          </label>
-        </div>
-
-        {/* Actions — full-width split on phones, right-aligned on desktop */}
-        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:ml-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-center sm:w-auto"
-            onClick={() => rejectAllMut.mutate(Array.from(selected))}
-            disabled={selected.size === 0 || rejectAllMut.isPending}
-          >
-            <X className="h-3.5 w-3.5" /> Reject selected
-          </Button>
-          <Button
-            size="sm"
-            className="w-full justify-center sm:w-auto"
-            onClick={() => approveAllMut.mutate(Array.from(selected))}
-            disabled={
-              selected.size === 0
-              || approveAllMut.isPending
-              || saveContactMut.isPending
-              || (missingContact && !draftHasContact)
-              || (!(sendEmail && effectiveEmail) && !(sendSms && effectivePhone))
-            }
-            title={
-              missingContact && !draftHasContact
-                ? 'Add tenant email or phone above first'
-                : !(sendEmail && effectiveEmail) && !(sendSms && effectivePhone)
-                  ? 'Pick at least one channel'
-                  : undefined
-            }
-          >
-            {(approveAllMut.isPending || saveContactMut.isPending) ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Send className="h-3.5 w-3.5" />
-            )}
-            Approve &amp; send selected
-          </Button>
-        </div>
+            {selected.size === sortedReminders.length ? 'Clear selection' : 'Select all'}
+          </button>
+        )}
       </div>
 
-      {/* Reminder rows — styled as notifications: urgency rail, tone
-          icon, and a status pill, matching AlertsPage's language so a
-          rent reminder doesn't read like a bare form row. */}
+      {/* WHAT — the action bar only exists once something is selected. Keeping
+          "0 selected" and two dead buttons on screen permanently was most of
+          the clutter here, and none of it was actionable. */}
+      {selected.size > 0 && (
+        <div className="px-4 py-2.5 border-b border-border bg-accent/[0.06] flex flex-wrap items-center gap-2">
+          <span className="text-[12.5px] font-medium tabular-nums">
+            {selected.size} selected
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => rejectAllMut.mutate(Array.from(selected))}
+              disabled={rejectAllMut.isPending}
+            >
+              <X className="h-3.5 w-3.5" /> Reject
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => approveAllMut.mutate(Array.from(selected))}
+              disabled={
+                approveAllMut.isPending
+                || saveContactMut.isPending
+                || (missingContact && !draftHasContact)
+                || (!(sendEmail && effectiveEmail) && !(sendSms && effectivePhone))
+              }
+              title={
+                missingContact && !draftHasContact
+                  ? 'Add a tenant email or phone above first'
+                  : !(sendEmail && effectiveEmail) && !(sendSms && effectivePhone)
+                    ? 'Pick at least one channel'
+                    : undefined
+              }
+            >
+              {(approveAllMut.isPending || saveContactMut.isPending) ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+              Approve &amp; send
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Reminder rows — a tone disc and a status pill carry the urgency,
+          matching how alerts read elsewhere in the app. */}
       <div className="divide-y divide-border/60">
         {sortedReminders.map((r) => {
           const isSelected = selected.has(r.id);
@@ -758,18 +786,16 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
             <label
               key={r.id}
               className={cn(
-                'group relative flex items-stretch gap-0 cursor-pointer transition-colors',
-                isSelected ? 'bg-accent/[0.06]' : 'hover:bg-foreground/[0.02]',
+                'group relative flex cursor-pointer transition-colors',
+                isSelected ? 'bg-accent/[0.07]' : 'hover:bg-foreground/[0.02]',
               )}
             >
-              <span aria-hidden="true" className={cn('w-[3px] shrink-0', tone.rail)} />
-
-              <div className="flex flex-1 items-center gap-3 px-3.5 py-3">
+              <div className="flex flex-1 items-center gap-3 px-4 py-3">
                 <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => toggle(r.id)}
-                  className="h-4 w-4 flex-shrink-0 accent-accent"
+                  className="h-4 w-4 flex-shrink-0 rounded-[3px] border-border accent-accent cursor-pointer"
                 />
 
                 <div className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-full border', tone.pillClass)}>
@@ -783,7 +809,7 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
                     </span>
                     <span
                       className={cn(
-                        'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned',
+                        'inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-kerned',
                         tone.pillClass,
                       )}
                     >
@@ -963,10 +989,10 @@ export function RentalRemindersPanel() {
           className="flex flex-1 items-center gap-2.5 min-w-0 text-left rounded-md -mx-2 px-2 py-1 hover:bg-foreground/[0.03] focus-ring transition-colors"
         >
           <BellRing className="h-5 w-5 text-accent-ink/70 shrink-0" />
-          <CardTitle className="text-[20px] font-semibold flex items-center gap-3 min-w-0">
+          <CardTitle className="text-[20px] font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
             <span>Pending tenant reminders</span>
             {reminders.length > 0 && (
-              <span className="inline-flex items-center rounded-full bg-accent/15 text-accent-ink ring-1 ring-accent/30 text-xs font-medium px-2 py-0.5">
+              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-accent/15 text-accent-ink ring-1 ring-accent/30 text-xs font-medium px-2 py-0.5">
                 {reminders.length} awaiting approval
               </span>
             )}

@@ -1,5 +1,11 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
+import {
+  resolveReportSubjects,
+  requireSingleSubject,
+  runForSubject,
+} from '../services/reports/reportSubjects.js';
+import {
+  z } from 'zod';
 import { DocumentOwnerType } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { Readable } from 'node:stream';
@@ -11,8 +17,11 @@ import {
   listDocuments,
   replaceDocumentBytes,
   updateDocumentMeta,
+  listAllDocuments,
+  zipDocuments,
 } from '../services/document.service.js';
-import { readStream } from '../lib/documentStorage.js';
+import { readBuffer } from '../lib/documentStorage.js';
+import { downloadHeaders, storedMimeFor } from '../lib/documentMime.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
@@ -26,6 +35,7 @@ import {
 } from '../lib/onlyoffice.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
+import { isAllowedOutboundUrl } from '../lib/outboundUrl.js';
 
 const ownerTypeSchema = z.nativeEnum(DocumentOwnerType);
 
@@ -72,7 +82,11 @@ export async function upload(req: Request, res: Response) {
     ownerId: body.ownerId,
     category: body.category ?? null,
     fileName: req.file.originalname,
-    mimeType: req.file.mimetype,
+    // Derived from the bytes we just probed, never from req.file.mimetype.
+    // The client-supplied value was being stored verbatim and echoed back as
+    // the download Content-Type, which let an uploader pick `text/html` and
+    // get script execution on the SPA origin. See lib/documentMime.ts.
+    mimeType: storedMimeFor(probe.kind, probe.mime),
     buffer: req.file.buffer,
   });
   created(res, doc);
@@ -114,13 +128,14 @@ export async function remove(req: Request, res: Response) {
 
 export async function download(req: Request, res: Response) {
   const doc = await getDocumentForDownload(userId(req), req.params.id!);
-  res.setHeader('Content-Type', doc.mimeType);
-  res.setHeader('Content-Length', String(doc.sizeBytes));
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename="${encodeURIComponent(doc.fileName)}"`,
-  );
-  readStream(doc.userId, doc.storageKey).pipe(res);
+  // Read before setting file headers, so a missing file goes out as a plain
+  // JSON 404 rather than an "attachment" the browser saves.
+  const bytes = await readBuffer(doc.userId, doc.storageKey);
+  for (const [k, v] of Object.entries(downloadHeaders(doc.mimeType, doc.fileName))) {
+    res.setHeader(k, v);
+  }
+  res.setHeader('Content-Length', String(bytes.length));
+  res.end(bytes);
 }
 
 // ─── OnlyOffice integration ──────────────────────────────────────
@@ -217,9 +232,10 @@ export async function onlyofficeDownload(req: Request, res: Response) {
     throw new BadRequestError('token mismatch');
   }
   const doc = await getDocumentForDownload(payload.userId, payload.documentId);
+  const bytes = await readBuffer(doc.userId, doc.storageKey);
   res.setHeader('Content-Type', doc.mimeType);
-  res.setHeader('Content-Length', String(doc.sizeBytes));
-  readStream(doc.userId, doc.storageKey).pipe(res);
+  res.setHeader('Content-Length', String(bytes.length));
+  res.end(bytes);
 }
 
 // OnlyOffice DocumentServer save callback. JWT in `Authorization: Bearer …`
@@ -245,19 +261,27 @@ export async function onlyofficeCallback(req: Request, res: Response) {
     return res.status(401).json({ error: 1, message: 'token mismatch' });
   }
 
-  // OnlyOffice JWT-wraps the body when JWT_ENABLED=true
+  // OnlyOffice JWT-wraps the body when JWT_ENABLED=true. The callback URL's
+  // own token is handed to the user's browser inside the editor config, so it
+  // proves nothing about who is calling; the body token is what proves the
+  // DocumentServer sent this. When JWT is on, a missing or bad one is refused
+  // — it used to be logged and the unverified body used anyway.
   let body = req.body as CallbackPayload;
-  if (env.ONLYOFFICE_JWT_ENABLED === 'true' && body && typeof body === 'object') {
-    const wrapped = (body as { token?: string }).token;
-    if (wrapped) {
-      try {
-        const decoded = jwt.verify(wrapped, env.ONLYOFFICE_JWT_SECRET, {
-          algorithms: ['HS256'],
-        });
-        body = (decoded as { payload?: CallbackPayload }).payload ?? (decoded as CallbackPayload);
-      } catch (err) {
-        logger.warn({ err }, '[oo] body token verification failed');
-      }
+  if (env.ONLYOFFICE_JWT_ENABLED === 'true') {
+    // DocumentServer puts it in the body when `outbox.inBody` is on, and in
+    // the Authorization header otherwise (its default).
+    const bearer = req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const wrapped =
+      (body && typeof body === 'object' ? (body as { token?: string }).token : undefined) ?? bearer;
+    if (!wrapped) return res.status(401).json({ error: 1, message: 'missing body token' });
+    try {
+      const decoded = jwt.verify(wrapped, env.ONLYOFFICE_JWT_SECRET, {
+        algorithms: ['HS256'],
+      });
+      body = (decoded as { payload?: CallbackPayload }).payload ?? (decoded as CallbackPayload);
+    } catch (err) {
+      logger.warn({ err }, '[oo] body token verification failed');
+      return res.status(401).json({ error: 1, message: 'invalid body token' });
     }
   }
 
@@ -266,8 +290,14 @@ export async function onlyofficeCallback(req: Request, res: Response) {
   }
 
   if (isSaveStatus(body.status) && body.url) {
+    // The saved file is stored and served back to the user, so fetching an
+    // arbitrary URL here would let them read internal services through it.
+    if (!isAllowedOutboundUrl(body.url, onlyOfficeOrigins())) {
+      logger.warn({ documentId: payload.documentId }, '[oo] refused save URL outside the DocumentServer');
+      return res.json({ error: 1 });
+    }
     try {
-      const fetched = await fetch(body.url, { signal: AbortSignal.timeout(60_000) });
+      const fetched = await fetch(body.url, { signal: AbortSignal.timeout(60_000), redirect: 'error' });
       if (!fetched.ok) {
         logger.warn(
           { documentId: payload.documentId, status: fetched.status },
@@ -302,8 +332,11 @@ export async function convertDocToPdf(req: Request, res: Response) {
 
   const pdfUrl = await convertToPdf({ fileUrl, fileType: ext, key: `${doc.externalEditKey}-topdf` });
 
-  // Fetch converted PDF bytes from OnlyOffice
-  const fetched = await fetch(pdfUrl, { signal: AbortSignal.timeout(60_000) });
+  // Fetch converted PDF bytes from OnlyOffice — only from OnlyOffice.
+  if (!isAllowedOutboundUrl(pdfUrl, onlyOfficeOrigins())) {
+    throw new BadRequestError('Conversion returned a file outside the document server');
+  }
+  const fetched = await fetch(pdfUrl, { signal: AbortSignal.timeout(60_000), redirect: 'error' });
   if (!fetched.ok) throw new BadRequestError('Failed to download converted PDF');
   const buffer = Buffer.from(await fetched.arrayBuffer());
 
@@ -326,3 +359,57 @@ export async function convertDocToPdf(req: Request, res: Response) {
 // when fs streams are typed externally). Trivial guard — drop if linter
 // stops flagging.
 void Readable;
+
+/**
+ * Every document for the resolved subject, across all owner types.
+ *
+ * Subject-aware, so a CA can assemble a client's paperwork and a family owner
+ * can see a member's — the same mechanism the reports use, rather than a
+ * second notion of "whose documents".
+ */
+export async function listAllDocumentsHandler(req: Request, res: Response) {
+  const resolved = await resolveReportSubjects(req);
+  const subject = requireSingleSubject(resolved, 'The document list');
+  const fromStr = (req.query.from as string | undefined)?.trim();
+  const toStr = (req.query.to as string | undefined)?.trim();
+
+  const rows = await runForSubject(resolved.via, subject.userId, () =>
+    listAllDocuments(subject.userId, {
+      from: fromStr ? new Date(fromStr) : undefined,
+      to: toStr ? new Date(toStr) : undefined,
+    }),
+  );
+  ok(res, rows);
+}
+
+/**
+ * Download several documents as one zip.
+ *
+ * POST rather than GET because the id list can be long enough to run into URL
+ * limits, and because a body is the honest place for a selection.
+ */
+export async function bulkDownloadDocumentsHandler(req: Request, res: Response) {
+  const resolved = await resolveReportSubjects(req);
+  const subject = requireSingleSubject(resolved, 'A document download');
+
+  const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]) : [];
+  const cleanIds = ids.filter((v): v is string => typeof v === 'string' && v.length > 0);
+  if (cleanIds.length === 0) throw new BadRequestError('Select at least one document');
+  // A ceiling, so one request cannot try to read an unbounded number of files
+  // into memory at once.
+  if (cleanIds.length > 200) throw new BadRequestError('Select at most 200 documents at a time');
+
+  const zip = await runForSubject(resolved.via, subject.userId, () =>
+    zipDocuments(subject.userId, cleanIds),
+  );
+
+  const stem = subject.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${stem || 'documents'}-documents.zip"`);
+  res.send(zip);
+}
+
+/** Where the DocumentServer serves files from, as seen by this API. */
+function onlyOfficeOrigins(): string[] {
+  return [env.ONLYOFFICE_INTERNAL_URL, env.ONLYOFFICE_PUBLIC_URL];
+}

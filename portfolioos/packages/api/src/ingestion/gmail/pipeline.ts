@@ -47,6 +47,7 @@ import {
   type LlmParseResult,
 } from '../llm/client.js';
 import { extractEmailBody } from './bodyExtract.js';
+import { parseFromHeader } from './headers.js';
 import type { ParsedEvent } from '../llm/schema.js';
 import { projectCanonicalEvent } from '../projection.js';
 import {
@@ -475,6 +476,16 @@ async function handleLlmFailure(
  * Transaction/CashFlow rows. This is the "approve sender once → fully auto"
  * UX. Skips review queue entirely.
  */
+/**
+ * Minimum extraction confidence required to bypass human review.
+ *
+ * Below this an event waits in PENDING_REVIEW no matter how trusted the
+ * sender is. 0.7 leaves the model's own "uncertain" band (< 0.3 per the
+ * system prompt) well clear of the auto-commit path while not sending
+ * routine, well-formed alerts to review.
+ */
+const AUTO_COMMIT_MIN_CONFIDENCE = new Prisma.Decimal('0.70');
+
 async function maybeAutoProject(
   outcome: ProcessEmailOutcome,
   input: ProcessEmailInput,
@@ -484,6 +495,29 @@ async function maybeAutoProject(
 
   for (const id of outcome.eventIds) {
     try {
+      // Honour the extraction's own confidence before writing to the user's
+      // financial records. The system prompt asks the model to score its
+      // certainty (and to return < 0.3 for marketing mail), and that score was
+      // stored and displayed — but never compared against anything, so an
+      // event the model itself flagged as a guess was auto-committed exactly
+      // like a confident one, provided the sender was trusted. Sender trust
+      // says "mail from here is usually real"; it does not say "this
+      // particular extraction is right".
+      const event = await prisma.canonicalEvent.findUnique({
+        where: { id },
+        select: { confidence: true },
+      });
+      // Compared as a Decimal: confidence is a Decimal(3,2) column, and the
+      // project bans Number() coercion of Decimal values (§3.2).
+      const confidence = event?.confidence ?? new Prisma.Decimal(0);
+      if (confidence.lessThan(AUTO_COMMIT_MIN_CONFIDENCE)) {
+        logger.info(
+          { userId: input.userId, eventId: id, confidence: confidence.toString() },
+          'gmail.pipeline.auto_commit_withheld_low_confidence',
+        );
+        continue; // stays PENDING_REVIEW
+      }
+
       await prisma.canonicalEvent.update({
         where: { id },
         data: { status: 'CONFIRMED', reviewedAt: new Date(), reviewedById: input.userId },
@@ -558,16 +592,26 @@ export async function retryGmailFailure(
 
   // Find the sender address from the From header
   const from = message.payload?.headers?.find((h) => h.name?.toLowerCase() === 'from')?.value ?? '';
-  // Find monitoring config (optional — use defaults if sender not found)
-  const monitored = await prisma.monitoredSender.findFirst({
-    where: { userId, isActive: true },
-    orderBy: { confirmedEventCount: 'desc' },
-    select: { address: true, autoCommitEnabled: true },
-  });
+  // Match the monitoring config to the address this message ACTUALLY came
+  // from. This used to pick the user's most-trusted sender by
+  // `confirmedEventCount` regardless of `from`, then stamp that sender's
+  // autoCommitEnabled onto the retry. So any message that failed to parse
+  // once — a transient LLM error, or content shaped to trip validation —
+  // was auto-committed straight into Transaction/CashFlow when retried,
+  // wearing trust earned by a different sender. That defeats the per-sender
+  // review model (§12). The primary poll path already matches on `from`.
+  const { address: fromAddress } = parseFromHeader(from);
+  const monitored = fromAddress
+    ? await prisma.monitoredSender.findFirst({
+        where: { userId, isActive: true, address: fromAddress },
+        select: { address: true, autoCommitEnabled: true },
+      })
+    : null;
 
   const outcome = await processEmail({
     userId,
-    senderAddress: from || monitored?.address || '',
+    senderAddress: fromAddress || '',
+    // No matching monitored sender means no earned trust: route to review.
     autoCommitEnabled: monitored?.autoCommitEnabled ?? false,
     messageId: row.sourceRef,
     message,

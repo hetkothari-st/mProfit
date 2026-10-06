@@ -1,7 +1,8 @@
 import { Router } from 'express';
+import { activatePaidPlan, isBillingCycle } from '../services/billing/planActivation.service.js';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { PLAN_TIER_ORDER, planPriceFor } from '@portfolioos/shared';
+import { PLAN_TIER_ORDER, planPriceFor } from '@everypaisa/shared';
 import { authenticate, requireRole } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { ok } from '../lib/response.js';
@@ -72,8 +73,6 @@ const verifyPaymentSchema = z.object({
   razorpaySignature: z.string().min(1),
 });
 
-const CYCLE_DAYS: Record<'MONTHLY' | 'ANNUAL', number> = { MONTHLY: 30, ANNUAL: 365 };
-
 // Verifies the Razorpay checkout signature, re-fetches the order from
 // Razorpay to read back the trusted tier/billingCycle/userId (never
 // trusts client-supplied plan data at this step — see razorpay.service.ts),
@@ -94,15 +93,19 @@ billingRouter.post(
       throw new ForbiddenError('This order does not belong to you');
     }
     const tier = notes.tier as (typeof PLAN_TIER_ORDER)[number];
-    const billingCycle = notes.billingCycle as 'MONTHLY' | 'ANNUAL';
-    if (!PLAN_TIER_ORDER.includes(tier) || !CYCLE_DAYS[billingCycle]) {
+    const billingCycle = notes.billingCycle;
+    if (!PLAN_TIER_ORDER.includes(tier) || !isBillingCycle(billingCycle)) {
       throw new BadRequestError('Order has invalid plan metadata');
     }
 
-    const planExpiresAt = new Date(Date.now() + CYCLE_DAYS[billingCycle] * 86_400_000);
-    const updated = await prisma.user.update({
-      where: { id: req.user.id },
-      data: { plan: tier, planExpiresAt },
+    // Each payment activates once; presenting it again returns the current
+    // session without extending the plan (see planActivation.service.ts).
+    const { user: updated } = await activatePaidPlan({
+      userId: req.user.id,
+      razorpayOrderId,
+      razorpayPaymentId,
+      tier,
+      billingCycle,
     });
 
     // Re-issue the session: `plan` is baked into the access token and read

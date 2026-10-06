@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+// import { Link } from 'react-router-dom'; — only used by the hidden failures link
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { UploadCloud, Trash2, RefreshCw, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle, Inbox, Download, Lock, Square, CheckSquare } from 'lucide-react';
+import { UploadCloud, Trash2, RefreshCw, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle, Download, Lock, Square, CheckSquare } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,8 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { importsApi } from '@/api/imports.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
-import type { ImportJobDTO, ImportStatus } from '@portfolioos/shared';
-import { IMPORT_STATUS_LABELS } from '@portfolioos/shared';
+import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';
+import { IMPORT_STATUS_LABELS } from '@everypaisa/shared';
 import { ImportErrorDialog } from './ImportErrorDialog';
 import { ImportDropzone } from './ImportDropzone';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
@@ -134,6 +134,8 @@ export function ImportPage() {
         description="Upload contract notes, CAS statements, back-office CSVs or Excel files. Transactions will be parsed and added to your portfolio automatically."
       />
 
+      {/* Failures link hidden for now — page still reachable at /import/failures.
+          Restore the `Link` and `Inbox` imports when uncommenting.
       <div className="flex justify-end mb-3">
         <Link to="/import/failures">
           <Button variant="outline" size="sm">
@@ -141,6 +143,7 @@ export function ImportPage() {
           </Button>
         </Link>
       </div>
+      */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <Card className="lg:col-span-2">
@@ -300,7 +303,7 @@ export function ImportPage() {
                           {new Date(j.createdAt).toLocaleString()}
                         </td>
                         <td data-fullrow className="px-4 py-2">
-                          <div className="flex justify-end gap-1">
+                          <div className="flex flex-wrap justify-end gap-1">
                             {!pwErr && ((j.failedRows ?? 0) > 0 || (j.errorLog?.parserWarnings?.length ?? 0) > 0 || (j.errorLog?.rowErrors?.length ?? 0) > 0) && (
                               <Button
                                 variant="ghost"
@@ -318,6 +321,8 @@ export function ImportPage() {
                               title="Download source file"
                             >
                               <Download className="h-4 w-4" />
+                              {/* Phones: no hover tooltip, so say what it does. */}
+                              <span className="sm:hidden">Download</span>
                             </Button>
                             <Button
                               variant="ghost"
@@ -327,6 +332,7 @@ export function ImportPage() {
                               title="Reprocess"
                             >
                               <RefreshCw className="h-3 w-3" />
+                              <span className="sm:hidden">Reprocess</span>
                             </Button>
                             <Button
                               variant="ghost"
@@ -337,8 +343,10 @@ export function ImportPage() {
                                   removeMutation.mutate(j.id);
                                 }
                               }}
+                              title="Delete"
                             >
                               <Trash2 className="h-3 w-3 text-negative" />
+                              <span className="sm:hidden text-negative">Delete</span>
                             </Button>
                           </div>
                         </td>

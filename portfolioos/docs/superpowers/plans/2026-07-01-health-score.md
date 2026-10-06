@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Money: `Decimal` throughout, never JS `Number` for anything monetary — `serializeMoney()` at the API boundary (from `@portfolioos/shared`), matching every existing calculator in this repo.
+- Money: `Decimal` throughout, never JS `Number` for anything monetary — `serializeMoney()` at the API boundary (from `@everypaisa/shared`), matching every existing calculator in this repo.
 - No new Redis/cache infra — cache via the `HealthScoreSnapshot.computedAt` column + a staleness check in the service (repo's established DB-cache pattern; see `INTELLIGENCE_LAYER_AUDIT.md` finding #4).
 - Follow the existing routes → controllers → services split; no business logic in route files.
 - All new backend files get co-located `*.test.ts` (Vitest) for pure-function logic — DB-orchestration code (the `service.ts` file itself) is not directly unit tested in this repo's convention (see `goals.service.ts` — untested directly; only `goalMath.ts` has tests). Follow that same split.
@@ -700,14 +700,14 @@ git commit -m "feat(health-score): GET /api/intelligence/health-score endpoint"
 - Create: `apps/web/src/api/intelligence.api.ts`
 
 **Interfaces:**
-- Consumes: `api` (axios instance) from `./client`, `ApiResponse<T>` from `@portfolioos/shared` — exact pattern copied from `apps/web/src/api/dashboard.api.ts:1-2,102-114` (the `unwrap()` + `dashboardApi.netWorth()` shape).
+- Consumes: `api` (axios instance) from `./client`, `ApiResponse<T>` from `@everypaisa/shared` — exact pattern copied from `apps/web/src/api/dashboard.api.ts:1-2,102-114` (the `unwrap()` + `dashboardApi.netWorth()` shape).
 - Produces: `intelligenceApi.healthScore(force?: boolean): Promise<HealthScoreResult>` — consumed by Task 7.
 
 - [ ] **Step 1: Add the client function**
 
 ```typescript
 import { api } from './client';
-import type { ApiResponse } from '@portfolioos/shared';
+import type { ApiResponse } from '@everypaisa/shared';
 
 export interface HealthSubScore {
   score: number;

@@ -268,7 +268,7 @@ The state-machine approach is closer to how `zerodhaContractNote.parser.ts` alre
 2. **Local LLM run:** set `ENABLE_LLM_PARSER=true`, `ANTHROPIC_API_KEY=...`, run import on each sample.
 3. **Verify samples accumulated:** `SELECT * FROM "LearnedTemplate" WHERE "senderAddress" = 'cn:groww';` — expect 1 row, `sampleCount=3`, `extractionRecipe.state='cn-promoted'` (or `cn-sampling` if synthesis disagreed).
 4. **Verify cache hit:** drop 4th Groww sample → log shows `[broker-cn] recipe hit`, no `LlmSpend` row written.
-5. **Snapshot test:** `pnpm --filter @portfolioos/api test parsers.fixtures` → seeds new snapshot.
+5. **Snapshot test:** `pnpm --filter @everypaisa/api test parsers.fixtures` → seeds new snapshot.
 6. **Repeat** for each of the 24 brokers.
 
 ---

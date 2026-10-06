@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializePct } from '@portfolioos/shared';
+import { serializePct } from '@everypaisa/shared';
 
 import { pfSingleStockRule } from '../../../../src/services/mfAnalytics/rules/pf.single-stock.js';
 import { MF_HEADLINE_MAX_CHARS } from '../../../../src/services/mfAnalytics/types.js';

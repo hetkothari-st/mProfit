@@ -24,7 +24,7 @@
  * so — the same reasoning that makes `weightedTerPct` null rather than zero.
  */
 
-import { serializeRatio, toDecimal, type MfEvidence, type MfFinding } from '@portfolioos/shared';
+import { serializeRatio, toDecimal, type MfEvidence, type MfFinding } from '@everypaisa/shared';
 
 import { confidenceFor, makeFinding, type MfAnalysisFacts, type MfRule } from '../types.js';
 

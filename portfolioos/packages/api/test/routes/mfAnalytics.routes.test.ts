@@ -36,7 +36,7 @@ import {
   type MfSchemeScoreDto,
   type MfPillarScore,
   type MfFundAnalyticsDto,
-} from '@portfolioos/shared';
+} from '@everypaisa/shared';
 
 import { prisma } from '../../src/lib/prisma.js';
 import { mfAnalyticsRouter } from '../../src/routes/mfAnalytics.routes.js';

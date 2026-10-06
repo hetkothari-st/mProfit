@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Decimal, formatINR } from '@portfolioos/shared';
+import { Decimal, formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -26,6 +26,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { bankAccountsApi } from '@/api/bankAccounts.api';
 import { BankAccountVisual } from '@/components/bankAccounts/BankAccountVisual';
+import { AccountNumberReveal } from '@/components/bankAccounts/AccountNumberReveal';
+import { ShareBankDetailsButton } from '@/components/bankAccounts/ShareBankDetailsButton';
 import { BankAccountDialog } from './BankAccountDialog';
 import { usePrivacyStore } from '@/stores/privacy.store';
 
@@ -192,13 +194,14 @@ export function BankAccountDetailPage() {
         {/* Hero: passbook visual + quick actions */}
         <div className="space-y-3">
           <BankAccountVisual account={account} size="lg" />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
             <Button variant="outline" size="sm" onClick={() => setSnapshotOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> Record balance
             </Button>
+            <ShareBankDetailsButton account={account} />
           </div>
         </div>
 
@@ -241,9 +244,25 @@ export function BankAccountDetailPage() {
                 </p>
                 <DetailRow label="Bank" value={account.bankName} />
                 <DetailRow label="Type" value={account.accountType} />
+                <DetailRow
+                  label="Account number"
+                  value={
+                    <AccountNumberReveal
+                      account={account}
+                      sizeClass="text-sm"
+                      tone={{
+                        primary: 'text-foreground',
+                        secondary: 'text-muted-foreground',
+                        dot: 'text-muted-foreground/60',
+                      }}
+                      variant="onLight"
+                    />
+                  }
+                />
                 <DetailRow label="Customer ID" value={account.customerId} />
                 <DetailRow label="IFSC" value={account.ifsc} />
                 <DetailRow label="Branch" value={account.branch} />
+                <DetailRow label="Branch address" value={account.branchAddress} />
                 <DetailRow label="Status" value={account.status} />
               </CardContent>
             </Card>
@@ -392,7 +411,7 @@ export function BankAccountDetailPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        className="tap-expand h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                         onClick={() => deleteSnapshot.mutate(s.id)}
                         disabled={deleteSnapshot.isPending}
                         title="Delete"

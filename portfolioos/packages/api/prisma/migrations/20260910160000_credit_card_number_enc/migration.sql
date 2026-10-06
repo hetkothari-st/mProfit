@@ -1,0 +1,12 @@
+-- Optional full credit card number, AES-256-GCM encrypted at the app layer
+-- (pfCredentials.encryptIdentifier, keyed by APP_ENCRYPTION_KEY per §15.1) —
+-- the same scheme as "BankAccount"."accountNumberEnc".
+--
+-- Additive and nullable: existing cards keep working on `last4` alone. The
+-- column is never serialized by the API; plaintext only leaves the server
+-- through the audited, rate-limited POST /api/credit-cards/:id/reveal.
+-- CVV and expiry are never collected or stored.
+--
+-- No policy changes needed: the existing RLS policy and the `portfolioos_app`
+-- table grant already cover every column on "CreditCard".
+ALTER TABLE "CreditCard" ADD COLUMN "cardNumberEnc" TEXT;
