@@ -321,6 +321,7 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
         lenderName: true,
         loanType: true,
         accountNumber: true,
+        accountNumberLast4: true,
         principalAmount: true,
         disbursementDate: true,
         payments: {
@@ -426,7 +427,7 @@ export async function loadTallySources(userId: string): Promise<{ sources: Tally
     trades,
     loans: loans.map((l) => ({
       id: l.id,
-      label: `${l.lenderName} ${LOAN_TYPE_LABEL[l.loanType] ?? 'Loan'}${lastFour(l.accountNumber)}`,
+      label: `${l.lenderName} ${LOAN_TYPE_LABEL[l.loanType] ?? 'Loan'}${lastFour(l.accountNumberLast4 ?? l.accountNumber)}`,
       principal: l.principalAmount.toString(),
       disbursedOn: iso(l.disbursementDate),
     })),

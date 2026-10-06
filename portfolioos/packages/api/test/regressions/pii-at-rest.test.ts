@@ -9,7 +9,10 @@ import {
   registrationNoHash,
   readPan,
   readRegistrationNo,
+  loanAccountNumberColumns,
+  readLoanAccountNumber,
 } from '../../src/services/piiAtRest.service.js';
+import { isMaskedAccountNumber, withMaskedAccount } from '../../src/services/loans.service.js';
 
 /**
  * SEC-14 — PAN and vehicle registration numbers were plain text at rest.
@@ -135,5 +138,57 @@ describe('SEC-14: plaintext clearing is an explicit operator decision', () => {
 
   it('verifies each ciphertext decrypts before saving it', () => {
     expect(svc.match(/did not read back/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('Loan account numbers are encrypted at rest', () => {
+  it('writes ciphertext and last-4, never plaintext', async () => {
+    const cols = await loanAccountNumberColumns(' 50100123456789 ');
+    expect(cols.accountNumber).toBeNull();
+    expect(cols.accountNumberEnc).toBeTruthy();
+    expect(cols.accountNumberEnc).not.toContain('50100123456789');
+    expect(cols.accountNumberLast4).toBe('6789');
+    expect(await readLoanAccountNumber(cols)).toBe('50100123456789');
+  });
+
+  it('clears every representation when the number is removed', async () => {
+    expect(await loanAccountNumberColumns('')).toEqual({
+      accountNumber: null,
+      accountNumberEnc: null,
+      accountNumberLast4: null,
+    });
+  });
+
+  it('still reveals a row the backfill has not reached', async () => {
+    expect(await readLoanAccountNumber({ accountNumber: 'HL0099887766', accountNumberEnc: null })).toBe('HL0099887766');
+  });
+
+  it('serializes masked, without ciphertext, before and after backfill', async () => {
+    const enc = withMaskedAccount({
+      id: 'l1',
+      ...(await loanAccountNumberColumns('50100123456789')),
+    });
+    expect(enc).toEqual({ id: 'l1', accountNumber: '••••6789' });
+
+    const legacy = withMaskedAccount({
+      id: 'l2',
+      accountNumber: 'HL0099887766',
+      accountNumberEnc: null,
+      accountNumberLast4: null,
+    });
+    expect(legacy).toEqual({ id: 'l2', accountNumber: '••••7766' });
+  });
+});
+
+describe('Loan edit does not overwrite the number with its mask', () => {
+  it('recognises the masked value the API serves', async () => {
+    const served = withMaskedAccount({ id: 'l1', ...(await loanAccountNumberColumns('50100123456789')) });
+    expect(isMaskedAccountNumber(served.accountNumber)).toBe(true);
+  });
+
+  it('treats a real number, empty and null as real edits', () => {
+    expect(isMaskedAccountNumber('50100123456789')).toBe(false);
+    expect(isMaskedAccountNumber('')).toBe(false);
+    expect(isMaskedAccountNumber(null)).toBe(false);
   });
 });

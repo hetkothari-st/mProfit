@@ -14,6 +14,8 @@ import { prisma } from '../lib/prisma.js';
 import { NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { serializeMoney } from '@everypaisa/shared';
+import { loanAccountNumberColumns, readLoanAccountNumber } from './piiAtRest.service.js';
+import { last4 } from './pfCredentials.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -555,15 +557,29 @@ type LoanWithPayments = Awaited<ReturnType<typeof prisma.loan.findFirst>> & {
  * codebase already mask and expose a separate audited reveal endpoint; loans
  * did not.
  */
-function maskAccountNumber(value: string | null): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (trimmed.length <= 4) return trimmed;
-  return `${'•'.repeat(Math.max(4, trimmed.length - 4))}${trimmed.slice(-4)}`;
+/**
+ * The edit dialog pre-fills the masked value it was given and sends it back
+ * unchanged. Treating that as a new number overwrote the real one with
+ * "••••6789", so a masked value means "unchanged".
+ */
+export function isMaskedAccountNumber(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.includes('•');
 }
 
-function withMaskedAccount<T extends { accountNumber: string | null }>(loan: T): T {
-  return { ...loan, accountNumber: maskAccountNumber(loan.accountNumber) };
+function maskAccountNumber(last4: string | null): string | null {
+  return last4 ? `••••${last4}` : null;
+}
+
+/**
+ * The response shape for a loan: the account number masked from its last
+ * four, the ciphertext and last-4 columns never serialized.
+ */
+export function withMaskedAccount<
+  T extends { accountNumber: string | null; accountNumberEnc: string | null; accountNumberLast4: string | null },
+>(loan: T): Omit<T, 'accountNumberEnc' | 'accountNumberLast4'> {
+  const { accountNumberEnc: _enc, accountNumberLast4, ...rest } = loan;
+  const tail = accountNumberLast4 ?? (loan.accountNumber ? last4(loan.accountNumber) : null);
+  return { ...rest, accountNumber: maskAccountNumber(tail) };
 }
 
 /**
@@ -573,10 +589,10 @@ function withMaskedAccount<T extends { accountNumber: string | null }>(loan: T):
 export async function revealLoanAccountNumber(userId: string, loanId: string): Promise<string | null> {
   const loan = await prisma.loan.findFirst({
     where: { id: loanId, userId },
-    select: { accountNumber: true },
+    select: { accountNumber: true, accountNumberEnc: true },
   });
   if (!loan) throw new NotFoundError(`Loan ${loanId} not found`);
-  return loan.accountNumber;
+  return readLoanAccountNumber(loan);
 }
 
 // ── Loan CRUD ────────────────────────────────────────────────────────────────
@@ -608,11 +624,11 @@ export async function getLoan(userId: string, loanId: string) {
 }
 
 export async function createLoan(userId: string, input: CreateLoanInput) {
-  return prisma.loan.create({
+  const loan = await prisma.loan.create({
     data: {
       userId,
       lenderName: input.lenderName,
-      accountNumber: input.accountNumber ?? null,
+      ...(await loanAccountNumberColumns(input.accountNumber)),
       loanType: input.loanType,
       borrowerName: input.borrowerName,
       principalAmount: new Prisma.Decimal(input.principalAmount),
@@ -632,6 +648,7 @@ export async function createLoan(userId: string, input: CreateLoanInput) {
       lenderMatchKey: input.lenderMatchKey ?? null,
     },
   });
+  return withMaskedAccount(loan);
 }
 
 export async function updateLoan(
@@ -642,11 +659,13 @@ export async function updateLoan(
   const existing = await prisma.loan.findFirst({ where: { id: loanId, userId } });
   if (!existing) throw new NotFoundError(`Loan ${loanId} not found`);
 
-  return prisma.loan.update({
+  const loan = await prisma.loan.update({
     where: { id: loanId },
     data: {
       ...(input.lenderName !== undefined && { lenderName: input.lenderName }),
-      ...(input.accountNumber !== undefined && { accountNumber: input.accountNumber }),
+      ...(input.accountNumber !== undefined &&
+        !isMaskedAccountNumber(input.accountNumber) &&
+        (await loanAccountNumberColumns(input.accountNumber))),
       ...(input.loanType !== undefined && { loanType: input.loanType }),
       ...(input.borrowerName !== undefined && { borrowerName: input.borrowerName }),
       ...(input.principalAmount !== undefined && {
@@ -674,6 +693,7 @@ export async function updateLoan(
       ...(input.lenderMatchKey !== undefined && { lenderMatchKey: input.lenderMatchKey }),
     },
   });
+  return withMaskedAccount(loan);
 }
 
 export async function deleteLoan(userId: string, loanId: string) {
@@ -744,7 +764,7 @@ export async function deletePayment(userId: string, paymentId: string) {
 // ── Computed views ───────────────────────────────────────────────────────────
 
 export async function getLoanSummary(userId: string, loanId: string): Promise<LoanSummary> {
-  const loan = await getLoan(userId, loanId) as LoanWithPayments;
+  const loan = (await getLoan(userId, loanId)) as unknown as LoanWithPayments;
   return computeLoanSummary(loan as unknown as StoredLoan);
 }
 
@@ -752,7 +772,7 @@ export async function getAmortization(
   userId: string,
   loanId: string,
 ): Promise<AmortizationRow[]> {
-  const loan = await getLoan(userId, loanId) as LoanWithPayments;
+  const loan = (await getLoan(userId, loanId)) as unknown as LoanWithPayments;
   return buildAmortizationSchedule(loan as unknown as StoredLoan);
 }
 
