@@ -88,6 +88,7 @@ model User {
   insurancePolicies   InsurancePolicy[]
   insuranceImportDismissals InsuranceImportDismissal[]
   auditLogs           AuditLog[]
+  billingPayments     BillingPayment[]
   healthScoreSnapshot HealthScoreSnapshot?
 
   // Phase 5-A — per-call LLM spend ledger (§8, §16 gate G5). Every
@@ -2247,6 +2248,21 @@ model InsuranceClaim {
 }
 
 // ─── §4.9 AUDIT LOG + APP SETTINGS ───────────────────────────────
+
+/// One row per Razorpay payment that activated a plan. The unique payment id
+/// is what stops a verified payment from being replayed to renew a plan again.
+model BillingPayment {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razorpayOrderId   String
+  razorpayPaymentId String   @unique
+  tier              PlanTier
+  billingCycle      String
+  createdAt         DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
 
 model AuditLog {
   id        String   @id @default(cuid())

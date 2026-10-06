@@ -20,6 +20,7 @@
 
 import type { PlanTier } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { effectivePlan } from '../lib/effectivePlan.js';
 
 export interface QuotaCheckResult {
   allowed: boolean;
@@ -58,9 +59,9 @@ function tomorrowIso(): string {
 export async function checkQuota(userId: string): Promise<QuotaCheckResult> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { plan: true },
+    select: { plan: true, planExpiresAt: true },
   });
-  const plan = user?.plan ?? 'FREE';
+  const plan = user ? effectivePlan(user) : 'FREE';
   const limit = dailyLimitFor(plan);
   if (limit === 0) {
     return {

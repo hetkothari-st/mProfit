@@ -22,6 +22,7 @@ import {
 } from './jwt.service.js';
 import { panColumns } from './piiAtRest.service.js';
 import { assertNotPendingDeletion } from './accountDeletion.service.js';
+import { effectivePlan } from '../lib/effectivePlan.js';
 
 interface IssueTokensResult {
   accessToken: string;
@@ -58,7 +59,7 @@ export function toAuthUser(user: User) {
     hasPan: Boolean(user.panEnc || user.pan),
     dob: user.dob ? user.dob.toISOString().slice(0, 10) : null,
     role: user.role,
-    plan: user.plan,
+    plan: effectivePlan(user),
     planExpiresAt: user.planExpiresAt?.toISOString() ?? null,
     isActive: user.isActive,
     createdAt: user.createdAt.toISOString(),
@@ -84,7 +85,7 @@ async function issueTokens(user: User): Promise<IssueTokensResult> {
     sub: user.id,
     email: user.email,
     role: user.role,
-    plan: user.plan,
+    plan: effectivePlan(user),
   });
   const refreshToken = generateRefreshToken();
   await prisma.refreshToken.create({
