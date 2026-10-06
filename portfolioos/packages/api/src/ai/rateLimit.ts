@@ -19,7 +19,7 @@
  * request fails before any answer streams.
  */
 
-import type { PlanTier } from '@prisma/client';
+import { Prisma, type PlanTier } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { effectivePlan } from '../lib/effectivePlan.js';
 
@@ -101,12 +101,18 @@ export async function checkQuota(userId: string): Promise<QuotaCheckResult> {
  */
 export async function reserveQuota(userId: string, limit: number): Promise<boolean> {
   const date = todayDate();
-  // Make sure today's row exists; a no-op when it does.
-  await prisma.aiUsage.upsert({
-    where: { userId_date: { userId, date } },
-    create: { userId, date, messageCount: 0 },
-    update: {},
-  });
+  // Make sure today's row exists; a no-op when it does. Two first-of-the-day
+  // requests can both try to create it — the loser's unique violation just
+  // means the row is there now.
+  try {
+    await prisma.aiUsage.upsert({
+      where: { userId_date: { userId, date } },
+      create: { userId, date, messageCount: 0 },
+      update: {},
+    });
+  } catch (err) {
+    if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+  }
   const { count } = await prisma.aiUsage.updateMany({
     where: { userId, date, messageCount: { lt: limit } },
     data: { messageCount: { increment: 1 } },
