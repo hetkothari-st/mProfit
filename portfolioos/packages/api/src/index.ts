@@ -33,6 +33,8 @@ import { initSentry, Sentry } from './lib/sentry.js';
 import { makeOriginCheck } from './lib/corsOrigins.js';
 import { apiSandbox } from './lib/apiSandbox.js';
 import { redactUrl } from './lib/redactUrl.js';
+import { auditDownloads } from './lib/auditDownloads.js';
+import { startSecurityAlertJobs } from './jobs/securityAlertJobs.js';
 
 // Initialise Sentry BEFORE building the Express app so auto-instrumentation
 // wraps all request handling. No-ops if SENTRY_DSN is not set.
@@ -117,6 +119,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api', apiSandbox);
+app.use('/api', auditDownloads);
 app.use('/api', standardLimiter);
 registerRoutes(app);
 
@@ -178,6 +181,7 @@ const server = app.listen(env.PORT, '::', () => {
   startInsuranceJobs();
   startAccountDeletionJob();
   startKeyRotationJobs();
+  startSecurityAlertJobs();
   startPiiAtRestJobs();
   startSecretRotationJobs();
   startAlertJobs();

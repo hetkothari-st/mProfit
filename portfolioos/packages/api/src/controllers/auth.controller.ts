@@ -26,6 +26,7 @@ import {
 import { UnauthorizedError } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { readPan } from '../services/piiAtRest.service.js';
+import { notifyIfLoginBurst, notifyIfNewDevice } from '../services/securityAlerts.service.js';
 
 export const registerSchema = z.object({
   email: z.string().email().toLowerCase(),
@@ -125,12 +126,15 @@ export async function login(req: Request, res: Response) {
       resource: `User:${result.user.id}`,
       req,
     });
+    notifyIfNewDevice(result.user.id, req);
     ok(res, result);
   } catch (err) {
     // A failed sign-in is the single most useful thing to have in an audit
     // trail, so record it before rethrowing. Email only — never the password,
     // and no indication of whether the account exists.
-    await writeAuditLog({ action: 'login_failed', metadata: { email: data.email }, req });
+    const email = data.email.trim().toLowerCase();
+    await writeAuditLog({ action: 'login_failed', metadata: { email }, req });
+    notifyIfLoginBurst(email);
     throw err;
   }
 }
@@ -220,6 +224,9 @@ export const googleSchema = z.object({
 export async function google(req: Request, res: Response) {
   const { idToken, restore } = googleSchema.parse(req.body);
   const result = await loginOrRegisterWithGoogle(idToken, { restore });
+  // Google sign-ins were not audited at all; they count for new-device checks.
+  await writeAuditLog({ userId: result.user.id, action: 'login', resource: `User:${result.user.id}`, metadata: { method: 'google' }, req });
+  if (!result.isNew) notifyIfNewDevice(result.user.id, req);
   if (result.isNew) created(res, result);
   else ok(res, result);
 }
