@@ -35,6 +35,7 @@ import {
 } from '../lib/onlyoffice.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
+import { isAllowedOutboundUrl } from '../lib/outboundUrl.js';
 
 const ownerTypeSchema = z.nativeEnum(DocumentOwnerType);
 
@@ -260,19 +261,27 @@ export async function onlyofficeCallback(req: Request, res: Response) {
     return res.status(401).json({ error: 1, message: 'token mismatch' });
   }
 
-  // OnlyOffice JWT-wraps the body when JWT_ENABLED=true
+  // OnlyOffice JWT-wraps the body when JWT_ENABLED=true. The callback URL's
+  // own token is handed to the user's browser inside the editor config, so it
+  // proves nothing about who is calling; the body token is what proves the
+  // DocumentServer sent this. When JWT is on, a missing or bad one is refused
+  // — it used to be logged and the unverified body used anyway.
   let body = req.body as CallbackPayload;
-  if (env.ONLYOFFICE_JWT_ENABLED === 'true' && body && typeof body === 'object') {
-    const wrapped = (body as { token?: string }).token;
-    if (wrapped) {
-      try {
-        const decoded = jwt.verify(wrapped, env.ONLYOFFICE_JWT_SECRET, {
-          algorithms: ['HS256'],
-        });
-        body = (decoded as { payload?: CallbackPayload }).payload ?? (decoded as CallbackPayload);
-      } catch (err) {
-        logger.warn({ err }, '[oo] body token verification failed');
-      }
+  if (env.ONLYOFFICE_JWT_ENABLED === 'true') {
+    // DocumentServer puts it in the body when `outbox.inBody` is on, and in
+    // the Authorization header otherwise (its default).
+    const bearer = req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const wrapped =
+      (body && typeof body === 'object' ? (body as { token?: string }).token : undefined) ?? bearer;
+    if (!wrapped) return res.status(401).json({ error: 1, message: 'missing body token' });
+    try {
+      const decoded = jwt.verify(wrapped, env.ONLYOFFICE_JWT_SECRET, {
+        algorithms: ['HS256'],
+      });
+      body = (decoded as { payload?: CallbackPayload }).payload ?? (decoded as CallbackPayload);
+    } catch (err) {
+      logger.warn({ err }, '[oo] body token verification failed');
+      return res.status(401).json({ error: 1, message: 'invalid body token' });
     }
   }
 
@@ -281,8 +290,14 @@ export async function onlyofficeCallback(req: Request, res: Response) {
   }
 
   if (isSaveStatus(body.status) && body.url) {
+    // The saved file is stored and served back to the user, so fetching an
+    // arbitrary URL here would let them read internal services through it.
+    if (!isAllowedOutboundUrl(body.url, onlyOfficeOrigins())) {
+      logger.warn({ documentId: payload.documentId }, '[oo] refused save URL outside the DocumentServer');
+      return res.json({ error: 1 });
+    }
     try {
-      const fetched = await fetch(body.url, { signal: AbortSignal.timeout(60_000) });
+      const fetched = await fetch(body.url, { signal: AbortSignal.timeout(60_000), redirect: 'error' });
       if (!fetched.ok) {
         logger.warn(
           { documentId: payload.documentId, status: fetched.status },
@@ -317,8 +332,11 @@ export async function convertDocToPdf(req: Request, res: Response) {
 
   const pdfUrl = await convertToPdf({ fileUrl, fileType: ext, key: `${doc.externalEditKey}-topdf` });
 
-  // Fetch converted PDF bytes from OnlyOffice
-  const fetched = await fetch(pdfUrl, { signal: AbortSignal.timeout(60_000) });
+  // Fetch converted PDF bytes from OnlyOffice — only from OnlyOffice.
+  if (!isAllowedOutboundUrl(pdfUrl, onlyOfficeOrigins())) {
+    throw new BadRequestError('Conversion returned a file outside the document server');
+  }
+  const fetched = await fetch(pdfUrl, { signal: AbortSignal.timeout(60_000), redirect: 'error' });
   if (!fetched.ok) throw new BadRequestError('Failed to download converted PDF');
   const buffer = Buffer.from(await fetched.arrayBuffer());
 
@@ -389,4 +407,9 @@ export async function bulkDownloadDocumentsHandler(req: Request, res: Response) 
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${stem || 'documents'}-documents.zip"`);
   res.send(zip);
+}
+
+/** Where the DocumentServer serves files from, as seen by this API. */
+function onlyOfficeOrigins(): string[] {
+  return [env.ONLYOFFICE_INTERNAL_URL, env.ONLYOFFICE_PUBLIC_URL];
 }
