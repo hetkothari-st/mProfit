@@ -14,8 +14,9 @@
  *   FAMILY       → 200 messages/day
  *   PRO_ADVISOR  → 500 messages/day
  *
- * The daily counter is a single AiUsage row per (user, date). Increment
- * on each successful assistant response (not on the user's message).
+ * The daily counter is a single AiUsage row per (user, date). A message is
+ * reserved before Claude is called (reserveQuota) and refunded only if the
+ * request fails before any answer streams.
  */
 
 import type { PlanTier } from '@prisma/client';
@@ -88,16 +89,35 @@ export async function checkQuota(userId: string): Promise<QuotaCheckResult> {
   return { allowed: true, used, limit, resetsAt: tomorrowIso() };
 }
 
-export async function incrementUsage(userId: string): Promise<void> {
+/**
+ * Take one message from today's allowance, atomically. Returns false when the
+ * day's limit is already used.
+ *
+ * Called before Claude is, so the cap holds under parallel requests: the
+ * conditional UPDATE re-checks `messageCount < limit` under the row lock, so
+ * twelve simultaneous requests against a limit of five get exactly five.
+ * (Checking at start and counting at the end let every parallel request
+ * through and never counted a stream that errored or was aborted.)
+ */
+export async function reserveQuota(userId: string, limit: number): Promise<boolean> {
+  const date = todayDate();
+  // Make sure today's row exists; a no-op when it does.
   await prisma.aiUsage.upsert({
-    where: { userId_date: { userId, date: todayDate() } },
-    create: {
-      userId,
-      date: todayDate(),
-      messageCount: 1,
-    },
-    update: {
-      messageCount: { increment: 1 },
-    },
+    where: { userId_date: { userId, date } },
+    create: { userId, date, messageCount: 0 },
+    update: {},
+  });
+  const { count } = await prisma.aiUsage.updateMany({
+    where: { userId, date, messageCount: { lt: limit } },
+    data: { messageCount: { increment: 1 } },
+  });
+  return count === 1;
+}
+
+/** Give a reservation back — for a request that failed before any answer. */
+export async function refundQuota(userId: string): Promise<void> {
+  await prisma.aiUsage.updateMany({
+    where: { userId, date: todayDate(), messageCount: { gt: 0 } },
+    data: { messageCount: { decrement: 1 } },
   });
 }
