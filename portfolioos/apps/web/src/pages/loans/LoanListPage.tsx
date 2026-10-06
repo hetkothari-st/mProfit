@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import { Figure, ReceiptShell } from '@/components/receipt/Receipt';
 import { BankLogo } from '@/components/bankAccounts/BankLogo';
@@ -452,15 +453,15 @@ function CreateLoanDialog({
             </div>
             <div>
               <Label>Loan type</Label>
-              <select
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              <Select
+                className="mt-1"
                 value={form.loanType}
                 onChange={(e) => set('loanType', e.target.value)}
               >
                 {Object.entries(LOAN_TYPE_LABELS).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -520,14 +521,14 @@ function CreateLoanDialog({
             </div>
             <div>
               <Label>Prepayment option</Label>
-              <select
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              <Select
+                className="mt-1"
                 value={form.prepaymentOption}
                 onChange={(e) => set('prepaymentOption', e.target.value)}
               >
                 <option value="REDUCE_TENURE">Reduce tenure</option>
                 <option value="REDUCE_EMI">Reduce EMI</option>
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -547,27 +548,27 @@ function CreateLoanDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tax benefit section</Label>
-              <select
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              <Select
+                className="mt-1"
                 value={form.taxBenefitSection ?? ''}
                 onChange={(e) => set('taxBenefitSection', e.target.value || null)}
               >
                 <option value="">None</option>
                 <option value="80C+24B">80C + 24B (Home loan)</option>
                 <option value="80E">80E (Education loan)</option>
-              </select>
+              </Select>
             </div>
             <div>
               <Label>Status</Label>
-              <select
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              <Select
+                className="mt-1"
                 value={form.status}
                 onChange={(e) => set('status', e.target.value)}
               >
                 {['ACTIVE', 'CLOSED', 'FORECLOSED', 'DEFAULT'].map((s) => (
                   <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 

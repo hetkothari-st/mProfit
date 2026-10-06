@@ -136,7 +136,7 @@ export function AssistantButton() {
   return (
     <>
       {!open && !dismissed && !tucked && (
-        <div className="fixed z-30 bottom-[calc(9.5rem+env(safe-area-inset-bottom))] md:bottom-[5rem] right-4 sm:right-6 flex flex-col items-end gap-2 pointer-events-none">
+        <div className="fixed z-30 bottom-[calc(7.25rem+env(safe-area-inset-bottom))] md:bottom-[5rem] right-4 sm:right-6 flex flex-col items-end gap-2 pointer-events-none">
           <TeaserBubble
             phase={phase}
             question={currentQuestion.question}
@@ -150,7 +150,9 @@ export function AssistantButton() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className={`fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-6 right-4 sm:right-6 z-30 h-12 w-12 rounded-full bg-accent text-accent-foreground shadow-lg hover:shadow-xl transition-[box-shadow,transform,opacity] duration-200 flex items-center justify-center group ${tucked ? 'pointer-events-none translate-x-20 opacity-0' : ''}`}
+          // Phones: 40px, just above the 3.5rem tab bar. At 48px floating 2.5rem
+          // higher it covered tiles and buttons at the right edge on load.
+          className={`fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] md:bottom-6 right-3 sm:right-6 z-30 h-10 w-10 md:h-12 md:w-12 rounded-full bg-accent text-accent-foreground shadow-lg hover:shadow-xl transition-[box-shadow,transform,opacity] duration-200 flex items-center justify-center group ${tucked ? 'pointer-events-none translate-x-20 opacity-0' : ''}`}
           aria-label="Open AI Assistant"
           title="Ask the AI Assistant"
         >
