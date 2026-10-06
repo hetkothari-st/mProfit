@@ -7,7 +7,7 @@ import { runFileImportAdapter } from '../../adapters/fileImport/runner.js';
 import { projectTransactionEvent } from '../../adapters/fileImport/projection.js';
 import { createTransaction } from '../transaction.service.js';
 import { hashBytes, positionalHash } from '../sourceHash.js';
-import { getImportQueue } from '../../lib/queue.js';
+import { enqueueBounded, getImportQueue } from '../../lib/queue.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
 import { hookAutoLinkImportedPremium } from '../insuranceExtras.service.js';
@@ -89,8 +89,11 @@ export async function createImportJob(input: CreateImportJobInput) {
     // Enqueue for async processing
     try {
       const q = getImportQueue();
-      await q.add({ importJobId: job.id, userId: input.userId, pdfPassword: input.pdfPassword ?? null });
-      logger.info({ jobId: job.id }, '[import] enqueued');
+      const enqueued = await enqueueBounded(
+        q.add({ importJobId: job.id, userId: input.userId, pdfPassword: input.pdfPassword ?? null }),
+        `import:${job.id}`,
+      );
+      if (enqueued) logger.info({ jobId: job.id }, '[import] enqueued');
     } catch (err) {
       logger.warn({ err, jobId: job.id }, '[import] enqueue failed — will need manual retry');
     }
