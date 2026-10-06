@@ -34,7 +34,7 @@ import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { checkBudget } from '../../ingestion/llm/budget.js';
-import { recordSpend } from '../../ingestion/llm/client.js';
+import { recordSpend, warnIfZeroRetentionUnconfirmed } from '../../ingestion/llm/client.js';
 import { ADVISOR_PROSE_SYSTEM_PROMPT } from './advisorSystemPrompt.js';
 import { assertProseConsistency } from './proseConsistency.js';
 import type { TradeAction } from './types.js';
@@ -213,6 +213,7 @@ export async function generateProseForRecommendation(
   let apiError: Error | null = null;
 
   try {
+    warnIfZeroRetentionUnconfirmed('advisor.prose');
     const client = getClient();
     const res = await client.messages.create({
       model,

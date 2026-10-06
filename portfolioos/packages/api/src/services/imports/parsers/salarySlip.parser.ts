@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { env } from '../../../config/env.js';
 import { logger } from '../../../lib/logger.js';
 import { readPdfText, isPdfPasswordError, getUserPdfPasswords } from '../../../lib/pdf.js';
-import { checkLlmGate, recordSpend } from '../../../ingestion/llm/client.js';
+import { checkLlmGate, recordSpend, warnIfZeroRetentionUnconfirmed } from '../../../ingestion/llm/client.js';
 import { checkBudget } from '../../../ingestion/llm/budget.js';
 import { redactForLlm } from '../../../ingestion/pii.js';
 import { Decimal } from '@everypaisa/shared';
@@ -159,6 +159,7 @@ export const salarySlipParser: Parser = {
     }
 
     const redacted = redactForLlm(pdfText.slice(0, 5000));
+    warnIfZeroRetentionUnconfirmed('import.salary_slip');
     const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY! });
     let resp;
     try {

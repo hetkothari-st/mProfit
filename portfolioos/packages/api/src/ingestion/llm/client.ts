@@ -159,6 +159,25 @@ export interface LlmUsage {
  * describing why we refuse. Extracted so callers (poller, tests) can
  * check the gate without triggering a redact+call.
  */
+const zeroRetentionWarned = new Set<string>();
+
+/**
+ * §13 reminder for every surface that sends user data to Anthropic, not only
+ * the email parser. Zero retention is an account-level setting in the
+ * Anthropic console that the code cannot see, so the env flag records that a
+ * person turned it on. Warns once per surface per process so the log names
+ * each feature sending data, without a line per call.
+ */
+export function warnIfZeroRetentionUnconfirmed(surface: string): void {
+  if (env.ANTHROPIC_ZERO_RETENTION_CONFIRMED === 'true') return;
+  if (zeroRetentionWarned.has(surface)) return;
+  zeroRetentionWarned.add(surface);
+  logger.warn(
+    { surface },
+    'llm.zero_retention_unconfirmed — set ANTHROPIC_ZERO_RETENTION_CONFIRMED=true after enabling in Anthropic console',
+  );
+}
+
 export function checkLlmGate():
   | { ok: true }
   | { ok: false; reason: 'disabled' | 'missing_api_key'; message: string } {
@@ -221,14 +240,7 @@ export async function parseEmailWithLlm(
 
   // --- Redact PII before the body crosses the boundary (§15.9) ---
   const redacted = redactForLlm(input.emailBody);
-  if (env.ANTHROPIC_ZERO_RETENTION_CONFIRMED !== 'true') {
-    // §13 reminder — belt-and-braces warning so we can't forget to set
-    // the Anthropic console toggle before running in prod.
-    logger.warn(
-      { userId: input.userId, sourceRef: input.sourceRef },
-      'llm.zero_retention_unconfirmed — set ANTHROPIC_ZERO_RETENTION_CONFIRMED=true after enabling in Anthropic console',
-    );
-  }
+  warnIfZeroRetentionUnconfirmed('email.parse');
 
   const model = env.LLM_MODEL;
 
