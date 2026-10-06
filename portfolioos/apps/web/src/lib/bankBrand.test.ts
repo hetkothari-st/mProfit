@@ -76,7 +76,7 @@ describe('tileSurface', () => {
   // navy and burgundy tiles.
   it('deepens a vivid red to the same weight as other tiles', () => {
     const [, s, l] = hsl(tileSurface('#ec1c24', null).via); // Kotak
-    expect(l).toBeLessThanOrEqual(0.4);
+    expect(l).toBeLessThanOrEqual(0.34);
     expect(s).toBeLessThanOrEqual(0.75);
   });
 

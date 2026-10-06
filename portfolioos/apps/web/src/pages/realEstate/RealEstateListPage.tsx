@@ -858,7 +858,7 @@ export function RealEstateListPage() {
         description="Properties you own — homes, plots, commercial. Manual current value, capital-gain on sale, document vault."
         actions={
           <div className="flex flex-wrap gap-2">
-            <DownloadReportButton type="holdings" assetClasses={['REAL_ESTATE']} />
+            <DownloadReportButton type="real-estate" />
             <Button onClick={() => { setEditProperty(null); setCreateOpen(true); }}>
               <Plus className="h-4 w-4" /> Add property
             </Button>

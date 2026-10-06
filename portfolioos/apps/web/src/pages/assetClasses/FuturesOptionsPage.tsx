@@ -364,6 +364,7 @@ export function FuturesOptionsPage() {
               title="Recompute derivative positions"
             >
               <RefreshCw className={`h-4 w-4 ${recomputeMut.isPending ? 'animate-spin' : ''}`} />
+              <span className="sm:hidden">Recompute</span>
             </Button>
           </div>
         }

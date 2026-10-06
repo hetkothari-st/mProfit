@@ -161,7 +161,7 @@ function AttentionRow({ item }: { item: AttentionItem }) {
     item.description && !isEchoOfTitle(item.description, item.title) ? item.description : null;
 
   return (
-    <li className="flex items-baseline gap-4 px-1 py-3">
+    <li className="flex items-baseline gap-3 sm:gap-4 px-1 py-3">
       {/* WHEN — lateness IS the urgency, so it needs no separate badge. */}
       <div className="w-[4.75rem] shrink-0 text-right">
         {when ? (
@@ -191,10 +191,17 @@ function AttentionRow({ item }: { item: AttentionItem }) {
           {memberLabel(item.member)}
           {showDescription && <span> · {showDescription}</span>}
         </p>
+        {/* On a phone the amount column squeezed the title to a word a line;
+            there the figure sits under the text instead. */}
+        {item.amountInr && (
+          <Money className="numeric mt-1 block text-[14px] font-medium text-foreground sm:hidden">
+            {formatINR(item.amountInr)}
+          </Money>
+        )}
       </div>
 
       {/* HOW MUCH — right-aligned so the figures form a column you can scan. */}
-      <div className="shrink-0 text-right">
+      <div className="hidden shrink-0 text-right sm:block">
         {item.amountInr ? (
           <Money className="numeric text-[14px] font-medium text-foreground">
             {formatINR(item.amountInr)}

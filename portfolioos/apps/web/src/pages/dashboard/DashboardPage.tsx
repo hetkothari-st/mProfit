@@ -651,20 +651,22 @@ export function DashboardPage() {
                   <div key={i} className={`flex items-stretch rounded-lg border text-sm ${urgencyBg(a.urgency, dark)}`}>
                     <Link
                       to={alertHref(a.type)}
-                      className="flex flex-1 items-start gap-3 px-4 py-2.5 min-w-0 rounded-l-lg transition-colors hover:bg-foreground/[0.03] focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      className="flex flex-1 items-center sm:items-start gap-2.5 sm:gap-3 px-3 sm:px-4 py-2.5 min-w-0 rounded-l-lg transition-colors hover:bg-foreground/[0.03] focus:outline-none focus:ring-2 focus:ring-primary/40"
                       title="Open section"
                     >
                       <UrgencyIcon urgency={a.urgency} dark={dark} />
-                      <div className="flex-1 min-w-0">
-                        <span className="block sm:inline font-medium">{a.title}</span>
-                        <span className="block sm:inline text-muted-foreground mt-0.5 sm:mt-0 sm:ml-2">{a.description}</span>
+                      {/* Phones: one line per alert, cut with an ellipsis; the
+                          full text is a tap away on the section it opens. */}
+                      <div className="flex-1 min-w-0 truncate sm:whitespace-normal sm:overflow-visible">
+                        <span className="font-medium">{a.title}</span>
+                        <span className="text-muted-foreground ml-2">{a.description}</span>
                       </div>
                       {a.daysUntil != null && (
                         <span className={`text-xs font-medium flex-shrink-0 ${urgencyColor(a.urgency, dark)}`}>
                           {a.daysUntil <= 0 ? 'Overdue' : `${a.daysUntil}d`}
                         </span>
                       )}
-                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" strokeWidth={1.8} />
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 sm:mt-0.5" strokeWidth={1.8} />
                     </Link>
                     {i === 0 && (
                       <button

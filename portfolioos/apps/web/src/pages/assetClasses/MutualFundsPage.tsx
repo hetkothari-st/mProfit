@@ -428,8 +428,12 @@ export function MutualFundsPage() {
                   {mfs.map((h: HoldingRow & { portfolioName: string; portfolioId: string }) => (
                     <tr key={h.id} className="border-b last:border-0 hover:bg-accent/20">
                       <td data-label="Scheme" className="py-2 pr-4">
-                        <div className="font-medium truncate max-w-sm">{h.assetName}</div>
-                        <div className="text-xs text-muted-foreground">{h.symbol ?? h.isin ?? ''}</div>
+                        {/* One wrapper so the phone card stacks the ISIN under
+                            the name instead of squeezing it alongside. */}
+                        <div className="min-w-0">
+                          <div className="font-medium truncate max-w-sm">{h.assetName}</div>
+                          <div className="text-xs text-muted-foreground">{h.symbol ?? h.isin ?? ''}</div>
+                        </div>
                       </td>
                       <td data-label="Units" className="py-2 pr-4 text-right tabular-nums">{h.quantity}</td>
                       <td data-label="Avg cost" className="py-2 pr-4 text-right tabular-nums">{formatINR(h.avgCostPrice)}</td>
@@ -484,8 +488,10 @@ export function MutualFundsPage() {
                     <tr key={txn.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                       <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">{txn.tradeDate}</td>
                       <td data-label="Scheme" className="px-4 py-3">
-                        <p className="font-medium truncate max-w-[180px]">{txn.assetName ?? '—'}</p>
-                        {txn.isin && <p className="text-xs text-muted-foreground">{txn.isin}</p>}
+                        <div className="min-w-0">
+                          <p className="font-medium truncate max-w-[180px]">{txn.assetName ?? '—'}</p>
+                          {txn.isin && <p className="text-xs text-muted-foreground">{txn.isin}</p>}
+                        </div>
                       </td>
                       <td data-label="Type" className="px-4 py-3 hidden sm:table-cell">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${['BUY','DEPOSIT','DIVIDEND_PAYOUT','DIVIDEND_REINVEST','SIP','BONUS'].includes(txn.transactionType) ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
