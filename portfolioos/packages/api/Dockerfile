@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /app
 
@@ -27,7 +27,7 @@ RUN pnpm --filter @everypaisa/api build
 RUN mkdir -p packages/api/dist/adapters/vehicle/fixtures && \
     cp packages/api/src/adapters/vehicle/fixtures/dev.json packages/api/dist/adapters/vehicle/fixtures/
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 RUN apk add --no-cache openssl
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
@@ -41,7 +41,7 @@ COPY --from=build /app/packages/api/package.json ./packages/api/package.json
 COPY --from=build /app/packages/shared ./packages/shared
 COPY packages/api/start.sh ./start.sh
 RUN chmod +x ./start.sh
-# Drop root. The node:20-alpine image already ships an unprivileged `node`
+# Drop root. The node:22-alpine image already ships an unprivileged `node`
 # user; nothing here needs privileged operations, so an application-layer
 # compromise should not land on a root shell.
 RUN chown -R node:node /app

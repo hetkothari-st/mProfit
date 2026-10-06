@@ -42,9 +42,9 @@ export async function readPdfText(
         password: pw || undefined,
         // Silence pdf.js console spam
         verbosity: 0,
-        // User-uploaded PDFs: never compile font programs with eval, the path
-        // malicious PDFs use to run code. Text extraction does not need it.
-        isEvalSupported: false,
+        // No isEvalSupported: pdf.js 6 no longer compiles font programs with
+        // eval at all, which removes the code-execution path malicious PDFs
+        // used (the reason for the 5 -> 6 upgrade).
       });
       const doc = await loadingTask.promise;
       let text = '';
@@ -59,7 +59,7 @@ export async function readPdfText(
         text += '\n';
       }
       await doc.cleanup();
-      await doc.destroy();
+      await loadingTask.destroy();
       return { text, usedPassword: pw || null, encrypted: wasEncrypted };
     } catch (err) {
       const e = err as { name?: string; code?: number; message?: string };
