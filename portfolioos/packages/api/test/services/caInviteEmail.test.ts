@@ -13,6 +13,17 @@ import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 
 const sent: Array<{ to: string; subject: string; html: string; text?: string; replyTo?: string }> = [];
 
+// The service reads SMTP settings from the parsed env module, which is loaded
+// once at import — setting process.env in beforeEach came too late, so these
+// only passed on a machine with real SMTP settings. Give the module its own.
+vi.mock('../../src/config/env.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/config/env.js')>();
+  return {
+    ...actual,
+    env: { ...actual.env, SMTP_HOST: 'smtp.test.local', SMTP_USER: 'test', SMTP_PASS: 'test' },
+  };
+});
+
 vi.mock('../../src/services/notifications/email.service.js', () => ({
   sendEmail: vi.fn(async (input: { to: string; subject: string; html: string; text?: string; replyTo?: string }) => {
     sent.push(input);
@@ -27,9 +38,6 @@ const { buildInviteEmail, sendInviteEmail } = await import(
 const cleanups: Array<() => Promise<void>> = [];
 beforeEach(() => {
   sent.length = 0;
-  process.env.SMTP_HOST = 'smtp.test.local';
-  process.env.SMTP_USER = 'test';
-  process.env.SMTP_PASS = 'test';
 });
 afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();

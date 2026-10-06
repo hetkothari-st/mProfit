@@ -159,8 +159,17 @@ afterEach(clearFixtureFunds);
 /** A dense quarter of weekdays for the fixture funds themselves. */
 const FIXTURE_DAYS = weekdaysBetween('2026-01-01', '2026-03-31');
 
-/** Trips: the shared database's sparse seeded history has weekday holes far
- *  longer than any holiday cluster inside this window. */
+/**
+ * The same quarter with a two-week hole (ten weekdays) — longer than any
+ * holiday cluster. The refusal tests used to rely on the shared dev database's
+ * sparse seeded history to supply a hole, so on a fresh database (CI, a
+ * throwaway container) the calendar was clean, the run proceeded and both
+ * tests failed. The fixture now carries its own hole; a shared database's
+ * extra history can only add more.
+ */
+const GAPPED_DAYS = FIXTURE_DAYS.filter((d) => d < '2026-02-09' || d > '2026-02-20');
+
+/** Trips on the gapped fixture (and on any sparser shared history). */
 const STRICT = () =>
   ({
     ...config,
@@ -176,7 +185,7 @@ const LENIENT = () =>
 
 describe('calendar integrity refusal', () => {
   it('refuses the run when the calendar cannot be trusted, and writes nothing', async () => {
-    await runAsSystem(() => makeUniverse(FIXTURE_DAYS));
+    await runAsSystem(() => makeUniverse(GAPPED_DAYS));
 
     const before = await runAsSystem(() =>
       prisma.fundScoreSnapshot.count({ where: { methodologyVersionId: methodologyId } }),
@@ -273,7 +282,7 @@ describe('calendar integrity refusal', () => {
       }),
     );
 
-    await runAsSystem(() => makeUniverse(FIXTURE_DAYS));
+    await runAsSystem(() => makeUniverse(GAPPED_DAYS));
     await runAsSystem(() =>
       runFundScoring({ methodologyVersionId: methodologyId, config: STRICT(), asOf: ASOF }),
     ).catch(() => undefined);
