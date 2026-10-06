@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
 import { transactionsApi } from '@/api/transactions.api';
+import { portfoliosApi } from '@/api/portfolios.api';
 import {
   accruedValue, monthsBetween, addMonthsIso, shortMonth, formatDate, daysUntil,
   normalizeText, INR_COMPACT, TOOLTIP_STYLE, TOOLTIP_LABEL_STYLE,
@@ -362,13 +363,29 @@ export function FdDetailPage() {
   const [editTxn, setEditTxn] = useState<TransactionDTO | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pendingUndoId, setPendingUndoId] = useState<string | null>(null);
-  void holdingId;
-
-  const holding = location.state?.holding as FDHolding | undefined;
+  // Tapping a card hands the row over in navigation state. A direct link,
+  // refresh or shared URL has none — this page used to bounce those to the
+  // list. Look the FD up by id instead, from the same data the list uses.
+  const stateHolding = location.state?.holding as FDHolding | undefined;
+  const lookup = useQuery({
+    queryKey: ['fd-holding', holdingId],
+    enabled: !stateHolding && Boolean(holdingId),
+    queryFn: async (): Promise<FDHolding | null> => {
+      const portfolios = await portfoliosApi.list();
+      for (const p of portfolios) {
+        const rows = await portfoliosApi.holdings(p.id);
+        const found = rows.find((r) => r.id === holdingId);
+        if (found) return { ...found, portfolioName: p.name, portfolioId: p.id };
+      }
+      return null;
+    },
+  });
+  const holding = stateHolding ?? lookup.data ?? undefined;
 
   useEffect(() => {
-    if (!holding) navigate('/fds', { replace: true });
-  }, [holding, navigate]);
+    // Only once we know it doesn't exist (deleted, or someone else's id).
+    if (!stateHolding && lookup.isSuccess && !lookup.data) navigate('/fds', { replace: true });
+  }, [stateHolding, lookup.isSuccess, lookup.data, navigate]);
 
   const { data: txnData, isLoading: txnLoading } = useQuery({
     queryKey: ['transactions', holding?.assetClass],
@@ -609,7 +626,11 @@ export function FdDetailPage() {
   }, [sorted, isRD, openDate, annualRate, freq, periodsPerYear, principal, maturity, todayIso]);
 
   // All hooks have run; safe to bail out for the transient no-holding render.
-  if (!holding) return null;
+  if (!holding) {
+    return lookup.isLoading ? (
+      <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+    ) : null;
+  }
 
   function openEdit(txn: TransactionDTO) {
     setEditTxn(txn);
