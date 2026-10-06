@@ -114,6 +114,7 @@ model User {
   // Generic document vault (rental agreements, vehicle RC scans, insurance
   // policy PDFs, …). Reusable across modules via {ownerType, ownerId}.
   documents Document[]
+  documentBlobs       DocumentBlob[]
 
   loans        Loan[]
   loansGiven   LoanGiven[]
@@ -2726,6 +2727,20 @@ model Document {
 
   @@index([userId, ownerType, ownerId])
   @@index([userId, createdAt])
+}
+
+/// The bytes of a vault document, keyed by Document.storageKey. Kept out of
+/// Document so listing a vault never loads file contents. Lived on the API
+/// container's disk until 2026-10, which every deploy wiped.
+model DocumentBlob {
+  storageKey String   @id
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data       Bytes
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
 }
 
 enum DocumentOwnerType {

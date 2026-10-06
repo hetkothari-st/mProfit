@@ -20,7 +20,7 @@ import {
   listAllDocuments,
   zipDocuments,
 } from '../services/document.service.js';
-import { storedFilePath, streamFileTo } from '../lib/documentStorage.js';
+import { readBuffer } from '../lib/documentStorage.js';
 import { downloadHeaders, storedMimeFor } from '../lib/documentMime.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
@@ -127,11 +127,14 @@ export async function remove(req: Request, res: Response) {
 
 export async function download(req: Request, res: Response) {
   const doc = await getDocumentForDownload(userId(req), req.params.id!);
+  // Read before setting file headers, so a missing file goes out as a plain
+  // JSON 404 rather than an "attachment" the browser saves.
+  const bytes = await readBuffer(doc.userId, doc.storageKey);
   for (const [k, v] of Object.entries(downloadHeaders(doc.mimeType, doc.fileName))) {
     res.setHeader(k, v);
   }
-  res.setHeader('Content-Length', String(doc.sizeBytes));
-  await streamFileTo(res, storedFilePath(doc.userId, doc.storageKey));
+  res.setHeader('Content-Length', String(bytes.length));
+  res.end(bytes);
 }
 
 // ─── OnlyOffice integration ──────────────────────────────────────
@@ -228,9 +231,10 @@ export async function onlyofficeDownload(req: Request, res: Response) {
     throw new BadRequestError('token mismatch');
   }
   const doc = await getDocumentForDownload(payload.userId, payload.documentId);
+  const bytes = await readBuffer(doc.userId, doc.storageKey);
   res.setHeader('Content-Type', doc.mimeType);
-  res.setHeader('Content-Length', String(doc.sizeBytes));
-  await streamFileTo(res, storedFilePath(doc.userId, doc.storageKey));
+  res.setHeader('Content-Length', String(bytes.length));
+  res.end(bytes);
 }
 
 // OnlyOffice DocumentServer save callback. JWT in `Authorization: Bearer …`
