@@ -67,7 +67,7 @@ export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
   // Bring the selected tab into view when it sits in the scrolled-off part of a
   // narrow tab row (phones).
   React.useEffect(() => {
-    if (isActive) ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (isActive) ref.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [isActive]);
   return (
     <button
