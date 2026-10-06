@@ -80,10 +80,10 @@ export function NotificationsSection() {
           </div>
         ) : connected ? (
           <div className="space-y-4">
-            <div className="rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 flex flex-wrap items-center gap-3">
-              <Check className="h-4 w-4 text-emerald-700" />
+            <div className="rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 flex flex-wrap items-center gap-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+              <Check className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
               <span className="text-sm font-medium">Gmail connected</span>
-              <span className="text-sm font-mono text-muted-foreground">
+              <span className="min-w-0 break-all text-sm font-mono text-muted-foreground">
                 {status?.gmailEmail}
               </span>
               <Button

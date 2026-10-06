@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form';
+import { Link } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
@@ -141,7 +142,11 @@ export function SettingsPage() {
               <div className="font-medium">{user?.role}</div>
             </div>
             <p className="text-xs text-muted-foreground pt-2">
-              Plan upgrades are available in the subscriptions section (Phase 8).
+              To change your plan, go to{' '}
+              <Link to="/pricing" className="underline underline-offset-2 hover:text-foreground">
+                Pricing
+              </Link>
+              .
             </p>
           </CardContent>
         </Card>

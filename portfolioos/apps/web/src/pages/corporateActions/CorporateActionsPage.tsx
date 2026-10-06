@@ -127,7 +127,7 @@ export function CorporateActionsPage() {
       />
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
         <MetricCard label="Total actions" value={String(summary?.total ?? 0)} icon={Split} />
         <MetricCard label="Applied" value={String(summary?.applied ?? 0)} icon={CheckCircle2} hint="Folded into holdings" />
         <MetricCard label="Pending" value={String(summary?.pending ?? 0)} icon={Clock} hint="Will apply on next sync" />

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileDown, Loader2, Info, Pencil, RotateCcw, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -325,7 +326,7 @@ export function TaxPage() {
         </CardContent>
       </Card>
 
-      <div className="flex gap-1 mb-4 border-b overflow-x-auto scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
+      <HScroll className="flex gap-1 mb-4 border-b overflow-x-auto scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -340,7 +341,7 @@ export function TaxPage() {
             {t.label}
           </button>
         ))}
-      </div>
+      </HScroll>
 
       {tab === 'summary' && (
         <SummaryView data={summaryQ.data} loading={summaryQ.isLoading} onDownloadReport={downloadTaxReport} />
@@ -570,7 +571,7 @@ function SummaryView({
               </tr>
             </tfoot>
           </table>
-          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+          <div className="mt-3 space-y-1 px-3 pb-3 text-xs text-muted-foreground md:px-0 md:pb-0">
             <p>
               Taxable amounts are after setting off losses (short-term losses against any capital gain,
               long-term losses against long-term gains only) and the 112A exemption; rates follow each

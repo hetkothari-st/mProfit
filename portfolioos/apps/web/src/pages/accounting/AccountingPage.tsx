@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HScroll } from '@/components/ui/h-scroll';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpenCheck, ChevronRight, ChevronDown, Plus, Trash2,
@@ -48,7 +49,7 @@ function AccountTreeNode({ node, depth, onAdd, onDelete }: {
         // Phones indent each level less (--tree-indent is set on the tree).
         style={{ paddingLeft: `calc(8px + ${depth} * var(--tree-indent, 20px))` }}
       >
-        <button type="button" onClick={() => setOpen((v) => !v)} className="w-4 shrink-0 text-muted-foreground">
+        <button type="button" onClick={() => setOpen((v) => !v)} aria-label={open ? 'Collapse' : 'Expand'} className="tap-expand w-4 shrink-0 text-muted-foreground">
           {hasChildren
             ? (open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />)
             : <span className="w-3 inline-block" />}
@@ -60,10 +61,10 @@ function AccountTreeNode({ node, depth, onAdd, onDelete }: {
           {!toDecimal(node.openingBalance).isZero() ? formatINR(node.openingBalance) : '—'}
         </span>
         <div className="opacity-0 group-hover:opacity-100 flex gap-1 ml-2">
-          <button type="button" onClick={() => onAdd(node.id)} className="p-0.5 hover:text-primary">
+          <button type="button" onClick={() => onAdd(node.id)} aria-label={`Add account under ${node.name}`} className="p-1.5 sm:p-0.5 hover:text-primary">
             <Plus className="h-3 w-3" />
           </button>
-          <button type="button" onClick={() => onDelete(node.id, node.name)} className="p-0.5 hover:text-destructive">
+          <button type="button" onClick={() => onDelete(node.id, node.name)} aria-label={`Delete ${node.name}`} className="p-1.5 sm:p-0.5 hover:text-destructive">
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
@@ -282,8 +283,10 @@ function VoucherFormDialog({ open, onOpenChange, accounts, initial }: {
               <Label>Entries</Label>
               <Button type="button" variant="outline" size="sm" onClick={addEntry}><Plus className="h-3 w-3" /> Add row</Button>
             </div>
-            <div className="rounded-md border overflow-x-auto">
-              <table className="w-full text-sm">
+            {/* Below md each entry becomes a stacked card (.rtable): four
+                selects/inputs side by side left each about 60px on a phone. */}
+            <div className="md:rounded-md md:border md:overflow-x-auto">
+              <table className="rtable w-full text-sm">
                 <thead className="bg-muted/40">
                   <tr>
                     <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Debit Account</th>
@@ -296,27 +299,27 @@ function VoucherFormDialog({ open, onOpenChange, accounts, initial }: {
                 <tbody>
                   {entries.map((e, i) => (
                     <tr key={i} className="border-t">
-                      <td className="px-2 py-1.5">
+                      <td data-label="Debit" className="px-2 py-1.5">
                         <Select value={e.debitAccountId} onChange={(ev) => updateEntry(i, 'debitAccountId', ev.target.value)} className="h-8 text-xs">
                           <option value="">Select…</option>
                           {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
                         </Select>
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td data-label="Credit" className="px-2 py-1.5">
                         <Select value={e.creditAccountId} onChange={(ev) => updateEntry(i, 'creditAccountId', ev.target.value)} className="h-8 text-xs">
                           <option value="">Select…</option>
                           {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
                         </Select>
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td data-label="Amount" className="px-2 py-1.5">
                         <Input className="h-8 text-xs text-right" type="number" value={e.amount} onChange={(ev) => updateEntry(i, 'amount', ev.target.value)} placeholder="0" />
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td data-label="Narration" className="px-2 py-1.5">
                         <Input className="h-8 text-xs" value={e.narration ?? ''} onChange={(ev) => updateEntry(i, 'narration', ev.target.value)} placeholder="Optional" />
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td data-label="" className="px-2 py-1.5">
                         {entries.length > 1 && (
-                          <button type="button" onClick={() => removeEntry(i)} className="text-muted-foreground hover:text-destructive">
+                          <button type="button" onClick={() => removeEntry(i)} aria-label="Remove row" className="tap-expand text-muted-foreground hover:text-destructive">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
@@ -326,9 +329,9 @@ function VoucherFormDialog({ open, onOpenChange, accounts, initial }: {
                 </tbody>
                 <tfoot>
                   <tr className="border-t bg-muted/20">
-                    <td colSpan={2} className="px-3 py-2 text-xs font-medium text-right text-muted-foreground">Total</td>
-                    <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums">{formatINR(totalAmount.toFixed(4))}</td>
-                    <td colSpan={2} />
+                    <td colSpan={2} className="px-3 py-2 text-xs font-medium text-right text-muted-foreground max-md:hidden">Total</td>
+                    <td data-label="Total" className="px-3 py-2 text-right text-sm font-semibold tabular-nums">{formatINR(totalAmount.toFixed(4))}</td>
+                    <td colSpan={2} className="max-md:hidden" />
                   </tr>
                 </tfoot>
               </table>
@@ -427,7 +430,7 @@ function VouchersTab() {
           <option value="">All types</option>
           {VOUCHER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </Select>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -695,10 +698,10 @@ function TrialBalanceReport() {
                   ];
                 })}
                 <tr className="border-t-2 bg-muted/30 font-semibold">
-                  <td colSpan={3} className="px-4 py-2.5 text-sm">Total</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalDebit.toFixed(4))}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalCredit.toFixed(4))}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalDebit.minus(totalCredit).toFixed(4))}</td>
+                  <td colSpan={3} data-label="" className="px-4 py-2.5 text-sm">Total</td>
+                  <td data-label="Debit" className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalDebit.toFixed(4))}</td>
+                  <td data-label="Credit" className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalCredit.toFixed(4))}</td>
+                  <td data-label="Balance" className="px-4 py-2.5 text-right tabular-nums">{formatINR(totalDebit.minus(totalCredit).toFixed(4))}</td>
                 </tr>
               </tbody>
             </table>
@@ -872,13 +875,13 @@ function BalanceSheetReport() {
 function ReportsTab() {
   return (
     <Tabs defaultValue="trial-balance">
-      <div className="overflow-x-auto">
+      <HScroll className="overflow-x-auto">
         <TabsList className="flex-nowrap w-max min-w-full">
           <TabsTrigger value="trial-balance" className="shrink-0 whitespace-nowrap"><Scale className="h-3.5 w-3.5 mr-1.5" />Trial Balance</TabsTrigger>
           <TabsTrigger value="pnl" className="shrink-0 whitespace-nowrap"><TrendingDown className="h-3.5 w-3.5 mr-1.5" />P&L Statement</TabsTrigger>
           <TabsTrigger value="balance-sheet" className="shrink-0 whitespace-nowrap"><Landmark className="h-3.5 w-3.5 mr-1.5" />Balance Sheet</TabsTrigger>
         </TabsList>
-      </div>
+      </HScroll>
       <div className="mt-4">
         <TabsContent value="trial-balance"><TrialBalanceReport /></TabsContent>
         <TabsContent value="pnl"><PnLReport /></TabsContent>
@@ -905,14 +908,14 @@ export function AccountingPage() {
       />
       <LockedFeature requiredTier="PRO_ADVISOR" featureName="Accounting Module">
         <Tabs defaultValue="chart">
-          <div className="overflow-x-auto">
+          <HScroll className="overflow-x-auto">
             <TabsList className="flex-nowrap w-max min-w-full">
               <TabsTrigger value="chart" className="shrink-0 whitespace-nowrap"><Landmark className="h-3.5 w-3.5 mr-1.5" />Chart of Accounts</TabsTrigger>
               <TabsTrigger value="vouchers" className="shrink-0 whitespace-nowrap"><FileText className="h-3.5 w-3.5 mr-1.5" />Vouchers</TabsTrigger>
               <TabsTrigger value="ledger" className="shrink-0 whitespace-nowrap"><BookOpenCheck className="h-3.5 w-3.5 mr-1.5" />Ledger</TabsTrigger>
               <TabsTrigger value="reports" className="shrink-0 whitespace-nowrap"><Scale className="h-3.5 w-3.5 mr-1.5" />Reports</TabsTrigger>
             </TabsList>
-          </div>
+          </HScroll>
           <div className="mt-6">
             <TabsContent value="chart"><ChartOfAccountsTab /></TabsContent>
             <TabsContent value="vouchers"><VouchersTab /></TabsContent>

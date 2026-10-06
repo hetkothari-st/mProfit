@@ -437,7 +437,7 @@ function StatusBadge({
   status: BrokerStatus | undefined;
 }) {
   if (isLoading) return <Badge variant="outline">Loading…</Badge>;
-  if (!status?.configured) return <Badge variant="outline">Not configured</Badge>;
+  if (!status?.configured) return <Badge variant="outline" className="whitespace-nowrap">Not configured</Badge>;
   if (status.connected) {
     return (
       <Badge variant="outline" className="text-positive border-positive/30">
