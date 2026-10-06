@@ -550,7 +550,7 @@ export function DashboardPage() {
                     aria-label={netWorthHidden ? 'Show net worth' : 'Hide net worth'}
                     aria-pressed={!netWorthHidden}
                     title={netWorthHidden ? 'Show net worth' : 'Hide net worth'}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-accent-ink/70 hover:text-foreground hover:bg-foreground/5 transition-colors"
+                    className="tap-expand inline-flex h-6 w-6 items-center justify-center rounded-md text-accent-ink/70 hover:text-foreground hover:bg-foreground/5 transition-colors"
                   >
                     {netWorthHidden
                       ? <Eye className="h-3.5 w-3.5" strokeWidth={1.7} />

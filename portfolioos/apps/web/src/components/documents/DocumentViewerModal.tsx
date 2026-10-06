@@ -38,6 +38,16 @@ export function DocumentViewerModal({ documentId, fileName, kind, onClose }: Pro
       .fetchBlob(documentId)
       .then((blob) => {
         if (cancelled) return;
+        // The blob URL renders on this app's origin. Only hand the frame types
+        // that can't run script: a real PDF or a raster image, as the server's
+        // magic-byte check labelled it — never what the filename claims.
+        const previewable =
+          blob.type === 'application/pdf' ||
+          (blob.type.startsWith('image/') && blob.type !== 'image/svg+xml');
+        if (!previewable) {
+          setError('This file can’t be previewed in the browser.');
+          return;
+        }
         url = URL.createObjectURL(blob);
         setObjectUrl(url);
       })

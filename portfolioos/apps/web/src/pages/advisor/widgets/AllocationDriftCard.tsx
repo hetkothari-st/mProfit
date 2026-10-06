@@ -257,7 +257,8 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
                     <th className="px-1 py-2 text-right text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
                       Drift
                     </th>
-                    <th className="px-1 py-2 text-right text-[10px] font-medium uppercase tracking-kerned text-muted-foreground">
+                    {/* Narrow phones fold the rupees under the drift figure. */}
+                    <th className="hidden px-1 py-2 text-right text-[10px] font-medium uppercase tracking-kerned text-muted-foreground min-[400px]:table-cell">
                       In rupees
                     </th>
                   </tr>
@@ -286,8 +287,13 @@ export function AllocationDriftCard({ data, isLoading, isError }: AllocationDrif
                         >
                           {r.driftPp > 0 ? '+' : ''}
                           {r.driftPp.toFixed(1)} pp
+                          {r.driftValue && (
+                            <span className="block whitespace-nowrap text-[11px] font-normal text-muted-foreground min-[400px]:hidden">
+                              <Money>{formatINR(r.driftValue, { showSign: true })}</Money>
+                            </span>
+                          )}
                         </td>
-                        <td className="whitespace-nowrap px-1 py-2 text-right text-muted-foreground">
+                        <td className="hidden whitespace-nowrap px-1 py-2 text-right text-muted-foreground min-[400px]:table-cell">
                           {r.driftValue ? (
                             <Money>{formatINR(r.driftValue, { showSign: true })}</Money>
                           ) : (

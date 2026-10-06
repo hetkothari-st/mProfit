@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { LogOut, User, ChevronDown, Sun, Moon, Bell, Eye, EyeOff, Menu, Sparkles, UserCog, ArrowLeftRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth.store';
@@ -16,6 +16,32 @@ import { useManageProfile } from '@/hooks/useManageProfile';
 export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // The full-screen backdrop below can't do this on its own: the header's
+  // backdrop-blur makes it the containing block for `fixed` children, so the
+  // "full-screen" backdrop only covered the 64px header and the menu stayed
+  // open over the drawer, the AI panel and other pages. Close on any tap
+  // outside the menu, on Escape, and on navigation.
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
   const { user, refreshToken, clearSession } = useAuthStore();
   const { dark, toggle } = useThemeStore();
   const { hideSensitive, toggleHideSensitive } = usePrivacyStore();
@@ -111,6 +137,7 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
         <Link
           to="/alerts"
           title="Alerts & Reminders"
+          aria-label="Alerts & Reminders"
           className="relative h-9 w-9 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors focus-ring"
         >
           <Bell className="h-4 w-4" strokeWidth={1.7} />
@@ -151,7 +178,7 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
         <span className="hidden sm:block mx-1 h-6 w-px bg-border shrink-0" />
 
         {/* User dropdown */}
-        <div className="relative shrink-0">
+        <div ref={menuRef} className="relative shrink-0">
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
