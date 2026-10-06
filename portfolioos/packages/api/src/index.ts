@@ -29,6 +29,7 @@ import { evaluateDbRole, readDbRoleFacts } from './lib/dbRoleGuard.js';
 import { startFoExpiryJob } from './jobs/foExpiryClose.job.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
+import { makeOriginCheck } from './lib/corsOrigins.js';
 
 // Initialise Sentry BEFORE building the Express app so auto-instrumentation
 // wraps all request handling. No-ops if SENTRY_DSN is not set.
@@ -57,24 +58,7 @@ app.use(
     hsts: { maxAge: 15_552_000, includeSubDomains: true, preload: false },
   }),
 );
-const corsAllowList = env.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
-function isOriginAllowed(origin: string): boolean {
-  if (corsAllowList.includes(origin)) return true;
-  // Allow any *.railway.app subdomain (Railway-generated web service URLs).
-  // Use a non-greedy host portion that explicitly anchors on `.railway.app`.
-  if (/^https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.railway\.app$/i.test(origin)) {
-    return true;
-  }
-  // The EPFO/SBI browser extension calls this API from its service worker
-  // with a chrome-extension:// origin and no host permission for the API, so
-  // it relies on CORS. Every endpoint authenticates with a Bearer header —
-  // there is no cookie session for a hostile extension to ride — so allowing
-  // the scheme adds no access; refusing it only breaks extension sync.
-  if (/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
-    return true;
-  }
-  return false;
-}
+const isOriginAllowed = makeOriginCheck(env.CORS_ORIGIN);
 app.use(
   cors({
     origin: (origin, callback) => {

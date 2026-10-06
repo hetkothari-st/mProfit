@@ -42,6 +42,9 @@ export async function readPdfText(
         password: pw || undefined,
         // Silence pdf.js console spam
         verbosity: 0,
+        // User-uploaded PDFs: never compile font programs with eval, the path
+        // malicious PDFs use to run code. Text extraction does not need it.
+        isEvalSupported: false,
       });
       const doc = await loadingTask.promise;
       let text = '';

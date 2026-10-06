@@ -67,7 +67,7 @@
     "razorpay": "^2.9.6",
     "tesseract.js": "^5",
     "twilio": "^6.0.2",
-    "undici": "^6.21.0",
+    "undici": "^6.28.1",
     "uuid": "^11.0.3",
     "yahoo-finance2": "^2.13.3",
     "zod": "^3.23.8"
