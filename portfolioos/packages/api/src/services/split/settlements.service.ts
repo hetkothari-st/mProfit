@@ -1,4 +1,3 @@
-import { Decimal } from 'decimal.js';
 import type { SplitSettlementDto } from '@everypaisa/shared';
 import { serializeMoney } from '@everypaisa/shared';
 import type { SplitSettlement } from '@prisma/client';
@@ -8,6 +7,7 @@ import { requireMember } from './groups.service.js';
 import { writeActivity } from './activity.js';
 import { resolveFxRate } from './fx.js';
 import { toBase } from './allocate.js';
+import { parseCcy, parseIsoDate, parseMoney2dp } from './validate.js';
 
 export interface SettlementInput {
   groupId: string;
@@ -31,20 +31,18 @@ function toDto(s: SplitSettlement): SplitSettlementDto {
 
 async function build(groupId: string, input: Omit<SettlementInput, 'groupId'>) {
   if (input.fromMemberId === input.toMemberId) throw new BadRequestError('Payer and receiver must differ');
-  if (!/^\d+(\.\d{1,2})?$/.test(input.amount) || new Decimal(input.amount).lte(0)) throw new BadRequestError('Amount must be > 0 with at most 2 decimals');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new BadRequestError('Invalid date');
+  const amount = parseMoney2dp(input.amount, 'amount');
+  const date = parseIsoDate(input.date);
   const group = await prisma.splitGroup.findUnique({ where: { id: groupId }, select: { baseCurrency: true } });
   if (!group) throw new NotFoundError('Group not found');
   const n = await prisma.splitMember.count({ where: { groupId, leftAt: null, id: { in: [input.fromMemberId, input.toMemberId] } } });
   if (n !== 2) throw new BadRequestError('A participant is not in this group');
-  const currency = (input.currency ?? group.baseCurrency).toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) throw new BadRequestError('Invalid currency code');
-  const amount = new Decimal(input.amount);
+  const currency = parseCcy(input.currency ?? group.baseCurrency);
   const fxRate = await resolveFxRate(currency, group.baseCurrency, input.fxRate);
   return {
     fromMemberId: input.fromMemberId, toMemberId: input.toMemberId, amount: amount.toFixed(2), currency,
     fxRate: fxRate.toString(), baseAmount: toBase(amount, fxRate).toFixed(2), method: input.method,
-    date: new Date(`${input.date}T00:00:00Z`),
+    date,
   };
 }
 

@@ -90,3 +90,11 @@ describe('base currency', () => {
     expect(sum(base).toFixed(2)).toBe('8312.35');
   });
 });
+
+describe('computeShares EXACT with zero shares', () => {
+  it('drops zero-amount entries like SHARES and PERCENT do', () => {
+    const r = computeShares('EXACT', new Decimal('100'), [{ memberId: 'a', value: '100' }, { memberId: 'b', value: '0' }]);
+    expect([...r.keys()]).toEqual(['a']);
+    expect(r.get('a')!.toFixed(2)).toBe('100.00');
+  });
+});

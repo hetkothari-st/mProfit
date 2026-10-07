@@ -14,6 +14,7 @@ import { computeShares, toBase, allocateBase } from './allocate.js';
 import { requireMember } from './groups.service.js';
 import { writeActivity } from './activity.js';
 import { resolveFxRate } from './fx.js';
+import { parseCcy, parseIsoDate, parseMoney2dp } from './validate.js';
 
 export interface ExpenseInput {
   groupId: string;
@@ -27,7 +28,6 @@ export interface ExpenseInput {
   shares: Array<{ memberId: string; value?: string }>;
 }
 
-const DAY_MS = 86_400_000;
 const INCLUDE = { payers: true, shares: true } as const;
 type Row = Prisma.SplitExpenseGetPayload<{ include: typeof INCLUDE }>;
 
@@ -54,15 +54,9 @@ function toDto(e: Row): SplitExpenseDto {
 async function build(groupId: string, input: Omit<ExpenseInput, 'groupId'>) {
   const description = input.description.trim();
   if (!description) throw new BadRequestError('Description is required');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new BadRequestError('Invalid date');
-  const date = new Date(`${input.date}T00:00:00Z`);
-  if (Number.isNaN(date.getTime()) || date.getTime() > Date.now() + DAY_MS) throw new BadRequestError('Invalid date');
-  const currency = input.currency.toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) throw new BadRequestError('Invalid currency code');
-  if (!/^\d+(\.\d{1,2})?$/.test(input.amount) || new Decimal(input.amount).lte(0)) {
-    throw new BadRequestError('SPLIT_BAD_INPUT: amount must be > 0 with at most 2 decimals');
-  }
-  const amount = new Decimal(input.amount);
+  const date = parseIsoDate(input.date);
+  const currency = parseCcy(input.currency);
+  const amount = parseMoney2dp(input.amount, 'amount');
 
   const group = await prisma.splitGroup.findUnique({ where: { id: groupId }, select: { baseCurrency: true } });
   if (!group) throw new NotFoundError('Group not found');
@@ -77,9 +71,7 @@ async function build(groupId: string, input: Omit<ExpenseInput, 'groupId'>) {
   const payers = new Map<string, Decimal>();
   let paid = new Decimal(0);
   for (const p of input.payers) {
-    if (!/^\d+(\.\d{1,2})?$/.test(p.amount)) throw new BadRequestError('SPLIT_BAD_INPUT: payer amount');
-    const v = new Decimal(p.amount);
-    if (v.lte(0)) throw new BadRequestError('SPLIT_BAD_INPUT: payer amount must be > 0');
+    const v = parseMoney2dp(p.amount, 'payer amount');
     payers.set(p.memberId, (payers.get(p.memberId) ?? new Decimal(0)).plus(v));
     paid = paid.plus(v);
   }

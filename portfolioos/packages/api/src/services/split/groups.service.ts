@@ -13,6 +13,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.
 import { getContactRow } from './contacts.service.js';
 import { memberNets, type LedgerExpense, type LedgerSettlement } from './balances.js';
 import { writeActivity } from './activity.js';
+import { parseCcy } from './validate.js';
 
 export interface CreateGroupInput {
   name: string;
@@ -23,7 +24,6 @@ export interface CreateGroupInput {
   contactIds?: string[];
 }
 
-const CCY = /^[A-Z]{3}$/;
 const DIRECT_FIXED = 'SPLIT_DIRECT_FIXED: a 1:1 ledger always has exactly two people';
 
 async function assertNotDirect(groupId: string): Promise<void> {
@@ -104,8 +104,7 @@ async function memberDataForContact(userId: string, contactId: string) {
 export async function createGroup(userId: string, input: CreateGroupInput): Promise<SplitGroupDto> {
   const name = input.name.trim();
   if (!name) throw new BadRequestError('Group name is required');
-  const baseCurrency = (input.baseCurrency ?? 'INR').toUpperCase();
-  if (!CCY.test(baseCurrency)) throw new BadRequestError('Invalid currency code');
+  const baseCurrency = parseCcy(input.baseCurrency ?? 'INR');
   const ids = input.contactIds ?? [];
   if (new Set(ids).size !== ids.length) throw new ConflictError('That person is already in the group');
   const others = await Promise.all(ids.map((id) => memberDataForContact(userId, id)));

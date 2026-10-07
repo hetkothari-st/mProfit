@@ -70,7 +70,7 @@ export function computeShares(mode: SplitMode, amount: Decimal, inputs: ShareInp
       for (const i of inputs) {
         const v = parseNonNegative(i.value, 'exact amount');
         if (v.decimalPlaces() > 2) bad('SPLIT_BAD_INPUT', 'exact amount has more than 2 decimals');
-        out.set(i.memberId, v);
+        if (v.gt(0)) out.set(i.memberId, v); // zero shares drop out, like SHARES/PERCENT
         total = total.plus(v);
       }
       if (!total.eq(amount)) bad('SPLIT_SUM_MISMATCH', `shares add to ${total.toFixed(2)}, expense is ${amount.toFixed(2)}`);
