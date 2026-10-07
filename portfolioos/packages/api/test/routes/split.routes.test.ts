@@ -109,4 +109,32 @@ describe('/api/split', () => {
     expect(d.status).toBe(200);
     expect(d.json.data.type).toBe('DIRECT');
   });
+
+  it('outsider writes are 404 and change nothing', async () => {
+    const contact = await seedContact(alice.userId, 'Bob', bob.userId);
+    const g = await call(alice, 'POST', '/groups', { name: 'Private', myDisplayName: 'Alice', contactIds: [contact.id] });
+    const groupId = g.json.data.id as string;
+    const a = g.json.data.members.find((m: { isMe: boolean }) => m.isMe).id as string;
+    const b = g.json.data.members.find((m: { isMe: boolean }) => !m.isMe).id as string;
+    const body = {
+      description: 'Hotel', date: '2026-10-01', amount: '1000', currency: 'INR', splitMode: 'EQUAL',
+      payers: [{ memberId: a, amount: '1000' }], shares: [{ memberId: a }, { memberId: b }],
+    };
+    const e = await call(alice, 'POST', '/expenses', { groupId, ...body });
+    const id = e.json.data.id as string;
+    const eveContact = await seedContact(eve.userId, 'Zed');
+
+    expect((await call(eve, 'POST', '/expenses', { groupId, ...body })).status).toBe(404);
+    expect((await call(eve, 'PATCH', `/expenses/${id}`, { ...body, amount: '1' })).status).toBe(404);
+    expect((await call(eve, 'DELETE', `/expenses/${id}`)).status).toBe(404);
+    expect((await call(eve, 'POST', '/settlements', { groupId, fromMemberId: b, toMemberId: a, amount: '10', method: 'CASH', date: '2026-10-02' })).status).toBe(404);
+    expect((await call(eve, 'POST', `/groups/${groupId}/members`, { contactId: eveContact.id })).status).toBe(404);
+    expect((await call(eve, 'GET', `/groups/${groupId}/activity`)).status).toBe(404);
+
+    const after = await call(alice, 'GET', `/expenses/${id}`);
+    expect(after.status).toBe(200);
+    expect(after.json.data.amount).toBe('1000.0000');
+    expect(after.json.data.deletedAt).toBeNull();
+    expect((await call(alice, 'GET', `/groups/${groupId}`)).json.data.members).toHaveLength(2);
+  });
 });
