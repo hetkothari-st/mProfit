@@ -17,7 +17,9 @@ import { readBuffer } from '../../src/lib/documentStorage.js';
 describe('encrypted file store', () => {
   let scope: TestScope;
   const CSV = 'Date,Description,Amount\n2025-07-01,Test,100\n';
-  const tmp = () => path.join(os.tmpdir(), `fs-test-${randomUUID()}.csv`);
+  // A private directory (mkdtemp), not shared names in the OS temp dir.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fs-test-'));
+  const tmp = () => path.join(dir, `${randomUUID()}.csv`);
 
   beforeAll(async () => {
     scope = await createTestScope('file-store');
@@ -31,6 +33,7 @@ describe('encrypted file store', () => {
       await prisma.userDataKey.deleteMany({ where: { userId: scope.userId } });
     });
     await scope.cleanup();
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it('restores a wiped file byte-for-byte and drops the plain copy again', async () => {
