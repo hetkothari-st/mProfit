@@ -20,6 +20,7 @@ import { startRentalJobs } from './jobs/rentalJobs.js';
 import { startInsuranceJobs } from './jobs/insuranceJobs.js';
 import { startAccountDeletionJob } from './jobs/accountDeletionJob.js';
 import { startPiiAtRestJobs } from './jobs/piiAtRestJobs.js';
+import { startKeyRotationJobs } from './jobs/keyRotationJobs.js';
 import { startSecretRotationJobs } from './jobs/secretRotationJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
@@ -45,6 +46,8 @@ import { initSentry, Sentry } from './lib/sentry.js';
 import { makeOriginCheck } from './lib/corsOrigins.js';
 import { apiSandbox } from './lib/apiSandbox.js';
 import { redactUrl } from './lib/redactUrl.js';
+import { auditDownloads } from './lib/auditDownloads.js';
+import { startSecurityAlertJobs } from './jobs/securityAlertJobs.js';
 
 // Initialise Sentry BEFORE building the Express app so auto-instrumentation
 // wraps all request handling. No-ops if SENTRY_DSN is not set.
@@ -129,6 +132,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api', apiSandbox);
+app.use('/api', auditDownloads);
 app.use('/api', standardLimiter);
 registerRoutes(app);
 
@@ -196,6 +200,8 @@ const server = app.listen(env.PORT, '::', () => {
   startRentalJobs();
   startInsuranceJobs();
   startAccountDeletionJob();
+  startKeyRotationJobs();
+  startSecurityAlertJobs();
   startPiiAtRestJobs();
   startSecretRotationJobs();
   startAlertJobs();

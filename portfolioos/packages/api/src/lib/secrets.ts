@@ -83,14 +83,29 @@ export function isCurrentFormat(payload: string): boolean {
  * The GCM auth tag makes a wrong-key attempt fail loudly rather than return
  * garbage, which is what makes trying two keys safe.
  */
-export function decryptSecretWithKeyInfo(payload: string): { plain: string; usedLegacyKey: boolean } {
+export function decryptSecretWithKeyInfo(payload: string): {
+  plain: string;
+  usedLegacyKey: boolean;
+  usedPreviousKey?: boolean;
+} {
   const parts = payload.split('.');
   const versioned = parts.length === 4;
   const [ivB64, tagB64, encB64] = versioned ? parts.slice(1) : parts;
   if (!ivB64 || !tagB64 || !encB64) throw new Error('Invalid encrypted payload');
 
   const current = getKey();
-  if (versioned) return { plain: decryptWith(current, ivB64, tagB64, encB64), usedLegacyKey: false };
+  if (versioned) {
+    try {
+      return { plain: decryptWith(current, ivB64, tagB64, encB64), usedLegacyKey: false };
+    } catch (err) {
+      // Mid-rotation: SECRETS_KEY_PREVIOUS is the key being retired. The
+      // rotation job re-encrypts every value it opens, then the variable goes.
+      const prevRaw = process.env.SECRETS_KEY_PREVIOUS;
+      if (!prevRaw) throw err;
+      const previous = crypto.createHash('sha256').update(prevRaw).digest();
+      return { plain: decryptWith(previous, ivB64, tagB64, encB64), usedLegacyKey: false, usedPreviousKey: true };
+    }
+  }
 
   try {
     return { plain: decryptWith(current, ivB64, tagB64, encB64), usedLegacyKey: false };

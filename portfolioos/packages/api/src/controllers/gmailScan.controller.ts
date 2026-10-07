@@ -23,6 +23,7 @@ import {
   upsertRule,
   deleteRule,
 } from '../services/gmailAutoApproveRules.service.js';
+import { readBuffer } from '../lib/documentStorage.js';
 
 const CreateScanSchema = z.object({
   lookbackFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -118,6 +119,10 @@ export async function getDocRaw(req: Request, res: Response) {
     'Content-Disposition',
     `inline; filename="${encodeURIComponent(doc.fileName)}"`,
   );
+  if (doc.blobKey) {
+    res.send(await readBuffer(req.user.id, doc.blobKey));
+    return;
+  }
   await streamFileTo(res, doc.storagePath);
 }
 

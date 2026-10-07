@@ -16,6 +16,7 @@ import { AcceptInvitationPage } from './pages/family/AcceptInvitationPage';
 import { ClaimProfilePage } from './pages/family/ClaimProfilePage';
 import { FamilyPage } from './pages/family/FamilyPage';
 import { CaWorkspacePage } from './pages/ca/CaWorkspacePage';
+import { ProfessionalTwoFactorGate } from './components/ca/ProfessionalTwoFactorGate';
 import { ClientBooksPage } from './pages/ca/ClientBooksPage';
 import { AcceptCaInvitationPage } from './pages/ca/AcceptCaInvitationPage';
 import { AcceptProfessionalInvitePage } from './pages/ca/AcceptProfessionalInvitePage';
@@ -137,8 +138,8 @@ export function App() {
         <Route path="/family/members/:userId" element={<FamilyMemberPage />} />
         {/* CA workspace. The client-facing routes deliberately sit outside it:
             seeing and withdrawing access must not depend on a plan. */}
-        <Route path="/ca" element={<CaWorkspacePage />} />
-        <Route path="/ca/clients/:clientId" element={<ClientBooksPage />} />
+        <Route path="/ca" element={<ProfessionalTwoFactorGate><CaWorkspacePage /></ProfessionalTwoFactorGate>} />
+        <Route path="/ca/clients/:clientId" element={<ProfessionalTwoFactorGate><ClientBooksPage /></ProfessionalTwoFactorGate>} />
         <Route path="/ca/invitations/:token/accept" element={<AcceptCaInvitationPage />} />
         <Route path="/settings/professional-access" element={<ProfessionalAccessPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />

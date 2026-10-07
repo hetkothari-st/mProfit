@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { useNextPath } from '@/hooks/useNextPath';
 import { useMutation } from '@tanstack/react-query';
-import { authApi } from '@/api/auth.api';
+import { authApi, isMfaChallenge } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
 import { isOnboardingUnfinished } from '@/lib/onboardingProgress';
@@ -79,11 +79,17 @@ export interface GoogleSignInButtonProps {
   text?: 'signin_with' | 'signup_with' | 'continue_with';
   /** The page's "Remember me" choice. Remembered unless told otherwise. */
   remember?: boolean;
+  /**
+   * The account has two-factor on: the page shows the code step. Pages that
+   * don't pass this (signup) send the person to /login to finish.
+   */
+  onMfaRequired?: (mfaToken: string) => void;
 }
 
 export function GoogleSignInButton({
   text = 'continue_with',
   remember = true,
+  onMfaRequired,
 }: GoogleSignInButtonProps) {
   const navigate = useNavigate();
   const nextPath = useNextPath();
@@ -100,6 +106,11 @@ export function GoogleSignInButton({
       authApi.loginWithGoogle(idToken, restore),
     onSuccess: (data, { restore }) => {
       setPendingRestore(null);
+      if (isMfaChallenge(data)) {
+        if (onMfaRequired) onMfaRequired(data.mfaToken);
+        else navigate('/login', { state: { mfaToken: data.mfaToken, remember } });
+        return;
+      }
       if (restore) toast.success('Your account has been restored.');
       setSession(data.user, data.tokens, { remember });
       toast.success(

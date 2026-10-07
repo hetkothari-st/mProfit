@@ -4,6 +4,7 @@ import { logger } from '../lib/logger.js';
 import { createImportJob } from './imports/import.service.js';
 import { findMatchingRule, upsertRule } from './gmailAutoApproveRules.service.js';
 import { NotFoundError, BadRequestError } from '../lib/errors.js';
+import { ensureLocalFile } from '../lib/fileStore.js';
 
 function inferImportType(fileName: string, classifiedDocType: string | null): ImportType {
   const lower = fileName.toLowerCase();
@@ -47,6 +48,8 @@ export async function approveDoc(
     throw new BadRequestError(`Cannot approve a doc in status ${doc.status}`);
   }
 
+  // The attachment's disk copy is dropped after classification.
+  await ensureLocalFile(userId, doc.blobKey, doc.storagePath);
   const importJob = await createImportJob({
     userId,
     portfolioId: null,

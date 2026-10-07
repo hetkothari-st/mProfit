@@ -7,6 +7,8 @@ import { env } from '../config/env.js';
 import { ok, noContent } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import { sniffImage } from '../services/propertyPhotos.service.js';
+import { persistLocalFile } from '../lib/fileStore.js';
+import { deleteFile, readBuffer } from '../lib/documentStorage.js';
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 const MAX_BYTES = (env.MAX_UPLOAD_SIZE_MB ?? 20) * 1024 * 1024;
@@ -75,11 +77,17 @@ export async function uploadPhoto(req: Request, res: Response) {
     throw new BadRequestError('That file is not a JPEG, PNG, WebP or HEIC image.');
   }
 
+  // Keep it encrypted in the database; the disk copy would not survive a
+  // deploy and would sit there in plain text.
+  const blobKey = await persistLocalFile(req.user.id, file.path, 'txnphoto');
+  await fs.unlink(file.path).catch(() => undefined);
+
   const photo = await prisma.transactionPhoto.create({
     data: {
       transactionId: txnId,
       fileName: file.originalname,
       filePath: file.path,
+      blobKey,
       mimeType,
       sizeBytes: file.size,
     },
@@ -104,6 +112,10 @@ export async function servePhoto(req: Request, res: Response) {
 
   res.setHeader('Content-Type', photo.mimeType);
   res.setHeader('Cache-Control', 'private, max-age=3600');
+  if (photo.blobKey) {
+    res.send(await readBuffer(req.user.id, photo.blobKey));
+    return;
+  }
   res.sendFile(path.resolve(photo.filePath));
 }
 
@@ -116,6 +128,7 @@ export async function deletePhoto(req: Request, res: Response) {
   if (!photo || photo.transactionId !== txnId) throw new NotFoundError('Photo not found');
 
   await fs.unlink(photo.filePath).catch(() => {});
+  if (photo.blobKey) await deleteFile(req.user.id, photo.blobKey);
   await prisma.transactionPhoto.delete({ where: { id: photoId } });
   noContent(res);
 }

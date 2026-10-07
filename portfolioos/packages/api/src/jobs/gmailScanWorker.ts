@@ -14,6 +14,7 @@ import { classifyAttachmentWithLlm } from '../lib/gmailClassifier.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 import { getGmailScanQueue } from '../lib/queue.js';
 import { sweepAutoApprovals } from '../services/gmailDocApproval.service.js';
+import { dropLocalFile, ensureLocalFile, persistBytes } from '../lib/fileStore.js';
 
 const STORAGE_ROOT = env.UPLOAD_DIR;
 const CONCURRENCY = 5;
@@ -136,6 +137,8 @@ async function processMessages(scanJobId: string, messageIds: string[]): Promise
         att,
         bytes,
       );
+      // Durable, encrypted copy; the disk file goes once classified.
+      const blobKey = await persistBytes(job.userId, bytes, 'gmail', extname(att.fileName));
 
       await prisma.gmailDiscoveredDoc.create({
         data: {
@@ -151,6 +154,7 @@ async function processMessages(scanJobId: string, messageIds: string[]): Promise
           mimeType: att.mimeType,
           contentHash,
           storagePath,
+          blobKey,
           status: dupeImport ? 'DUPLICATE' : 'CLASSIFYING',
         },
       });
@@ -183,11 +187,14 @@ async function classifyPending(scanJobId: string): Promise<void> {
       const doc = queue.shift();
       if (!doc) return;
 
+      await ensureLocalFile(doc.userId, doc.blobKey, doc.storagePath);
       const decrypted = await decryptIfNeeded(doc.storagePath, {
         fileName: doc.fileName,
         userId: doc.userId,
         allowedKinds: ['pdf', 'xlsx_ooxml', 'xlsx_encrypted', 'xls', 'csv'],
       });
+      // Classification only needs the text; the plain-text disk copy goes.
+      await dropLocalFile(doc.blobKey, doc.storagePath);
 
       const first4kb = decrypted.ok && decrypted.text ? decrypted.text.slice(0, 4096) : '';
 

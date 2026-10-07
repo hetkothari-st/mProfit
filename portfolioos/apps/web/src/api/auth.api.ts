@@ -22,9 +22,28 @@ export interface AuthResult {
   tokens: AuthTokens;
 }
 
+/** Password/Google step passed on a two-factor account: send a code next. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  mfaToken: string;
+  expiresAt: string;
+}
+
+export function isMfaChallenge(x: unknown): x is MfaChallenge {
+  return typeof x === 'object' && x !== null && (x as { mfaRequired?: unknown }).mfaRequired === true;
+}
+
+export interface TwoFactorStatus {
+  enabled: boolean;
+  enabledAt: string | null;
+  backupCodesRemaining: number;
+  /** This session was signed in with a code (what the CA workspace needs). */
+  sessionVerified: boolean;
+}
+
 export const authApi = {
-  async login(payload: LoginRequest): Promise<AuthResult> {
-    const { data } = await api.post<ApiResponse<AuthResult>>('/api/auth/login', payload);
+  async login(payload: LoginRequest): Promise<AuthResult | MfaChallenge> {
+    const { data } = await api.post<ApiResponse<AuthResult | MfaChallenge>>('/api/auth/login', payload);
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
@@ -53,11 +72,45 @@ export const authApi = {
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
-  async loginWithGoogle(idToken: string, restore?: boolean): Promise<AuthResult & { isNew?: boolean }> {
-    const { data } = await api.post<ApiResponse<AuthResult & { isNew?: boolean }>>(
+  async loginWithGoogle(
+    idToken: string,
+    restore?: boolean,
+  ): Promise<(AuthResult & { isNew?: boolean }) | MfaChallenge> {
+    const { data } = await api.post<ApiResponse<(AuthResult & { isNew?: boolean }) | MfaChallenge>>(
       '/api/auth/google',
       restore ? { idToken, restore } : { idToken },
     );
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  /** Second step of a two-factor sign-in. */
+  async verifyTwoFactor(mfaToken: string, code: string): Promise<AuthResult> {
+    const { data } = await api.post<ApiResponse<AuthResult>>('/api/auth/2fa/verify', { mfaToken, code });
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async twoFactorStatus(): Promise<TwoFactorStatus> {
+    const { data } = await api.get<ApiResponse<TwoFactorStatus>>('/api/auth/me/2fa');
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async twoFactorSetup(): Promise<{ secret: string; otpauthUrl: string }> {
+    const { data } = await api.post<ApiResponse<{ secret: string; otpauthUrl: string }>>('/api/auth/me/2fa/setup');
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  /** Also returns a fresh session marked as signed in with the second factor. */
+  async twoFactorEnable(code: string): Promise<{ backupCodes: string[]; session?: AuthResult }> {
+    const { data } = await api.post<ApiResponse<{ backupCodes: string[]; session?: AuthResult }>>('/api/auth/me/2fa/enable', { code });
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+  async twoFactorDisable(code: string): Promise<void> {
+    const { data } = await api.post<ApiResponse<{ enabled: false }>>('/api/auth/me/2fa/disable', { code });
+    if (!data.success) throw new Error(data.error);
+  },
+  async twoFactorBackupCodes(code: string): Promise<{ backupCodes: string[] }> {
+    const { data } = await api.post<ApiResponse<{ backupCodes: string[] }>>('/api/auth/me/2fa/backup-codes', { code });
     if (!data.success) throw new Error(data.error);
     return data.data;
   },

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
+import { createTestScope, prisma, type TestScope, runAsVerified } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import {
   getCaScope,
@@ -102,7 +102,7 @@ describe('a grant narrowed to some portfolios', () => {
     const ca = await person('scope-pf-ca');
     const g = await grant(ca.userId, client.userId);
 
-    const wideOpen = await runAsUser(ca.userId, () =>
+    const wideOpen = await runAsVerified(ca.userId, () =>
       prisma.portfolio.findMany({ where: { userId: client.userId } }),
     );
     expect(wideOpen).toHaveLength(2);
@@ -111,13 +111,13 @@ describe('a grant narrowed to some portfolios', () => {
       updateGrantScope(client.userId, g.id, { portfolioIds: [client.portfolioId] }),
     );
 
-    const narrowed = await runAsUser(ca.userId, () =>
+    const narrowed = await runAsVerified(ca.userId, () =>
       prisma.portfolio.findMany({ where: { userId: client.userId } }),
     );
     expect(narrowed.map((p) => p.id)).toEqual([client.portfolioId]);
 
     // The rows inside the excluded portfolio go with it.
-    const txns = await runAsUser(ca.userId, () =>
+    const txns = await runAsVerified(ca.userId, () =>
       prisma.transaction.findMany({ where: { portfolio: { userId: client.userId } } }),
     );
     expect(txns).toHaveLength(1);
@@ -133,7 +133,7 @@ describe('a grant narrowed to some portfolios', () => {
       updateGrantScope(client.userId, g.id, { portfolioIds: [client.secondPortfolioId] }),
     );
 
-    const scope = await runAsUser(ca.userId, () => getCaScope(ca.userId, g.id));
+    const scope = await runAsVerified(ca.userId, () => getCaScope(ca.userId, g.id));
     expect(scope.allowedPortfolioIds).toEqual([client.secondPortfolioId]);
   });
 });
@@ -148,7 +148,7 @@ describe('a grant narrowed by category', () => {
       updateGrantScope(client.userId, g.id, { categories: ['LOAN'] }),
     );
 
-    const seen = await runAsUser(ca.userId, async () => ({
+    const seen = await runAsVerified(ca.userId, async () => ({
       loans: await prisma.loan.count({ where: { userId: client.userId } }),
       vehicles: await prisma.vehicle.count({ where: { userId: client.userId } }),
     }));
@@ -164,7 +164,7 @@ describe('a grant narrowed by category', () => {
       updateGrantScope(client.userId, g.id, { categories: [] }),
     );
 
-    const loans = await runAsUser(ca.userId, () =>
+    const loans = await runAsVerified(ca.userId, () =>
       prisma.loan.count({ where: { userId: client.userId } }),
     );
     expect(loans).toBe(0);
@@ -181,7 +181,7 @@ describe('a grant narrowed by asset class', () => {
       updateGrantScope(client.userId, g.id, { assetClasses: ['EQUITY'] }),
     );
 
-    const txns = await runAsUser(ca.userId, () =>
+    const txns = await runAsVerified(ca.userId, () =>
       prisma.transaction.findMany({ where: { portfolio: { userId: client.userId } } }),
     );
     expect(txns.map((t) => t.assetClass)).toEqual(['EQUITY']);
@@ -235,7 +235,7 @@ describe('a grant narrowed by asset class', () => {
     );
 
     const readAsCa = () =>
-      runAsUser(ca.userId, () =>
+      runAsVerified(ca.userId, () =>
         Promise.all([
           prisma.holdingProjection.findMany({ where: { portfolio: { userId: client.userId } } }),
           prisma.capitalGain.findMany({
@@ -274,13 +274,13 @@ describe('the access window', () => {
       updateGrantScope(client.userId, g.id, { accessUntil: '2020-01-01' }),
     );
 
-    const portfolios = await runAsUser(ca.userId, () =>
+    const portfolios = await runAsVerified(ca.userId, () =>
       prisma.portfolio.findMany({ where: { userId: client.userId } }),
     );
     expect(portfolios).toHaveLength(0);
 
     // And the service says why, rather than showing an empty page.
-    await expect(runAsUser(ca.userId, () => getCaScope(ca.userId, g.id))).rejects.toThrow(
+    await expect(runAsVerified(ca.userId, () => getCaScope(ca.userId, g.id))).rejects.toThrow(
       /ended on 2020-01-01/,
     );
   });
@@ -298,11 +298,11 @@ describe('the access window', () => {
       updateGrantScope(client.userId, g.id, { accessFrom: istToday, accessUntil: istToday }),
     );
 
-    const portfolios = await runAsUser(ca.userId, () =>
+    const portfolios = await runAsVerified(ca.userId, () =>
       prisma.portfolio.findMany({ where: { userId: client.userId } }),
     );
     expect(portfolios.length).toBeGreaterThan(0);
-    await expect(runAsUser(ca.userId, () => getCaScope(ca.userId, g.id))).resolves.toBeTruthy();
+    await expect(runAsVerified(ca.userId, () => getCaScope(ca.userId, g.id))).resolves.toBeTruthy();
   });
 
   it('refuses a window that ends before it starts', async () => {
@@ -325,7 +325,7 @@ describe('who may change a grant', () => {
     const g = await grant(ca.userId, client.userId);
 
     await expect(
-      runAsUser(ca.userId, () => updateGrantScope(ca.userId, g.id, { categories: null })),
+      runAsVerified(ca.userId, () => updateGrantScope(ca.userId, g.id, { categories: null })),
     ).rejects.toThrow(/not yours to manage/);
   });
 
@@ -335,13 +335,13 @@ describe('who may change a grant', () => {
     const g = await grant(ca.userId, client.userId);
 
     await runAsUser(client.userId, () => revokeGrant(client.userId, g.id));
-    const duringRevocation = await runAsUser(ca.userId, () =>
+    const duringRevocation = await runAsVerified(ca.userId, () =>
       prisma.portfolio.count({ where: { userId: client.userId } }),
     );
     expect(duringRevocation).toBe(0);
 
     await runAsUser(client.userId, () => reinstateGrant(client.userId, g.id));
-    const after = await runAsUser(ca.userId, () =>
+    const after = await runAsVerified(ca.userId, () =>
       prisma.portfolio.count({ where: { userId: client.userId } }),
     );
     expect(after).toBe(2);
@@ -355,7 +355,7 @@ describe('who may change a grant', () => {
     await runAsUser(client.userId, () => revokeGrant(client.userId, g.id));
 
     await expect(
-      runAsUser(ca.userId, () => reinstateGrant(ca.userId, g.id)),
+      runAsVerified(ca.userId, () => reinstateGrant(ca.userId, g.id)),
     ).rejects.toThrow(/Only the client can restore/);
   });
 });

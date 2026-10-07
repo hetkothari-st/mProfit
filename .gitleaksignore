@@ -1,0 +1,14 @@
+# Reviewed 2026-10-06: test fixtures, placeholder keys in plan docs, and prose
+# that matched the generic-api-key rule. No real secrets. New findings still fail CI.
+2ce692aa6c4295aaab0f33fc44de014413297019:portfolioos/packages/api/test/helpers/env.setup.ts:generic-api-key:16
+2ce692aa6c4295aaab0f33fc44de014413297019:portfolioos/packages/api/test/regressions/secrets-roundtrip.test.ts:generic-api-key:15
+62f1b0974c6cfc8e267db8a0827a21f8bd9560df:AGENTS.md:generic-api-key:1428
+bae3ac2e6d996a7ffd3feabf80d82b6751f02809:portfolioos/docs/superpowers/plans/2026-05-06-epf-ppf-autofetch-plan-A-foundation-epfo.md:generic-api-key:2587
+bae3ac2e6d996a7ffd3feabf80d82b6751f02809:portfolioos/docs/superpowers/plans/2026-05-06-epf-ppf-autofetch-plan-A-foundation-epfo.md:generic-api-key:331
+c7c0cf00407e0c9bc8247572508895ba3f8cbf72:portfolioos/packages/api/src/services/reportBuilder/special/index.ts:generic-api-key:60
+cfc4688edaeb8ee2189328af826d241b88fe1050:AGENTS.md:generic-api-key:1428
+d3382266145017e7af5aafb4567feb6be4659030:CLAUDE.md:generic-api-key:1419
+d896787d868c284c88909d33abcc959bb74f400b:portfolioos/packages/api/src/services/reportBuilder/special/index.ts:generic-api-key:60
+e038c95578f6c98e53ecca7c0dc3101174c0a0ba:AGENTS.md:generic-api-key:1428
+e4e244a5e95e27eb10b85c2464f941d5421aa97f:portfolioos/docs/superpowers/plans/2026-05-06-epf-ppf-autofetch-plan-A-foundation-epfo.md:generic-api-key:2587
+e4e244a5e95e27eb10b85c2464f941d5421aa97f:portfolioos/docs/superpowers/plans/2026-05-06-epf-ppf-autofetch-plan-A-foundation-epfo.md:generic-api-key:331

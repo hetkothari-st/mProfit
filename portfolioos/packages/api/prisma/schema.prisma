@@ -214,6 +214,17 @@ model User {
   // Wrapped per-user data key (lib/userKeys).
   dataKey UserDataKey?
 
+  // Two-factor sign-in (services/twoFactor.service.ts). The TOTP secret is
+  // encrypted under SECRETS_KEY; set only once a code has confirmed it.
+  twoFactorSecretEnc        String?
+  // Secret shown during setup, before the user has proved they saved it.
+  twoFactorPendingSecretEnc String?
+  twoFactorEnabledAt        DateTime?
+  // Last accepted TOTP time step: a code is accepted once, never replayed.
+  twoFactorLastStep         Int?
+  twoFactorBackupCodes      TwoFactorBackupCode[]
+  mfaChallenges             MfaChallenge[]
+
   @@index([deletionScheduledFor])
   @@index([managedById])
 }
@@ -343,6 +354,9 @@ model RefreshToken {
   token     String?   @unique
   /// SHA-256 of the bearer value. The only thing looked up.
   tokenHash String    @unique
+  /// The session was signed in with a second factor (two-factor sign-in).
+  /// Carried to every token refreshed from it; gates professional access.
+  mfa       Boolean   @default(false)
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
@@ -1097,6 +1111,10 @@ model TransactionPhoto {
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   fileName      String
   filePath      String
+  /// Encrypted copy of the file in DocumentBlob (lib/fileStore). The filePath
+  /// copy on local disk is temporary: a deploy wipes it, and it is restored
+  /// from here when needed. Null on rows from before the store existed.
+  blobKey String?
   mimeType      String
   sizeBytes     Int
 
@@ -1302,6 +1320,10 @@ model ImportJob {
   status         ImportStatus @default(PENDING)
   fileName       String
   filePath       String
+  /// Encrypted copy of the file in DocumentBlob (lib/fileStore). The filePath
+  /// copy on local disk is temporary: a deploy wipes it, and it is restored
+  /// from here when needed. Null on rows from before the store existed.
+  blobKey String?
   broker         String?
   totalRows      Int?
   successRows    Int?
@@ -1424,6 +1446,10 @@ model GmailDiscoveredDoc {
   classifierTokensOut  Int?
 
   storagePath String
+  /// Encrypted copy of the file in DocumentBlob (lib/fileStore). The storagePath
+  /// copy on local disk is temporary: a deploy wipes it, and it is restored
+  /// from here when needed. Null on rows from before the store existed.
+  blobKey String?
 
   status GmailDocStatus @default(CLASSIFYING)
 
@@ -4923,4 +4949,32 @@ model UserDataKey {
   wrappedKey String
   kekVersion Int      @default(1)
   createdAt  DateTime @default(now())
+}
+
+/// One-time backup codes for two-factor sign-in. Stored hashed; single use.
+model TwoFactorBackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// A sign-in that passed the password (or Google) step and is waiting for
+/// the second factor. Single use, short-lived, attempt-capped.
+model MfaChallenge {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  method     String // "password" | "google"
+  restore    Boolean   @default(false)
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
