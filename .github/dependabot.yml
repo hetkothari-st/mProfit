@@ -22,10 +22,20 @@ updates:
     directory: /portfolioos/packages/api
     schedule:
       interval: weekly
+    ignore:
+      # Node stays on 22 until the price feeds' undici redirect handling is
+      # fixed for Node 24+ (maxRedirections was removed there).
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
   - package-ecosystem: docker
     directory: /portfolioos/apps/web
     schedule:
       interval: weekly
+    ignore:
+      # Node stays on 22 until the price feeds' undici redirect handling is
+      # fixed for Node 24+ (maxRedirections was removed there).
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
