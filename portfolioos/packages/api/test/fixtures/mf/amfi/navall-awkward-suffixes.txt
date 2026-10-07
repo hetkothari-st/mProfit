@@ -1,0 +1,19 @@
+Open Ended Schemes(Equity Scheme - Flexi Cap Fund)
+
+Test Awkward Suffix Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+900001;INF000A01001;;Awkward Flexi Cap Fund - Direct Plan - Growth;101.0000;31-Dec-2025
+900002;INF000A01002;;Awkward Flexi Cap Fund - DIRECT - IDCW;102.0000;31-Dec-2025
+900003;INF000A01003;INF000A01004;Awkward Flexi Cap Fund - Regular Plan - IDCW Reinvestment;103.0000;31-Dec-2025
+900004;INF000A01005;;Awkward Flexi Cap Fund - Direct - Dividend Payout;104.0000;31-Dec-2025
+900005;INF000A01006;;Awkward Flexi Cap Fund - Growth Option - Direct Plan;105.0000;31-Dec-2025
+900006;INF000A01007;;Awkward Flexi Cap Fund - Direct Plan (G);106.0000;31-Dec-2025
+900007;INF000A01008;;Awkward Flexi Cap Fund (G);107.0000;31-Dec-2025
+900008;INF000A01009;;Awkward Flexi Cap Fund - Direct Growth;108.0000;31-Dec-2025
+900009;INF000A01010;;Awkward Flexi Cap Fund - Growth;109.0000;31-Dec-2025
+900010;INF000A01011;;Awkward Flexi Cap Fund - Payout of Income Distribution cum capital Withdrawal option - Direct Plan;110.0000;31-Dec-2025
+900011;INF000A01012;INF000A01013;Awkward Flexi Cap Fund - Reinvestment of Income Distribution cum capital Withdrawal option - Regular Plan;111.0000;31-Dec-2025
+900012;INF000A01014;INF000A01015;Awkward Flexi Cap Fund-Direct Plan-Daily Dividend Re-investment;112.0000;31-Dec-2025
+900013;INF000A01016;;Awkward Flexi Cap Fund - Direct Plan - Div - Payout;113.0000;31-Dec-2025
+900014;INF000A01017;;Awkward ETF Nifty 50 BeES;114.0000;31-Dec-2025

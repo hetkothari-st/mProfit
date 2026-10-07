@@ -1,0 +1,52 @@
+{
+  "asOf": "2026-07-31",
+  "capturedAt": "2026-09-07",
+  "factsheetRatioPlan": "REGULAR",
+  "schemeCode": 118955,
+  "schemeName": "HDFC Flexi Cap Fund - Direct Plan - Growth Option",
+  "regularPlanCode": 101762,
+  "category": "Equity - Flexi Cap",
+  "benchmarkNamed": "NIFTY 500 Index (TRI)",
+  "benchmarkIndexCode": "NIFTY500_TRI",
+  "source": {
+    "url": "https://files.hdfcfund.com/s3fs-public/2026-08/HDFC%20MF%20Factsheet%20-%20July%202026.pdf",
+    "edition": "HDFC MF Factsheet - July 2026 (data as on July 31, 2026)",
+    "sha256": "d5760e7627b7e36848eb71f892cd1e3c0b56c2b206df2affbe06099debce02ea",
+    "pages": {
+      "ratios": 7,
+      "performanceRegular": 8,
+      "performanceDirect": 115
+    },
+    "capturedAt": "2026-09-07"
+  },
+  "methodology": {
+    "window": "3-yr period ended July 31, 2026",
+    "frequency": "month-end NAV",
+    "riskFree": "5.41% (Source: FIMMDA MIBOR)",
+    "verbatim": "Computed for the 3-yr period ended July 31, 2026 Based on month-end NAV.* Risk free rate: 5.41% (Source: FIMMDA MIBOR) For schemes which have not completed 3 years, data is computed since inception.",
+    "planNote": "Plan not stated for the risk ratios. The published Sharpe is reproduced to 3 dp from the Regular-plan NAV and not from the Direct-plan NAV (see README), so REGULAR is recorded as the basis."
+  },
+  "riskFreeAnnualPct": "5.41",
+  "returns": {
+    "regular": {
+      "return1y": "4.60",
+      "return3y": "16.27",
+      "return5y": "17.99"
+    },
+    "direct": {
+      "return1y": "5.29",
+      "return3y": "17.04",
+      "return5y": "18.76",
+      "return10y": "16.35"
+    },
+    "benchmark": {
+      "return1y": "3.37",
+      "return3y": "12.29",
+      "return5y": "12.53",
+      "return10y": "13.55"
+    }
+  },
+  "stdDev3y": "12.899",
+  "sharpe3y": "0.821",
+  "beta3y": "0.790"
+}

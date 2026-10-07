@@ -45,7 +45,74 @@ const INTENTIONALLY_UNSCOPED = new Set<string>([
  */
 const NO_POLICY_BY_DESIGN = new Set<string>(['RefreshToken', 'PasswordResetToken']);
 
+/**
+ * Tables whose protection is asserted BY NAME as well as by the sweeps below.
+ *
+ * The four checks in this file are all discovery-based: they ask the database
+ * what exists and compare. That is the right default, but it has one blind
+ * spot — a table that is missing from the database entirely (a migration not
+ * applied, a table dropped) appears in no result set and so passes every
+ * check silently. For tables whose whole reason to exist is that they hold one
+ * user's private analysis, "the sweep found nothing to complain about" is not
+ * the same evidence as "the policy is there".
+ *
+ * MF analytics user-scoped trio, docs/mf-analytics/05 §1, policies from
+ * 20260904140000_mf_analytics_user_scoped. MfFinding and MfFundVerdict carry a
+ * denormalised `userId` copied from MfAnalysisRun so their policies are direct
+ * column comparisons rather than EXISTS joins through the run.
+ */
+const MUST_BE_PROTECTED_BY_NAME = [
+  'MfAnalysisRun',
+  'MfFinding',
+  'MfFundVerdict',
+] as const;
+
 describe('USER_SCOPED_MODELS covers every RLS-protected table', () => {
+  it('protects and registers each explicitly-named table', async () => {
+    const rows = await runAsSystem(() =>
+      prisma.$queryRawUnsafe<
+        Array<{ tablename: string; enabled: boolean; forced: boolean; policies: number }>
+      >(
+        `SELECT c.relname               AS tablename,
+                c.relrowsecurity        AS enabled,
+                c.relforcerowsecurity   AS forced,
+                (SELECT count(*)::int FROM pg_policies p
+                  WHERE p.schemaname = 'public' AND p.tablename = c.relname) AS policies
+           FROM pg_class c
+           JOIN pg_namespace ns ON ns.oid = c.relnamespace
+          WHERE ns.nspname = 'public'
+            AND c.relkind = 'r'
+            AND c.relname IN (${MUST_BE_PROTECTED_BY_NAME.map((t) => `'${t}'`).join(', ')})`,
+      ),
+    );
+
+    const byName = new Map(rows.map((r) => [r.tablename, r]));
+    const problems: string[] = [];
+
+    for (const table of MUST_BE_PROTECTED_BY_NAME) {
+      const row = byName.get(table);
+      if (!row) {
+        problems.push(`${table}: table does not exist (migration not applied?)`);
+        continue;
+      }
+      if (!row.enabled) problems.push(`${table}: ROW LEVEL SECURITY not enabled`);
+      if (!row.forced) problems.push(`${table}: RLS not FORCEd (table owner bypasses it)`);
+      if (row.policies === 0) problems.push(`${table}: no policy`);
+      if (!USER_SCOPED_MODELS.has(table)) {
+        problems.push(`${table}: absent from USER_SCOPED_MODELS in src/lib/prisma.ts`);
+      }
+    }
+
+    expect(
+      problems,
+      'These tables hold one user\'s private data and must carry both halves of ' +
+        'the mechanism: a FORCEd policy in the database AND an entry in ' +
+        'USER_SCOPED_MODELS so the Prisma hook issues app.current_user_id for ' +
+        'them. Half of it is worse than neither — the reads return zero rows ' +
+        'and the writes fail 42501, which reads as a logic bug.',
+    ).toEqual([]);
+  }, 120_000);
+
   it('has no table with a policy that Prisma does not scope', async () => {
     const rows = await runAsSystem(() =>
       prisma.$queryRawUnsafe<Array<{ tablename: string }>>(

@@ -1,0 +1,66 @@
+[
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 5.28,
+  "comments": " "
+ },
+ "a bare string",
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "7 Days",
+  "rate": 5.13,
+  "comments": " "
+ },
+ {
+  "processRunDate": "",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 5.27,
+  "comments": " "
+ },
+ {
+  "processRunDate": "27-08-2026 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 5.27,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "3 Months",
+  "rate": null,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "3 Months",
+  "rate": "not-a-rate",
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 999,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 5.27,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 5.27,
+  "comments": " "
+ }
+]

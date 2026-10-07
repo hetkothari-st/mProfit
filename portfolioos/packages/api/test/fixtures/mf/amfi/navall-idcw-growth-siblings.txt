@@ -1,0 +1,16 @@
+Open Ended Schemes(Equity Scheme - Large Cap Fund)
+
+SBI Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+119598;INF200K01T44;;SBI Bluechip Fund - Direct Plan - Growth;98.7654;31-Dec-2025
+119599;INF200K01T51;;SBI Bluechip Fund - Direct Plan - IDCW;31.2200;31-Dec-2025
+119600;INF200K01T69;INF200K01T77;SBI Bluechip Fund - Direct Plan - IDCW Reinvestment;31.2200;31-Dec-2025
+103504;INF200K01QX4;;SBI Bluechip Fund - Regular Plan - Growth;91.1122;31-Dec-2025
+103505;INF200K01QY2;;SBI Bluechip Fund - Regular Plan - IDCW;29.4400;31-Dec-2025
+
+UTI Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+120716;INF789F01XA1;;UTI Bluechip Fund - Direct Plan - Growth;204.5500;31-Dec-2025
+120717;INF789F01XB9;;UTI Bluechip Fund - Direct Plan - IDCW;44.8800;31-Dec-2025

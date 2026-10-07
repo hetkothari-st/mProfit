@@ -29,7 +29,10 @@ function inr(n: number): string {
 }
 
 function isoDate(d: Date): string {
-  return d.toISOString().split('T')[0];
+  // `split` is typed as possibly-empty, so index 0 is `string | undefined`
+  // under strict mode. A valid Date always yields "YYYY-MM-DDTHH:mm:ss.sssZ",
+  // so slicing the fixed-width prefix is both exact and total.
+  return d.toISOString().slice(0, 10);
 }
 
 function indDate(d: Date): string {
@@ -529,7 +532,14 @@ function genCamsStatement(): void {
         doc.text(line);
       });
 
-      const latestNav = f.txns[f.txns.length-1].nav;
+      // Guarded rather than asserted: an empty txns array would otherwise
+      // throw at runtime here, inside PDF generation, with no indication of
+      // which fund was malformed.
+      const lastTxn = f.txns[f.txns.length - 1];
+      if (lastTxn === undefined) {
+        throw new Error(`gen-test-corpus: fund ${f.scheme} (folio ${f.folio}) has no transactions`);
+      }
+      const latestNav = lastTxn.nav;
       doc.moveDown(0.2).font('Helvetica-Bold').fontSize(8);
       doc.text(`Total Units: ${fmt(cumUnits, 4)}    Market Value (NAV ${fmt(latestNav, 4)}): ${inr(cumUnits * latestNav)}`);
     });

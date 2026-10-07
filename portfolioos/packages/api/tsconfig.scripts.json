@@ -1,0 +1,18 @@
+{
+  // Type coverage for `scripts/` and `test/`, which `tsconfig.json` cannot
+  // include: it sets `rootDir: "src"` for the build output layout, and TS
+  // rejects inputs outside rootDir.
+  //
+  // Without this, the ten operator scripts in `scripts/` had NO type checking
+  // at all -- including backfills that write to real data. A rename in a
+  // service would break them silently and only surface when someone ran one
+  // against a database. `noEmit` here because these are executed via tsx, not
+  // compiled.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "outDir": null
+  },
+  "include": ["src/**/*", "scripts/**/*"]
+}

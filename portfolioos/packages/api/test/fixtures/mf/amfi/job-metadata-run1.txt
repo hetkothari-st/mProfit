@@ -1,0 +1,32 @@
+Open Ended Schemes(Equity Scheme - Large Cap Fund)
+
+TEST-METADATA-1 Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+991201;INF991201A01;;Testmeta Bluechip Fund - Direct Plan - Growth;101.5000;31-Dec-2025
+991202;INF991202A01;;Testmeta Bluechip Fund - Direct Plan - IDCW;41.2500;31-Dec-2025
+991203;INF991203A01;INF991203A02;Testmeta Bluechip Fund - Direct Plan - IDCW Reinvestment;41.2500;31-Dec-2025
+991204;INF991204A01;;Testmeta Bluechip Fund - Regular Plan - Growth;95.1000;31-Dec-2025
+991205;INF991205A01;;Testmeta Bluechip Fund - Regular Plan - IDCW;38.7000;31-Dec-2025
+
+Open Ended Schemes(Debt Scheme - Corporate Bond Fund)
+
+TEST-METADATA-2 Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+991206;INF991206A01;;Testmeta Corporate Bond Fund - Direct Plan - Growth;3210.4410;31-Dec-2025
+
+Open Ended Schemes(Other Scheme - Capital Protection Oriented Fund)
+
+TEST-METADATA-2 Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+991207;INF991207A01;;Testmeta Capital Protection Scheme - Direct Plan - Growth;11.9800;31-Dec-2025
+
+Open Ended Schemes(Equity Scheme - Large Cap Fund)
+
+TEST-METADATA-1 Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+991208;INF991208A01;;Testmeta No Option Fund;10.0000;31-Dec-2025
+99120X;INF991209A01;;Testmeta Broken Code Fund - Direct Plan - Growth;12.0000;31-Dec-2025

@@ -1,0 +1,600 @@
+{
+ "Table": [
+  {
+   "Indx_cd": "SENSEX",
+   "shortalias": "BSE SENSEX"
+  },
+  {
+   "Indx_cd": "SPBSS5IP",
+   "shortalias": "BSE SENSEX 50"
+  },
+  {
+   "Indx_cd": "SPBS5TIP",
+   "shortalias": "BSE SENSEX 50 TMC"
+  },
+  {
+   "Indx_cd": "SENEQW",
+   "shortalias": "BSE SENSEX EQUAL WEIGHT"
+  },
+  {
+   "Indx_cd": "SNXN30",
+   "shortalias": "BSE SENSEX NEXT 30"
+  },
+  {
+   "Indx_cd": "SPBSN5IP",
+   "shortalias": "BSE SENSEX Next 50"
+  },
+  {
+   "Indx_cd": "SPBN5TIP",
+   "shortalias": "BSE SENSEX Next 50 TMC"
+  },
+  {
+   "Indx_cd": "SNSX60",
+   "shortalias": "BSE SENSEX SIXTY"
+  },
+  {
+   "Indx_cd": "SS6535",
+   "shortalias": "BSE SENSEX SIXTY 65:35"
+  },
+  {
+   "Indx_cd": "BSE100",
+   "shortalias": "BSE 100"
+  },
+  {
+   "Indx_cd": "SPBS1E",
+   "shortalias": "BSE 100 ESG Index"
+  },
+  {
+   "Indx_cd": "SPB1LTIP",
+   "shortalias": "BSE 100 LargeCap TMC Index"
+  },
+  {
+   "Indx_cd": "BS1000",
+   "shortalias": "BSE 1000"
+  },
+  {
+   "Indx_cd": "1000EQ",
+   "shortalias": "BSE 1000 MULTICAP EQUAL SIZE WEIGHTED (25%)"
+  },
+  {
+   "Indx_cd": "150M1I",
+   "shortalias": "BSE 150 MidCap 1X Inverse Daily"
+  },
+  {
+   "Indx_cd": "SPB15MIP",
+   "shortalias": "BSE 150 MidCap Index"
+  },
+  {
+   "Indx_cd": "BSE200",
+   "shortalias": "BSE 200"
+  },
+  {
+   "Indx_cd": "B2001I",
+   "shortalias": "BSE 200 1X Inverse Daily"
+  },
+  {
+   "Indx_cd": "200EQW",
+   "shortalias": "BSE 200 EQUAL WEIGHT INDEX"
+  },
+  {
+   "Indx_cd": "SPB2MXIP",
+   "shortalias": "BSE 250 LargeMidCap 65:35 Index "
+  },
+  {
+   "Indx_cd": "SPB25XIP",
+   "shortalias": "BSE 250 LargeMidCap Index"
+  },
+  {
+   "Indx_cd": "BSM250",
+   "shortalias": "BSE 250 MICROCAP"
+  },
+  {
+   "Indx_cd": "SPB25SIP",
+   "shortalias": "BSE 250 SmallCap Index"
+  },
+  {
+   "Indx_cd": "SPB40YIP",
+   "shortalias": "BSE 400 MidSmallCap Index"
+  },
+  {
+   "Indx_cd": "BSE500",
+   "shortalias": "BSE 500"
+  },
+  {
+   "Indx_cd": "DIVY50",
+   "shortalias": "BSE 500 Dividend Leaders 50"
+  },
+  {
+   "Indx_cd": "ENHV50",
+   "shortalias": "BSE 500 Enhanced Value 50"
+  },
+  {
+   "Indx_cd": "500EQW",
+   "shortalias": "BSE 500 EQUAL WEIGHT"
+  },
+  {
+   "Indx_cd": "BSEG50",
+   "shortalias": "BSE 500 Growth 50"
+  },
+  {
+   "Indx_cd": "500L1I",
+   "shortalias": "BSE 500 Long + 150 MidCap 1X Inverse 80:20"
+  },
+  {
+   "Indx_cd": "B52L1I",
+   "shortalias": "BSE 500 Long + 200 1X Inverse 80:20"
+  },
+  {
+   "Indx_cd": "LVOL50",
+   "shortalias": "BSE 500 Low Volatility 50"
+  },
+  {
+   "Indx_cd": "MOME50",
+   "shortalias": "BSE 500 Momentum 50 "
+  },
+  {
+   "Indx_cd": "BSMQ50",
+   "shortalias": "BSE 500 Momentum Quality 50"
+  },
+  {
+   "Indx_cd": "BSMV50",
+   "shortalias": "BSE 500 Momentum Value 50"
+  },
+  {
+   "Indx_cd": "QUAL50",
+   "shortalias": "BSE 500 Quality 50"
+  },
+  {
+   "Indx_cd": "SPBSE5S",
+   "shortalias": "BSE 500 Shariah"
+  },
+  {
+   "Indx_cd": "BALLDS",
+   "shortalias": "BSE All Derivative Stocks Index"
+  },
+  {
+   "Indx_cd": "SPBSAIP",
+   "shortalias": "BSE AllCap"
+  },
+  {
+   "Indx_cd": "SPBSARB",
+   "shortalias": "BSE Arbitrage Rate Index"
+  },
+  {
+   "Indx_cd": "SI1900",
+   "shortalias": "BSE AUTO"
+  },
+  {
+   "Indx_cd": "SIBANK",
+   "shortalias": "BSE BANKEX"
+  },
+  {
+   "Indx_cd": "SPBSB2IP",
+   "shortalias": "BSE Bharat 22 Index"
+  },
+  {
+   "Indx_cd": "SI0200",
+   "shortalias": "BSE CAPITAL GOODS"
+  },
+  {
+   "Indx_cd": "CAPMKT",
+   "shortalias": "BSE CAPITAL MARKETS"
+  },
+  {
+   "Indx_cd": "CAPINS",
+   "shortalias": "BSE CAPITAL MARKETS & INSURANCE"
+  },
+  {
+   "Indx_cd": "CARBON",
+   "shortalias": "BSE CARBONEX"
+  },
+  {
+   "Indx_cd": "CLEENV",
+   "shortalias": "BSE Clean Environment"
+  },
+  {
+   "Indx_cd": "SPBSCOIP",
+   "shortalias": "BSE Commodities"
+  },
+  {
+   "Indx_cd": "SPBSCDIP",
+   "shortalias": "BSE Consumer Discretionary"
+  },
+  {
+   "Indx_cd": "SI0400",
+   "shortalias": "BSE CONSUMER DURABLES"
+  },
+  {
+   "Indx_cd": "CPSE",
+   "shortalias": "BSE CPSE"
+  },
+  {
+   "Indx_cd": "SPBSDFIP",
+   "shortalias": "BSE Diversified Financials Revenue Growth Index"
+  },
+  {
+   "Indx_cd": "SPBSDSIP",
+   "shortalias": "BSE Dividend Stability Index"
+  },
+  {
+   "Indx_cd": "DOL100",
+   "shortalias": "BSE DOLLEX 100"
+  },
+  {
+   "Indx_cd": "DOLLEX",
+   "shortalias": "BSE DOLLEX 200"
+  },
+  {
+   "Indx_cd": "DOLL30",
+   "shortalias": "BSE DOLLEX 30"
+  },
+  {
+   "Indx_cd": "SPBSENIP",
+   "shortalias": "BSE Energy"
+  },
+  {
+   "Indx_cd": "SPBSEVIP",
+   "shortalias": "BSE Enhanced Value Index"
+  },
+  {
+   "Indx_cd": "SI0600",
+   "shortalias": "BSE Fast Moving Consumer Goods"
+  },
+  {
+   "Indx_cd": "SPBSFIIP",
+   "shortalias": "BSE Financial Services"
+  },
+  {
+   "Indx_cd": "SPBSEBIP",
+   "shortalias": "BSE Financials Ex-Banks 30 Index "
+  },
+  {
+   "Indx_cd": "FOCIT",
+   "shortalias": "BSE Focused IT "
+  },
+  {
+   "Indx_cd": "FOCMID",
+   "shortalias": "BSE FOCUSED MIDCAP"
+  },
+  {
+   "Indx_cd": "GREENX",
+   "shortalias": "BSE GREENEX"
+  },
+  {
+   "Indx_cd": "SI0800",
+   "shortalias": "BSE Healthcare"
+  },
+  {
+   "Indx_cd": "BSHOSP",
+   "shortalias": "BSE Hospitals"
+  },
+  {
+   "Indx_cd": "BSHFIN",
+   "shortalias": "BSE Housing Finance"
+  },
+  {
+   "Indx_cd": "SPBSHOIP",
+   "shortalias": "BSE Housing Index"
+  },
+  {
+   "Indx_cd": "IND150",
+   "shortalias": "BSE India 150"
+  },
+  {
+   "Indx_cd": "INDDEF",
+   "shortalias": "BSE India Defence "
+  },
+  {
+   "Indx_cd": "INFRA",
+   "shortalias": "BSE India Infrastructure Index"
+  },
+  {
+   "Indx_cd": "SPBIMIP",
+   "shortalias": "BSE India Manufacturing Index"
+  },
+  {
+   "Indx_cd": "INSLDR",
+   "shortalias": "BSE INDIA SECTOR LEADERS"
+  },
+  {
+   "Indx_cd": "SPBSIDIP",
+   "shortalias": "BSE Industrials"
+  },
+  {
+   "Indx_cd": "SI1000",
+   "shortalias": "BSE Information Technology"
+  },
+  {
+   "Indx_cd": "INSURE",
+   "shortalias": "BSE Insurance"
+  },
+  {
+   "Indx_cd": "INTECO",
+   "shortalias": "BSE INTERNET ECONOMY"
+  },
+  {
+   "Indx_cd": "IPO   ",
+   "shortalias": "BSE IPO"
+  },
+  {
+   "Indx_cd": "SPBSLIP",
+   "shortalias": "BSE LargeCap"
+  },
+  {
+   "Indx_cd": "LENH30",
+   "shortalias": "BSE LARGECAP 100 ENHANCED VALUE 30"
+  },
+  {
+   "Indx_cd": "BSLG30",
+   "shortalias": "BSE LargeCap 100 Growth 30"
+  },
+  {
+   "Indx_cd": "LVOL30",
+   "shortalias": "BSE LARGECAP 100 LOW VOLATILITY 30"
+  },
+  {
+   "Indx_cd": "LMOM30",
+   "shortalias": "BSE LARGECAP 100 MOMENTUM 30"
+  },
+  {
+   "Indx_cd": "LQUA30",
+   "shortalias": "BSE LARGECAP 100 QUALITY 30"
+  },
+  {
+   "Indx_cd": "BLMD50",
+   "shortalias": "BSE LargeMid (60:40) Stable Dividend 50 "
+  },
+  {
+   "Indx_cd": "SPBSLMIP",
+   "shortalias": "BSE LargeMidCap"
+  },
+  {
+   "Indx_cd": "SPBSLVIP",
+   "shortalias": "BSE Low Volatility Index"
+  },
+  {
+   "Indx_cd": "SI1200",
+   "shortalias": "BSE METAL"
+  },
+  {
+   "Indx_cd": "BSEMID",
+   "shortalias": "BSE MidCap"
+  },
+  {
+   "Indx_cd": "MENV30",
+   "shortalias": "BSE Midcap 150 Enhanced Value 30"
+  },
+  {
+   "Indx_cd": "BSMG30",
+   "shortalias": "BSE MidCap 150 Growth 30"
+  },
+  {
+   "Indx_cd": "MLWV30",
+   "shortalias": "BSE Midcap 150 Low Volatility 30"
+  },
+  {
+   "Indx_cd": "MMOM30",
+   "shortalias": "BSE Midcap 150 Momentum 30"
+  },
+  {
+   "Indx_cd": "MQUA30",
+   "shortalias": "BSE Midcap 150 Quality 30"
+  },
+  {
+   "Indx_cd": "SPBMDSIP",
+   "shortalias": "BSE MidCap Select Index"
+  },
+  {
+   "Indx_cd": "BSMSIT",
+   "shortalias": "BSE MidSmall IT"
+  },
+  {
+   "Indx_cd": "BSEMSP",
+   "shortalias": "BSE MidSmall Private Banks"
+  },
+  {
+   "Indx_cd": "BSMSPB",
+   "shortalias": "BSE MidSmall Private Banks Quality Tilt"
+  },
+  {
+   "Indx_cd": "SPBSMSIP",
+   "shortalias": "BSE MidSmallCap"
+  },
+  {
+   "Indx_cd": "SPBSMOIP",
+   "shortalias": "BSE Momentum Index"
+  },
+  {
+   "Indx_cd": "MULCON",
+   "shortalias": "BSE Multicap Consumption (50:30:20)"
+  },
+  {
+   "Indx_cd": "NXT250",
+   "shortalias": "BSE Next 250 MICROCAP"
+  },
+  {
+   "Indx_cd": "NXT500",
+   "shortalias": "BSE NEXT 500"
+  },
+  {
+   "Indx_cd": "SI1400",
+   "shortalias": "BSE OIL & GAS"
+  },
+  {
+   "Indx_cd": "SIPOWE",
+   "shortalias": "BSE POWER"
+  },
+  {
+   "Indx_cd": "POWENE",
+   "shortalias": "BSE POWER & ENERGY"
+  },
+  {
+   "Indx_cd": "PRECON",
+   "shortalias": "BSE PREMIUM CONSUMPTION"
+  },
+  {
+   "Indx_cd": "SPBSPBIP",
+   "shortalias": "BSE Private Banks Index"
+  },
+  {
+   "Indx_cd": "SIBPSU",
+   "shortalias": "BSE PSU"
+  },
+  {
+   "Indx_cd": "PSUBNK",
+   "shortalias": "BSE PSU BANK"
+  },
+  {
+   "Indx_cd": "SPBSQIP",
+   "shortalias": "BSE Quality Index "
+  },
+  {
+   "Indx_cd": "SIREAL",
+   "shortalias": "BSE REALTY"
+  },
+  {
+   "Indx_cd": "BREITS",
+   "shortalias": "BSE REITS"
+  },
+  {
+   "Indx_cd": "BRACRE",
+   "shortalias": "BSE REITS and Commercial Real Estate "
+  },
+  {
+   "Indx_cd": "SAT100",
+   "shortalias": "BSE Saatvik 100 "
+  },
+  {
+   "Indx_cd": "BBGEFS",
+   "shortalias": "BSE SELECT BUSINESS GROUPS"
+  },
+  {
+   "Indx_cd": "SELIPO",
+   "shortalias": "BSE SELECT IPO"
+  },
+  {
+   "Indx_cd": "SPBSSEIP",
+   "shortalias": "BSE Services"
+  },
+  {
+   "Indx_cd": "BSESML",
+   "shortalias": "BSE SmallCap"
+  },
+  {
+   "Indx_cd": "SML500",
+   "shortalias": "BSE Smallcap 500"
+  },
+  {
+   "Indx_cd": "BSSE50",
+   "shortalias": "BSE Smallcap 500 Enhanced Value 50"
+  },
+  {
+   "Indx_cd": "BSSL50",
+   "shortalias": "BSE Smallcap 500 Low Volatility 50"
+  },
+  {
+   "Indx_cd": "BSSM50",
+   "shortalias": "BSE Smallcap 500 Momentum 50"
+  },
+  {
+   "Indx_cd": "BSSQ50",
+   "shortalias": "BSE Smallcap 500 Quality 50"
+  },
+  {
+   "Indx_cd": "SPBSSSIP",
+   "shortalias": "BSE SmallCap Select Index"
+  },
+  {
+   "Indx_cd": "SMEIPO",
+   "shortalias": "BSE SME IPO"
+  },
+  {
+   "Indx_cd": "SIBTEC",
+   "shortalias": "BSE TECK"
+  },
+  {
+   "Indx_cd": "SPBSTLIP",
+   "shortalias": "BSE Telecommunication"
+  },
+  {
+   "Indx_cd": "T10BNK",
+   "shortalias": "BSE Top 10 Banks"
+  },
+  {
+   "Indx_cd": "BSETMI",
+   "shortalias": "BSE Total Market"
+  },
+  {
+   "Indx_cd": "SPBSUTIP",
+   "shortalias": "BSE Utilities"
+  },
+  {
+   "Indx_cd": "GOI48",
+   "shortalias": "BSE 4-8 Year G-Sec Index"
+  },
+  {
+   "Indx_cd": "GOI10",
+   "shortalias": "BSE 8-13 Year G-Sec Index"
+  },
+  {
+   "Indx_cd": "SPBDISBT",
+   "shortalias": "BSE India 10 Year Sovereign Bond "
+  },
+  {
+   "Indx_cd": "GOI5Y",
+   "shortalias": "BSE India 5 Year Sovereign Bond Index "
+  },
+  {
+   "Indx_cd": "SPBINAGT",
+   "shortalias": "BSE India Agency Bond Index"
+  },
+  {
+   "Indx_cd": "SPBINCOT",
+   "shortalias": "BSE India Bond Index"
+  },
+  {
+   "Indx_cd": "SPBINCPT",
+   "shortalias": "BSE India Corporate Bond Index"
+  },
+  {
+   "Indx_cd": "SPBINCFT",
+   "shortalias": "BSE India Financials Bond Index"
+  },
+  {
+   "Indx_cd": "SPBINGBT",
+   "shortalias": "BSE India Government Bill Index"
+  },
+  {
+   "Indx_cd": "SPBINGOT",
+   "shortalias": "BSE India Government Bond Index"
+  },
+  {
+   "Indx_cd": "SPBINCIT",
+   "shortalias": "BSE India Industrials Bond Index"
+  },
+  {
+   "Indx_cd": "SPBINGPT",
+   "shortalias": "BSE India Provincial Bond Index"
+  },
+  {
+   "Indx_cd": "SPBINCST",
+   "shortalias": "BSE India Services Bond Index"
+  },
+  {
+   "Indx_cd": "SPBINSOT",
+   "shortalias": "BSE India Sovereign Bond Index"
+  },
+  {
+   "Indx_cd": "SPBINCUT",
+   "shortalias": "BSE India Utilities Bond Index"
+  },
+  {
+   "Indx_cd": "SPICBLOT",
+   "shortalias": "BSE Liquid Rate Index"
+  },
+  {
+   "Indx_cd": "SPBRIIP",
+   "shortalias": "BSE REITs and InvITs Index"
+  }
+ ]
+}

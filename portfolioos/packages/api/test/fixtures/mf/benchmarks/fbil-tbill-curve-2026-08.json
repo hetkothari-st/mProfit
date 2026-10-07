@@ -1,0 +1,394 @@
+[
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "7 Days",
+  "rate": 5.13,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "14 Days",
+  "rate": 5.12,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "1 Month",
+  "rate": 5.09,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "2 Months",
+  "rate": 5.21,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 5.28,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "4 Months",
+  "rate": 5.39,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "5 Months",
+  "rate": 5.5,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "6 Months",
+  "rate": 5.61,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "7 Months",
+  "rate": 5.61,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "8 Months",
+  "rate": 5.62,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "9 Months",
+  "rate": 5.62,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "10 Months",
+  "rate": 5.68,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "11 Months",
+  "rate": 5.74,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-28 00:00:00",
+  "displayTime": "2026-08-28 17:30:00",
+  "tenorName": "12 Months",
+  "rate": 5.79,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "7 Days",
+  "rate": 5.18,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "14 Days",
+  "rate": 5.16,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "1 Month",
+  "rate": 5.1,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "2 Months",
+  "rate": 5.21,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 5.27,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "4 Months",
+  "rate": 5.38,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "5 Months",
+  "rate": 5.49,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "6 Months",
+  "rate": 5.6,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "7 Months",
+  "rate": 5.6,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "8 Months",
+  "rate": 5.6,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "9 Months",
+  "rate": 5.61,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "10 Months",
+  "rate": 5.66,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "11 Months",
+  "rate": 5.72,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-27 00:00:00",
+  "displayTime": "2026-08-27 17:30:00",
+  "tenorName": "12 Months",
+  "rate": 5.77,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "7 Days",
+  "rate": 4.94,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "14 Days",
+  "rate": 5.01,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "1 Month",
+  "rate": 5.16,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "2 Months",
+  "rate": 5.22,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 5.26,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "4 Months",
+  "rate": 5.35,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "5 Months",
+  "rate": 5.45,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "6 Months",
+  "rate": 5.54,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "7 Months",
+  "rate": 5.55,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "8 Months",
+  "rate": 5.55,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "9 Months",
+  "rate": 5.56,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "10 Months",
+  "rate": 5.62,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "11 Months",
+  "rate": 5.68,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-25 00:00:00",
+  "displayTime": "2026-08-25 17:30:00",
+  "tenorName": "12 Months",
+  "rate": 5.74,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "7 Days",
+  "rate": 5.06,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "14 Days",
+  "rate": 5.1,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "1 Month",
+  "rate": 5.19,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "2 Months",
+  "rate": 5.22,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "3 Months",
+  "rate": 5.27,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "4 Months",
+  "rate": 5.37,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "5 Months",
+  "rate": 5.46,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "6 Months",
+  "rate": 5.56,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "7 Months",
+  "rate": 5.56,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "8 Months",
+  "rate": 5.56,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "9 Months",
+  "rate": 5.57,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "10 Months",
+  "rate": 5.62,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "11 Months",
+  "rate": 5.68,
+  "comments": " "
+ },
+ {
+  "processRunDate": "2026-08-24 00:00:00",
+  "displayTime": "2026-08-24 17:30:00",
+  "tenorName": "12 Months",
+  "rate": 5.74,
+  "comments": " "
+ }
+]

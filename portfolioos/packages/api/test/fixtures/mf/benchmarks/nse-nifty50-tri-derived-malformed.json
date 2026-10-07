@@ -1,0 +1,66 @@
+[
+ {
+  "RequestNumber": "TRI63924365465243704900",
+  "Index Name": "Nifty 50",
+  "Date": "01 Jan 2024",
+  "TotalReturnsIndex": "31949.36",
+  "NTR_Value": "28945.65"
+ },
+ "this row is a bare string",
+ {
+  "RequestNumber": "TRI63924365465243704900",
+  "Index Name": "Nifty 50",
+  "Date": "",
+  "TotalReturnsIndex": "31837.56",
+  "NTR_Value": "28844.36"
+ },
+ {
+  "RequestNumber": "TRI63924365465243704900",
+  "Index Name": "Nifty 50",
+  "Date": "31 Foo 2024",
+  "TotalReturnsIndex": "31619.36",
+  "NTR_Value": "28646.67"
+ },
+ {
+  "RequestNumber": "TRI63924365465243704900",
+  "Index Name": "Nifty 50",
+  "Date": "04 Jan 2024",
+  "TotalReturnsIndex": "-",
+  "NTR_Value": "28834.77"
+ },
+ {
+  "RequestNumber": "TRI63924365465243704900",
+  "Index Name": "Nifty 50",
+  "Date": "05 Jan 2024",
+  "TotalReturnsIndex": "not-a-number",
+  "NTR_Value": "28904.27"
+ },
+ {
+  "RequestNumber": "TRI63924365465243704900",
+  "Index Name": "Nifty 50",
+  "Date": "08 Jan 2024",
+  "TotalReturnsIndex": "-31613.01",
+  "NTR_Value": "28640.92"
+ },
+ {
+  "RequestNumber": "TRI63924365465243704900",
+  "Index Name": "Nifty 50",
+  "Date": "09 Jan 2024",
+  "TotalReturnsIndex": "31659.81",
+  "NTR_Value": "28683.33"
+ },
+ {
+  "RequestNumber": "TRI63924365465243704900",
+  "Index Name": "Nifty 50",
+  "Date": "09 Jan 2024",
+  "TotalReturnsIndex": "31659.81",
+  "NTR_Value": "28683.33"
+ },
+ {
+  "RequestNumber": "TRI63924365465243704900",
+  "Index Name": "Nifty 50",
+  "Date": "10 Jan 2024",
+  "TotalReturnsIndex": "31768.30",
+  "NTR_Value": "28781.4"
+ }
+]

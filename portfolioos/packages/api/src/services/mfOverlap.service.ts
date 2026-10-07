@@ -197,3 +197,135 @@ export async function getMfOverlap(userId: string): Promise<MfOverlapResult> {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Weight-overlap primitives (`docs/mf-analytics/04-PORTFOLIO-ANALYSIS.md §2`)
+// ---------------------------------------------------------------------------
+//
+// Everything above this line is the Phase-2g *name-canonicalisation* heuristic:
+// it answers "is the user holding the same scheme twice?" without any portfolio
+// disclosure at all. What `04 §2` needs is the harder question — "how much of
+// fund A's book is also inside fund B's?" — which needs `MfPortfolioSnapshot`
+// weights.
+//
+// These live here rather than in a second overlap module because
+// `07-IMPLEMENTATION-PLAN.md` Task 4.2 says to extend this file, and for the
+// reason behind that instruction: two overlap implementations would eventually
+// give the fund page and the portfolio page different answers about the same
+// pair of funds, and neither page could explain the other.
+//
+// They are deliberately **pure and unit-agnostic**. The caller decides whether
+// the weights are percent (`MfPortfolioHolding.weightPct`, 0-100) or fractions;
+// every function below preserves whatever came in. That is what lets the same
+// `weightOverlap` serve both the ISIN-keyed equity overlap and the issuer-keyed
+// debt overlap `04 §2` asks to report separately — one formula, two keyings,
+// rather than a second near-copy that drifts.
+
+/**
+ * A disclosed portfolio reduced to weight-by-key: ISIN for the equity overlap,
+ * issuer for the debt overlap. Keys absent from the map are weight zero.
+ */
+export type WeightsByKey = ReadonlyMap<string, Decimal>;
+
+/**
+ * `overlap(A, B) = Σ_i min(w_A,i, w_B,i)` over the keys the two share.
+ *
+ * Iterates the smaller map so the cost is O(min(|A|,|B|)) rather than O(|A|)
+ * — a pairwise matrix over a 15-fund portfolio is 105 calls, and a debt fund
+ * can disclose several hundred lines.
+ */
+export function weightOverlap(a: WeightsByKey, b: WeightsByKey): Decimal {
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  let total = ZERO;
+  for (const [key, weight] of small) {
+    const other = large.get(key);
+    if (other === undefined) continue;
+    total = total.plus(Decimal.min(weight, other));
+  }
+  return total;
+}
+
+/** One security held by both funds of a pair, with its weight in each. */
+export interface SharedWeight {
+  key: string;
+  weightInA: Decimal;
+  weightInB: Decimal;
+  /** `min(weightInA, weightInB)` — this security's contribution to the overlap. */
+  contribution: Decimal;
+}
+
+/**
+ * The shared securities behind a `weightOverlap`, ordered by how much each
+ * contributes. Returned rather than derived at the call site so the headline
+ * number and the "top shared stocks" list can never be computed from two
+ * different intersections.
+ */
+export function sharedWeights(a: WeightsByKey, b: WeightsByKey, limit?: number): SharedWeight[] {
+  const out: SharedWeight[] = [];
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  const smallIsA = small === a;
+  for (const [key, weight] of small) {
+    const other = large.get(key);
+    if (other === undefined) continue;
+    const weightInA = smallIsA ? weight : other;
+    const weightInB = smallIsA ? other : weight;
+    out.push({ key, weightInA, weightInB, contribution: Decimal.min(weightInA, weightInB) });
+  }
+  out.sort((x, y) => y.contribution.comparedTo(x.contribution));
+  return limit === undefined ? out : out.slice(0, limit);
+}
+
+/**
+ * `effectiveFundCount = 1 / Σ (w_f)²` — the inverse Herfindahl index over the
+ * fund weights, i.e. how many *equally-sized* funds the book behaves like.
+ *
+ * Ten funds where one holds 90% of the money behaves like ~1.2 funds, and
+ * saying so is the point: `04 §2` uses this for diversification **across**
+ * funds, which the raw count cannot express.
+ *
+ * `weights` must be fractions of the same book (they should sum to ~1).
+ * Returns `null` for an empty book rather than `Infinity` or `0` — an
+ * undefined count is not a count of zero.
+ */
+export function effectiveFundCount(weights: readonly Decimal[]): Decimal | null {
+  let sumSq = ZERO;
+  for (const w of weights) sumSq = sumSq.plus(w.times(w));
+  if (sumSq.lessThanOrEqualTo(0)) return null;
+  return new Decimal(1).dividedBy(sumSq);
+}
+
+/** One pair's contribution to the portfolio-level redundancy figure. */
+export interface WeightedPairOverlap {
+  /** Overlap between the pair, in whatever unit the caller is working in. */
+  overlap: Decimal;
+  /** Fund A's fractional weight in the book. */
+  weightA: Decimal;
+  /** Fund B's fractional weight in the book. */
+  weightB: Decimal;
+}
+
+/**
+ * `redundancyScore` — the weight-weighted mean pairwise overlap.
+ *
+ * Each pair is weighted by `w_A × w_B`, which is the share of the book that
+ * the pair *jointly* accounts for. A plain unweighted mean would let two 1%
+ * satellite funds that happen to be near-identical dominate the score for a
+ * portfolio whose real money sits in three uncorrelated funds — the number
+ * would be alarming and would describe 2% of the portfolio.
+ *
+ * Returns `null` when there is no pair to average (a single-fund book has no
+ * redundancy, and zero would assert that it has none *measured*).
+ */
+export function weightedMeanPairOverlap(
+  pairs: readonly WeightedPairOverlap[],
+): Decimal | null {
+  let weighted = ZERO;
+  let totalWeight = ZERO;
+  for (const p of pairs) {
+    const w = p.weightA.times(p.weightB);
+    weighted = weighted.plus(p.overlap.times(w));
+    totalWeight = totalWeight.plus(w);
+  }
+  if (totalWeight.lessThanOrEqualTo(0)) return null;
+  return weighted.dividedBy(totalWeight);
+}

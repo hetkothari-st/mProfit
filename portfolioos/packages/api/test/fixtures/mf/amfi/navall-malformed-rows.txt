@@ -1,0 +1,11 @@
+Open Ended Schemes(Equity Scheme - Mid Cap Fund)
+
+ICICI Prudential Mutual Fund
+
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+120841;INF109K012K1;;ICICI Prudential Midcap Fund - Direct Plan - Growth;318.4400;31-Dec-2025
+120842;INF109K013K9;ICICI Prudential Midcap Fund - Direct Plan - IDCW
+BADCODE;INF109K014K7;;ICICI Prudential Midcap Fund - Regular Plan - Growth;271.1100;31-Dec-2025
+120843;INF109K015K4;;;44.2200;31-Dec-2025
+120844;INF109K016K2;;ICICI Prudential Midcap Fund - Regular Plan - IDCW;N.A.;31-Dec-2025
+120845;INF109K017K0;;ICICI Prudential Smallcap Fund - Direct Plan - Growth;88.1234;31-Feb-2025

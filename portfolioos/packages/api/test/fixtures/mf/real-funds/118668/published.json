@@ -1,0 +1,49 @@
+{
+  "asOf": "2026-07-31",
+  "capturedAt": "2026-09-07",
+  "factsheetRatioPlan": "REGULAR",
+  "schemeCode": 118668,
+  "schemeName": "Nippon India Growth Mid Cap Fund - Direct Plan - Growth Option",
+  "regularPlanCode": 100377,
+  "category": "Equity - Mid Cap",
+  "benchmarkNamed": "NIFTY Midcap 150 TRI",
+  "benchmarkIndexCode": "NIFTY_MIDCAP150_TRI",
+  "source": {
+    "url": "https://mf.nipponindiaim.com/InvestorServices/FactSheetsDocuments/Nippon-FS-AUGUST-2026.pdf",
+    "edition": "Fundamentals, August 2026 (details as on July 31, 2026)",
+    "sha256": "87fd536c1df76224cd27c8bdd18eeaa9a229dbe436204aea160e9af9642c29b3",
+    "pages": {
+      "ratios": 9,
+      "performance": 117
+    },
+    "capturedAt": "2026-09-07"
+  },
+  "methodology": {
+    "window": "36 months period",
+    "frequency": "monthly rolling returns",
+    "riskFree": "5.41% (FBIL Overnight MIBOR as on 31/07/2026)",
+    "verbatim": "The above measures have been calculated using monthly rolling returns for 36 months period with 5.41% risk free return (FBIL Overnight MIBOR as on 31/07/2026).",
+    "planNote": "Plan not stated for the volatility measures. The published Sharpe is reproduced to 2 dp from the Regular-plan NAV and not from the Direct-plan NAV (see README), so REGULAR is recorded as the basis."
+  },
+  "riskFreeAnnualPct": "5.41",
+  "returns": {
+    "regular": {
+      "return1y": "9.70",
+      "return3y": "20.43",
+      "return5y": "18.85"
+    },
+    "direct": {
+      "return1y": "10.56",
+      "return3y": "21.40",
+      "return5y": "19.80"
+    },
+    "benchmark": {
+      "return1y": "9.01",
+      "return3y": "18.53",
+      "return5y": "17.91"
+    }
+  },
+  "stdDev3y": "17.81",
+  "sharpe3y": "0.84",
+  "beta3y": "0.94"
+}
