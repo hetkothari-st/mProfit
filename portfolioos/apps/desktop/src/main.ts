@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, session, shell, screen, type WebContents } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, session, shell, screen, type WebContents } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import log from 'electron-log/main';
@@ -53,6 +53,11 @@ function start(): void {
   const allowed = new Set(['clipboard-sanitized-write', 'notifications', 'fullscreen']);
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => {
     callback(allowed.has(permission) && new URL(contents.getURL() || 'about:blank').origin === APP_ORIGIN);
+  });
+
+  // Read synchronously by the preload of the main window (src/preload.ts).
+  ipcMain.on('everypaisa:desktop-info', (event) => {
+    event.returnValue = { version: app.getVersion(), platform: process.platform };
   });
 
   Menu.setApplicationMenu(buildMenu());
@@ -112,6 +117,7 @@ function createMainWindow(): void {
       nodeIntegration: false,
       webSecurity: true,
       spellcheck: true,
+      preload: join(__dirname, 'preload.js'),
     },
   });
   mainWindow = win;

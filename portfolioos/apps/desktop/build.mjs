@@ -7,8 +7,8 @@ rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist', { recursive: true });
 
 await build({
-  entryPoints: ['src/main.ts'],
-  outfile: 'dist/main.js',
+  entryPoints: { main: 'src/main.ts', preload: 'src/preload.ts' },
+  outdir: 'dist',
   bundle: true,
   platform: 'node',
   target: 'node22',

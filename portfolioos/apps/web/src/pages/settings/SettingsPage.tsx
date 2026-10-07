@@ -15,6 +15,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
 import { NotificationsSection } from './NotificationsSection';
 import { TwoFactorSection } from './TwoFactorSection';
+import { DesktopAppSection } from './DesktopAppSection';
 import { DeleteAccountSection } from './DeleteAccountSection';
 
 const schema = z.object({
@@ -157,6 +158,8 @@ export function SettingsPage() {
         <TwoFactorSection />
 
         <NotificationsSection />
+
+        <DesktopAppSection />
       </div>
 
       <div className="mt-6">
