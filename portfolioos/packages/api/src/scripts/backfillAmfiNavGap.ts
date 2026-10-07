@@ -116,7 +116,17 @@ export interface BackfillResult {
  * and larger chunks amortise the latency. Defaults are the container values;
  * BACKFILL_CHUNK_SIZE and BACKFILL_CHUNK_PAUSE_MS override them.
  */
-const CHUNK_PAUSE_MS = Number.parseInt(process.env.BACKFILL_CHUNK_PAUSE_MS ?? '120', 10);
+function envInt(name: string, fallback: number, min: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  // eslint-disable-next-line everypaisa/no-money-coercion -- a row count / milliseconds, not money
+  const n = Number(raw);
+  // A typo must stop the run, not turn the chunk loop into a no-op (NaN).
+  if (!Number.isInteger(n) || n < min) throw new Error(`${name} must be an integer ≥ ${min}, got "${raw}"`);
+  return n;
+}
+const CHUNK_PAUSE_MS = envInt('BACKFILL_CHUNK_PAUSE_MS', 120, 0);
+const CHUNK_SIZE = envInt('BACKFILL_CHUNK_SIZE', 2000, 1);
 const MONTH_PAUSE_MS = 1_000;
 const RETRY_PAUSE_MS = 5_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -231,7 +241,7 @@ async function backfillWindow(from: Date, to: Date, dryRun: boolean): Promise<Ba
     // must not be restated from a historical report, and a row the backfill
     // did not create must never carry this batch id — otherwise reversing the
     // batch would delete data the backfill never added.
-    const CHUNK = Number.parseInt(process.env.BACKFILL_CHUNK_SIZE ?? '2000', 10);
+    const CHUNK = CHUNK_SIZE;
     let inserted = 0;
     for (let i = 0; i < writes.length; i += CHUNK) {
       const slice = writes.slice(i, i + CHUNK);
