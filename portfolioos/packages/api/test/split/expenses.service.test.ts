@@ -98,6 +98,23 @@ describe('split expenses', () => {
     expect(e.shares.reduce((a, s) => a.plus(s.baseAmount), new Decimal(0)).toFixed(2)).toBe('831.23');
   });
 
+  it('rejects an fx override when currency equals the group base', async () => {
+    await expect(alice.runAs(() => createExpense(alice.userId, { ...base(), fxRate: '2' }))).rejects.toThrow(/SPLIT_BAD_INPUT/);
+  });
+
+  it('rounds the fx override to 8 dp and uses the rounded rate', async () => {
+    const e = await alice.runAs(() =>
+      createExpense(alice.userId, { ...base(), amount: '10', currency: 'USD', fxRate: '83.123456789', payers: [{ memberId: me, amount: '10' }] }),
+    );
+    expect(e.fxRate).toBe('83.12345679');
+    expect(e.baseAmount).toBe('831.2300');
+  });
+
+  it('rejects zero and over-precise amounts', async () => {
+    await expect(alice.runAs(() => createExpense(alice.userId, { ...base(), amount: '0', payers: [{ memberId: me, amount: '0' }] }))).rejects.toThrow(/SPLIT_BAD_INPUT/);
+    await expect(alice.runAs(() => createExpense(alice.userId, { ...base(), amount: '100.005', payers: [{ memberId: me, amount: '100' }] }))).rejects.toThrow(/SPLIT_BAD_INPUT/);
+  });
+
   it('soft delete hides from list, restore brings it back', async () => {
     const e = await alice.runAs(() => createExpense(alice.userId, base()));
     await alice.runAs(() => deleteExpense(alice.userId, e.id));

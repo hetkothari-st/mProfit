@@ -59,7 +59,9 @@ async function build(groupId: string, input: Omit<ExpenseInput, 'groupId'>) {
   if (Number.isNaN(date.getTime()) || date.getTime() > Date.now() + DAY_MS) throw new BadRequestError('Invalid date');
   const currency = input.currency.toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) throw new BadRequestError('Invalid currency code');
-  if (!/^\d+(\.\d+)?$/.test(input.amount)) throw new BadRequestError('SPLIT_BAD_INPUT: amount');
+  if (!/^\d+(\.\d{1,2})?$/.test(input.amount) || new Decimal(input.amount).lte(0)) {
+    throw new BadRequestError('SPLIT_BAD_INPUT: amount must be > 0 with at most 2 decimals');
+  }
   const amount = new Decimal(input.amount);
 
   const group = await prisma.splitGroup.findUnique({ where: { id: groupId }, select: { baseCurrency: true } });
