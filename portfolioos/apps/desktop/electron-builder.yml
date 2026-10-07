@@ -1,0 +1,56 @@
+# Packaging + publishing. Releases go to GitHub Releases on this repo; the
+# installed app's updater reads them from there (see docs/desktop/RELEASING.md).
+appId: com.everypaisa.desktop
+productName: EveryPaisa
+copyright: Copyright © EveryPaisa
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - '!dist/**/*.map'
+  - build/icon.png
+  - package.json
+asar: true
+# The workspace package is @everypaisa/desktop; installed, it is "everypaisa"
+# (install folder, updater cache). Never change once released: updates find
+# the installed app by it.
+extraMetadata:
+  name: everypaisa
+
+publish:
+  - provider: github
+    owner: hetkothari-st
+    repo: mProfit
+    # CI uploads to a DRAFT. Nothing reaches users until the draft is
+    # published by hand, after the installers have been tried.
+    releaseType: draft
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: EveryPaisa-Setup-${version}.${ext}
+
+nsis:
+  # Per-user install, no admin prompt: updates install silently the same way.
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: EveryPaisa
+  deleteAppDataOnUninstall: false
+  differentialPackage: true
+
+mac:
+  target:
+    - target: dmg
+      arch: [universal]
+    - target: zip
+      arch: [universal]
+  category: public.app-category.finance
+  artifactName: EveryPaisa-${version}-mac.${ext}
+  # No Apple Developer account yet: ad-hoc signed ("-"), which Apple Silicon
+  # needs to run the app at all. Not notarized, so the app offers new
+  # versions as a download instead of installing them itself (src/updater.ts).
+  identity: '-'

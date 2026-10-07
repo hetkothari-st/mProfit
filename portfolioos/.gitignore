@@ -75,3 +75,6 @@ scratch_*.json
 # npm also cannot read the workspace:* / catalog: protocols this repo uses.
 package-lock.json
 yarn.lock
+
+# electron-builder resources (icon), not build output
+!/apps/desktop/build/
