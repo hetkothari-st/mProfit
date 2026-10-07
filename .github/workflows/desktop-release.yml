@@ -14,7 +14,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # One draft, created before the builds: two jobs creating it at the same
+  # moment each made their own, and the Windows files ended up split across
+  # two drafts. electron-builder uploads into the existing draft for the tag.
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the draft release (or reuse it)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./portfolioos/apps/desktop/package.json').version")
+          TAG="v$VERSION"
+          EXISTING=$(gh api "repos/${{ github.repository }}/releases" --jq "[.[] | select(.tag_name == \"$TAG\")] | length")
+          if [ "$EXISTING" != "0" ]; then
+            if gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null | grep -q false; then
+              echo "::error::$TAG is already published. Bump the version in apps/desktop/package.json."
+              exit 1
+            fi
+            echo "Reusing the existing draft for $TAG"
+          else
+            gh release create "$TAG" --draft --title "$VERSION" --notes "EveryPaisa desktop $VERSION" --target "${{ github.sha }}"
+          fi
+
   build:
+    needs: draft
     strategy:
       fail-fast: false
       matrix:
