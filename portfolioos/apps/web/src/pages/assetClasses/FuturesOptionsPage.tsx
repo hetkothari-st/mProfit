@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/common/EmptyState';
 
+import { signOf } from '@/lib/signTone';
 type BrokerId = 'zerodha' | 'upstox' | 'angel';
 
 const BROKER_LABEL: Record<BrokerId, string> = {
@@ -75,12 +76,10 @@ function fmtINR(v: string | number | null | undefined): string {
 }
 
 function pnlClass(v: string | null | undefined): string {
-  if (!v) return '';
-  return toDecimal(v).isPositive()
-    ? 'text-emerald-700 dark:text-emerald-400'
-    : toDecimal(v).isNegative()
-      ? 'text-rose-700 dark:text-rose-400'
-      : '';
+  // signOf, not isPositive(): decimal.js counts zero as positive, which
+  // painted every ₹0.00 green.
+  const s = signOf(v);
+  return s > 0 ? 'text-emerald-700 dark:text-emerald-400' : s < 0 ? 'text-rose-700 dark:text-rose-400' : '';
 }
 
 function daysUntil(iso: string): number {

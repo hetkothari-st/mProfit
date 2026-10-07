@@ -99,6 +99,8 @@ const GRADE_BANDS: Array<{ grade: string; range: string; desc: string }> = [
   { grade: 'F', range: '0–39', desc: 'At risk' },
 ];
 
+const UNSCORED_TONE = { bar: 'bg-muted', text: 'text-muted-foreground', ring: 'ring-border' };
+
 function scoreTone(score: number): { bar: string; text: string; ring: string } {
   if (score < 40) return { bar: 'bg-negative', text: 'text-negative', ring: 'ring-negative/30' };
   if (score < 70) return { bar: 'bg-orange-500', text: 'text-orange-600', ring: 'ring-orange-500/30' };
@@ -188,7 +190,8 @@ export function HealthScorePage() {
 function DimensionDetailCard({ id, sub }: { id: DimensionId; sub: HealthSubScore }) {
   const meta = DIMENSION_META[id];
   const Icon = meta.icon;
-  const tone = scoreTone(sub.score);
+  const scored = sub.score != null;
+  const tone = scored ? scoreTone(sub.score!) : UNSCORED_TONE;
 
   return (
     <Card>
@@ -204,13 +207,17 @@ function DimensionDetailCard({ id, sub }: { id: DimensionId; sub: HealthSubScore
             <Badge variant="outline" className="whitespace-nowrap text-[10px] text-muted-foreground">
               Weight {meta.weight}%
             </Badge>
-            <span className={cn('numeric-display text-lg font-semibold', tone.text)}>{sub.score}</span>
+            {scored ? (
+              <span className={cn('numeric-display text-lg font-semibold', tone.text)}>{sub.score}</span>
+            ) : (
+              <span className="whitespace-nowrap text-xs text-muted-foreground">Not scored</span>
+            )}
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="h-2 w-full overflow-hidden rounded-full bg-muted/60">
-          <div className={cn('h-full transition-all', tone.bar)} style={{ width: `${sub.score}%` }} />
+          {scored && <div className={cn('h-full transition-all', tone.bar)} style={{ width: `${sub.score}%` }} />}
         </div>
 
         <p className="text-[12.5px] leading-relaxed text-muted-foreground">{meta.explanation}</p>
@@ -220,10 +227,14 @@ function DimensionDetailCard({ id, sub }: { id: DimensionId; sub: HealthSubScore
           <p className="mt-1 text-[13px] text-foreground">{sub.insight}</p>
         </div>
 
-        <div className="rounded-lg border border-accent/25 bg-accent/[0.06] p-3">
-          <p className="text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85">Fix this</p>
-          <p className="mt-1 text-[13px] text-foreground">{sub.action}</p>
-        </div>
+        {sub.action && (
+          <div className="rounded-lg border border-accent/25 bg-accent/[0.06] p-3">
+            <p className="text-[10px] font-medium uppercase tracking-kerned text-accent-ink/85">
+              {scored ? 'Fix this' : 'To score this'}
+            </p>
+            <p className="mt-1 text-[13px] text-foreground">{sub.action}</p>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
           {meta.links.map((link) => (

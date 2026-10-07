@@ -12,6 +12,7 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { SCHEMES, SCHEME_ORDER, PO_ASSET_CLASSES, type SchemeType } from '@/lib/poSchemes';
 import { PostOfficeFormDialog } from './PostOfficeFormDialog';
 
+import { signTone } from '@/lib/signTone';
 type POHolding = HoldingRow & { portfolioName: string; portfolioId: string };
 
 const PO_CLASS_SET = new Set<string>(PO_ASSET_CLASSES);
@@ -113,7 +114,7 @@ export function PostOfficePage() {
               label: 'Unrealised P&L',
               value: `${totalPnL.gte(0) ? '+' : ''}${formatINR(totalPnL.toString())}${pnlPct != null ? ` (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : ''}`,
               sub: 'interest accrual',
-              cls: totalPnL.gte(0) ? 'text-positive' : 'text-negative',
+              cls: signTone(totalPnL.toString()),
             },
           ]).map((m) => (
             <Card key={m.label}>
@@ -208,7 +209,7 @@ export function PostOfficePage() {
                     </div>
                     <div>
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">P&L</p>
-                      <p className={`text-sm font-medium tabular-nums ${sec.pnl.gte(0) ? 'text-positive' : 'text-negative'}`}>
+                      <p className={`text-sm font-medium tabular-nums ${signTone(sec.pnl.toString())}`}>
                         {sec.pnl.gte(0) ? '+' : ''}{formatINR(sec.pnl.toString())}
                       </p>
                     </div>
@@ -249,7 +250,7 @@ export function PostOfficePage() {
                                 <td data-label="Current" className="px-4 py-3 text-right tabular-nums hidden sm:table-cell">{h.currentValue ? formatINR(h.currentValue) : '—'}</td>
                                 <td data-label="P&L" className="px-4 py-3 text-right tabular-nums">
                                   {pnl ? (
-                                    <span className={pnl.gte(0) ? 'text-positive' : 'text-negative'}>
+                                    <span className={signTone(pnl.toString())}>
                                       {pnl.gte(0) ? '+' : ''}{formatINR(pnl.toString())}
                                     </span>
                                   ) : '—'}

@@ -227,19 +227,40 @@ export interface HealthScoreResult {
   grade: string;
   subScores: Record<
     'emergencyFund' | 'investmentRate' | 'debtBurden' | 'diversification' | 'insurance' | 'goalProgress',
-    { score: number; insight: string; action: string }
+    HealthSubScore
   >;
   computedAt: string;
+}
+
+/**
+ * One part of the score. `score` is null when we don't have the data to judge
+ * it (no expenses, no income, no goals...) - it is left out of the overall, not
+ * counted as a middling 50. `action` is null when there is nothing to fix.
+ */
+export interface HealthSubScore {
+  score: number | null;
+  insight: string;
+  action: string | null;
+}
+
+/** Bumped when the stored sub-score shape changes; older snapshots are recomputed. */
+const SNAPSHOT_VERSION = 2;
+
+function stripVersion(stored: unknown): HealthScoreResult['subScores'] {
+  const { _v: _ignored, ...rest } = stored as Record<string, unknown>;
+  return rest as HealthScoreResult['subScores'];
 }
 
 export async function computeHealthScore(userId: string, opts: { force?: boolean } = {}): Promise<HealthScoreResult> {
   if (!opts.force) {
     const cached = await prisma.healthScoreSnapshot.findUnique({ where: { userId } });
-    if (cached && Date.now() - cached.computedAt.getTime() < STALE_AFTER_MS) {
+    // Snapshots from before unscored parts existed hold a made-up 50: recompute those.
+    const isCurrent = (cached?.subScores as { _v?: unknown } | null)?._v === SNAPSHOT_VERSION;
+    if (cached && isCurrent && Date.now() - cached.computedAt.getTime() < STALE_AFTER_MS) {
       return {
         overallScore: cached.overallScore,
         grade: cached.grade,
-        subScores: cached.subScores as HealthScoreResult['subScores'],
+        subScores: stripVersion(cached.subScores),
         computedAt: cached.computedAt.toISOString(),
       };
     }
@@ -276,6 +297,16 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
   // earn nothing."
   const hasIncomeData = monthlyIncome.greaterThan(0);
 
+  // What we can actually judge. Without holdings there is nothing to measure
+  // an emergency fund or diversification against; without expenses no
+  // "months covered"; without income no investment rate, debt burden or
+  // "is the cover enough"; without goals no goal progress. Those parts are
+  // left unscored rather than given a neutral 50 — an account with no data
+  // was showing B/70, and "20+ months" of emergency fund with no expenses.
+  const hasExpenseData = monthlyExpenses.greaterThan(0);
+  const hasDebt = monthlyDebtPayments.greaterThan(0);
+  const activeGoals = goals.filter((g) => g.status === 'ACTIVE');
+
   const ef = emergencyFundScore(liquidAssets, monthlyExpenses);
   const ir = investmentRateScore(monthlyInvestment, monthlyIncome);
   const db = debtBurdenScore(monthlyDebtPayments, monthlyIncome);
@@ -286,62 +317,73 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
     age,
   });
   const ins = insuranceScore(life.sumAssured, annualIncome, life.hasPolicies);
-  const activeGoals = goals.filter((g) => g.status === 'ACTIVE');
   const gp = goalProgressScore(activeGoals.map((g) => g.progressPct));
 
-  // A brand-new user with zero holdings has no signal for emergency-fund coverage or
-  // diversification, and a user with zero confirmed income events has no signal for
-  // investment rate, debt burden, or "is my cover enough" — the pure-math functions
-  // optimistically resolve their zero-denominator guard clauses to values that read as
-  // real judgments (0, 100, ...) when they're actually "insufficient data." Override to
-  // the neutral 50 already used elsewhere (insuranceScore/goalProgressScore with no
-  // policies/goals). These overridden values feed BOTH the sub-score cards and
-  // weightedOverall so the gauge and the cards never disagree.
-  const emergencyFundScoreForOverall = hasAnyHoldings ? ef.score : 50;
-  const diversificationScoreForOverall = hasAnyHoldings ? dv.score : 50;
-  const investmentRateScoreForOverall = hasIncomeData ? ir.score : 50;
-  const debtBurdenScoreForOverall = hasIncomeData ? db.score : 50;
-  const insuranceNeedsIncomeToJudge = life.hasPolicies && !hasIncomeData;
-  const insuranceScoreForOverall = insuranceNeedsIncomeToJudge ? 50 : ins.score;
+  const addIncome = 'Add your salary under Income, or connect Gmail, so we can see your income.';
 
-  const { overall, grade } = weightedOverall({
-    emergencyFund: emergencyFundScoreForOverall, investmentRate: investmentRateScoreForOverall, debtBurden: debtBurdenScoreForOverall,
-    diversification: diversificationScoreForOverall, insurance: insuranceScoreForOverall, goalProgress: gp.score,
-  });
-
-  // Emergency fund: point at the exact shortfall, or confirm the buffer if already met.
+  // Emergency fund.
   const emergencyTarget = emergencyFundTargetFor(monthlyExpenses);
   const emergencyShortfall = emergencyTarget.minus(liquidAssets);
-  const emergencyFundAction = emergencyShortfall.greaterThan(0)
-    ? `You need ${formatINR(emergencyShortfall.toString())} more in liquid assets (savings, FDs) to reach the 6-month target of ${formatINR(emergencyTarget.toString())}.`
-    : "You're fully covered for 6 months of expenses — keep this buffer growing as your expenses rise.";
+  const emergencyFund: HealthSubScore = !hasAnyHoldings
+    ? {
+      score: null,
+      insight: 'No bank balances or investments yet, so there is nothing to measure an emergency fund against.',
+      action: 'Add a bank account or your investments.',
+    }
+    : !hasExpenseData
+      ? {
+        score: null,
+        insight: `You have ${formatINR(liquidAssets.toString())} in liquid assets, but we don't know your monthly expenses yet, so we can't tell how many months that covers.`,
+        action: 'Record your spending (Cash Activity), or connect Gmail, so we can work out your monthly expenses.',
+      }
+      : {
+        score: Math.round(ef.score),
+        insight: `You have ${ef.monthsCovered.toFixed(1)} months of expenses covered. Target is 6 months.`,
+        action: emergencyShortfall.greaterThan(0)
+          ? `You need ${formatINR(emergencyShortfall.toString())} more in liquid assets (savings, FDs) to reach the 6-month target of ${formatINR(emergencyTarget.toString())}.`
+          : null,
+      };
 
-  // Investment rate: exact ₹/month gap to the 20% target.
+  // Investment rate.
   const investmentTarget = monthlyIncome.times(0.2);
   const investmentGap = investmentTarget.minus(monthlyInvestment);
-  const investmentRateAction = !hasIncomeData
-    ? 'Add your salary under Income, or connect Gmail, so we can see your income and score this accurately.'
-    : investmentGap.greaterThan(0)
-      ? `Increase your monthly investing by ${formatINR(investmentGap.toString())} to hit the 20% target (${formatINR(investmentTarget.toString())}/month).`
-      : "You're investing at or above the 20% target — keep it up.";
+  const investmentRate: HealthSubScore = !hasIncomeData
+    ? { score: null, insight: "We don't know your income yet, so we can't work out your investment rate.", action: addIncome }
+    : {
+      score: Math.round(ir.score),
+      insight: `You're investing ${ir.ratePct.toFixed(1)}% of income. Target is 20%.`,
+      action: investmentGap.greaterThan(0)
+        ? `Increase your monthly investing by ${formatINR(investmentGap.toString())} to hit the 20% target (${formatINR(investmentTarget.toString())}/month).`
+        : null,
+    };
 
-  // Debt burden: exact ₹/month to cut to get under the 40% comfort line.
+  // Debt burden. No EMIs or card dues is a fact, income or not.
   const debtComfortCap = monthlyIncome.times(0.4);
   const debtExcess = monthlyDebtPayments.minus(debtComfortCap);
-  const debtBurdenAction = !hasIncomeData
-    ? 'Add your salary under Income, or connect Gmail, so we can see your income and score this accurately.'
-    : debtExcess.greaterThan(0)
-      ? `Cut ${formatINR(debtExcess.toString())}/month from EMIs or card dues to get under the comfortable 40% line.`
-      : 'Your EMIs and card payments are comfortably within a healthy range.';
+  const debtBurden: HealthSubScore = !hasDebt
+    ? { score: 100, insight: 'You have no EMIs or card dues.', action: null }
+    : !hasIncomeData
+      ? {
+        score: null,
+        insight: `You pay ${formatINR(monthlyDebtPayments.toString())}/month in EMIs and card dues, but we don't know your income yet, so we can't tell how heavy that is.`,
+        action: addIncome,
+      }
+      : {
+        score: Math.round(db.score),
+        insight: `Your EMIs and card payments take ${db.burdenPct.toFixed(1)}% of income. Keep it under 40%.`,
+        action: debtExcess.greaterThan(0)
+          ? `Cut ${formatINR(debtExcess.toString())}/month from EMIs or card dues to get under the comfortable 40% line.`
+          : null,
+      };
 
-  // Diversification: name the single worst driver (holding, then asset class, then
-  // equity-vs-age guideline) instead of a generic "rebalance" nudge.
+  // Diversification: name the single worst driver (holding, then asset class,
+  // then equity-vs-age guideline).
   const maxClass = netWorth.allocationBreakdown.reduce<{ key: string; percent: number } | null>(
     (m, a) => (m === null || a.percent > m.percent ? a : m), null,
   );
   const targetEquityPct = ageBasedEquityGuidelinePct(age);
   const equityGap = targetEquityPct != null ? Math.abs(equityPct - targetEquityPct) : null;
-  let diversificationAction: string;
+  let diversificationAction: string | null = null;
   if (largestHoldingPct.pct > 50) {
     diversificationAction = `${largestHoldingPct.name ?? 'Your largest holding'} is ${largestHoldingPct.pct.toFixed(0)}% of your portfolio — trim it below 50% to reduce concentration risk.`;
   } else if (maxClass && maxClass.percent > 60) {
@@ -350,97 +392,74 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
     diversificationAction = equityPct > targetEquityPct
       ? `Your equity allocation (${equityPct.toFixed(0)}%) is well above the age-based guideline of ${targetEquityPct.toFixed(0)}% — consider shifting some toward debt.`
       : `Your equity allocation (${equityPct.toFixed(0)}%) is well below the age-based guideline of ${targetEquityPct.toFixed(0)}% — consider adding equity exposure.`;
-  } else {
-    diversificationAction = "Your portfolio is well spread across holdings and asset classes — no rebalancing needed right now.";
   }
+  const diversification: HealthSubScore = !hasAnyHoldings
+    ? { score: null, insight: 'No investments yet to assess diversification.', action: 'Add your investments.' }
+    : {
+      score: Math.round(dv.score),
+      insight: diversificationAction
+        ? `Your equity allocation is ${equityPct.toFixed(1)}% of your portfolio.`
+        : `Your portfolio is well spread across holdings and asset classes (equity ${equityPct.toFixed(1)}%).`,
+      action: diversificationAction,
+    };
 
-  // Insurance: exact ₹ gap to the 10x-income target, or flag missing income data.
+  // Insurance. With no life policy tracked we can't tell a gap from someone
+  // with no dependents, so it isn't scored — but it is said.
   const insuranceRequiredCover = requiredLifeCover(annualIncome);
   const insuranceGap = insuranceRequiredCover.minus(life.sumAssured);
-  const insuranceAction = !life.hasPolicies
-    ? 'Add a term or life policy — you currently have none tracked.'
+  const insurance: HealthSubScore = !life.hasPolicies
+    ? {
+      score: null,
+      insight: 'No life insurance tracked.',
+      action: 'If anyone depends on your income, add your term or life policy here (or take one).',
+    }
     : !hasIncomeData
-      ? 'Add your salary under Income, or connect Gmail, so we can see your income and check if your cover is enough.'
-      : insuranceGap.greaterThan(0)
-        ? `Add ${formatINR(insuranceGap.toString())} more life cover to reach the 10x-income target of ${formatINR(insuranceRequiredCover.toString())}.`
-        : "Your life cover meets the 10x-income target — no action needed.";
+      ? {
+        score: null,
+        insight: `Your life cover is ${formatINR(life.sumAssured.toString())}, but we don't know your income yet, so we can't check if that's enough.`,
+        action: addIncome,
+      }
+      : {
+        score: Math.round(ins.score),
+        insight: `Your life cover is ${formatINR(life.sumAssured.toString())}. Target is 10x annual income.`,
+        action: insuranceGap.greaterThan(0)
+          ? `Add ${formatINR(insuranceGap.toString())} more life cover to reach the 10x-income target of ${formatINR(insuranceRequiredCover.toString())}.`
+          : null,
+      };
 
-  // Goal progress: name the specific goal dragging the average down.
+  // Goal progress: name the goal furthest behind.
   const worstGoal = activeGoals.length > 0
     ? [...activeGoals].sort((a, b) => a.progressPct - b.progressPct)[0]
     : null;
-  const goalProgressAction = worstGoal
-    ? `"${worstGoal.name}" is your furthest-behind goal at ${Math.round(worstGoal.progressPct)}% progress — review contributions or timeline.`
-    : 'Set your first financial goal.';
+  const goalProgress: HealthSubScore = !worstGoal
+    ? { score: null, insight: "You haven't set any financial goals yet.", action: 'Set your first financial goal.' }
+    : {
+      score: Math.round(gp.score),
+      insight: `You are averaging ${Math.round(gp.score)}% progress across your active goals.`,
+      action: worstGoal.progressPct < 100
+        ? `"${worstGoal.name}" is your furthest-behind goal at ${Math.round(worstGoal.progressPct)}% progress — review contributions or timeline.`
+        : null,
+    };
 
   const subScores: HealthScoreResult['subScores'] = {
-    emergencyFund: hasAnyHoldings
-      ? {
-        score: Math.round(ef.score),
-        insight: `You have ${ef.monthsCovered === Infinity ? '20+' : ef.monthsCovered.toFixed(1)} months of expenses covered. Target is 6 months.`,
-        action: emergencyFundAction,
-      }
-      : {
-        score: 50,
-        insight: 'No portfolio data yet — add your bank accounts or investments to get an emergency-fund score.',
-        action: 'Connect a bank account or add your investments to get scored.',
-      },
-    investmentRate: hasIncomeData
-      ? {
-        score: Math.round(ir.score),
-        insight: `You're investing ${ir.ratePct.toFixed(1)}% of income. Target is 20%.`,
-        action: investmentRateAction,
-      }
-      : {
-        score: 50,
-        insight: "We don't have enough confirmed income data yet to estimate your investment rate.",
-        action: investmentRateAction,
-      },
-    debtBurden: hasIncomeData
-      ? {
-        score: Math.round(db.score),
-        insight: `Your EMIs and card payments consume ${db.burdenPct.toFixed(1)}% of income. Keep it under 40%.`,
-        action: debtBurdenAction,
-      }
-      : {
-        score: 50,
-        insight: `We don't have enough confirmed income data yet to score this. You have ${formatINR(monthlyDebtPayments.toString())}/month in EMIs and card dues.`,
-        action: debtBurdenAction,
-      },
-    diversification: hasAnyHoldings
-      ? {
-        score: Math.round(dv.score),
-        insight: `Your equity allocation is ${equityPct.toFixed(1)}% of your portfolio.`,
-        action: diversificationAction,
-      }
-      : {
-        score: 50,
-        insight: 'No portfolio data yet to assess diversification.',
-        action: 'Add your investments to get scored.',
-      },
-    insurance: {
-      score: Math.round(insuranceNeedsIncomeToJudge ? 50 : ins.score),
-      insight: !life.hasPolicies
-        ? 'No life insurance policies found — add one manually to get scored.'
-        : insuranceNeedsIncomeToJudge
-          ? `Your life cover is ${formatINR(life.sumAssured.toString())}, but we don't have enough income data yet to check if that's enough.`
-          : `Your life cover is ${formatINR(life.sumAssured.toString())}. Target is 10x annual income.`,
-      action: insuranceAction,
-    },
-    goalProgress: {
-      score: Math.round(gp.score),
-      insight: activeGoals.length > 0
-        ? `You are averaging ${Math.round(gp.score)}% progress across your active goals.`
-        : 'You have not set any financial goals yet.',
-      action: goalProgressAction,
-    },
+    emergencyFund, investmentRate, debtBurden, diversification, insurance, goalProgress,
   };
+
+  // The gauge and the cards are computed from the same values, so they agree.
+  const { overall, grade } = weightedOverall({
+    emergencyFund: emergencyFund.score,
+    investmentRate: investmentRate.score,
+    debtBurden: debtBurden.score,
+    diversification: diversification.score,
+    insurance: insurance.score,
+    goalProgress: goalProgress.score,
+  });
 
   const computedAt = new Date();
   await prisma.healthScoreSnapshot.upsert({
     where: { userId },
-    create: { userId, overallScore: overall, grade, subScores: subScores as never, computedAt },
-    update: { overallScore: overall, grade, subScores: subScores as never, computedAt },
+    create: { userId, overallScore: overall, grade, subScores: { ...subScores, _v: SNAPSHOT_VERSION } as never, computedAt },
+    update: { overallScore: overall, grade, subScores: { ...subScores, _v: SNAPSHOT_VERSION } as never, computedAt },
   });
 
   return { overallScore: overall, grade, subScores, computedAt: computedAt.toISOString() };

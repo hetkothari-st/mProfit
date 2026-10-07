@@ -24,6 +24,7 @@ import { InboxImportsTab } from './InboxImportsTab';
 import { TaxMisDownloads, REPORTS as TAX_MIS_REPORTS, type ReportHighlight } from './TaxMisDownloads';
 import { Decimal, toDecimal } from '@everypaisa/shared';
 
+import { signTone } from '@/lib/signTone';
 type Tab =
   | 'summary'
   | 'statements'
@@ -169,15 +170,6 @@ function fmt(n: string | number | null | undefined, decimals = 2): string {
   }
   const signed = negative ? '-' + grouped : grouped;
   return fracPart ? `${signed}.${fracPart}` : signed;
-}
-
-function isNonNegativeMoney(s: string | number | null | undefined): boolean {
-  if (s == null || s === '') return true;
-  try {
-    return !toDecimal(s).isNegative();
-  } catch {
-    return true;
-  }
 }
 
 function fmtPct(n: number | null | undefined): string {
@@ -550,7 +542,6 @@ function ReportSearch({ onSelect }: { onSelect: (item: SearchItem) => void }) {
 }
 
 
-
 function Loading() {
   return (
     <div className="flex items-center gap-2 text-muted-foreground p-8 text-sm">
@@ -585,9 +576,7 @@ function SummaryView({ data, loading }: { data: ReturnType<typeof reportsApi.sum
           <div>Value: ₹{fmt(data.unrealised.totalValue)}</div>
           <div
             className={
-              isNonNegativeMoney(data.unrealised.unrealisedPnL)
-                ? 'text-positive'
-                : 'text-negative'
+              signTone(data.unrealised.unrealisedPnL)
             }
           >
             P&L: ₹{fmt(data.unrealised.unrealisedPnL)}
@@ -669,7 +658,7 @@ function UnrealisedView({
           {fmt(data.totalValue)} · P&L{' '}
           <span
             className={
-              isNonNegativeMoney(data.unrealisedPnL) ? 'text-positive' : 'text-negative'
+              signTone(data.unrealisedPnL)
             }
           >
             ₹{fmt(data.unrealisedPnL)}
@@ -706,7 +695,7 @@ function UnrealisedView({
                     data-label="P&L"
                     className={cn(
                       'p-2 text-right',
-                      isNonNegativeMoney(r.unrealisedPnL) ? 'text-positive' : 'text-negative',
+                      signTone(r.unrealisedPnL),
                     )}
                   >
                     {fmt(r.unrealisedPnL)}
@@ -795,7 +784,7 @@ function GainsView({
                     data-label="Gain/Loss"
                     className={cn(
                       'p-2 text-right',
-                      isNonNegativeMoney(r.gainLoss) ? 'text-positive' : 'text-negative',
+                      signTone(r.gainLoss),
                     )}
                   >
                     {fmt(r.gainLoss)}

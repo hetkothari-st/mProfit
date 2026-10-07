@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { intelligenceApi } from '@/api/intelligence.api';
 import { HealthScoreGauge } from './HealthScoreGauge';
 
+import { UNGRADED } from '@/api/intelligence.api';
 const GRADE_BLURB: Record<string, string> = {
   A: 'Excellent — your finances are in great shape.',
   B: 'Good — a few areas could use attention.',
@@ -48,7 +49,9 @@ export function HealthScore() {
             Financial Health Score
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {GRADE_BLURB[data.grade] ?? 'See your full breakdown.'}
+            {data.grade === UNGRADED
+              ? 'Not enough data to grade yet. Add your income and expenses to get a score.'
+              : (GRADE_BLURB[data.grade] ?? 'See your full breakdown.')}
           </p>
         </div>
         <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-accent-ink group-hover:underline">

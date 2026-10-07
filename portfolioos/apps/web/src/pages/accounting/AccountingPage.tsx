@@ -29,6 +29,7 @@ import {
   type CreateVoucherInput,
 } from '@/api/accounting.api';
 
+import { signTone } from '@/lib/signTone';
 // ─── Chart of Accounts ────────────────────────────────────────────────────────
 
 function AccountTreeNode({ node, depth, onAdd, onDelete }: {
@@ -721,7 +722,7 @@ function PnLReport() {
     queryKey: ['pnl', from, to],
     queryFn: () => accountingApi.getPnL(from || undefined, to || undefined),
   });
-  const netClass = data ? (toDecimal(data.netProfit).gte(0) ? 'text-positive' : 'text-negative') : '';
+  const netClass = data ? (signTone(data.netProfit)) : '';
 
   return (
     <div className="space-y-4">

@@ -1,3 +1,27 @@
+import { UNGRADED } from '@/api/intelligence.api';
+
+/** Too little data to grade: an empty ring, not a number that means nothing. */
+function UngradedGauge({ size }: { size: number }) {
+  const stroke = 14;
+  const radius = (size - stroke) / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Health score: not enough data to grade yet">
+      <circle
+        cx={size / 2} cy={size / 2} r={radius}
+        fill="none" stroke="currentColor" strokeOpacity={0.12} strokeWidth={stroke}
+      />
+      <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" fontSize={size * 0.22} fontWeight={700} fill="currentColor" fillOpacity={0.45}>
+        —
+      </text>
+      {size >= 120 && (
+        <text x="50%" y="64%" textAnchor="middle" dominantBaseline="middle" fontSize={size * 0.075} fill="currentColor" fillOpacity={0.55}>
+          Not enough data
+        </text>
+      )}
+    </svg>
+  );
+}
+
 interface HealthScoreGaugeProps {
   score: number;
   grade: string;
@@ -11,6 +35,7 @@ function gaugeColor(score: number): string {
 }
 
 export function HealthScoreGauge({ score, grade, size = 200 }: HealthScoreGaugeProps) {
+  if (grade === UNGRADED) return <UngradedGauge size={size} />;
   const stroke = 14;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
