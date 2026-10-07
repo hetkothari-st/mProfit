@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, session, shell, screen, type WebContents } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, net, session, shell, screen, type WebContents } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import log from 'electron-log/main';
@@ -130,11 +130,27 @@ function createMainWindow(): void {
 
   // Unreachable server (offline, outage): a page that keeps retrying, rather
   // than a blank window.
+  // The offline page never navigates itself: it asks for a retry by setting
+  // its title, and this process decides where to go.
+  let offline = false;
+  const retry = () => {
+    if (!offline || win.isDestroyed()) return;
+    offline = false;
+    void win.loadURL(APP_URL);
+  };
   win.webContents.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
     if (!isMainFrame || code === -3 /* aborted, e.g. a redirect */) return;
     log.warn('[main] page failed to load', { code, description, url });
-    void win.loadFile(join(__dirname, 'offline.html'), { query: { url: APP_URL } });
+    offline = true;
+    void win.loadFile(join(__dirname, 'offline.html'));
   });
+  win.webContents.on('page-title-updated', (_e, title) => {
+    if (title === 'retry') retry();
+  });
+  const retryTimer = setInterval(() => {
+    if (offline && net.isOnline()) retry();
+  }, 10_000);
+  win.on('closed', () => clearInterval(retryTimer));
 
   void win.loadURL(APP_URL);
 }
@@ -147,7 +163,6 @@ function openExternal(url: string): void {
 
 function guard(contents: WebContents): void {
   contents.on('will-navigate', (event, url) => {
-    // The offline page's retry button is the one file:// page allowed to leave.
     const decision = decideNavigation(url, APP_ORIGIN);
     if (decision === 'allow') return;
     event.preventDefault();

@@ -28,16 +28,15 @@
       <small id="status">Retrying in <span id="n">10</span>s</small>
     </main>
     <script>
-      const target = new URLSearchParams(location.search).get('url');
-      const go = () => { if (target) location.href = target; };
-      document.getElementById('retry').addEventListener('click', go);
+      // Ask the app to try again; it decides where to go (src/main.ts).
+      const retry = () => { document.title = 'EveryPaisa'; document.title = 'retry'; };
+      document.getElementById('retry').addEventListener('click', retry);
       let n = 10;
       setInterval(() => {
-        n -= 1;
-        if (n <= 0) { n = 10; if (navigator.onLine) go(); }
+        n = n <= 1 ? 10 : n - 1;
         document.getElementById('n').textContent = String(n);
       }, 1000);
-      window.addEventListener('online', go);
+      window.addEventListener('online', retry);
     </script>
   </body>
 </html>
