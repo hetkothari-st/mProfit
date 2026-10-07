@@ -17,3 +17,4 @@ export * from './mfAnalytics.types.js';
 export * from './mfAnalytics.rating.js';
 export * from './insurance/index.js';
 export * from './familyRelations.js';
+export * from './split.types.js';
