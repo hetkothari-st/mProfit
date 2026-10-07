@@ -17,7 +17,7 @@
     "release": "node build.mjs && electron-builder --publish always"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^22.20.5",
     "electron": "44.6.0",
     "electron-builder": "26.15.3",
     "electron-log": "5.4.4",
