@@ -62,9 +62,10 @@ describe('runMfBootstrapOnce', () => {
     const log: string[] = [];
     const r = await runMfBootstrapOnce({ now: NOW, months: 2, deps: deps(log) });
     expect(r.status).toBe('DONE');
+    // Ratings before factsheets: nothing rating-required depends on them.
     expect(log).toEqual([
-      'metadata', 'benchmarks', 'riskFree', 'navHistory', 'navAdjustment', 'factsheets',
-      'rate 2026-08-31', 'rate 2026-09-30',
+      'metadata', 'benchmarks', 'riskFree', 'navHistory', 'navAdjustment',
+      'rate 2026-08-31', 'rate 2026-09-30', 'factsheets',
     ]);
     expect((store.get(MF_BOOTSTRAP_KEY)!.value as { status: string }).status).toBe('DONE');
   });
@@ -77,15 +78,19 @@ describe('runMfBootstrapOnce', () => {
     expect(log).toEqual([]);
   });
 
-  it('leaves a run in progress alone', async () => {
-    store.set(MF_BOOTSTRAP_KEY, { value: { status: 'RUNNING', startedAt: '2026-10-06T11:30:00Z' } });
+  it('leaves a run with a live heartbeat alone', async () => {
+    store.set(MF_BOOTSTRAP_KEY, {
+      value: { status: 'RUNNING', startedAt: '2026-10-06T11:00:00Z', heartbeatAt: '2026-10-06T11:56:00Z' },
+    });
     const log: string[] = [];
     expect((await runMfBootstrapOnce({ now: NOW, months: 1, deps: deps(log) })).status).toBe('SKIPPED');
     expect(log).toEqual([]);
   });
 
-  it('takes over a run abandoned by a redeploy', async () => {
-    store.set(MF_BOOTSTRAP_KEY, { value: { status: 'RUNNING', startedAt: '2026-10-06T02:00:00Z' } });
+  it('takes over a run whose heartbeat stopped (a redeploy killed it)', async () => {
+    store.set(MF_BOOTSTRAP_KEY, {
+      value: { status: 'RUNNING', startedAt: '2026-10-06T11:00:00Z', heartbeatAt: '2026-10-06T11:40:00Z' },
+    });
     const log: string[] = [];
     expect((await runMfBootstrapOnce({ now: NOW, months: 1, deps: deps(log) })).status).toBe('DONE');
     expect(log).toContain('rate 2026-09-30');
@@ -118,5 +123,20 @@ describe('runMfBootstrapOnce', () => {
     const r = await runMfBootstrapOnce({ now: NOW, months: 1, deps: d });
     expect(r.status).toBe('FAILED');
     expect(log.some((l) => l.startsWith('rate'))).toBe(false);
+  });
+
+  it('resumes after the steps an interrupted run already finished', async () => {
+    store.set(MF_BOOTSTRAP_KEY, {
+      value: {
+        status: 'RUNNING',
+        startedAt: '2026-10-06T06:36:00Z',
+        heartbeatAt: '2026-10-06T07:02:00Z',
+        done: ['metadata', 'benchmarks', 'riskFree', 'navHistory', 'navAdjustment'],
+      },
+    });
+    const log: string[] = [];
+    const r = await runMfBootstrapOnce({ now: NOW, months: 1, deps: deps(log) });
+    expect(r.status).toBe('DONE');
+    expect(log).toEqual(['rate 2026-09-30', 'factsheets']);
   });
 });
