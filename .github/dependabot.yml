@@ -17,6 +17,9 @@ updates:
       # Majors need a deliberate upgrade (API changes, e.g. pdfjs-dist, nodemailer).
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      # 0.5 only loads from an ESLint flat config; the repo still uses .eslintrc.
+      - dependency-name: eslint-plugin-react-refresh
+        versions: ['>=0.5.0']
 
   - package-ecosystem: docker
     directory: /portfolioos/packages/api
