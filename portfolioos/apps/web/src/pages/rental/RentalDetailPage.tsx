@@ -50,6 +50,7 @@ import { DocumentVault } from '@/components/documents/DocumentVault';
 import { PropertyGallery } from '@/components/property/PropertyGallery';
 import { PropertyLocationCard } from '@/components/property/PropertyLocationCard';
 
+import { signTone } from '@/lib/signTone';
 // ── Status badge ──────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<
@@ -524,7 +525,7 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
                 hint={
                   receivedCount === 1 ? '1 payment' : `${receivedCount} payments`
                 }
-                tone="positive"
+                tone={receivedCount > 0 ? 'positive' : 'neutral'}
               />
               <SummaryTile
                 label="Expected"
@@ -967,7 +968,7 @@ function PnLPanel({ propertyId }: { propertyId: string }) {
           )}
           <p
             className={`text-lg font-semibold tabular-nums ${
-              pnl.gte(0) ? 'text-positive' : 'text-negative'
+              signTone(pnl.toString())
             }`}
           >
             {formatINR(data.netPnL)}

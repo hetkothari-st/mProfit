@@ -33,6 +33,7 @@ import {
   type ReminderTone,
 } from '@/lib/depositReminders';
 
+import { signTone } from '@/lib/signTone';
 type FDHolding = HoldingRow & { portfolioName: string; portfolioId: string };
 
 const FD_ACCENT = 'hsl(var(--positive))';
@@ -279,9 +280,9 @@ function InterestSoFar({ holding }: { holding: FDHolding }) {
   if (!holding.currentValue) return <span className="text-muted-foreground">—</span>;
   const earned = new Decimal(holding.currentValue).minus(holding.totalCost);
   const pct = new Decimal(holding.totalCost).isZero() ? null : earned.div(holding.totalCost).times(100);
-  const up = earned.gte(0);
+  const up = earned.gt(0);
   return (
-    <span className={up ? 'text-positive' : 'text-negative'}>
+    <span className={signTone(earned.toString())}>
       <span className="money-digits whitespace-nowrap">
         {up ? '+' : ''}
         {formatINR(earned.toString())}
@@ -721,7 +722,7 @@ export function FixedDepositsPage() {
               label: 'Total Earnings',
               value: `${totalPnL.gte(0) ? '+' : ''}${formatINR(totalPnL.toString())}${pnlPct != null ? ` (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : ''}`,
               sub: 'realised + unrealised',
-              valueClass: totalPnL.gte(0) ? 'text-positive' : 'text-negative',
+              valueClass: signTone(totalPnL.toString()),
             },
           ] as { label: string; value: string; sub: string; valueClass: string }[]).map((m) => (
             <Card key={m.label}>

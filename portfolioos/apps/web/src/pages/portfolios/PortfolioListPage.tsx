@@ -57,7 +57,7 @@ export function PortfolioListPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {maxPortfolios !== null && (
-              <Badge variant={capReached ? 'destructive' : 'outline'}>
+              <Badge variant="outline">
                 {portfolioCount} of {maxPortfolios} portfolios used
               </Badge>
             )}

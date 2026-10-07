@@ -35,6 +35,7 @@ import {
 import type { HoldingRow, Money, Quantity, TransactionDTO } from '@everypaisa/shared';
 import { summariseHoldings, unpricedHint } from '@/lib/holdingsSummary';
 
+import { signOf } from '@/lib/signTone';
 const TXN_TYPE_LABELS: Record<string, string> = {
   BUY: 'Buy',
   SELL: 'Sell',
@@ -399,12 +400,9 @@ function Stat({
 }
 
 function pnlClassFor(v: string | null | undefined): string {
-  if (!v) return '';
-  return toDecimal(v).isPositive()
-    ? 'text-emerald-700 dark:text-emerald-400'
-    : toDecimal(v).isNegative()
-      ? 'text-rose-700 dark:text-rose-400'
-      : '';
+  // signOf, not isPositive(): decimal.js counts zero as positive.
+  const s = signOf(v);
+  return s > 0 ? 'text-emerald-700 dark:text-emerald-400' : s < 0 ? 'text-rose-700 dark:text-rose-400' : '';
 }
 
 interface StockRowProps {
@@ -445,9 +443,9 @@ function StockRow({
           : '';
   // Subtle directional cue — left edge bar reflects P&L direction
   const edgeCls =
-    pnlD?.isPositive()
+    signOf(pnlVal) > 0
       ? 'bg-emerald-500/80 dark:bg-emerald-400/75'
-      : pnlD?.isNegative()
+      : signOf(pnlVal) < 0
         ? 'bg-rose-500/80 dark:bg-rose-400/75'
         : 'bg-border';
   return (

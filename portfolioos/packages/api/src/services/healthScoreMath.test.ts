@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import {
   emergencyFundScore, investmentRateScore, debtBurdenScore,
-  diversificationScore, insuranceScore, goalProgressScore, weightedOverall,
+  diversificationScore, insuranceScore, goalProgressScore, weightedOverall, UNGRADED,
 } from './healthScoreMath.js';
 
 const D = (n: number | string) => new Decimal(n);
@@ -134,5 +134,26 @@ describe('weightedOverall', () => {
     expect(weightedOverall({ emergencyFund: 55, investmentRate: 55, debtBurden: 55, diversification: 55, insurance: 55, goalProgress: 55 }).grade).toBe('C');
     expect(weightedOverall({ emergencyFund: 40, investmentRate: 40, debtBurden: 40, diversification: 40, insurance: 40, goalProgress: 40 }).grade).toBe('D');
     expect(weightedOverall({ emergencyFund: 0, investmentRate: 0, debtBurden: 0, diversification: 0, insurance: 0, goalProgress: 0 }).grade).toBe('F');
+  });
+});
+
+describe('weightedOverall with parts we could not score', () => {
+  const all = (v: number | null) => ({
+    emergencyFund: v, investmentRate: v, debtBurden: v, diversification: v, insurance: v, goalProgress: v,
+  });
+  it('averages only the scored parts — an unknown is not a 50', () => {
+    // Income, expenses, insurance and goals unknown; the two we know are 100.
+    const r = weightedOverall({ ...all(null), debtBurden: 100, diversification: 100 });
+    expect(r.overall).toBe(100);
+    expect(r.scoredWeight).toBeCloseTo(0.4, 6);
+  });
+  it('gives no grade when less than half the weight is scored', () => {
+    expect(weightedOverall({ ...all(null), debtBurden: 100, diversification: 100 }).grade).toBe(UNGRADED);
+    expect(weightedOverall(all(null))).toEqual({ overall: 0, grade: UNGRADED, scoredWeight: 0 });
+  });
+  it('grades once half or more is scored', () => {
+    const r = weightedOverall({ ...all(null), debtBurden: 80, diversification: 80, emergencyFund: 80 });
+    expect(r.scoredWeight).toBeCloseTo(0.6, 6);
+    expect(r).toMatchObject({ overall: 80, grade: 'B' });
   });
 });

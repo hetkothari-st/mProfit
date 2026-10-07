@@ -21,6 +21,7 @@ import {
 } from '@/api/tax.api';
 import { useReportSubject } from '@/components/reports/useReportSubject';
 
+import { signTone } from '@/lib/signTone';
 type Tab =
   | 'summary'
   | 'schedule-112a'
@@ -104,15 +105,6 @@ function effectiveRate(section: { taxable: string; tax: string }, statutoryPct: 
     return `${toDecimal(section.tax).dividedBy(taxable).times(100).toDecimalPlaces(2).toString()}%`;
   } catch {
     return '—';
-  }
-}
-
-function isNonNegativeMoney(s: string | number | null | undefined): boolean {
-  if (s == null || s === '') return true;
-  try {
-    return !toDecimal(s).isNegative();
-  } catch {
-    return true;
   }
 }
 
@@ -430,7 +422,7 @@ function SummaryView({
             <div
               className={cn(
                 'text-xl sm:text-2xl font-semibold break-words',
-                isNonNegativeMoney(data.totalRealisedGain) ? 'text-positive' : 'text-negative',
+                signTone(data.totalRealisedGain),
               )}
             >
               ₹{fmt(data.totalRealisedGain)}
@@ -487,7 +479,7 @@ function SummaryView({
               <tr className="border-b">
                 <td data-label="Section" className="p-2 font-medium">Sec. 111A</td>
                 <td data-label="Description" className="p-2">STCG on listed equity (STT paid)</td>
-                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.section111A_stcgEquity.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Gain" className={cn('p-2 text-right', signTone(cg.section111A_stcgEquity.gain))}>
                   ₹{fmt(cg.section111A_stcgEquity.gain)}
                 </td>
                 <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section111A_stcgEquity.taxable)}</td>
@@ -499,7 +491,7 @@ function SummaryView({
                 <td data-label="Description" className="p-2">
                   LTCG on listed equity (exemption used ₹{fmt(cg.section112A_ltcgEquity.exemption, 0)} of ₹{fmt(data.rates.ltcgEquityExemption, 0)})
                 </td>
-                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.section112A_ltcgEquity.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Gain" className={cn('p-2 text-right', signTone(cg.section112A_ltcgEquity.gain))}>
                   ₹{fmt(cg.section112A_ltcgEquity.gain)}
                 </td>
                 <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section112A_ltcgEquity.taxable)}</td>
@@ -509,7 +501,7 @@ function SummaryView({
               <tr className="border-b">
                 <td data-label="Section" className="p-2 font-medium">Sec. 112</td>
                 <td data-label="Description" className="p-2">LTCG on other assets (with / without indexation)</td>
-                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.section112_ltcgOther.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Gain" className={cn('p-2 text-right', signTone(cg.section112_ltcgOther.gain))}>
                   ₹{fmt(cg.section112_ltcgOther.gain)}
                 </td>
                 <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.section112_ltcgOther.taxable)}</td>
@@ -519,7 +511,7 @@ function SummaryView({
               <tr className="border-b">
                 <td data-label="Section" className="p-2 font-medium">Slab</td>
                 <td data-label="Description" className="p-2">STCG on non-equity (debt, bonds, gold, etc.)</td>
-                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.stcgOther.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Gain" className={cn('p-2 text-right', signTone(cg.stcgOther.gain))}>
                   ₹{fmt(cg.stcgOther.gain)}
                 </td>
                 <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.stcgOther.taxable)}</td>
@@ -529,7 +521,7 @@ function SummaryView({
               <tr className="border-b">
                 <td data-label="Section" className="p-2 font-medium">Sec. 43(5)</td>
                 <td data-label="Description" className="p-2">Intraday speculative business income</td>
-                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.intradaySpeculative.gain) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Gain" className={cn('p-2 text-right', signTone(cg.intradaySpeculative.gain))}>
                   ₹{fmt(cg.intradaySpeculative.gain)}
                 </td>
                 <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.intradaySpeculative.taxable)}</td>
@@ -540,7 +532,7 @@ function SummaryView({
                 <tr className="border-b">
                   <td data-label="Section" className="p-2 font-medium">Sec. 115BBH</td>
                   <td data-label="Description" className="p-2">Virtual digital assets (losses cannot be set off)</td>
-                  <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(cg.virtualDigitalAssets.gain) ? 'text-positive' : 'text-negative')}>
+                  <td data-label="Gain" className={cn('p-2 text-right', signTone(cg.virtualDigitalAssets.gain))}>
                     ₹{fmt(cg.virtualDigitalAssets.gain)}
                   </td>
                   <td data-label="Taxable" className="p-2 text-right">₹{fmt(cg.virtualDigitalAssets.taxable)}</td>
@@ -553,7 +545,7 @@ function SummaryView({
                 <td data-label="Description" className="p-2">
                   F&O non-speculative {data.fnoBusinessIncome.auditApplicable && <span className="text-xs text-amber-600 ml-1">· Sec. 44AB audit</span>}
                 </td>
-                <td data-label="Gain" className={cn('p-2 text-right', isNonNegativeMoney(data.fnoBusinessIncome.netPnl) ? 'text-positive' : 'text-negative')}>
+                <td data-label="Gain" className={cn('p-2 text-right', signTone(data.fnoBusinessIncome.netPnl))}>
                   ₹{fmt(data.fnoBusinessIncome.netPnl)}
                 </td>
                 <td data-label="Taxable" className="p-2 text-right">₹{fmt(data.fnoBusinessIncome.netPnl)}</td>
@@ -732,7 +724,7 @@ function GainsView({
                       data-label="Gain/Loss"
                       className={cn(
                         'p-2 text-right',
-                        isNonNegativeMoney(r.gainLoss) ? 'text-positive' : 'text-negative',
+                        signTone(r.gainLoss),
                       )}
                     >
                       {fmt(r.gainLoss)}
@@ -790,7 +782,7 @@ function Schedule43View({ data, loading }: { data: Schedule43Report | undefined;
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Net P&L</div>
-              <div className={cn('font-medium', isNonNegativeMoney(ns.netPnl) ? 'text-positive' : 'text-negative')}>
+              <div className={cn('font-medium', signTone(ns.netPnl))}>
                 ₹{fmt(ns.netPnl)}
               </div>
             </div>
@@ -843,7 +835,7 @@ function Schedule43View({ data, loading }: { data: Schedule43Report | undefined;
                     <td data-label="Strike" className="p-2">{r.strikePrice ?? '—'}</td>
                     <td data-label="Expiry" className="p-2">{r.expiryDate.slice(0, 10)}</td>
                     <td data-label="Side" className="p-2 text-xs">{r.side}</td>
-                    <td data-label="P&L" className={cn('p-2 text-right', isNonNegativeMoney(r.realizedPnl) ? 'text-positive' : 'text-negative')}>
+                    <td data-label="P&L" className={cn('p-2 text-right', signTone(r.realizedPnl))}>
                       {fmt(r.realizedPnl)}
                     </td>
                     <td data-label="Turnover" className="p-2 text-right">{fmt(r.turnover)}</td>
@@ -991,7 +983,7 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
                       data-label="P&L"
                       className={cn(
                         'p-2 text-right',
-                        isNonNegativeMoney(r.unrealisedPnL) ? 'text-positive' : 'text-negative',
+                        signTone(r.unrealisedPnL),
                       )}
                     >
                       {fmt(r.unrealisedPnL)}
@@ -1136,9 +1128,7 @@ function GrandfatheringView({
             <div
               className={cn(
                 'text-2xl font-semibold',
-                isNonNegativeMoney(data.summary.totalUncorrectedGain)
-                  ? 'text-positive'
-                  : 'text-negative',
+                signTone(data.summary.totalUncorrectedGain),
               )}
             >
               ₹{fmt(data.summary.totalUncorrectedGain)}
@@ -1154,9 +1144,7 @@ function GrandfatheringView({
             <div
               className={cn(
                 'text-2xl font-semibold',
-                isNonNegativeMoney(data.summary.totalCorrectedGain)
-                  ? 'text-positive'
-                  : 'text-negative',
+                signTone(data.summary.totalCorrectedGain),
               )}
             >
               ₹{fmt(data.summary.totalCorrectedGain)}
@@ -1314,9 +1302,7 @@ function GrandfatheringView({
                       className={cn(
                         'p-2 text-right',
                         r.correctedGain
-                          ? isNonNegativeMoney(r.correctedGain)
-                            ? 'text-positive'
-                            : 'text-negative'
+                          ? signTone(r.correctedGain)
                           : '',
                       )}
                     >

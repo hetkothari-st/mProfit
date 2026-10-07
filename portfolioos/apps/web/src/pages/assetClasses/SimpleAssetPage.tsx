@@ -24,6 +24,7 @@ import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialo
 import type { FormDialogProps } from './FDFormDialog';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 
+import { signTone } from '@/lib/signTone';
 interface FormOption {
   label: string;
   assetClass: AssetClass;
@@ -264,7 +265,7 @@ export function SimpleAssetPage({
             {
               label: 'Unrealised P&L',
               value: `${totalPnL.gte(0) ? '+' : ''}${formatINR(totalPnL.toString())}${pnlPct != null ? ` (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : ''}`,
-              className: totalPnL.gte(0) ? 'text-positive' : 'text-negative',
+              className: signTone(totalPnL.toString()),
               extra: null,
             },
           ].map((m) => (
@@ -554,7 +555,7 @@ function HoldingsSection({
                   </td>
                   <td data-label="P&L" className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
                     {pnl ? (
-                      <span className={pnl.gte(0) ? 'text-positive' : 'text-negative'}>
+                      <span className={signTone(pnl.toString())}>
                         {pnl.gte(0) ? '+' : ''}
                         {formatINR(pnl.toString())}
                       </span>

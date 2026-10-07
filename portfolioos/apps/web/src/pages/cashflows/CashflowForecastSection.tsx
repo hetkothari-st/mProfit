@@ -13,6 +13,7 @@ import { formatINR, toDecimal } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cashflowsApi, type ForecastEvent } from '@/api/cashflows.api';
 
+import { signOf } from '@/lib/signTone';
 const SOURCE_LABEL: Record<ForecastEvent['source'], string> = {
   LOAN_EMI: 'Loan EMI',
   RENT_DUE: 'Rent due',
@@ -67,19 +68,19 @@ export function CashflowForecastSection() {
           <Tile
             label="Expected inflows"
             value={formatINR(data.summary.totalInflow)}
-            tone="positive"
+            tone={signOf(data.summary.totalInflow) === 0 ? 'neutral' : 'positive'}
             icon={<ArrowDownLeft className="h-4 w-4" />}
           />
           <Tile
             label="Expected outflows"
             value={formatINR(data.summary.totalOutflow)}
-            tone="negative"
+            tone={signOf(data.summary.totalOutflow) === 0 ? 'neutral' : 'negative'}
             icon={<ArrowUpRight className="h-4 w-4" />}
           />
           <Tile
             label="Net"
             value={formatINR(data.summary.netCashflow)}
-            tone={toDecimal(data.summary.netCashflow).greaterThanOrEqualTo(0) ? 'positive' : 'negative'}
+            tone={(['negative', 'neutral', 'positive'] as const)[signOf(data.summary.netCashflow) + 1]!}
           />
         </div>
 

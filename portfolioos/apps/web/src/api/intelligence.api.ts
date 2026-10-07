@@ -2,10 +2,15 @@ import { api } from './client';
 import type { ApiResponse } from '@everypaisa/shared';
 
 export interface HealthSubScore {
-  score: number;
+  /** null: not enough data to score this part (left out of the overall). */
+  score: number | null;
   insight: string;
-  action: string;
+  /** null: nothing to fix. */
+  action: string | null;
 }
+
+/** The grade the API returns when too little could be scored to grade. */
+export const UNGRADED = '—';
 
 export interface HealthScoreResult {
   overallScore: number;

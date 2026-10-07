@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { cashflowsApi, type CashFlowDTO } from '@/api/cashflows.api';
 import { CashflowForecastSection } from './CashflowForecastSection';
 
+import { flowTone } from '@/lib/signTone';
 type Tab = 'all' | 'INFLOW' | 'OUTFLOW';
 
 const PAGE_SIZE = 50;
@@ -76,7 +77,7 @@ export function CashFlowsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <div className="text-xl font-semibold text-positive tabular-nums">
+              <div className={`text-xl font-semibold tabular-nums ${flowTone(totalInflow.toString(), 'in')}`}>
                 {formatINR(totalInflow.toString())}
               </div>
             </CardContent>
@@ -88,7 +89,7 @@ export function CashFlowsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <div className="text-xl font-semibold text-negative tabular-nums">
+              <div className={`text-xl font-semibold tabular-nums ${flowTone(totalOutflow.toString(), 'out')}`}>
                 {formatINR(totalOutflow.toString())}
               </div>
             </CardContent>

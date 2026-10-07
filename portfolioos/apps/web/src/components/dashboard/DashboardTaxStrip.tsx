@@ -9,6 +9,7 @@ import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { cn } from '@/lib/cn';
 
+import { signTone } from '@/lib/signTone';
 // Derives the current Indian financial year as "YYYY-YY"
 function currentFy(): string {
   const now = new Date();
@@ -40,7 +41,6 @@ export function DashboardTaxStrip() {
   // Hide strip entirely when there are no realised gains — nothing useful to show
   if (totalGain.isZero() && totalTax.isZero()) return null;
 
-  const isGainPositive = !totalGain.isNegative();
   const isTaxPositive = totalTax.greaterThan(0);
 
   // Format as Indian lakhs/crores
@@ -108,7 +108,7 @@ export function DashboardTaxStrip() {
         <span className="flex shrink-0 items-center gap-1.5">
           <span className="text-muted-foreground">Realised gain</span>
           <span className={cn('font-mono tabular-nums font-medium',
-            isGainPositive ? 'text-positive' : 'text-negative'
+            signTone(totalGain.toString())
           )}>
             {fmtINR(totalGain)}
           </span>

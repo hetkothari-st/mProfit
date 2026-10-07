@@ -21,6 +21,7 @@ import { computeSummary } from '../services/realEstate.service.js';
 import { buildAdvisorFacts } from '../services/advisor/advisorFacts.builder.js';
 import { listRecommendations } from '../services/advisor/advisorRecommendations.service.js';
 import { computeHealthScore } from '../services/healthScore.service.js';
+import { UNGRADED } from '../services/healthScoreMath.js';
 import { activeMonthlyIncomeTotal } from '../services/income.service.js';
 import { listPolicies } from '../services/insurance.service.js';
 import type { AdvisorAssetBucketValue, AdvisorFacts } from '../services/advisor/types.js';
@@ -236,7 +237,7 @@ export function serializeUserFacts(input: UserFactsInput): string {
     lines.push(`Insurance: ${NOT_ON_FILE}`);
   }
   lines.push(
-    `Financial health score: ${input.healthScore ? `${input.healthScore.overallScore}/100 (${input.healthScore.grade})` : NOT_ON_FILE}`,
+    `Financial health score: ${!input.healthScore ? NOT_ON_FILE : input.healthScore.grade === UNGRADED ? 'not graded yet (too little data: income, expenses or goals missing)' : `${input.healthScore.overallScore}/100 (${input.healthScore.grade})`}`,
   );
   lines.push(`Open adviser recommendations: ${known(input.openRecommendations) ? input.openRecommendations : NOT_ON_FILE}`);
   return lines.join('\n');

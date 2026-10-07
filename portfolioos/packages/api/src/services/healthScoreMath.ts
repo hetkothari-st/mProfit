@@ -153,15 +153,34 @@ const WEIGHTS: SubScores = {
   diversification: 0.2, insurance: 0.1, goalProgress: 0.1,
 };
 
-export function weightedOverall(subScores: SubScores): { overall: number; grade: string } {
-  const overall = Math.round(
-    subScores.emergencyFund * WEIGHTS.emergencyFund +
-    subScores.investmentRate * WEIGHTS.investmentRate +
-    subScores.debtBurden * WEIGHTS.debtBurden +
-    subScores.diversification * WEIGHTS.diversification +
-    subScores.insurance * WEIGHTS.insurance +
-    subScores.goalProgress * WEIGHTS.goalProgress,
-  );
+/** Below this share of the total weight scored, no grade is given. */
+export const MIN_GRADED_WEIGHT = 0.5;
+
+/** Shown as the grade when too little could be scored to give one. */
+export const UNGRADED = '—';
+
+/**
+ * Weighted average of the parts that could be scored. A part we have no data
+ * for is `null` and leaves the average — it is not counted as a middling 50,
+ * which made an empty account look like a B. When less than half the weight
+ * could be scored there is no grade at all.
+ */
+export function weightedOverall(subScores: { [K in keyof SubScores]: number | null }): {
+  overall: number;
+  grade: string;
+  scoredWeight: number;
+} {
+  let weight = 0;
+  let sum = 0;
+  for (const key of Object.keys(WEIGHTS) as Array<keyof SubScores>) {
+    const score = subScores[key];
+    if (score == null) continue;
+    weight += WEIGHTS[key];
+    sum += score * WEIGHTS[key];
+  }
+  const scoredWeight = Math.round(weight * 100) / 100;
+  const overall = weight > 0 ? Math.round(sum / weight) : 0;
+  if (scoredWeight < MIN_GRADED_WEIGHT) return { overall, grade: UNGRADED, scoredWeight };
   const grade = overall >= 85 ? 'A' : overall >= 70 ? 'B' : overall >= 55 ? 'C' : overall >= 40 ? 'D' : 'F';
-  return { overall, grade };
+  return { overall, grade, scoredWeight };
 }

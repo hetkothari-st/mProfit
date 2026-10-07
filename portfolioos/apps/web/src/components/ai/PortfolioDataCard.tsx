@@ -1,6 +1,7 @@
 import { Briefcase, Target, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
 import type { AiCard } from '@/api/aiAssistant.api';
 
+import { signTone } from '@/lib/signTone';
 /**
  * Inline visual card rendered under an assistant message. Claude
  * emits at most one card per response; the frontend decides how to
@@ -60,11 +61,11 @@ function HoldingCard({ data }: { data: Record<string, unknown> }) {
         </div>
         <div className="col-span-2 flex items-center gap-1.5">
           {positive ? (
-            <TrendingUp className="h-3.5 w-3.5 text-positive" strokeWidth={2} />
+            <TrendingUp className={`h-3.5 w-3.5 ${signTone(gainAbs)}`} strokeWidth={2} />
           ) : (
             <TrendingDown className="h-3.5 w-3.5 text-negative" strokeWidth={2} />
           )}
-          <span className={`text-[12px] tabular-nums ${positive ? 'text-positive' : 'text-negative'}`}>
+          <span className={`text-[12px] tabular-nums ${signTone(gainAbs)}`}>
             {formatMoney(gainAbs)} ({formatPct(data.gainPct)})
           </span>
         </div>
