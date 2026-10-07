@@ -68,6 +68,7 @@ export async function createSettlement(userId: string, input: SettlementInput): 
 
 export async function updateSettlement(userId: string, id: string, input: Omit<SettlementInput, 'groupId'>): Promise<SplitSettlementDto> {
   const existing = await loadOwned(userId, id);
+  if (existing.deletedAt) throw new BadRequestError('Restore the settlement before editing it');
   const data = await build(existing.groupId, input);
   const row = await runInTransaction(async (tx) => {
     const s = await tx.splitSettlement.update({ where: { id }, data });

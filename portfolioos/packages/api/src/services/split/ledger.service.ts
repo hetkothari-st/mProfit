@@ -2,6 +2,7 @@
 import { Decimal } from 'decimal.js';
 import type { SplitActivityDto, SplitBalancesDto, SplitFriendDto, SplitTransferDto } from '@everypaisa/shared';
 import { serializeMoney } from '@everypaisa/shared';
+import { BadRequestError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { getLatestFxRate } from '../../priceFeeds/fx.service.js';
 import { requireMember, loadLedger, listGroups } from './groups.service.js';
@@ -62,13 +63,20 @@ export async function listFriends(userId: string): Promise<SplitFriendDto[]> {
 
 export async function listActivity(userId: string, opts: { groupId?: string; limit?: number; before?: string }): Promise<SplitActivityDto[]> {
   if (opts.groupId) await requireMember(userId, opts.groupId);
+  let beforeDate: Date | undefined;
+  if (opts.before) {
+    beforeDate = new Date(opts.before);
+    if (Number.isNaN(beforeDate.getTime())) throw new BadRequestError('Invalid before cursor');
+  }
+  const rawLimit = Math.trunc(opts.limit ?? 50);
+  const take = Math.min(Math.max(Number.isNaN(rawLimit) ? 50 : rawLimit, 1), 200);
   const rows = await prisma.splitActivity.findMany({
     where: {
       ...(opts.groupId ? { groupId: opts.groupId } : { group: { members: { some: { userId, leftAt: null } } } }),
-      ...(opts.before ? { createdAt: { lt: new Date(opts.before) } } : {}),
+      ...(beforeDate ? { createdAt: { lt: beforeDate } } : {}),
     },
     orderBy: { createdAt: 'desc' },
-    take: Math.min(opts.limit ?? 50, 200),
+    take,
   });
   return rows.map((r) => ({ id: r.id, groupId: r.groupId, actorUserId: r.actorUserId, kind: r.kind, payload: r.payload, createdAt: r.createdAt.toISOString() }));
 }

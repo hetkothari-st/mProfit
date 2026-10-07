@@ -3,7 +3,7 @@ import { createTestScope, type TestScope } from '../helpers/db.js';
 import { seedContact, cleanupSplit } from '../helpers/splitFixtures.js';
 import { createGroup } from '../../src/services/split/groups.service.js';
 import { createExpense } from '../../src/services/split/expenses.service.js';
-import { createSettlement, deleteSettlement } from '../../src/services/split/settlements.service.js';
+import { createSettlement, deleteSettlement, updateSettlement } from '../../src/services/split/settlements.service.js';
 import { groupBalances, listFriends, listActivity } from '../../src/services/split/ledger.service.js';
 
 describe('split settlements and balances', () => {
@@ -76,5 +76,20 @@ describe('split settlements and balances', () => {
     const act = await alice.runAs(() => listActivity(alice.userId, { groupId, limit: 50 }));
     expect(act[0]!.createdAt >= act[act.length - 1]!.createdAt).toBe(true);
     expect(act.map((x) => x.kind)).toContain('EXPENSE_ADDED');
+  });
+
+  it('rejects editing a soft-deleted settlement', async () => {
+    const s = await bob.runAs(() => createSettlement(bob.userId, { groupId, fromMemberId: b, toMemberId: a, amount: '5', method: 'CASH', date: '2026-10-04' }));
+    await bob.runAs(() => deleteSettlement(bob.userId, s.id));
+    await expect(bob.runAs(() => updateSettlement(bob.userId, s.id, { fromMemberId: b, toMemberId: a, amount: '6', method: 'CASH', date: '2026-10-04' }))).rejects.toThrow(/restore/i);
+  });
+
+  it('validates activity before cursor and clamps limit', async () => {
+    await expect(alice.runAs(() => listActivity(alice.userId, { groupId, before: 'garbage' }))).rejects.toThrow(/before/i);
+    const zero = await alice.runAs(() => listActivity(alice.userId, { groupId, limit: 0 }));
+    expect(zero.length).toBeGreaterThanOrEqual(1);
+    const neg = await alice.runAs(() => listActivity(alice.userId, { groupId, limit: -5 }));
+    expect(neg.length).toBeGreaterThanOrEqual(1);
+    expect(neg[0]!.createdAt >= neg[neg.length - 1]!.createdAt).toBe(true);
   });
 });
