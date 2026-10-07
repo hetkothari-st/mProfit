@@ -31,6 +31,7 @@ import {
   fetchOrderNotes,
   isRazorpayConfigured,
 } from './billing/razorpay.service.js';
+import { inviteTokenHash, newInviteToken } from '../lib/inviteToken.js';
 
 // How long a seat's Razorpay order stays valid before the pending invite
 // is considered abandoned. Not actively swept (see PendingFamilyInvite
@@ -561,7 +562,7 @@ export async function inviteMember(
     };
   }
 
-  const token = crypto.randomBytes(INVITE_TOKEN_BYTES).toString('base64url');
+  const { token, hash: tokenHash, enc: tokenEnc } = newInviteToken(INVITE_TOKEN_BYTES);
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000);
 
   const invitation = await prisma.familyInvitation.create({
@@ -575,7 +576,8 @@ export async function inviteMember(
       visibleAssetClasses: input.visibleAssetClasses ?? [],
       visibleCategories: input.visibleCategories ?? [],
       invitedById: callerId,
-      token,
+      tokenHash,
+      tokenEnc,
       expiresAt,
     },
   });
@@ -684,7 +686,7 @@ export async function verifySeatPaymentAndInvite(
     };
   }
 
-  const token = crypto.randomBytes(INVITE_TOKEN_BYTES).toString('base64url');
+  const { token, hash: tokenHash, enc: tokenEnc } = newInviteToken(INVITE_TOKEN_BYTES);
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000);
   // Only a MANAGED seat has no address, and that one returned above.
   const pendingEmail = pending.invitedEmail;
@@ -711,7 +713,8 @@ export async function verifySeatPaymentAndInvite(
         visibleAssetClasses: pending.visibleAssetClasses,
         visibleCategories: pending.visibleCategories,
         invitedById: pending.createdById,
-        token,
+        tokenHash,
+        tokenEnc,
         expiresAt,
       },
     });
@@ -1344,7 +1347,7 @@ export async function peekInvitation(token: string) {
   // what the accept page must render.
   const inv = await runAsSystem(() =>
     prisma.familyInvitation.findUnique({
-      where: { token },
+      where: { tokenHash: inviteTokenHash(token) },
       include: {
         family: { select: { name: true } },
         invitedBy: { select: { name: true, email: true } },
@@ -1390,7 +1393,7 @@ export async function acceptInvitation(callerId: string, token: string) {
   // still run, and both still refuse.
   const membership = await runAsSystem(() =>
     runInTransaction(async (tx) => {
-      const inv = await tx.familyInvitation.findUnique({ where: { token } });
+      const inv = await tx.familyInvitation.findUnique({ where: { tokenHash: inviteTokenHash(token) } });
       if (!inv) throw new NotFoundError('Invitation not found.');
       if (inv.acceptedAt) throw new BadRequestError('Invitation already accepted.');
       if (inv.expiresAt < new Date()) throw new BadRequestError('Invitation expired.');
@@ -1432,7 +1435,8 @@ export async function acceptInvitation(callerId: string, token: string) {
           });
       await tx.familyInvitation.update({
         where: { id: inv.id },
-        data: { acceptedAt: new Date() },
+        // Used: the link is no longer needed, only the hash that refuses a replay.
+        data: { acceptedAt: new Date(), token: null, tokenEnc: null },
       });
       logger.info(
         { familyId: inv.familyId, userId: callerId },

@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile, access } from 'node:fs/promises';
 import { dirname, extname } from 'node:path';
 import { logger } from './logger.js';
+import { prisma } from './prisma.js';
 import { readBuffer, saveBuffer } from './documentStorage.js';
 
 /** Seal a local file into the encrypted store; returns its blob key. */
@@ -62,4 +63,44 @@ export async function dropLocalFile(blobKey: string | null | undefined, path: st
       logger.warn({ err, path }, '[fileStore] could not remove local copy');
     }
   }
+}
+
+/** Statuses after which a Gmail attachment's plain copy is never needed again. */
+const GMAIL_DOC_DONE = ['NOT_FINANCIAL', 'DUPLICATE', 'IMPORTED', 'PARSE_FAILED', 'REJECTED'] as const;
+
+/**
+ * Gmail attachments saved before the encrypted store, or whose plain copy was
+ * never removed (duplicates skipped classification): seal what is still on
+ * disk and remove the plain copies of finished ones. Idempotent; run
+ * privileged on start.
+ */
+export async function sealLegacyGmailDocs(): Promise<{ sealed: number; dropped: number; failed: number }> {
+  let sealed = 0;
+  let dropped = 0;
+  let failed = 0;
+  const legacy = await prisma.gmailDiscoveredDoc.findMany({
+    where: { blobKey: null },
+    select: { id: true, userId: true, storagePath: true },
+  });
+  for (const doc of legacy) {
+    if (!(await exists(doc.storagePath))) continue; // wiped by a deploy; nothing to keep
+    try {
+      const blobKey = await persistLocalFile(doc.userId, doc.storagePath, 'gmail');
+      await prisma.gmailDiscoveredDoc.update({ where: { id: doc.id }, data: { blobKey } });
+      sealed++;
+    } catch (err) {
+      failed++;
+      logger.warn({ err: err instanceof Error ? err.message : String(err), docId: doc.id }, '[fileStore] could not seal Gmail attachment');
+    }
+  }
+  const finished = await prisma.gmailDiscoveredDoc.findMany({
+    where: { blobKey: { not: null }, status: { in: [...GMAIL_DOC_DONE] } },
+    select: { blobKey: true, storagePath: true },
+  });
+  for (const doc of finished) {
+    if (!(await exists(doc.storagePath))) continue;
+    await dropLocalFile(doc.blobKey, doc.storagePath);
+    dropped++;
+  }
+  return { sealed, dropped, failed };
 }

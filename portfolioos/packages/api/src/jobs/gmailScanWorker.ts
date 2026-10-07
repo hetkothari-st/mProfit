@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
@@ -131,13 +130,10 @@ async function processMessages(scanJobId: string, messageIds: string[]): Promise
       });
       if (dupeDoc) continue;
 
-      const storagePath = await writeBytes(
-        job.userId,
-        msg.header.messageId,
-        att,
-        bytes,
-      );
-      // Durable, encrypted copy; the disk file goes once classified.
+      // Only the encrypted copy is written. `storagePath` is where a plain
+      // copy is put back (ensureLocalFile) while it's being classified or
+      // imported, and removed again after.
+      const storagePath = localPathFor(job.userId, msg.header.messageId, att);
       const blobKey = await persistBytes(job.userId, bytes, 'gmail', extname(att.fileName));
 
       await prisma.gmailDiscoveredDoc.create({
@@ -273,20 +269,16 @@ function sha256(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-async function writeBytes(
+function localPathFor(
   userId: string,
   messageId: string,
   att: { attachmentId: string; fileName: string },
-  bytes: Buffer,
-): Promise<string> {
+): string {
   const ym = new Date().toISOString().slice(0, 7);
   const dir = join(STORAGE_ROOT, 'gmail-imports', userId, ym);
-  await mkdir(dir, { recursive: true });
   const ext = extname(att.fileName) || '.bin';
   const safeMsg = messageId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32);
-  const path = join(dir, `${safeMsg}-${att.attachmentId.slice(0, 12)}${ext}`);
-  await writeFile(path, bytes);
-  return path;
+  return join(dir, `${safeMsg}-${att.attachmentId.slice(0, 12)}${ext}`);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
+import { newInviteToken } from '../../src/lib/inviteToken.js';
 
 /**
  * Emailing a client their invitation.
@@ -50,7 +51,8 @@ async function advisor(label: string): Promise<TestScope> {
 }
 
 async function pendingInvite(advisorId: string, email = 'client@example.com') {
-  const client = await runAsSystem(() =>
+  const { token, hash, enc } = newInviteToken(32);
+  const row = await runAsSystem(() =>
     prisma.client.create({
       data: {
         advisorId,
@@ -58,18 +60,19 @@ async function pendingInvite(advisorId: string, email = 'client@example.com') {
         kind: 'INVITED',
         status: 'PENDING',
         invitedEmail: email,
-        inviteToken: `tok-${Math.random().toString(36).slice(2)}`,
+        inviteTokenHash: hash,
+        inviteTokenEnc: enc,
         inviteExpiresAt: new Date(Date.now() + 14 * 86_400_000),
       },
     }),
   );
   cleanups.push(async () => {
     await runAsSystem(async () => {
-      await prisma.caAuditLog.deleteMany({ where: { clientId: client.id } });
-      await prisma.client.deleteMany({ where: { id: client.id } });
+      await prisma.caAuditLog.deleteMany({ where: { clientId: row.id } });
+      await prisma.client.deleteMany({ where: { id: row.id } });
     });
   });
-  return client;
+  return { ...row, token };
 }
 
 describe('the draft', () => {
@@ -80,7 +83,7 @@ describe('the draft', () => {
     const draft = await runAsUser(ca.userId, () => buildInviteEmail(ca.userId, client.id));
 
     expect(draft.to).toBe('client@example.com');
-    expect(draft.acceptUrl).toContain(`/ca/invitations/${client.inviteToken}/accept`);
+    expect(draft.acceptUrl).toContain(`/ca/invitations/${client.token}/accept`);
     expect(draft.subject).toContain('access to your books');
     expect(draft.message).toContain('Rajesh');
     expect(draft.sendsRemaining).toBe(5);
@@ -159,7 +162,7 @@ describe('the accept link', () => {
 
     const draft = await runAsUser(ca.userId, () => buildInviteEmail(ca.userId, client.id));
     expect(draft.direction).toBe('CLIENT_TO_ADVISOR');
-    expect(draft.acceptUrl).toContain(`/professional-invitations/${client.inviteToken}`);
+    expect(draft.acceptUrl).toContain(`/professional-invitations/${client.token}`);
     expect(draft.acceptUrl).not.toContain('/ca/invitations/');
   });
 
@@ -169,7 +172,7 @@ describe('the accept link', () => {
 
     const draft = await runAsUser(ca.userId, () => buildInviteEmail(ca.userId, client.id));
     expect(draft.direction).toBe('ADVISOR_TO_CLIENT');
-    expect(draft.acceptUrl).toContain(`/ca/invitations/${client.inviteToken}/accept`);
+    expect(draft.acceptUrl).toContain(`/ca/invitations/${client.token}/accept`);
   });
 });
 

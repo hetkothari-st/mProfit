@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { dropLocalFile, ensureLocalFile, persistLocalFile } from '../../src/lib/fileStore.js';
+import { dropLocalFile, ensureLocalFile, persistLocalFile, sealLegacyGmailDocs } from '../../src/lib/fileStore.js';
 import { createImportJob, processImportJob } from '../../src/services/imports/import.service.js';
 import { readBuffer } from '../../src/lib/documentStorage.js';
 
@@ -25,6 +25,8 @@ describe('encrypted file store', () => {
   afterAll(async () => {
     await runAsSystem(async () => {
       await prisma.importJob.deleteMany({ where: { userId: scope.userId } });
+      await prisma.gmailScanJob.deleteMany({ where: { userId: scope.userId } });
+      await prisma.mailboxAccount.deleteMany({ where: { userId: scope.userId } });
       await prisma.documentBlob.deleteMany({ where: { userId: scope.userId } });
       await prisma.userDataKey.deleteMany({ where: { userId: scope.userId } });
     });
@@ -66,5 +68,52 @@ describe('encrypted file store', () => {
     expect(after.errorMessage ?? '').not.toMatch(/ENOENT|no such file/i);
     expect(fs.existsSync(p)).toBe(false);
     expect((await readBuffer(scope.userId, job.blobKey!)).toString('utf8')).toBe(CSV);
+  });
+  it('Gmail attachments: old ones get an encrypted copy, finished ones lose their plain copy', async () => {
+    const legacyPath = tmp();
+    const finishedPath = tmp();
+    fs.writeFileSync(legacyPath, CSV);
+    fs.writeFileSync(finishedPath, CSV);
+    const finishedKey = await persistLocalFile(scope.userId, finishedPath, 'gmail');
+    const ids = await runAsSystem(async () => {
+      const mailbox = await prisma.mailboxAccount.create({ data: { userId: scope.userId } as never });
+      const scan = await prisma.gmailScanJob.create({
+        data: { userId: scope.userId, mailboxId: mailbox.id, lookbackFrom: new Date(0), lookbackTo: new Date() },
+      });
+      const base = {
+        userId: scope.userId,
+        scanJobId: scan.id,
+        gmailAttachmentId: 'att',
+        fromAddress: 'bank@example.com',
+        subject: 'Statement',
+        receivedAt: new Date(),
+        fileName: 'statement.csv',
+        fileSize: CSV.length,
+        mimeType: 'text/csv',
+      };
+      const legacy = await prisma.gmailDiscoveredDoc.create({
+        data: { ...base, gmailMessageId: 'm1', contentHash: randomUUID(), storagePath: legacyPath, status: 'PENDING_APPROVAL' },
+      });
+      const finished = await prisma.gmailDiscoveredDoc.create({
+        data: {
+          ...base,
+          gmailMessageId: 'm2',
+          contentHash: randomUUID(),
+          storagePath: finishedPath,
+          blobKey: finishedKey,
+          status: 'DUPLICATE',
+        },
+      });
+      return { legacy: legacy.id, finished: finished.id };
+    });
+
+    await runAsSystem(() => sealLegacyGmailDocs());
+
+    const legacy = await runAsSystem(() => prisma.gmailDiscoveredDoc.findUniqueOrThrow({ where: { id: ids.legacy } }));
+    expect(legacy.blobKey).toBeTruthy();
+    expect((await readBuffer(scope.userId, legacy.blobKey!)).toString('utf8')).toBe(CSV);
+    expect(fs.existsSync(legacyPath)).toBe(true); // still pending: kept until it's dealt with
+    expect(fs.existsSync(finishedPath)).toBe(false);
+    fs.unlinkSync(legacyPath);
   });
 });

@@ -4,6 +4,8 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { PLAN_TIER_ORDER, planPriceFor } from '@everypaisa/shared';
 import { authenticate, requireRole } from '../middleware/authenticate.js';
+import { requireSecondFactor } from '../lib/professionalMfa.js';
+import { sessionHasSecondFactor } from '../lib/requestContext.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { ok } from '../lib/response.js';
 import { env } from '../config/env.js';
@@ -111,7 +113,8 @@ billingRouter.post(
     // Re-issue the session: `plan` is baked into the access token and read
     // back by `authenticate`, so returning only the user would leave the
     // caller's requests on their pre-upgrade tier until the token expired.
-    ok(res, await issueSession(updated));
+    // Same session, new plan: keep its two-factor mark.
+    ok(res, await issueSession(updated, { mfa: sessionHasSecondFactor() }));
   }),
 );
 
@@ -130,6 +133,8 @@ const devSetPlanSchema = z.object({
 billingRouter.post(
   '/dev-set-plan',
   requireRole('ADMIN'),
+  // Admin powers need two-factor sign-in, used for this session.
+  requireSecondFactor('admin tools'),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw new UnauthorizedError();
     const { tier } = devSetPlanSchema.parse(req.body);
@@ -137,6 +142,7 @@ billingRouter.post(
       where: { id: req.user.id },
       data: { plan: tier, planExpiresAt: null },
     });
-    ok(res, await issueSession(updated));
+    // Same session, new plan: keep its two-factor mark.
+    ok(res, await issueSession(updated, { mfa: sessionHasSecondFactor() }));
   }),
 );

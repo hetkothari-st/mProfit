@@ -2,6 +2,8 @@ import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { backfillPiiAtRest } from '../services/piiAtRest.service.js';
 import { sealLegacyBlobs } from '../lib/documentStorage.js';
+import { sealLegacyInviteTokens } from '../lib/inviteToken.js';
+import { sealLegacyGmailDocs } from '../lib/fileStore.js';
 
 /**
  * Encrypt PAN and vehicle registration numbers still stored as plain text
@@ -12,6 +14,25 @@ import { sealLegacyBlobs } from '../lib/documentStorage.js';
  */
 export function startPiiAtRestJobs(): void {
   if (process.env.ENABLE_PII_BACKFILL === 'false') return;
+  // Gmail attachments: encrypted copy for old rows, no lingering plain copies.
+  runAsSystem(() => sealLegacyGmailDocs()).then(
+    (result) => {
+      if (result.sealed + result.dropped + result.failed > 0) logger.info(result, '[pii] sealed stored Gmail attachments');
+    },
+    (err: unknown) => {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, '[pii] Gmail attachment sealing failed');
+    },
+  );
+  // Invitation tokens are encrypted under SECRETS_KEY, so this one does not
+  // wait for APP_ENCRYPTION_KEY.
+  runAsSystem(() => sealLegacyInviteTokens()).then(
+    (result) => {
+      if (result.clients + result.familyInvitations > 0) logger.info(result, '[pii] sealed stored invitation tokens');
+    },
+    (err: unknown) => {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, '[pii] invitation token sealing failed');
+    },
+  );
   if (!process.env.APP_ENCRYPTION_KEY) {
     logger.warn('[pii] APP_ENCRYPTION_KEY is not set — PAN and registration numbers stay unencrypted until it is');
     return;

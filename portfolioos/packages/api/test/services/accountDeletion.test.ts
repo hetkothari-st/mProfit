@@ -121,7 +121,7 @@ async function seedEverything(userId: string) {
         familyId: family.id,
         invitedEmail: 'x@example.com',
         invitedById: userId,
-        token: `tok-${crypto.randomUUID()}`,
+        tokenHash: `tok-${crypto.randomUUID()}`,
         expiresAt: new Date(Date.now() + 86_400_000),
       },
     });
