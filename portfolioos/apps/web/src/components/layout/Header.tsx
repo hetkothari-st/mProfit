@@ -12,6 +12,7 @@ import { FamilyScopeSwitcher } from '@/components/family/FamilyScopeSwitcher';
 import { managedProfilesApi } from '@/api/managedProfiles.api';
 import { useActingAsStore } from '@/stores/actingAs.store';
 import { useManageProfile } from '@/hooks/useManageProfile';
+import { DesktopDownloadButton } from './DesktopDownloadButton';
 
 export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -127,6 +128,9 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
             <span className="hidden sm:inline">Upgrade</span>
           </Link>
         )}
+
+        {/* Desktop app download (computers only, once a release exists) */}
+        <DesktopDownloadButton />
 
         {/* Family / HOF "viewing as" switcher */}
         <FamilyScopeSwitcher />
