@@ -155,7 +155,9 @@ describe('MF analytics reference data is not user-scoped', () => {
     // the newest tables — which is exactly how the USER_SCOPED_MODELS gaps in
     // CONTEXT.md §5 accumulated.
     const schema = readFileSync(schemaPath, 'utf8');
-    const declared = [...schema.matchAll(/^model\s+(Mf[A-Za-z0-9_]*)\s*\{/gm)].map((m) => m[1]);
+    // `Mf` + a capital: the MF analytics models. `MfaChallenge` (multi-factor
+    // auth) shares the prefix but is not mutual-fund data.
+    const declared = [...schema.matchAll(/^model\s+(Mf[A-Z][A-Za-z0-9_]*)\s*\{/gm)].map((m) => m[1]);
 
     const reference = new Set<string>(MF_REFERENCE_MODELS);
     const unclassified = declared.filter(
