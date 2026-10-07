@@ -32,6 +32,7 @@ import { hashPassword } from '../password.service.js';
 import { recordCaAudit } from './caAudit.service.js';
 import type { Request } from 'express';
 import { panColumns } from '../piiAtRest.service.js';
+import { assertProfessionalSecondFactor } from '../../lib/professionalMfa.js';
 
 /** Invitations expire; an indefinitely open grant link is a standing risk. */
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -124,6 +125,7 @@ export function assertCaMayEdit(scope: CaScope, section: CaEditSection): void {
  * uses for a forged family header.
  */
 export async function getCaScope(callerId: string, clientId: string): Promise<CaScope> {
+  await assertProfessionalSecondFactor(callerId);
   const client = await prisma.client.findUnique({
     where: { id: clientId },
     include: {

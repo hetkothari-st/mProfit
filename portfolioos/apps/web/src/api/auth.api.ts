@@ -37,6 +37,8 @@ export interface TwoFactorStatus {
   enabled: boolean;
   enabledAt: string | null;
   backupCodesRemaining: number;
+  /** This session was signed in with a code (what the CA workspace needs). */
+  sessionVerified: boolean;
 }
 
 export const authApi = {
@@ -97,8 +99,9 @@ export const authApi = {
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
-  async twoFactorEnable(code: string): Promise<{ backupCodes: string[] }> {
-    const { data } = await api.post<ApiResponse<{ backupCodes: string[] }>>('/api/auth/me/2fa/enable', { code });
+  /** Also returns a fresh session marked as signed in with the second factor. */
+  async twoFactorEnable(code: string): Promise<{ backupCodes: string[]; session?: AuthResult }> {
+    const { data } = await api.post<ApiResponse<{ backupCodes: string[]; session?: AuthResult }>>('/api/auth/me/2fa/enable', { code });
     if (!data.success) throw new Error(data.error);
     return data.data;
   },

@@ -8,6 +8,8 @@ export interface AccessPayload {
   email: string;
   role: string;
   plan: string;
+  /** Signed in with a second factor (two-factor sign-in). */
+  mfa?: boolean;
   type: 'access';
 }
 

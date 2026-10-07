@@ -10,6 +10,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { ok, created, noContent } from '../lib/response.js';
 import { BadRequestError } from '../lib/errors.js';
+import { assertProfessionalSecondFactor } from '../lib/professionalMfa.js';
 import {
   createManagedClient,
   inviteClient,
@@ -58,7 +59,12 @@ const inviteSchema = z.object({
 });
 
 export async function listClientsHandler(req: Request, res: Response) {
-  ok(res, await listClients(req.user!.id));
+  const clients = await listClients(req.user!.id);
+  // Someone with no clients gets the empty list without the gate, so the
+  // sidebar can ask everyone. Anyone with clients needs a verified session to
+  // see them — and the 403 tells the sidebar the workspace exists.
+  if (clients.length > 0) await assertProfessionalSecondFactor(req.actor?.id ?? req.user!.id);
+  ok(res, clients);
 }
 
 export async function createManagedClientHandler(req: Request, res: Response) {

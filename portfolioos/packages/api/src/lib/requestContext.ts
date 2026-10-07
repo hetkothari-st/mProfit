@@ -27,6 +27,8 @@ export interface RequestContext {
    * atomic were not.
    */
   inTransaction?: boolean;
+  /** The request's session was signed in with a second factor. */
+  mfa?: boolean;
 }
 
 /**
@@ -70,8 +72,8 @@ export function isSystemContext(): boolean {
  * — is scheduled, so `getCurrentUserId()` / `isSystemContext()` see nothing.
  * The `await` here keeps the store active across the microtask boundary.
  */
-export function runAsUser<T>(userId: string, fn: () => Promise<T>): Promise<T> {
-  return userContext.run({ userId }, async () => await fn());
+export function runAsUser<T>(userId: string, fn: () => Promise<T>, opts: { mfa?: boolean } = {}): Promise<T> {
+  return userContext.run({ userId, ...(opts.mfa ? { mfa: true } : {}) }, async () => await fn());
 }
 
 /**
@@ -90,8 +92,13 @@ export function runAsSystem<T>(fn: () => Promise<T>): Promise<T> {
  * in request-scoped code — prefer `userContext.run` so context cannot leak
  * between requests on a shared event loop.
  */
-export function enterUserContext(userId: string): void {
-  userContext.enterWith({ userId });
+export function enterUserContext(userId: string, opts: { mfa?: boolean } = {}): void {
+  userContext.enterWith({ userId, ...(opts.mfa ? { mfa: true } : {}) });
+}
+
+/** True when the current request's session was signed in with a second factor. */
+export function sessionHasSecondFactor(): boolean {
+  return userContext.getStore()?.mfa === true;
 }
 
 export function enterSystemContext(): void {

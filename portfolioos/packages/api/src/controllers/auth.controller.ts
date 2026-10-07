@@ -28,7 +28,7 @@ import { writeAuditLog } from '../lib/audit.js';
 import { readPan } from '../services/piiAtRest.service.js';
 import { notifyIfLoginBurst, notifyIfNewDevice } from '../services/securityAlerts.service.js';
 import * as twoFactor from '../services/twoFactor.service.js';
-import { completeTwoFactorSignIn } from '../services/auth.service.js';
+import { completeTwoFactorSignIn, issueSession } from '../services/auth.service.js';
 
 export const registerSchema = z.object({
   email: z.string().email().toLowerCase(),
@@ -315,7 +315,11 @@ export async function twoFactorSetupHandler(req: Request, res: Response) {
 
 export async function twoFactorEnableHandler(req: Request, res: Response) {
   const { code } = codeSchema.parse(req.body);
-  ok(res, await twoFactor.enableTwoFactor(req.user!.id, code, req));
+  const result = await twoFactor.enableTwoFactor(req.user!.id, code, req);
+  // The code just proved the second factor: hand back a session marked as
+  // signed in with it, so the professional workspace opens without a re-login.
+  const user = await getCurrentUserRecord(req.user!.id);
+  ok(res, { ...result, session: await issueSession(user, { mfa: true }) });
 }
 
 export async function twoFactorDisableHandler(req: Request, res: Response) {

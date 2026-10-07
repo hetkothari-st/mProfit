@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { authApi } from '@/api/auth.api';
+import { isSessionRemembered, useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/api/client';
 
 type Mode = 'setup' | 'codes' | 'disable' | 'regenerate' | null;
@@ -84,6 +85,7 @@ function BackupCodes({ codes }: { codes: string[] }) {
  */
 export function TwoFactorSection() {
   const qc = useQueryClient();
+  const setSession = useAuthStore((s) => s.setSession);
   const status = useQuery({ queryKey: ['two-factor-status'], queryFn: authApi.twoFactorStatus });
   const [mode, setMode] = useState<Mode>(null);
   const [code, setCode] = useState('');
@@ -117,6 +119,9 @@ export function TwoFactorSection() {
   const enable = useMutation({
     mutationFn: () => authApi.twoFactorEnable(code.trim()),
     onSuccess: (r) => {
+      // The code just proved the second factor: switch to the session the
+      // server marked as verified, so the CA workspace opens without re-login.
+      if (r.session) setSession(r.session.user, r.session.tokens, { remember: isSessionRemembered() });
       setBackupCodes(r.backupCodes);
       setMode('codes');
       setCode('');

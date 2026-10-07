@@ -81,12 +81,14 @@ function digestToken(token: string): string {
   return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
 }
 
-async function issueTokens(user: User): Promise<IssueTokensResult> {
+async function issueTokens(user: User, opts: { mfa?: boolean } = {}): Promise<IssueTokensResult> {
+  const mfa = opts.mfa === true;
   const { token: accessToken, expiresAt: accessTokenExpiresAt } = signAccessToken({
     sub: user.id,
     email: user.email,
     role: user.role,
     plan: effectivePlan(user),
+    ...(mfa ? { mfa: true } : {}),
   });
   const refreshToken = generateRefreshToken();
   await prisma.refreshToken.create({
@@ -94,6 +96,7 @@ async function issueTokens(user: User): Promise<IssueTokensResult> {
       tokenHash: digestToken(refreshToken),
       userId: user.id,
       expiresAt: refreshTokenExpiry(),
+      mfa,
     },
   });
   return { accessToken, refreshToken, accessTokenExpiresAt };
@@ -106,8 +109,8 @@ async function issueTokens(user: User): Promise<IssueTokensResult> {
  * DB-only plan change leaves the caller stuck on their old tier until the
  * token expires (see billing's plan switch / payment verification).
  */
-export async function issueSession(user: User) {
-  const tokens = await issueTokens(user);
+export async function issueSession(user: User, opts: { mfa?: boolean } = {}) {
+  const tokens = await issueTokens(user, opts);
   return {
     user: toAuthUser(user),
     tokens: {
@@ -392,7 +395,7 @@ async function challengeSecondFactor(user: User, method: 'password' | 'google', 
 export async function completeTwoFactorSignIn(mfaToken: string, code: string) {
   const { user, restore, via } = await completeChallenge(mfaToken, code);
   await assertNotPendingDeletion(user, restore);
-  return { ...(await issueSession(user)), via };
+  return { ...(await issueSession(user, { mfa: true })), via };
 }
 
 export async function refreshSession(refreshToken: string) {
@@ -423,7 +426,8 @@ export async function refreshSession(refreshToken: string) {
     data: { revokedAt: new Date() },
   });
 
-  return issueSession(stored.user);
+  // A session signed in with a second factor stays one across refreshes.
+  return issueSession(stored.user, { mfa: stored.mfa });
 }
 
 export async function logoutSession(refreshToken: string): Promise<void> {
