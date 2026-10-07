@@ -5145,6 +5145,9 @@ model SplitLabel {
   name        String
   color       String
   expenses    SplitExpenseLabel[]
+
+  @@index([groupId])
+  @@index([ownerUserId])
 }
 
 model SplitExpenseLabel {
@@ -5154,6 +5157,7 @@ model SplitExpenseLabel {
   label     SplitLabel   @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@id([expenseId, labelId])
+  @@index([labelId])
 }
 
 model SplitComment {
