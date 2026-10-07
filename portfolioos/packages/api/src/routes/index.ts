@@ -33,6 +33,7 @@ import { catalogRouter, valuationRouter } from './valuation.routes.js';
 import { documentsRouter } from './documents.routes.js';
 import { loansRouter } from './loans.routes.js';
 import { loansGivenRouter } from './loansGiven.routes.js';
+import { splitRouter } from './split.routes.js';
 import { creditCardsRouter } from './creditCards.routes.js';
 import { bankAccountsRouter } from './bankAccounts.routes.js';
 import { realEstateRouter } from './realEstate.routes.js';
@@ -101,6 +102,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/documents', documentsRouter);
   app.use('/api/loans', loansRouter);
   app.use('/api/loans-given', loansGivenRouter);
+  app.use('/api/split', splitRouter);
   app.use('/api/credit-cards', creditCardsRouter);
   app.use('/api/bank-accounts', bankAccountsRouter);
   app.use('/api/real-estate', realEstateRouter);
