@@ -29,7 +29,7 @@
  * stripped, trailing "mutual fund" removed. Values are every prefix AMFI has
  * been seen to use, longest match wins.
  *
- * Generated 2026-09-21 from 54 AMCs in MutualFundMaster. The scheme counts in the comments are direct-growth schemes, which is the only population the join reads.
+ * Generated 2026-10-07 from 55 AMCs in MutualFundMaster. The scheme counts in the comments are direct-growth schemes, which is the only population the join reads.
  */
 
 /** Brand tokens by `amcKey`. See `amcKey()` in terJoin.ts. */
@@ -38,7 +38,7 @@ export const AMC_BRANDS: Readonly<Record<string, readonly string[]>> = {
   '360 one': ['360 one'],
   // Abakkus Mutual Fund — 4 direct-growth schemes
   'abakkus': ['abakkus'],
-  // Aditya Birla Sun Life Mutual Fund — 87 direct-growth schemes
+  // Aditya Birla Sun Life Mutual Fund — 86 direct-growth schemes
   'aditya birla sun life': ['aditya birla sun', 'aditya birla sun life'],
   // AlphaGrep Mutual Fund — 3 direct-growth schemes
   'alphagrep': ['alphagrep'],
@@ -46,13 +46,13 @@ export const AMC_BRANDS: Readonly<Record<string, readonly string[]>> = {
   'angel one': ['angel one'],
   // ASK MUTUAL FUND — 1 direct-growth scheme
   'ask': ['ask'],
-  // Axis Mutual Fund — 81 direct-growth schemes
+  // Axis Mutual Fund — 80 direct-growth schemes
   'axis': ['axis'],
   // Bajaj Finserv Mutual Fund — 21 direct-growth schemes
   'bajaj finserv': ['bajaj finserv'],
   // Bandhan Mutual Fund — 75 direct-growth schemes
   'bandhan': ['bandhan'],
-  // Bank of India Mutual Fund — 24 direct-growth schemes
+  // Bank of India Mutual Fund — 25 direct-growth schemes
   'bank of india': ['bank of india'],
   // Baroda BNP Paribas Mutual Fund — 47 direct-growth schemes
   'baroda bnp paribas': ['baroda bnp paribas'],
@@ -70,7 +70,7 @@ export const AMC_BRANDS: Readonly<Record<string, readonly string[]>> = {
   'franklin templeton': ['franklin templeton'],
   // Groww Mutual Fund — 37 direct-growth schemes
   'groww': ['groww'],
-  // HDFC Mutual Fund — 89 direct-growth schemes
+  // HDFC Mutual Fund — 90 direct-growth schemes
   'hdfc': ['hdfc'],
   // Helios Mutual Fund — 8 direct-growth schemes
   'helios': ['helios'],
@@ -88,17 +88,19 @@ export const AMC_BRANDS: Readonly<Record<string, readonly string[]>> = {
   'jio blackrock': ['jio blackrock', 'jioblackrock'],
   // JM Financial Mutual Fund — 23 direct-growth schemes
   'jm financial': ['jm', 'jm financial'],
-  // Kotak Mahindra Mutual Fund — 99 direct-growth schemes
+  // Kotak Mahindra Mutual Fund — 100 direct-growth schemes
   'kotak mahindra': ['kotak', 'kotak mahindra'],
+  // Lakshya Mutual Fund — 1 direct-growth scheme
+  'lakshya': ['lakshya'],
   // LIC Mutual Fund — 36 direct-growth schemes
   'lic': ['lic', 'lic mf'],
   // Mahindra Manulife Mutual Fund — 27 direct-growth schemes
   'mahindra manulife': ['mahindra manulife'],
-  // Mirae Asset Mutual Fund — 57 direct-growth schemes
+  // Mirae Asset Mutual Fund — 58 direct-growth schemes
   'mirae asset': ['mirae asset'],
   // Monarch Mutual Fund — 1 direct-growth scheme
   'monarch': ['monarch'],
-  // Motilal Oswal Mutual Fund — 39 direct-growth schemes
+  // Motilal Oswal Mutual Fund — 40 direct-growth schemes
   'motilal oswal': ['motilal oswal'],
   // Navi Mutual Fund — 14 direct-growth schemes
   'navi': ['navi'],
@@ -120,15 +122,15 @@ export const AMC_BRANDS: Readonly<Record<string, readonly string[]>> = {
   'samco': ['samco'],
   // SBI Mutual Fund — 100 direct-growth schemes
   'sbi': ['sbi'],
-  // Shriram Mutual Fund — 10 direct-growth schemes
+  // Shriram Mutual Fund — 11 direct-growth schemes
   'shriram': ['shriram'],
   // Sundaram Mutual Fund — 36 direct-growth schemes
   'sundaram': ['sundaram'],
-  // Tata Mutual Fund — 65 direct-growth schemes
+  // Tata Mutual Fund — 66 direct-growth schemes
   'tata': ['tata'],
   // Taurus Mutual Fund — 8 direct-growth schemes
   'taurus': ['taurus'],
-  // The Wealth Company Mutual Fund — 10 direct-growth schemes
+  // The Wealth Company Mutual Fund — 11 direct-growth schemes
   'the wealth company': ['the wealth company'],
   // Trust Mutual Fund — 12 direct-growth schemes
   'trust': ['trust', 'trustmf'],
@@ -136,7 +138,7 @@ export const AMC_BRANDS: Readonly<Record<string, readonly string[]>> = {
   'unifi': ['unifi'],
   // Union Mutual Fund — 32 direct-growth schemes
   'union': ['union'],
-  // UTI Mutual Fund — 78 direct-growth schemes
+  // UTI Mutual Fund — 79 direct-growth schemes
   'uti': ['uti'],
   // WhiteOak Capital Mutual Fund — 22 direct-growth schemes
   'whiteoak capital': ['whiteoak capital'],
