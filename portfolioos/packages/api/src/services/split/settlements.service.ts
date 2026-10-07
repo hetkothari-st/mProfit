@@ -1,9 +1,10 @@
 import type { SplitSettlementDto } from '@everypaisa/shared';
 import { serializeMoney } from '@everypaisa/shared';
 import type { SplitSettlement } from '@prisma/client';
+import { Decimal } from 'decimal.js';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
-import { requireMember } from './groups.service.js';
+import { requireMember, loadLedger, assertLeftMembersSettled } from './groups.service.js';
 import { writeActivity } from './activity.js';
 import { resolveFxRate } from './fx.js';
 import { toBase } from './allocate.js';
@@ -46,6 +47,14 @@ async function build(groupId: string, input: Omit<SettlementInput, 'groupId'>) {
   };
 }
 
+/** Check the ledger as it would look with settlement `id` removed or replaced. */
+async function assertAfter(groupId: string, id: string, replacement: { fromMemberId: string; toMemberId: string; baseAmount: string } | null): Promise<void> {
+  const l = await loadLedger(groupId);
+  const settlements = l.settlements.filter((s) => s.id !== id);
+  if (replacement) settlements.push({ id, fromMemberId: replacement.fromMemberId, toMemberId: replacement.toMemberId, baseAmount: new Decimal(replacement.baseAmount) });
+  await assertLeftMembersSettled(groupId, { memberIds: l.memberIds, expenses: l.expenses, settlements });
+}
+
 async function loadOwned(userId: string, id: string) {
   const s = await prisma.splitSettlement.findUnique({ where: { id } });
   if (!s) throw new NotFoundError('Settlement not found');
@@ -68,6 +77,7 @@ export async function updateSettlement(userId: string, id: string, input: Omit<S
   const existing = await loadOwned(userId, id);
   if (existing.deletedAt) throw new BadRequestError('Restore the settlement before editing it');
   const data = await build(existing.groupId, input);
+  await assertAfter(existing.groupId, id, data);
   const row = await runInTransaction(async (tx) => {
     const s = await tx.splitSettlement.update({ where: { id }, data });
     await writeActivity(tx, existing.groupId, userId, 'SETTLEMENT_EDITED', { settlementId: id, amount: data.amount });
@@ -79,6 +89,7 @@ export async function updateSettlement(userId: string, id: string, input: Omit<S
 export async function deleteSettlement(userId: string, id: string): Promise<void> {
   const s = await loadOwned(userId, id);
   if (s.deletedAt) return;
+  await assertAfter(s.groupId, id, null);
   await runInTransaction(async (tx) => {
     await tx.splitSettlement.update({ where: { id }, data: { deletedAt: new Date() } });
     await writeActivity(tx, s.groupId, userId, 'SETTLEMENT_DELETED', { settlementId: id });

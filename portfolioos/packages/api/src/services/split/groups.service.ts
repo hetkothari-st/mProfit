@@ -37,26 +37,45 @@ export async function requireMember(userId: string, groupId: string): Promise<{ 
   return { memberId: m.id };
 }
 
+export type Ledger = Awaited<ReturnType<typeof loadLedger>>;
+
+/**
+ * Called with the ledger as it WOULD be after a change. A member who has left
+ * must stay at exactly zero, otherwise their debt/credit would be stranded
+ * with nobody able to settle it.
+ */
+export async function assertLeftMembersSettled(groupId: string, after: Pick<Ledger, 'memberIds' | 'expenses' | 'settlements'>): Promise<void> {
+  const left = await prisma.splitMember.findMany({ where: { groupId, leftAt: { not: null } }, select: { id: true, displayName: true } });
+  if (left.length === 0) return;
+  const nets = memberNets(after.expenses, after.settlements, after.memberIds);
+  for (const m of left) {
+    if (!(nets.get(m.id) ?? new Decimal(0)).isZero()) {
+      throw new ConflictError(`SPLIT_MEMBER_LEFT: re-add ${m.displayName} before changing their past entries`);
+    }
+  }
+}
+
 export async function loadLedger(groupId: string) {
   const [members, expenses, settlements] = await Promise.all([
     prisma.splitMember.findMany({ where: { groupId }, select: { id: true } }),
     prisma.splitExpense.findMany({
       where: { groupId, deletedAt: null },
-      select: { payers: { select: { memberId: true, baseAmount: true } }, shares: { select: { memberId: true, baseAmount: true } } },
+      select: { id: true, payers: { select: { memberId: true, baseAmount: true } }, shares: { select: { memberId: true, baseAmount: true } } },
     }),
     prisma.splitSettlement.findMany({
       where: { groupId, deletedAt: null },
-      select: { fromMemberId: true, toMemberId: true, baseAmount: true },
+      select: { id: true, fromMemberId: true, toMemberId: true, baseAmount: true },
     }),
   ]);
   const d = (v: { toString(): string }) => new Decimal(v.toString());
   return {
     memberIds: members.map((m) => m.id),
-    expenses: expenses.map<LedgerExpense>((e) => ({
+    expenses: expenses.map<LedgerExpense & { id: string }>((e) => ({
+      id: e.id,
       payers: e.payers.map((p) => ({ memberId: p.memberId, baseAmount: d(p.baseAmount) })),
       shares: e.shares.map((s) => ({ memberId: s.memberId, baseAmount: d(s.baseAmount) })),
     })),
-    settlements: settlements.map<LedgerSettlement>((s) => ({ fromMemberId: s.fromMemberId, toMemberId: s.toMemberId, baseAmount: d(s.baseAmount) })),
+    settlements: settlements.map<LedgerSettlement & { id: string }>((s) => ({ id: s.id, fromMemberId: s.fromMemberId, toMemberId: s.toMemberId, baseAmount: d(s.baseAmount) })),
   };
 }
 
@@ -171,10 +190,10 @@ export async function addMember(userId: string, groupId: string, contactId: stri
     where: { groupId, OR: [{ contactId }, ...(data.userId ? [{ userId: data.userId }] : [])] },
   });
   if (existing.some((m) => !m.leftAt)) throw new ConflictError('That person is already in the group');
-  const left = data.userId ? existing.find((m) => m.userId === data.userId && m.leftAt) : undefined;
+  const left = existing.find((m) => m.leftAt && (m.contactId === contactId || (data.userId && m.userId === data.userId)));
   const m = await runInTransaction(async (tx) => {
     const row = left
-      ? await tx.splitMember.update({ where: { id: left.id }, data: { leftAt: null, displayName: data.displayName, contactId: data.contactId } })
+      ? await tx.splitMember.update({ where: { id: left.id }, data: { leftAt: null, displayName: data.displayName, contactId: data.contactId, userId: data.userId } })
       : await tx.splitMember.create({ data: { groupId, ...data } });
     await writeActivity(tx, groupId, userId, 'MEMBER_ADDED', { memberId: row.id, displayName: row.displayName });
     return row;

@@ -11,7 +11,7 @@ import { serializeMoney } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 import { computeShares, toBase, allocateBase } from './allocate.js';
-import { requireMember } from './groups.service.js';
+import { requireMember, loadLedger, assertLeftMembersSettled } from './groups.service.js';
 import { writeActivity } from './activity.js';
 import { resolveFxRate } from './fx.js';
 import { parseCcy, parseIsoDate, parseMoney2dp } from './validate.js';
@@ -96,6 +96,25 @@ async function build(groupId: string, input: Omit<ExpenseInput, 'groupId'>) {
   };
 }
 
+type Built = Awaited<ReturnType<typeof build>>;
+const ledgerExpense = (payers: Array<{ memberId: string; baseAmount: string }>, shares: Array<{ memberId: string; baseAmount: string }>) => ({
+  payers: payers.map((p) => ({ memberId: p.memberId, baseAmount: new Decimal(p.baseAmount) })),
+  shares: shares.map((s) => ({ memberId: s.memberId, baseAmount: new Decimal(s.baseAmount) })),
+});
+
+/** Check the group's ledger as it would look with expense `id` removed / replaced / added back. */
+async function assertAfter(groupId: string, id: string, replacement: Pick<Built, 'payers' | 'shares'> | Row | null): Promise<void> {
+  const l = await loadLedger(groupId);
+  const expenses = l.expenses.filter((e) => e.id !== id);
+  if (replacement) {
+    expenses.push({ id, ...ledgerExpense(
+      replacement.payers.map((p) => ({ memberId: p.memberId, baseAmount: p.baseAmount.toString() })),
+      replacement.shares.map((s) => ({ memberId: s.memberId, baseAmount: s.baseAmount.toString() })),
+    ) });
+  }
+  await assertLeftMembersSettled(groupId, { memberIds: l.memberIds, expenses, settlements: l.settlements });
+}
+
 async function loadOwned(userId: string, id: string): Promise<Row> {
   const e = await prisma.splitExpense.findUnique({ where: { id }, include: INCLUDE });
   if (!e) throw new NotFoundError('Expense not found');
@@ -135,6 +154,7 @@ export async function updateExpense(userId: string, id: string, input: Omit<Expe
   const existing = await loadOwned(userId, id);
   if (existing.deletedAt) throw new BadRequestError('Restore the expense before editing it');
   const b = await build(existing.groupId, input);
+  await assertAfter(existing.groupId, id, b);
   await runInTransaction(async (tx) => {
     await tx.splitPayer.deleteMany({ where: { expenseId: id } });
     await tx.splitShare.deleteMany({ where: { expenseId: id } });
@@ -154,6 +174,7 @@ export async function updateExpense(userId: string, id: string, input: Omit<Expe
 export async function deleteExpense(userId: string, id: string): Promise<void> {
   const e = await loadOwned(userId, id);
   if (e.deletedAt) return;
+  await assertAfter(e.groupId, id, null);
   await runInTransaction(async (tx) => {
     await tx.splitExpense.update({ where: { id }, data: { deletedAt: new Date() } });
     await writeActivity(tx, e.groupId, userId, 'EXPENSE_DELETED', { expenseId: id, description: e.description });
@@ -163,6 +184,7 @@ export async function deleteExpense(userId: string, id: string): Promise<void> {
 export async function restoreExpense(userId: string, id: string): Promise<SplitExpenseDto> {
   const e = await loadOwned(userId, id);
   if (e.deletedAt) {
+    await assertAfter(e.groupId, id, e);
     await runInTransaction(async (tx) => {
       await tx.splitExpense.update({ where: { id }, data: { deletedAt: null } });
       await writeActivity(tx, e.groupId, userId, 'EXPENSE_RESTORED', { expenseId: id, description: e.description });
