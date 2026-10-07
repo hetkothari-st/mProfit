@@ -7,10 +7,10 @@
  * makes it single-flight and run-once:
  *
  *   - DONE      → later boots skip it.
- *   - RUNNING   → another instance (or this one before a restart) is on it;
- *                 skipped, unless it started more than STALE_AFTER_MS ago — a
- *                 redeploy kills the process mid-run and nothing else would
- *                 ever finish it.
+ *   - RUNNING   → another instance is on it; skipped, unless its heartbeat
+ *                 (written every minute) is older than STALE_AFTER_MS — a
+ *                 redeploy killed it. Then this boot takes over and resumes
+ *                 after the steps already finished.
  *   - FAILED    → retried on the next boot.
  *
  * Inputs first, in dependency order, then the rating chain for each requested
@@ -35,7 +35,7 @@ import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
 
 export const MF_BOOTSTRAP_KEY = 'mf.bootstrap.2026-10-v1';
-const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+const STALE_AFTER_MS = 10 * 60 * 1000;
 export const MAX_BOOTSTRAP_MONTHS = 12;
 
 export interface MfBootstrapDeps {
@@ -92,32 +92,53 @@ async function defaultDeps(historyStart: Date): Promise<MfBootstrapDeps> {
   };
 }
 
-/** Claim the marker. True when this process should run the bootstrap. */
-async function claim(now: Date): Promise<boolean> {
-  const running = { status: 'RUNNING', startedAt: now.toISOString() };
+interface Marker {
+  status?: string;
+  startedAt?: string;
+  heartbeatAt?: string;
+  /** Steps finished by this or an earlier (interrupted) run. */
+  done?: string[];
+}
+
+/**
+ * Claim the marker. Returns the steps already finished (to skip), or null when
+ * this process should not run.
+ *
+ * A RUNNING marker whose heartbeat is older than STALE_AFTER_MS belongs to a
+ * process that died — in practice a redeploy, which on this project happens
+ * several times a day. The first version waited six hours to take over, so a
+ * run killed by a deploy sat abandoned while every later boot skipped it.
+ */
+async function claim(now: Date): Promise<string[] | null> {
+  const fresh: Marker = { status: 'RUNNING', startedAt: now.toISOString(), heartbeatAt: now.toISOString(), done: [] };
   try {
-    await prisma.appSetting.create({ data: { key: MF_BOOTSTRAP_KEY, value: running } });
-    return true;
+    await prisma.appSetting.create({ data: { key: MF_BOOTSTRAP_KEY, value: fresh as object } });
+    return [];
   } catch (err) {
     if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
   }
   const row = await prisma.appSetting.findUnique({ where: { key: MF_BOOTSTRAP_KEY } });
-  const value = (row?.value ?? {}) as { status?: string; startedAt?: string };
-  if (value.status === 'DONE') return false;
+  const value = (row?.value ?? {}) as Marker;
+  if (value.status === 'DONE') return null;
   if (value.status === 'RUNNING') {
-    const started = value.startedAt ? Date.parse(value.startedAt) : 0;
-    if (now.getTime() - started < STALE_AFTER_MS) return false;
+    const beat = Date.parse(value.heartbeatAt ?? value.startedAt ?? '') || 0;
+    if (now.getTime() - beat < STALE_AFTER_MS) return null;
   }
-  await prisma.appSetting.update({ where: { key: MF_BOOTSTRAP_KEY }, data: { value: running } });
-  return true;
+  const done = value.status === 'RUNNING' ? value.done ?? [] : [];
+  await prisma.appSetting.update({
+    where: { key: MF_BOOTSTRAP_KEY },
+    data: { value: { ...fresh, done } as object },
+  });
+  return done;
 }
 
 export async function runMfBootstrapOnce(
-  opts: { now?: Date; months?: number; deps?: MfBootstrapDeps } = {},
+  opts: { now?: Date; months?: number; deps?: MfBootstrapDeps; heartbeatMs?: number } = {},
 ): Promise<MfBootstrapResult> {
   const now = opts.now ?? new Date();
   return runAsSystem(async () => {
-    if (!(await claim(now))) {
+    const alreadyDone = await claim(now);
+    if (alreadyDone === null) {
       logger.info({ key: MF_BOOTSTRAP_KEY }, '[mf] bootstrap: already done or in progress — skipping');
       return { status: 'SKIPPED' };
     }
@@ -126,35 +147,79 @@ export async function runMfBootstrapOnce(
     const historyStart = new Date(Date.UTC(oldest.getUTCFullYear() - 11, oldest.getUTCMonth(), 1));
     const deps = opts.deps ?? (await defaultDeps(historyStart));
     const started = Date.now();
+    const done = new Set(alreadyDone);
     logger.info(
-      { key: MF_BOOTSTRAP_KEY, months: months.map((d) => d.toISOString().slice(0, 10)) },
+      {
+        key: MF_BOOTSTRAP_KEY,
+        months: months.map((d) => d.toISOString().slice(0, 10)),
+        resumingAfter: [...done],
+      },
       '[mf] bootstrap: start',
     );
 
+    // Heartbeat + progress, so a run killed by a deploy is picked up by the
+    // next boot from where it stopped.
+    const save = async () =>
+      prisma.appSetting.update({
+        where: { key: MF_BOOTSTRAP_KEY },
+        data: {
+          value: {
+            status: 'RUNNING',
+            startedAt: now.toISOString(),
+            heartbeatAt: new Date().toISOString(),
+            done: [...done],
+          } as object,
+        },
+      });
+    const beat = setInterval(() => {
+      save().catch((err: unknown) => logger.warn({ err }, '[mf] bootstrap: heartbeat write failed'));
+    }, opts.heartbeatMs ?? 60_000);
+    beat.unref?.();
+
     const skippedSteps: string[] = [];
-    const best = async (name: string, fn: () => Promise<unknown>) => {
+    const step = async (name: string, fn: () => Promise<unknown>, optional = false) => {
+      if (done.has(name)) return;
       try {
         await fn();
       } catch (err) {
+        if (!optional) throw err;
         skippedSteps.push(name);
         logger.warn({ err, step: name }, '[mf] bootstrap: optional step failed — continuing');
       }
+      done.add(name);
+      await save();
     };
 
     try {
-      await deps.metadata();
-      await deps.benchmarks();
-      await deps.riskFree();
-      await best('navHistory', deps.navHistory);
-      await deps.navAdjustment();
-      await best('factsheets', deps.factsheets);
+      await step('metadata', deps.metadata);
+      await step('benchmarks', deps.benchmarks);
+      await step('riskFree', deps.riskFree);
+      await step('navHistory', deps.navHistory, true);
+      await step('navAdjustment', deps.navAdjustment);
 
+      // Rate before factsheets: no rating-required pillar needs them, and the
+      // factsheet pass is the slow, failure-heavy one (one DLQ row per scheme
+      // whose AMC page is missing) — it must not stand between users and
+      // ratings.
       const rated: string[] = [];
       const notRated: string[] = [];
       for (const asOf of months) {
         const iso = asOf.toISOString().slice(0, 10);
-        ((await deps.ratingChain(asOf)) ? rated : notRated).push(iso);
+        const key = `rate:${iso}`;
+        if (done.has(key)) {
+          rated.push(iso);
+          continue;
+        }
+        if (await deps.ratingChain(asOf)) {
+          rated.push(iso);
+          done.add(key);
+          await save();
+        } else {
+          notRated.push(iso);
+        }
       }
+
+      await step('factsheets', deps.factsheets, true);
 
       const result: MfBootstrapResult = { status: 'DONE', rated, notRated, skippedSteps };
       await prisma.appSetting.update({
@@ -171,6 +236,8 @@ export async function runMfBootstrapOnce(
       });
       logger.error({ err }, '[mf] bootstrap: failed — will retry on the next boot');
       return { status: 'FAILED', error, skippedSteps };
+    } finally {
+      clearInterval(beat);
     }
   });
 }
