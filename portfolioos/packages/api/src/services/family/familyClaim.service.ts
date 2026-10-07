@@ -25,7 +25,6 @@
  *     send the invitation in the first place.
  */
 
-import crypto from 'node:crypto';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
@@ -33,6 +32,7 @@ import { logger } from '../../lib/logger.js';
 import { hashPassword } from '../password.service.js';
 import { issueSession } from '../auth.service.js';
 import { assertOwnerOf } from '../familyScope.service.js';
+import { inviteTokenHash, newInviteToken } from '../../lib/inviteToken.js';
 
 const CLAIM_TOKEN_BYTES = 32;
 
@@ -92,7 +92,7 @@ export async function inviteProfileClaim(
     );
   }
 
-  const token = crypto.randomBytes(CLAIM_TOKEN_BYTES).toString('base64url');
+  const { token, hash: tokenHash, enc: tokenEnc } = newInviteToken(CLAIM_TOKEN_BYTES);
   const expiresAt = new Date(Date.now() + CLAIM_TTL_DAYS * 86_400_000);
 
   // Privileged: the invitation is about somebody else's row, and only the
@@ -110,7 +110,8 @@ export async function inviteProfileClaim(
         relatedToId: membership.relatedToId,
         claimForUserId: profileId,
         invitedById: callerId,
-        token,
+        tokenHash,
+        tokenEnc,
         expiresAt,
       },
     }),
@@ -141,7 +142,7 @@ export interface ClaimPreview {
 export async function peekProfileClaim(token: string): Promise<ClaimPreview> {
   const inv = await runAsSystem(() =>
     prisma.familyInvitation.findUnique({
-      where: { token },
+      where: { tokenHash: inviteTokenHash(token) },
       include: {
         family: { select: { name: true } },
         invitedBy: { select: { name: true, email: true } },
@@ -185,7 +186,7 @@ export async function claimProfile(
 
   const user = await runAsSystem(() =>
     runInTransaction(async (tx) => {
-      const inv = await tx.familyInvitation.findUnique({ where: { token } });
+      const inv = await tx.familyInvitation.findUnique({ where: { tokenHash: inviteTokenHash(token) } });
       if (!inv || !inv.claimForUserId) throw new NotFoundError('That link is not valid.');
       if (inv.acceptedAt) throw new BadRequestError('That account has already been taken over.');
       if (inv.expiresAt < new Date()) throw new BadRequestError('That link has expired.');
@@ -225,7 +226,8 @@ export async function claimProfile(
       });
       await tx.familyInvitation.update({
         where: { id: inv.id },
-        data: { acceptedAt: new Date() },
+        // Used: the link is no longer needed, only the hash that refuses a replay.
+        data: { acceptedAt: new Date(), token: null, tokenEnc: null },
       });
       await tx.auditLog.create({
         data: {

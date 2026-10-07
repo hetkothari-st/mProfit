@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
+import { inviteTokenHash } from '../../src/lib/inviteToken.js';
 import {
   acceptInvitation,
   createFamily,
@@ -90,7 +91,7 @@ describe('a family invitation', () => {
     expect(membership.userId).toBe(invitee.userId);
 
     const stamped = await runAsSystem(() =>
-      prisma.familyInvitation.findUniqueOrThrow({ where: { token } }),
+      prisma.familyInvitation.findUniqueOrThrow({ where: { tokenHash: inviteTokenHash(token) } }),
     );
     expect(stamped.acceptedAt).not.toBeNull();
   });

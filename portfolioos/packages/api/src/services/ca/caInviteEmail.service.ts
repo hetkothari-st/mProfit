@@ -35,6 +35,7 @@ import {
   type InviteDirection,
 } from '../notifications/caInviteEmail.template.js';
 import { recordCaAudit } from './caAudit.service.js';
+import { openInviteToken } from '../../lib/inviteToken.js';
 
 /** How many times one invitation may be mailed, counting the first. */
 const MAX_SENDS_PER_INVITE = 5;
@@ -101,7 +102,7 @@ async function loadInvitation(callerId: string, clientId: string) {
   if (client.status === 'REVOKED') {
     throw new BadRequestError('That invitation was withdrawn. Send a fresh one.');
   }
-  if (!client.inviteToken || !client.invitedEmail) {
+  if (!client.inviteTokenHash || !client.invitedEmail) {
     throw new NotFoundError('That invitation no longer has a link to send.');
   }
   if (client.inviteExpiresAt && client.inviteExpiresAt < new Date()) {
@@ -193,10 +194,12 @@ export async function buildInviteEmail(
   // "invitation not found", which reads as a broken link rather than the wrong
   // one.
   const base = env.FRONTEND_URL.replace(/\/$/, '');
+  const token = openInviteToken(client.inviteTokenEnc, client.inviteToken);
+  if (!token) throw new NotFoundError('That invitation no longer has a link to send.');
   const acceptUrl =
     direction === 'CLIENT_TO_ADVISOR'
-      ? `${base}/professional-invitations/${client.inviteToken}`
-      : `${base}/ca/invitations/${client.inviteToken}/accept`;
+      ? `${base}/professional-invitations/${token}`
+      : `${base}/ca/invitations/${token}/accept`;
   const expiresOn = prettyDate(client.inviteExpiresAt ?? new Date());
 
   const { html } = renderCaInviteEmail({

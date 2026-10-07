@@ -455,7 +455,10 @@ model Client {
   // rather than a second table: there is at most one pending invite per row,
   // no multi-invitee choice and no seat billing.
   invitedEmail    String?
+  /// Legacy plaintext; new rows use inviteTokenHash + inviteTokenEnc (lib/inviteToken).
   inviteToken     String?   @unique
+  inviteTokenHash String?   @unique
+  inviteTokenEnc  String?
   inviteExpiresAt DateTime?
   acceptedAt      DateTime?
   revokedAt       DateTime?
@@ -3687,10 +3690,13 @@ model FamilyInvitation {
   invitedById         String
   invitedBy           User         @relation("FamilyInvitationInviter", fields: [invitedById], references: [id])
 
-  // Random 32+ byte hex token emailed to the invitee for the accept
-  // flow. Single-use; cleared on accept. Never trust the token holder
-  // to change role/visibility — those come from the row, not the URL.
-  token      String    @unique
+  // Random 32+ byte token emailed to the invitee for the accept flow.
+  // Never trust the token holder to change role/visibility — those come
+  // from the row, not the URL. Stored as a hash (looked up by) plus the
+  // token encrypted (to resend the link); `token` is legacy plaintext only.
+  token      String?   @unique
+  tokenHash  String    @unique
+  tokenEnc   String?
   expiresAt  DateTime
   acceptedAt DateTime?
   createdAt  DateTime  @default(now())

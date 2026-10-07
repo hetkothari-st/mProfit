@@ -80,3 +80,19 @@ describe('client list: open to everyone, gated once there are clients', () => {
     }
   });
 });
+
+describe('admin tools need two-factor sign-in too', () => {
+  it('refuses an unverified session and lets a verified one through', async () => {
+    const { requireSecondFactor } = await import('../../src/lib/professionalMfa.js');
+    const admin = await createTestScope('admin-mfa');
+    try {
+      const gate = requireSecondFactor('admin tools');
+      const call = () =>
+        new Promise<unknown>((resolve) => gate({ user: { id: admin.userId } } as never, {} as never, resolve));
+      expect(await runAsUser(admin.userId, call)).toMatchObject({ code: 'TWO_FACTOR_REQUIRED' });
+      expect(await runAsVerified(admin.userId, call)).toBeUndefined();
+    } finally {
+      await admin.cleanup();
+    }
+  });
+});

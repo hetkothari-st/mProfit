@@ -24,6 +24,7 @@
  */
 
 import crypto from 'node:crypto';
+import { inviteTokenHash, newInviteToken } from '../../lib/inviteToken.js';
 import type { AssetClass, Client } from '@prisma/client';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
@@ -33,6 +34,9 @@ import { recordCaAudit } from './caAudit.service.js';
 import type { Request } from 'express';
 import { panColumns } from '../piiAtRest.service.js';
 import { assertProfessionalSecondFactor } from '../../lib/professionalMfa.js';
+
+/** Clears every form of an invitation token: single use, or withdrawn. */
+const NO_INVITE_TOKEN = { inviteToken: null, inviteTokenHash: null, inviteTokenEnc: null } as const;
 
 /** Invitations expire; an indefinitely open grant link is a standing risk. */
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -412,7 +416,7 @@ export async function inviteClient(
   if (!name) throw new BadRequestError('A client name is required.');
   if (!email) throw new BadRequestError('An email address is required.');
 
-  const token = crypto.randomBytes(32).toString('hex');
+  const { token, hash: tokenHash, enc: tokenEnc } = newInviteToken(32);
 
   const client = await runInTransaction(async (tx) => {
     const created = await tx.client.create({
@@ -423,7 +427,8 @@ export async function inviteClient(
         kind: 'INVITED',
         status: 'PENDING',
         invitedEmail: email,
-        inviteToken: token,
+        inviteTokenHash: tokenHash,
+        inviteTokenEnc: tokenEnc,
         inviteExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
       },
     });
@@ -473,7 +478,7 @@ export async function acceptInvitation(
   // threw "Invitation not found."
   return runAsSystem(() =>
     runInTransaction(async (tx) => {
-      const client = await tx.client.findUnique({ where: { inviteToken: token } });
+      const client = await tx.client.findUnique({ where: { inviteTokenHash: inviteTokenHash(token) } });
 
       if (!client || client.kind !== 'INVITED') throw new NotFoundError('Invitation not found.');
       if (client.status === 'REVOKED') {
@@ -498,6 +503,8 @@ export async function acceptInvitation(
           acceptedAt: new Date(),
           // Single use: clearing the token makes a replay find nothing.
           inviteToken: null,
+          inviteTokenHash: null,
+          inviteTokenEnc: null,
         },
       });
 
@@ -540,7 +547,7 @@ export async function revokeGrant(callerId: string, clientId: string, req?: Requ
   await runInTransaction(async (tx) => {
     await tx.client.update({
       where: { id: clientId },
-      data: { status: 'REVOKED', revokedAt: new Date(), revokedByUserId: callerId, inviteToken: null },
+      data: { status: 'REVOKED', revokedAt: new Date(), revokedByUserId: callerId, ...NO_INVITE_TOKEN },
     });
     await recordCaAudit(
       tx,
@@ -966,7 +973,7 @@ export async function inviteProfessional(
     );
   }
 
-  const token = crypto.randomBytes(32).toString('hex');
+  const { token, hash: tokenHash, enc: tokenEnc } = newInviteToken(32);
 
   const client = await runInTransaction(async (tx) => {
     const created = await tx.client.create({
@@ -980,7 +987,8 @@ export async function inviteProfessional(
         kind: 'INVITED',
         status: 'PENDING',
         invitedEmail: email,
-        inviteToken: token,
+        inviteTokenHash: tokenHash,
+        inviteTokenEnc: tokenEnc,
         inviteExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
         // Nothing is shared by default beyond what the client picks later; the
         // scope columns keep their permissive defaults so an accepted invite
@@ -1013,7 +1021,7 @@ export async function inviteProfessional(
 export async function peekProfessionalInvitation(token: string) {
   const client = await runAsSystem(() =>
     prisma.client.findUnique({
-      where: { inviteToken: token },
+      where: { inviteTokenHash: inviteTokenHash(token) },
       include: { clientUser: { select: { name: true, email: true } } },
     }),
   );
@@ -1051,7 +1059,7 @@ export async function acceptProfessionalInvitation(
 ): Promise<Client> {
   return runAsSystem(() =>
     runInTransaction(async (tx) => {
-      const client = await tx.client.findUnique({ where: { inviteToken: token } });
+      const client = await tx.client.findUnique({ where: { inviteTokenHash: inviteTokenHash(token) } });
       if (!client || client.initiatedBy !== 'CLIENT') {
         throw new NotFoundError('Invitation not found.');
       }
@@ -1076,6 +1084,8 @@ export async function acceptProfessionalInvitation(
           status: 'ACTIVE',
           acceptedAt: new Date(),
           inviteToken: null,
+          inviteTokenHash: null,
+          inviteTokenEnc: null,
         },
       });
 
@@ -1117,7 +1127,7 @@ export async function cancelProfessionalInvitation(
   await runInTransaction(async (tx) => {
     await tx.client.update({
       where: { id: clientId },
-      data: { status: 'REVOKED', revokedAt: new Date(), revokedByUserId: callerId, inviteToken: null },
+      data: { status: 'REVOKED', revokedAt: new Date(), revokedByUserId: callerId, ...NO_INVITE_TOKEN },
     });
     await recordCaAudit(
       tx,

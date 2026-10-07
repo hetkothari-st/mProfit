@@ -17,6 +17,7 @@ import { env } from '../../config/env.js';
 import { sendEmail } from '../notifications/email.service.js';
 import { renderInviteShell } from '../notifications/caInviteEmail.template.js';
 import { assertOwnerOf } from '../familyScope.service.js';
+import { openInviteToken } from '../../lib/inviteToken.js';
 
 const MAX_SENDS_PER_INVITE = 5;
 const MAX_SENDS_PER_HOUR = 20;
@@ -194,9 +195,11 @@ export async function buildFamilyInviteEmail(
   const base = env.FRONTEND_URL.replace(/\/$/, '');
   // Two different pages: joining a family, or taking over the account that
   // was kept for you. The wrong one reads as a broken link.
+  const token = openInviteToken(inv.tokenEnc, inv.token);
+  if (!token) throw new NotFoundError('That invitation no longer has a link to send.');
   const acceptUrl = isClaim
-    ? `${base}/family/claims/${inv.token}`
-    : `${base}/families/invitations/${inv.token}/accept`;
+    ? `${base}/family/claims/${token}`
+    : `${base}/families/invitations/${token}/accept`;
   const expiresOn = prettyDate(inv.expiresAt);
 
   const { html } = renderInviteShell({
