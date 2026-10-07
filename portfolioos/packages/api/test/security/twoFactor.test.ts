@@ -85,6 +85,9 @@ describe('two-factor sign-in', () => {
     const code = await freshCode();
     const session = await completeTwoFactorSignIn(await challenge(), code);
     expect(session.tokens.accessToken).toBeTruthy();
+    // Marked as signed in with a second factor (what the CA workspace needs).
+    const payload = JSON.parse(Buffer.from(session.tokens.accessToken.split('.')[1]!, 'base64url').toString());
+    expect(payload.mfa).toBe(true);
     await expect(completeTwoFactorSignIn(await challenge(), code)).rejects.toThrow(/didn't match/);
   });
 

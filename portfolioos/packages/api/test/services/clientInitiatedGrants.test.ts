@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
+import { createTestScope, prisma, type TestScope, runAsVerified } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import {
   inviteProfessional,
@@ -67,7 +67,7 @@ describe('an invitation nobody has accepted', () => {
     expect(seen).toEqual({ portfolios: 0, transactions: 0 });
 
     await expect(
-      runAsUser(ramesh.userId, () => getCaScope(ramesh.userId, row.id)),
+      runAsVerified(ramesh.userId, () => getCaScope(ramesh.userId, row.id)),
     ).rejects.toThrow();
   });
 
@@ -137,7 +137,7 @@ describe('accepting', () => {
     }));
     expect(seen).toEqual({ portfolios: 1, transactions: 1 });
 
-    const scope = await runAsUser(ramesh.userId, () => getCaScope(ramesh.userId, row.id));
+    const scope = await runAsVerified(ramesh.userId, () => getCaScope(ramesh.userId, row.id));
     expect(scope.subjectUserId).toBe(het.userId);
   });
 
@@ -214,7 +214,7 @@ describe('records for people with no login', () => {
     const ca = await person('cig-shadow-ca');
 
     await expect(
-      runAsUser(ca.userId, () =>
+      runAsVerified(ca.userId, () =>
         createManagedClient(ca.userId, { name: 'Mahesh', consentBasis: 'ENGAGEMENT_LETTER' }),
       ),
     ).rejects.toThrow(/no longer created/i);
@@ -244,7 +244,7 @@ describe('who the professional is shown', () => {
     expect(mine.displayName).not.toBe('Ramesh CA');
 
     // And the refusal sentence uses the same person.
-    const scope = await runAsUser(ramesh.userId, () => getCaScope(ramesh.userId, row.id));
+    const scope = await runAsVerified(ramesh.userId, () => getCaScope(ramesh.userId, row.id));
     expect(scope.subjectLabel).toBe(hetName.name);
   });
 });

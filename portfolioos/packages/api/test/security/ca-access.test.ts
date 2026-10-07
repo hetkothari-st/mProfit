@@ -45,7 +45,7 @@ import {
   acceptProfessionalInvitation,
   updateGrantScope,
 } from '../../src/services/ca/caAccess.service.js';
-import { createTestScope, type TestScope } from '../helpers/db.js';
+import { createTestScope, type TestScope, runAsVerified } from '../helpers/db.js';
 
 let ca: TestScope;
 let client: TestScope;
@@ -124,7 +124,7 @@ async function invitedClientWithNoPortfolio(
   const { client: row, token } = await runAsUser(subject.userId, () =>
     inviteProfessional(subject.userId, { name: 'Their CA', email: caEmail }),
   );
-  await runAsUser(ca.userId, () => acceptProfessionalInvitation(ca.userId, caEmail, token));
+  await runAsVerified(ca.userId, () => acceptProfessionalInvitation(ca.userId, caEmail, token));
   // The bootstrap cases are about a CA putting a client's FIRST portfolio and
   // trade in place, which is a write; the client has to have permitted it.
   await runAsUser(subject.userId, () =>
@@ -242,26 +242,26 @@ describe('CA access boundary', () => {
   });
 
   it('resolves a scope for an active grant', async () => {
-    const scope = await ca.runAs(() => getCaScope(ca.userId, clientId));
+    const scope = await runAsVerified(ca.userId, () => getCaScope(ca.userId, clientId));
     expect(scope.subjectUserId).toBe(client.userId);
     expect(scope.callerId).toBe(ca.userId);
   });
 
   it('refuses a CA who holds no grant over that client', async () => {
-    await expect(stranger.runAs(() => getCaScope(stranger.userId, clientId))).rejects.toThrow(
+    await expect(runAsVerified(stranger.userId, () => getCaScope(stranger.userId, clientId))).rejects.toThrow(
       /not yours/i,
     );
   });
 
   it("lets the CA read and write the client's books", async () => {
-    const account = await ca.runAs(() =>
+    const account = await runAsVerified(ca.userId, () =>
       prisma.account.create({
         data: { userId: client.userId, code: 'CA100', name: 'Opened by CA', type: 'ASSET' },
       }),
     );
     expect(account.userId).toBe(client.userId);
 
-    const read = await ca.runAs(() =>
+    const read = await runAsVerified(ca.userId, () =>
       prisma.account.findMany({ where: { userId: client.userId } }),
     );
     expect(read.map((a) => a.code)).toContain('CA100');
@@ -271,7 +271,7 @@ describe('CA access boundary', () => {
     // No CA branch exists on Portfolio's WITH CHECK, so Postgres refuses.
     // This is the difference between "keeps the books" and "owns the account".
     await expect(
-      ca.runAs(() =>
+      runAsVerified(ca.userId, () =>
         prisma.portfolio.create({
           data: { userId: client.userId, name: 'Should not exist', type: 'INVESTMENT' },
         }),
@@ -288,7 +288,7 @@ describe('CA access boundary', () => {
     expect(before).toBeGreaterThan(0);
 
     await expect(
-      ca.runAs(() => prisma.transaction.deleteMany({ where: { portfolioId: client.portfolioId } })),
+      runAsVerified(ca.userId, () => prisma.transaction.deleteMany({ where: { portfolioId: client.portfolioId } })),
     ).resolves.toMatchObject({ count: 0 });
 
     const after = await runAsSystem(() =>
@@ -306,7 +306,7 @@ describe('CA access boundary', () => {
     );
     expect(seeded).toBe(1);
 
-    const creds = await ca.runAs(() =>
+    const creds = await runAsVerified(ca.userId, () =>
       prisma.brokerCredential.findMany({ where: { userId: client.userId } }),
     );
     expect(creds).toEqual([]);
@@ -333,7 +333,7 @@ describe('CA access boundary', () => {
       return fam.id;
     });
 
-    const seen = await ca.runAs(() => prisma.portfolio.findMany({ where: { familyId } }));
+    const seen = await runAsVerified(ca.userId, () => prisma.portfolio.findMany({ where: { familyId } }));
     expect(seen).toEqual([]);
 
     await runAsSystem(async () => {
@@ -348,10 +348,10 @@ describe('CA access boundary', () => {
       prisma.client.update({ where: { id: clientId }, data: { status: 'REVOKED' } }),
     );
 
-    await expect(ca.runAs(() => getCaScope(ca.userId, clientId))).rejects.toThrow(/revoked/i);
+    await expect(runAsVerified(ca.userId, () => getCaScope(ca.userId, clientId))).rejects.toThrow(/revoked/i);
 
     // And the database agrees, independently of the service layer.
-    const rows = await ca.runAs(() =>
+    const rows = await runAsVerified(ca.userId, () =>
       prisma.account.findMany({ where: { userId: client.userId } }),
     );
     expect(rows).toEqual([]);
@@ -377,13 +377,13 @@ describe('CA access boundary', () => {
     // No UPDATE or DELETE policy exists, so under FORCE ROW LEVEL SECURITY
     // these match nothing — for the CA, for the client, and for system context.
     await expect(
-      ca.runAs(() =>
+      runAsVerified(ca.userId, () =>
         prisma.caAuditLog.updateMany({ where: { id: entry.id }, data: { summary: 'rewritten' } }),
       ),
     ).resolves.toMatchObject({ count: 0 });
 
     await expect(
-      ca.runAs(() => prisma.caAuditLog.deleteMany({ where: { id: entry.id } })),
+      runAsVerified(ca.userId, () => prisma.caAuditLog.deleteMany({ where: { id: entry.id } })),
     ).resolves.toMatchObject({ count: 0 });
 
     const still = await runAsSystem(() =>
@@ -414,12 +414,12 @@ describe('CA access boundary', () => {
    * failed. Fabricating ACTIVE grants in the other tests hid it.
    */
   it('completes an invitation end to end, and only for the invited address', async () => {
-    const { client: invited, token } = await ca.runAs(() =>
+    const { client: invited, token } = await runAsVerified(ca.userId, () =>
       inviteClient(ca.userId, { name: 'Invited Person', email: strangerEmail }),
     );
 
     // Pending: the CA can see the row but cannot act for them yet.
-    await expect(ca.runAs(() => getCaScope(ca.userId, invited.id))).rejects.toThrow(
+    await expect(runAsVerified(ca.userId, () => getCaScope(ca.userId, invited.id))).rejects.toThrow(
       /has not accepted/i,
     );
 
@@ -435,7 +435,7 @@ describe('CA access boundary', () => {
     expect(accepted.status).toBe('ACTIVE');
 
     // Now, and only now, the grant resolves.
-    const scope = await ca.runAs(() => getCaScope(ca.userId, invited.id));
+    const scope = await runAsVerified(ca.userId, () => getCaScope(ca.userId, invited.id));
     expect(scope.subjectUserId).toBe(stranger.userId);
 
     // Single use: the token is cleared, so a replay finds nothing.
@@ -463,7 +463,7 @@ describe('CA access boundary', () => {
     // no DELETE policy for a CA on this table — a CA can add a trade and fix
     // a trade, never erase one (see the DELETE assertion at the end, and
     // `cannot delete a client transaction...` above).
-    const inserted = await ca.runAs(() =>
+    const inserted = await runAsVerified(ca.userId, () =>
       prisma.transaction.create({
         data: {
           portfolioId: client.portfolioId,
@@ -483,7 +483,7 @@ describe('CA access boundary', () => {
     expect(inserted.portfolioId).toBe(client.portfolioId);
     await runAsSystem(() => prisma.transaction.delete({ where: { id: inserted.id } }));
 
-    const updated = await ca.runAs(() =>
+    const updated = await runAsVerified(ca.userId, () =>
       prisma.transaction.updateMany({
         where: { id: clientTransactionId },
         data: { narration: 'Corrected by CA' },
@@ -497,7 +497,7 @@ describe('CA access boundary', () => {
     expect(persisted.narration).toBe('Corrected by CA');
 
     await expect(
-      ca.runAs(() => prisma.transaction.delete({ where: { id: clientTransactionId } })),
+      runAsVerified(ca.userId, () => prisma.transaction.delete({ where: { id: clientTransactionId } })),
     ).rejects.toThrow();
   });
 
@@ -543,7 +543,7 @@ describe('CA access boundary', () => {
   });
 
   it('does not let an unrelated user read a transaction the CA created for the client', async () => {
-    const inserted = await ca.runAs(() =>
+    const inserted = await runAsVerified(ca.userId, () =>
       prisma.transaction.create({
         data: {
           portfolioId: client.portfolioId,
@@ -587,7 +587,7 @@ describe('CA access boundary', () => {
     });
     const res = fakeResponse();
 
-    await ca.runAs(() => caCreateTransaction(req, res));
+    await runAsVerified(ca.userId, () => caCreateTransaction(req, res));
 
     expect(res.statusCode).toBe(201);
     const body = res.body as { success: true; data: { id: string; portfolioId: string } };
@@ -619,7 +619,7 @@ describe('CA access boundary', () => {
     // CA write policy precisely so a correction can rebuild them without
     // runAsUser(clientId) — the impersonation that would have reopened the
     // family-shared hole. If the grant were missing this throws 42501.
-    const written = await ca.runAs(() =>
+    const written = await runAsVerified(ca.userId, () =>
       prisma.holdingProjection.updateMany({
         where: { portfolioId: client.portfolioId },
         data: { computedAt: new Date() },
@@ -629,7 +629,7 @@ describe('CA access boundary', () => {
 
     // Still read-only where it should be: a portfolio cannot be conjured.
     await expect(
-      ca.runAs(() =>
+      runAsVerified(ca.userId, () =>
         prisma.portfolio.create({
           data: { userId: client.userId, name: 'Nope', type: 'INVESTMENT' },
         }),
@@ -732,12 +732,12 @@ describe('CA access boundary', () => {
     // feed. Asserted because the write is invisible from the CA's side.
     const { ensureDefaultAccounts } = await import('../../src/services/accounting.service.js');
 
-    const firstOpen = await ca.runAs(() => ensureDefaultAccounts(client.userId));
+    const firstOpen = await runAsVerified(ca.userId, () => ensureDefaultAccounts(client.userId));
     expect(firstOpen.length).toBeGreaterThan(0);
 
     // Idempotent: opening it again reports nothing created, so a CA browsing
     // the tab repeatedly does not spam the client's trail.
-    const secondOpen = await ca.runAs(() => ensureDefaultAccounts(client.userId));
+    const secondOpen = await runAsVerified(ca.userId, () => ensureDefaultAccounts(client.userId));
     expect(secondOpen).toEqual([]);
   });
 
@@ -763,18 +763,18 @@ describe('CA access boundary', () => {
     // The bug, stated as an assertion: the chart exists (an earlier test
     // seeded it) and the client has a real transaction, yet every figure is
     // zero until something projects. This is exactly what the CA saw.
-    const before = await ca.runAs(() => getTrialBalance(client.userId));
+    const before = await runAsVerified(ca.userId, () => getTrialBalance(client.userId));
     expect(before.length).toBeGreaterThan(0);
     expect(
       before.every((r) => parseFloat(r.totalDebit) === 0 && parseFloat(r.totalCredit) === 0),
     ).toBe(true);
 
-    const first = await ca.runAs(() => projectBooks(client.userId, audit));
+    const first = await runAsVerified(ca.userId, () => projectBooks(client.userId, audit));
     expect(first.created).toBeGreaterThan(0);
 
     // The tab's own query, run as the CA, now shows the same figures the
     // report is built from. Before the fix this was all zeroes.
-    const tb = await ca.runAs(() => getTrialBalance(client.userId));
+    const tb = await runAsVerified(ca.userId, () => getTrialBalance(client.userId));
     const moved = tb.filter((r) => parseFloat(r.totalDebit) > 0 || parseFloat(r.totalCredit) > 0);
     expect(moved.length).toBeGreaterThan(0);
 
@@ -793,7 +793,7 @@ describe('CA access boundary', () => {
 
     // Idempotent, and silent when it is. Re-opening the tab must not create
     // duplicate vouchers or bury the client's feed in entries about nothing.
-    const second = await ca.runAs(() => projectBooks(client.userId, audit));
+    const second = await runAsVerified(ca.userId, () => projectBooks(client.userId, audit));
     expect(second.created).toBe(0);
 
     const after = await runAsSystem(() =>
@@ -808,7 +808,7 @@ describe('CA access boundary', () => {
     // accept. Existing rows keep working, which is why the enum value and the
     // shadow-user lock both remain.
     await expect(
-      ca.runAs(() =>
+      runAsVerified(ca.userId, () =>
         createManagedClient(ca.userId, {
           name: 'No-Login Client',
           consentBasis: 'ENGAGEMENT_LETTER',
@@ -831,7 +831,7 @@ describe('CA access boundary', () => {
     );
     expect(zero).toBe(0);
 
-    const bootstrapped = await ca.runAs(() =>
+    const bootstrapped = await runAsVerified(ca.userId, () =>
       prisma.portfolio.create({
         data: { userId: subjectId, name: 'My Portfolio', type: 'INVESTMENT' },
       }),
@@ -841,7 +841,7 @@ describe('CA access boundary', () => {
     // Now provisioned — a second bootstrap attempt for the SAME client is
     // refused, exactly like a client who had one from the start.
     await expect(
-      ca.runAs(() =>
+      runAsVerified(ca.userId, () =>
         prisma.portfolio.create({
           data: { userId: subjectId, name: 'Second one', type: 'INVESTMENT' },
         }),
@@ -872,7 +872,7 @@ describe('CA access boundary', () => {
     });
     const res = fakeResponse();
 
-    await ca.runAs(() => caCreateTransaction(req, res));
+    await runAsVerified(ca.userId, () => caCreateTransaction(req, res));
 
     expect(res.statusCode).toBe(201);
     const body = res.body as { success: true; data: { id: string; portfolioId: string } };
@@ -948,7 +948,7 @@ describe('CA access boundary', () => {
     // importjob_ca_read: without it this would also come back empty, because
     // `caListImports` reads under the CA's OWN ambient identity (no
     // `runAsUser` bridge), for which `importjob_owner` alone matches nothing.
-    const seenByCa = await ca.runAs(() => prisma.importJob.findMany({ where: { id: job.id } }));
+    const seenByCa = await runAsVerified(ca.userId, () => prisma.importJob.findMany({ where: { id: job.id } }));
     expect(seenByCa.map((j) => j.id)).toEqual([job.id]);
 
     await runAsSystem(() => prisma.importJob.delete({ where: { id: job.id } }));
@@ -964,7 +964,7 @@ describe('CA access boundary', () => {
     const res = fakeResponse();
 
     try {
-      await ca.runAs(() => caCreateImport(req, res));
+      await runAsVerified(ca.userId, () => caCreateImport(req, res));
 
       expect(res.statusCode).toBe(201);
       const body = res.body as {

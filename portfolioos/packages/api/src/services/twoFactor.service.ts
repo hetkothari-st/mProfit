@@ -20,7 +20,7 @@ import jwt from 'jsonwebtoken';
 import type { Request } from 'express';
 import type { User } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { runAsSystem } from '../lib/requestContext.js';
+import { runAsSystem, sessionHasSecondFactor } from '../lib/requestContext.js';
 import { env } from '../config/env.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import { decryptSecret, encryptSecret } from '../lib/secrets.js';
@@ -84,6 +84,8 @@ export async function twoFactorStatus(userId: string) {
     enabled: isTwoFactorEnabled(user),
     enabledAt: user.twoFactorEnabledAt?.toISOString() ?? null,
     backupCodesRemaining: isTwoFactorEnabled(user) ? remaining : 0,
+    // This session was signed in with a code (what the professional workspace needs).
+    sessionVerified: sessionHasSecondFactor(),
   };
 }
 

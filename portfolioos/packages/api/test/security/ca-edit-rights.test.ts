@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
+import { createTestScope, prisma, type TestScope, runAsVerified } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import {
   inviteProfessional,
@@ -39,7 +39,7 @@ async function relationship(label: string) {
   const { client: row, token } = await runAsUser(client.userId, () =>
     inviteProfessional(client.userId, { name: 'Their CA', email: pro.email }),
   );
-  await runAsUser(pro.userId, () => acceptProfessionalInvitation(pro.userId, pro.email, token));
+  await runAsVerified(pro.userId, () => acceptProfessionalInvitation(pro.userId, pro.email, token));
 
   cleanups.push(async () => {
     await runAsSystem(async () => {
@@ -58,7 +58,7 @@ describe('a grant as it arrives', () => {
   it('reads everything and changes nothing', async () => {
     const { client, pro, clientId } = await relationship('edit-default');
 
-    const scope = await runAsUser(pro.userId, () => getCaScope(pro.userId, clientId));
+    const scope = await runAsVerified(pro.userId, () => getCaScope(pro.userId, clientId));
     expect(scope.edit).toEqual({
       books: false,
       transactions: false,
@@ -67,14 +67,14 @@ describe('a grant as it arrives', () => {
     });
 
     // Reading is unaffected.
-    const portfolios = await runAsUser(pro.userId, () =>
+    const portfolios = await runAsVerified(pro.userId, () =>
       prisma.portfolio.count({ where: { userId: client.userId } }),
     );
     expect(portfolios).toBe(1);
 
     // Writing is refused by the database, on every surface.
     await expect(
-      runAsUser(pro.userId, () =>
+      runAsVerified(pro.userId, () =>
         prisma.account.create({
           data: { userId: client.userId, code: '9999', name: 'Sneaky', type: 'EXPENSE' },
         }),
@@ -82,7 +82,7 @@ describe('a grant as it arrives', () => {
     ).rejects.toThrow();
 
     await expect(
-      runAsUser(pro.userId, () =>
+      runAsVerified(pro.userId, () =>
         prisma.transaction.create({
           data: {
             portfolioId: client.portfolioId, assetClass: 'EQUITY', transactionType: 'BUY',
@@ -94,7 +94,7 @@ describe('a grant as it arrives', () => {
     ).rejects.toThrow();
 
     await expect(
-      runAsUser(pro.userId, () =>
+      runAsVerified(pro.userId, () =>
         prisma.fmvOverride.create({
           data: { userId: client.userId, isin: 'INE009A01021', fmv: '100', asOf: new Date('2018-01-31') },
         }),
@@ -111,7 +111,7 @@ describe('a grant the client has opened up', () => {
       updateGrantScope(client.userId, clientId, { edit: { books: true } }),
     );
 
-    const account = await runAsUser(pro.userId, () =>
+    const account = await runAsVerified(pro.userId, () =>
       prisma.account.create({
         data: { userId: client.userId, code: '4999', name: 'Consulting income', type: 'INCOME' },
       }),
@@ -120,7 +120,7 @@ describe('a grant the client has opened up', () => {
 
     // Transactions were not part of that permission.
     await expect(
-      runAsUser(pro.userId, () =>
+      runAsVerified(pro.userId, () =>
         prisma.transaction.create({
           data: {
             portfolioId: client.portfolioId, assetClass: 'EQUITY', transactionType: 'BUY',
@@ -147,7 +147,7 @@ describe('a grant the client has opened up', () => {
     });
 
     await expect(
-      runAsUser(pro.userId, () =>
+      runAsVerified(pro.userId, () =>
         prisma.transaction.update({ where: { id: txId }, data: { narration: 'Corrected' } }),
       ),
     ).rejects.toThrow();
@@ -156,14 +156,14 @@ describe('a grant the client has opened up', () => {
       updateGrantScope(client.userId, clientId, { edit: { transactions: true } }),
     );
 
-    const updated = await runAsUser(pro.userId, () =>
+    const updated = await runAsVerified(pro.userId, () =>
       prisma.transaction.update({ where: { id: txId }, data: { narration: 'Corrected' } }),
     );
     expect(updated.narration).toBe('Corrected');
 
     // Still never a delete: no policy grants one, at any setting.
     await expect(
-      runAsUser(pro.userId, () => prisma.transaction.delete({ where: { id: txId } })),
+      runAsVerified(pro.userId, () => prisma.transaction.delete({ where: { id: txId } })),
     ).rejects.toThrow();
   });
 
@@ -173,7 +173,7 @@ describe('a grant the client has opened up', () => {
     await runAsUser(client.userId, () =>
       updateGrantScope(client.userId, clientId, { edit: { books: true } }),
     );
-    await runAsUser(pro.userId, () =>
+    await runAsVerified(pro.userId, () =>
       prisma.account.create({
         data: { userId: client.userId, code: '4998', name: 'While allowed', type: 'INCOME' },
       }),
@@ -184,7 +184,7 @@ describe('a grant the client has opened up', () => {
     );
 
     await expect(
-      runAsUser(pro.userId, () =>
+      runAsVerified(pro.userId, () =>
         prisma.account.create({
           data: { userId: client.userId, code: '4997', name: 'After', type: 'INCOME' },
         }),
@@ -192,7 +192,7 @@ describe('a grant the client has opened up', () => {
     ).rejects.toThrow();
 
     // And what they already posted stays readable to them.
-    const seen = await runAsUser(pro.userId, () =>
+    const seen = await runAsVerified(pro.userId, () =>
       prisma.account.count({ where: { userId: client.userId } }),
     );
     expect(seen).toBeGreaterThan(0);
@@ -209,7 +209,7 @@ describe('a grant the client has opened up', () => {
     );
 
     await expect(
-      runAsUser(pro.userId, () =>
+      runAsVerified(pro.userId, () =>
         prisma.account.create({
           data: { userId: client.userId, code: '4996', name: 'Expired', type: 'INCOME' },
         }),
@@ -223,7 +223,7 @@ describe('what the professional’s own workspace is told', () => {
     const { client, pro, clientId } = await relationship('edit-listed');
     const { listClients } = await import('../../src/services/ca/caAccess.service.js');
 
-    const before = await runAsUser(pro.userId, () => listClients(pro.userId));
+    const before = await runAsVerified(pro.userId, () => listClients(pro.userId));
     expect(before.find((c) => c.id === clientId)).toMatchObject({
       canEditBooks: false,
       canEditTransactions: false,
@@ -235,7 +235,7 @@ describe('what the professional’s own workspace is told', () => {
       updateGrantScope(client.userId, clientId, { edit: { books: true, fmv: true } }),
     );
 
-    const after = await runAsUser(pro.userId, () => listClients(pro.userId));
+    const after = await runAsVerified(pro.userId, () => listClients(pro.userId));
     expect(after.find((c) => c.id === clientId)).toMatchObject({
       canEditBooks: true,
       canEditTransactions: false,
@@ -250,7 +250,7 @@ describe('the refusal a professional actually sees', () => {
     const { pro, clientId } = await relationship('edit-message');
     const { assertCaMayEdit } = await import('../../src/services/ca/caAccess.service.js');
 
-    const scope = await runAsUser(pro.userId, () => getCaScope(pro.userId, clientId));
+    const scope = await runAsVerified(pro.userId, () => getCaScope(pro.userId, clientId));
     expect(() => assertCaMayEdit(scope, 'books')).toThrow(/view-only/i);
     expect(() => assertCaMayEdit(scope, 'books')).toThrow(/Account Access/);
   });

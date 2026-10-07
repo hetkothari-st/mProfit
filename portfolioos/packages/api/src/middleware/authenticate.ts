@@ -31,7 +31,7 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
     // some downstream stream/callback chains don't propagate the ALS store.
     // `enterWith` sets the store on this async resource and every descendant,
     // which matches the lifetime of the HTTP request.
-    enterUserContext(payload.sub);
+    enterUserContext(payload.sub, { mfa: payload.mfa === true });
 
     // Acting for a managed family profile (see managedProfile.service). The
     // header is checked against the database on every request — a revoked

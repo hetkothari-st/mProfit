@@ -348,6 +348,9 @@ model RefreshToken {
   token     String?   @unique
   /// SHA-256 of the bearer value. The only thing looked up.
   tokenHash String    @unique
+  /// The session was signed in with a second factor (two-factor sign-in).
+  /// Carried to every token refreshed from it; gates professional access.
+  mfa       Boolean   @default(false)
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime

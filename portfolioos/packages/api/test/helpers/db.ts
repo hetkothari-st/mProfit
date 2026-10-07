@@ -113,3 +113,24 @@ export async function seedStockMaster(
 }
 
 export { prisma };
+
+/**
+ * Run `fn` as `userId` in a session signed in with two-factor, after making
+ * sure the account has two-factor on. The CA / adviser workspace requires
+ * both (lib/professionalMfa), so tests acting as a professional use this.
+ */
+const verifiedProfessionals = new Set<string>();
+export async function runAsVerified<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+  if (!verifiedProfessionals.has(userId)) {
+    const { encryptSecret } = await import('../../src/lib/secrets.js');
+    const { generateTotpSecret } = await import('../../src/lib/totp.js');
+    await runAsSystem(() =>
+      prisma.user.update({
+        where: { id: userId },
+        data: { twoFactorEnabledAt: new Date(), twoFactorSecretEnc: encryptSecret(generateTotpSecret()) },
+      }),
+    );
+    verifiedProfessionals.add(userId);
+  }
+  return runAsUser(userId, fn, { mfa: true });
+}

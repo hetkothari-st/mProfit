@@ -521,13 +521,15 @@ function EmptyAccess({ onInvite }: { onInvite: () => void }) {
  */
 function ActForClientsCard() {
   const entitled = useEntitlement('CA_WORKSPACE');
-  const { data: clients } = useQuery({
+  const { data: clients, isError } = useQuery({
     queryKey: ['ca', 'clients'],
     queryFn: () => caApi.listClients(),
     retry: false,
   });
 
-  if (!entitled.allowed || (clients?.length ?? 0) > 0) return null;
+  // An error here is typically "has clients, two-factor needed": not the
+  // practice-with-no-clients this card is for.
+  if (!entitled.allowed || isError || (clients?.length ?? 0) > 0) return null;
 
   return (
     <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 px-5 py-4">

@@ -52,6 +52,7 @@ import {
   caReceiptsZip,
   caReceiptsWorkbook,
 } from '../controllers/caAccounting.controller.js';
+import { requireProfessionalSecondFactor } from '../lib/professionalMfa.js';
 
 /**
  * The CA's own surface: their client list, and those clients' books.
@@ -64,6 +65,12 @@ import {
  */
 export const caRouter = Router();
 caRouter.use(authenticate);
+// The client list comes before the gate: every signed-in user's sidebar asks
+// it whether to show the workspace at all. It applies the gate itself once
+// there is something to show (listClientsHandler).
+caRouter.get('/clients', asyncHandler(listClientsHandler));
+// Two-factor sign-in, used for this session, for anything else in the workspace.
+caRouter.use(requireProfessionalSecondFactor);
 
 /**
  * The plan gate moved off the whole router and onto the routes that earn it.
@@ -80,7 +87,6 @@ caRouter.use(authenticate);
 const requireAdvisorPlan = requireFeature('CA_WORKSPACE');
 
 // Grants
-caRouter.get('/clients', asyncHandler(listClientsHandler));
 caRouter.post('/clients', requireAdvisorPlan, asyncHandler(createManagedClientHandler));
 // Returns the invitation token to the caller rather than emailing it. Delivery
 // is deliberately left to the caller for now: wiring it to the mailer without
@@ -201,5 +207,6 @@ professionalInviteRouter.get('/:token', asyncHandler(peekProfessionalInvitationH
 professionalInviteRouter.post(
   '/:token/accept',
   authenticate,
+  requireProfessionalSecondFactor,
   asyncHandler(acceptProfessionalInvitationHandler),
 );
