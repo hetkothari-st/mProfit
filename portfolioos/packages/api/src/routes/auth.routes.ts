@@ -15,6 +15,12 @@ import {
   deletionCode,
   deletionStatus,
   requestDeletion,
+  verifyTwoFactorHandler,
+  twoFactorStatusHandler,
+  twoFactorSetupHandler,
+  twoFactorEnableHandler,
+  twoFactorDisableHandler,
+  twoFactorBackupCodesHandler,
 } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
@@ -31,6 +37,14 @@ authRouter.post('/refresh', authLimiter, asyncHandler(refresh));
 authRouter.post('/logout', asyncHandler(logout));
 authRouter.post('/forgot-password', authLimiter, asyncHandler(forgotPassword));
 authRouter.post('/reset-password', authLimiter, asyncHandler(resetPasswordHandler));
+// Second step of a two-factor sign-in (no session yet: the challenge token
+// from /login or /google is the credential).
+authRouter.post('/2fa/verify', authLimiter, asyncHandler(verifyTwoFactorHandler));
+authRouter.get('/me/2fa', authenticate, asyncHandler(twoFactorStatusHandler));
+authRouter.post('/me/2fa/setup', authenticate, authLimiter, asyncHandler(twoFactorSetupHandler));
+authRouter.post('/me/2fa/enable', authenticate, authLimiter, asyncHandler(twoFactorEnableHandler));
+authRouter.post('/me/2fa/disable', authenticate, authLimiter, asyncHandler(twoFactorDisableHandler));
+authRouter.post('/me/2fa/backup-codes', authenticate, authLimiter, asyncHandler(twoFactorBackupCodesHandler));
 // Authenticated + rate-limited + audited: this returns a government ID.
 authRouter.post('/pan/reveal', authenticate, piiLimiter, asyncHandler(revealPan));
 authRouter.get('/me', authenticate, asyncHandler(me));

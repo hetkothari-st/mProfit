@@ -114,11 +114,11 @@ const TARGETS = [
   }),
   target({
     label: 'User',
-    fields: ['savedFilePasswordsEnc'] as const,
+    fields: ['savedFilePasswordsEnc', 'twoFactorSecretEnc', 'twoFactorPendingSecretEnc'] as const,
     findMany: (afterId) =>
       prisma.user.findMany({
         where: afterId ? { id: { gt: afterId } } : {},
-        select: { id: true, savedFilePasswordsEnc: true },
+        select: { id: true, savedFilePasswordsEnc: true, twoFactorSecretEnc: true, twoFactorPendingSecretEnc: true },
         take: BATCH,
         orderBy: { id: 'asc' },
       }),

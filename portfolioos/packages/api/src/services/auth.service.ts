@@ -23,6 +23,7 @@ import {
 import { panColumns } from './piiAtRest.service.js';
 import { assertNotPendingDeletion } from './accountDeletion.service.js';
 import { effectivePlan } from '../lib/effectivePlan.js';
+import { completeChallenge, createChallenge, isTwoFactorEnabled } from './twoFactor.service.js';
 
 interface IssueTokensResult {
   accessToken: string;
@@ -368,11 +369,30 @@ export async function loginUser(email: string, password: string, opts: { restore
   assertNotShadowClient(user);
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) throw new UnauthorizedError('Invalid credentials');
+  if (isTwoFactorEnabled(user)) return challengeSecondFactor(user, 'password', opts.restore === true);
   // Only after the password checks out, so the pending state is never
   // revealed to someone who doesn't own the account.
   await assertNotPendingDeletion(user, opts.restore === true);
 
   return issueSession(user);
+}
+
+/**
+ * The first factor passed on a 2FA account: hand back a challenge, not a
+ * session. A pending deletion still refuses here unless restore was asked
+ * for, but the restore itself (which cancels the deletion) waits until the
+ * second factor passes — the password alone must not undo a deletion.
+ */
+async function challengeSecondFactor(user: User, method: 'password' | 'google', restore: boolean) {
+  if (!restore) await assertNotPendingDeletion(user, false);
+  return createChallenge(user, method, restore);
+}
+
+/** Second step of a 2FA sign-in: challenge token + code → session. */
+export async function completeTwoFactorSignIn(mfaToken: string, code: string) {
+  const { user, restore, via } = await completeChallenge(mfaToken, code);
+  await assertNotPendingDeletion(user, restore);
+  return { ...(await issueSession(user)), via };
 }
 
 export async function refreshSession(refreshToken: string) {
@@ -613,6 +633,7 @@ export async function loginOrRegisterWithGoogle(idToken: string, opts: { restore
   // A CA may have entered the client's real Google address on the shadow
   // record; signing in with it must not adopt those books.
   assertNotShadowClient(user);
+  if (!isNew && isTwoFactorEnabled(user)) return challengeSecondFactor(user, 'google', opts.restore === true);
   await assertNotPendingDeletion(user, opts.restore === true);
 
   return { ...(await issueSession(user)), isNew };
