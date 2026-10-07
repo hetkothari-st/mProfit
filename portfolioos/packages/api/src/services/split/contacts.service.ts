@@ -20,7 +20,8 @@ export function normalizeEmail(raw: string): string {
 }
 
 export function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, '');
+  let digits = raw.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
   return digits.length === 10 ? `91${digits}` : digits;
 }
 
@@ -36,6 +37,7 @@ async function identifierColumns(prefix: 'email' | 'phone', raw: string | null |
   if (raw === null || raw.trim() === '') return { [prefix]: null, [`${prefix}Enc`]: null, [`${prefix}Hash`]: null };
   const value = prefix === 'email' ? normalizeEmail(raw) : normalizePhone(raw);
   if (prefix === 'email') checkEmail(value);
+  else if (value.length < 10 || value.length > 15) throw new BadRequestError('Invalid phone number');
   const { plain, enc } = await sealText(value);
   const hash = env.APP_ENCRYPTION_KEY ? hashIdentifier(value, prefix === 'email' ? EMAIL_PURPOSE : PHONE_PURPOSE) : null;
   return { [prefix]: plain, [`${prefix}Enc`]: enc, [`${prefix}Hash`]: hash };

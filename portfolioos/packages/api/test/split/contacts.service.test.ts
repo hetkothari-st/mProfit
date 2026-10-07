@@ -17,6 +17,7 @@ describe('split contacts', () => {
     expect(normalizeEmail('  Ravi@Example.COM ')).toBe('ravi@example.com');
     expect(normalizePhone('+91 98765-43210')).toBe('919876543210');
     expect(normalizePhone('9876543210')).toBe('919876543210');
+    expect(normalizePhone('09876543210')).toBe('919876543210');
   });
 
   it('stores email/phone encrypted with a lookup hash, returns plaintext', async () => {
@@ -44,5 +45,18 @@ describe('split contacts', () => {
   it('rejects an invalid email or UPI id', async () => {
     await expect(me.runAs(() => createContact(me.userId, { name: 'X', email: 'nope' }))).rejects.toThrow(/email/i);
     await expect(me.runAs(() => createContact(me.userId, { name: 'X', upiId: 'no-at-sign' }))).rejects.toThrow(/UPI/i);
+  });
+
+  it('rejects a digitless phone', async () => {
+    await expect(me.runAs(() => createContact(me.userId, { name: 'X', phone: 'abc' }))).rejects.toThrow(/phone/i);
+  });
+
+  it('clears email, emailEnc and emailHash when email is null', async () => {
+    const c = await me.runAs(() => createContact(me.userId, { name: 'Clr', email: 'clr@x.com' }));
+    await me.runAs(() => updateContact(me.userId, c.id, { email: null }));
+    const row = await runAsSystem(() => prisma.splitContact.findUniqueOrThrow({ where: { id: c.id } }));
+    expect(row.email).toBeNull();
+    expect(row.emailEnc).toBeNull();
+    expect(row.emailHash).toBeNull();
   });
 });
