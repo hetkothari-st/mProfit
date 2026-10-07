@@ -18,7 +18,7 @@ from the server.
 2. GitHub → **Actions** → **desktop-release** → **Run workflow** (branch `main`).
    This builds the Windows installer and the macOS app, and uploads both to a **draft** release named `v<version>`.
 3. Open **Releases**, download the installer from the draft and try it.
-4. When it's good, click **Publish release**. From that moment:
+4. When it's good, click **Publish release**. Leave **Set as a pre-release** unticked and **Set as the latest release** ticked. A pre-release is invisible to both the updater and the Settings download card. From that moment:
    - **Windows:** installed apps find it within 4 hours, or straight away via Help → Check for Updates. They download it in the background and offer "Restart now". If the user says Later, it installs the next time they quit.
    - **macOS:** installed apps show "Update available → Download".
 
