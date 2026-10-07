@@ -13,12 +13,14 @@ describe('split settlements and balances', () => {
   let a: string;
   let b: string;
   let c: string;
+  let chetanContactId: string;
 
   beforeAll(async () => {
     alice = await createTestScope('split-set-a');
     bob = await createTestScope('split-set-b');
     const cb = await seedContact(alice.userId, 'Bob', bob.userId);
     const cc = await seedContact(alice.userId, 'Chetan');
+    chetanContactId = cc.id;
     const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Flat', myDisplayName: 'Alice', contactIds: [cb.id, cc.id] }));
     groupId = g.id;
     a = g.members.find((m) => m.isMe)!.id;
@@ -55,7 +57,7 @@ describe('split settlements and balances', () => {
     expect(fa.find((f) => f.key === `u:${bob.userId}`)?.net).toBe('70.0000');
     const fb = await bob.runAs(() => listFriends(bob.userId));
     expect(fb.find((f) => f.key === `u:${alice.userId}`)?.net).toBe('-70.0000');
-    expect(fa.find((f) => f.key === `m:${c}`)?.net).toBe('130.0000');
+    expect(fa.find((f) => f.key === `c:${chetanContactId}`)?.net).toBe('130.0000');
   });
 
   it('settlement reduces balance; delete restores it', async () => {

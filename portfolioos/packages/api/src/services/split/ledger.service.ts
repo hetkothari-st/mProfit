@@ -35,6 +35,8 @@ export async function listFriends(userId: string): Promise<SplitFriendDto[]> {
   const home = settings?.homeCurrency ?? 'INR';
   const groups = await listGroups(userId, { includeDirect: true, includeArchived: true });
   const friends = new Map<string, SplitFriendDto & { total: Decimal }>();
+  // A placeholder is the same person across groups when it came from one of my contacts.
+  const myContactIds = new Set((await prisma.splitContact.findMany({ where: { ownerUserId: userId }, select: { id: true } })).map((c) => c.id));
 
   for (const g of groups) {
     const me = g.members.find((m) => m.isMe);
@@ -48,7 +50,7 @@ export async function listFriends(userId: string): Promise<SplitFriendDto[]> {
         if (t.fromMemberId === other.id && t.toMemberId === me.id) net = net.plus(t.amount);
         if (t.fromMemberId === me.id && t.toMemberId === other.id) net = net.minus(t.amount);
       }
-      const key = other.userId ? `u:${other.userId}` : `m:${other.id}`;
+      const key = other.userId ? `u:${other.userId}` : other.contactId && myContactIds.has(other.contactId) ? `c:${other.contactId}` : `m:${other.id}`;
       const f = friends.get(key) ?? { key, displayName: other.displayName, userId: other.userId, currency: home, net: serializeMoney(0), approx: false, groups: [], total: new Decimal(0) };
       f.groups.push({ groupId: g.id, groupName: g.name, net: serializeMoney(net), currency: g.baseCurrency });
       if (rate) f.total = f.total.plus(net.mul(rate));
