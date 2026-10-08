@@ -11,6 +11,7 @@ import {
 } from '../services/split/expenses.service.js';
 import { createSettlement, deleteSettlement, listSettlements, updateSettlement } from '../services/split/settlements.service.js';
 import { listLabels, createLabel, deleteLabel, setExpenseLabels } from '../services/split/labels.service.js';
+import { putReceipt, getReceipt, deleteReceipt } from '../services/split/receipts.service.js';
 import { listComments, addComment, deleteComment } from '../services/split/comments.service.js';
 import { getSettings, updateSettings, upiLink } from '../services/split/settings.service.js';
 import { groupBalances, listActivity, listFriends } from '../services/split/ledger.service.js';
@@ -137,3 +138,18 @@ const commentBody = z.object({ body: z.string().max(2000) });
 export const listCommentsHandler = async (req: Request, res: Response) => ok(res, await listComments(uid(req), p(req, 'id')));
 export const addCommentHandler = async (req: Request, res: Response) => created(res, await addComment(uid(req), p(req, 'id'), parse(commentBody, req.body).body));
 export const deleteCommentHandler = async (req: Request, res: Response) => { await deleteComment(uid(req), p(req, 'id')); noContent(res); };
+
+export const putReceiptHandler = async (req: Request, res: Response) => {
+  if (!req.file) throw new BadRequestError('Attach a receipt file');
+  ok(res, await putReceipt(uid(req), p(req, 'id'), { buffer: req.file.buffer, originalname: req.file.originalname }));
+};
+export const getReceiptHandler = async (req: Request, res: Response) => {
+  const r = await getReceipt(uid(req), p(req, 'id'));
+  const ext = r.mime === 'application/pdf' ? 'pdf' : r.mime.split('/')[1];
+  res.setHeader('Content-Type', r.mime);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Content-Disposition', `inline; filename="receipt.${ext}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.end(r.buffer);
+};
+export const deleteReceiptHandler = async (req: Request, res: Response) => { await deleteReceipt(uid(req), p(req, 'id')); noContent(res); };

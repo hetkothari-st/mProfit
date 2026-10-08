@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+import multer from 'multer';
+import { BadRequestError } from '../lib/errors.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
 import * as c from '../controllers/split.controller.js';
@@ -48,3 +51,12 @@ splitRouter.put('/expenses/:id/labels', asyncHandler(c.setExpenseLabelsHandler))
 splitRouter.get('/expenses/:id/comments', asyncHandler(c.listCommentsHandler));
 splitRouter.post('/expenses/:id/comments', asyncHandler(c.addCommentHandler));
 splitRouter.delete('/comments/:id', asyncHandler(c.deleteCommentHandler));
+
+// multer errors (e.g. LIMIT_FILE_SIZE) would otherwise surface as 500s.
+const receiptMulter = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }).single('file');
+const receiptUpload = (req: Request, res: Response, next: NextFunction) =>
+  receiptMulter(req, res, (err) => (err ? next(new BadRequestError('Receipts must be under 10 MB')) : next()));
+
+splitRouter.put('/expenses/:id/receipt', receiptUpload, asyncHandler(c.putReceiptHandler));
+splitRouter.get('/expenses/:id/receipt', asyncHandler(c.getReceiptHandler));
+splitRouter.delete('/expenses/:id/receipt', asyncHandler(c.deleteReceiptHandler));
