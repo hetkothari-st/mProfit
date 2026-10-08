@@ -126,4 +126,30 @@ describe('SplitHomePage', () => {
     renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
     expect(await screen.findByText(/Bob recorded a payment of ₹100\.00/)).toBeTruthy();
   });
+
+  it('words the Plan 3 activity kinds', async () => {
+    seed();
+    const mk = (id: string, kind: string, payload: unknown) => ({ id, groupId: 'g1', groupName: 'Goa trip', actorUserId: 'u2', actorName: 'Bob', kind, payload, createdAt: '2026-10-08T10:00:00Z' });
+    api.activity.mockResolvedValue([
+      mk('k1', 'EXPENSE_LABELED', { description: 'Hotel' }), mk('k2', 'COMMENTED', { description: 'Hotel' }),
+      mk('k3', 'RECEIPT_ADDED', { description: 'Hotel' }), mk('k4', 'RECEIPT_REMOVED', { description: 'Hotel' }),
+      mk('k5', 'MEMBER_LINKED', { displayName: 'Chetan' }),
+    ]);
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    expect(await screen.findByText(/Bob labelled “Hotel”/)).toBeTruthy();
+    expect(screen.getByText(/Bob commented on “Hotel”/)).toBeTruthy();
+    expect(screen.getByText(/Bob attached a receipt to “Hotel”/)).toBeTruthy();
+    expect(screen.getByText(/Bob removed the receipt from “Hotel”/)).toBeTruthy();
+    expect(screen.getByText(/Chetan joined EveryPaisa/)).toBeTruthy();
+  });
+
+  it('only archived groups: no "No groups yet", says all are archived', async () => {
+    seed();
+    api.listGroups.mockImplementation((includeArchived?: boolean) => Promise.resolve(includeArchived
+      ? [{ id: 'g2', name: 'Old flat', type: 'HOME', baseCurrency: 'INR', simplifyDebts: true, archivedAt: '2026-09-01T00:00:00Z', members: [], myNet: '0.0000' }]
+      : []));
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    expect(await screen.findByText('All your groups are archived.')).toBeTruthy();
+    expect(screen.queryByText('No groups yet')).toBeNull();
+  });
 });

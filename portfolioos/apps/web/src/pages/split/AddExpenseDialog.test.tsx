@@ -6,7 +6,7 @@ import { serializeMoney, type SplitGroupDto, type SplitExpenseDto } from '@every
 import { renderWithProviders } from './testUtils';
 import { AddExpenseDialog } from './AddExpenseDialog';
 
-const api = vi.hoisted(() => ({ createExpense: vi.fn(), updateExpense: vi.fn() }));
+const api = vi.hoisted(() => ({ createExpense: vi.fn(), updateExpense: vi.fn(), listLabels: vi.fn().mockResolvedValue([]), setExpenseLabels: vi.fn() }));
 vi.mock('@/api/split.api', async (orig) => ({ ...(await orig<typeof import('@/api/split.api')>()), splitApi: api }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -127,5 +127,29 @@ describe('AddExpenseDialog', () => {
     renderWithProviders(<AddExpenseDialog open onOpenChange={() => {}} group={group}
       expense={expenseOf({ currency: 'CHF', fxRate: '95' })} />);
     expect((screen.getByLabelText('Currency') as HTMLSelectElement).value).toBe('CHF');
+  });
+
+  it('labels: picking Food saves them on the new expense', async () => {
+    api.listLabels.mockResolvedValue([{ id: 'l-food', groupId: 'g1', name: 'Food', color: '#f00' }, { id: 'l-trip', groupId: 'g1', name: 'Trip', color: '#0f0' }]);
+    api.createExpense.mockResolvedValue({ id: 'new1' });
+    api.setExpenseLabels.mockResolvedValue(['l-food']);
+    renderWithProviders(<AddExpenseDialog open onOpenChange={() => {}} group={group} />);
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Lunch' } });
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '50' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Food' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
+    await waitFor(() => expect(api.setExpenseLabels).toHaveBeenCalledWith('new1', ['l-food']));
+  });
+
+  it('labels: edit prefills and only saves when changed', async () => {
+    api.listLabels.mockResolvedValue([{ id: 'l-food', groupId: 'g1', name: 'Food', color: '#f00' }]);
+    api.updateExpense.mockResolvedValue({});
+    api.setExpenseLabels.mockResolvedValue([]);
+    renderWithProviders(<AddExpenseDialog open onOpenChange={() => {}} group={group} expense={expenseOf({ labelIds: ['l-food'] })} />);
+    const chip = await screen.findByRole('button', { name: 'Food' });
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
+    await waitFor(() => expect(api.updateExpense).toHaveBeenCalled());
+    expect(api.setExpenseLabels).not.toHaveBeenCalled();
   });
 });

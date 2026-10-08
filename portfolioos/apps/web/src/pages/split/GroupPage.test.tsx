@@ -6,7 +6,7 @@ import { GroupPage } from './GroupPage';
 
 const api = vi.hoisted(() => ({
   getGroup: vi.fn(), listExpenses: vi.fn(), balances: vi.fn(), activity: vi.fn(), listContacts: vi.fn(),
-  createSettlement: vi.fn(), deleteSettlement: vi.fn(), updateGroup: vi.fn(), addMember: vi.fn(), removeMember: vi.fn(), listSettlements: vi.fn(),
+  createSettlement: vi.fn(), remind: vi.fn(), listLabels: vi.fn(), upiLink: vi.fn(), inviteContact: vi.fn(), deleteSettlement: vi.fn(), updateGroup: vi.fn(), addMember: vi.fn(), removeMember: vi.fn(), listSettlements: vi.fn(),
 }));
 vi.mock('@/api/split.api', async (orig) => ({ ...(await orig<typeof import('@/api/split.api')>()), splitApi: api }));
 const toastError = vi.hoisted(() => vi.fn());
@@ -37,6 +37,7 @@ function seed() {
   api.activity.mockResolvedValue([]);
   api.listContacts.mockResolvedValue([]);
   api.listSettlements.mockResolvedValue([]);
+  api.listLabels.mockResolvedValue([]);
 }
 
 const renderPage = () => renderWithProviders(<GroupPage />, { route: '/split/groups/g1', path: '/split/groups/:id' });
@@ -145,7 +146,7 @@ describe('GroupPage', () => {
     seed();
     api.listSettlements.mockResolvedValue([SETTLEMENT]);
     renderPage();
-    expect(await screen.findByText('Bob paid You ₹100.00')).toBeTruthy();
+    expect(await screen.findByText('Bob paid you ₹100.00')).toBeTruthy();
     expect(screen.getByText('Payment')).toBeTruthy();
     expect(screen.getByText('Hotel')).toBeTruthy();
   });
@@ -234,5 +235,91 @@ describe('GroupPage', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
     await screen.findByText('Chetan');
     expect(screen.queryByText(/not on the app yet/)).toBeNull();
+  });
+
+  it('balances: Pay on my debt, Remind on what I am owed', async () => {
+    seed();
+    api.balances.mockResolvedValue({ groupId: 'g1', baseCurrency: 'INR', simplified: true,
+      nets: [{ memberId: 'a', net: '0.0000' }, { memberId: 'b', net: '100.0000' }, { memberId: 'c', net: '-100.0000' }],
+      transfers: [{ fromMemberId: 'a', toMemberId: 'b', amount: '100.0000' }, { fromMemberId: 'c', toMemberId: 'a', amount: '50.0000' }] });
+    api.remind.mockResolvedValue({ sent: true });
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
+    expect(await screen.findByRole('button', { name: 'Pay' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Remind' }));
+    await waitFor(() => expect(api.remind).toHaveBeenCalledWith('g1', 'c'));
+    expect(toastSuccess).toHaveBeenCalledWith('Reminder sent');
+  });
+
+  it('remind: 409 reads as already reminded', async () => {
+    seed();
+    api.remind.mockRejectedValue({ isAxiosError: true, message: 'x', response: { status: 409, data: { error: 'SPLIT_ALREADY_REMINDED: nope' } } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Remind' }))[0]!);
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Already reminded today'));
+  });
+
+  it('label chips on rows, receipt clip, and a label filter', async () => {
+    seed();
+    api.listLabels.mockResolvedValue([{ id: 'l1', groupId: 'g1', name: 'Food', color: '#ff0000' }, { id: 'l2', groupId: 'g1', name: 'Stay', color: '#00ff00' }]);
+    const base = { groupId: 'g1', date: '2026-10-01', currency: 'INR', fxRate: '1', splitMode: 'EQUAL', createdById: 'u1', createdAt: '2026-10-01T00:00:00Z', sourceType: 'MANUAL', deletedAt: null };
+    api.listExpenses.mockResolvedValue([
+      { ...base, id: 'e1', description: 'Hotel', amount: '300.0000', baseAmount: '300.0000', labelIds: ['l2'], hasReceipt: false,
+        payers: [{ memberId: 'a', amount: '300.0000', baseAmount: '300.0000' }], shares: [{ memberId: 'a', amount: '300.0000', baseAmount: '300.0000', rawInput: null }] },
+      { ...base, id: 'e2', description: 'Dinner', amount: '60.0000', baseAmount: '60.0000', labelIds: ['l1'], hasReceipt: true,
+        payers: [{ memberId: 'a', amount: '60.0000', baseAmount: '60.0000' }], shares: [{ memberId: 'a', amount: '60.0000', baseAmount: '60.0000', rawInput: null }] },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Dinner')).toBeTruthy();
+    expect(screen.getByLabelText('Has receipt')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Food' }));
+    expect(screen.queryByText('Hotel')).toBeNull();
+    expect(screen.getByText('Dinner')).toBeTruthy();
+  });
+
+  it('payment rows say "paid you" mid-sentence', async () => {
+    seed();
+    api.listSettlements.mockResolvedValue([{ id: 's1', groupId: 'g1', fromMemberId: 'b', toMemberId: 'a', amount: '100.0000', baseAmount: '100.0000', currency: 'INR', method: 'CASH', date: '2026-10-02', deletedAt: null }]);
+    renderPage();
+    expect(await screen.findByText('Bob paid you ₹100.00')).toBeTruthy();
+  });
+
+  it('a failed payments load has its own retry line', async () => {
+    seed();
+    api.listSettlements.mockRejectedValue({ isAxiosError: true, message: 'x', response: { status: 500, data: {} } });
+    renderPage();
+    expect(await screen.findByText(/Couldn't load payments\./)).toBeTruthy();
+    expect(screen.getByText('Hotel')).toBeTruthy();
+  });
+
+  it('Archive group stays disabled until balances load', async () => {
+    seed();
+    api.balances.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    const tab = await screen.findByRole('tab', { name: 'Settings' });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+    expect(((await screen.findByRole('button', { name: 'Archive group' })) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('settings: Invite a placeholder with an email, tag linked members', async () => {
+    seed();
+    api.getGroup.mockResolvedValue({ ...GROUP, members: [
+      GROUP.members[0], { ...GROUP.members[1], userId: 'u2', contactId: 'c2' }, { ...GROUP.members[2], contactId: 'c3' },
+    ] });
+    api.listContacts.mockResolvedValue([
+      { id: 'c2', name: 'Bob', email: 'b@x.com', phone: null, upiId: null, linkedUserId: 'u2' },
+      { id: 'c3', name: 'Chetan', email: 'c@x.com', phone: null, upiId: null, linkedUserId: null },
+    ]);
+    api.inviteContact.mockResolvedValue({ sent: true });
+    renderPage();
+    const tab = await screen.findByRole('tab', { name: 'Settings' });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+    expect(await screen.findByText('On EveryPaisa')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Invite Chetan' }));
+    await waitFor(() => expect(api.inviteContact).toHaveBeenCalledWith('c3'));
+    expect(toastSuccess).toHaveBeenCalledWith('Invite sent');
   });
 });
