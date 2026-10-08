@@ -10,6 +10,7 @@ import {
   createExpense, deleteExpense, getExpense, listExpenses, restoreExpense, updateExpense,
 } from '../services/split/expenses.service.js';
 import { createSettlement, deleteSettlement, listSettlements, updateSettlement } from '../services/split/settlements.service.js';
+import { listLabels, createLabel, deleteLabel, setExpenseLabels } from '../services/split/labels.service.js';
 import { getSettings, updateSettings, upiLink } from '../services/split/settings.service.js';
 import { groupBalances, listActivity, listFriends } from '../services/split/ledger.service.js';
 
@@ -123,3 +124,10 @@ export const upiLinkHandler = async (req: Request, res: Response) => {
   if (!to) throw new BadRequestError('to is required');
   ok(res, await upiLink(uid(req), p(req, 'id'), to, amount));
 };
+
+const labelBody = z.object({ name: z.string().max(60), color: z.string().max(7) });
+const labelIdsBody = z.object({ labelIds: z.array(z.string().min(1).max(64)).max(10) });
+export const listLabelsHandler = async (req: Request, res: Response) => ok(res, await listLabels(uid(req), p(req, 'id')));
+export const createLabelHandler = async (req: Request, res: Response) => created(res, await createLabel(uid(req), p(req, 'id'), parse(labelBody, req.body)));
+export const deleteLabelHandler = async (req: Request, res: Response) => { await deleteLabel(uid(req), p(req, 'id')); noContent(res); };
+export const setExpenseLabelsHandler = async (req: Request, res: Response) => ok(res, await setExpenseLabels(uid(req), p(req, 'id'), parse(labelIdsBody, req.body).labelIds));
