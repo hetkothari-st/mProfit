@@ -49,7 +49,7 @@ describe('ExpenseDetailPage', () => {
     renderWithProviders(<ExpenseDetailPage />, route);
     fireEvent.click(await screen.findByRole('button', { name: /Delete/ }));
     await waitFor(() => expect(toastError).toHaveBeenCalled());
-    expect(String(toastError.mock.calls[0]?.[0])).toContain('member left');
+    expect(String(toastError.mock.calls[0]?.[0])).toBe('Member left');
   });
 
   it('undo restores the expense; a failed restore toasts the server message', async () => {
@@ -66,6 +66,6 @@ describe('ExpenseDetailPage', () => {
     fireEvent.click(view.getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(api.restoreExpense).toHaveBeenCalledWith('e1'));
     await waitFor(() => expect(toastError).toHaveBeenCalled());
-    expect(String(toastError.mock.calls[0]?.[0])).toContain('member left');
+    expect(String(toastError.mock.calls[0]?.[0])).toBe('Member left');
   });
 });

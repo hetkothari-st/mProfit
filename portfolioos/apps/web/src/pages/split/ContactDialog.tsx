@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { apiErrorMessage } from '@/api/client';
+import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 
 export function ContactDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (o: boolean) => void; onSaved?: (c: SplitContactDto) => void }) {
@@ -28,7 +28,7 @@ export function ContactDialog({ open, onOpenChange, onSaved }: { open: boolean; 
       onOpenChange(false);
       onSaved?.(c);
     },
-    onError: (err) => setError(apiErrorMessage(err, 'Could not add the person')),
+    onError: (err) => setError(splitErrorMessage(err, 'Could not add the person')),
   });
 
   const submit = (e: FormEvent) => {

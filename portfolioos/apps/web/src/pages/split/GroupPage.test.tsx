@@ -78,7 +78,7 @@ describe('GroupPage', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Remove Bob' }));
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringContaining('settle this member to zero first')));
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Settle this member to zero first'));
   });
 
   it('direct groups hide member management', async () => {

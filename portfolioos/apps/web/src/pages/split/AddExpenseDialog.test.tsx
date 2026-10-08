@@ -62,7 +62,8 @@ describe('AddExpenseDialog', () => {
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'X' } });
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '10' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
-    expect(await screen.findByText(/SPLIT_SUM_MISMATCH/)).toBeTruthy();
+    expect(await screen.findByText('Shares add to 99')).toBeTruthy();
+    expect(screen.queryByText(/SPLIT_SUM_MISMATCH/)).toBeNull();
   });
 
   const expenseOf = (over: Partial<SplitExpenseDto>): SplitExpenseDto => ({

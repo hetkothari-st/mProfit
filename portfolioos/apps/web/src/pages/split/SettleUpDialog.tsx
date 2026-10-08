@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { apiErrorMessage } from '@/api/client';
+import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { todayLocal } from '@/lib/localDate';
 import { cleanAmount } from './expenseForm';
@@ -54,7 +54,7 @@ export function SettleUpDialog({ open, onOpenChange, group, from, to, amount }: 
       toast.success('Payment recorded');
       onOpenChange(false);
     },
-    onError: (err) => setError(apiErrorMessage(err, 'Could not record the payment')),
+    onError: (err) => setError(splitErrorMessage(err, 'Could not record the payment')),
   });
 
   const submit = (e: FormEvent) => {

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { apiErrorMessage } from '@/api/client';
+import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { formatSplitMoney } from '@/lib/splitFormat';
 import { todayLocal } from '@/lib/localDate';
@@ -60,7 +60,7 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
       toast.success(expense ? 'Expense updated' : 'Expense added');
       onOpenChange(false);
     },
-    onError: (err) => setServerError(apiErrorMessage(err, 'Could not save the expense')),
+    onError: (err) => setServerError(splitErrorMessage(err, 'Could not save the expense')),
   });
 
   const submit = (e: FormEvent) => {

@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { apiErrorMessage } from '@/api/client';
+import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { formatSplitMoney, memberName, transferLabel } from '@/lib/splitFormat';
 import { BalancePill } from './BalancePill';
@@ -84,7 +84,7 @@ function SettingsTab({ group }: { group: SplitGroupDto }) {
   const [addPerson, setAddPerson] = useState(false);
   const contacts = useQuery({ queryKey: SPLIT_KEYS.contacts, queryFn: splitApi.listContacts });
   const refresh = () => void qc.invalidateQueries({ queryKey: SPLIT_KEYS.all });
-  const onErr = (fallback: string) => (err: unknown) => toast.error(apiErrorMessage(err, fallback));
+  const onErr = (fallback: string) => (err: unknown) => toast.error(splitErrorMessage(err, fallback));
 
   const update = useMutation({ mutationFn: (p: Parameters<typeof splitApi.updateGroup>[1]) => splitApi.updateGroup(group.id, p), onSuccess: () => { refresh(); toast.success('Saved'); }, onError: onErr('Could not save') });
   const add = useMutation({ mutationFn: (contactId: string) => splitApi.addMember(group.id, contactId), onSuccess: refresh, onError: onErr('Could not add') });

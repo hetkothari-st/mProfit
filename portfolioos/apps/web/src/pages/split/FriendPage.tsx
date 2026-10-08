@@ -8,7 +8,7 @@ import type { SplitGroupDto } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { apiErrorMessage } from '@/api/client';
+import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { BalancePill } from './BalancePill';
@@ -25,7 +25,7 @@ export function FriendPage() {
   const open1to1 = useMutation({
     mutationFn: (contactId: string) => splitApi.directGroup(contactId, myDisplayName(user)),
     onSuccess: (g) => setDirect(g),
-    onError: (err) => toast.error(apiErrorMessage(err, 'Could not open your 1:1 expenses')),
+    onError: (err) => toast.error(splitErrorMessage(err, 'Could not open your 1:1 expenses')),
   });
 
   if (friends.isError) {

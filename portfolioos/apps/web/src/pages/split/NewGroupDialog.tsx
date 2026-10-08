@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { apiErrorMessage } from '@/api/client';
+import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi, type NewGroupInput } from '@/api/split.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { ContactDialog } from './ContactDialog';
@@ -51,7 +51,7 @@ export function NewGroupDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       onOpenChange(false);
       navigate(`/split/groups/${g.id}`);
     },
-    onError: (err) => setError(apiErrorMessage(err, 'Could not create the group')),
+    onError: (err) => setError(splitErrorMessage(err, 'Could not create the group')),
   });
 
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
