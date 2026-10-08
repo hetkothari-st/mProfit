@@ -8,6 +8,7 @@
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 import { buildStorageKey, saveBuffer, readBuffer, deleteFile } from '../../lib/documentStorage.js';
+import { logger } from '../../lib/logger.js';
 import { requireMember } from './groups.service.js';
 import { writeActivity } from './activity.js';
 import { detectReceiptKind, isHeic, stripImageMetadata, type ReceiptKind } from './imageMeta.js';
@@ -36,11 +37,11 @@ export async function putReceipt(userId: string, expenseId: string, file: { buff
   if (e.deletedAt) throw new BadRequestError('Restore the expense before changing its receipt');
   if (file.buffer.length === 0) throw new BadRequestError('The file is empty');
   if (file.buffer.length > MAX_BYTES) throw new BadRequestError('Receipts must be under 10 MB');
-  if (isHeic(file.buffer)) throw new BadRequestError("HEIC photos aren't supported — share the photo as JPEG");
+  if (isHeic(file.buffer)) throw new BadRequestError("HEIC photos aren't supported - share the photo as JPEG");
   const kind = detectReceiptKind(file.buffer);
   if (!kind) throw new BadRequestError('Upload a JPEG, PNG, WebP or PDF receipt');
   const clean = stripImageMetadata(file.buffer, kind);
-  if (!clean) throw new BadRequestError("We couldn't read this image — try saving it as JPEG or PNG");
+  if (!clean) throw new BadRequestError("We couldn't read this image - try saving it as JPEG or PNG");
   const key = buildStorageKey(`receipt${EXT[kind]}`);
   await saveBuffer(userId, key, clean);
   try {
@@ -49,7 +50,8 @@ export async function putReceipt(userId: string, expenseId: string, file: { buff
     await writeActivity(tx, e.groupId, userId, 'RECEIPT_ADDED', { expenseId, description: e.description });
   });
   } catch (err) {
-    await deleteFile(userId, key); // don't orphan the sealed blob
+    // Don't orphan the sealed blob; a failed cleanup must not mask the original error.
+    await deleteFile(userId, key).catch((cleanupErr: unknown) => logger.error({ err: cleanupErr, key }, '[split] receipt blob cleanup failed'));
     throw err;
   }
   await dropBlob(e.receiptOwnerUserId, e.receiptBlobId);

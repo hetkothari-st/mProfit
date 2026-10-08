@@ -32,9 +32,9 @@ describe('split receipts', () => {
 
   it('rejects HEIC, empty and unreadable images with clear messages', async () => {
     const put = (buffer: Buffer) => alice.runAs(() => putReceipt(alice.userId, expenseId, { buffer, originalname: 'r.x' }));
-    await expect(put(Buffer.concat([Buffer.alloc(4), Buffer.from('ftypheic')]))).rejects.toThrow(/HEIC photos aren't supported/);
-    await expect(put(Buffer.alloc(0))).rejects.toThrow(/empty/);
-    await expect(put(PNG.subarray(0, 14))).rejects.toThrow(/couldn't read this image/);
+    await expect(put(Buffer.concat([Buffer.alloc(4), Buffer.from('ftypheic')]))).rejects.toThrow("HEIC photos aren't supported - share the photo as JPEG");
+    await expect(put(Buffer.alloc(0))).rejects.toThrow('The file is empty');
+    await expect(put(PNG.subarray(0, 14))).rejects.toThrow("We couldn't read this image - try saving it as JPEG or PNG");
   });
 
   it('outsider gets 404', async () => {
