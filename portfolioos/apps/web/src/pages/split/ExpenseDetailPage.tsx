@@ -13,16 +13,9 @@ import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { formatSplitMoney, memberName } from '@/lib/splitFormat';
 import { AddExpenseDialog } from './AddExpenseDialog';
 import { isNotFound } from './queryErrors';
+import { LoadError } from './LoadError';
 
 const MODE_LABEL = { EQUAL: 'Split equally', EXACT: 'Exact amounts', PERCENT: 'By percent', SHARES: 'By shares' } as const;
-
-function LoadError({ text, onRetry }: { text: string; onRetry: () => void }) {
-  return (
-    <p className="text-sm text-muted-foreground py-6 text-center">
-      {text} <Button variant="link" size="sm" onClick={onRetry}>Retry</Button>
-    </p>
-  );
-}
 
 export function ExpenseDetailPage() {
   const { id = '' } = useParams();
@@ -70,7 +63,7 @@ export function ExpenseDetailPage() {
   const foreign = e.currency !== g.baseCurrency;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-24">
       <Link to={`/split/groups/${g.id}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />{g.name}</Link>
       <PageHeader
         eyebrow="Split Expenses"

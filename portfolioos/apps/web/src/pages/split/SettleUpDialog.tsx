@@ -12,9 +12,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { todayLocal } from '@/lib/localDate';
-import { cleanAmount } from './expenseForm';
-
-const MONEY = /^\d+(\.\d{1,2})?$/;
+import { memberName } from '@/lib/splitFormat';
+import { cleanAmount, MONEY } from './expenseForm';
 
 export function SettleUpDialog({ open, onOpenChange, group, from, to, amount }: {
   open: boolean; onOpenChange: (o: boolean) => void; group: SplitGroupDto; from?: string; to?: string; amount?: string;
@@ -65,7 +64,7 @@ export function SettleUpDialog({ open, onOpenChange, group, from, to, amount }: 
     save.mutate();
   };
 
-  const label = (id: string) => (active.find((m) => m.id === id)?.isMe ? 'You' : active.find((m) => m.id === id)?.displayName ?? '');
+  const label = (id: string) => memberName(active, id);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

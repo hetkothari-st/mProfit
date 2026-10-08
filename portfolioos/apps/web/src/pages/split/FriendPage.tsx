@@ -39,7 +39,7 @@ export function FriendPage() {
   if (!friend) return <p className="text-sm text-muted-foreground">No balances with this person. <Link className="underline" to="/split">Back</Link></p>;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-24">
       <Link to="/split" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Split Expenses</Link>
       <PageHeader
         eyebrow="Split Expenses"
