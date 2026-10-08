@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({ getExpense: vi.fn(), getGroup: vi.fn(), deleteEx
 const toastError = vi.hoisted(() => vi.fn());
 const toastFn = vi.hoisted(() => vi.fn());
 vi.mock('@/api/split.api', async (orig) => ({ ...(await orig<typeof import('@/api/split.api')>()), splitApi: api }));
+vi.mock('./ExpenseExtras', () => ({ ExpenseExtras: () => null }));
 vi.mock('react-hot-toast', () => {
   const t = Object.assign(toastFn, { success: vi.fn(), error: toastError, dismiss: vi.fn() });
   return { default: t };
