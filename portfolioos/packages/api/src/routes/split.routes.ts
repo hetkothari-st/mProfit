@@ -66,3 +66,6 @@ const receiptUpload = (req: Request, res: Response, next: NextFunction) =>
 splitRouter.put('/expenses/:id/receipt', receiptUploadLimiter, receiptUpload, rebindUserContext, asyncHandler(c.putReceiptHandler));
 splitRouter.get('/expenses/:id/receipt', asyncHandler(c.getReceiptHandler));
 splitRouter.delete('/expenses/:id/receipt', asyncHandler(c.deleteReceiptHandler));
+
+splitRouter.get('/expenses/:id/share-link', asyncHandler(c.getShareLinkHandler));
+splitRouter.put('/expenses/:id/share-link', asyncHandler(c.setShareLinkHandler));

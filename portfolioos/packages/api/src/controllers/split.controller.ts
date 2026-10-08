@@ -14,6 +14,7 @@ import { listLabels, createLabel, deleteLabel, setExpenseLabels } from '../servi
 import { putReceipt, getReceipt, deleteReceipt } from '../services/split/receipts.service.js';
 import { listComments, addComment, deleteComment } from '../services/split/comments.service.js';
 import { getSettings, updateSettings, upiLink } from '../services/split/settings.service.js';
+import { getShareLink, setShareLink } from '../services/split/shareLink.service.js';
 import { groupBalances, listActivity, listFriends } from '../services/split/ledger.service.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
@@ -153,3 +154,7 @@ export const getReceiptHandler = async (req: Request, res: Response) => {
   res.end(r.buffer);
 };
 export const deleteReceiptHandler = async (req: Request, res: Response) => { await deleteReceipt(uid(req), p(req, 'id')); noContent(res); };
+
+const shareLinkBody = z.object({ enabled: z.boolean(), portfolioId: z.string().max(64).nullable().optional() });
+export const getShareLinkHandler = async (req: Request, res: Response) => ok(res, await getShareLink(uid(req), p(req, 'id')));
+export const setShareLinkHandler = async (req: Request, res: Response) => ok(res, await setShareLink(uid(req), p(req, 'id'), parse(shareLinkBody, req.body)));

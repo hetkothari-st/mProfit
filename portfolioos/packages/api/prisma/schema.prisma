@@ -5236,6 +5236,7 @@ model SplitShareLink {
   userId     String
   user       User   @relation("SplitShareLinkUser", fields: [userId], references: [id], onDelete: Cascade)
   cashFlowId String
+  portfolioId String
 
   @@unique([expenseId, userId])
 }

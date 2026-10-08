@@ -14,6 +14,7 @@ import { computeShares, toBase, allocateBase } from './allocate.js';
 import { requireMember, loadLedger, assertLeftMembersSettled } from './groups.service.js';
 import { writeActivity } from './activity.js';
 import { resolveFxRate } from './fx.js';
+import { syncShareLinksSafely } from './shareLink.service.js';
 import { parseCcy, parseIsoDate, parseMoney2dp } from './validate.js';
 
 export interface ExpenseInput {
@@ -171,6 +172,7 @@ export async function updateExpense(userId: string, id: string, input: Omit<Expe
       after: { description: b.scalar.description, amount: b.scalar.amount, currency: b.scalar.currency },
     });
   });
+  await syncShareLinksSafely(id);
   return getExpense(userId, id);
 }
 
@@ -182,6 +184,7 @@ export async function deleteExpense(userId: string, id: string): Promise<void> {
     await tx.splitExpense.update({ where: { id }, data: { deletedAt: new Date() } });
     await writeActivity(tx, e.groupId, userId, 'EXPENSE_DELETED', { expenseId: id, description: e.description });
   });
+  await syncShareLinksSafely(id);
 }
 
 export async function restoreExpense(userId: string, id: string): Promise<SplitExpenseDto> {
@@ -192,6 +195,7 @@ export async function restoreExpense(userId: string, id: string): Promise<SplitE
       await tx.splitExpense.update({ where: { id }, data: { deletedAt: null } });
       await writeActivity(tx, e.groupId, userId, 'EXPENSE_RESTORED', { expenseId: id, description: e.description });
     });
+    await syncShareLinksSafely(id);
   }
   return getExpense(userId, id);
 }

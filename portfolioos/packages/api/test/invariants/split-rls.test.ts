@@ -192,7 +192,7 @@ describe('invariant: Split RLS', () => {
     const ids = await alice.runAs(async () => ({
       d: (await prisma.splitDetection.create({ data: { userId: alice.userId, source: 'PASTE', sourceHash: 'h-' + alice.userId,
         amount: '5', direction: 'DEBIT', date: new Date('2026-10-01') } })).id,
-      l: (await prisma.splitShareLink.create({ data: { expenseId, userId: alice.userId, cashFlowId: 'cf1' } })).id,
+      l: (await prisma.splitShareLink.create({ data: { expenseId, userId: alice.userId, cashFlowId: 'cf1', portfolioId: 'p1' } })).id,
       s: (await prisma.splitSettings.create({ data: { userId: alice.userId } })).userId,
     }));
     await bob.runAs(async () => {
