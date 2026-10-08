@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
-import { Decimal, toDecimal, formatDateIST } from '@everypaisa/shared';
+import { Decimal, toDecimal, formatDateIST, formatDateOnly } from '@everypaisa/shared';
 import { drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
 import { themeFor, hexToArgb, type PdfTheme, type ThemeName } from './charts/pdfTheme.js';
 import { drawBrandLockup } from './charts/pdfBrand.js';
@@ -442,7 +442,7 @@ function renderTable(doc: InstanceType<typeof PDFDocument>, o: RenderTableOpts):
 
   const cellText = (col: ExportColumn, row: Record<string, unknown>): string => {
     const raw = row[col.key];
-    return pdfSafe(col.formatter ? col.formatter(raw) : raw == null ? '' : String(raw));
+    return pdfSafe(col.formatter ? (col.formatter === fmtDate ? fmtDatePdf : col.formatter)(raw) : raw == null ? '' : String(raw));
   };
 
   // One alignment per column, shared by the header and every cell. Previously
@@ -569,6 +569,12 @@ export function fmtNum(v: unknown, decimals = 2): string {
   }
   const signed = negative ? '-' + grouped : grouped;
   return fracPart ? `${signed}.${fracPart}` : signed;
+}
+
+/** dd/mm/yyyy for PDF rendering only; `fmtDate` stays ISO for CSV/Excel cells. */
+export function fmtDatePdf(v: unknown): string {
+  const iso = fmtDate(v);
+  return iso ? formatDateOnly(iso) : '';
 }
 
 export function fmtDate(v: unknown): string {

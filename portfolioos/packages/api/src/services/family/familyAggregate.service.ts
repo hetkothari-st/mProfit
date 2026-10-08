@@ -23,7 +23,7 @@ import {
   type AttentionUrgency,
   type AttentionItem,
   type FamilyAttention,
-  premiumToAnnual,
+  premiumToAnnual, formatDateOnly
 } from '@everypaisa/shared';
 import { runAsUser } from '../../lib/requestContext.js';
 import {
@@ -965,7 +965,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
       id: `FD_MATURITY:${t.id}`,
       type: 'FD_MATURITY',
       title: `${t.assetName ?? t.assetClass} matures in ${days} day${days === 1 ? '' : 's'}`,
-      description: `Matures on ${due.toISOString().slice(0, 10)} — decide whether to renew or withdraw`,
+      description: `Matures on ${formatDateOnly(due.toISOString().slice(0, 10))} — decide whether to renew or withdraw`,
       urgency: days <= 7 ? 'HIGH' : days <= 30 ? 'MEDIUM' : 'LOW',
       daysUntil: days,
       dueDate: due.toISOString().slice(0, 10),
@@ -981,7 +981,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
       id: `INSURANCE_PREMIUM_DUE:${p.id}`,
       type: 'INSURANCE_PREMIUM_DUE',
       title: `${p.insurer} ${p.type} premium due`,
-      description: `Premium due on ${due.toISOString().slice(0, 10)}`,
+      description: `Premium due on ${formatDateOnly(due.toISOString().slice(0, 10))}`,
       urgency: urgencyForDays(days),
       daysUntil: days,
       dueDate: due.toISOString().slice(0, 10),

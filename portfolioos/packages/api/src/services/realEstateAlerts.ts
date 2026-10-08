@@ -10,6 +10,7 @@
  * Run on a daily cron (registered alongside other alert scanners).
  */
 
+import { formatDateOnly } from '@everypaisa/shared';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 
@@ -91,8 +92,8 @@ async function scanPropertyTax(property: PropertyForScan, today: Date): Promise<
       type: 'PROPERTY_TAX_DUE',
       title: `Property tax due in ${days} day${days !== 1 ? 's' : ''} — ${property.name}`,
       description: taxAmount
-        ? `${taxAmount} property tax due on ${dueDate.toISOString().slice(0, 10)}`
-        : `Property tax due on ${dueDate.toISOString().slice(0, 10)}`,
+        ? `${taxAmount} property tax due on ${formatDateOnly(dueDate.toISOString().slice(0, 10))}`
+        : `Property tax due on ${formatDateOnly(dueDate.toISOString().slice(0, 10))}`,
       triggerDate: new Date(),
       metadata: {
         key: metaKey,
@@ -129,8 +130,8 @@ async function scanPossession(property: PropertyForScan, today: Date): Promise<n
       type: 'PROPERTY_POSSESSION_DUE',
       title: `Possession in ${days} day${days !== 1 ? 's' : ''} — ${property.name}`,
       description: property.builderName
-        ? `${property.builderName} — possession expected on ${due.toISOString().slice(0, 10)}`
-        : `Possession expected on ${due.toISOString().slice(0, 10)}`,
+        ? `${property.builderName} — possession expected on ${formatDateOnly(due.toISOString().slice(0, 10))}`
+        : `Possession expected on ${formatDateOnly(due.toISOString().slice(0, 10))}`,
       triggerDate: new Date(),
       metadata: {
         key: metaKey,
@@ -171,7 +172,7 @@ async function scanInsuranceLink(
       portfolioId: property.portfolioId,
       type: 'INSURANCE_PREMIUM',
       title: `Insurance renewal in ${days} day${days !== 1 ? 's' : ''} — ${property.name}`,
-      description: `${policy.insurer} — premium due on ${policy.nextPremiumDue.toISOString().slice(0, 10)}`,
+      description: `${policy.insurer} — premium due on ${formatDateOnly(policy.nextPremiumDue.toISOString().slice(0, 10))}`,
       triggerDate: new Date(),
       metadata: {
         key: metaKey,

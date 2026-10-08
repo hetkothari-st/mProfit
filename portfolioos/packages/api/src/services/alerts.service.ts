@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { formatDateOnly } from '@everypaisa/shared';
 import { NotFoundError } from '../lib/errors.js';
 import type { AlertType, AssetClass } from '@prisma/client';
 import { generateLoanEmiAlerts } from './loans.service.js';
@@ -157,7 +158,7 @@ export async function generateVehicleExpiryAlerts(userId?: string): Promise<numb
           type: 'CUSTOM',
           title: `${label} expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
           // Last four only: alert text is stored in plain text.
-          description: `Vehicle ending ${vehicle.registrationNoLast4 ?? plateOf(vehicle).slice(-4)} — ${label} expires on ${expiryDate.toISOString().slice(0, 10)}`,
+          description: `Vehicle ending ${vehicle.registrationNoLast4 ?? plateOf(vehicle).slice(-4)} — ${label} expires on ${formatDateOnly(expiryDate.toISOString().slice(0, 10))}`,
           triggerDate: new Date(),
           metadata: { key: metaKey, vehicleId: vehicle.id, field, daysLeft },
         },
@@ -323,7 +324,7 @@ export async function generatePoMaturityAlerts(userId?: string): Promise<number>
         userId: ownerId,
         type: 'FD_MATURITY',
         title: `${schemeLabel} matures in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
-        description: `${txn.assetName ?? schemeLabel} matures on ${expiryDate.toISOString().slice(0, 10)}`,
+        description: `${txn.assetName ?? schemeLabel} matures on ${formatDateOnly(expiryDate.toISOString().slice(0, 10))}`,
         triggerDate: new Date(),
         metadata: { key: metaKey, transactionId: txn.id, daysLeft },
       },

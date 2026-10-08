@@ -16,6 +16,7 @@
  * alert carries a key that includes the date and threshold, so a re-run of the
  * nightly scan never duplicates one.
  */
+import { formatDateOnly } from '@everypaisa/shared';
 import { Decimal } from 'decimal.js';
 import type { AlertType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
@@ -167,7 +168,7 @@ export async function generateDepositReminderAlerts(userId?: string): Promise<nu
           : toDue === 0
             ? `${label} installment due today`
             : `${label} installment due in ${days(toDue)}`,
-        description: `Installment of ₹${amount} ${overdue ? 'was due' : 'due'} on ${dueIso}`,
+        description: `Installment of ₹${amount} ${overdue ? 'was due' : 'due'} on ${formatDateOnly(dueIso)}`,
         metadata: { depositKey, dueDate: dueIso, daysLeft: toDue, isOverdue: overdue },
       },
     );

@@ -52,8 +52,7 @@ const PAD = 24;
 const LABEL_W = 150;
 
 function prettyDate(iso: string): string {
-  const [y, m, d] = iso.split('-').map((n) => Number.parseInt(n, 10));
-  return formatDateOnly(`${y}-${String(m ?? 1).padStart(2, '0')}-${String(d ?? 1).padStart(2, '0')}`);
+  return formatDateOnly(iso);
 }
 
 /**

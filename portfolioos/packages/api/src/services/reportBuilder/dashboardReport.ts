@@ -30,7 +30,7 @@ import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
-import { fmtNum, fmtDate } from '../export.service.js';
+import { fmtNum, fmtDatePdf } from '../export.service.js';
 import { computePortfolioXirr, computeUserXirr } from '../xirr.service.js';
 import { computePortfolioCapitalGains } from '../capitalGains.service.js';
 import { computePortfolioFoPnl } from '../foPnl.service.js';
@@ -905,7 +905,7 @@ function drawTable(
       const raw = rows[i]![col.key];
       let display: string;
       if (col.dateField) {
-        display = pdfSafe(fmtDate(raw));
+        display = pdfSafe(fmtDatePdf(raw));
       } else if (col.money) {
         display = raw == null || raw === '' ? '' : fmtNum(raw);
       } else {
@@ -994,7 +994,7 @@ export async function streamDashboardExcel(res: Response, params: DashboardRepor
   ws.getCell('A1').value = 'EveryPaisa — Comprehensive Portfolio Report';
   ws.getCell('A1').font = { bold: true, size: 14 };
   ws.getCell('A2').value = `Portfolio: ${portfolioIdFilter ? (portfolios.find(p => p.id === portfolioIdFilter)?.name ?? '') : 'All Portfolios'}`;
-  ws.getCell('A3').value = `Generated: ${new Date().toISOString().slice(0, 10)}`;
+  ws.getCell('A3').value = `Generated: ${formatDateIST(new Date())}`;
   ws.addRow([]);
   ws.addRow(['Metric', 'Value']).font = { bold: true };
   ws.addRow(['Net Worth',          `₹${fmtNum(nw.totalNetWorth)}`]);

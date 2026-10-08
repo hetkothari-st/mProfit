@@ -99,7 +99,7 @@ describe('generateDepositReminderAlerts', () => {
     expect(created()[0]).toMatchObject({
       type: 'CUSTOM',
       title: 'ICICI Bank RD installment due in 3 days',
-      description: 'Installment of ₹5,000.00 due on 2026-09-05',
+      description: 'Installment of ₹5,000.00 due on 05/09/2026',
     });
   });
 
@@ -110,7 +110,7 @@ describe('generateDepositReminderAlerts', () => {
     expect(await generateDepositReminderAlerts()).toBe(1);
     expect(created()[0]).toMatchObject({
       title: 'ICICI Bank RD installment overdue by 5 days',
-      description: 'Installment of ₹5,000.00 was due on 2026-09-05',
+      description: 'Installment of ₹5,000.00 was due on 05/09/2026',
     });
 
     // Next night's scan finds the alert it already raised.
