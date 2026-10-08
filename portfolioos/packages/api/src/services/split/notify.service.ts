@@ -93,12 +93,32 @@ function activityLine(actor: string, kind: string, payload: unknown, groupName: 
   return kind === 'SETTLED' ? `${actor} ${verb} in ${groupName}` : `${actor} ${verb} ${groupName}`;
 }
 
+/** Spec §11: a digest covers only activity that involves the user's own member rows. */
+async function onlyInvolving<T extends { kind: string; payload: unknown }>(acts: T[], myMemberIds: string[]): Promise<T[]> {
+  const mine = new Set(myMemberIds);
+  const field = (a: T, k: string): unknown => (a.payload as Record<string, unknown> | null)?.[k];
+  const expenseKinds = new Set(['EXPENSE_ADDED', 'EXPENSE_EDITED', 'EXPENSE_DELETED', 'COMMENTED']);
+  const expenseIds = [...new Set(acts.filter((a) => expenseKinds.has(a.kind)).map((a) => field(a, 'expenseId')).filter((x): x is string => typeof x === 'string'))];
+  const involved = new Set(
+    expenseIds.length === 0 ? [] : (await prisma.splitExpense.findMany({
+      where: { id: { in: expenseIds }, OR: [{ payers: { some: { memberId: { in: myMemberIds } } } }, { shares: { some: { memberId: { in: myMemberIds } } } }] },
+      select: { id: true },
+    })).map((e) => e.id),
+  );
+  return acts.filter((a) => {
+    if (expenseKinds.has(a.kind)) { const id = field(a, 'expenseId'); return typeof id === 'string' && involved.has(id); }
+    if (a.kind === 'SETTLED') return mine.has(String(field(a, 'from'))) || mine.has(String(field(a, 'to')));
+    if (a.kind === 'MEMBER_ADDED') return mine.has(String(field(a, 'memberId')));
+    return false;
+  });
+}
+
 export async function sendActivityDigests(now: Date = new Date()): Promise<{ users: number; emails: number }> {
   return runAsSystem(async () => {
-    const rows = await prisma.splitMember.findMany({ where: { userId: { not: null }, leftAt: null }, select: { userId: true, groupId: true, createdAt: true } });
+    const rows = await prisma.splitMember.findMany({ where: { userId: { not: null }, leftAt: null }, select: { id: true, userId: true, groupId: true, createdAt: true } });
     // createdAt is the join time; a re-join reactivates the same row and keeps it, so a re-joined member may see some older activity.
-    const groupsByUser = new Map<string, Array<{ groupId: string; joinedAt: Date }>>();
-    for (const r of rows) groupsByUser.set(r.userId!, [...(groupsByUser.get(r.userId!) ?? []), { groupId: r.groupId, joinedAt: r.createdAt }]);
+    const groupsByUser = new Map<string, Array<{ groupId: string; joinedAt: Date; memberId: string }>>();
+    for (const r of rows) groupsByUser.set(r.userId!, [...(groupsByUser.get(r.userId!) ?? []), { groupId: r.groupId, joinedAt: r.createdAt, memberId: r.id }]);
 
     let users = 0; let emails = 0;
     for (const [userId, memberships] of groupsByUser) {
@@ -108,18 +128,19 @@ export async function sendActivityDigests(now: Date = new Date()): Promise<{ use
         users += 1;
         // Cap the window so a long outage cannot produce a giant email.
         const since = new Date(Math.max((settings?.lastActivityEmailAt ?? new Date(now.getTime() - HOUR_MS)).getTime(), now.getTime() - 7 * DAY_MS));
-        const acts = await prisma.splitActivity.findMany({
+        const candidates = await prisma.splitActivity.findMany({
           where: { OR: memberships.map((m) => ({ groupId: m.groupId, createdAt: { gt: new Date(Math.max(since.getTime(), m.joinedAt.getTime())), lte: now } })), actorUserId: { not: userId }, kind: { in: DIGEST_KINDS } },
           orderBy: { createdAt: 'asc' },
           include: { group: { select: { name: true } } },
         });
+        const acts = await onlyInvolving(candidates, memberships.map((m) => m.memberId));
         if (acts.length === 0) continue;
         const [user, actors, actorMembers] = await Promise.all([
-          prisma.user.findUnique({ where: { id: userId }, select: { email: true, isActive: true } }),
+          prisma.user.findUnique({ where: { id: userId }, select: { email: true, isActive: true, deletionScheduledFor: true } }),
           prisma.user.findMany({ where: { id: { in: [...new Set(acts.map((a) => a.actorUserId))] } }, select: { id: true, name: true } }),
           prisma.splitMember.findMany({ where: { groupId: { in: memberships.map((m) => m.groupId) }, userId: { in: [...new Set(acts.map((a) => a.actorUserId))] } }, select: { groupId: true, userId: true, displayName: true } }),
         ]);
-        if (!user?.email || !user.isActive) continue;
+        if (!user?.email || !user.isActive || user.deletionScheduledFor) continue;
         const userName = new Map(actors.map((a) => [a.id, a.name?.trim() || 'Someone']));
         const groupName = new Map(actorMembers.map((m) => [`${m.groupId}:${m.userId}`, m.displayName.trim()]));
         const nameOf = (a: { groupId: string; actorUserId: string }) => groupName.get(`${a.groupId}:${a.actorUserId}`) || userName.get(a.actorUserId) || 'Someone';
@@ -150,8 +171,8 @@ export async function sendWeeklyDigests(_now: Date = new Date()): Promise<{ emai
     let emails = 0;
     for (const t of targets) {
       try {
-        const user = await prisma.user.findUnique({ where: { id: t.userId }, select: { email: true, isActive: true } });
-        if (!user?.email || !user.isActive) continue;
+        const user = await prisma.user.findUnique({ where: { id: t.userId }, select: { email: true, isActive: true, deletionScheduledFor: true } });
+        if (!user?.email || !user.isActive || user.deletionScheduledFor) continue;
         const friends = (await runAsUser(t.userId, () => listFriends(t.userId)))
           .map((f) => ({ name: f.displayName, net: new Decimal(f.net) }))
           .filter((f) => !f.net.isZero());

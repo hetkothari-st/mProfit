@@ -101,6 +101,44 @@ describe('split reminders + digests', () => {
     }
   });
 
+  it('digest only covers activity involving the user', async () => {
+    const frank = await createTestScope('split-ntf-f');
+    try {
+      const cf = await seedContact(alice.userId, 'Frank', frank.userId);
+      const cb = await seedContact(alice.userId, 'Bob', bob.userId);
+      const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Trio', myDisplayName: 'Alice', contactIds: [cf.id, cb.id] }));
+      const a5 = g.members.find((m) => m.isMe)!.id; const b5 = g.members.find((m) => m.displayName === 'Bob')!.id; const f5 = g.members.find((m) => m.displayName === 'Frank')!.id;
+      await alice.runAs(() => createExpense(alice.userId, { groupId: g.id, description: 'AliceBobOnly', date: '2026-10-03', amount: '20', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: a5, amount: '20' }], shares: [{ memberId: a5 }, { memberId: b5 }] }));
+      await alice.runAs(() => createExpense(alice.userId, { groupId: g.id, description: 'WithFrank', date: '2026-10-03', amount: '30', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: a5, amount: '30' }], shares: [{ memberId: a5 }, { memberId: f5 }] }));
+      sent.mockClear();
+      await sendActivityDigests(new Date(Date.now() + 5000));
+      const toFrank = sent.mock.calls.filter((c) => c[0].to.startsWith('inv-split-ntf-f'));
+      expect(toFrank).toHaveLength(1);
+      expect(toFrank[0]![0].html).toContain('WithFrank');
+      expect(toFrank[0]![0].html).not.toContain('AliceBobOnly');
+    } finally {
+      await runAsSystem(() => prisma.splitSettings.deleteMany({ where: { userId: frank.userId } }));
+      await frank.cleanup();
+    }
+  });
+
+  it('digests skip users pending account deletion', async () => {
+    const gina = await createTestScope('split-ntf-g');
+    try {
+      const cg = await seedContact(alice.userId, 'Gina', gina.userId);
+      const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Del', myDisplayName: 'Alice', contactIds: [cg.id] }));
+      const a6 = g.members.find((m) => m.isMe)!.id; const g6 = g.members.find((m) => !m.isMe)!.id;
+      await alice.runAs(() => createExpense(alice.userId, { groupId: g.id, description: 'ForGina', date: '2026-10-03', amount: '20', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: a6, amount: '20' }], shares: [{ memberId: a6 }, { memberId: g6 }] }));
+      await runAsSystem(() => prisma.user.update({ where: { id: gina.userId }, data: { deletionScheduledFor: new Date(Date.now() + 86_400_000) } }));
+      sent.mockClear();
+      await sendActivityDigests(new Date(Date.now() + 6000));
+      expect(sent.mock.calls.filter((c) => c[0].to.startsWith('inv-split-ntf-g'))).toHaveLength(0);
+    } finally {
+      await runAsSystem(() => prisma.splitSettings.deleteMany({ where: { userId: gina.userId } }));
+      await gina.cleanup();
+    }
+  });
+
   it('remind needs an email on file', async () => {
     const dave = await seedContact(alice.userId, 'Dave');
     const g3 = await alice.runAs(() => createGroup(alice.userId, { name: 'NoMail', myDisplayName: 'Alice', contactIds: [dave.id] }));
