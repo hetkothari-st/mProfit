@@ -286,7 +286,7 @@ describe('GroupPage', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Share pay link' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(URI));
-    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Pay link copied — paste it in WhatsApp or SMS'));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Pay link copied - paste it in WhatsApp or SMS'));
   });
 
   it('share pay link: no UPI ID points to Split settings', async () => {

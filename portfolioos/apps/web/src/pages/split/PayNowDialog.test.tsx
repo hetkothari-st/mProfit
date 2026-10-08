@@ -73,6 +73,6 @@ describe('PayNowDialog', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) }, configurable: true });
     renderWithProviders(<PayNowDialog open onOpenChange={() => {}} group={group} toMemberId="b" amount="100.0000" />);
     fireEvent.click(await screen.findByRole('button', { name: 'Copy pay link' }));
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Couldn't copy — long-press the QR or use Open UPI app"));
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Couldn't copy - long-press the QR or use Open UPI app"));
   });
 });

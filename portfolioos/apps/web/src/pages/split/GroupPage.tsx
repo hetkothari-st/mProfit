@@ -270,8 +270,8 @@ export function GroupPage() {
         }
         return;
       }
-      if (await copyText(link.uri)) toast.success('Pay link copied — paste it in WhatsApp or SMS');
-      else toast.error("Couldn't copy the pay link — use Settle up instead");
+      if (await copyText(link.uri)) toast.success('Pay link copied - paste it in WhatsApp or SMS');
+      else toast.error("Couldn't copy the pay link - use Settle up instead");
     },
     onError: (err) => setShareError(splitErrorMessage(err, 'Could not create the pay link')),
   });

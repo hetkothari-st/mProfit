@@ -6,7 +6,7 @@ import { prisma } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 import { requireMember, loadLedger } from './groups.service.js';
-import { memberNets, simplify } from './balances.js';
+import { memberNets, pairwiseDebts, simplify } from './balances.js';
 
 export const UPI_VPA = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$/;
 const DEFAULTS: SplitSettingsDto = { upiId: null, homeCurrency: 'INR', defaultPortfolioId: null, emailOnActivity: true, weeklyDigest: false };
@@ -45,6 +45,16 @@ export async function updateSettings(userId: string, patch: Partial<SplitSetting
   return toDto(s);
 }
 
+/** What `fromMemberId` owes `toMemberId` in the same debt view the Balances tab shows (simplified or pairwise); null when nothing. */
+export async function owedBetween(groupId: string, fromMemberId: string, toMemberId: string): Promise<Decimal | null> {
+  const group = await prisma.splitGroup.findUniqueOrThrow({ where: { id: groupId }, select: { simplifyDebts: true } });
+  const ledger = await loadLedger(groupId);
+  const transfers = group.simplifyDebts
+    ? simplify(memberNets(ledger.expenses, ledger.settlements, ledger.memberIds))
+    : pairwiseDebts(ledger.expenses, ledger.settlements);
+  return transfers.find((x) => x.fromMemberId === fromMemberId && x.toMemberId === toMemberId)?.amount ?? null;
+}
+
 export function buildUpiUri(p: { vpa: string; name: string; amount: string; note: string }): string {
   const e = encodeURIComponent;
   return `upi://pay?pa=${e(p.vpa)}&pn=${e(p.name)}&am=${e(p.amount)}&cu=INR&tn=${e(p.note)}`;
@@ -58,16 +68,14 @@ export async function upiLink(userId: string, groupId: string, toMemberId: strin
   if (!target || target.id === myId) throw new NotFoundError('Member not found');
 
   // Privacy: a co-member's UPI ID is revealed only to someone who actually owes them.
-  const ledger = await loadLedger(groupId);
-  const owed = simplify(memberNets(ledger.expenses, ledger.settlements, ledger.memberIds))
-    .find((x) => x.fromMemberId === myId && x.toMemberId === toMemberId);
+  const owed = await owedBetween(groupId, myId, toMemberId);
   if (!owed) throw new BadRequestError(`SPLIT_NOTHING_OWED: you don't owe ${target.displayName} anything here`);
 
-  let value: Decimal = owed.amount;
+  let value: Decimal = owed;
   if (amount !== undefined) {
     if (!/^\d+(\.\d{1,2})?$/.test(amount) || new Decimal(amount).lte(0)) throw new BadRequestError('SPLIT_BAD_INPUT: amount must be > 0 with at most 2 decimals');
     value = new Decimal(amount);
-    if (value.gt(owed.amount)) throw new BadRequestError('SPLIT_BAD_INPUT: amount is more than you owe');
+    if (value.gt(owed)) throw new BadRequestError('SPLIT_BAD_INPUT: amount is more than you owe');
   }
 
   const vpa = await runAsSystem(async () => {
@@ -99,16 +107,14 @@ export async function requestLink(userId: string, groupId: string, fromMemberId:
   const debtor = await prisma.splitMember.findFirst({ where: { id: fromMemberId, groupId, leftAt: null } });
   if (!debtor || debtor.id === myId) throw new NotFoundError('Member not found');
 
-  const ledger = await loadLedger(groupId);
-  const owed = simplify(memberNets(ledger.expenses, ledger.settlements, ledger.memberIds))
-    .find((x) => x.fromMemberId === fromMemberId && x.toMemberId === myId);
+  const owed = await owedBetween(groupId, fromMemberId, myId);
   if (!owed) throw new BadRequestError(`SPLIT_NOTHING_OWED: ${debtor.displayName} doesn't owe you anything here`);
 
-  let value: Decimal = owed.amount;
+  let value: Decimal = owed;
   if (amount !== undefined) {
     if (!/^\d+(\.\d{1,2})?$/.test(amount) || new Decimal(amount).lte(0)) throw new BadRequestError('SPLIT_BAD_INPUT: amount must be > 0 with at most 2 decimals');
     value = new Decimal(amount);
-    if (value.gt(owed.amount)) throw new BadRequestError('SPLIT_BAD_INPUT: amount is more than they owe');
+    if (value.gt(owed)) throw new BadRequestError('SPLIT_BAD_INPUT: amount is more than they owe');
   }
 
   const mine = await prisma.splitSettings.findUnique({ where: { userId }, select: { upiId: true } });

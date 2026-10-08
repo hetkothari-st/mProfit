@@ -8,10 +8,9 @@ import { logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
 import { openText } from '../piiAtRest.service.js';
 import { sendEmail } from '../notifications/email.service.js';
-import { requireMember, loadLedger } from './groups.service.js';
-import { memberNets, pairwiseDebts, simplify } from './balances.js';
+import { requireMember } from './groups.service.js';
 import { listFriends } from './ledger.service.js';
-import { buildUpiUri } from './settings.service.js';
+import { buildUpiUri, owedBetween } from './settings.service.js';
 import { renderReminderEmail, renderActivityDigestEmail, renderWeeklyDigestEmail } from './splitEmail.templates.js';
 
 const HOUR_MS = 3_600_000;
@@ -28,15 +27,12 @@ const money = (v: Decimal.Value, ccy: string): string => (ccy === 'INR' ? format
 
 export async function remind(userId: string, groupId: string, memberId: string, now: Date = new Date()): Promise<{ sent: boolean }> {
   const { memberId: myId } = await requireMember(userId, groupId);
-  const group = await prisma.splitGroup.findUnique({ where: { id: groupId }, select: { name: true, baseCurrency: true, simplifyDebts: true } });
+  const group = await prisma.splitGroup.findUnique({ where: { id: groupId }, select: { name: true, baseCurrency: true } });
   const target = await prisma.splitMember.findFirst({ where: { id: memberId, groupId, leftAt: null } });
   if (!group || !target || target.id === myId) throw new NotFoundError('Member not found');
 
-  const ledger = await loadLedger(groupId);
-  const transfers = group.simplifyDebts
-    ? simplify(memberNets(ledger.expenses, ledger.settlements, ledger.memberIds))
-    : pairwiseDebts(ledger.expenses, ledger.settlements);
-  const owed = transfers.find((t) => t.fromMemberId === memberId && t.toMemberId === myId);
+  const owedAmount = await owedBetween(groupId, memberId, myId);
+  const owed = owedAmount === null ? null : { amount: owedAmount };
   if (!owed) throw new BadRequestError(`SPLIT_NOTHING_OWED: ${target.displayName} doesn't owe you anything here`);
 
   // Cross-user reads run as system only after the membership checks above.

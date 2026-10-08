@@ -123,4 +123,32 @@ describe('split settings + UPI link', () => {
       } finally { await outsider.cleanup(); }
     });
   });
+
+  describe('non-simplified groups', () => {
+    it('upiLink and requestLink follow the pairwise view shown on Balances', async () => {
+      const cb = await seedContact(alice.userId, 'Bob', bob.userId);
+      const cr = await seedContact(alice.userId, 'Ravi');
+      const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Pairs', myDisplayName: 'Alice', contactIds: [cb.id, cr.id] }));
+      await runAsSystem(() => prisma.splitGroup.update({ where: { id: g.id }, data: { simplifyDebts: false } }));
+      const am = g.members.find((m) => m.isMe)!.id; const bm = g.members.find((m) => m.displayName === 'Bob')!.id; const rm = g.members.find((m) => m.displayName === 'Ravi')!.id;
+      const exp = (payer: string, forWho: string) => runAsSystem(() => prisma.splitExpense.create({ data: {
+        groupId: g.id, description: 'x', date: new Date('2026-10-03'), amount: '60', currency: 'INR', fxRate: '1', baseAmount: '60',
+        splitMode: 'EQUAL', createdById: alice.userId,
+        payers: { create: [{ memberId: payer, amount: '60', baseAmount: '60' }] },
+        shares: { create: [{ memberId: forWho, amount: '60', baseAmount: '60' }] },
+      } }));
+      await exp(am, bm); // Bob owes Alice 60
+      await exp(bm, rm); // Ravi owes Bob 60 (simplified: Ravi owes Alice 60, Bob nothing)
+      await runAsSystem(() => prisma.splitSettings.upsert({ where: { userId: alice.userId }, create: { userId: alice.userId, upiId: 'alicepair@oksbi' }, update: { upiId: 'alicepair@oksbi' } }));
+      await runAsSystem(() => prisma.splitSettings.upsert({ where: { userId: bob.userId }, create: { userId: bob.userId, upiId: 'bobpair@oksbi' }, update: { upiId: 'bobpair@oksbi' } }));
+      const req = await alice.runAs(() => requestLink(alice.userId, g.id, bm));
+      expect(req.amount).toBe('60.0000');
+      expect(req.payeeVpa).toBe('alicepair@oksbi');
+      const pay = await bob.runAs(() => upiLink(bob.userId, g.id, am));
+      expect(pay.amount).toBe('60.0000');
+      expect(pay.payeeVpa).toBe('alicepair@oksbi');
+      // Ravi owes Bob (pairwise), not Alice.
+      await expect(alice.runAs(() => requestLink(alice.userId, g.id, rm))).rejects.toThrow(/SPLIT_NOTHING_OWED/);
+    });
+  });
 });
