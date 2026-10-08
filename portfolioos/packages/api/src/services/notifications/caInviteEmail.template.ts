@@ -138,7 +138,8 @@ export interface InviteShellInput {
   /** The sender's own words. Plain text; escaped here, newlines become breaks. */
   message: string;
   acceptUrl: string;
-  expiresOn: string;
+  /** Omit for links that carry no expiry; the sentence is then left out. */
+  expiresOn?: string | null;
   logoUrl?: string;
   buttonLabel?: string;
 }
@@ -151,7 +152,7 @@ export interface InviteShellInput {
 export function renderInviteShell(input: InviteShellInput): RenderedInviteEmail {
   const message = escapeHtml(input.message).replace(/\r?\n/g, '<br>');
   const url = escapeHtml(input.acceptUrl);
-  const expires = escapeHtml(input.expiresOn);
+  const expires = input.expiresOn ? escapeHtml(input.expiresOn) : null;
   const year = new Date().getFullYear();
   const heading = input.heading;
   const preheader = input.preheader;
@@ -185,7 +186,7 @@ ${logoCell}<td style="font-family:Arial,Helvetica,sans-serif;font-size:18px;font
 <tr><td align="center" style="padding:28px 32px 8px 32px;">
 <a href="${url}" style="display:inline-block;padding:13px 28px;background-color:#18181b;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">${button}</a>
 </td></tr>
-<tr><td style="padding:8px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#71717a;" align="center">This link works once and expires on ${expires}.</td></tr>
+${expires === null ? '' : `<tr><td style="padding:8px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#71717a;" align="center">This link works once and expires on ${expires}.</td></tr>`}
 <tr><td style="padding:22px 32px 0 32px;"><div style="height:1px;background-color:#e4e4e7;"></div></td></tr>
 <tr><td style="padding:18px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:12.5px;line-height:19px;color:#71717a;">
 ${closing}
@@ -203,7 +204,7 @@ ${closing}
     input.message,
     '',
     `${input.buttonLabel ?? 'Review and accept'}: ${input.acceptUrl}`,
-    `This link works once and expires on ${input.expiresOn}.`,
+    ...(input.expiresOn ? [`This link works once and expires on ${input.expiresOn}.`] : []),
     '',
     closing.replace(/<[^>]+>/g, '').replace(/&rsaquo;/g, '>').replace(/&#(\d+);/g, (_m, c) => String.fromCharCode(Number(c))),
   ].join('\n');

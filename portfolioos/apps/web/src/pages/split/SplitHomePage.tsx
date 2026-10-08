@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, UserPlus, UsersRound } from 'lucide-react';
+import { Plus, Settings, UserPlus, UsersRound } from 'lucide-react';
 import { Decimal, toDecimal, formatDateTimeIST } from '@everypaisa/shared';
 import type { SplitActivityDto, SplitGroupDto, SplitMemberDto } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { formatSplitMoney, memberName } from '@/lib/splitFormat';
@@ -38,6 +38,11 @@ export function activityText(a: SplitActivityDto, members?: SplitMemberDto[]): s
     case 'GROUP_CREATED': return `${a.actorName} created the group`;
     case 'GROUP_UPDATED': return `${a.actorName} changed group settings`;
     case 'MEMBER_ADDED': return `${a.actorName} added ${typeof p.displayName === 'string' ? p.displayName : 'someone'}`;
+    case 'EXPENSE_LABELED': return `${a.actorName} labelled ${desc}`;
+    case 'COMMENTED': return `${a.actorName} commented on ${desc}`;
+    case 'RECEIPT_ADDED': return `${a.actorName} attached a receipt to ${desc}`;
+    case 'RECEIPT_REMOVED': return `${a.actorName} removed the receipt from ${desc}`;
+    case 'MEMBER_LINKED': return `${typeof p.displayName === 'string' ? p.displayName : 'Someone'} joined EveryPaisa`;
     case 'MEMBER_REMOVED': return `${a.actorName} removed a member`;
     default: return `${a.actorName} updated the group`;
   }
@@ -84,6 +89,7 @@ export function SplitHomePage() {
         description="Share costs with friends, flatmates and trips — see who owes whom and settle up."
         actions={
           <>
+            <Link to="/split/settings" className={buttonVariants({ variant: 'ghost' })}><Settings className="h-4 w-4 mr-1.5" />Settings</Link>
             <Button variant="outline" onClick={() => setNewPerson(true)}><UserPlus className="h-4 w-4 mr-1.5" />Add person</Button>
             <Button onClick={() => setNewGroup(true)}><Plus className="h-4 w-4 mr-1.5" />New group</Button>
           </>
@@ -113,7 +119,10 @@ export function SplitHomePage() {
             Couldn't load groups. <Button variant="link" size="sm" className="px-1" onClick={() => void groups.refetch()}>Retry</Button>
           </p>
         )}
-        {groups.isSuccess && groups.data.length === 0 && (
+        {groups.isSuccess && groups.data.length === 0 && allGroups.isSuccess && archived.length > 0 && (
+          <p className="text-sm text-muted-foreground">All your groups are archived.</p>
+        )}
+        {groups.isSuccess && groups.data.length === 0 && !allGroups.isPending && archived.length === 0 && (
           <Card><CardContent className="p-6 text-center space-y-2">
             <UsersRound className="h-6 w-6 mx-auto text-muted-foreground" />
             <p className="font-medium">No groups yet</p>

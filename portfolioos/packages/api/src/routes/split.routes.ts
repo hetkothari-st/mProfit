@@ -1,4 +1,9 @@
 import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+import multer from 'multer';
+import { BadRequestError } from '../lib/errors.js';
+import { rebindUserContext } from '../middleware/rebindUserContext.js';
+import { receiptUploadLimiter } from '../middleware/rateLimit.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
 import * as c from '../controllers/split.controller.js';
@@ -10,6 +15,7 @@ splitRouter.get('/contacts', asyncHandler(c.listContactsHandler));
 splitRouter.post('/contacts', asyncHandler(c.createContactHandler));
 splitRouter.patch('/contacts/:id', asyncHandler(c.updateContactHandler));
 splitRouter.delete('/contacts/:id', asyncHandler(c.deleteContactHandler));
+splitRouter.post('/contacts/:id/invite', asyncHandler(c.inviteContactHandler));
 
 splitRouter.get('/groups', asyncHandler(c.listGroupsHandler));
 splitRouter.post('/groups', asyncHandler(c.createGroupHandler));
@@ -36,3 +42,33 @@ splitRouter.delete('/settlements/:id', asyncHandler(c.deleteSettlementHandler));
 
 splitRouter.get('/friends', asyncHandler(c.friendsHandler));
 splitRouter.get('/activity', asyncHandler(c.activityHandler));
+
+splitRouter.get('/settings', asyncHandler(c.getSettingsHandler));
+splitRouter.put('/settings', asyncHandler(c.updateSettingsHandler));
+splitRouter.get('/groups/:id/upi-link', asyncHandler(c.upiLinkHandler));
+splitRouter.get('/groups/:id/request-link', asyncHandler(c.requestLinkHandler));
+
+splitRouter.get('/groups/:id/labels', asyncHandler(c.listLabelsHandler));
+splitRouter.post('/groups/:id/labels', asyncHandler(c.createLabelHandler));
+splitRouter.delete('/labels/:id', asyncHandler(c.deleteLabelHandler));
+splitRouter.put('/expenses/:id/labels', asyncHandler(c.setExpenseLabelsHandler));
+splitRouter.get('/expenses/:id/comments', asyncHandler(c.listCommentsHandler));
+splitRouter.post('/expenses/:id/comments', asyncHandler(c.addCommentHandler));
+splitRouter.delete('/comments/:id', asyncHandler(c.deleteCommentHandler));
+
+// multer errors (e.g. LIMIT_FILE_SIZE) would otherwise surface as 500s.
+const receiptMulter = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }).single('file');
+const receiptUpload = (req: Request, res: Response, next: NextFunction) =>
+  receiptMulter(req, res, (err) => {
+    if (!err) return next();
+    const code = (err as { code?: string }).code;
+    next(new BadRequestError(code === 'LIMIT_FILE_SIZE' ? 'Receipts must be under 10 MB' : "Attach the receipt as a single file in the 'file' field"));
+  });
+
+splitRouter.put('/expenses/:id/receipt', receiptUploadLimiter, receiptUpload, rebindUserContext, asyncHandler(c.putReceiptHandler));
+splitRouter.get('/expenses/:id/receipt', asyncHandler(c.getReceiptHandler));
+splitRouter.delete('/expenses/:id/receipt', asyncHandler(c.deleteReceiptHandler));
+
+splitRouter.get('/expenses/:id/share-link', asyncHandler(c.getShareLinkHandler));
+splitRouter.put('/expenses/:id/share-link', asyncHandler(c.setShareLinkHandler));
+splitRouter.post('/reminders', asyncHandler(c.remindHandler));

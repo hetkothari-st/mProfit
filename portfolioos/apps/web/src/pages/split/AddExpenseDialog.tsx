@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import type { SplitExpenseDto, SplitGroupDto, SplitModeDto } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,8 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
   const [form, setForm] = useState<ExpenseFormState>(() =>
     expense ? formFromExpense(expense, members) : emptyForm(members, group.baseCurrency, todayLocal()));
   const [serverError, setServerError] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>(() => expense?.labelIds ?? []);
+  const labels = useQuery({ queryKey: SPLIT_KEYS.labels(group.id), queryFn: () => splitApi.listLabels(group.id), enabled: open });
 
   const wasOpen = useRef(open);
   useEffect(() => {
@@ -37,6 +39,7 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
     if (open && !wasOpen.current) {
       setForm(expense ? formFromExpense(expense, members) : emptyForm(members, group.baseCurrency, todayLocal()));
       setServerError(null);
+      setPicked(expense?.labelIds ?? []);
     }
     wasOpen.current = open;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on `open` alone (see above)
@@ -50,9 +53,20 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
   const previewOf = (id: string) => check.preview.find((p) => p.memberId === id)?.amount ?? null;
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const payload = toPayload(form, members, group.baseCurrency);
-      return expense ? splitApi.updateExpense(expense.id, payload) : splitApi.createExpense({ groupId: group.id, ...payload });
+      const saved = expense ? await splitApi.updateExpense(expense.id, payload) : await splitApi.createExpense({ groupId: group.id, ...payload });
+      const before = [...(expense?.labelIds ?? [])].sort().join(',');
+      const after = [...picked].sort().join(',');
+      if (before === after) return { labelsFailed: false };
+      try {
+        await splitApi.setExpenseLabels(expense?.id ?? saved.id, picked);
+        return { labelsFailed: false };
+      } catch (err) {
+        // The expense itself is saved; say so rather than failing the whole save.
+        toast.error(splitErrorMessage(err, 'Expense saved, but its labels could not be updated'));
+        return { labelsFailed: true };
+      }
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SPLIT_KEYS.all });
@@ -174,6 +188,24 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
               })}
             </ul>
           </fieldset>
+
+          {(labels.data ?? []).length > 0 && (
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">Labels</legend>
+              <div className="flex flex-wrap gap-1.5">
+                {(labels.data ?? []).map((l) => {
+                  const on = picked.includes(l.id);
+                  return (
+                    <button key={l.id} type="button" aria-pressed={on}
+                      onClick={() => setPicked((p) => (on ? p.filter((x) => x !== l.id) : [...p, l.id]))}
+                      className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs', on ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}>
+                      <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: l.color }} />{l.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
 
           {(showCheckError || serverError) && (
             <p role="alert" className="text-sm text-destructive">{serverError ?? check.error}</p>

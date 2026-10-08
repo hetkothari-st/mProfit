@@ -22,6 +22,7 @@ import {
 } from './jwt.service.js';
 import { panColumns } from './piiAtRest.service.js';
 import { assertNotPendingDeletion } from './accountDeletion.service.js';
+import { linkContactsForUser } from './split/linking.service.js';
 import { effectivePlan } from '../lib/effectivePlan.js';
 import { completeChallenge, createChallenge, isTwoFactorEnabled } from './twoFactor.service.js';
 
@@ -320,6 +321,14 @@ export async function verifyRegistration(email: string, code: string) {
       throw new ConflictError('Email already registered');
     }
     throw err;
+  }
+
+  // Split: placeholders created by friends with this (now verified) email become this user.
+  // Never block signup on it; contact create/update re-runs linking, so a miss self-heals.
+  try {
+    await linkContactsForUser({ id: user.id, email: user.email });
+  } catch (err) {
+    logger.error({ err, userId: user.id }, '[split] linking after signup failed');
   }
 
   return issueSession(user);
@@ -632,6 +641,15 @@ export async function loginOrRegisterWithGoogle(idToken: string, opts: { restore
       data: { email, name, passwordHash, role: 'INVESTOR', plan: 'FREE' },
     });
     isNew = true;
+  }
+  if (isNew && payload.email_verified === true) {
+    // Split: placeholders created by friends with this (Google-verified) email become this user.
+    // Never block signup on it; contact create/update re-runs linking, so a miss self-heals.
+    try {
+      await linkContactsForUser({ id: user.id, email: user.email });
+    } catch (err) {
+      logger.error({ err, userId: user.id }, '[split] linking after signup failed');
+    }
   }
   if (!user.isActive) throw new UnauthorizedError('Account deactivated');
   // A CA may have entered the client's real Google address on the shadow

@@ -137,4 +137,48 @@ describe('/api/split', () => {
     expect(after.json.data.deletedAt).toBeNull();
     expect((await call(alice, 'GET', `/groups/${groupId}`)).json.data.members).toHaveLength(2);
   });
+
+  it('receipt: member uploads, other member views, outsider 404', async () => {
+    const contact = await seedContact(alice.userId, 'Bob', bob.userId);
+    const g = await call(alice, 'POST', '/groups', { name: 'Rcpt', type: 'TRIP', myDisplayName: 'Alice', contactIds: [contact.id] });
+    const a = g.json.data.members.find((m: { isMe: boolean }) => m.isMe).id as string;
+    const b = g.json.data.members.find((m: { isMe: boolean }) => !m.isMe).id as string;
+    const e = await call(alice, 'POST', '/expenses', {
+      groupId: g.json.data.id, description: 'Lunch', date: '2026-10-01', amount: '100', currency: 'INR', splitMode: 'EQUAL',
+      payers: [{ memberId: a, amount: '100' }], shares: [{ memberId: a }, { memberId: b }],
+    });
+    const id = e.json.data.id as string;
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from([0, 0, 0, 0]), Buffer.from('IEND'), Buffer.alloc(4)]);
+    const fd = new FormData();
+    fd.append('file', new Blob([png], { type: 'image/png' }), 'r.png');
+    const up = await fetch(`${base}/api/split/expenses/${id}/receipt`, { method: 'PUT', headers: { authorization: `Bearer ${tok(alice)}` }, body: fd });
+    expect(up.status).toBe(200);
+    const view = await fetch(`${base}/api/split/expenses/${id}/receipt`, { headers: { authorization: `Bearer ${tok(bob)}` } });
+    expect(view.status).toBe(200);
+    expect(view.headers.get('content-type')).toBe('image/png');
+    expect(Buffer.from(await view.arrayBuffer()).equals(png)).toBe(true);
+    const out = await fetch(`${base}/api/split/expenses/${id}/receipt`, { headers: { authorization: `Bearer ${tok(eve)}` } });
+    expect(out.status).toBe(404);
+  });
+
+  it('receipt: a ~2 MB upload keeps its user context and round-trips', async () => {
+    const contact = await seedContact(alice.userId, 'Bob', bob.userId);
+    const g = await call(alice, 'POST', '/groups', { name: 'Big', type: 'TRIP', myDisplayName: 'Alice', contactIds: [contact.id] });
+    const a = g.json.data.members.find((m: { isMe: boolean }) => m.isMe).id as string;
+    const b = g.json.data.members.find((m: { isMe: boolean }) => !m.isMe).id as string;
+    const e = await call(alice, 'POST', '/expenses', {
+      groupId: g.json.data.id, description: 'Big', date: '2026-10-01', amount: '100', currency: 'INR', splitMode: 'EQUAL',
+      payers: [{ memberId: a, amount: '100' }], shares: [{ memberId: a }, { memberId: b }],
+    });
+    const id = e.json.data.id as string;
+    const chunk = (type: string, data: Buffer) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); return Buffer.concat([len, Buffer.from(type, 'ascii'), data, Buffer.alloc(4)]); };
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', Buffer.alloc(13)), chunk('IDAT', Buffer.alloc(2 * 1024 * 1024, 7)), chunk('IEND', Buffer.alloc(0))]);
+    const fd = new FormData();
+    fd.append('file', new Blob([png], { type: 'image/png' }), 'big.png');
+    const up = await fetch(`${base}/api/split/expenses/${id}/receipt`, { method: 'PUT', headers: { authorization: `Bearer ${tok(alice)}` }, body: fd });
+    expect(up.status).toBe(200);
+    const view = await fetch(`${base}/api/split/expenses/${id}/receipt`, { headers: { authorization: `Bearer ${tok(bob)}` } });
+    expect(view.status).toBe(200);
+    expect((await view.arrayBuffer()).byteLength).toBe(png.length);
+  });
 });

@@ -9,21 +9,15 @@ import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 import { sealText, openText } from '../piiAtRest.service.js';
 import { hashIdentifier } from '../pfCredentials.service.js';
 import { env } from '../../config/env.js';
+import { normalizeEmail, normalizePhone } from './validate.js';
+import { linkContactToExistingUser } from './linking.service.js';
+
+export { normalizeEmail, normalizePhone };
 
 export interface ContactInput { name: string; email?: string | null; phone?: string | null; upiId?: string | null }
 
 const EMAIL_PURPOSE = 'split-contact-email';
 const PHONE_PURPOSE = 'split-contact-phone';
-
-export function normalizeEmail(raw: string): string {
-  return raw.trim().toLowerCase();
-}
-
-export function normalizePhone(raw: string): string {
-  let digits = raw.replace(/\D/g, '');
-  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
-  return digits.length === 10 ? `91${digits}` : digits;
-}
 
 function checkEmail(v: string): void {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new BadRequestError('Invalid email address');
@@ -44,6 +38,13 @@ async function identifierColumns(prefix: 'email' | 'phone', raw: string | null |
 }
 
 type Row = { id: string; name: string; email: string | null; emailEnc: string | null; phone: string | null; phoneEnc: string | null; upiId: string | null; linkedUserId: string | null };
+
+/** After an email was set, link to an existing account and re-read so the DTO carries linkedUserId. */
+async function relinked<T extends Row>(row: T, emailInput: string | null | undefined): Promise<Row> {
+  if (!emailInput || !emailInput.trim() || row.linkedUserId) return row;
+  if (!(await linkContactToExistingUser(row.id))) return row;
+  return (await prisma.splitContact.findUnique({ where: { id: row.id } })) ?? row;
+}
 
 function toDto(r: Row): SplitContactDto {
   return {
@@ -74,7 +75,7 @@ export async function createContact(userId: string, input: ContactInput): Promis
       ...(await identifierColumns('phone', input.phone ?? null)),
     },
   });
-  return toDto(row);
+  return toDto(await relinked(row, input.email));
 }
 
 export async function getContactRow(userId: string, id: string) {
@@ -98,7 +99,7 @@ export async function updateContact(userId: string, id: string, input: Partial<C
       ...(await identifierColumns('phone', input.phone)),
     },
   });
-  return toDto(row);
+  return toDto(await relinked(row, input.email));
 }
 
 export async function deleteContact(userId: string, id: string): Promise<void> {

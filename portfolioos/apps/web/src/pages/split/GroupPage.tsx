@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Plus, HandCoins, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, HandCoins, Trash2, Paperclip } from 'lucide-react';
 import { Decimal, toDecimal, formatDateIST, formatDateTimeIST } from '@everypaisa/shared';
-import type { SplitExpenseDto, SplitGroupDto, SplitSettlementDto } from '@everypaisa/shared';
+import type { SplitContactDto, SplitExpenseDto, SplitGroupDto, SplitLabelDto, SplitSettlementDto } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,15 +14,18 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { splitErrorMessage } from './errors';
+import { copyText } from './clipboard';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { formatSplitMoney, memberName, transferLabel } from '@/lib/splitFormat';
 import { BalancePill } from './BalancePill';
 import { AddExpenseDialog } from './AddExpenseDialog';
 import { SettleUpDialog } from './SettleUpDialog';
+import { PayNowDialog } from './PayNowDialog';
 import { ContactDialog } from './ContactDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { LoadError } from './LoadError';
 import { isNotFound } from './queryErrors';
+import axios from 'axios';
 import { activityText } from './SplitHomePage';
 
 function myLine(e: SplitExpenseDto, myId: string | undefined, currency: string): string {
@@ -37,23 +40,57 @@ function myLine(e: SplitExpenseDto, myId: string | undefined, currency: string):
 type DayItem = { kind: 'expense'; e: SplitExpenseDto } | { kind: 'payment'; s: SplitSettlementDto };
 const dayOf = (iso: string) => iso.slice(0, 10);
 
-function ExpensesTab({ group, expenses, settlements, status, onRetry, onDeletePayment }: {
+function LabelChips({ ids, labels }: { ids: string[]; labels: SplitLabelDto[] }) {
+  const shown = ids.map((id) => labels.find((l) => l.id === id)).filter((l): l is SplitLabelDto => !!l);
+  if (shown.length === 0) return null;
+  return (
+    <span className="mt-1 inline-flex flex-wrap items-center gap-1.5">
+      {shown.slice(0, 2).map((l) => (
+        <span key={l.id} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+          <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: l.color }} />{l.name}
+        </span>
+      ))}
+      {shown.length > 2 && <span className="text-[11px] text-muted-foreground">{`+${shown.length - 2}`}</span>}
+    </span>
+  );
+}
+
+function ExpensesTab({ group, expenses, settlements, settlementsStatus, onRetrySettlements, labels, status, onRetry, onDeletePayment }: {
   group: SplitGroupDto; expenses: SplitExpenseDto[]; settlements: SplitSettlementDto[];
+  settlementsStatus: 'pending' | 'error' | 'success'; onRetrySettlements: () => void; labels: SplitLabelDto[];
   status: 'pending' | 'error' | 'success'; onRetry: () => void; onDeletePayment: (s: SplitSettlementDto) => void;
 }) {
   const me = group.members.find((m) => m.isMe);
+  const [labelFilter, setLabelFilter] = useState<string | null>(null);
   if (status === 'pending') return <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>;
   if (status === 'error') return <LoadError text="Couldn't load expenses." onRetry={onRetry} />;
   const payments = settlements.filter((s) => !s.deletedAt);
-  if (expenses.length === 0 && payments.length === 0) return <p className="text-sm text-muted-foreground py-6 text-center">No expenses yet.</p>;
+  const shownExpenses = labelFilter ? expenses.filter((e) => e.labelIds.includes(labelFilter)) : expenses;
+  const shownPayments = labelFilter ? [] : payments;
+  const paymentsError = settlementsStatus === 'error' && (
+    <LoadError text="Couldn't load payments." onRetry={onRetrySettlements} />
+  );
+  if (expenses.length === 0 && payments.length === 0) {
+    return <>{paymentsError}<p className="text-sm text-muted-foreground py-6 text-center">No expenses yet.</p></>;
+  }
   // Group by day, newest first. The API returns each list ordered by date desc; expenses lead within a day.
   const byDay = new Map<string, DayItem[]>();
   const push = (date: string, item: DayItem) => { byDay.set(date, [...(byDay.get(date) ?? []), item]); };
-  for (const e of expenses) push(dayOf(e.date), { kind: 'expense', e });
-  for (const s of payments) push(dayOf(s.date), { kind: 'payment', s });
+  for (const e of shownExpenses) push(dayOf(e.date), { kind: 'expense', e });
+  for (const s of shownPayments) push(dayOf(s.date), { kind: 'payment', s });
   const days = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0));
   return (
     <div className="space-y-3">
+      {paymentsError}
+      {labels.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by label">
+          {[{ id: null as string | null, name: 'All' }, ...labels].map((l) => (
+            <button key={l.id ?? 'all'} type="button" aria-pressed={labelFilter === l.id} onClick={() => setLabelFilter(l.id)}
+              className={`rounded-full border px-3 py-1 text-xs ${labelFilter === l.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>{l.name}</button>
+          ))}
+        </div>
+      )}
+      {labelFilter && shownExpenses.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">No expenses with this label.</p>}
       {days.map(([date, items]) => (
         <section key={date}>
           <h3 data-testid="expense-day" className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{formatDateIST(`${date}T00:00:00+05:30`)}</h3>
@@ -61,10 +98,14 @@ function ExpensesTab({ group, expenses, settlements, status, onRetry, onDeletePa
             {items.map((it) => it.kind === 'expense' ? (
               <Link key={it.e.id} to={`/split/expenses/${it.e.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40">
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{it.e.description}</p>
+                  <p className="font-medium truncate">
+                    {it.e.description}
+                    {it.e.hasReceipt && <Paperclip aria-label="Has receipt" className="ml-1.5 inline h-3.5 w-3.5 text-muted-foreground" />}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {it.e.payers.length === 1 ? `${memberName(group.members, it.e.payers[0]!.memberId)} paid` : `${it.e.payers.length} people paid`} {formatSplitMoney(it.e.amount, it.e.currency)}
                   </p>
+                  <LabelChips ids={it.e.labelIds} labels={labels} />
                 </div>
                 <span className="text-sm text-muted-foreground whitespace-nowrap">{myLine(it.e, me?.id, group.baseCurrency)}</span>
               </Link>
@@ -72,7 +113,7 @@ function ExpensesTab({ group, expenses, settlements, status, onRetry, onDeletePa
               <div key={it.s.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0 flex items-center gap-2">
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">Payment</span>
-                  <p className="text-sm truncate">{`${memberName(group.members, it.s.fromMemberId)} paid ${memberName(group.members, it.s.toMemberId)} ${formatSplitMoney(it.s.baseAmount, group.baseCurrency)}`}</p>
+                  <p className="text-sm truncate">{`${memberName(group.members, it.s.fromMemberId)} paid ${memberName(group.members, it.s.toMemberId).replace(/^You$/, 'you')} ${formatSplitMoney(it.s.baseAmount, group.baseCurrency)}`}</p>
                 </div>
                 <Button variant="ghost" size="sm" aria-label="Delete payment" onClick={() => onDeletePayment(it.s)}><Trash2 className="h-4 w-4" /></Button>
               </div>
@@ -84,7 +125,20 @@ function ExpensesTab({ group, expenses, settlements, status, onRetry, onDeletePa
   );
 }
 
+function inviteErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    if (err.response?.status === 409) return "They're already on EveryPaisa";
+    if (err.response?.status === 429) return 'Already invited today';
+  }
+  return splitErrorMessage(err, "Invite couldn't be sent right now");
+}
+
 function SettingsTab({ group, nets }: { group: SplitGroupDto; nets: Array<{ net: string }> | undefined }) {
+  const inviteContact = useMutation({
+    mutationFn: (contactId: string) => splitApi.inviteContact(contactId),
+    onSuccess: (r) => (r.sent ? toast.success('Invite sent') : toast.error("Invite couldn't be sent right now")),
+    onError: (err) => toast.error(inviteErrorMessage(err)),
+  });
   const qc = useQueryClient();
   const [name, setName] = useState(group.name);
   const [addPerson, setAddPerson] = useState(false);
@@ -100,6 +154,9 @@ function SettingsTab({ group, nets }: { group: SplitGroupDto; nets: Array<{ net:
 
   const direct = group.type === 'DIRECT';
   const memberContactIds = new Set(group.members.filter((m) => !m.leftAt).map((m) => m.contactId));
+  const ownedContacts = new Map((contacts.data ?? []).map((c: SplitContactDto) => [c.id, c]));
+  const canInvite = (m: SplitGroupDto['members'][number]) =>
+    !m.isMe && !m.userId && !!m.contactId && !!ownedContacts.get(m.contactId)?.email && !ownedContacts.get(m.contactId)?.linkedUserId;
   const addable = (contacts.data ?? []).filter((c) => !memberContactIds.has(c.id));
 
   return (
@@ -123,8 +180,14 @@ function SettingsTab({ group, nets }: { group: SplitGroupDto; nets: Array<{ net:
       <Card><CardContent className="p-0 divide-y">
         {group.members.filter((m) => !m.leftAt).map((m) => (
           <div key={m.id} className="flex items-center justify-between px-4 py-3">
-            <span className="text-sm">{m.isMe ? `${m.displayName} (you)` : m.displayName}</span>
-            {!direct && <Button variant="ghost" size="sm" aria-label={`Remove ${m.isMe ? 'yourself' : m.displayName}`} onClick={() => setRemoving(m)}>Remove</Button>}
+            <span className="text-sm">
+              {m.isMe ? `${m.displayName} (you)` : m.displayName}
+              {m.userId && !m.isMe && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">On EveryPaisa</span>}
+            </span>
+            <span className="flex items-center gap-1">
+              {canInvite(m) && <Button variant="outline" size="sm" aria-label={`Invite ${m.displayName}`} disabled={inviteContact.isPending} onClick={() => inviteContact.mutate(m.contactId!)}>Invite</Button>}
+              {!direct && <Button variant="ghost" size="sm" aria-label={`Remove ${m.isMe ? 'yourself' : m.displayName}`} onClick={() => setRemoving(m)}>Remove</Button>}
+            </span>
           </div>
         ))}
       </CardContent></Card>
@@ -135,7 +198,7 @@ function SettingsTab({ group, nets }: { group: SplitGroupDto; nets: Array<{ net:
             {addable.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </Select>
           <Button variant="link" size="sm" onClick={() => setAddPerson(true)}>+ New person</Button>
-          <Button variant="outline" size="sm" className="ml-auto" onClick={() => {
+          <Button variant="outline" size="sm" className="ml-auto" disabled={nets === undefined} onClick={() => {
             const unsettled = (nets ?? []).some((n) => !toDecimal(n.net).isZero());
             if (!group.archivedAt && unsettled) setConfirmArchive(true);
             else update.mutate({ archived: !group.archivedAt });
@@ -165,10 +228,46 @@ function SettingsTab({ group, nets }: { group: SplitGroupDto; nets: Array<{ net:
   );
 }
 
+
+/**
+ * The pay link is prefetched so the click can call navigator.share
+ * synchronously: iOS Safari drops the user activation after an await.
+ * requestLink only reveals the caller's own UPI ID.
+ */
+function SharePayLinkButton({ group, fromMemberId, onError }: { group: SplitGroupDto; fromMemberId: string; onError: (msg: string | null) => void }) {
+  const link = useQuery({
+    queryKey: [...SPLIT_KEYS.group(group.id), 'request-link', fromMemberId],
+    queryFn: () => splitApi.requestLink(group.id, fromMemberId),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const copyFallback = async (uri: string) => {
+    if (await copyText(uri)) toast.success('Pay link copied - paste it in WhatsApp or SMS');
+    else toast.error("Couldn't copy the pay link - use Settle up instead");
+  };
+  const onClick = () => {
+    if (link.isError) { onError(splitErrorMessage(link.error, 'Could not create the pay link')); return; }
+    const data = link.data;
+    if (!data) return;
+    onError(null);
+    const text = `${memberName(group.members, fromMemberId)}, pay ${formatSplitMoney(data.amount, 'INR')} for ${group.name}: ${data.uri}`;
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') { void copyFallback(data.uri); return; }
+    // Called synchronously from the click so the browser still sees the user activation.
+    navigator.share({ title: 'Pay me back', text }).catch((err: unknown) => {
+      const name = (err as { name?: string }).name;
+      if (name === 'AbortError') return;
+      if (name === 'NotAllowedError') { void copyFallback(data.uri); return; }
+      toast.error("Couldn't open the share sheet");
+    });
+  };
+  return <Button size="sm" variant="outline" disabled={link.isPending} onClick={onClick}>Share pay link</Button>;
+}
+
 export function GroupPage() {
   const { id = '' } = useParams();
   const [adding, setAdding] = useState(false);
   const [settle, setSettle] = useState<{ from?: string; to?: string; amount?: string } | null>(null);
+  const [pay, setPay] = useState<{ to: string; amount: string } | null>(null);
   const group = useQuery({ queryKey: SPLIT_KEYS.group(id), queryFn: () => splitApi.getGroup(id),
     retry: (count, err) => !isNotFound(err) && count < 2 });
   const expenses = useQuery({ queryKey: SPLIT_KEYS.expenses(id), queryFn: () => splitApi.listExpenses(id) });
@@ -181,6 +280,13 @@ export function GroupPage() {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: SPLIT_KEYS.all }); toast.success('Payment deleted'); },
     onError: (err) => toast.error(splitErrorMessage(err, 'Could not delete the payment')),
   });
+  const labels = useQuery({ queryKey: SPLIT_KEYS.labels(id), queryFn: () => splitApi.listLabels(id) });
+  const remind = useMutation({
+    mutationFn: (memberId: string) => splitApi.remind(id, memberId),
+    onSuccess: (r) => (r.sent ? toast.success('Reminder sent') : toast.error("Reminder saved but email couldn't be sent right now")),
+    onError: (err) => toast.error(axios.isAxiosError(err) && err.response?.status === 409 ? 'Already reminded today' : splitErrorMessage(err, 'Could not send the reminder')),
+  });
+  const [shareError, setShareError] = useState<string | null>(null);
   const activity = useQuery({ queryKey: SPLIT_KEYS.activity(id), queryFn: () => splitApi.activity(id) });
 
   if (group.isError) {
@@ -190,6 +296,7 @@ export function GroupPage() {
   }
   if (!group.data) return <p className="text-sm text-muted-foreground">Loading…</p>;
   const g = group.data;
+  const me = g.members.find((m) => m.isMe);
 
   return (
     <div className="space-y-5 pb-24">
@@ -217,7 +324,7 @@ export function GroupPage() {
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
-        <TabsContent value="expenses" className="pt-3"><ExpensesTab group={g} expenses={expenses.data ?? []} settlements={settlements.data ?? []} status={expenses.status} onRetry={() => void expenses.refetch()} onDeletePayment={setDeletingPayment} /></TabsContent>
+        <TabsContent value="expenses" className="pt-3"><ExpensesTab group={g} expenses={expenses.data ?? []} settlements={settlements.data ?? []} settlementsStatus={settlements.status} onRetrySettlements={() => void settlements.refetch()} labels={labels.data ?? []} status={expenses.status} onRetry={() => void expenses.refetch()} onDeletePayment={setDeletingPayment} /></TabsContent>
         <TabsContent value="balances" className="pt-3 space-y-3">
           {balances.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
           {balances.isError && <LoadError text="Couldn't load balances." onRetry={() => void balances.refetch()} />}
@@ -236,10 +343,28 @@ export function GroupPage() {
             {(balances.data?.transfers ?? []).map((t, i) => (
               <div key={i} className="flex items-center justify-between gap-3 px-4 py-3">
                 <span className="text-sm">{transferLabel(g.members, t, g.baseCurrency)}</span>
-                <Button size="sm" variant="outline" onClick={() => setSettle({ from: t.fromMemberId, to: t.toMemberId, amount: t.amount })}>Settle</Button>
+                <span className="flex items-center gap-1.5">
+                  {t.toMemberId === me?.id && (
+                    <>
+                      <Button size="sm" variant="outline" disabled={remind.isPending} onClick={() => remind.mutate(t.fromMemberId)}>Remind</Button>
+                      {g.baseCurrency === 'INR' && (
+                        <SharePayLinkButton group={g} fromMemberId={t.fromMemberId} onError={setShareError} />
+                      )}
+                    </>
+                  )}
+                  {t.fromMemberId === me?.id && g.baseCurrency === 'INR' && (
+                    <Button size="sm" onClick={() => setPay({ to: t.toMemberId, amount: t.amount })}>Pay</Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => setSettle({ from: t.fromMemberId, to: t.toMemberId, amount: t.amount })}>Settle</Button>
+                </span>
               </div>
             ))}
           </CardContent></Card>
+          {shareError && (
+            <p role="alert" className="text-sm text-destructive">
+              {shareError}{/UPI ID/i.test(shareError) && <> <Link className="underline" to="/split/settings">Open Split settings</Link></>}
+            </p>
+          )}
           </>}
         </TabsContent>
         <TabsContent value="activity" className="pt-3">
@@ -263,6 +388,7 @@ export function GroupPage() {
         onConfirm={() => deletingPayment && deletePayment.mutate(deletingPayment.id)}
       />
       <AddExpenseDialog open={adding} onOpenChange={setAdding} group={g} />
+      {pay && <PayNowDialog open onOpenChange={(o) => !o && setPay(null)} group={g} toMemberId={pay.to} amount={pay.amount} />}
       <SettleUpDialog open={settle !== null} onOpenChange={(o) => !o && setSettle(null)} group={g} {...(settle ?? {})} />
     </div>
   );

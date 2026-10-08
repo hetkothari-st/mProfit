@@ -14,6 +14,7 @@ import { computeShares, toBase, allocateBase } from './allocate.js';
 import { requireMember, loadLedger, assertLeftMembersSettled } from './groups.service.js';
 import { writeActivity } from './activity.js';
 import { resolveFxRate } from './fx.js';
+import { syncShareLinksSafely } from './shareLink.service.js';
 import { parseCcy, parseIsoDate, parseMoney2dp } from './validate.js';
 
 export interface ExpenseInput {
@@ -28,7 +29,7 @@ export interface ExpenseInput {
   shares: Array<{ memberId: string; value?: string }>;
 }
 
-const INCLUDE = { payers: true, shares: true } as const;
+const INCLUDE = { payers: true, shares: true, labels: { select: { labelId: true } } } as const;
 type Row = Prisma.SplitExpenseGetPayload<{ include: typeof INCLUDE }>;
 
 function toDto(e: Row): SplitExpenseDto {
@@ -47,6 +48,8 @@ function toDto(e: Row): SplitExpenseDto {
     createdAt: e.createdAt.toISOString(),
     sourceType: e.sourceType,
     deletedAt: e.deletedAt?.toISOString() ?? null,
+    labelIds: e.labels.map((l) => l.labelId).sort(),
+    hasReceipt: !!e.receiptBlobId,
     payers: [...e.payers].sort(byId).map((p) => ({ memberId: p.memberId, amount: serializeMoney(p.amount.toString()), baseAmount: serializeMoney(p.baseAmount.toString()) })),
     shares: [...e.shares].sort(byId).map((s) => ({ memberId: s.memberId, amount: serializeMoney(s.amount.toString()), baseAmount: serializeMoney(s.baseAmount.toString()), rawInput: s.rawInput?.toString() ?? null })),
   };
@@ -169,6 +172,7 @@ export async function updateExpense(userId: string, id: string, input: Omit<Expe
       after: { description: b.scalar.description, amount: b.scalar.amount, currency: b.scalar.currency },
     });
   });
+  await syncShareLinksSafely(id);
   return getExpense(userId, id);
 }
 
@@ -180,6 +184,7 @@ export async function deleteExpense(userId: string, id: string): Promise<void> {
     await tx.splitExpense.update({ where: { id }, data: { deletedAt: new Date() } });
     await writeActivity(tx, e.groupId, userId, 'EXPENSE_DELETED', { expenseId: id, description: e.description });
   });
+  await syncShareLinksSafely(id);
 }
 
 export async function restoreExpense(userId: string, id: string): Promise<SplitExpenseDto> {
@@ -190,6 +195,7 @@ export async function restoreExpense(userId: string, id: string): Promise<SplitE
       await tx.splitExpense.update({ where: { id }, data: { deletedAt: null } });
       await writeActivity(tx, e.groupId, userId, 'EXPENSE_RESTORED', { expenseId: id, description: e.description });
     });
+    await syncShareLinksSafely(id);
   }
   return getExpense(userId, id);
 }

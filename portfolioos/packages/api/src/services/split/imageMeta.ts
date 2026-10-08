@@ -1,0 +1,103 @@
+// packages/api/src/services/split/imageMeta.ts
+/**
+ * Receipt type detection and metadata stripping without native image
+ * libraries. We only remove whole metadata segments/chunks; pixel data is
+ * never re-encoded, so a malformed file stays exactly as malformed as it was.
+ */
+export type ReceiptKind = 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
+
+export function detectReceiptKind(buf: Buffer): ReceiptKind | null {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buf.length >= 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  if (buf.length >= 5 && buf.toString('ascii', 0, 5) === '%PDF-') return 'application/pdf';
+  return null;
+}
+
+export function isHeic(buf: Buffer): boolean {
+  if (buf.length < 12 || buf.toString('ascii', 4, 8) !== 'ftyp') return false;
+  return ['heic', 'heix', 'hevc', 'mif1', 'heif'].includes(buf.toString('ascii', 8, 12));
+}
+
+const ICC = Buffer.from('ICC_PROFILE\0', 'ascii');
+
+/** Returns null when the file can't be parsed: callers must reject rather than store unstripped bytes. */
+function stripJpeg(buf: Buffer): Buffer | null {
+  const out: Buffer[] = [buf.subarray(0, 2)];
+  let i = 2;
+  while (i < buf.length) {
+    if (buf[i] !== 0xff) return null;
+    while (i < buf.length && buf[i] === 0xff) i++; // fill bytes before a marker are legal
+    if (i >= buf.length) return null;
+    const marker = buf[i]!;
+    i++;
+    const start = i - 2;
+    if (marker === 0xd9) { out.push(Buffer.from([0xff, 0xd9])); return Buffer.concat(out); }
+    if (marker === 0xda) {
+      if (i + 2 > buf.length) return null;
+      const len = buf.readUInt16BE(i);
+      // Entropy-coded data stuffs a literal FF as FF 00, so the first FF D9 ends the primary image.
+      const eoi = buf.indexOf(Buffer.from([0xff, 0xd9]), i + len);
+      if (eoi < 0) return null;
+      out.push(buf.subarray(start, eoi + 2));
+      return Buffer.concat(out);
+    }
+    if (i + 2 > buf.length) return null;
+    const len = buf.readUInt16BE(i);
+    const end = i + len;
+    if (len < 2 || end > buf.length) return null;
+    let keep = true;
+    if ((marker >= 0xe1 && marker <= 0xed) || marker === 0xef || marker === 0xfe) keep = false;
+    if (marker === 0xe2) keep = buf.subarray(i + 2, i + 2 + ICC.length).equals(ICC);
+    if (keep) out.push(buf.subarray(start, end));
+    i = end;
+  }
+  return null;
+}
+
+const PNG_DROP = new Set(['tEXt', 'iTXt', 'zTXt', 'eXIf', 'tIME']);
+function stripPng(buf: Buffer): Buffer | null {
+  const out: Buffer[] = [buf.subarray(0, 8)];
+  let i = 8;
+  while (i + 12 <= buf.length) {
+    const len = buf.readUInt32BE(i);
+    const type = buf.toString('ascii', i + 4, i + 8);
+    const end = i + 12 + len;
+    if (end > buf.length) return null;
+    if (!PNG_DROP.has(type)) out.push(buf.subarray(i, end));
+    i = end;
+    if (type === 'IEND') return Buffer.concat(out);
+  }
+  return null;
+}
+
+// Note: the VP8X EXIF/XMP flag bits are not cleared; decoders ignore a set
+// flag when the chunk is absent.
+function stripWebp(buf: Buffer): Buffer | null {
+  const limit = Math.min(buf.length, 8 + buf.readUInt32LE(4));
+  const chunks: Buffer[] = [];
+  let i = 12;
+  while (i + 8 <= limit) {
+    const type = buf.toString('ascii', i, i + 4);
+    const len = buf.readUInt32LE(i + 4);
+    const dataEnd = i + 8 + len;
+    if (dataEnd > limit) return null;
+    const end = Math.min(dataEnd + (len % 2), limit); // last chunk may lack its pad byte
+    if (type !== 'EXIF' && type !== 'XMP ') chunks.push(buf.subarray(i, end));
+    i = end;
+  }
+  if (i !== limit && limit - i > 0) return null;
+  const body = Buffer.concat(chunks);
+  const header = Buffer.from(buf.subarray(0, 12));
+  header.writeUInt32LE(body.length + 4, 4);
+  return Buffer.concat([header, body]);
+}
+
+export function stripImageMetadata(buf: Buffer, kind: ReceiptKind): Buffer | null {
+  switch (kind) {
+    case 'image/jpeg': return stripJpeg(buf);
+    case 'image/png': return stripPng(buf);
+    case 'image/webp': return stripWebp(buf);
+    case 'application/pdf': return buf;
+  }
+}

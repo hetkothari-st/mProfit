@@ -59,7 +59,7 @@ export function FriendPage() {
         <Card><CardContent className="p-0 divide-y">
           {friend.groups.map((g) => (
             <Link key={g.groupId} to={`/split/groups/${g.groupId}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40">
-              <span className="text-sm truncate">{g.groupName}</span>
+              <span className="text-sm truncate">{g.groupType === 'DIRECT' ? 'Just you two' : g.groupName}</span>
               <BalancePill net={g.net} currency={g.currency} />
             </Link>
           ))}

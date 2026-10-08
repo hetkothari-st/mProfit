@@ -14,6 +14,7 @@ import { formatSplitMoney, memberName } from '@/lib/splitFormat';
 import { AddExpenseDialog } from './AddExpenseDialog';
 import { isNotFound } from './queryErrors';
 import { LoadError } from './LoadError';
+import { ExpenseExtras } from './ExpenseExtras';
 
 const MODE_LABEL = { EQUAL: 'Split equally', EXACT: 'Exact amounts', PERCENT: 'By percent', SHARES: 'By shares' } as const;
 
@@ -100,6 +101,7 @@ export function ExpenseDetailPage() {
           ))}
         </CardContent></Card>
       </div>
+      <ExpenseExtras expense={e} group={g} />
       <p className="text-xs text-muted-foreground">Added {formatDateTimeIST(e.createdAt)}</p>
       <AddExpenseDialog open={editing} onOpenChange={setEditing} group={g} expense={e} />
     </div>

@@ -55,4 +55,14 @@ describe('FriendPage', () => {
     renderWithProviders(<FriendPage />, { route: '/split/friends/u%3Anobody', path: '/split/friends/:key' });
     expect(await screen.findByText(/No balances with this person/)).toBeTruthy();
   });
+
+  it('the 1:1 group row reads "Just you two"', async () => {
+    api.friends.mockResolvedValue([{ ...FRIENDS[0]!, groups: [
+      { groupId: 'd1', groupName: 'Bob', groupType: 'DIRECT', net: '20.0000', currency: 'INR' },
+      { groupId: 'g1', groupName: 'Goa trip', groupType: 'TRIP', net: '50.0000', currency: 'INR' },
+    ] }]);
+    renderWithProviders(<FriendPage />, { route: '/split/friends/u%3Au2', path: '/split/friends/:key' });
+    expect(await screen.findByText('Just you two')).toBeTruthy();
+    expect(screen.getByText('Goa trip')).toBeTruthy();
+  });
 });

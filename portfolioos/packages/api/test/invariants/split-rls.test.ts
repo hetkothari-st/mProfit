@@ -192,7 +192,7 @@ describe('invariant: Split RLS', () => {
     const ids = await alice.runAs(async () => ({
       d: (await prisma.splitDetection.create({ data: { userId: alice.userId, source: 'PASTE', sourceHash: 'h-' + alice.userId,
         amount: '5', direction: 'DEBIT', date: new Date('2026-10-01') } })).id,
-      l: (await prisma.splitShareLink.create({ data: { expenseId, userId: alice.userId, cashFlowId: 'cf1' } })).id,
+      l: (await prisma.splitShareLink.create({ data: { expenseId, userId: alice.userId, cashFlowId: 'cf1', portfolioId: 'p1' } })).id,
       s: (await prisma.splitSettings.create({ data: { userId: alice.userId } })).userId,
     }));
     await bob.runAs(async () => {
@@ -308,5 +308,17 @@ describe('invariant: Split RLS', () => {
       ).rejects.toThrow();
     });
     expect(await runAsSystem(() => prisma.splitExpense.findUniqueOrThrow({ where: { id: expenseId } }))).toMatchObject({ groupId });
+  });
+  it('SplitReminder rows are sender-only', async () => {
+    const r = await alice.runAs(() => prisma.splitReminder.create({
+      data: { userId: alice.userId, groupId, memberId: bobMemberId, sentOn: new Date('2026-10-08') },
+    }));
+    await bob.runAs(async () => {
+      expect(await prisma.splitReminder.findUnique({ where: { id: r.id } })).toBeNull();
+    });
+    await expect(eve.runAs(() => prisma.splitReminder.create({
+      data: { userId: alice.userId, groupId, memberId: bobMemberId, sentOn: new Date('2026-10-09') },
+    }))).rejects.toThrow();
+    await runAsSystem(() => prisma.splitReminder.delete({ where: { id: r.id } }));
   });
 });
