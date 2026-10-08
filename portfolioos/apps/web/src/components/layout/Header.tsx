@@ -14,6 +14,7 @@ import { useActingAsStore } from '@/stores/actingAs.store';
 import { useManageProfile } from '@/hooks/useManageProfile';
 import { DesktopDownloadButton } from './DesktopDownloadButton';
 
+import { formatDateIST } from '@everypaisa/shared';
 export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -78,17 +79,9 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
     .slice(0, 2)
     .toUpperCase();
 
-  const today = new Date().toLocaleDateString('en-IN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-  const todayShort = new Date().toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
+  const now = new Date();
+  const today = `${formatDateIST(now, { weekday: 'long' })}, ${formatDateIST(now)}`;
+  const todayShort = `${formatDateIST(now, { weekday: 'short' })}, ${formatDateIST(now)}`;
 
   return (
     <header className="relative z-30 h-16 shrink-0 border-b border-border/70 bg-card/70 backdrop-blur-md flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-10">

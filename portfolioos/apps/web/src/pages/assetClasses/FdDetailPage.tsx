@@ -10,7 +10,7 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
-import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@everypaisa/shared';
+import { Decimal, formatINR, type HoldingRow, type TransactionDTO, formatDateOnly } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { AutoFitText } from '@/components/ui/AutoFitText';
 import { Badge } from '@/components/ui/badge';
@@ -761,9 +761,9 @@ export function FdDetailPage() {
                     style={{ left: `calc(${elapsedPct}% - 6px)` }} />
                 </div>
                 <div className="mt-2 flex items-center justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
-                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{openDate}</span>
+                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatDateOnly(openDate)}</span>
                   <span className="text-foreground/70 font-medium">{Math.round(elapsedPct)}% elapsed</span>
-                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{maturity}</span>
+                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatDateOnly(maturity)}</span>
                 </div>
               </div>
             )}
@@ -784,7 +784,7 @@ export function FdDetailPage() {
           <Stat
             label="At Maturity"
             value={maturityValue ? formatINR(maturityValue.toString()) : '—'}
-            sub={maturity ? `on ${maturity}` : undefined}
+            sub={maturity ? `on ${formatDateOnly(maturity)}` : undefined}
             icon={Hash}
           />
         </div>

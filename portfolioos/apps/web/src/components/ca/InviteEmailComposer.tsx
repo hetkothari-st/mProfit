@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { caInviteEmailApi, type InviteEmailDraft } from '@/api/ca.api';
 import { apiErrorMessage } from '@/api/client';
 
+import { formatDateOnly } from '@everypaisa/shared';
 /**
  * Compose, read, send.
  *
@@ -115,7 +116,7 @@ export function InviteEmailComposer({ clientId, source: given, onDone }: Props) 
     return (
       <div className="space-y-4 py-2">
         <p className="text-[13px] leading-relaxed text-foreground">
-          Sent to <span className="font-medium">{d.to}</span>. They have until {d.expiresOn} to
+          Sent to <span className="font-medium">{d.to}</span>. They have until {formatDateOnly(d.expiresOn)} to
           accept, and replies come back to you.
         </p>
         <p className="text-[12px] leading-relaxed text-muted-foreground">

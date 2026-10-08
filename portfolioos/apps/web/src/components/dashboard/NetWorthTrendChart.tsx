@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { intelligenceApi, type NetWorthHistoryPeriod } from '@/api/intelligence.api';
-import { formatINR, toDecimal } from '@everypaisa/shared';
+import { formatINR, toDecimal, formatDateIST } from '@everypaisa/shared';
 import { EstimatedChip } from '@/pages/family/widgets/RestrictedNotice';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 
@@ -37,7 +37,7 @@ export function NetWorthTrendChart() {
 
   const points = data?.points ?? [];
   const chartData = points.map((p) => ({
-    label: new Date(p.asOf).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }),
+    label: formatDateIST(p.asOf),
     value: toDecimal(p.netWorthAfterLiabilities).toNumber(),
     estimated: p.estimated,
   }));

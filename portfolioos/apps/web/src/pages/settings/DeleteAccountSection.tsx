@@ -20,6 +20,7 @@ import { authApi } from '@/api/auth.api';
 import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
 
+import { formatDateIST } from '@everypaisa/shared';
 type Step = 'warn' | 'verify' | 'final';
 
 const ERASED = [
@@ -31,11 +32,7 @@ const ERASED = [
 ];
 
 function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatDateIST(iso);
 }
 
 /**

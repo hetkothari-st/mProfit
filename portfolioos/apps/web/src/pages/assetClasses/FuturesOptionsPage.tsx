@@ -20,7 +20,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { formatINR, toDecimal, Decimal } from '@everypaisa/shared';
+import { formatINR, toDecimal, Decimal, formatDateOnly } from '@everypaisa/shared';
 import { foApi, brokerApi, type FoPosition, type FoTrade, type BrokerStatus } from '@/api/fo.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
@@ -399,7 +399,7 @@ export function FuturesOptionsPage() {
             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
             <div className="text-sm text-amber-900 dark:text-amber-200">
               <strong>Expiring soon:</strong>{' '}
-              {summaryQ.data.expiringSoon.map((e) => `${e.underlying} (${e.expiryDate})`).join(', ')}
+              {summaryQ.data.expiringSoon.map((e) => `${e.underlying} (${formatDateOnly(e.expiryDate)})`).join(', ')}
             </div>
           </CardContent>
         </Card>
@@ -511,7 +511,7 @@ export function FuturesOptionsPage() {
                     className="flex items-center justify-between border rounded p-3 dark:border-border"
                   >
                     <div className="text-sm">
-                      <div className="font-medium">Expiry close {j.expiryDate}</div>
+                      <div className="font-medium">Expiry close {formatDateOnly(j.expiryDate)}</div>
                       <div className="text-xs text-muted-foreground">
                         {j.openQty} contracts · settlement{' '}
                         {j.settlementPrice ? fmtINR(j.settlementPrice) : 'pending'}
@@ -737,7 +737,7 @@ function ContractTrades({ trades }: { trades: FoTrade[] }) {
         <tbody>
           {sorted.map((t) => (
             <tr key={t.id} className="border-t border-border/60">
-              <td data-label="Date" className="px-2.5 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">{t.tradeDate}</td>
+              <td data-label="Date" className="px-2.5 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">{formatDateOnly(t.tradeDate)}</td>
               <td data-label="Side" className="px-2.5 py-1.5">
                 <span
                   className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
@@ -991,7 +991,7 @@ function UnderlyingTrades({ trades }: { trades: FoTrade[] }) {
               >
                 <td data-label="Date" className="pl-3 pr-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
                   <span className="text-accent/60 mr-1.5">▸</span>
-                  {t.tradeDate}
+                  {formatDateOnly(t.tradeDate)}
                 </td>
                 <td data-label="Side" className="px-2 py-1.5 font-sans">
                   <SideTagBadge side={t.transactionType} />
@@ -1149,7 +1149,7 @@ function FuturesLedger({
                   </td>
                   <td data-label="Expiry" className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground tabular-nums">{p.expiryDate}</span>
+                      <span className="text-muted-foreground tabular-nums">{formatDateOnly(p.expiryDate)}</span>
                       {(p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') && (
                         <ExpiryBadge iso={p.expiryDate} />
                       )}
@@ -1361,7 +1361,7 @@ function OptionsChain({
                   </td>
                   <td data-label="Expiry" className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground tabular-nums">{p.expiryDate}</span>
+                      <span className="text-muted-foreground tabular-nums">{formatDateOnly(p.expiryDate)}</span>
                       {(p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') && (
                         <ExpiryBadge iso={p.expiryDate} />
                       )}
@@ -1476,7 +1476,7 @@ function TapeSection({ trades, limit }: { trades: FoTrade[]; limit?: number }) {
               >
                 <td data-label="Date" className="pl-4 pr-2 py-2 whitespace-nowrap text-muted-foreground tabular-nums">
                   <span className="text-accent/60 mr-1.5">▸</span>
-                  {t.tradeDate}
+                  {formatDateOnly(t.tradeDate)}
                 </td>
                 <td data-label="Side" className="px-3 py-2 font-sans">
                   <SideTagBadge side={t.transactionType} />
@@ -1579,7 +1579,7 @@ function PnlStatement({
                   )}
                 </td>
                 <td data-label="Strike" className="px-3 py-2 text-right tabular-nums">{r.strikePrice ?? '—'}</td>
-                <td data-label="Expiry" className="px-3 py-2 tabular-nums text-muted-foreground">{r.expiryDate}</td>
+                <td data-label="Expiry" className="px-3 py-2 tabular-nums text-muted-foreground">{formatDateOnly(r.expiryDate)}</td>
                 <td data-label="Side" className="px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">
                   {r.side}
                 </td>

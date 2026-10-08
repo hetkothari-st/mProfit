@@ -18,7 +18,7 @@ import {
   Check,
   Undo2,
 } from 'lucide-react';
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend,
@@ -69,7 +69,7 @@ const PAYMENT_TYPE_COLORS: Record<string, string> = {
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateIST(iso);
 }
 
 /** Top-left way back to the loans list, where the eye looks first. */

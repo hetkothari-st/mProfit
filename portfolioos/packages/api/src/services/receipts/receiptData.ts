@@ -22,7 +22,7 @@
 
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError } from '../../lib/errors.js';
-import { toDecimal } from '@everypaisa/shared';
+import { toDecimal, formatDateIST } from '@everypaisa/shared';
 import { amountInWords } from './amountInWords.js';
 import { inr } from './format.js';
 
@@ -103,11 +103,7 @@ function monthLabel(forMonth: string): string {
 
 function dayLabel(d: Date | null | undefined): string {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatDateIST(d);
 }
 
 /** Short codes for the derived receipt number, one per kind of document. */

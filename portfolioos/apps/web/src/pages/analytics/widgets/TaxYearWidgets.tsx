@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarClock, Check, AlertTriangle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
-import { formatINR, toDecimal } from '@everypaisa/shared';
+import { formatINR, toDecimal, formatDateIST } from '@everypaisa/shared';
 import { taxApi, type AdvanceTaxReport } from '@/api/tax.api';
 import { AnalyticsInfo } from '../AnalyticsInfo';
 import { currentFy } from '../financialYear';
@@ -63,7 +63,7 @@ function statusStyles(status: AdvanceTaxReport['instalments'][number]['status'])
 
 function formatDueDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  return formatDateIST(d);
 }
 
 export function AdvanceTaxCard({ fy }: { fy: string }) {

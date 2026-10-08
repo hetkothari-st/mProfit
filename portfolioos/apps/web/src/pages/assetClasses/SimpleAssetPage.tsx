@@ -10,7 +10,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Plus, Pencil, Loader2, ImageIcon, ChevronDown, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatINR, Decimal, type HoldingRow } from '@everypaisa/shared';
+import { formatINR, Decimal, type HoldingRow, formatDateOnly } from '@everypaisa/shared';
 import type { AssetClass, TransactionDTO } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -364,7 +364,7 @@ export function SimpleAssetPage({
                   return (
                     <tr key={txn.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                       <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                        {txn.tradeDate}
+                        {formatDateOnly(txn.tradeDate)}
                       </td>
                       <td data-label="Name" className="px-4 py-3">
                         <div className="flex items-center gap-3">

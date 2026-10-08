@@ -22,7 +22,7 @@ import { useReportSubject } from '@/components/reports/useReportSubject';
 import { useAuthStore } from '@/stores/auth.store';
 import { InboxImportsTab } from './InboxImportsTab';
 import { TaxMisDownloads, REPORTS as TAX_MIS_REPORTS, type ReportHighlight } from './TaxMisDownloads';
-import { Decimal, toDecimal } from '@everypaisa/shared';
+import { Decimal, toDecimal, formatDateOnly } from '@everypaisa/shared';
 
 import { signTone } from '@/lib/signTone';
 type Tab =
@@ -773,8 +773,8 @@ function GainsView({
               {data.rows.map((r, i) => (
                 <tr key={i} className="border-b">
                   <td data-label="Asset" className="p-2">{r.assetName || r.isin || '—'}</td>
-                  <td data-label="Buy Date" className="p-2">{r.buyDate.slice(0, 10)}</td>
-                  <td data-label="Sell Date" className="p-2">{r.sellDate.slice(0, 10)}</td>
+                  <td data-label="Buy Date" className="p-2">{formatDateOnly(r.buyDate)}</td>
+                  <td data-label="Sell Date" className="p-2">{formatDateOnly(r.sellDate)}</td>
                   <td data-label="Qty" className="p-2 text-right">{fmt(r.quantity, 4)}</td>
                   <td data-label="Buy ₹" className="p-2 text-right">{fmt(r.buyPrice)}</td>
                   <td data-label="Sell ₹" className="p-2 text-right">{fmt(r.sellPrice)}</td>
@@ -839,7 +839,7 @@ function IncomeView({
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.id} className="border-b">
-                  <td data-label="Date" className="p-2">{r.date.slice(0, 10)}</td>
+                  <td data-label="Date" className="p-2">{formatDateOnly(r.date)}</td>
                   <td data-label="Type" className="p-2 text-xs">{r.type}</td>
                   <td data-label="Asset" className="p-2">{r.assetName}</td>
                   <td data-label="Amount" className="p-2 text-right">{fmt(r.amount)}</td>
@@ -943,7 +943,7 @@ function HistoricalView({
             <tbody>
               {data.points.map((p) => (
                 <tr key={p.date} className="border-b">
-                  <td data-label="Month-end" className="p-2">{p.date.slice(0, 10)}</td>
+                  <td data-label="Month-end" className="p-2">{formatDateOnly(p.date)}</td>
                   <td data-label="Cost" className="p-2 text-right">{fmt(p.cost)}</td>
                   <td data-label="Value" className="p-2 text-right">{fmt(p.value)}</td>
                   <td data-label="Holdings" className="p-2 text-right">{p.holdings}</td>

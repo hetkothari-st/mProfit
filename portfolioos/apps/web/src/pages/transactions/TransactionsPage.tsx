@@ -11,7 +11,7 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { TransactionFormDialog } from './TransactionFormDialog';
 import { DuplicatesDialog } from './DuplicatesDialog';
 import type { TransactionDTO } from '@everypaisa/shared';
-import { ASSET_CLASS_LABELS, formatINR, formatQuantity } from '@everypaisa/shared';
+import { ASSET_CLASS_LABELS, formatINR, formatQuantity, formatDateOnly } from '@everypaisa/shared';
 
 export function TransactionsPage() {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('');
@@ -106,7 +106,7 @@ export function TransactionsPage() {
                         <span className={`shrink-0 rounded px-1.5 py-px text-[10.5px] font-medium ${txTypeTone(r.transactionType)}`}>
                           {r.transactionType.replace(/_/g, ' ')}
                         </span>
-                        <span className="shrink-0 tabular-nums">{r.tradeDate}</span>
+                        <span className="shrink-0 tabular-nums">{formatDateOnly(r.tradeDate)}</span>
                         <span className="truncate">· {r.symbol ?? r.schemeCode ?? r.isin ?? ASSET_CLASS_LABELS[r.assetClass] ?? r.assetClass}</span>
                       </span>
                       <span className="shrink-0 tabular-nums">
@@ -138,7 +138,7 @@ export function TransactionsPage() {
                       className="border-b last:border-0 hover:bg-accent/20 cursor-pointer"
                       onClick={() => { setEditing(r); setOpen(true); }}
                     >
-                      <td data-label="Date" className="py-2 pr-4 tabular-nums">{r.tradeDate}</td>
+                      <td data-label="Date" className="py-2 pr-4 tabular-nums">{formatDateOnly(r.tradeDate)}</td>
                       <td data-label="Type" className="py-2 pr-4">
                         <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${txTypeTone(r.transactionType)}`}>
                           {r.transactionType.replace(/_/g, ' ')}

@@ -6,6 +6,7 @@ import { logger } from '../../lib/logger.js';
 import { fmtNum, fmtDate, type ExportPayload, type ExportColumn } from '../export.service.js';
 import type { BarDatum } from '../charts/pdfCharts.js';
 
+import { formatDateIST } from '@everypaisa/shared';
 const ASSET_CLASS_LABELS: Record<string, string> = {
   EQUITY: 'Equity', MUTUAL_FUND: 'Mutual Fund', ETF: 'ETF',
   FUTURES: 'Futures', OPTIONS: 'Options',
@@ -190,7 +191,7 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
 
-  const todayStr = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+  const todayStr = formatDateIST(new Date());
 
   // ── Transactions ─────────────────────────────────────────────────────────────
   const txns = await prisma.transaction.findMany({

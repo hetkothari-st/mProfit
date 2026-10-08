@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -177,11 +177,7 @@ export function CashFlowsPage() {
 
 function CashFlowRow({ cf }: { cf: CashFlowDTO }) {
   const isInflow = cf.type === 'INFLOW';
-  const dateStr = new Date(cf.date).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  const dateStr = formatDateIST(cf.date);
   const amountDecimal = new Decimal(cf.amount);
 
   return (

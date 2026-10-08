@@ -31,6 +31,7 @@ import type { ReceiptDocument } from './receiptData.js';
 import { RUPEE_FIELDS } from './receiptData.js';
 import { inr } from './format.js';
 
+import { formatDateIST, formatDateOnly } from '@everypaisa/shared';
 type Doc = InstanceType<typeof PDFDocument>;
 
 const INK = '#1B2027';
@@ -52,11 +53,7 @@ const LABEL_W = 150;
 
 function prettyDate(iso: string): string {
   const [y, m, d] = iso.split('-').map((n) => Number.parseInt(n, 10));
-  return new Date(y!, (m ?? 1) - 1, d ?? 1).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatDateOnly(`${y}-${String(m ?? 1).padStart(2, '0')}-${String(d ?? 1).padStart(2, '0')}`);
 }
 
 /**
@@ -418,11 +415,7 @@ export function drawReceipt(doc: Doc, receipt: ReceiptDocument): void {
   // ── Footer ──
   doc.moveTo(left, y).lineTo(right, y).lineWidth(0.4).strokeColor(RULE).stroke();
   y += 8;
-  const generated = new Date().toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  const generated = formatDateIST(new Date());
   doc
     .font('Helvetica')
     .fontSize(7)

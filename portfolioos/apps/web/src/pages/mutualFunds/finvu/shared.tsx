@@ -5,7 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { Decimal, formatINR, toDecimal } from '@everypaisa/shared';
+import { Decimal, formatINR, toDecimal, formatDateIST, formatDateTimeIST } from '@everypaisa/shared';
 
 export function isObj(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -57,7 +57,7 @@ export function fmtDate(v: unknown): string {
   if (!s) return '—';
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateIST(d);
 }
 
 export function fmtDateTime(v: unknown): string {
@@ -65,13 +65,7 @@ export function fmtDateTime(v: unknown): string {
   if (!s) return '—';
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTimeIST(d);
 }
 
 export function shortInr(v: number): string {

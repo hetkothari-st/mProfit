@@ -22,26 +22,7 @@
  */
 
 import { Prisma, type InsuranceClaim } from '@prisma/client';
-import {
-  Decimal,
-  addDaysIso,
-  addMonthsIso,
-  buildPremiumSchedule,
-  daysBetweenIso,
-  defaultGraceDays,
-  formatINR,
-  nextPremiumDue,
-  premiumDueOn,
-  PREMIUM_FREQUENCY_MONTHS,
-  CLAIM_GUIDES,
-  claimProgress,
-  isClaimKind,
-  hasSurrenderValue,
-  canHaveCriticalIllness,
-  type ClaimGuide,
-  type NextPremiumDue,
-  type TaxBucket,
-} from '@everypaisa/shared';
+import { Decimal, addDaysIso, addMonthsIso, buildPremiumSchedule, daysBetweenIso, defaultGraceDays, formatINR, nextPremiumDue, premiumDueOn, PREMIUM_FREQUENCY_MONTHS, CLAIM_GUIDES, claimProgress, isClaimKind, hasSurrenderValue, canHaveCriticalIllness, type ClaimGuide, type NextPremiumDue, type TaxBucket, formatDateIST } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
@@ -1110,12 +1091,7 @@ interface Reminder {
 }
 
 function fmtDate(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
+  return formatDateIST(`${iso}T00:00:00Z`);
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;

@@ -12,6 +12,7 @@ import { mailboxesApi, type MailboxCreateInput } from '@/api/mailboxes.api';
 import { gmailApi } from '@/api/gmail.api';
 import { apiErrorMessage } from '@/api/client';
 
+import { formatDateTimeIST } from '@everypaisa/shared';
 const DEFAULT_FORM: MailboxCreateInput = {
   label: '',
   host: 'imap.gmail.com',
@@ -308,7 +309,7 @@ export function MailboxesPage() {
                         <div className="text-xs text-muted-foreground">{subtitle}</div>
                         <div className="text-xs text-muted-foreground">
                           {m.lastPolledAt
-                            ? `Last polled ${new Date(m.lastPolledAt).toLocaleString()}`
+                            ? `Last polled ${formatDateTimeIST(m.lastPolledAt)}`
                             : 'Never polled'}
                         </div>
                         {m.lastError && (

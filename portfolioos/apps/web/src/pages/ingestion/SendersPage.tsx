@@ -16,6 +16,7 @@ import {
 } from '@/api/monitoredSenders.api';
 import { apiErrorMessage } from '@/api/client';
 
+import { formatDateTimeIST } from '@everypaisa/shared';
 const DEFAULT_FORM: CreateMonitoredSenderInput = {
   address: '',
   displayLabel: '',
@@ -229,7 +230,7 @@ function SenderRow({
           <div className="text-[11px] text-muted-foreground mt-1">
             {sender.confirmedEventCount} / {sender.autoCommitAfter} approved
             {sender.lastFetchedAt
-              ? ` · last fetched ${new Date(sender.lastFetchedAt).toLocaleString()}`
+              ? ` · last fetched ${formatDateTimeIST(sender.lastFetchedAt)}`
               : ' · never fetched'}
           </div>
           <div className="h-1 bg-muted rounded-full mt-1 overflow-hidden">

@@ -18,7 +18,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@everypaisa/shared';
+import { Decimal, formatINR, type HoldingRow, type AssetClass, formatDateOnly } from '@everypaisa/shared';
 import type { TransactionDTO } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { transactionsApi } from '@/api/transactions.api';
@@ -648,7 +648,7 @@ export function GoldAssetDetailPage() {
             <Ledger
               label="Held For"
               value={holdHuman ?? '—'}
-              hint={firstTxnDate ? `since ${firstTxnDate}` : undefined}
+              hint={firstTxnDate ? `since ${formatDateOnly(firstTxnDate)}` : undefined}
             />
             {holding.xirr != null ? (
               <Ledger
@@ -748,7 +748,7 @@ export function GoldAssetDetailPage() {
                               : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'}`}>
                             {TXN_LABELS[t.transactionType] ?? t.transactionType}
                           </span>
-                          <span className="text-xs text-muted-foreground tabular-nums">{t.tradeDate}</span>
+                          <span className="text-xs text-muted-foreground tabular-nums">{formatDateOnly(t.tradeDate)}</span>
                           {t.broker && (
                             <span className="text-[10px] tracking-wider uppercase text-muted-foreground/70 hidden sm:inline">
                               · {t.broker}

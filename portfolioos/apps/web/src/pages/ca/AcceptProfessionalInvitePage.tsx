@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { authApi } from '@/api/auth.api';
 import { useResolvedSession } from '@/hooks/useResolvedSession';
 
+import { formatDateIST } from '@everypaisa/shared';
 /**
  * A professional accepting a client's invitation.
  *
@@ -160,11 +161,7 @@ export function AcceptProfessionalInvitePage() {
           <p className="text-[12.5px] leading-relaxed text-muted-foreground">
             The invitation was sent to <span className="font-medium">{invite.invitedEmail}</span>,
             and only that account can accept it. It expires on{' '}
-            {new Date(invite.expiresAt).toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: 'long',
-              year: 'numeric',
-            })}
+            {formatDateIST(invite.expiresAt)}
             .
           </p>
 

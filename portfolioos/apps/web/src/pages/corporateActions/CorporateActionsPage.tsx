@@ -22,7 +22,7 @@ import {
   type CorporateActionRow,
 } from '@/api/corporateActions.api';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR } from '@everypaisa/shared';
+import { formatINR, formatDateIST } from '@everypaisa/shared';
 
 const TYPE_LABELS: Record<CorporateActionType, string> = {
   DIVIDEND: 'Dividend', BONUS: 'Bonus', SPLIT: 'Split',
@@ -37,7 +37,7 @@ const STATUS_STYLE: Record<CorporateActionStatus, { label: string; cls: string }
 };
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateIST(iso);
 }
 
 function StatusBadge({ status }: { status: CorporateActionStatus }) {

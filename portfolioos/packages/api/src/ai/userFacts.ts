@@ -12,7 +12,7 @@
  * load.
  */
 import { Decimal } from 'decimal.js';
-import { formatINR, taxYearOf } from '@everypaisa/shared';
+import { formatINR, taxYearOf, formatDateIST } from '@everypaisa/shared';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { userDataVersion } from '../lib/userDataVersion.js';
@@ -92,7 +92,7 @@ function money(v: unknown): string {
 }
 
 function fmtDate(d: Date): string {
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  return formatDateIST(d);
 }
 
 function allocationLines(a: AdvisorFacts): string[] {

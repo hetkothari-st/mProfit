@@ -42,14 +42,7 @@ import { apiErrorMessage } from '@/api/client';
 import { usePrivacyStore } from '@/stores/privacy.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { useAssetSectionsStore } from '@/stores/assetSections.store';
-import {
-  formatINR,
-  formatPercent,
-  ASSET_CLASS_LABELS,
-  Decimal,
-  toDecimal,
-  valuationMethodFor,
-} from '@everypaisa/shared';
+import { formatINR, formatPercent, ASSET_CLASS_LABELS, Decimal, toDecimal, valuationMethodFor, formatDateIST, formatDateOnly } from '@everypaisa/shared';
 
 const PERIOD_OPTIONS = [
   { label: '1M', days: 30 },
@@ -404,7 +397,7 @@ export function DashboardPage() {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, m]) => ({
           date,
-          label: new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }),
+          label: formatDateIST(date),
           value: m.value.toNumber(),
           invested: m.invested.toNumber(),
         }));
@@ -568,7 +561,7 @@ export function DashboardPage() {
                   <span className="inline-flex items-center gap-1.5">
                     <CalendarDays className="h-3.5 w-3.5 text-accent-ink/70" strokeWidth={1.7} />
                     <span className="tracking-tight">
-                      {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      {formatDateIST(new Date())}
                     </span>
                   </span>
                   <span className="w-px self-stretch bg-border/80" />
@@ -841,9 +834,7 @@ export function DashboardPage() {
                         <span className="text-foreground font-medium">{next.lenderName}</span>
                         {' '}on{' '}
                         <span className="text-foreground font-medium">
-                          {new Date(next.emiDate).toLocaleDateString('en-IN', {
-                            day: '2-digit', month: 'short',
-                          })}
+                          {formatDateIST(next.emiDate)}
                         </span>
                         {' '}—{' '}
                         <span className="text-foreground font-medium">{formatINR(next.emiAmount)}</span>
@@ -1460,7 +1451,7 @@ export function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     <div className="font-medium truncate">{t.assetName}</div>
                     <div className="text-xs text-muted-foreground">
-                      {t.tradeDate} · {t.transactionType.replace(/_/g, ' ')}
+                      {formatDateOnly(t.tradeDate)} · {t.transactionType.replace(/_/g, ' ')}
                     </div>
                   </div>
                   <div className="text-right tabular-nums ml-3 flex-shrink-0">

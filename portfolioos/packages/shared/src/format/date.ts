@@ -1,9 +1,15 @@
 const IST_LOCALE = 'en-IN';
 const IST_TZ = 'Asia/Kolkata';
 
+const DEFAULT_DATE_OPTS: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
+
+/**
+ * Display a date as dd/mm/yyyy (Indian calendar date). Callers may pass
+ * explicit `opts` for other shapes (month-year labels, weekday, etc.).
+ */
 export function formatDateIST(
   input: string | Date | null | undefined,
-  opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' },
+  opts: Intl.DateTimeFormatOptions = DEFAULT_DATE_OPTS,
 ): string {
   if (!input) return '-';
   const d = typeof input === 'string' ? new Date(input) : input;
@@ -11,14 +17,33 @@ export function formatDateIST(
   return new Intl.DateTimeFormat(IST_LOCALE, { ...opts, timeZone: IST_TZ }).format(d);
 }
 
+/** dd/mm/yyyy, hh:mm am/pm in Asia/Kolkata. */
 export function formatDateTimeIST(input: string | Date | null | undefined): string {
-  return formatDateIST(input, {
+  if (!input) return '-';
+  const d = typeof input === 'string' ? new Date(input) : input;
+  if (Number.isNaN(d.getTime())) return '-';
+  const parts = new Intl.DateTimeFormat(IST_LOCALE, {
     day: '2-digit',
-    month: 'short',
+    month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  });
+    hour12: true,
+    timeZone: IST_TZ,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  return `${get('day')}/${get('month')}/${get('year')}, ${get('hour')}:${get('minute')} ${get('dayPeriod').toLowerCase()}`;
+}
+
+/**
+ * Format a calendar-date string ("YYYY-MM-DD", optionally followed by a time
+ * part which is ignored) as dd/mm/yyyy without any timezone shift.
+ */
+export function formatDateOnly(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return '-';
+  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 export function toISODateString(input: Date | string): string {

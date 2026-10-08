@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { transactionsApi } from '@/api/transactions.api';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR, type DuplicateGroupDTO, type DuplicateRowDTO } from '@everypaisa/shared';
+import { formatINR, type DuplicateGroupDTO, type DuplicateRowDTO, formatDateOnly } from '@everypaisa/shared';
 
 interface Props {
   open: boolean;
@@ -226,9 +226,9 @@ function GroupCard({
 }
 
 function describeRow(row: DuplicateRowDTO): string {
-  const added = `added ${row.createdAt.slice(0, 10)}`;
+  const added = `added ${formatDateOnly(row.createdAt)}`;
   if (row.kind === 'RENT_ENTRY') {
-    return `${row.entryType?.toLowerCase()} ${formatINR(row.amount ?? '0')} on ${row.entryDate}${
+    return `${row.entryType?.toLowerCase()} ${formatINR(row.amount ?? '0')} on ${formatDateOnly(row.entryDate)}${
       row.note ? ` — ${row.note}` : ''
     } (${added})`;
   }

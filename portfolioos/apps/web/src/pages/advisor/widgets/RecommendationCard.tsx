@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';
-import { formatINR } from '@everypaisa/shared';
+import { formatINR, formatDateTimeIST, formatDateIST, formatDateOnly } from '@everypaisa/shared';
 import { apiErrorMessage } from '@/api/client';
 import {
   advisorApi,
@@ -136,7 +136,7 @@ function NamedFundEvidence({
         )}
         <span className="text-[11px] text-muted-foreground">
           Methodology v{evidence.methodologyVersion ?? '—'}
-          {evidence.asOfDate ? ` · scored ${evidence.asOfDate}` : ''}
+          {evidence.asOfDate ? ` · scored ${formatDateOnly(evidence.asOfDate)}` : ''}
         </span>
       </div>
 
@@ -229,13 +229,7 @@ function formatSnapshotValue(key: string, value: unknown): string {
 
   if (typeof value === 'string') {
     if (ISO_DATE.test(value)) {
-      return new Date(value).toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      return formatDateTimeIST(value);
     }
     // Decimals cross the wire as strings; format them like the money they are.
     if (MONEY_KEY.test(key) && /^-?\d+(\.\d+)?$/.test(value)) return formatINR(value);
@@ -367,11 +361,7 @@ export function RecommendationCard({ rec, llmEnabled }: RecommendationCardProps)
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
             Suggested{' '}
-            {new Date(rec.createdAt).toLocaleDateString('en-IN', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
+            {formatDateIST(rec.createdAt)}
           </p>
         </div>
 

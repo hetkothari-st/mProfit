@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EmptyState } from '@/components/common/EmptyState';
-import { FAMILY_RELATIONS } from '@everypaisa/shared';
+import { FAMILY_RELATIONS, formatDateIST } from '@everypaisa/shared';
 import {
   familiesApi,
   NON_AC_CATEGORIES,
@@ -763,7 +763,7 @@ function PendingInvitationsList({
             <div className="truncate">{inv.invitedEmail}</div>
             <div className="text-[11px] uppercase tracking-kerned text-muted-foreground">
               {inv.role.toLowerCase()} · expires{' '}
-              {new Date(inv.expiresAt).toLocaleDateString('en-IN')}
+              {formatDateIST(inv.expiresAt)}
             </div>
           </div>
           <button

@@ -19,6 +19,7 @@ import { renderInviteShell } from '../notifications/caInviteEmail.template.js';
 import { assertOwnerOf } from '../familyScope.service.js';
 import { openInviteToken } from '../../lib/inviteToken.js';
 
+import { formatDateIST } from '@everypaisa/shared';
 const MAX_SENDS_PER_INVITE = 5;
 const MAX_SENDS_PER_HOUR = 20;
 const SUBJECT_MAX = 160;
@@ -52,7 +53,7 @@ function escapeHtml(s: string): string {
 }
 
 function prettyDate(d: Date): string {
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+  return formatDateIST(d);
 }
 
 export function defaultFamilyInviteSubject(

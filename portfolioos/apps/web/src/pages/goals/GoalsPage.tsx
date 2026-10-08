@@ -18,7 +18,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { goalsApi, type GoalDTO, type GoalCategory, type GoalPriority } from '@/api/goals.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR } from '@everypaisa/shared';
+import { formatINR, formatDateIST } from '@everypaisa/shared';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { GoalDialog } from './GoalDialog';
 
@@ -269,11 +269,7 @@ function GoalCard({ goal, portfolios, onEdit, onDelete }: CardProps) {
           <Cell label="Remaining" value={formatINR(goal.remaining)} />
           <Cell
             label="Target date"
-            value={new Date(goal.targetDate).toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-            })}
+            value={formatDateIST(goal.targetDate)}
           />
         </div>
 

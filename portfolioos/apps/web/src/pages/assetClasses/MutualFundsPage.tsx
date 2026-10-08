@@ -3,7 +3,7 @@ import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/rea
 import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, Lock, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';
-import { IMPORT_STATUS_LABELS } from '@everypaisa/shared';
+import { IMPORT_STATUS_LABELS, formatDateOnly } from '@everypaisa/shared';
 import { ImportErrorDialog } from '@/pages/imports/ImportErrorDialog';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -494,7 +494,7 @@ export function MutualFundsPage() {
                   const isDeleting = deleteMutation.isPending && confirmDeleteId === txn.id;
                   return (
                     <tr key={txn.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                      <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">{txn.tradeDate}</td>
+                      <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDateOnly(txn.tradeDate)}</td>
                       <td data-label="Scheme" className="px-4 py-3">
                         <div className="min-w-0">
                           <p className="font-medium truncate max-w-[180px]">{txn.assetName ?? '—'}</p>

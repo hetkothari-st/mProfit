@@ -10,7 +10,7 @@ import {
   Loader2,
   CreditCard,
 } from 'lucide-react';
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,7 +51,7 @@ const STATEMENT_STATUS_BG: Record<string, string> = {
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateIST(iso);
 }
 
 function formatMonth(ym: string) {

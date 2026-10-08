@@ -19,7 +19,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { InstitutionField } from '@/components/common/InstitutionField';
 import { LoansGivenSection } from './given/LoansGivenSection';
@@ -65,7 +65,7 @@ const LOAN_TYPE_LABELS: Record<string, string> = {
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateIST(iso);
 }
 
 function daysUntil(isoDate: string): number {

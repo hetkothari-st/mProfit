@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { finfactorApi, type AaConsentDTO } from '@/api/finfactor.api';
 import { apiErrorMessage } from '@/api/client';
 
+import { formatDateIST } from '@everypaisa/shared';
 const STATUS_TONES: Record<string, { label: string; cls: string }> = {
   INITIATED: { label: 'Initiated', cls: 'bg-muted text-muted-foreground ring-1 ring-border' },
   PENDING: { label: 'Pending', cls: 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/20' },
@@ -39,7 +40,7 @@ function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateIST(d);
 }
 
 export function FinvuConsentCard() {

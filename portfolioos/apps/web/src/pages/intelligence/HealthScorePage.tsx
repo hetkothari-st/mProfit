@@ -20,6 +20,7 @@ import { cn } from '@/lib/cn';
 import { intelligenceApi, type HealthSubScore } from '@/api/intelligence.api';
 import { HealthScoreGauge } from '@/components/intelligence/HealthScoreGauge';
 
+import { formatDateTimeIST } from '@everypaisa/shared';
 type DimensionId = 'emergencyFund' | 'investmentRate' | 'debtBurden' | 'diversification' | 'insurance' | 'goalProgress';
 
 interface DimensionLink {
@@ -149,7 +150,7 @@ export function HealthScorePage() {
             <div className="flex flex-col items-center gap-2">
               <HealthScoreGauge score={data.overallScore} grade={data.grade} size={200} />
               <p className="text-xs text-muted-foreground">
-                Updated {new Date(data.computedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                Updated {formatDateTimeIST(data.computedAt)}
               </p>
             </div>
             <div className="w-full max-w-xs shrink-0">

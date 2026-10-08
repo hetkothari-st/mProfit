@@ -23,14 +23,7 @@
  * "nothing here" without saying why, which is the same failure with less ink.
  */
 
-import {
-  Decimal,
-  toDecimal,
-  ratioToPct,
-  type MfMetricStatus,
-  type Pct,
-  type Ratio,
-} from '@everypaisa/shared';
+import { Decimal, toDecimal, ratioToPct, type MfMetricStatus, type Pct, type Ratio, formatDateIST } from '@everypaisa/shared';
 
 // ---------------------------------------------------------------------------
 // Number formatting — Decimal in, string out, no JS number anywhere
@@ -306,7 +299,7 @@ export function formatIsoDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateIST(d);
 }
 
 /** Whole days between an ISO date and `now`. Null when unparseable. */

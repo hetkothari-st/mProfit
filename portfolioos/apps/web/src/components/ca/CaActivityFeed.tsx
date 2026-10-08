@@ -1,6 +1,7 @@
 import type { CaAuditEntry } from '@/api/ca.api';
 import { cn } from '@/lib/cn';
 
+import { formatDateIST } from '@everypaisa/shared';
 /**
  * What a professional did, rendered for either side of the relationship.
  *
@@ -111,7 +112,7 @@ function groupByDay(entries: CaAuditEntry[]): Array<[string, CaAuditEntry[]]> {
         ? 'Today'
         : d.toDateString() === yesterday
           ? 'Yesterday'
-          : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+          : formatDateIST(d);
     const list = groups.get(key);
     if (list) list.push(e);
     else groups.set(key, [e]);

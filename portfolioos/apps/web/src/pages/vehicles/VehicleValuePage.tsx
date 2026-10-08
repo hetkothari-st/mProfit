@@ -3,18 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Calculator, Save, Sparkles, Loader2, AlertTriangle } from 'lucide-react';
-import {
-  applyCondition,
-  defaultSliderState,
-  SLIDERS,
-  SLIDER_LABELS,
-  STOPS,
-  STOP_LABELS,
-  type SliderKey,
-  type SliderState,
-  type SliderStop,
-  type ValuationQuoteResult,
-} from '@everypaisa/shared';
+import { applyCondition, defaultSliderState, SLIDERS, SLIDER_LABELS, STOPS, STOP_LABELS, type SliderKey, type SliderState, type SliderStop, type ValuationQuoteResult, formatDateTimeIST } from '@everypaisa/shared';
 import { Decimal } from 'decimal.js';
 
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -506,7 +495,7 @@ export function VehicleValuePage() {
 
               {/* Sources footer */}
               <div className="text-xs text-muted-foreground text-center">
-                Sources: {quote.sources.length > 0 ? quote.sources.join(', ') : 'none'} · Cached until {new Date(quote.expiresAt).toLocaleString()}
+                Sources: {quote.sources.length > 0 ? quote.sources.join(', ') : 'none'} · Cached until {formatDateTimeIST(quote.expiresAt)}
               </div>
             </>
           )}

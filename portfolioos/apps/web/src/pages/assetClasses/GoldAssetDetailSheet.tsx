@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, Coins, Calendar, Package, ImageIcon, ImageOff, Pencil } from 'lucide-react';
-import { Decimal, formatINR, type HoldingRow, type AssetClass } from '@everypaisa/shared';
+import { Decimal, formatINR, type HoldingRow, type AssetClass, formatDateOnly } from '@everypaisa/shared';
 import type { TransactionDTO } from '@everypaisa/shared';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
@@ -228,7 +228,7 @@ export function GoldAssetDetailSheet({ holding, livePrice, open, onClose, onEdit
               {transactions.filter((t) => t.photos?.length).map((t) => (
                 <div key={t.id} className="mb-3">
                   <p className="text-xs text-muted-foreground mb-2">
-                    {TXN_TYPE_LABELS[t.transactionType] ?? t.transactionType} · {t.tradeDate}
+                    {TXN_TYPE_LABELS[t.transactionType] ?? t.transactionType} · {formatDateOnly(t.tradeDate)}
                   </p>
                   <PhotoGrid txnId={t.id} photos={t.photos ?? []} />
                 </div>
@@ -260,7 +260,7 @@ export function GoldAssetDetailSheet({ holding, livePrice, open, onClose, onEdit
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
-                          <span className="text-muted-foreground text-xs">{t.tradeDate}</span>
+                          <span className="text-muted-foreground text-xs">{formatDateOnly(t.tradeDate)}</span>
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5">
                           {new Decimal(t.quantity).toFixed(3)} {['PHYSICAL_GOLD', 'PHYSICAL_SILVER'].includes(t.assetClass) ? 'g' : 'units'}

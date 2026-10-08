@@ -15,6 +15,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { alertsApi, type AlertType, type AlertDTO } from '@/api/alerts.api';
 import { cn } from '@/lib/cn';
 
+import { formatDateIST } from '@everypaisa/shared';
 /**
  * Alerts, set as a ledger grouped by when they land.
  *
@@ -68,9 +69,7 @@ function daysUntil(iso: string): number {
 }
 
 function exactDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
+  return formatDateIST(iso);
 }
 
 /** Short relative form for the left column — same idiom as the family feed. */

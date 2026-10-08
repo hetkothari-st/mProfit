@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiErrorCode } from '@/api/client';
 
+import { formatDateIST } from '@everypaisa/shared';
 /** The deletion date when sign-in was refused because the account is pending deletion. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function pendingDeletionDate(err: unknown): string | null {
@@ -25,11 +26,7 @@ export function RestoreAccountNotice({
   onCancel: () => void;
 }) {
   const when = scheduledFor
-    ? new Date(scheduledFor).toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })
+    ? formatDateIST(scheduledFor)
     : 'soon';
   return (
     <div role="alert" className="rounded-lg border border-negative/40 bg-negative/10 p-3">

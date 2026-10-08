@@ -50,6 +50,7 @@ import { themeFor, type ThemeName, type PdfTheme } from '../charts/pdfTheme.js';
 import { drawBrandLockup } from '../charts/pdfBrand.js';
 import { plateOf } from '../piiAtRest.service.js';
 
+import { formatDateIST } from '@everypaisa/shared';
 export type DashboardScope = 'single' | 'all';
 
 export interface DashboardReportParams {
@@ -115,7 +116,7 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   const portfolioLabel = portfolioIdFilter
     ? (portfolioNameMap[portfolioIdFilter] ?? 'Portfolio')
     : 'All Portfolios';
-  const todayStr = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+  const todayStr = formatDateIST(new Date());
 
   // ─── Holdings grouped by asset class (live data) ────────────────────────────
   const holdings = await prisma.holdingProjection.findMany({

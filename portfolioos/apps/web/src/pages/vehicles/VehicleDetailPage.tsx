@@ -26,6 +26,7 @@ import { VehicleFormDialog } from './VehicleFormDialog';
 import { SmsPasteDialog } from './SmsPasteDialog';
 import { FuelPricesCard } from './FuelPricesCard';
 
+import { formatDateIST, formatDateTimeIST, formatDateOnly } from '@everypaisa/shared';
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
   const then = new Date(iso).getTime();
@@ -49,7 +50,7 @@ function formatYearsAndMonths(fromDate: Date): string {
 
 function ExpiryRow({ label, iso }: { label: string; iso: string | null }) {
   const days = daysUntil(iso);
-  const dateFmt = iso ? new Date(iso).toLocaleDateString() : null;
+  const dateFmt = iso ? formatDateIST(iso) : null;
   let tone = 'text-muted-foreground';
   let badge = '—';
   if (days !== null) {
@@ -423,7 +424,7 @@ export function VehicleDetailPage() {
                 <Info className="h-3.5 w-3.5" />
                 Last refreshed{' '}
                 {vehicle.lastRefreshedAt
-                  ? new Date(vehicle.lastRefreshedAt).toLocaleString()
+                  ? formatDateTimeIST(vehicle.lastRefreshedAt)
                   : 'never'}
                 {vehicle.refreshSource && <> via <span className="font-mono">{vehicle.refreshSource}</span></>}
               </div>
@@ -536,7 +537,7 @@ export function VehicleDetailPage() {
                       <tr key={c.id} className="border-b last:border-b-0">
                         <td data-label="Challan" className="py-2 font-mono text-xs">{c.challanNo}</td>
                         <td data-label="Offence" className="py-2">{c.offenceType ?? '—'}</td>
-                        <td data-label="Date" className="py-2">{c.offenceDate.slice(0, 10)}</td>
+                        <td data-label="Date" className="py-2">{formatDateOnly(c.offenceDate)}</td>
                         <td data-label="Location" className="py-2">{c.location ?? '—'}</td>
                         <td data-label="Amount" className="py-2 text-right numeric">₹{c.amount}</td>
                         <td data-label="Status" className="py-2 text-right">

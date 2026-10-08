@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
-import { Decimal, toDecimal } from '@everypaisa/shared';
+import { Decimal, toDecimal, formatDateIST } from '@everypaisa/shared';
 import { drawHorizontalBarChart, pdfSafe, type BarDatum } from './charts/pdfCharts.js';
 import { themeFor, hexToArgb, type PdfTheme, type ThemeName } from './charts/pdfTheme.js';
 import { drawBrandLockup } from './charts/pdfBrand.js';
@@ -252,7 +252,7 @@ export function streamPdf(res: Response, payload: ExportPayload): Promise<void> 
       const brandX = drawBrandLockup(doc, C, ML, 12, 17);
       doc.font('Helvetica').fontSize(10).fillColor(C.muted)
          .text(pdfSafe(payload.title), brandX, 32, { lineBreak: false });
-      const genStr = `Generated  ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+      const genStr = `Generated  ${formatDateIST(new Date())}`;
       doc.font('Helvetica').fontSize(8.5).fillColor(C.muted)
          .text(genStr, ML, 22, { align: 'right', width: pageW, lineBreak: false });
       if (payload.subtitle) {
