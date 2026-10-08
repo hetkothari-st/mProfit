@@ -16,6 +16,11 @@ datasource db {
 // ─── USERS & AUTH ───────────────────────────────────────────────
 
 model User {
+  splitContacts    SplitContact[]   @relation("SplitContactOwner")
+  splitMembers     SplitMember[]    @relation("SplitMemberUser")
+  splitDetections  SplitDetection[] @relation("SplitDetectionUser")
+  splitShareLinks  SplitShareLink[] @relation("SplitShareLinkUser")
+  splitSettings    SplitSettings?
   id                    String    @id @default(cuid())
   email                 String    @unique
   passwordHash          String
@@ -4983,4 +4988,265 @@ model MfaChallenge {
   createdAt  DateTime  @default(now())
 
   @@index([userId])
+}
+
+// ── Split Expenses (docs/superpowers/specs/2026-10-07-split-expenses-design.md) ──
+
+enum SplitGroupType {
+  TRIP
+  HOME
+  COUPLE
+  OTHER
+  DIRECT
+}
+enum SplitMode {
+  EQUAL
+  EXACT
+  PERCENT
+  SHARES
+}
+enum SplitSource {
+  MANUAL
+  RECEIPT_OCR
+  EMAIL
+  SMS
+  PASTE
+}
+enum SplitSettleMethod {
+  CASH
+  UPI
+  OTHER
+}
+enum SplitDetectionSource {
+  EMAIL
+  SMS
+  PASTE
+  RECEIPT
+}
+enum SplitDetectionStatus {
+  NEW
+  SPLIT
+  SETTLED
+  DISMISSED
+}
+
+model SplitContact {
+  id           String   @id @default(cuid())
+  ownerUserId  String
+  owner        User     @relation("SplitContactOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  name         String
+  email        String?  // plaintext only when no APP_ENCRYPTION_KEY (dev)
+  emailEnc     String?
+  emailHash    String?
+  phone        String?
+  phoneEnc     String?
+  phoneHash    String?
+  upiId        String?
+  linkedUserId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  members      SplitMember[]
+
+  @@index([ownerUserId])
+  @@index([emailHash])
+  @@index([phoneHash])
+}
+
+model SplitGroup {
+  id            String         @id @default(cuid())
+  name          String
+  type          SplitGroupType @default(OTHER)
+  baseCurrency  String         @default("INR")
+  simplifyDebts Boolean        @default(true)
+  createdById   String         // plain id: groups outlive their creator's account
+  archivedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  members       SplitMember[]
+  expenses      SplitExpense[]
+  settlements   SplitSettlement[]
+  activity      SplitActivity[]
+  labels        SplitLabel[]
+
+  @@index([createdById])
+}
+
+model SplitMember {
+  id          String        @id @default(cuid())
+  groupId     String
+  group       SplitGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  contactId   String?
+  contact     SplitContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  userId      String?
+  user        User?         @relation("SplitMemberUser", fields: [userId], references: [id], onDelete: SetNull)
+  displayName String
+  leftAt      DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+model SplitExpense {
+  id            String       @id @default(cuid())
+  groupId       String
+  group         SplitGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  description   String
+  date          DateTime     @db.Date
+  amount        Decimal      @db.Decimal(18, 4)
+  currency      String
+  fxRate        Decimal      @db.Decimal(18, 8)
+  baseAmount    Decimal      @db.Decimal(18, 4)
+  splitMode     SplitMode
+  createdById   String
+  receiptBlobId String?
+  sourceType    SplitSource  @default(MANUAL)
+  detectionId   String?
+  deletedAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  payers        SplitPayer[]
+  shares        SplitShare[]
+  labels        SplitExpenseLabel[]
+  comments      SplitComment[]
+
+  @@index([groupId, date])
+}
+
+model SplitPayer {
+  id         String       @id @default(cuid())
+  expenseId  String
+  expense    SplitExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  memberId   String
+  amount     Decimal      @db.Decimal(18, 4)
+  baseAmount Decimal      @db.Decimal(18, 4)
+
+  @@index([expenseId])
+}
+
+model SplitShare {
+  id         String       @id @default(cuid())
+  expenseId  String
+  expense    SplitExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  memberId   String
+  amount     Decimal      @db.Decimal(18, 4)
+  baseAmount Decimal      @db.Decimal(18, 4)
+  rawInput   Decimal?     @db.Decimal(18, 6)
+
+  @@index([expenseId])
+}
+
+model SplitLabel {
+  id          String      @id @default(cuid())
+  groupId     String?
+  group       SplitGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  ownerUserId String?
+  name        String
+  color       String
+  expenses    SplitExpenseLabel[]
+
+  @@index([groupId])
+  @@index([ownerUserId])
+}
+
+model SplitExpenseLabel {
+  expenseId String
+  expense   SplitExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  labelId   String
+  label     SplitLabel   @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([expenseId, labelId])
+  @@index([labelId])
+}
+
+model SplitComment {
+  id           String       @id @default(cuid())
+  expenseId    String
+  expense      SplitExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  authorUserId String
+  body         String
+  createdAt    DateTime     @default(now())
+  deletedAt    DateTime?
+
+  @@index([expenseId, createdAt])
+}
+
+model SplitSettlement {
+  id           String            @id @default(cuid())
+  groupId      String
+  group        SplitGroup        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fromMemberId String
+  toMemberId   String
+  amount       Decimal           @db.Decimal(18, 4)
+  currency     String
+  fxRate       Decimal           @db.Decimal(18, 8)
+  baseAmount   Decimal           @db.Decimal(18, 4)
+  method       SplitSettleMethod
+  date         DateTime          @db.Date
+  createdById  String
+  detectionId  String?
+  deletedAt    DateTime?
+  createdAt    DateTime          @default(now())
+
+  @@index([groupId, date])
+}
+
+model SplitActivity {
+  id          String     @id @default(cuid())
+  groupId     String
+  group       SplitGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  actorUserId String
+  kind        String
+  payload     Json
+  createdAt   DateTime   @default(now())
+
+  @@index([groupId, createdAt])
+}
+
+model SplitDetection {
+  id                String               @id @default(cuid())
+  userId            String
+  user              User                 @relation("SplitDetectionUser", fields: [userId], references: [id], onDelete: Cascade)
+  source            SplitDetectionSource
+  sourceHash        String
+  amount            Decimal              @db.Decimal(18, 4)
+  currency          String               @default("INR")
+  direction         String
+  merchant          String?
+  payeeVpa          String?
+  date              DateTime             @db.Date
+  rawRedactedEnc    String?
+  canonicalEventId  String?
+  status            SplitDetectionStatus @default(NEW)
+  expenseId         String?
+  settlementId      String?
+  createdAt         DateTime             @default(now())
+
+  @@unique([userId, sourceHash])
+  @@index([userId, status, date])
+}
+
+model SplitShareLink {
+  id         String @id @default(cuid())
+  expenseId  String
+  userId     String
+  user       User   @relation("SplitShareLinkUser", fields: [userId], references: [id], onDelete: Cascade)
+  cashFlowId String
+
+  @@unique([expenseId, userId])
+}
+
+model SplitSettings {
+  userId             String  @id
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upiId              String?
+  homeCurrency       String  @default("INR")
+  defaultPortfolioId String?
+  detectEmail        Boolean @default(false)
+  detectPaste        Boolean @default(true)
+  detectReceipt      Boolean @default(true)
+  detectSms          Boolean @default(false)
+  emailOnActivity    Boolean @default(true)
+  weeklyDigest       Boolean @default(false)
 }

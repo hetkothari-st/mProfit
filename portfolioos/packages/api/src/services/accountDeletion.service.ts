@@ -318,6 +318,15 @@ export async function purgeUser(userId: string): Promise<void> {
         await tx.familyInvitation.deleteMany({ where: { invitedById: id } });
         await tx.pendingFamilyInvite.deleteMany({ where: { createdById: id } });
         await tx.family.deleteMany({ where: { createdById: id } });
+        // Split groups outlive a departing member (SplitMember.userId is SET NULL),
+        // so a group where nobody else is linked would be orphaned for good.
+        // SplitGroup DELETE is system-context only; the purge runs as system.
+        await tx.splitGroup.deleteMany({
+          where: {
+            members: { some: { userId: id } },
+            NOT: { members: { some: { userId: { not: null, notIn: [id] } } } },
+          },
+        });
       }
       // Shadow clients first: their Client rows reference the CA.
       for (const id of userIds.slice(1)) await tx.user.delete({ where: { id } });

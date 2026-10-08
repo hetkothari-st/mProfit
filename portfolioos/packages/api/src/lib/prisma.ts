@@ -205,6 +205,23 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   // empty and uploads failed 42501; dismissed premium suggestions never stuck.
   'PropertyPhoto',
   'InsuranceImportDismissal',
+  // Split Expenses (20261007150000_split_expenses). Group tables use the
+  // membership helper app_is_split_member; contacts/detections/share links/
+  // settings are owner-only.
+  'SplitContact',
+  'SplitGroup',
+  'SplitMember',
+  'SplitExpense',
+  'SplitPayer',
+  'SplitShare',
+  'SplitLabel',
+  'SplitExpenseLabel',
+  'SplitComment',
+  'SplitSettlement',
+  'SplitActivity',
+  'SplitDetection',
+  'SplitShareLink',
+  'SplitSettings',
 ]);
 
 /**

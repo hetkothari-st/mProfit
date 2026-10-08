@@ -58,6 +58,10 @@ import { CoveragePage } from './pages/insurance/CoveragePage';
 import { LoanListPage } from './pages/loans/LoanListPage';
 import { LoanDetailPage } from './pages/loans/LoanDetailPage';
 import { LoanGivenDetailPage } from './pages/loans/given/LoanGivenDetailPage';
+import { SplitHomePage } from './pages/split/SplitHomePage';
+import { GroupPage } from './pages/split/GroupPage';
+import { ExpenseDetailPage } from './pages/split/ExpenseDetailPage';
+import { FriendPage } from './pages/split/FriendPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
 import { IncomePage } from './pages/income/IncomePage';
 import { HealthScorePage } from './pages/intelligence/HealthScorePage';
@@ -199,6 +203,10 @@ export function App() {
         <Route path="/loans" element={<LoanListPage />} />
         <Route path="/loans/given/:id" element={<LoanGivenDetailPage />} />
         <Route path="/loans/:id" element={<LoanDetailPage />} />
+        <Route path="/split" element={<SplitHomePage />} />
+        <Route path="/split/groups/:id" element={<GroupPage />} />
+        <Route path="/split/expenses/:id" element={<ExpenseDetailPage />} />
+        <Route path="/split/friends/:key" element={<FriendPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/income" element={<IncomePage />} />
         <Route path="/health-score" element={<HealthScorePage />} />
