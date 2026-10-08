@@ -49,6 +49,19 @@ describe('SplitSettingsPage', () => {
     }));
   });
 
+  it('keeps unsaved edits when the settings query refetches', async () => {
+    api.getSettings.mockResolvedValue(SETTINGS);
+    const { queryClient } = render();
+    const input = (await screen.findByLabelText('UPI ID')) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'typing@okaxis' } });
+    api.getSettings.mockResolvedValue({ ...SETTINGS, upiId: 'server@okhdfc', weeklyDigest: true });
+    await queryClient.invalidateQueries({ queryKey: ['split', 'settings'] });
+    await waitFor(() => expect(api.getSettings.mock.calls.length).toBeGreaterThan(1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect((screen.getByLabelText('UPI ID') as HTMLInputElement).value).toBe('typing@okaxis');
+    expect((screen.getByLabelText(/Weekly balance summary/) as HTMLInputElement).checked).toBe(false);
+  });
+
   it('shows a retry when settings fail to load', async () => {
     api.getSettings.mockRejectedValue(new Error('boom'));
     render();

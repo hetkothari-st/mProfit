@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -23,9 +23,12 @@ export function SplitSettingsPage() {
   const [onActivity, setOnActivity] = useState(false);
   const [weekly, setWeekly] = useState(false);
 
+  // Seed once per load (and again after a save) so a background refetch never wipes unsaved edits.
+  const seeded = useRef(false);
   useEffect(() => {
     const s = q.data;
-    if (!s) return;
+    if (!s || seeded.current) return;
+    seeded.current = true;
     setUpi(s.upiId ?? '');
     setCurrency(s.homeCurrency);
     setPortfolioId(s.defaultPortfolioId);
@@ -41,7 +44,7 @@ export function SplitSettingsPage() {
       upiId: trimmed === '' ? null : trimmed, homeCurrency: currency, defaultPortfolioId: portfolioId,
       emailOnActivity: onActivity, weeklyDigest: weekly,
     }),
-    onSuccess: () => { toast.success('Settings saved'); void qc.invalidateQueries({ queryKey: SPLIT_KEYS.settings }); },
+    onSuccess: () => { toast.success('Settings saved'); seeded.current = false; void qc.invalidateQueries({ queryKey: SPLIT_KEYS.settings }); },
     onError: (e) => toast.error(splitErrorMessage(e, "Couldn't save your settings")),
   });
 
