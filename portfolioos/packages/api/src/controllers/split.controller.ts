@@ -4,6 +4,7 @@ import { ok, created, noContent } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import { createContact, deleteContact, listContacts, updateContact } from '../services/split/contacts.service.js';
 import { sendInvite } from '../services/split/linking.service.js';
+import { remind } from '../services/split/notify.service.js';
 import {
   addMember, createGroup, getGroup, getOrCreateDirectGroup, listGroups, removeMember, updateGroup,
 } from '../services/split/groups.service.js';
@@ -160,3 +161,6 @@ export const deleteReceiptHandler = async (req: Request, res: Response) => { awa
 const shareLinkBody = z.object({ enabled: z.boolean(), portfolioId: z.string().max(64).nullable().optional() });
 export const getShareLinkHandler = async (req: Request, res: Response) => ok(res, await getShareLink(uid(req), p(req, 'id')));
 export const setShareLinkHandler = async (req: Request, res: Response) => ok(res, await setShareLink(uid(req), p(req, 'id'), parse(shareLinkBody, req.body)));
+
+const remindBody = z.object({ groupId: z.string().min(1).max(64), memberId: z.string().min(1).max(64) });
+export const remindHandler = async (req: Request, res: Response) => { const b = parse(remindBody, req.body); ok(res, await remind(uid(req), b.groupId, b.memberId)); };

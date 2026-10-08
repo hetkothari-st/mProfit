@@ -70,3 +70,4 @@ splitRouter.delete('/expenses/:id/receipt', asyncHandler(c.deleteReceiptHandler)
 
 splitRouter.get('/expenses/:id/share-link', asyncHandler(c.getShareLinkHandler));
 splitRouter.put('/expenses/:id/share-link', asyncHandler(c.setShareLinkHandler));
+splitRouter.post('/reminders', asyncHandler(c.remindHandler));

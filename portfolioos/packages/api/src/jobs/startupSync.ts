@@ -11,6 +11,7 @@ import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniv
 import { startPfFetchWorker } from './pfFetchWorker.js';
 import { startPfNudgeJob } from './pfNudgeJob.js';
 import { startSplitShareLinkReconcileJob } from './splitShareLinkReconcileJob.js';
+import { startSplitDigestJobs } from './splitDigestJobs.js';
 // Self-registering PF adapters — import side-effects call registerPfAdapter()
 import '../adapters/pf/epf/epfo.v1.js';
 import '../adapters/pf/ppf/sbi.v1.js';
@@ -106,6 +107,7 @@ async function runStartupSyncInner(): Promise<void> {
   // Daily nudge: alert users with stale PF balances (Plan E, Track 5)
   startPfNudgeJob();
   startSplitShareLinkReconcileJob();
+  startSplitDigestJobs();
 
   logger.info('[startup] initial data sync complete');
 }
