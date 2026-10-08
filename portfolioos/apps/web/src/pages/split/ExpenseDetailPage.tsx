@@ -73,6 +73,7 @@ export function ExpenseDetailPage() {
     <div className="space-y-5">
       <Link to={`/split/groups/${g.id}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />{g.name}</Link>
       <PageHeader
+        eyebrow="Split Expenses"
         title={e.description}
         description={`${formatDateIST(e.date)} · ${MODE_LABEL[e.splitMode]}${e.deletedAt ? ' · deleted' : ''}`}
         actions={e.deletedAt ? (

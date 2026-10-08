@@ -61,6 +61,16 @@ describe('GroupPage', () => {
     })));
   });
 
+  it('balances tab words each member row from that member point of view', async () => {
+    seed();
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
+    expect((await screen.findAllByText('you are owed ₹200.00')).length).toBe(2);
+    expect(screen.getAllByText('owes ₹100.00')).toHaveLength(2);
+    expect(screen.queryByText('owes you ₹200.00')).toBeNull();
+    expect(screen.queryByText('you owe ₹100.00')).toBeNull();
+  });
+
   it('remove member with balance shows server message', async () => {
     seed();
     // apiErrorMessage reads response.data.error as a string.

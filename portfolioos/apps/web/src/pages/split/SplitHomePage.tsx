@@ -97,7 +97,7 @@ export function SplitHomePage() {
                   <p className="font-medium truncate">{g.name}</p>
                   <p className="text-xs text-muted-foreground">{g.members.length} people · {g.baseCurrency}</p>
                 </div>
-                <BalancePill net={g.myNet} currency={g.baseCurrency} />
+                <BalancePill net={g.myNet} currency={g.baseCurrency} phrases={{ owed: 'you are owed', owe: 'you owe' }} />
               </CardContent></Card>
             </Link>
           ))}

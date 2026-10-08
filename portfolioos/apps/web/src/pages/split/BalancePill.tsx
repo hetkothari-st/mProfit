@@ -7,10 +7,10 @@ const TONE = {
   settled: 'text-muted-foreground',
 } as const;
 
-export function BalancePill({ net, currency, approx, className }: { net: string; currency: string; approx?: boolean; className?: string }) {
+export function BalancePill({ net, currency, approx, phrases, className }: { net: string; currency: string; approx?: boolean; phrases?: { owed: string; owe: string }; className?: string }) {
   return (
     <span className={cn('text-sm font-medium tabular-nums whitespace-nowrap', TONE[balanceTone(net)], className)}>
-      {balanceLabel(net, currency, { approx })}
+      {balanceLabel(net, currency, { approx, phrases })}
     </span>
   );
 }

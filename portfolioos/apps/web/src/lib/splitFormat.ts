@@ -19,11 +19,11 @@ export function balanceTone(net: string | Decimal): BalanceTone {
 export function balanceLabel(
   net: string | Decimal,
   currency: string,
-  opts: { approx?: boolean; who?: string } = {},
+  opts: { approx?: boolean; who?: string; phrases?: { owed: string; owe: string } } = {},
 ): string {
   const tone = balanceTone(net);
   if (tone === 'settled') return 'settled up';
-  const prefix = opts.who ?? (tone === 'owed' ? 'owes you' : 'you owe');
+  const prefix = opts.who ?? (tone === 'owed' ? (opts.phrases?.owed ?? 'owes you') : (opts.phrases?.owe ?? 'you owe'));
   return `${prefix} ${opts.approx ? '≈ ' : ''}${formatSplitMoney(net, currency)}`;
 }
 

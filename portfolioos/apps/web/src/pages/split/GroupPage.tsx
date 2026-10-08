@@ -159,6 +159,7 @@ export function GroupPage() {
     <div className="space-y-5">
       <Link to="/split" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Split Expenses</Link>
       <PageHeader
+        eyebrow="Split Expenses"
         title={g.name}
         description={g.type === 'DIRECT' ? 'Your 1:1 expenses' : `${g.members.filter((m) => !m.leftAt).length} people · ${g.baseCurrency}`}
         actions={
@@ -170,7 +171,7 @@ export function GroupPage() {
       />
       <Card><CardContent className="p-4 flex items-center justify-between">
         <span className="text-sm text-muted-foreground">Your balance</span>
-        <BalancePill net={g.myNet} currency={g.baseCurrency} className="text-base" />
+        <BalancePill net={g.myNet} currency={g.baseCurrency} phrases={{ owed: 'you are owed', owe: 'you owe' }} className="text-base" />
       </CardContent></Card>
 
       <Tabs defaultValue="expenses">
@@ -189,7 +190,7 @@ export function GroupPage() {
             {(balances.data?.nets ?? []).filter((n) => !toDecimal(n.net).isZero() || !g.members.find((m) => m.id === n.memberId)?.leftAt).map((n) => (
               <div key={n.memberId} className="flex items-center justify-between px-4 py-3">
                 <span className="text-sm">{memberName(g.members, n.memberId)}</span>
-                <BalancePill net={n.net} currency={g.baseCurrency} />
+                <BalancePill net={n.net} currency={g.baseCurrency} phrases={g.members.find((m) => m.id === n.memberId)?.isMe ? { owed: 'you are owed', owe: 'you owe' } : { owed: 'is owed', owe: 'owes' }} />
               </div>
             ))}
           </CardContent></Card>
