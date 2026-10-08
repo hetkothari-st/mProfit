@@ -20,6 +20,8 @@ vi.mock('@/components/common/PortfolioSelect', () => ({
   ),
 }));
 
+const origCreate = URL.createObjectURL;
+const origRevoke = URL.revokeObjectURL;
 beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:x');
   URL.revokeObjectURL = vi.fn();
@@ -28,7 +30,7 @@ beforeEach(() => {
   api.getShareLink.mockResolvedValue({ expenseId: 'e1', enabled: false, portfolioId: null, cashFlowId: null, myShare: '500.0000', currency: 'INR' });
   api.getSettings.mockResolvedValue({ upiId: null, homeCurrency: 'INR', defaultPortfolioId: null, emailOnActivity: false, weeklyDigest: false });
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); URL.createObjectURL = origCreate; URL.revokeObjectURL = origRevoke; vi.clearAllMocks(); });
 
 const GROUP = { id: 'g1', name: 'Goa', type: 'TRIP', baseCurrency: 'INR', simplifyDebts: true, archivedAt: null, myNet: '0.0000', members: [] };
 const EXP = { id: 'e1', groupId: 'g1', description: 'Dinner', amount: '100.00', currency: 'INR', fxRate: '1', baseAmount: '100.0000', date: '2026-10-01T00:00:00.000Z',
@@ -89,6 +91,38 @@ describe('ExpenseExtras', () => {
     await waitFor(() => expect(screen.getByAltText('Receipt').getAttribute('src')).toBe('blob:2'));
     expect(api.fetchReceipt).toHaveBeenCalledTimes(2);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:1');
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['split', 'group', 'g1', 'expenses'] });
+  });
+
+  it('a failed fetch after Replace shows Retry, not a revoked image', async () => {
+    let n = 0;
+    URL.createObjectURL = vi.fn(() => `blob:${++n}`);
+    api.fetchReceipt.mockResolvedValueOnce(new Blob(['x'], { type: 'image/png' }))
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
+    api.uploadReceipt.mockResolvedValue({ hasReceipt: true, mime: 'image/png' });
+    const { container } = render({ hasReceipt: true });
+    expect((await screen.findByAltText('Receipt')).getAttribute('src')).toBe('blob:1');
+    fireEvent.change(container.querySelector('input[type=file]') as HTMLInputElement, { target: { files: [file('n.png', 'image/png')] } });
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.queryByAltText('Receipt')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect((await screen.findByAltText('Receipt')).getAttribute('src')).toBe('blob:2');
+  });
+
+  it('label change and share toggle invalidate the group list and cashflow keys', async () => {
+    api.setExpenseLabels.mockResolvedValue(['l-food']);
+    api.setShareLink.mockResolvedValue({});
+    const { queryClient } = render();
+    const spy = vi.spyOn(queryClient, 'invalidateQueries');
+    fireEvent.click(await screen.findByRole('button', { name: 'Food' }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: ['split', 'group', 'g1', 'expenses'] }));
+    spy.mockClear();
+    fireEvent.click(await screen.findByRole('switch'));
+    fireEvent.change(await screen.findByLabelText('Portfolio'), { target: { value: 'p1' } });
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: ['cashflows'] }));
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['bank-account-cashflows'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['cashflow-forecast'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['split', 'group', 'g1', 'expenses'] });
   });
 

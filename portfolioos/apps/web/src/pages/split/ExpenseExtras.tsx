@@ -49,6 +49,7 @@ function ReceiptCard({ expense }: { expense: SplitExpenseDto }) {
     let cancelled = false;
     let made: string | null = null;
     setError(null);
+    setView(null);
     splitApi.fetchReceipt(expense.id)
       .then((blob) => {
         if (cancelled) return;
@@ -105,7 +106,7 @@ function ReceiptCard({ expense }: { expense: SplitExpenseDto }) {
       {error && (
         <div className="flex items-center gap-2">
           <p role="alert" className="text-xs text-destructive">{error}</p>
-          {expense.hasReceipt && !view && <Button type="button" variant="outline" size="sm" onClick={() => setFetchTry((n) => n + 1)}>Retry</Button>}
+          {expense.hasReceipt && <Button type="button" variant="outline" size="sm" onClick={() => setFetchTry((n) => n + 1)}>Retry</Button>}
         </div>
       )}
       <ConfirmDialog open={confirmRemove} onOpenChange={setConfirmRemove} title="Remove this receipt?"
