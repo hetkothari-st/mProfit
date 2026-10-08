@@ -16,8 +16,8 @@ import { AddExpenseDialog } from './AddExpenseDialog';
 import { myDisplayName } from './NewGroupDialog';
 
 export function FriendPage() {
-  const { key: rawKey = '' } = useParams();
-  const key = decodeURIComponent(rawKey);
+  // React Router already decodes params.
+  const { key = '' } = useParams();
   const user = useAuthStore((s: { user: { name?: string | null } | null }) => s.user);
   const friends = useQuery({ queryKey: SPLIT_KEYS.friends, queryFn: splitApi.friends });
   const [direct, setDirect] = useState<SplitGroupDto | null>(null);

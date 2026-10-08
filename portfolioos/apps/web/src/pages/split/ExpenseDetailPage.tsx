@@ -39,15 +39,21 @@ export function ExpenseDetailPage() {
     onSuccess: () => { refresh(); toast.success('Expense restored'); },
     onError: (err) => toast.error(apiErrorMessage(err, 'Could not restore')),
   });
+  // Standalone (not a mutation owned by this component) so Undo still reports after the user navigates away.
+  const undoDelete = () => {
+    splitApi.restoreExpense(id)
+      .then(() => { void qc.invalidateQueries({ queryKey: SPLIT_KEYS.all }); toast.success('Expense restored'); })
+      .catch((err: unknown) => { toast.error(apiErrorMessage(err, 'Could not restore')); });
+  };
   const remove = useMutation({
     mutationFn: () => splitApi.deleteExpense(id),
     onSuccess: () => {
       refresh();
       toast((t) => (
         <span className="flex items-center gap-3">Expense deleted
-          <button className="underline" onClick={() => { toast.dismiss(t.id); restore.mutate(); }}>Undo</button>
+          <button className="underline" onClick={() => { toast.dismiss(t.id); undoDelete(); }}>Undo</button>
         </span>
-      ));
+      ), { duration: 8000 });
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Could not delete')),
   });

@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { screen, cleanup, fireEvent, waitFor, render as render_ } from '@testing-library/react';
 import { renderWithProviders } from './testUtils';
 import { ExpenseDetailPage } from './ExpenseDetailPage';
 
 const api = vi.hoisted(() => ({ getExpense: vi.fn(), getGroup: vi.fn(), deleteExpense: vi.fn(), restoreExpense: vi.fn(), updateExpense: vi.fn(), createExpense: vi.fn() }));
 const toastError = vi.hoisted(() => vi.fn());
+const toastFn = vi.hoisted(() => vi.fn());
 vi.mock('@/api/split.api', async (orig) => ({ ...(await orig<typeof import('@/api/split.api')>()), splitApi: api }));
 vi.mock('react-hot-toast', () => {
-  const t = Object.assign(vi.fn(), { success: vi.fn(), error: toastError, dismiss: vi.fn() });
+  const t = Object.assign(toastFn, { success: vi.fn(), error: toastError, dismiss: vi.fn() });
   return { default: t };
 });
 
@@ -46,6 +48,23 @@ describe('ExpenseDetailPage', () => {
     api.deleteExpense.mockRejectedValue({ isAxiosError: true, message: 'x', response: { status: 409, data: { success: false, error: 'SPLIT_MEMBER_LEFT: member left', code: 'CONFLICT' } } });
     renderWithProviders(<ExpenseDetailPage />, route);
     fireEvent.click(await screen.findByRole('button', { name: /Delete/ }));
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(String(toastError.mock.calls[0]?.[0])).toContain('member left');
+  });
+
+  it('undo restores the expense; a failed restore toasts the server message', async () => {
+    api.getExpense.mockResolvedValue(EXPENSE);
+    api.getGroup.mockResolvedValue(GROUP);
+    api.deleteExpense.mockResolvedValue(undefined);
+    renderWithProviders(<ExpenseDetailPage />, route);
+    fireEvent.click(await screen.findByRole('button', { name: /Delete/ }));
+    await waitFor(() => expect(toastFn).toHaveBeenCalled());
+    const [render, opts] = toastFn.mock.calls[0] as [(t: { id: string }) => ReactElement, { duration: number }];
+    expect(opts.duration).toBe(8000);
+    api.restoreExpense.mockRejectedValue({ isAxiosError: true, message: 'x', response: { status: 409, data: { success: false, error: 'SPLIT_MEMBER_LEFT: member left', code: 'CONFLICT' } } });
+    const view = render_(render({ id: 't1' }));
+    fireEvent.click(view.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(api.restoreExpense).toHaveBeenCalledWith('e1'));
     await waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(String(toastError.mock.calls[0]?.[0])).toContain('member left');
   });
