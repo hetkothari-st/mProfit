@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, UserPlus, UsersRound } from 'lucide-react';
+import { Plus, Settings, UserPlus, UsersRound } from 'lucide-react';
 import { Decimal, toDecimal, formatDateTimeIST } from '@everypaisa/shared';
 import type { SplitActivityDto, SplitGroupDto, SplitMemberDto } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { formatSplitMoney, memberName } from '@/lib/splitFormat';
@@ -84,6 +84,7 @@ export function SplitHomePage() {
         description="Share costs with friends, flatmates and trips — see who owes whom and settle up."
         actions={
           <>
+            <Link to="/split/settings" className={buttonVariants({ variant: 'ghost' })}><Settings className="h-4 w-4 mr-1.5" />Settings</Link>
             <Button variant="outline" onClick={() => setNewPerson(true)}><UserPlus className="h-4 w-4 mr-1.5" />Add person</Button>
             <Button onClick={() => setNewGroup(true)}><Plus className="h-4 w-4 mr-1.5" />New group</Button>
           </>

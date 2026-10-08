@@ -2,6 +2,7 @@ import { api, unwrap } from './client';
 import type {
   ApiResponse, SplitActivityDto, SplitBalancesDto, SplitContactDto, SplitExpenseDto, SplitFriendDto,
   SplitGroupDto, SplitMemberDto, SplitModeDto, SplitSettleMethodDto, SplitSettlementDto,
+  SplitSettingsDto, SplitUpiLinkDto, SplitLabelDto, SplitCommentDto, SplitShareLinkDto,
 } from '@everypaisa/shared';
 
 const BASE = '/api/split';
@@ -17,6 +18,10 @@ export const SPLIT_KEYS = {
   expense: (id: string) => ['split', 'expense', id] as const,
   friends: ['split', 'friends'] as const,
   contacts: ['split', 'contacts'] as const,
+  settings: ['split', 'settings'] as const,
+  labels: (groupId: string) => ['split', 'group', groupId, 'labels'] as const,
+  comments: (expenseId: string) => ['split', 'expense', expenseId, 'comments'] as const,
+  shareLink: (expenseId: string) => ['split', 'expense', expenseId, 'share-link'] as const,
 };
 
 export interface ContactInput { name: string; email?: string | null; phone?: string | null; upiId?: string | null }
@@ -45,6 +50,11 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
 }
 async function patch<T>(url: string, body: unknown): Promise<T> {
   const { data } = await api.patch<ApiResponse<T>>(url, body);
+  return unwrap(data);
+}
+
+async function put<T>(url: string, body: unknown): Promise<T> {
+  const { data } = await api.put<ApiResponse<T>>(url, body);
   return unwrap(data);
 }
 
@@ -81,4 +91,44 @@ export const splitApi = {
   friends: () => get<SplitFriendDto[]>(`${BASE}/friends`),
   activity: (groupId?: string) =>
     get<SplitActivityDto[]>(groupId ? `${BASE}/groups/${groupId}/activity` : `${BASE}/activity`),
+
+  getSettings: () => get<SplitSettingsDto>(`${BASE}/settings`),
+  updateSettings: (p: Partial<SplitSettingsDto>) => put<SplitSettingsDto>(`${BASE}/settings`, p),
+  upiLink: (groupId: string, toMemberId: string, amount?: string) => {
+    const q = new URLSearchParams({ to: toMemberId });
+    if (amount) q.set('amount', amount);
+    return get<SplitUpiLinkDto>(`${BASE}/groups/${groupId}/upi-link?${q.toString()}`);
+  },
+
+  listLabels: (groupId: string) => get<SplitLabelDto[]>(`${BASE}/groups/${groupId}/labels`),
+  createLabel: (groupId: string, i: { name: string; color: string }) =>
+    post<SplitLabelDto>(`${BASE}/groups/${groupId}/labels`, i),
+  deleteLabel: async (id: string) => { await api.delete(`${BASE}/labels/${id}`); },
+  setExpenseLabels: (expenseId: string, labelIds: string[]) =>
+    put<string[]>(`${BASE}/expenses/${expenseId}/labels`, { labelIds }),
+
+  listComments: (expenseId: string) => get<SplitCommentDto[]>(`${BASE}/expenses/${expenseId}/comments`),
+  addComment: (expenseId: string, body: string) => post<SplitCommentDto>(`${BASE}/expenses/${expenseId}/comments`, { body }),
+  deleteComment: async (id: string) => { await api.delete(`${BASE}/comments/${id}`); },
+
+  uploadReceipt: async (expenseId: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const { data } = await api.put<ApiResponse<{ hasReceipt: true; mime: string }>>(
+      `${BASE}/expenses/${expenseId}/receipt`, fd, { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return unwrap(data);
+  },
+  fetchReceipt: async (expenseId: string): Promise<Blob> => {
+    const res = await api.get(`${BASE}/expenses/${expenseId}/receipt`, { responseType: 'blob' });
+    return res.data as Blob;
+  },
+  deleteReceipt: async (expenseId: string) => { await api.delete(`${BASE}/expenses/${expenseId}/receipt`); },
+
+  getShareLink: (expenseId: string) => get<SplitShareLinkDto>(`${BASE}/expenses/${expenseId}/share-link`),
+  setShareLink: (expenseId: string, i: { enabled: boolean; portfolioId?: string | null }) =>
+    put<SplitShareLinkDto>(`${BASE}/expenses/${expenseId}/share-link`, i),
+
+  remind: (groupId: string, memberId: string) => post<{ sent: boolean }>(`${BASE}/reminders`, { groupId, memberId }),
+  inviteContact: (contactId: string) => post<{ sent: boolean }>(`${BASE}/contacts/${contactId}/invite`),
 };
