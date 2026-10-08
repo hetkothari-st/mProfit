@@ -10,20 +10,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
-import { useAuthStore } from '@/stores/auth.store';
 import { BalancePill } from './BalancePill';
 import { AddExpenseDialog } from './AddExpenseDialog';
-import { myDisplayName } from './NewGroupDialog';
+import { useSplitDisplayName } from './useSplitDisplayName';
 
 export function FriendPage() {
   // React Router already decodes params.
   const { key = '' } = useParams();
-  const user = useAuthStore((s: { user: { name?: string | null } | null }) => s.user);
+  const myName = useSplitDisplayName();
   const friends = useQuery({ queryKey: SPLIT_KEYS.friends, queryFn: splitApi.friends });
   const [direct, setDirect] = useState<SplitGroupDto | null>(null);
 
   const open1to1 = useMutation({
-    mutationFn: (contactId: string) => splitApi.directGroup(contactId, myDisplayName(user)),
+    mutationFn: (contactId: string) => splitApi.directGroup(contactId, myName),
     onSuccess: (g) => setDirect(g),
     onError: (err) => toast.error(splitErrorMessage(err, 'Could not open your 1:1 expenses')),
   });

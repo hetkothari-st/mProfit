@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi, type NewGroupInput } from '@/api/split.api';
-import { useAuthStore } from '@/stores/auth.store';
+import { useSplitDisplayName } from './useSplitDisplayName';
 import { ContactDialog } from './ContactDialog';
 
 export const GROUP_TYPES: Array<{ value: NonNullable<NewGroupInput['type']>; label: string }> = [
@@ -20,14 +20,10 @@ export const GROUP_TYPES: Array<{ value: NonNullable<NewGroupInput['type']>; lab
 ];
 export const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'THB', 'JPY', 'AUD', 'CAD'];
 
-export function myDisplayName(user: { name?: string | null } | null): string {
-  return user?.name?.trim() || 'Me';
-}
-
 export function NewGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const user = useAuthStore((s: { user: { name?: string | null } | null }) => s.user);
+  const myName = useSplitDisplayName();
   const contacts = useQuery({ queryKey: SPLIT_KEYS.contacts, queryFn: splitApi.listContacts, enabled: open });
   const [name, setName] = useState('');
   const [type, setType] = useState<NonNullable<NewGroupInput['type']>>('TRIP');
@@ -43,7 +39,7 @@ export function NewGroupDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const save = useMutation({
     mutationFn: () => splitApi.createGroup({
       name: name.trim(), type, baseCurrency: currency, simplifyDebts: true,
-      myDisplayName: myDisplayName(user), contactIds: picked,
+      myDisplayName: myName, contactIds: picked,
     }),
     onSuccess: (g) => {
       void qc.invalidateQueries({ queryKey: SPLIT_KEYS.all });
