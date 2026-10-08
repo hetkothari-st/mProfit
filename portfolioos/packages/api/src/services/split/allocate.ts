@@ -13,6 +13,7 @@ export type SplitMode = 'EQUAL' | 'EXACT' | 'PERCENT' | 'SHARES';
 
 const PAISA = new Decimal('0.01');
 const HUNDRED = new Decimal(100);
+const BASE_LIMIT = new Decimal('1e12');
 
 function bad(code: string, detail: string): never {
   throw new BadRequestError(`${code}: ${detail}`);
@@ -80,7 +81,9 @@ export function computeShares(mode: SplitMode, amount: Decimal, inputs: ShareInp
 }
 
 export function toBase(amount: Decimal, fxRate: Decimal): Decimal {
-  return amount.mul(fxRate).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN);
+  const base = amount.mul(fxRate).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN);
+  if (base.gte(BASE_LIMIT)) bad('SPLIT_BAD_INPUT', 'converted amount too large');
+  return base;
 }
 
 /** Spread a base-currency total over members in proportion to their expense-currency amounts. */

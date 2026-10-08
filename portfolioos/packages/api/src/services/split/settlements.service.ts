@@ -26,7 +26,7 @@ function toDto(s: SplitSettlement): SplitSettlementDto {
     id: s.id, groupId: s.groupId, fromMemberId: s.fromMemberId, toMemberId: s.toMemberId,
     amount: serializeMoney(s.amount.toString()), currency: s.currency, fxRate: s.fxRate.toString(),
     baseAmount: serializeMoney(s.baseAmount.toString()), method: s.method,
-    date: s.date.toISOString().slice(0, 10), deletedAt: s.deletedAt?.toISOString() ?? null,
+    date: s.date.toISOString().slice(0, 10), createdById: s.createdById, createdAt: s.createdAt.toISOString(), deletedAt: s.deletedAt?.toISOString() ?? null,
   };
 }
 

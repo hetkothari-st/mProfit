@@ -36,7 +36,9 @@ export async function listFriends(userId: string): Promise<SplitFriendDto[]> {
   const groups = await listGroups(userId, { includeDirect: true, includeArchived: true });
   const friends = new Map<string, SplitFriendDto & { total: Decimal }>();
   // A placeholder is the same person across groups when it came from one of my contacts.
-  const myContactIds = new Set((await prisma.splitContact.findMany({ where: { ownerUserId: userId }, select: { id: true } })).map((c) => c.id));
+  const myContacts = await prisma.splitContact.findMany({ where: { ownerUserId: userId }, select: { id: true, linkedUserId: true } });
+  const myContactIds = new Set(myContacts.map((c) => c.id));
+  const contactByLinkedUser = new Map(myContacts.filter((c) => c.linkedUserId).map((c) => [c.linkedUserId!, c.id]));
 
   for (const g of groups) {
     const me = g.members.find((m) => m.isMe);
@@ -51,7 +53,7 @@ export async function listFriends(userId: string): Promise<SplitFriendDto[]> {
         if (t.fromMemberId === me.id && t.toMemberId === other.id) net = net.minus(t.amount);
       }
       const key = other.userId ? `u:${other.userId}` : other.contactId && myContactIds.has(other.contactId) ? `c:${other.contactId}` : `m:${other.id}`;
-      const f = friends.get(key) ?? { key, displayName: other.displayName, userId: other.userId, currency: home, net: serializeMoney(0), approx: false, groups: [], total: new Decimal(0) };
+      const f = friends.get(key) ?? { key, displayName: other.displayName, userId: other.userId, contactId: key.startsWith('c:') ? key.slice(2) : other.userId ? contactByLinkedUser.get(other.userId) ?? null : null, currency: home, net: serializeMoney(0), approx: false, groups: [], total: new Decimal(0) };
       f.groups.push({ groupId: g.id, groupName: g.name, net: serializeMoney(net), currency: g.baseCurrency });
       if (rate) f.total = f.total.plus(net.mul(rate));
       if (g.baseCurrency !== home) f.approx = true;
@@ -79,6 +81,16 @@ export async function listActivity(userId: string, opts: { groupId?: string; lim
     },
     orderBy: { createdAt: 'desc' },
     take,
+    include: { group: { select: { name: true, members: { select: { userId: true, displayName: true } } } } },
   });
-  return rows.map((r) => ({ id: r.id, groupId: r.groupId, actorUserId: r.actorUserId, kind: r.kind, payload: r.payload, createdAt: r.createdAt.toISOString() }));
+  return rows.map((r) => ({
+    id: r.id,
+    groupId: r.groupId,
+    groupName: r.group.name,
+    actorUserId: r.actorUserId,
+    actorName: r.group.members.find((m) => m.userId === r.actorUserId)?.displayName ?? 'Someone',
+    kind: r.kind,
+    payload: r.payload,
+    createdAt: r.createdAt.toISOString(),
+  }));
 }

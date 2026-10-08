@@ -44,6 +44,7 @@ function toDto(e: Row): SplitExpenseDto {
     baseAmount: serializeMoney(e.baseAmount.toString()),
     splitMode: e.splitMode,
     createdById: e.createdById,
+    createdAt: e.createdAt.toISOString(),
     sourceType: e.sourceType,
     deletedAt: e.deletedAt?.toISOString() ?? null,
     payers: [...e.payers].sort(byId).map((p) => ({ memberId: p.memberId, amount: serializeMoney(p.amount.toString()), baseAmount: serializeMoney(p.baseAmount.toString()) })),
