@@ -266,13 +266,33 @@ describe('GroupPage', () => {
     Object.defineProperty(navigator, 'share', { value: share, configurable: true });
     renderPage();
     fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Share pay link' }));
-    await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
-    expect(api.requestLink).toHaveBeenCalledWith('g1', 'c', '50.00');
+    const btn = await screen.findByRole('button', { name: 'Share pay link' });
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(btn);
+    // Synchronous: the share sheet must open inside the click, before any await.
+    expect(share).toHaveBeenCalledTimes(1);
+    expect(api.requestLink).toHaveBeenCalledWith('g1', 'c');
     const arg = share.mock.calls[0]![0] as { text: string; title: string; url?: string };
     expect(arg.text).toContain(URI);
     expect(arg.text).toContain('Chetan');
     expect(arg.url).toBeUndefined();
+    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+  });
+
+  it('share pay link: NotAllowedError falls back to copying the uri', async () => {
+    OWED();
+    api.requestLink.mockResolvedValue({ uri: URI, payeeName: 'Alice', payeeVpa: 'alice@oksbi', amount: '50.0000', note: 'x' });
+    const share = vi.fn().mockRejectedValue(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
+    const btn = await screen.findByRole('button', { name: 'Share pay link' });
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(btn);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(URI));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Pay link copied - paste it in WhatsApp or SMS'));
     Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
   });
 
@@ -284,7 +304,9 @@ describe('GroupPage', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     renderPage();
     fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Share pay link' }));
+    const btn = await screen.findByRole('button', { name: 'Share pay link' });
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(btn);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(URI));
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Pay link copied - paste it in WhatsApp or SMS'));
   });
@@ -294,7 +316,9 @@ describe('GroupPage', () => {
     api.requestLink.mockRejectedValue({ isAxiosError: true, message: 'x', response: { status: 400, data: { error: 'SPLIT_NO_UPI: add your UPI ID in Split settings first' } } });
     renderPage();
     fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Share pay link' }));
+    const btn = await screen.findByRole('button', { name: 'Share pay link' });
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(btn);
     const link = await screen.findByRole('link', { name: 'Open Split settings' });
     expect(link.getAttribute('href')).toBe('/split/settings');
     expect(screen.getByText(/Add your UPI ID in Split settings first/)).toBeTruthy();

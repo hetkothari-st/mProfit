@@ -228,6 +228,41 @@ function SettingsTab({ group, nets }: { group: SplitGroupDto; nets: Array<{ net:
   );
 }
 
+
+/**
+ * The pay link is prefetched so the click can call navigator.share
+ * synchronously: iOS Safari drops the user activation after an await.
+ * requestLink only reveals the caller's own UPI ID.
+ */
+function SharePayLinkButton({ group, fromMemberId, onError }: { group: SplitGroupDto; fromMemberId: string; onError: (msg: string | null) => void }) {
+  const link = useQuery({
+    queryKey: [...SPLIT_KEYS.group(group.id), 'request-link', fromMemberId],
+    queryFn: () => splitApi.requestLink(group.id, fromMemberId),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const copyFallback = async (uri: string) => {
+    if (await copyText(uri)) toast.success('Pay link copied - paste it in WhatsApp or SMS');
+    else toast.error("Couldn't copy the pay link - use Settle up instead");
+  };
+  const onClick = () => {
+    if (link.isError) { onError(splitErrorMessage(link.error, 'Could not create the pay link')); return; }
+    const data = link.data;
+    if (!data) return;
+    onError(null);
+    const text = `${memberName(group.members, fromMemberId)}, pay ${formatSplitMoney(data.amount, 'INR')} for ${group.name}: ${data.uri}`;
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') { void copyFallback(data.uri); return; }
+    // Called synchronously from the click so the browser still sees the user activation.
+    navigator.share({ title: 'Pay me back', text }).catch((err: unknown) => {
+      const name = (err as { name?: string }).name;
+      if (name === 'AbortError') return;
+      if (name === 'NotAllowedError') { void copyFallback(data.uri); return; }
+      toast.error("Couldn't open the share sheet");
+    });
+  };
+  return <Button size="sm" variant="outline" disabled={link.isPending} onClick={onClick}>Share pay link</Button>;
+}
+
 export function GroupPage() {
   const { id = '' } = useParams();
   const [adding, setAdding] = useState(false);
@@ -252,29 +287,6 @@ export function GroupPage() {
     onError: (err) => toast.error(axios.isAxiosError(err) && err.response?.status === 409 ? 'Already reminded today' : splitErrorMessage(err, 'Could not send the reminder')),
   });
   const [shareError, setShareError] = useState<string | null>(null);
-  const share = useMutation({
-    mutationFn: async (t: { fromMemberId: string; amount: string }) => {
-      const link = await splitApi.requestLink(id, t.fromMemberId, toDecimal(t.amount).toFixed(2));
-      return { link, ...t };
-    },
-    onSuccess: async ({ link, fromMemberId, amount }) => {
-      setShareError(null);
-      const g0 = group.data;
-      const text = `${g0 ? memberName(g0.members, fromMemberId) : 'Hi'}, pay ${formatSplitMoney(amount, 'INR')} for ${g0?.name ?? 'our group'}: ${link.uri}`;
-      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-        try {
-          await navigator.share({ title: 'Pay me back', text });
-        } catch (err) {
-          // Cancelling the share sheet is not an error; anything else is shown.
-          if ((err as { name?: string }).name !== 'AbortError') toast.error("Couldn't open the share sheet");
-        }
-        return;
-      }
-      if (await copyText(link.uri)) toast.success('Pay link copied - paste it in WhatsApp or SMS');
-      else toast.error("Couldn't copy the pay link - use Settle up instead");
-    },
-    onError: (err) => setShareError(splitErrorMessage(err, 'Could not create the pay link')),
-  });
   const activity = useQuery({ queryKey: SPLIT_KEYS.activity(id), queryFn: () => splitApi.activity(id) });
 
   if (group.isError) {
@@ -336,7 +348,7 @@ export function GroupPage() {
                     <>
                       <Button size="sm" variant="outline" disabled={remind.isPending} onClick={() => remind.mutate(t.fromMemberId)}>Remind</Button>
                       {g.baseCurrency === 'INR' && (
-                        <Button size="sm" variant="outline" disabled={share.isPending} onClick={() => share.mutate({ fromMemberId: t.fromMemberId, amount: t.amount })}>Share pay link</Button>
+                        <SharePayLinkButton group={g} fromMemberId={t.fromMemberId} onError={setShareError} />
                       )}
                     </>
                   )}
