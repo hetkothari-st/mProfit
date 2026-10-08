@@ -179,6 +179,17 @@ export const piiLimiter = rateLimit({
   message: { success: false, error: 'Too many reveal requests', code: 'RATE_LIMITED' },
 });
 
+export const receiptUploadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  keyGenerator: (req) => req.user?.id ?? 'anonymous',
+  store: makeStore('split-receipt'),
+  message: { success: false, error: 'Too many receipt uploads', code: 'RATE_LIMITED' },
+});
+
 export const importLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,

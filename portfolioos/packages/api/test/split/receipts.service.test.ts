@@ -30,6 +30,13 @@ describe('split receipts', () => {
     await expect(alice.runAs(() => putReceipt(alice.userId, expenseId, { buffer: Buffer.from('MZ\x90\x00junk'), originalname: 'r.jpg' }))).rejects.toThrow(/JPEG, PNG, WebP or PDF/);
   });
 
+  it('rejects HEIC, empty and unreadable images with clear messages', async () => {
+    const put = (buffer: Buffer) => alice.runAs(() => putReceipt(alice.userId, expenseId, { buffer, originalname: 'r.x' }));
+    await expect(put(Buffer.concat([Buffer.alloc(4), Buffer.from('ftypheic')]))).rejects.toThrow(/HEIC photos aren't supported/);
+    await expect(put(Buffer.alloc(0))).rejects.toThrow(/empty/);
+    await expect(put(PNG.subarray(0, 14))).rejects.toThrow(/couldn't read this image/);
+  });
+
   it('outsider gets 404', async () => {
     await expect(eve.runAs(() => getReceipt(eve.userId, expenseId))).rejects.toThrow(/not found/i);
   });

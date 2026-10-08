@@ -10,7 +10,7 @@ import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 import { buildStorageKey, saveBuffer, readBuffer, deleteFile } from '../../lib/documentStorage.js';
 import { requireMember } from './groups.service.js';
 import { writeActivity } from './activity.js';
-import { detectReceiptKind, stripImageMetadata, type ReceiptKind } from './imageMeta.js';
+import { detectReceiptKind, isHeic, stripImageMetadata, type ReceiptKind } from './imageMeta.js';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const EXT: Record<ReceiptKind, string> = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'application/pdf': '.pdf' };
@@ -34,16 +34,24 @@ async function dropBlob(ownerId: string | null, key: string | null): Promise<voi
 export async function putReceipt(userId: string, expenseId: string, file: { buffer: Buffer; originalname: string }) {
   const e = await load(userId, expenseId);
   if (e.deletedAt) throw new BadRequestError('Restore the expense before changing its receipt');
-  if (file.buffer.length === 0 || file.buffer.length > MAX_BYTES) throw new BadRequestError('Receipts must be under 10 MB');
+  if (file.buffer.length === 0) throw new BadRequestError('The file is empty');
+  if (file.buffer.length > MAX_BYTES) throw new BadRequestError('Receipts must be under 10 MB');
+  if (isHeic(file.buffer)) throw new BadRequestError("HEIC photos aren't supported — share the photo as JPEG");
   const kind = detectReceiptKind(file.buffer);
   if (!kind) throw new BadRequestError('Upload a JPEG, PNG, WebP or PDF receipt');
   const clean = stripImageMetadata(file.buffer, kind);
+  if (!clean) throw new BadRequestError("We couldn't read this image — try saving it as JPEG or PNG");
   const key = buildStorageKey(`receipt${EXT[kind]}`);
   await saveBuffer(userId, key, clean);
+  try {
   await runInTransaction(async (tx) => {
     await tx.splitExpense.update({ where: { id: expenseId }, data: { receiptBlobId: key, receiptOwnerUserId: userId, receiptMime: kind } });
     await writeActivity(tx, e.groupId, userId, 'RECEIPT_ADDED', { expenseId, description: e.description });
   });
+  } catch (err) {
+    await deleteFile(userId, key); // don't orphan the sealed blob
+    throw err;
+  }
   await dropBlob(e.receiptOwnerUserId, e.receiptBlobId);
   return { hasReceipt: true as const, mime: kind };
 }
