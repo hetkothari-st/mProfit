@@ -11,6 +11,7 @@ import {
 } from '../services/split/expenses.service.js';
 import { createSettlement, deleteSettlement, listSettlements, updateSettlement } from '../services/split/settlements.service.js';
 import { listLabels, createLabel, deleteLabel, setExpenseLabels } from '../services/split/labels.service.js';
+import { listComments, addComment, deleteComment } from '../services/split/comments.service.js';
 import { getSettings, updateSettings, upiLink } from '../services/split/settings.service.js';
 import { groupBalances, listActivity, listFriends } from '../services/split/ledger.service.js';
 
@@ -131,3 +132,8 @@ export const listLabelsHandler = async (req: Request, res: Response) => ok(res, 
 export const createLabelHandler = async (req: Request, res: Response) => created(res, await createLabel(uid(req), p(req, 'id'), parse(labelBody, req.body)));
 export const deleteLabelHandler = async (req: Request, res: Response) => { await deleteLabel(uid(req), p(req, 'id')); noContent(res); };
 export const setExpenseLabelsHandler = async (req: Request, res: Response) => ok(res, await setExpenseLabels(uid(req), p(req, 'id'), parse(labelIdsBody, req.body).labelIds));
+
+const commentBody = z.object({ body: z.string().max(2000) });
+export const listCommentsHandler = async (req: Request, res: Response) => ok(res, await listComments(uid(req), p(req, 'id')));
+export const addCommentHandler = async (req: Request, res: Response) => created(res, await addComment(uid(req), p(req, 'id'), parse(commentBody, req.body).body));
+export const deleteCommentHandler = async (req: Request, res: Response) => { await deleteComment(uid(req), p(req, 'id')); noContent(res); };

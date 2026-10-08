@@ -45,3 +45,6 @@ splitRouter.get('/groups/:id/labels', asyncHandler(c.listLabelsHandler));
 splitRouter.post('/groups/:id/labels', asyncHandler(c.createLabelHandler));
 splitRouter.delete('/labels/:id', asyncHandler(c.deleteLabelHandler));
 splitRouter.put('/expenses/:id/labels', asyncHandler(c.setExpenseLabelsHandler));
+splitRouter.get('/expenses/:id/comments', asyncHandler(c.listCommentsHandler));
+splitRouter.post('/expenses/:id/comments', asyncHandler(c.addCommentHandler));
+splitRouter.delete('/comments/:id', asyncHandler(c.deleteCommentHandler));
