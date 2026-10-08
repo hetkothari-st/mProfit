@@ -58,7 +58,7 @@ describe('split settings + UPI link', () => {
   });
 
   it('no UPI on file -> 404 with a plain reason', async () => {
-    await expect(alice.runAs(() => upiLink(alice.userId, g2, memberOf(g2Members, 'Bob'), '10'))).rejects.toThrow(/hasn't added a UPI ID/);
+    await expect(alice.runAs(() => upiLink(alice.userId, g2, memberOf(g2Members, 'Bob'), '10'))).rejects.toThrow(/hasn't shared a UPI ID in this group yet/);
   });
 
   it('reveals nothing to someone who owes nothing', async () => {
@@ -71,11 +71,28 @@ describe('split settings + UPI link', () => {
     expect(l.uri).toContain('am=40.00');
   });
 
-  it('prefers the linked users own UPI over the contact one', async () => {
+  it('prefers the linked users own UPI over the contact one, but only once they take part in the group', async () => {
     await runAsSystem(() => prisma.splitContact.update({ where: { id: cbId }, data: { upiId: 'bobcontact@okhdfc' } }));
     expect((await alice.runAs(() => upiLink(alice.userId, g2, memberOf(g2Members, 'Bob'), '10'))).payeeVpa).toBe('bobcontact@okhdfc');
     await runAsSystem(() => prisma.splitSettings.upsert({ where: { userId: bob.userId }, create: { userId: bob.userId, upiId: 'bob@oksbi' }, update: { upiId: 'bob@oksbi' } }));
+    // Bob has not created anything in g2 yet: his own UPI must stay hidden.
+    expect((await alice.runAs(() => upiLink(alice.userId, g2, memberOf(g2Members, 'Bob'), '10'))).payeeVpa).toBe('bobcontact@okhdfc');
+    await runAsSystem(() => prisma.splitExpense.updateMany({ where: { groupId: g2 }, data: { createdById: bob.userId } }));
     expect((await alice.runAs(() => upiLink(alice.userId, g2, memberOf(g2Members, 'Bob'), '10'))).payeeVpa).toBe('bob@oksbi');
+  });
+
+  it('a linked user who never acted in the group has no UPI revealed even from their settings', async () => {
+    const cz = await seedContact(alice.userId, 'Zed', bob.userId);
+    const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Quiet', myDisplayName: 'Alice', contactIds: [cz.id] }));
+    const am = g.members.find((m) => m.isMe)!.id; const zm = g.members.find((m) => m.displayName === 'Zed')!.id;
+    await runAsSystem(() => prisma.splitExpense.create({ data: {
+      groupId: g.id, description: 'Forged', date: new Date('2026-10-02'), amount: '60', currency: 'INR', fxRate: '1', baseAmount: '60',
+      splitMode: 'EQUAL', createdById: alice.userId,
+      payers: { create: [{ memberId: zm, amount: '60', baseAmount: '60' }] },
+      shares: { create: [am, zm].map((m) => ({ memberId: m, amount: '30', baseAmount: '30' })) },
+    } }));
+    await runAsSystem(() => prisma.splitSettings.upsert({ where: { userId: bob.userId }, create: { userId: bob.userId, upiId: 'bob@oksbi' }, update: { upiId: 'bob@oksbi' } }));
+    await expect(alice.runAs(() => upiLink(alice.userId, g.id, zm, '10'))).rejects.toThrow(/SPLIT_NO_UPI: Zed hasn't shared a UPI ID in this group yet/);
   });
 
   it('empty defaultPortfolioId stores null', async () => {

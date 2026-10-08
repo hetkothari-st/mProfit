@@ -62,7 +62,7 @@ export function buildUpiUri(p: { vpa: string; name: string; amount: string; note
 
 export async function upiLink(userId: string, groupId: string, toMemberId: string, amount?: string): Promise<SplitUpiLinkDto> {
   const { memberId: myId } = await requireMember(userId, groupId);
-  const group = await prisma.splitGroup.findUniqueOrThrow({ where: { id: groupId }, select: { name: true, baseCurrency: true } });
+  const group = await prisma.splitGroup.findUniqueOrThrow({ where: { id: groupId }, select: { name: true, baseCurrency: true, createdById: true } });
   if (group.baseCurrency !== 'INR') throw new BadRequestError('SPLIT_UPI_INR_ONLY: UPI works only for INR groups');
   const target = await prisma.splitMember.findFirst({ where: { id: toMemberId, groupId, leftAt: null } });
   if (!target || target.id === myId) throw new NotFoundError('Member not found');
@@ -80,8 +80,16 @@ export async function upiLink(userId: string, groupId: string, toMemberId: strin
 
   const vpa = await runAsSystem(async () => {
     if (target.userId) {
-      const s = await prisma.splitSettings.findUnique({ where: { userId: target.userId }, select: { upiId: true } });
-      if (s?.upiId) return s.upiId;
+      // A forged "they paid" expense can make anyone appear owed, so a linked
+      // user's own UPI ID is shown only once they have taken part themselves.
+      const tid = target.userId;
+      const tookPart = group.createdById === tid
+        || (await prisma.splitExpense.count({ where: { groupId, createdById: tid, deletedAt: null } })) > 0
+        || (await prisma.splitSettlement.count({ where: { groupId, createdById: tid, deletedAt: null } })) > 0;
+      if (tookPart) {
+        const s = await prisma.splitSettings.findUnique({ where: { userId: tid }, select: { upiId: true } });
+        if (s?.upiId) return s.upiId;
+      }
     }
     if (target.contactId) {
       const c = await prisma.splitContact.findUnique({ where: { id: target.contactId }, select: { upiId: true } });
@@ -89,7 +97,7 @@ export async function upiLink(userId: string, groupId: string, toMemberId: strin
     }
     return null;
   });
-  if (!vpa) throw new NotFoundError(`SPLIT_NO_UPI: ${target.displayName} hasn't added a UPI ID`);
+  if (!vpa) throw new NotFoundError(`SPLIT_NO_UPI: ${target.displayName} hasn't shared a UPI ID in this group yet`);
 
   const note = `${group.name} settle-up`.slice(0, 40);
   const amt = value.toFixed(2);
