@@ -9,11 +9,17 @@ const DEFAULT_DATE_OPTS: Intl.DateTimeFormatOptions = { day: '2-digit', month: '
  */
 export function formatDateIST(
   input: string | Date | null | undefined,
-  opts: Intl.DateTimeFormatOptions = DEFAULT_DATE_OPTS,
+  opts?: Intl.DateTimeFormatOptions,
 ): string {
   if (!input) return '-';
   const d = typeof input === 'string' ? new Date(input) : input;
   if (Number.isNaN(d.getTime())) return '-';
+  if (!opts) {
+    // Built from parts so the separator never depends on the ICU build.
+    const parts = new Intl.DateTimeFormat(IST_LOCALE, { ...DEFAULT_DATE_OPTS, timeZone: IST_TZ }).formatToParts(d);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+    return `${get('day')}/${get('month')}/${get('year')}`;
+  }
   return new Intl.DateTimeFormat(IST_LOCALE, { ...opts, timeZone: IST_TZ }).format(d);
 }
 

@@ -397,7 +397,7 @@ export function DashboardPage() {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, m]) => ({
           date,
-          label: formatDateIST(date),
+          label: formatDateIST(date, { day: '2-digit', month: 'short', year: '2-digit' }),
           value: m.value.toNumber(),
           invested: m.invested.toNumber(),
         }));
@@ -977,6 +977,10 @@ export function DashboardPage() {
                     cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3', strokeOpacity: 0.4 }}
                     contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12, padding: '10px 12px', boxShadow: '0 12px 28px -16px hsl(var(--shadow-color) / 0.35)' }}
                     formatter={(v: number, name: string) => [hideSensitive ? '•••' : formatINR(v.toFixed(4)), name === 'value' ? 'Market value' : 'Invested']}
+                    labelFormatter={(label, payload) => {
+                      const iso = (payload?.[0]?.payload as { date?: string } | undefined)?.date;
+                      return iso ? formatDateOnly(iso) : String(label);
+                    }}
                     labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: 4, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}
                   />
                   {/* Portfolio market value over time. The gross-cumulative

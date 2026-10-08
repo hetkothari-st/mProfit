@@ -81,7 +81,7 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
 
   const now = new Date();
   const today = `${formatDateIST(now, { weekday: 'long' })}, ${formatDateIST(now)}`;
-  const todayShort = `${formatDateIST(now, { weekday: 'short' })}, ${formatDateIST(now)}`;
+  const todayShort = `${formatDateIST(now, { weekday: 'short' })}, ${formatDateIST(now, { day: '2-digit', month: '2-digit' })}`;
 
   return (
     <header className="relative z-30 h-16 shrink-0 border-b border-border/70 bg-card/70 backdrop-blur-md flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-10">

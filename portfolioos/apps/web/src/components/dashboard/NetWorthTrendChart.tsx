@@ -24,6 +24,8 @@ const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
  * one just past the day-1 backfill) will only have a single point, so this
  * intentionally shows a friendly placeholder instead of a broken/flat chart.
  */
+const SHORT_TICK: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: '2-digit' };
+
 export function NetWorthTrendChart() {
   const [period, setPeriod] = useState<NetWorthHistoryPeriod>('1Y');
   // Phones: a narrower value axis, and room on the right for the last date,
@@ -37,7 +39,8 @@ export function NetWorthTrendChart() {
 
   const points = data?.points ?? [];
   const chartData = points.map((p) => ({
-    label: formatDateIST(p.asOf),
+    label: formatDateIST(p.asOf, SHORT_TICK),
+    fullDate: formatDateIST(p.asOf),
     value: toDecimal(p.netWorthAfterLiabilities).toNumber(),
     estimated: p.estimated,
   }));
@@ -196,6 +199,9 @@ export function NetWorthTrendChart() {
                     ? 'Net worth (estimate)'
                     : 'Net worth',
                 ]}
+                labelFormatter={(label, payload) =>
+                  (payload?.[0]?.payload as { fullDate?: string } | undefined)?.fullDate ?? String(label)
+                }
                 labelStyle={{
                   color: 'hsl(var(--muted-foreground))',
                   marginBottom: 4,
