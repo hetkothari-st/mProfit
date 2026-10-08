@@ -72,7 +72,8 @@ export function formFromExpense(e: SplitExpenseDto, members: SplitMemberDto[]): 
   const activePayers = e.payers.filter((p) => actives.some((m) => m.id === p.memberId));
   if (activePayers.length === 0) {
     f.payerMode = 'single';
-    f.singlePayerId = actives[0]?.id ?? '';
+    // Keep the stored payer even if they left, so edit shows the truth (checkForm blocks save).
+    f.singlePayerId = e.payers[0]?.memberId ?? actives[0]?.id ?? '';
   } else if (activePayers.length === 1) {
     f.payerMode = 'single';
     f.singlePayerId = activePayers[0]!.memberId;

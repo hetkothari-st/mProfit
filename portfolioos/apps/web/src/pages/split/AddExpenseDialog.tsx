@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import type { SplitExpenseDto, SplitGroupDto, SplitModeDto } from '@everypaisa/shared';
@@ -31,16 +31,20 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
     expense ? formFromExpense(expense, members) : emptyForm(members, group.baseCurrency, todayLocal()));
   const [serverError, setServerError] = useState<string | null>(null);
 
+  const wasOpen = useRef(open);
   useEffect(() => {
-    if (open) {
+    // Reset only on the closed -> open transition, so a refetch or a new props identity never wipes typing.
+    if (open && !wasOpen.current) {
       setForm(expense ? formFromExpense(expense, members) : emptyForm(members, group.baseCurrency, todayLocal()));
       setServerError(null);
     }
-  }, [open, expense, members, group.baseCurrency]);
+    wasOpen.current = open;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on `open` alone (see above)
+  }, [open]);
 
-  const set = <K extends keyof ExpenseFormState>(k: K, v: ExpenseFormState[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const set = <K extends keyof ExpenseFormState>(k: K, v: ExpenseFormState[K]) => { setServerError(null); setForm((f) => ({ ...f, [k]: v })); };
   const setIn = (k: 'payerAmounts' | 'included' | 'values', id: string, v: string | boolean) =>
-    setForm((f) => ({ ...f, [k]: { ...f[k], [id]: v } }));
+    { setServerError(null); setForm((f) => ({ ...f, [k]: { ...f[k], [id]: v } })); };
 
   const check = checkForm(form, members, group.baseCurrency);
   const nameOf = (id: string) => (members.find((m) => m.id === id)?.isMe ? 'You' : members.find((m) => m.id === id)?.displayName ?? '');
@@ -86,7 +90,7 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
             <div className="space-y-1.5">
               <Label htmlFor="exp-ccy">Currency</Label>
               <Select id="exp-ccy" value={form.currency} onChange={(e) => set('currency', e.target.value)} className="w-24">
-                {Array.from(new Set([group.baseCurrency, ...CURRENCIES])).map((c) => <option key={c} value={c}>{c}</option>)}
+                {Array.from(new Set([group.baseCurrency, form.currency, ...CURRENCIES])).map((c) => <option key={c} value={c}>{c}</option>)}
               </Select>
             </div>
           </div>
@@ -109,6 +113,11 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
                   if (e.target.value === '__multi') set('payerMode', 'multiple');
                   else setForm((f) => ({ ...f, payerMode: 'single', singlePayerId: e.target.value }));
                 }}>
+                {form.payerMode === 'single' && form.singlePayerId && !members.some((m) => m.id === form.singlePayerId) && (
+                  <option value={form.singlePayerId}>
+                    {`${group.members.find((m) => m.id === form.singlePayerId)?.displayName ?? 'Former member'} (left the group)`}
+                  </option>
+                )}
                 {members.map((m) => <option key={m.id} value={m.id}>{m.isMe ? 'You' : m.displayName}</option>)}
                 <option value="__multi">Multiple people</option>
               </Select>

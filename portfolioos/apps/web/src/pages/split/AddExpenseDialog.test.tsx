@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import { useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
-import { serializeMoney, type SplitGroupDto } from '@everypaisa/shared';
+import { serializeMoney, type SplitGroupDto, type SplitExpenseDto } from '@everypaisa/shared';
 import { renderWithProviders } from './testUtils';
 import { AddExpenseDialog } from './AddExpenseDialog';
 
@@ -62,5 +63,43 @@ describe('AddExpenseDialog', () => {
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '10' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
     expect(await screen.findByText(/SPLIT_SUM_MISMATCH/)).toBeTruthy();
+  });
+
+  const expenseOf = (over: Partial<SplitExpenseDto>): SplitExpenseDto => ({
+    id: 'e1', groupId: 'g1', description: 'Old', date: '2026-08-01', amount: serializeMoney('100'), currency: 'INR',
+    fxRate: '1', baseAmount: serializeMoney('100'), splitMode: 'EQUAL', createdById: 'u1', createdAt: '2026-08-01T00:00:00Z',
+    sourceType: 'MANUAL', deletedAt: null,
+    payers: [{ memberId: 'a', amount: serializeMoney('100'), baseAmount: serializeMoney('100') }],
+    shares: [{ memberId: 'a', amount: serializeMoney('50'), baseAmount: serializeMoney('50'), rawInput: null },
+      { memberId: 'b', amount: serializeMoney('50'), baseAmount: serializeMoney('50'), rawInput: null }],
+    ...over,
+  });
+
+  it('keeps typed input when the group prop gets a new identity', () => {
+    function Harness() {
+      const [g, setG] = useState(group);
+      return (<>
+        <button type="button" onClick={() => setG({ ...g, members: [...g.members] })}>refresh</button>
+        <AddExpenseDialog open onOpenChange={() => {}} group={g} />
+      </>);
+    }
+    renderWithProviders(<Harness />);
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Typed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'refresh', hidden: true }));
+    expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Typed');
+  });
+
+  it('edit: a payer who left is shown and blocks save', () => {
+    renderWithProviders(<AddExpenseDialog open onOpenChange={() => {}} group={group}
+      expense={expenseOf({ payers: [{ memberId: 'z', amount: serializeMoney('100'), baseAmount: serializeMoney('100') }] })} />);
+    const sel = screen.getByLabelText('Payer') as HTMLSelectElement;
+    expect(sel.options[sel.selectedIndex]!.textContent).toBe('Zed (left the group)');
+    expect((screen.getByRole('button', { name: 'Save expense' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('edit: a currency outside the list is preserved', () => {
+    renderWithProviders(<AddExpenseDialog open onOpenChange={() => {}} group={group}
+      expense={expenseOf({ currency: 'CHF', fxRate: '95' })} />);
+    expect((screen.getByLabelText('Currency') as HTMLSelectElement).value).toBe('CHF');
   });
 });
