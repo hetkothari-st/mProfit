@@ -1,7 +1,6 @@
 // apps/web/src/pages/split/GroupPage.tsx
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Plus, HandCoins } from 'lucide-react';
@@ -21,6 +20,7 @@ import { BalancePill } from './BalancePill';
 import { AddExpenseDialog } from './AddExpenseDialog';
 import { SettleUpDialog } from './SettleUpDialog';
 import { ContactDialog } from './ContactDialog';
+import { isNotFound } from './queryErrors';
 import { activityText } from './SplitHomePage';
 
 function myLine(e: SplitExpenseDto, myId: string | undefined, currency: string): string {
@@ -30,10 +30,6 @@ function myLine(e: SplitExpenseDto, myId: string | undefined, currency: string):
   const diff = paid.minus(share);
   if (diff.isZero()) return paid.isZero() ? 'not involved' : 'settled';
   return diff.gt(0) ? `you lent ${formatSplitMoney(diff, currency)}` : `you borrowed ${formatSplitMoney(diff.abs(), currency)}`;
-}
-
-function isNotFound(err: unknown): boolean {
-  return axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 403);
 }
 
 function LoadError({ text, onRetry }: { text: string; onRetry: () => void }) {
