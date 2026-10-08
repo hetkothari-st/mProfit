@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { seedContact, cleanupSplit } from '../helpers/splitFixtures.js';
-import { createGroup } from '../../src/services/split/groups.service.js';
+import { createGroup, addMember } from '../../src/services/split/groups.service.js';
 import { createExpense } from '../../src/services/split/expenses.service.js';
 import { updateSettings } from '../../src/services/split/settings.service.js';
 import { remind, sendActivityDigests, istDay } from '../../src/services/split/notify.service.js';
@@ -55,6 +55,46 @@ describe('split reminders + digests', () => {
     expect(r1.emails).toBeGreaterThanOrEqual(1);
     sent.mockClear();
     await sendActivityDigests(new Date(Date.now() + 2000));
+    expect(sent.mock.calls.filter((c) => c[0].to.startsWith('inv-split-ntf-b'))).toHaveLength(0);
+  });
+
+  it('a newly added member does not get activity from before they joined', async () => {
+    const carol = await createTestScope('split-ntf-c');
+    try {
+      const cc = await seedContact(alice.userId, 'Carol', carol.userId);
+      const g2 = await alice.runAs(() => createGroup(alice.userId, { name: 'Old', myDisplayName: 'Alice', contactIds: [] }));
+      const a2 = g2.members.find((m) => m.isMe)!.id;
+      await alice.runAs(() => createExpense(alice.userId, { groupId: g2.id, description: 'OldThing', date: '2026-10-01', amount: '100', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: a2, amount: '100' }], shares: [{ memberId: a2 }] }));
+      await new Promise((r) => setTimeout(r, 50));
+      const m = await alice.runAs(() => addMember(alice.userId, g2.id, cc.id));
+      await new Promise((r) => setTimeout(r, 50));
+      await alice.runAs(() => createExpense(alice.userId, { groupId: g2.id, description: 'NewThing', date: '2026-10-02', amount: '100', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: a2, amount: '100' }], shares: [{ memberId: a2 }, { memberId: m.id }] }));
+      sent.mockClear();
+      await sendActivityDigests(new Date(Date.now() + 1000));
+      const toCarol = sent.mock.calls.filter((c) => c[0].to.startsWith('inv-split-ntf-c'));
+      expect(toCarol).toHaveLength(1);
+      expect(toCarol[0]![0].html).toContain('NewThing');
+      expect(toCarol[0]![0].html).not.toContain('OldThing');
+      expect(toCarol[0]![0].html).toContain('Alice added');
+    } finally {
+      await cleanupSplit([carol.userId]); await carol.cleanup();
+    }
+  });
+
+  it('remind needs an email on file', async () => {
+    const dave = await seedContact(alice.userId, 'Dave');
+    const g3 = await alice.runAs(() => createGroup(alice.userId, { name: 'NoMail', myDisplayName: 'Alice', contactIds: [dave.id] }));
+    const a3 = g3.members.find((m) => m.isMe)!.id; const d3 = g3.members.find((m) => !m.isMe)!.id;
+    await alice.runAs(() => createExpense(alice.userId, { groupId: g3.id, description: 'X', date: '2026-10-01', amount: '100', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: a3, amount: '100' }], shares: [{ memberId: a3 }, { memberId: d3 }] }));
+    await expect(alice.runAs(() => remind(alice.userId, g3.id, d3))).rejects.toThrow(/SPLIT_NO_EMAIL/);
+  });
+
+  it('emailOnActivity=false gets no digest', async () => {
+    await bob.runAs(() => updateSettings(bob.userId, { emailOnActivity: false }));
+    const a4 = a;
+    await alice.runAs(() => createExpense(alice.userId, { groupId, description: 'Quiet', date: '2026-10-03', amount: '10', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: a4, amount: '10' }], shares: [{ memberId: a4 }, { memberId: b }] }));
+    sent.mockClear();
+    await sendActivityDigests(new Date(Date.now() + 3000));
     expect(sent.mock.calls.filter((c) => c[0].to.startsWith('inv-split-ntf-b'))).toHaveLength(0);
   });
 });

@@ -14,6 +14,7 @@ import { listFriends } from './ledger.service.js';
 import { renderReminderEmail, renderActivityDigestEmail, renderWeeklyDigestEmail } from './splitEmail.templates.js';
 
 const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
 const MAX_LINES = 10;
 
 /** UTC-midnight Date of the IST calendar day (IST is UTC+05:30, no DST). */
@@ -90,32 +91,37 @@ function activityLine(actor: string, kind: string, payload: unknown, groupName: 
 
 export async function sendActivityDigests(now: Date = new Date()): Promise<{ users: number; emails: number }> {
   return runAsSystem(async () => {
-    const rows = await prisma.splitMember.findMany({ where: { userId: { not: null }, leftAt: null }, select: { userId: true, groupId: true } });
-    const groupsByUser = new Map<string, string[]>();
-    for (const r of rows) groupsByUser.set(r.userId!, [...(groupsByUser.get(r.userId!) ?? []), r.groupId]);
+    const rows = await prisma.splitMember.findMany({ where: { userId: { not: null }, leftAt: null }, select: { userId: true, groupId: true, createdAt: true } });
+    // createdAt is the join time; a re-join reactivates the same row and keeps it, so a re-joined member may see some older activity.
+    const groupsByUser = new Map<string, Array<{ groupId: string; joinedAt: Date }>>();
+    for (const r of rows) groupsByUser.set(r.userId!, [...(groupsByUser.get(r.userId!) ?? []), { groupId: r.groupId, joinedAt: r.createdAt }]);
 
     let users = 0; let emails = 0;
-    for (const [userId, groupIds] of groupsByUser) {
+    for (const [userId, memberships] of groupsByUser) {
       try {
         const settings = await prisma.splitSettings.findUnique({ where: { userId }, select: { emailOnActivity: true, lastActivityEmailAt: true } });
         if (settings && !settings.emailOnActivity) continue;
         users += 1;
-        const since = settings?.lastActivityEmailAt ?? new Date(now.getTime() - HOUR_MS);
+        // Cap the window so a long outage cannot produce a giant email.
+        const since = new Date(Math.max((settings?.lastActivityEmailAt ?? new Date(now.getTime() - HOUR_MS)).getTime(), now.getTime() - 7 * DAY_MS));
         const acts = await prisma.splitActivity.findMany({
-          where: { groupId: { in: groupIds }, createdAt: { gt: since, lte: now }, actorUserId: { not: userId }, kind: { in: DIGEST_KINDS } },
+          where: { OR: memberships.map((m) => ({ groupId: m.groupId, createdAt: { gt: new Date(Math.max(since.getTime(), m.joinedAt.getTime())), lte: now } })), actorUserId: { not: userId }, kind: { in: DIGEST_KINDS } },
           orderBy: { createdAt: 'asc' },
           include: { group: { select: { name: true } } },
         });
         if (acts.length === 0) continue;
-        const [user, actors] = await Promise.all([
+        const [user, actors, actorMembers] = await Promise.all([
           prisma.user.findUnique({ where: { id: userId }, select: { email: true, isActive: true } }),
           prisma.user.findMany({ where: { id: { in: [...new Set(acts.map((a) => a.actorUserId))] } }, select: { id: true, name: true } }),
+          prisma.splitMember.findMany({ where: { groupId: { in: memberships.map((m) => m.groupId) }, userId: { in: [...new Set(acts.map((a) => a.actorUserId))] } }, select: { groupId: true, userId: true, displayName: true } }),
         ]);
         if (!user?.email || !user.isActive) continue;
-        const nameOf = new Map(actors.map((a) => [a.id, a.name?.trim() || 'Someone']));
+        const userName = new Map(actors.map((a) => [a.id, a.name?.trim() || 'Someone']));
+        const groupName = new Map(actorMembers.map((m) => [`${m.groupId}:${m.userId}`, m.displayName.trim()]));
+        const nameOf = (a: { groupId: string; actorUserId: string }) => groupName.get(`${a.groupId}:${a.actorUserId}`) || userName.get(a.actorUserId) || 'Someone';
         const mail = renderActivityDigestEmail({
           count: acts.length,
-          lines: acts.slice(0, MAX_LINES).map((a) => activityLine(nameOf.get(a.actorUserId) ?? 'Someone', a.kind, a.payload, a.group.name)),
+          lines: acts.slice(0, MAX_LINES).map((a) => activityLine(nameOf(a), a.kind, a.payload, a.group.name)),
           more: Math.max(0, acts.length - MAX_LINES),
           url: `${env.FRONTEND_URL}/split`,
         });
