@@ -34,6 +34,7 @@ import {
   Globe,
   Calculator,
   Split,
+  UsersRound,
   Target,
   HeartPulse,
   IndianRupee,
@@ -100,6 +101,7 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'CAS', to: '/cas', icon: FileDown },
       { label: 'Corporate Actions', to: '/corporate-actions', icon: Split },
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
+      { label: 'Split Expenses', to: '/split', icon: UsersRound },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
       // Hidden for now — page still reachable at /import/failures.
       // { label: 'Failures (DLQ)', to: '/import/failures', icon: Bug },
