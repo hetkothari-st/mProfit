@@ -32,11 +32,12 @@ export async function updateSettings(userId: string, patch: Partial<SplitSetting
     data.homeCurrency = c;
   }
   if (patch.defaultPortfolioId !== undefined) {
-    if (patch.defaultPortfolioId) {
-      const p = await prisma.portfolio.findFirst({ where: { id: patch.defaultPortfolioId, userId }, select: { id: true } });
+    const pid = patch.defaultPortfolioId?.trim() || null;
+    if (pid) {
+      const p = await prisma.portfolio.findFirst({ where: { id: pid, userId }, select: { id: true } });
       if (!p) throw new BadRequestError('Pick one of your own portfolios');
     }
-    data.defaultPortfolioId = patch.defaultPortfolioId;
+    data.defaultPortfolioId = pid;
   }
   if (patch.emailOnActivity !== undefined) data.emailOnActivity = patch.emailOnActivity;
   if (patch.weeklyDigest !== undefined) data.weeklyDigest = patch.weeklyDigest;
@@ -56,6 +57,19 @@ export async function upiLink(userId: string, groupId: string, toMemberId: strin
   const target = await prisma.splitMember.findFirst({ where: { id: toMemberId, groupId, leftAt: null } });
   if (!target || target.id === myId) throw new NotFoundError('Member not found');
 
+  // Privacy: a co-member's UPI ID is revealed only to someone who actually owes them.
+  const ledger = await loadLedger(groupId);
+  const owed = simplify(memberNets(ledger.expenses, ledger.settlements, ledger.memberIds))
+    .find((x) => x.fromMemberId === myId && x.toMemberId === toMemberId);
+  if (!owed) throw new BadRequestError(`SPLIT_NOTHING_OWED: you don't owe ${target.displayName} anything here`);
+
+  let value: Decimal = owed.amount;
+  if (amount !== undefined) {
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) || new Decimal(amount).lte(0)) throw new BadRequestError('SPLIT_BAD_INPUT: amount must be > 0 with at most 2 decimals');
+    value = new Decimal(amount);
+    if (value.gt(owed.amount)) throw new BadRequestError('SPLIT_BAD_INPUT: amount is more than you owe');
+  }
+
   const vpa = await runAsSystem(async () => {
     if (target.userId) {
       const s = await prisma.splitSettings.findUnique({ where: { userId: target.userId }, select: { upiId: true } });
@@ -69,17 +83,6 @@ export async function upiLink(userId: string, groupId: string, toMemberId: strin
   });
   if (!vpa) throw new NotFoundError(`SPLIT_NO_UPI: ${target.displayName} hasn't added a UPI ID`);
 
-  let value: Decimal;
-  if (amount !== undefined) {
-    if (!/^\d+(\.\d{1,2})?$/.test(amount) || new Decimal(amount).lte(0)) throw new BadRequestError('SPLIT_BAD_INPUT: amount must be > 0 with at most 2 decimals');
-    value = new Decimal(amount);
-  } else {
-    const ledger = await loadLedger(groupId);
-    const t = simplify(memberNets(ledger.expenses, ledger.settlements, ledger.memberIds))
-      .find((x) => x.fromMemberId === myId && x.toMemberId === toMemberId);
-    if (!t) throw new BadRequestError(`SPLIT_NOTHING_OWED: you don't owe ${target.displayName} anything here`);
-    value = t.amount;
-  }
   const note = `${group.name} settle-up`.slice(0, 40);
   const amt = value.toFixed(2);
   return { uri: buildUpiUri({ vpa, name: target.displayName, amount: amt, note }), payeeName: target.displayName, payeeVpa: vpa, amount: serializeMoney(value), note };
