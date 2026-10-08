@@ -6,19 +6,21 @@
  * membership under their own context before any system-context work.
  */
 import { Decimal } from 'decimal.js';
+import type { Prisma } from '@prisma/client';
 import type { SplitShareLinkDto } from '@everypaisa/shared';
 import { serializeMoney } from '@everypaisa/shared';
-import { prisma } from '../../lib/prisma.js';
+import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { getLatestFxRate } from '../../priceFeeds/fx.service.js';
 import { requireMember } from './groups.service.js';
 
+type Db = { splitExpense: Prisma.TransactionClient['splitExpense'] };
 type Desired = { portfolioId: string; date: Date; amount: Decimal; currency: string | null; inrEquivalent: Decimal | null; description: string } | null;
 
-async function myShare(expenseId: string, userId: string) {
-  const e = await prisma.splitExpense.findUnique({
+async function myShare(db: Db, expenseId: string, userId: string) {
+  const e = await db.splitExpense.findUnique({
     where: { id: expenseId },
     include: { shares: true, group: { select: { name: true, baseCurrency: true, members: { select: { id: true, userId: true } } } } },
   });
@@ -28,8 +30,8 @@ async function myShare(expenseId: string, userId: string) {
   return { e, share };
 }
 
-async function desiredFor(link: { expenseId: string; userId: string; portfolioId: string }): Promise<Desired> {
-  const r = await myShare(link.expenseId, link.userId);
+async function desiredFor(db: Db, link: { expenseId: string; userId: string; portfolioId: string }): Promise<Desired> {
+  const r = await myShare(db, link.expenseId, link.userId);
   if (!r || r.e.deletedAt || r.share.lte(0)) return null;
   const base = r.e.group.baseCurrency;
   let inr: Decimal | null = null;
@@ -45,42 +47,62 @@ async function desiredFor(link: { expenseId: string; userId: string; portfolioId
   };
 }
 
-/** Bring one link's CashFlow in line with the expense. Returns true when something changed. Runs as system. */
+/**
+ * Bring one link's CashFlow in line with the expense. Returns true when something changed. Runs as system.
+ * One transaction per link, with the link row locked, so concurrent syncs cannot create duplicate OUTFLOWs.
+ */
 async function syncOne(link: { id: string; expenseId: string; userId: string; cashFlowId: string; portfolioId: string }): Promise<boolean> {
-  const want = await desiredFor(link);
-  const have = link.cashFlowId ? await prisma.cashFlow.findUnique({ where: { id: link.cashFlowId } }) : null;
-  if (!want) {
-    if (!have) {
-      if (link.cashFlowId) await prisma.splitShareLink.update({ where: { id: link.id }, data: { cashFlowId: '' } });
-      return false;
+  return runInTransaction(async (tx) => {
+    const locked = await tx.$queryRaw<{ cashFlowId: string }[]>`SELECT "cashFlowId" FROM "SplitShareLink" WHERE id = ${link.id} FOR UPDATE`;
+    if (locked.length === 0) return false; // link removed concurrently
+    const cashFlowId = locked[0]!.cashFlowId;
+    const have = cashFlowId ? await tx.cashFlow.findUnique({ where: { id: cashFlowId } }) : null;
+
+    const r = await myShare(tx, link.expenseId, link.userId);
+    if (!r) {
+      // Expense row is gone entirely: prune the orphan link and its cash flow.
+      if (have) await tx.cashFlow.delete({ where: { id: have.id } });
+      await tx.splitShareLink.delete({ where: { id: link.id } });
+      return true;
     }
-    await prisma.cashFlow.delete({ where: { id: have.id } });
-    await prisma.splitShareLink.update({ where: { id: link.id }, data: { cashFlowId: '' } });
+    const portfolio = await tx.portfolio.findFirst({ where: { id: link.portfolioId, userId: link.userId }, select: { id: true } });
+    const want = portfolio ? await desiredFor(tx, link) : null;
+    if (!want) {
+      if (have) await tx.cashFlow.delete({ where: { id: have.id } });
+      if (cashFlowId) await tx.splitShareLink.update({ where: { id: link.id }, data: { cashFlowId: '' } });
+      return !!have || !!cashFlowId;
+    }
+    const data = {
+      portfolioId: want.portfolioId, date: want.date, type: 'OUTFLOW' as const, amount: want.amount.toFixed(4),
+      currency: want.currency, inrEquivalent: want.inrEquivalent?.toFixed(4) ?? null, description: want.description,
+    };
+    if (!have) {
+      const cf = await tx.cashFlow.create({ data, select: { id: true } });
+      await tx.splitShareLink.update({ where: { id: link.id }, data: { cashFlowId: cf.id } });
+      return true;
+    }
+    const eqDec = (x: { toString(): string } | null, y: Decimal | null) =>
+      x === null || y === null ? x === y : new Decimal(x.toString()).eq(y);
+    const same = have.portfolioId === data.portfolioId && have.date.getTime() === data.date.getTime()
+      && have.type === 'OUTFLOW' && eqDec(have.amount, want.amount) && (have.currency ?? null) === data.currency
+      && eqDec(have.inrEquivalent, want.inrEquivalent) && have.description === data.description;
+    if (same) return false;
+    await tx.cashFlow.update({ where: { id: have.id }, data });
     return true;
-  }
-  const data = {
-    portfolioId: want.portfolioId, date: want.date, type: 'OUTFLOW' as const, amount: want.amount.toFixed(4),
-    currency: want.currency, inrEquivalent: want.inrEquivalent?.toFixed(4) ?? null, description: want.description,
-  };
-  if (!have) {
-    const cf = await prisma.cashFlow.create({ data, select: { id: true } });
-    await prisma.splitShareLink.update({ where: { id: link.id }, data: { cashFlowId: cf.id } });
-    return true;
-  }
-  const eqDec = (a: { toString(): string } | null, b: Decimal | null) =>
-    a === null || b === null ? a === b : new Decimal(a.toString()).eq(b);
-  const same = have.portfolioId === data.portfolioId && have.date.getTime() === data.date.getTime()
-    && have.type === 'OUTFLOW' && eqDec(have.amount, want.amount) && (have.currency ?? null) === data.currency
-    && eqDec(have.inrEquivalent, want.inrEquivalent) && have.description === data.description;
-  if (same) return false;
-  await prisma.cashFlow.update({ where: { id: have.id }, data });
-  return true;
+  });
 }
 
 export async function syncShareLinks(expenseId: string): Promise<void> {
   await runAsSystem(async () => {
     const links = await prisma.splitShareLink.findMany({ where: { expenseId } });
-    for (const l of links) await syncOne(l);
+    for (const l of links) {
+      try {
+        await syncOne(l);
+      } catch (err) {
+        // Sanctioned catch-and-log: one bad link must not block the others or undo the caller's committed edit; nightly reconcile retries.
+        logger.error({ err, linkId: l.id }, '[split] share-link sync failed for one link');
+      }
+    }
   });
 }
 
@@ -101,13 +123,20 @@ export async function reconcileAllShareLinks(): Promise<{ checked: number; fixed
   return runAsSystem(async () => {
     const links = await prisma.splitShareLink.findMany();
     let fixed = 0;
-    for (const l of links) if (await syncOne(l)) fixed += 1;
+    for (const l of links) {
+      try {
+        if (await syncOne(l)) fixed += 1;
+      } catch (err) {
+        // Sanctioned catch-and-log: isolate failures so one bad link cannot block the rest of the reconcile.
+        logger.error({ err, linkId: l.id }, '[split] share-link sync failed for one link');
+      }
+    }
     return { checked: links.length, fixed };
   });
 }
 
 async function toDto(userId: string, expenseId: string): Promise<SplitShareLinkDto> {
-  const r = await myShare(expenseId, userId);
+  const r = await myShare({ splitExpense: prisma.splitExpense as Db['splitExpense'] }, expenseId, userId);
   if (!r) throw new NotFoundError('Expense not found');
   const link = await prisma.splitShareLink.findUnique({ where: { expenseId_userId: { expenseId, userId } } });
   return {
@@ -139,7 +168,7 @@ export async function setShareLink(userId: string, expenseId: string, input: { e
     return toDto(userId, expenseId);
   }
 
-  const r = await myShare(expenseId, userId);
+  const r = await myShare({ splitExpense: prisma.splitExpense as Db['splitExpense'] }, expenseId, userId);
   if (!r || r.share.lte(0)) throw new BadRequestError("SPLIT_NOT_IN_SPLIT: you're not part of this expense");
   const settings = await prisma.splitSettings.findUnique({ where: { userId }, select: { defaultPortfolioId: true } });
   const portfolioId = input.portfolioId ?? existing?.portfolioId ?? settings?.defaultPortfolioId ?? null;

@@ -4,7 +4,7 @@ import { runAsSystem } from '../../src/lib/requestContext.js';
 import { seedContact, cleanupSplit } from '../helpers/splitFixtures.js';
 import { createGroup } from '../../src/services/split/groups.service.js';
 import { createExpense, updateExpense, deleteExpense, restoreExpense } from '../../src/services/split/expenses.service.js';
-import { getShareLink, setShareLink, reconcileAllShareLinks } from '../../src/services/split/shareLink.service.js';
+import { getShareLink, setShareLink, reconcileAllShareLinks, syncShareLinks } from '../../src/services/split/shareLink.service.js';
 
 describe('split share → Cash Activity', () => {
   let alice: TestScope; let bob: TestScope; let groupId: string; let a: string; let b: string; let expenseId: string;
@@ -61,5 +61,33 @@ describe('split share → Cash Activity', () => {
     const r = await runAsSystem(() => reconcileAllShareLinks());
     expect(r.fixed).toBeGreaterThanOrEqual(1);
     expect((await cashFlowFor(l.cashFlowId))!.amount.toString()).toBe('600');
+  });
+
+  it('concurrent syncs create exactly one cash flow', async () => {
+    await alice.runAs(() => setShareLink(alice.userId, expenseId, { enabled: false }));
+    const l = await alice.runAs(() => setShareLink(alice.userId, expenseId, { enabled: true, portfolioId: alice.portfolioId }));
+    await runAsSystem(async () => {
+      await prisma.cashFlow.delete({ where: { id: l.cashFlowId! } });
+      await prisma.splitShareLink.updateMany({ where: { expenseId, userId: alice.userId }, data: { cashFlowId: '' } });
+    });
+    await Promise.all([syncShareLinks(expenseId), syncShareLinks(expenseId)]);
+    const rows = await runAsSystem(() => prisma.cashFlow.findMany({ where: { portfolioId: alice.portfolioId, description: { startsWith: 'Split: Rent Oct' } } }));
+    expect(rows).toHaveLength(1);
+    const link = await alice.runAs(() => getShareLink(alice.userId, expenseId));
+    expect(link.cashFlowId).toBe(rows[0]!.id);
+  });
+
+  it('a deleted portfolio does not break sync or block other links in reconcile', async () => {
+    const extra = await runAsSystem(() => prisma.portfolio.create({ data: { userId: alice.userId, name: 'Throwaway', type: 'INVESTMENT', currency: 'INR', isDefault: false } }));
+    const e2 = (await alice.runAs(() => createExpense(alice.userId, { groupId, description: 'Gas', date: '2026-10-02', amount: '200', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: b, amount: '200' }], shares: [{ memberId: a }, { memberId: b }] }))).id;
+    await alice.runAs(() => setShareLink(alice.userId, e2, { enabled: true, portfolioId: extra.id }));
+    const good = await alice.runAs(() => getShareLink(alice.userId, expenseId));
+    await runAsSystem(() => prisma.portfolio.delete({ where: { id: extra.id } }));
+    await runAsSystem(() => prisma.cashFlow.update({ where: { id: good.cashFlowId! }, data: { amount: '2' } }));
+    await expect(bob.runAs(() => updateExpense(bob.userId, e2, { description: 'Gas 2', date: '2026-10-02', amount: '300', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: b, amount: '300' }], shares: [{ memberId: a }, { memberId: b }] }))).resolves.toBeTruthy();
+    await expect(runAsSystem(() => reconcileAllShareLinks())).resolves.toBeTruthy();
+    expect((await cashFlowFor(good.cashFlowId))!.amount.toString()).toBe('600');
+    const l2 = await alice.runAs(() => getShareLink(alice.userId, e2));
+    expect(l2).toMatchObject({ enabled: true, cashFlowId: null });
   });
 });
