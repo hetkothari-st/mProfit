@@ -32,3 +32,13 @@ export function parseCcy(raw: string): string {
   if (!/^[A-Z]{3}$/.test(c)) throw new BadRequestError('Invalid currency code');
   return c;
 }
+
+export function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+export function normalizePhone(raw: string): string {
+  let digits = raw.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  return digits.length === 10 ? `91${digits}` : digits;
+}

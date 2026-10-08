@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ok, created, noContent } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import { createContact, deleteContact, listContacts, updateContact } from '../services/split/contacts.service.js';
+import { sendInvite } from '../services/split/linking.service.js';
 import {
   addMember, createGroup, getGroup, getOrCreateDirectGroup, listGroups, removeMember, updateGroup,
 } from '../services/split/groups.service.js';
@@ -78,6 +79,7 @@ export const listContactsHandler = async (req: Request, res: Response) => ok(res
 export const createContactHandler = async (req: Request, res: Response) => created(res, await createContact(uid(req), parse(contactSchema, req.body)));
 export const updateContactHandler = async (req: Request, res: Response) => ok(res, await updateContact(uid(req), p(req, 'id'), parse(contactSchema.partial(), req.body)));
 export const deleteContactHandler = async (req: Request, res: Response) => { await deleteContact(uid(req), p(req, 'id')); noContent(res); };
+export const inviteContactHandler = async (req: Request, res: Response) => ok(res, await sendInvite(uid(req), p(req, 'id')));
 
 export const listGroupsHandler = async (req: Request, res: Response) => ok(res, await listGroups(uid(req), { includeArchived: req.query['includeArchived'] === '1' }));
 export const createGroupHandler = async (req: Request, res: Response) => created(res, await createGroup(uid(req), parse(groupSchema, req.body)));

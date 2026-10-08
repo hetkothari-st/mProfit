@@ -15,6 +15,7 @@ splitRouter.get('/contacts', asyncHandler(c.listContactsHandler));
 splitRouter.post('/contacts', asyncHandler(c.createContactHandler));
 splitRouter.patch('/contacts/:id', asyncHandler(c.updateContactHandler));
 splitRouter.delete('/contacts/:id', asyncHandler(c.deleteContactHandler));
+splitRouter.post('/contacts/:id/invite', asyncHandler(c.inviteContactHandler));
 
 splitRouter.get('/groups', asyncHandler(c.listGroupsHandler));
 splitRouter.post('/groups', asyncHandler(c.createGroupHandler));
