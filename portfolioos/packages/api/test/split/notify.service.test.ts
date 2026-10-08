@@ -39,6 +39,9 @@ describe('split reminders + digests', () => {
     const mail = sent.mock.calls.at(-1)![0];
     expect(mail.subject).toBe('Reminder: you owe Alice ₹500.00');
     expect(mail.html).toContain('alice@oksbi');
+    expect(mail.html).toContain('upi://pay?pa=alice%40oksbi');
+    expect(mail.html).toContain('Pay with any UPI app');
+    expect(mail.text).toContain('UPI ID: alice@oksbi');
     await expect(alice.runAs(() => remind(alice.userId, groupId, b, now))).rejects.toThrow(/Already reminded today/);
   });
 

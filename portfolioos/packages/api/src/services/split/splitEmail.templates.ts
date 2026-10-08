@@ -5,11 +5,14 @@
  */
 import { renderInviteShell } from '../notifications/caInviteEmail.template.js';
 
+/** Attribute-safe text for the one anchor built here (the shell escapes only its own fields). */
+const escapeAttr = (v: string): string => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 export interface SplitEmail { html: string; text: string }
 
-export function renderReminderEmail(i: { senderName: string; amount: string; groupName: string; upiId: string | null; url: string }): SplitEmail {
+export function renderReminderEmail(i: { senderName: string; amount: string; groupName: string; upiId: string | null; upiUri?: string | null; url: string }): SplitEmail {
   const lines = [`${i.senderName} is asking for ${i.amount} in “${i.groupName}”.`];
-  if (i.upiId) lines.push(`Pay by UPI to ${i.upiId}`);
+  if (i.upiId) lines.push(`UPI ID: ${i.upiId}`);
   lines.push('Once you have paid, open EveryPaisa and record the payment so everyone sees it.');
   return renderInviteShell({
     title: 'Payment reminder',
@@ -18,7 +21,7 @@ export function renderReminderEmail(i: { senderName: string; amount: string; gro
     message: lines.join('\n'),
     acceptUrl: i.url,
     buttonLabel: 'Open EveryPaisa',
-    closingHtml: 'You are receiving this because someone you share expenses with sent you a reminder. You can ignore it if you have already paid.',
+    closingHtml: `${i.upiUri ? `<a href="${escapeAttr(i.upiUri)}" style="color:#18181b;font-weight:700;">Pay with any UPI app</a> (if the link does not open, use the UPI ID above).<br><br>` : ''}You are receiving this because someone you share expenses with sent you a reminder. You can ignore it if you have already paid.`,
     expiresOn: null,
   });
 }

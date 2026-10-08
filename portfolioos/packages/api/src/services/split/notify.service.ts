@@ -11,6 +11,7 @@ import { sendEmail } from '../notifications/email.service.js';
 import { requireMember, loadLedger } from './groups.service.js';
 import { memberNets, pairwiseDebts, simplify } from './balances.js';
 import { listFriends } from './ledger.service.js';
+import { buildUpiUri } from './settings.service.js';
 import { renderReminderEmail, renderActivityDigestEmail, renderWeeklyDigestEmail } from './splitEmail.templates.js';
 
 const HOUR_MS = 3_600_000;
@@ -64,11 +65,13 @@ export async function remind(userId: string, groupId: string, memberId: string, 
 
   const settings = await prisma.splitSettings.findUnique({ where: { userId }, select: { upiId: true } });
   const amount = money(owed.amount, group.baseCurrency);
+  const upiId = group.baseCurrency === 'INR' ? settings?.upiId ?? null : null;
   const mail = renderReminderEmail({
     senderName,
     amount,
     groupName: group.name,
-    upiId: group.baseCurrency === 'INR' ? settings?.upiId ?? null : null,
+    upiId,
+    upiUri: upiId ? buildUpiUri({ vpa: upiId, name: senderName, amount: owed.amount.toFixed(2), note: `${group.name} settle-up`.slice(0, 40) }) : null,
     url: `${env.FRONTEND_URL}/split/groups/${groupId}`,
   });
   const r = await sendEmail({ to: lookup.email, subject: `Reminder: you owe ${senderName} ${amount}`, html: mail.html, text: mail.text });
