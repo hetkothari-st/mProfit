@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 import { AlertTriangle, CalendarClock, Loader2, ShieldCheck, ShieldX } from 'lucide-react';
-import { formatINR } from '@everypaisa/shared';
+import { formatINR, formatDateIST } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';
@@ -61,11 +61,7 @@ const TOOLTIP_LABEL_STYLE = {
 function formatDate(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return '—';
-  return new Date(t).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatDateIST(new Date(t));
 }
 
 export interface FamilyProtectionCardProps {

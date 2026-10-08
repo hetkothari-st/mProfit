@@ -10,7 +10,7 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -157,11 +157,7 @@ function AccountTile({
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">As of</span>
             <span className="text-muted-foreground">
-              {new Date(account.balanceAsOf).toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              })}
+              {formatDateIST(account.balanceAsOf)}
               {account.balanceSource === 'auto_event' && (
                 <span className="ml-1.5 text-[10px] text-positive">· live</span>
               )}

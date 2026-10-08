@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { financialYearOf, financialYearRange, formatINR, toDecimal } from '@everypaisa/shared';
+import { financialYearOf, financialYearRange, formatINR, toDecimal, formatDateOnly } from '@everypaisa/shared';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { TallyExportButton } from '@/components/tally/TallyExportButton';
 import {
@@ -490,7 +490,7 @@ function VouchersTab() {
                   const total = v.entries.reduce((s, e) => s.plus(e.amount), toDecimal(0));
                   return (
                     <tr key={v.id} className="border-b last:border-0 hover:bg-muted/20">
-                      <td data-label="Date" className="px-4 py-3 tabular-nums text-sm">{v.date}</td>
+                      <td data-label="Date" className="px-4 py-3 tabular-nums text-sm">{formatDateOnly(v.date)}</td>
                       <td data-label="Voucher No." className="px-4 py-3 font-mono text-sm font-medium">{v.voucherNo}</td>
                       <td data-label="Type" className="px-4 py-3">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${VOUCHER_COLORS[v.type]}`}>{v.type}</span>
@@ -619,7 +619,7 @@ function LedgerTab() {
                 )}
                 {ledger.entries.map((e, i) => (
                   <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
-                    <td data-label="Date" className="px-4 py-2.5 tabular-nums">{e.date}</td>
+                    <td data-label="Date" className="px-4 py-2.5 tabular-nums">{formatDateOnly(e.date)}</td>
                     <td data-label="Voucher" className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{e.voucherNo}</td>
                     <td data-label="Narration" className="px-4 py-2.5 text-muted-foreground text-xs hidden md:table-cell">{e.narration ?? '—'}</td>
                     <td data-label="Debit" className="px-4 py-2.5 text-right tabular-nums text-positive">{e.debit ? formatINR(e.debit) : '—'}</td>

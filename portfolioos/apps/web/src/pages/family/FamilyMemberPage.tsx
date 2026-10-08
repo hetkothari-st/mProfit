@@ -12,7 +12,7 @@ import {
   Target,
   Wallet,
 } from 'lucide-react';
-import { formatINR, formatQuantity } from '@everypaisa/shared';
+import { formatINR, formatQuantity, formatDateIST } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -113,11 +113,7 @@ function formatDate(iso: string | null): string {
   if (!iso) return '—';
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return '—';
-  return new Date(t).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatDateIST(new Date(t));
 }
 
 function assetClassLabel(token: string): string {

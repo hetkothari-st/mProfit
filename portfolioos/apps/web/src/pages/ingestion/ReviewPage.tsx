@@ -29,6 +29,7 @@ import {
 import { monitoredSendersApi } from '@/api/monitoredSenders.api';
 import { apiErrorMessage } from '@/api/client';
 
+import { formatDateOnly } from '@everypaisa/shared';
 type Tab = 'pending' | 'projected' | 'rejected';
 
 const TAB_STATUSES: Record<Tab, CanonicalEventStatus[]> = {
@@ -403,10 +404,10 @@ function EventsTable({
                   onClick={() => onRowClick(r)}
                 >
                   <td className="hidden px-4 py-2 w-28 text-xs text-muted-foreground sm:table-cell">
-                    {r.eventDate}
+                    {formatDateOnly(r.eventDate)}
                   </td>
                   <td className="px-3 py-2 sm:px-4">
-                    <div className="mb-0.5 text-[11px] text-muted-foreground sm:hidden">{r.eventDate}</div>
+                    <div className="mb-0.5 text-[11px] text-muted-foreground sm:hidden">{formatDateOnly(r.eventDate)}</div>
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="inline-block shrink-0 px-1.5 py-0.5 rounded bg-muted text-[10px] font-medium tracking-wide">
                         {r.eventType}

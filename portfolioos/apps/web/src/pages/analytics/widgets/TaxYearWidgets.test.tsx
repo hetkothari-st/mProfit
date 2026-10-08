@@ -63,8 +63,7 @@ describe('AdvanceTaxCard', () => {
     expect(await screen.findByText(/you owe about/)).toBeTruthy();
     // The same figure appears in the sentence and on the March instalment.
     expect(screen.getAllByText('₹1,00,000.00').length).toBeGreaterThan(0);
-    // Month abbreviation is the runtime's ("Sept" on this ICU), so match loosely.
-    for (const d of [/15 Jun 2026/, /15 Sept? 2026/, /15 Dec 2026/, /15 Mar 2027/]) {
+    for (const d of [/15\/06\/2026/, /15\/09\/2026/, /15\/12\/2026/, /15\/03\/2027/]) {
       expect(screen.getByText(d), String(d)).toBeTruthy();
     }
   });
@@ -81,7 +80,7 @@ describe('AdvanceTaxCard', () => {
     api.advance.mockResolvedValue(report({ totalTax: '4200', belowThreshold: true }));
     renderCard();
     expect(await screen.findByText(/nothing to pay in instalments/)).toBeTruthy();
-    expect(screen.queryByText('15 Jun 2026')).toBeNull();
+    expect(screen.queryByText('15/06/2026')).toBeNull();
   });
 
   it('says so plainly when no gains were booked', async () => {

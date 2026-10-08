@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
 
+import { formatDateIST } from '@everypaisa/shared';
 // ---------------------------------------------------------------------------
 // Nudge banner helpers
 // ---------------------------------------------------------------------------
@@ -175,11 +176,7 @@ function AutoFetchSection() {
                         <>
                           {' '}
                           · refreshed{' '}
-                          {new Date(a.lastRefreshedAt).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: '2-digit',
-                          })}
+                          {formatDateIST(a.lastRefreshedAt)}
                         </>
                       )}
                     </p>

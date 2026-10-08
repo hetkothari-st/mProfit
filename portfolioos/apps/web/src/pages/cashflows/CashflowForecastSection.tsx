@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { formatINR, toDecimal } from '@everypaisa/shared';
+import { formatINR, toDecimal, formatDateIST } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cashflowsApi, type ForecastEvent } from '@/api/cashflows.api';
 
@@ -135,11 +135,7 @@ export function CashflowForecastSection() {
                     <div className="font-medium truncate">{e.description}</div>
                     <div className="text-[11px] text-muted-foreground">
                       {SOURCE_LABEL[e.source]} ·{' '}
-                      {new Date(e.date).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatDateIST(e.date)}
                     </div>
                   </div>
                   <div

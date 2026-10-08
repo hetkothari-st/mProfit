@@ -9,6 +9,7 @@ import { getApiBaseUrl } from '@/api/baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
 import { caApi, type CaDocumentRow } from '@/api/ca.api';
 
+import { formatDateIST } from '@everypaisa/shared';
 /**
  * Every document a client holds, in one place.
  *
@@ -169,11 +170,7 @@ export function ClientDocumentsTab({ clientId }: { clientId: string }) {
                 </p>
               </div>
               <span className="numeric tabular-nums shrink-0 text-[11.5px] text-muted-foreground">
-                {new Date(d.createdAt).toLocaleDateString('en-IN', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })}
+                {formatDateIST(d.createdAt)}
               </span>
             </label>
           ))}

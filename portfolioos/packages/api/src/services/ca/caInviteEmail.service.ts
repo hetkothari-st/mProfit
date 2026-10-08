@@ -37,6 +37,7 @@ import {
 import { recordCaAudit } from './caAudit.service.js';
 import { openInviteToken } from '../../lib/inviteToken.js';
 
+import { formatDateIST } from '@everypaisa/shared';
 /** How many times one invitation may be mailed, counting the first. */
 const MAX_SENDS_PER_INVITE = 5;
 /** How many invitation emails one advisor may send in an hour, across clients. */
@@ -73,7 +74,7 @@ export interface InviteEmailDraft {
 }
 
 function prettyDate(d: Date): string {
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+  return formatDateIST(d);
 }
 
 /**

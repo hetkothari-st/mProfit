@@ -12,7 +12,7 @@ import { importsApi } from '@/api/imports.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';
-import { IMPORT_STATUS_LABELS } from '@everypaisa/shared';
+import { IMPORT_STATUS_LABELS, formatDateTimeIST } from '@everypaisa/shared';
 import { ImportErrorDialog } from './ImportErrorDialog';
 import { ImportDropzone } from './ImportDropzone';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
@@ -300,7 +300,7 @@ export function ImportPage() {
                           {j.failedRows ?? '—'}
                         </td>
                         <td data-label="Uploaded" className="px-4 py-2 text-xs text-muted-foreground">
-                          {new Date(j.createdAt).toLocaleString()}
+                          {formatDateTimeIST(j.createdAt)}
                         </td>
                         <td data-fullrow className="px-4 py-2">
                           <div className="flex flex-wrap justify-end gap-1">

@@ -3,7 +3,7 @@
  * "coming up" list, the policy page and the emergency sheet all describe a
  * premium the same way.
  */
-import { addMonthsIso, canHaveCriticalIllness, formatINR, PREMIUM_FREQUENCY_MONTHS } from '@everypaisa/shared';
+import { addMonthsIso, canHaveCriticalIllness, formatINR, PREMIUM_FREQUENCY_MONTHS, formatDateIST } from '@everypaisa/shared';
 import type { InsurancePolicyDTO } from '@/api/insurance.api';
 
 export const POLICY_TYPE_LABELS: Record<string, string> = {
@@ -99,12 +99,7 @@ export function criticalIllnessMeta(
 /** "2026-10-01" or a full ISO timestamp → "1 Oct 2026". */
 export function formatDay(iso: string | null | undefined): string {
   if (!iso) return '—';
-  return new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
+  return formatDateIST(`${iso.slice(0, 10)}T00:00:00Z`);
 }
 
 export const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;

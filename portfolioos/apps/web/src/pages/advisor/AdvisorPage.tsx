@@ -22,6 +22,7 @@ import { AllocationDriftCard } from './widgets/AllocationDriftCard';
 import { RecommendationFeed } from './widgets/RecommendationFeed';
 import { ApprovedProductsPanel } from './ApprovedProductsPanel';
 
+import { formatDateTimeIST } from '@everypaisa/shared';
 const CATEGORY_TONE: Record<RiskCategory, string> = {
   CONSERVATIVE: 'border-[hsl(210_75%_50%/0.4)] text-[hsl(210_75%_45%)] dark:text-[hsl(210_85%_70%)]',
   BALANCED: 'border-accent/45 text-accent-ink',
@@ -265,10 +266,7 @@ function RiskProfileSummary({
 
         <p className="text-[11px] text-muted-foreground">
           Assessed{' '}
-          {new Date(profile.assessedAt).toLocaleString('en-IN', {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-          })}
+          {formatDateTimeIST(profile.assessedAt)}
         </p>
       </CardContent>
     </Card>

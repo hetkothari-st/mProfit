@@ -24,14 +24,7 @@ import { assetsApi } from '@/api/assets.api';
 import { transactionsApi } from '@/api/transactions.api';
 import { apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
-import {
-  formatINR,
-  formatPercent,
-  Decimal,
-  toDecimal,
-  serializeMoney,
-  serializeQuantity,
-} from '@everypaisa/shared';
+import { formatINR, formatPercent, Decimal, toDecimal, serializeMoney, serializeQuantity, formatDateOnly } from '@everypaisa/shared';
 import type { HoldingRow, Money, Quantity, TransactionDTO } from '@everypaisa/shared';
 import { summariseHoldings, unpricedHint } from '@/lib/holdingsSummary';
 
@@ -645,7 +638,7 @@ function StockTransactions({
                 >
                   <td data-label="Date" className="pl-3 pr-2 py-1.5 whitespace-nowrap tabular-nums text-muted-foreground">
                     <span className="text-accent/60 mr-1.5">▸</span>
-                    {txn.tradeDate}
+                    {formatDateOnly(txn.tradeDate)}
                   </td>
                   <td data-label="Type" className="px-2 py-1.5">
                     <TxnTypePill type={txn.transactionType} />

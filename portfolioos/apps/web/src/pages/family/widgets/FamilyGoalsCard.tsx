@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { CalendarClock, Loader2, Target, TrendingUp } from 'lucide-react';
-import { formatINR } from '@everypaisa/shared';
+import { formatINR, formatDateIST } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Money } from '@/components/ui/money';
@@ -33,11 +33,7 @@ function daysUntil(iso: string): number | null {
 function formatDate(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return '—';
-  return new Date(t).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatDateIST(new Date(t));
 }
 
 /** "in 8 months" / "overdue by 12 days" — the phrasing the sort is built on. */

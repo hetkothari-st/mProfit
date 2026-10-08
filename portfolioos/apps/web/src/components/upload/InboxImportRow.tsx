@@ -1,7 +1,7 @@
 import { CheckCircle2, XCircle, Loader2, AlertTriangle, Eye, FileText, FileSpreadsheet, FileImage } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { GmailDiscoveredDocDTO } from '@everypaisa/shared';
-import { GMAIL_DOC_STATUS_LABELS } from '@everypaisa/shared';
+import { GMAIL_DOC_STATUS_LABELS, formatDateIST } from '@everypaisa/shared';
 
 const STATUS_CLASSES: Record<string, string> = {
   CLASSIFYING: 'bg-blue-500/10 text-blue-600',
@@ -55,7 +55,7 @@ export function InboxImportRow({
       </td>
       <td data-label="From" className="px-2 py-2 text-xs text-muted-foreground truncate max-w-[200px]">{doc.fromAddress}</td>
       <td data-label="Date" className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">
-        {new Date(doc.receivedAt).toLocaleDateString()}
+        {formatDateIST(doc.receivedAt)}
       </td>
       <td data-label="Type" className="px-2 py-2 text-xs text-muted-foreground">{doc.classifiedDocType ?? '—'}</td>
       <td data-label="Confidence" className="px-2 py-2 text-xs text-muted-foreground tabular-nums">

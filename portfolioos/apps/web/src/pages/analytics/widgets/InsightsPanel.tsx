@@ -17,6 +17,7 @@ import type {
 import { apiErrorMessage } from '@/api/client';
 import { AnalyticsInfo } from '../AnalyticsInfo';
 
+import { formatDateIST } from '@everypaisa/shared';
 const CATEGORY_LABEL: Record<InsightCategory, string> = {
   diversification: 'Diversification',
   tax_optimisation: 'Tax optimisation',
@@ -209,7 +210,7 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
           </CardTitle>
           {open && okPayload?.fromCache && (
             <span className="shrink-0 whitespace-nowrap text-[10px] uppercase tracking-kerned text-muted-foreground border rounded-full px-2 py-0.5">
-              Cached · {new Date(okPayload.generatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+              Cached · {formatDateIST(okPayload.generatedAt)}
             </span>
           )}
         </div>

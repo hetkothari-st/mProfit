@@ -1,10 +1,11 @@
 import type { CaClient } from '@/api/ca.api';
 
+import { formatDateIST } from '@everypaisa/shared';
 /** Plain helpers behind the access components, kept apart so fast refresh stays whole. */
 
 export const fmtDate = (iso: string | null): string =>
   iso
-    ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    ? formatDateIST(iso)
     : '';
 
 export type EditMode = 'VIEW' | 'PARTIAL' | 'FULL';

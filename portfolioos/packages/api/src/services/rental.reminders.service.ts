@@ -33,6 +33,7 @@ import { sendViaGmailApi, getGmailSendAccount } from './notifications/gmailSende
 import { markOverdueReceipts } from './rental.service.js';
 import { openText, revealTenancy, tenantContactColumns } from './piiAtRest.service.js';
 
+import { formatDateIST } from '@everypaisa/shared';
 export const REMINDER_LEAD_DAYS = [5, 3, 1, 0] as const;
 export type ReminderLeadDay = (typeof REMINDER_LEAD_DAYS)[number];
 
@@ -72,11 +73,7 @@ function formatINRPlain(d: Prisma.Decimal): string {
 }
 
 function formatIsoDate(d: Date): string {
-  return d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatDateIST(d);
 }
 
 function buildTemplate(vars: TemplateVars): { subject: string; body: string; smsBody: string } {

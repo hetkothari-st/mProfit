@@ -136,8 +136,8 @@ describe('GroupPage', () => {
     await screen.findByText('Lunch');
     const heads = screen.getAllByTestId('expense-day').map((h) => h.textContent ?? '');
     expect(heads).toHaveLength(2);
-    expect(heads[0]).toContain('2 Oct');
-    expect(heads[1]).toContain('1 Oct');
+    expect(heads[0]).toContain('02/10/2026');
+    expect(heads[1]).toContain('01/10/2026');
   });
 
   const SETTLEMENT = { id: 's1', groupId: 'g1', fromMemberId: 'b', toMemberId: 'a', amount: '100.0000', currency: 'INR', fxRate: '1', baseAmount: '100.0000', method: 'CASH', date: '2026-10-02', createdById: 'u2', createdAt: '2026-10-02T00:00:00Z', deletedAt: null };

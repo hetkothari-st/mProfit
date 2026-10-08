@@ -14,6 +14,7 @@
  *   Each finding is written as a `security_alert` audit row and not repeated
  *   for the same subject within the hour.
  */
+import { formatDateTimeIST } from '@everypaisa/shared';
 import type { Request } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
@@ -98,7 +99,7 @@ export function notifyIfNewDevice(userId: string, req: Request): void {
       prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } }),
     );
     if (!user) return;
-    const when = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    const when = formatDateTimeIST(new Date());
     await sendEmail({
       to: user.email,
       subject: 'New sign-in to your EveryPaisa account',

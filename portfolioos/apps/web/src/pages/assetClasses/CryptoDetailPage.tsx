@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Pencil, TrendingUp, TrendingDown, Sparkles, ExternalLink, Wallet, Network,
 } from 'lucide-react';
-import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@everypaisa/shared';
+import { Decimal, formatINR, type HoldingRow, type TransactionDTO, formatDateOnly } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { transactionsApi } from '@/api/transactions.api';
@@ -279,7 +279,7 @@ export function CryptoDetailPage() {
                           {TXN_LABEL[t.transactionType] ?? t.transactionType}
                         </span>
                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3" />{t.tradeDate}
+                          <Calendar className="h-3 w-3" />{formatDateOnly(t.tradeDate)}
                         </span>
                       </div>
                       <p className="text-sm mt-0.5 tabular-nums text-muted-foreground">

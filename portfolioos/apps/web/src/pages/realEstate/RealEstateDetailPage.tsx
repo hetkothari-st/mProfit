@@ -15,13 +15,7 @@ import {
   KeyRound,
   Undo2,
 } from 'lucide-react';
-import {
-  Decimal,
-  formatINR,
-  totalCostBasisOf,
-  PROPERTY_TYPE_LABELS,
-  PROPERTY_STATUS_LABELS,
-} from '@everypaisa/shared';
+import { Decimal, formatINR, totalCostBasisOf, PROPERTY_TYPE_LABELS, PROPERTY_STATUS_LABELS, formatDateIST } from '@everypaisa/shared';
 import type { OwnedPropertyDTO } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -50,11 +44,7 @@ function daysSince(iso: string): number {
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatDateIST(iso);
 }
 
 export function RealEstateDetailPage() {

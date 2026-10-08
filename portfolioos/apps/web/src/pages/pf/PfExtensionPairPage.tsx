@@ -21,6 +21,7 @@ import type { ExtensionPairingDTO } from '@/api/pf';
 import { apiErrorMessage } from '@/api/client';
 import toast from 'react-hot-toast';
 
+import { formatDateIST } from '@everypaisa/shared';
 // ---------------------------------------------------------------------------
 // Countdown hook
 // ---------------------------------------------------------------------------
@@ -255,12 +256,12 @@ export function PfExtensionPairPage() {
                 <div className="text-sm">
                   <p className="font-medium">Extension ···{p.bearerLast8 ?? '????????'}</p>
                   <p className="text-xs text-muted-foreground">
-                    Paired {new Date(p.pairedAt!).toLocaleDateString('en-IN')}
+                    Paired {formatDateIST(p.pairedAt!)}
                     {p.lastUsedAt && (
                       <>
                         {' '}
                         · last used{' '}
-                        {new Date(p.lastUsedAt).toLocaleDateString('en-IN')}
+                        {formatDateIST(p.lastUsedAt)}
                       </>
                     )}
                   </p>

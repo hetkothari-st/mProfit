@@ -180,7 +180,7 @@ describe('Loan card', () => {
     expect(figure(card, 'Principal')).toMatch(/50,00,000\.00/);
     expect(figure(card, 'Tenure')).toBe('240 months');
     expect(figure(card, 'EMI')).toMatch(/43,391\.16/);
-    expect(figure(card, 'Next EMI')).toMatch(/05 Oct 2026/);
+    expect(figure(card, 'Next EMI')).toMatch(/05\/10\/2026/);
     expect(figure(card, 'EMIs left')).toBe('212');
     // Principal + interest paid to date, from the loan summary.
     expect(figure(card, 'Paid so far')).toMatch(/12,14,999\.88/);

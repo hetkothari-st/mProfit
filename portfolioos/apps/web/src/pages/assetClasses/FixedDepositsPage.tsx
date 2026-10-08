@@ -10,7 +10,7 @@ import {
   PiggyBank,
   Plus,
 } from 'lucide-react';
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import type { AssetClass, HoldingRow, TransactionDTO } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
@@ -118,11 +118,7 @@ function rdMaturityValue(
 function formatShortDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
-    return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    return formatDateIST(`${iso}T00:00:00Z`);
   } catch {
     return iso;
   }

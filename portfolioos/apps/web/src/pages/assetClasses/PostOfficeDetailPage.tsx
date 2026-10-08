@@ -10,7 +10,7 @@ import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
   CartesianGrid, ReferenceLine, PieChart, Pie, Cell,
 } from 'recharts';
-import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@everypaisa/shared';
+import { Decimal, formatINR, type HoldingRow, type TransactionDTO, formatDateOnly } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
@@ -714,9 +714,9 @@ export function PostOfficeDetailPage() {
                   <span className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rotate-45 bg-accent ring-2 ring-card" style={{ left: `calc(${elapsedPct}% - 6px)` }} />
                 </div>
                 <div className="mt-2 flex items-center justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
-                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{openDate}</span>
+                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatDateOnly(openDate)}</span>
                   <span className="text-foreground/70 font-medium">{Math.round(elapsedPct)}% elapsed</span>
-                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{maturity}</span>
+                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatDateOnly(maturity)}</span>
                 </div>
               </div>
             )}
@@ -737,7 +737,7 @@ export function PostOfficeDetailPage() {
           <Stat
             label={isSavings ? 'Balance' : isPayout ? 'Principal at Maturity' : 'At Maturity'}
             value={isSavings ? (currentValue ? formatINR(currentValue.toString()) : '—') : (maturityValue ? formatINR(maturityValue.toString()) : '—')}
-            sub={maturity ? `on ${maturity}` : undefined}
+            sub={maturity ? `on ${formatDateOnly(maturity)}` : undefined}
             icon={Hash}
           />
         </div>

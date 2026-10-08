@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatINR, formatCurrency, Decimal } from '@everypaisa/shared';
+import { formatINR, formatCurrency, Decimal, formatDateOnly } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -179,7 +179,7 @@ export function LrsTab() {
                 <tbody>
                   {remittancesQ.data.map((r: LrsRemittanceDTO) => (
                     <tr key={r.id} className="border-b border-border/50 last:border-0">
-                      <td data-label="Date" className="px-3 py-2 font-mono text-xs">{r.remittanceDate.slice(0, 10)}</td>
+                      <td data-label="Date" className="px-3 py-2 font-mono text-xs">{formatDateOnly(r.remittanceDate)}</td>
                       <td data-label="Purpose" className="px-3 py-2">{r.purpose}</td>
                       <td data-label="Bank" className="px-3 py-2 text-muted-foreground">{r.bankName ?? '—'}</td>
                       <td data-label="Foreign" className="px-3 py-2 text-right font-mono tabular-nums">

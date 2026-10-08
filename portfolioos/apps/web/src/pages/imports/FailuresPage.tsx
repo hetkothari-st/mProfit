@@ -35,7 +35,7 @@ import type {
   IngestionFailureDTO,
   IngestionResolveAction,
 } from '@everypaisa/shared';
-import { feedLabel } from '@everypaisa/shared';
+import { feedLabel, formatDateTimeIST } from '@everypaisa/shared';
 import {
   INGESTION_RESOLVE_ACTIONS,
   INGESTION_RESOLVE_ACTION_LABELS,
@@ -240,7 +240,7 @@ export function FailuresPage() {
                           </div>
                         </td>
                         <td data-label="When" className="px-4 py-2 text-xs text-muted-foreground">
-                          {new Date(r.createdAt).toLocaleString()}
+                          {formatDateTimeIST(r.createdAt)}
                         </td>
                         <td data-label="Status" className="px-4 py-2">
                           {r.resolvedAt ? (
@@ -293,13 +293,13 @@ export function FailuresPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 <Field label="Adapter" value={`${detail.sourceAdapter} v${detail.adapterVersion}`} mono />
-                <Field label="Created" value={new Date(detail.createdAt).toLocaleString()} />
+                <Field label="Created" value={formatDateTimeIST(detail.createdAt)} />
                 <Field label="Source" value={detail.sourceRef} mono wrap />
                 <Field
                   label="Status"
                   value={
                     detail.resolvedAt
-                      ? `${detail.resolvedAction ? INGESTION_RESOLVE_ACTION_LABELS[detail.resolvedAction] : 'Resolved'} · ${new Date(detail.resolvedAt).toLocaleString()}`
+                      ? `${detail.resolvedAction ? INGESTION_RESOLVE_ACTION_LABELS[detail.resolvedAction] : 'Resolved'} · ${formatDateTimeIST(detail.resolvedAt)}`
                       : 'Unresolved'
                   }
                 />
@@ -500,12 +500,7 @@ function FeedFailures() {
                       </div>
                     </td>
                     <td data-label="When" className="whitespace-nowrap px-4 py-2.5 text-muted-foreground tabular-nums">
-                      {new Date(row.startedAt).toLocaleString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatDateTimeIST(row.startedAt)}
                     </td>
                     <td data-label="Imported" className="whitespace-nowrap px-4 py-2.5 tabular-nums">
                       {/* The comparison IS the finding, so both numbers are

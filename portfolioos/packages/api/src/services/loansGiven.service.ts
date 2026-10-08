@@ -19,7 +19,7 @@ import { Prisma } from '@prisma/client';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
-import { serializeMoney } from '@everypaisa/shared';
+import { serializeMoney, formatDateOnly } from '@everypaisa/shared';
 
 export const LOAN_GIVEN_ENTRY_KINDS = [
   'REPAYMENT',
@@ -723,7 +723,7 @@ export async function generateLoanGivenAlerts(userId?: string): Promise<number> 
         title: isOverdue
           ? `${loan.borrowerName}'s repayment is overdue by ${days} day${days !== 1 ? 's' : ''}`
           : `${loan.borrowerName}'s repayment is due in ${days} day${days !== 1 ? 's' : ''}`,
-        description: `₹${amount} ${isOverdue ? 'was due on' : 'due on'} ${summary.nextDue.date}`,
+        description: `₹${amount} ${isOverdue ? 'was due on' : 'due on'} ${formatDateOnly(summary.nextDue.date)}`,
         triggerDate: new Date(),
         metadata: { key, loanGivenId: loan.id, dueDate: summary.nextDue.date, amount: summary.nextDue.amount },
       },

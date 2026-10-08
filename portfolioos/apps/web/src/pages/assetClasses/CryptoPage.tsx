@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   Bitcoin, Plus, Loader2, TrendingUp, TrendingDown, Sparkles, Pencil, ArrowUpRight,
 } from 'lucide-react';
-import { Decimal, formatINR, type HoldingRow, type TransactionDTO } from '@everypaisa/shared';
+import { Decimal, formatINR, type HoldingRow, type TransactionDTO, formatDateOnly } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
@@ -414,7 +414,7 @@ export function CryptoPage() {
                   const sym = (txn.symbol ?? txn.isin ?? txn.assetName ?? '??').toString().toUpperCase().slice(0, 4);
                   return (
                     <tr key={txn.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                      <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">{txn.tradeDate}</td>
+                      <td data-label="Date" className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDateOnly(txn.tradeDate)}</td>
                       <td data-label="Coin" className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <CoinAvatar symbol={sym} size="sm" />

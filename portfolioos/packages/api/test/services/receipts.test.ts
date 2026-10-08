@@ -176,7 +176,7 @@ describe('a premium receipt', () => {
     expect(labels).toContain('Policy: Jeevan Anand');
     // The date is in the header; repeating it as a field was noise.
     expect(labels).not.toContain('Paid on');
-    expect(labels).toContain('Covering: 01 Apr 2025 to 31 Mar 2026');
+    expect(labels).toContain('Covering: 01/04/2025 to 31/03/2026');
   });
 });
 

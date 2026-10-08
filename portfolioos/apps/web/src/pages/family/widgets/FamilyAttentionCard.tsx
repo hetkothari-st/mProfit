@@ -1,5 +1,5 @@
 import { CheckCircle2, Loader2, Siren } from 'lucide-react';
-import { formatINR } from '@everypaisa/shared';
+import { formatINR, formatDateIST } from '@everypaisa/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';
@@ -43,11 +43,7 @@ function timing(iso: string | null, daysUntil: number | null): Timing | null {
   if (Number.isNaN(t)) return null;
 
   const days = daysUntil ?? Math.round((t - Date.now()) / DAY_MS);
-  const exact = new Date(t).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  const exact = formatDateIST(new Date(t));
 
   if (days < 0) return { short: `${Math.abs(days)}d late`, exact, overdue: true };
   if (days === 0) return { short: 'today', exact, overdue: false };

@@ -23,6 +23,7 @@
  * because the code assumed the CA drives every transition.
  */
 
+import { formatDateOnly } from '@everypaisa/shared';
 import crypto from 'node:crypto';
 import { inviteTokenHash, newInviteToken } from '../../lib/inviteToken.js';
 import type { AssetClass, Client } from '@prisma/client';
@@ -155,14 +156,14 @@ export async function getCaScope(callerId: string, clientId: string): Promise<Ca
   const today = istToday();
   if (client.accessFrom && client.accessFrom > today) {
     throw new ForbiddenError(
-      `This access starts on ${client.accessFrom.toISOString().slice(0, 10)}.`,
+      `This access starts on ${formatDateOnly(client.accessFrom.toISOString().slice(0, 10))}.`,
     );
   }
   if (client.accessUntil && client.accessUntil < today) {
     // Said plainly, because the CA can do nothing about it themselves: the
     // client sets the window and only the client can extend it.
     throw new ForbiddenError(
-      `This access ended on ${client.accessUntil.toISOString().slice(0, 10)}. Ask the client to extend it.`,
+      `This access ended on ${formatDateOnly(client.accessUntil.toISOString().slice(0, 10))}. Ask the client to extend it.`,
     );
   }
 

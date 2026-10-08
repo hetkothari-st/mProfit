@@ -5,7 +5,7 @@
  * month arithmetic, and chart formatting identically. Money math uses
  * decimal.js throughout (project invariant §3.2) — never JS Number.
  */
-import { Decimal } from '@everypaisa/shared';
+import { Decimal, formatDateIST } from '@everypaisa/shared';
 
 export const TOOLTIP_STYLE: React.CSSProperties = {
   background: 'hsl(var(--popover))',
@@ -46,7 +46,7 @@ export function shortMonth(iso: string): string {
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateIST(iso);
 }
 
 export const INR_COMPACT = (v: number): string => {

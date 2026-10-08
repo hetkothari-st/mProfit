@@ -22,6 +22,7 @@ import { brokerApi, type BrokerId, type BrokerStatus } from '@/api/fo.api';
 import { connectorsApi } from '@/api/connectors.api';
 import { apiErrorMessage } from '@/api/client';
 
+import { formatDateTimeIST } from '@everypaisa/shared';
 interface BrokerMeta {
   id: BrokerId;
   name: string;
@@ -318,12 +319,12 @@ export function ConnectorsPage() {
 
                 {status?.lastSyncedAt && (
                   <div className="text-xs text-muted-foreground">
-                    Last sync: {new Date(status.lastSyncedAt).toLocaleString()}
+                    Last sync: {formatDateTimeIST(status.lastSyncedAt)}
                   </div>
                 )}
                 {status?.tokenExpiresAt && (
                   <div className="text-xs text-muted-foreground">
-                    Token expires: {new Date(status.tokenExpiresAt).toLocaleString()}
+                    Token expires: {formatDateTimeIST(status.tokenExpiresAt)}
                   </div>
                 )}
               </CardContent>
@@ -370,7 +371,7 @@ export function ConnectorsPage() {
                       <div className="text-xs text-muted-foreground">
                         {a.publicUserId ? `User: ${a.publicUserId} · ` : ''}
                         {a.lastSyncAt
-                          ? `Last synced ${new Date(a.lastSyncAt).toLocaleString()}`
+                          ? `Last synced ${formatDateTimeIST(a.lastSyncAt)}`
                           : 'Never synced'}
                       </div>
                       {a.lastError && (

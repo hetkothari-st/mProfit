@@ -21,6 +21,7 @@ import { fmtNum } from '../../export.service.js';
 import { buildTaxSummary, taxHarvestReport } from '../../tax.service.js';
 import { buildCapitalGainsStatement } from './capitalGains.js';
 
+import { formatDateIST } from '@everypaisa/shared';
 export interface CapitalGainsTaxReportParams {
   userId: string;
   portfolioIds: string[]; // empty = all
@@ -98,9 +99,7 @@ export async function streamCapitalGainsTaxReport(
       const brandX = drawBrandLockup(doc, C, ML, 12, 17);
       doc.font('Helvetica').fontSize(10).fillColor(C.muted)
         .text(subtitle, brandX, 32, { lineBreak: false });
-      const genStr = `Generated: ${new Date().toLocaleDateString('en-IN', {
-        year: 'numeric', month: 'short', day: 'numeric',
-      })}`;
+      const genStr = `Generated: ${formatDateIST(new Date())}`;
       doc.font('Helvetica').fontSize(8.5).fillColor(C.muted)
         .text(genStr, ML, 14, { align: 'right', width: pageW, lineBreak: false });
       doc.font('Helvetica').fontSize(8).fillColor(C.muted)
@@ -116,7 +115,7 @@ export async function streamCapitalGainsTaxReport(
         ['Member', pdfSafe(params.userName ?? 'Investor')],
         ['PAN', pdfSafe(params.pan ?? 'Not provided')],
         ['Financial Year', pdfSafe(params.fy)],
-        ['Report as of', new Date().toLocaleDateString('en-IN')],
+        ['Report as of', formatDateIST(new Date())],
       ];
       const cellW = pageW / parts.length;
       parts.forEach(([label, value], i) => {

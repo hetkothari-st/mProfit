@@ -20,7 +20,7 @@ import {
   Camera,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
@@ -398,7 +398,7 @@ function PropertyCard({
           </span>
           {nextDue && (
             <span className="opacity-80 normal-case tracking-normal text-[10px] font-mono">
-              Next · {new Date(nextDue.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+              Next · {formatDateIST(nextDue.dueDate)}
             </span>
           )}
         </div>

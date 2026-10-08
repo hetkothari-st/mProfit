@@ -30,7 +30,7 @@ import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/cn';
-import { formatINR, toDecimal } from '@everypaisa/shared';
+import { formatINR, toDecimal, formatDateIST } from '@everypaisa/shared';
 import {
   caApi,
   caReceiptsApi,
@@ -95,7 +95,7 @@ const TAB_GROUPS: { key: Tab; label: string; icon: typeof BookOpen }[][] = [
 ];
 
 const fmtDay = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  formatDateIST(iso);
 
 /** "COMPLETED_WITH_ERRORS" → "Completed with errors". */
 const sentence = (s: string) => {

@@ -3,7 +3,7 @@ import { useQuery, useQueries, useMutation } from '@tanstack/react-query';
 import { FlaskConical, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { formatINR, formatPercent, toDecimal } from '@everypaisa/shared';
+import { formatINR, formatPercent, toDecimal, formatDateOnly } from '@everypaisa/shared';
 import type { HoldingRow } from '@everypaisa/shared';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { analyticsApi } from '@/api/analytics.api';
@@ -142,7 +142,7 @@ export function WhatIfSimulator() {
             {sale.lotsMatched > 0 && (
               <p className="text-[11px] text-muted-foreground">
                 Matched {sale.lotsMatched} purchase {sale.lotsMatched === 1 ? 'lot' : 'lots'} oldest-first (FIFO)
-                {sale.oldestMatchedBuyDate ? `, from ${sale.oldestMatchedBuyDate}` : ''} · cost basis{' '}
+                {sale.oldestMatchedBuyDate ? `, from ${formatDateOnly(sale.oldestMatchedBuyDate)}` : ''} · cost basis{' '}
                 {formatINR(sale.costBasis)}
               </p>
             )}

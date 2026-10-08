@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -220,11 +220,7 @@ export function BankAccountDetailPage() {
               {account.balanceAsOf && (
                 <p className="text-xs text-muted-foreground mt-1">
                   As of{' '}
-                  {new Date(account.balanceAsOf).toLocaleDateString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
+                  {formatDateIST(account.balanceAsOf)}
                   {account.balanceSource === 'auto_event' && (
                     <span className="ml-2 inline-flex items-center gap-1 text-positive">
                       <span className="h-1.5 w-1.5 rounded-full bg-positive animate-pulse" />
@@ -341,11 +337,7 @@ export function BankAccountDetailPage() {
                         return formatINR(str);
                       }}
                       labelFormatter={(v) =>
-                        new Date(v).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })
+                        formatDateIST(v)
                       }
                       contentStyle={{
                         background: 'hsl(var(--card))',
@@ -394,11 +386,7 @@ export function BankAccountDetailPage() {
                 {[...snapshots].reverse().map((s) => (
                   <tr key={s.id} className="border-b last:border-0 hover:bg-muted/20">
                     <td data-label="Date" className="px-4 py-2.5 text-muted-foreground">
-                      {new Date(s.asOfDate).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatDateIST(s.asOfDate)}
                     </td>
                     <td data-label="Balance" className="px-4 py-2.5 text-right tabular-nums font-medium">
                       {formatINR(s.balance)}
@@ -452,11 +440,7 @@ export function BankAccountDetailPage() {
                   return (
                     <tr key={cf.id} className="border-b last:border-0 hover:bg-muted/20">
                       <td data-label="Date" className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                        {new Date(cf.date).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {formatDateIST(cf.date)}
                       </td>
                       <td data-label="Description" className="px-4 py-2.5">
                         <div className="flex items-center gap-2">

@@ -1,12 +1,9 @@
 import type { LoanGivenEntryKind, Relationship } from '@/api/loansGiven.api';
 
+import { formatDateOnly } from '@everypaisa/shared';
 export function formatDay(iso: string | null | undefined): string {
   if (!iso) return '—';
-  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatDateOnly(iso);
 }
 
 const RELATIONSHIP_LABELS: Record<Relationship, string> = {

@@ -22,7 +22,7 @@ import {
   Receipt,
   MapPin,
 } from 'lucide-react';
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -296,10 +296,7 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
         </td>
         <td data-label="Due" className="px-4 py-3 text-sm tabular-nums whitespace-nowrap">
           <div className="text-foreground">
-            {new Date(receipt.dueDate).toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-            })}
+            {formatDateIST(receipt.dueDate)}
           </div>
           <div className="text-[10.5px] text-muted-foreground">
             {new Date(receipt.dueDate).toLocaleDateString('en-IN', { weekday: 'short' })}
@@ -1127,11 +1124,7 @@ export function RentalDetailPage() {
                   {(property.expenses ?? []).map((e) => (
                     <tr key={e.id} className="hover:bg-muted/30 transition-colors group">
                       <td data-label="Date" className="px-4 py-3 tabular-nums text-muted-foreground whitespace-nowrap">
-                        {new Date(e.paidOn).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {formatDateIST(e.paidOn)}
                       </td>
                       <td data-label="Type" className="px-4 py-3">{EXPENSE_LABELS[e.expenseType] ?? e.expenseType}</td>
                       <td data-label="Description" className="px-4 py-3 text-muted-foreground hidden md:table-cell">

@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/auth.store';
-import { Decimal, toDecimal } from '@everypaisa/shared';
+import { Decimal, toDecimal, formatDateOnly } from '@everypaisa/shared';
 import {
   taxApi,
   type TaxGainsReport,
@@ -710,8 +710,8 @@ function GainsView({
                   <tr key={i} className={cn('border-b', r.needsReview && 'bg-amber-50/30')}>
                     <td data-label="Asset" className="p-2">{r.assetName || r.isin || '—'}</td>
                     <td data-label="ISIN" className="p-2 text-xs text-muted-foreground">{r.isin ?? '—'}</td>
-                    <td data-label="Buy" className="p-2">{r.buyDate.slice(0, 10)}</td>
-                    <td data-label="Sell" className="p-2">{r.sellDate.slice(0, 10)}</td>
+                    <td data-label="Buy" className="p-2">{formatDateOnly(r.buyDate)}</td>
+                    <td data-label="Sell" className="p-2">{formatDateOnly(r.sellDate)}</td>
                     <td data-label="Qty" className="p-2 text-right">{fmt(r.quantity, 4)}</td>
                     <td data-label="Cost" className="p-2 text-right">{fmt(r.buyAmount)}</td>
                     <td data-label="Proceeds" className="p-2 text-right">{fmt(r.sellAmount)}</td>
@@ -833,7 +833,7 @@ function Schedule43View({ data, loading }: { data: Schedule43Report | undefined;
                     <td data-label="Underlying" className="p-2">{r.underlying}</td>
                     <td data-label="Type" className="p-2 text-xs">{r.instrumentType}</td>
                     <td data-label="Strike" className="p-2">{r.strikePrice ?? '—'}</td>
-                    <td data-label="Expiry" className="p-2">{r.expiryDate.slice(0, 10)}</td>
+                    <td data-label="Expiry" className="p-2">{formatDateOnly(r.expiryDate)}</td>
                     <td data-label="Side" className="p-2 text-xs">{r.side}</td>
                     <td data-label="P&L" className={cn('p-2 text-right', signTone(r.realizedPnl))}>
                       {fmt(r.realizedPnl)}
@@ -884,7 +884,7 @@ function IncomeView({ data, loading }: { data: TaxIncomeReport | undefined; load
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.id} className="border-b">
-                  <td data-label="Date" className="p-2">{r.date.slice(0, 10)}</td>
+                  <td data-label="Date" className="p-2">{formatDateOnly(r.date)}</td>
                   <td data-label="Type" className="p-2 text-xs">{r.type}</td>
                   <td data-label="Portfolio" className="p-2 text-xs">{r.portfolioName}</td>
                   <td data-label="Asset" className="p-2">{r.assetName}</td>
@@ -1019,7 +1019,7 @@ function HarvestView({ data, loading }: { data: TaxHarvestReport | undefined; lo
                           : days <= 30 ? 'text-amber-600 dark:text-amber-400 font-medium'
                           : 'text-muted-foreground';
                         return (
-                          <span className={urgency} title={`Oldest buy: ${r.oldestBuyDate}`}>
+                          <span className={urgency} title={`Oldest buy: ${formatDateOnly(r.oldestBuyDate)}`}>
                             {days}d
                           </span>
                         );
@@ -1207,8 +1207,8 @@ function GrandfatheringView({
                   <tr key={i} className={cn('border-b', r.needsUserInput && 'bg-amber-50/30')}>
                     <td data-label="Asset" className="p-2">{r.assetName || '—'}</td>
                     <td data-label="ISIN" className="p-2 text-xs text-muted-foreground">{r.isin ?? '—'}</td>
-                    <td data-label="Buy Date" className="p-2">{r.buyDate.slice(0, 10)}</td>
-                    <td data-label="Sell Date" className="p-2">{r.sellDate.slice(0, 10)}</td>
+                    <td data-label="Buy Date" className="p-2">{formatDateOnly(r.buyDate)}</td>
+                    <td data-label="Sell Date" className="p-2">{formatDateOnly(r.sellDate)}</td>
                     <td data-label="Qty" className="p-2 text-right">{fmt(r.quantity, 4)}</td>
                     <td data-label="Cost" className="p-2 text-right">{fmt(r.buyAmount)}</td>
                     <td data-label="Proceeds" className="p-2 text-right">{fmt(r.sellAmount)}</td>
