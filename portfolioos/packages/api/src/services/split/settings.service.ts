@@ -87,3 +87,35 @@ export async function upiLink(userId: string, groupId: string, toMemberId: strin
   const amt = value.toFixed(2);
   return { uri: buildUpiUri({ vpa, name: target.displayName, amount: amt, note }), payeeName: target.displayName, payeeVpa: vpa, amount: serializeMoney(value), note };
 }
+
+/**
+ * Creditor side: a link that pays the CALLER, to send to someone who owes them.
+ * Uses only the caller's own UPI ID, so nothing about anyone else is revealed.
+ */
+export async function requestLink(userId: string, groupId: string, fromMemberId: string, amount?: string): Promise<SplitUpiLinkDto> {
+  const { memberId: myId } = await requireMember(userId, groupId);
+  const group = await prisma.splitGroup.findUniqueOrThrow({ where: { id: groupId }, select: { name: true, baseCurrency: true } });
+  if (group.baseCurrency !== 'INR') throw new BadRequestError('SPLIT_UPI_INR_ONLY: UPI works only for INR groups');
+  const debtor = await prisma.splitMember.findFirst({ where: { id: fromMemberId, groupId, leftAt: null } });
+  if (!debtor || debtor.id === myId) throw new NotFoundError('Member not found');
+
+  const ledger = await loadLedger(groupId);
+  const owed = simplify(memberNets(ledger.expenses, ledger.settlements, ledger.memberIds))
+    .find((x) => x.fromMemberId === fromMemberId && x.toMemberId === myId);
+  if (!owed) throw new BadRequestError(`SPLIT_NOTHING_OWED: ${debtor.displayName} doesn't owe you anything here`);
+
+  let value: Decimal = owed.amount;
+  if (amount !== undefined) {
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) || new Decimal(amount).lte(0)) throw new BadRequestError('SPLIT_BAD_INPUT: amount must be > 0 with at most 2 decimals');
+    value = new Decimal(amount);
+    if (value.gt(owed.amount)) throw new BadRequestError('SPLIT_BAD_INPUT: amount is more than they owe');
+  }
+
+  const mine = await prisma.splitSettings.findUnique({ where: { userId }, select: { upiId: true } });
+  if (!mine?.upiId) throw new BadRequestError('SPLIT_NO_UPI: add your UPI ID in Split settings first');
+  const me = await prisma.splitMember.findUniqueOrThrow({ where: { id: myId }, select: { displayName: true } });
+
+  const note = `${group.name} settle-up`.slice(0, 40);
+  const amt = value.toFixed(2);
+  return { uri: buildUpiUri({ vpa: mine.upiId, name: me.displayName, amount: amt, note }), payeeName: me.displayName, payeeVpa: mine.upiId, amount: serializeMoney(value), note };
+}

@@ -46,6 +46,7 @@ splitRouter.get('/activity', asyncHandler(c.activityHandler));
 splitRouter.get('/settings', asyncHandler(c.getSettingsHandler));
 splitRouter.put('/settings', asyncHandler(c.updateSettingsHandler));
 splitRouter.get('/groups/:id/upi-link', asyncHandler(c.upiLinkHandler));
+splitRouter.get('/groups/:id/request-link', asyncHandler(c.requestLinkHandler));
 
 splitRouter.get('/groups/:id/labels', asyncHandler(c.listLabelsHandler));
 splitRouter.post('/groups/:id/labels', asyncHandler(c.createLabelHandler));

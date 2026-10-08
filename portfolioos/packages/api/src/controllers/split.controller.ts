@@ -15,7 +15,7 @@ import { createSettlement, deleteSettlement, listSettlements, updateSettlement }
 import { listLabels, createLabel, deleteLabel, setExpenseLabels } from '../services/split/labels.service.js';
 import { putReceipt, getReceipt, deleteReceipt } from '../services/split/receipts.service.js';
 import { listComments, addComment, deleteComment } from '../services/split/comments.service.js';
-import { getSettings, updateSettings, upiLink } from '../services/split/settings.service.js';
+import { getSettings, updateSettings, upiLink, requestLink } from '../services/split/settings.service.js';
 import { getShareLink, setShareLink } from '../services/split/shareLink.service.js';
 import { groupBalances, listActivity, listFriends } from '../services/split/ledger.service.js';
 
@@ -129,6 +129,12 @@ export const upiLinkHandler = async (req: Request, res: Response) => {
   const amount = typeof req.query['amount'] === 'string' ? req.query['amount'] : undefined;
   if (!to) throw new BadRequestError('to is required');
   ok(res, await upiLink(uid(req), p(req, 'id'), to, amount));
+};
+export const requestLinkHandler = async (req: Request, res: Response) => {
+  const from = typeof req.query['from'] === 'string' ? req.query['from'] : '';
+  const amount = typeof req.query['amount'] === 'string' ? req.query['amount'] : undefined;
+  if (!from) throw new BadRequestError('from is required');
+  ok(res, await requestLink(uid(req), p(req, 'id'), from, amount));
 };
 
 const labelBody = z.object({ name: z.string().max(60), color: z.string().max(7) });

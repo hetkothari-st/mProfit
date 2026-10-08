@@ -3,7 +3,7 @@ import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { seedContact, cleanupSplit } from '../helpers/splitFixtures.js';
 import { createGroup } from '../../src/services/split/groups.service.js';
-import { getSettings, updateSettings, upiLink, buildUpiUri } from '../../src/services/split/settings.service.js';
+import { getSettings, updateSettings, upiLink, requestLink, buildUpiUri } from '../../src/services/split/settings.service.js';
 
 const memberOf = (ms: Array<{ id: string; displayName: string }>, n: string) => ms.find((m) => m.displayName === n)!.id;
 
@@ -86,5 +86,41 @@ describe('split settings + UPI link', () => {
   it('buildUpiUri encodes values', () => {
     expect(buildUpiUri({ vpa: 'a.b@ok', name: 'A & B', amount: '1.50', note: 'x/y' }))
       .toBe('upi://pay?pa=a.b%40ok&pn=A%20%26%20B&am=1.50&cu=INR&tn=x%2Fy');
+  });
+
+  describe('requestLink (creditor side)', () => {
+    // In group Pune Bob paid 60 for both: Alice owes Bob 30. Bob is owed -> Bob requests from Alice.
+    it('uses the callers own VPA and the owed amount', async () => {
+      const aliceInPune = g2Members.find((m) => m.displayName === 'Alice')!.id;
+      await runAsSystem(() => prisma.splitSettings.upsert({ where: { userId: bob.userId }, create: { userId: bob.userId, upiId: 'bobpay@oksbi' }, update: { upiId: 'bobpay@oksbi' } }));
+      // Bob must be a real member of Pune (linked contact) so he can call.
+      const l = await bob.runAs(() => requestLink(bob.userId, g2, aliceInPune));
+      const url = new URL(l.uri.replace('upi://', 'http://x/'));
+      expect(url.searchParams.get('pa')).toBe('bobpay@oksbi');
+      expect(url.searchParams.get('am')).toBe('30.00');
+      expect(l.payeeVpa).toBe('bobpay@oksbi');
+      expect(l.note).toBe('Pune settle-up');
+    });
+    it('needs the caller to have a UPI ID', async () => {
+      await runAsSystem(() => prisma.splitSettings.deleteMany({ where: { userId: bob.userId } }));
+      const aliceInPune = g2Members.find((m) => m.displayName === 'Alice')!.id;
+      await expect(bob.runAs(() => requestLink(bob.userId, g2, aliceInPune))).rejects.toThrow(/SPLIT_NO_UPI/);
+    });
+    it('rejects someone who is not owing the caller', async () => {
+      const bobInPune = g2Members.find((m) => m.displayName === 'Bob')!.id;
+      await expect(alice.runAs(() => requestLink(alice.userId, g2, bobInPune))).rejects.toThrow(/SPLIT_NOTHING_OWED/);
+    });
+    it('rejects more than owed', async () => {
+      await runAsSystem(() => prisma.splitSettings.upsert({ where: { userId: bob.userId }, create: { userId: bob.userId, upiId: 'bobpay@oksbi' }, update: { upiId: 'bobpay@oksbi' } }));
+      const aliceInPune = g2Members.find((m) => m.displayName === 'Alice')!.id;
+      await expect(bob.runAs(() => requestLink(bob.userId, g2, aliceInPune, '31'))).rejects.toThrow(/more than they owe/);
+      expect((await bob.runAs(() => requestLink(bob.userId, g2, aliceInPune, '10'))).uri).toContain('am=10.00');
+    });
+    it('is not available to non-members', async () => {
+      const outsider = await createTestScope('split-set2-o');
+      try {
+        await expect(outsider.runAs(() => requestLink(outsider.userId, g2, g2Members[0]!.id))).rejects.toThrow(/not found/i);
+      } finally { await outsider.cleanup(); }
+    });
   });
 });
