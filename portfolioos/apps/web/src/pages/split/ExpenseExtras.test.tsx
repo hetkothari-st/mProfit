@@ -77,6 +77,41 @@ describe('ExpenseExtras', () => {
     expect(api.fetchReceipt).toHaveBeenCalledWith('e1');
   });
 
+  it('replacing a receipt refetches the image, revokes the old URL and refreshes the list', async () => {
+    let n = 0;
+    URL.createObjectURL = vi.fn(() => `blob:${++n}`);
+    api.fetchReceipt.mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
+    api.uploadReceipt.mockResolvedValue({ hasReceipt: true, mime: 'image/png' });
+    const { container, queryClient } = render({ hasReceipt: true });
+    const spy = vi.spyOn(queryClient, 'invalidateQueries');
+    expect((await screen.findByAltText('Receipt')).getAttribute('src')).toBe('blob:1');
+    fireEvent.change(container.querySelector('input[type=file]') as HTMLInputElement, { target: { files: [file('n.png', 'image/png')] } });
+    await waitFor(() => expect(screen.getByAltText('Receipt').getAttribute('src')).toBe('blob:2'));
+    expect(api.fetchReceipt).toHaveBeenCalledTimes(2);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:1');
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['split', 'group', 'g1', 'expenses'] });
+  });
+
+  it('receipt fetch failure shows the error with Retry', async () => {
+    api.fetchReceipt.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
+    render({ hasReceipt: true });
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByAltText('Receipt')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('comments and labels show load errors, not empty text', async () => {
+    api.listComments.mockRejectedValue(new Error('x'));
+    api.listLabels.mockRejectedValue(new Error('x'));
+    render();
+    expect(await screen.findByText(/Couldn't load comments\./)).toBeTruthy();
+    expect(await screen.findByText(/Couldn't load labels\./)).toBeTruthy();
+    expect(screen.queryByText('No comments yet.')).toBeNull();
+    expect(screen.queryByText('No labels yet.')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(2);
+  });
+
   it('rejects an 11 MB receipt and uploads a PNG', async () => {
     api.uploadReceipt.mockResolvedValue({ hasReceipt: true, mime: 'image/png' });
     const { container } = render();

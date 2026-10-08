@@ -37,12 +37,18 @@ function ReceiptCard({ expense }: { expense: SplitExpenseDto }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [view, setView] = useState<{ url: string; isPdf: boolean } | null>(null);
-  const refresh = () => void qc.invalidateQueries({ queryKey: SPLIT_KEYS.expense(expense.id) });
+  const [version, setVersion] = useState(0);
+  const [fetchTry, setFetchTry] = useState(0);
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: SPLIT_KEYS.expense(expense.id) });
+    void qc.invalidateQueries({ queryKey: SPLIT_KEYS.expenses(expense.groupId) });
+  };
 
   useEffect(() => {
     if (!expense.hasReceipt) { setView(null); return; }
     let cancelled = false;
     let made: string | null = null;
+    setError(null);
     splitApi.fetchReceipt(expense.id)
       .then((blob) => {
         if (cancelled) return;
@@ -54,11 +60,11 @@ function ReceiptCard({ expense }: { expense: SplitExpenseDto }) {
       cancelled = true;
       if (made) URL.revokeObjectURL(made);
     };
-  }, [expense.id, expense.hasReceipt]);
+  }, [expense.id, expense.hasReceipt, version, fetchTry]);
 
   const upload = useMutation({
     mutationFn: (f: File) => splitApi.uploadReceipt(expense.id, f),
-    onSuccess: () => { setError(null); refresh(); toast.success('Receipt saved'); },
+    onSuccess: () => { setError(null); setVersion((v) => v + 1); refresh(); toast.success('Receipt saved'); },
     onError: (err) => setError(splitErrorMessage(err, "Couldn't upload the receipt")),
   });
   const remove = useMutation({
@@ -78,6 +84,7 @@ function ReceiptCard({ expense }: { expense: SplitExpenseDto }) {
   return (
     <Card><CardContent className="p-4 space-y-3">
       <h2 className="text-sm font-semibold">Receipt</h2>
+      {expense.hasReceipt && !view && !error && <p className="text-sm text-muted-foreground">Loading receipt…</p>}
       {expense.hasReceipt && view && (view.isPdf
         ? <a href={view.url} target="_blank" rel="noreferrer" className="text-sm underline">Open PDF</a>
         : <img src={view.url} alt="Receipt" className="max-h-72 max-w-full rounded-md border object-contain" />)}
@@ -95,7 +102,12 @@ function ReceiptCard({ expense }: { expense: SplitExpenseDto }) {
         </div>
       )}
       {!expense.hasReceipt && readOnly && <p className="text-sm text-muted-foreground">No receipt.</p>}
-      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+      {error && (
+        <div className="flex items-center gap-2">
+          <p role="alert" className="text-xs text-destructive">{error}</p>
+          {expense.hasReceipt && !view && <Button type="button" variant="outline" size="sm" onClick={() => setFetchTry((n) => n + 1)}>Retry</Button>}
+        </div>
+      )}
       <ConfirmDialog open={confirmRemove} onOpenChange={setConfirmRemove} title="Remove this receipt?"
         confirmLabel="Remove" destructive onConfirm={() => remove.mutate()} />
     </CardContent></Card>
@@ -112,7 +124,10 @@ function LabelsCard({ expense, group }: Props) {
 
   const setLabels = useMutation({
     mutationFn: (ids: string[]) => splitApi.setExpenseLabels(expense.id, ids),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: SPLIT_KEYS.expense(expense.id) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: SPLIT_KEYS.expense(expense.id) });
+      void qc.invalidateQueries({ queryKey: SPLIT_KEYS.expenses(expense.groupId) });
+    },
     onError: (err) => toast.error(splitErrorMessage(err, "Couldn't update labels")),
   });
   const create = useMutation({
@@ -145,7 +160,12 @@ function LabelsCard({ expense, group }: Props) {
             </button>
           );
         })}
-        {shown.length === 0 && <p className="text-sm text-muted-foreground">{readOnly ? 'No labels.' : 'No labels yet.'}</p>}
+        {labels.isPending && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {labels.isError && (
+          <p className="text-sm text-destructive">Couldn't load labels.{' '}
+            <Button type="button" variant="outline" size="sm" onClick={() => void labels.refetch()}>Retry</Button></p>
+        )}
+        {labels.isSuccess && shown.length === 0 && <p className="text-sm text-muted-foreground">{readOnly ? 'No labels.' : 'No labels yet.'}</p>}
       </div>
       {!readOnly && (adding ? (
         <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) create.mutate(); }}>
@@ -205,7 +225,12 @@ function CommentsCard({ expense }: { expense: SplitExpenseDto }) {
           <p className="whitespace-pre-wrap break-words">{c.body}</p>
         </div>
       ))}
-      {comments.data?.length === 0 && <p className="text-sm text-muted-foreground">No comments yet.</p>}
+      {comments.isPending && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {comments.isError && (
+        <p className="text-sm text-destructive">Couldn't load comments.{' '}
+          <Button type="button" variant="outline" size="sm" onClick={() => void comments.refetch()}>Retry</Button></p>
+      )}
+      {comments.isSuccess && comments.data.length === 0 && <p className="text-sm text-muted-foreground">No comments yet.</p>}
       {!readOnly && (
         <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); if (body.trim()) post.mutate(); }}>
           <textarea aria-label="Add a comment" value={body} maxLength={1000} rows={2}
@@ -236,6 +261,9 @@ function CashActivityCard({ expense }: { expense: SplitExpenseDto }) {
     onSuccess: () => {
       setNeedPortfolio(false);
       void qc.invalidateQueries({ queryKey: SPLIT_KEYS.shareLink(expense.id) });
+      void qc.invalidateQueries({ queryKey: SPLIT_KEYS.expenses(expense.groupId) });
+      // Cash Activity pages: CashFlowsPage, bank-account detail, forecast.
+      for (const k of ['cashflows', 'bank-account-cashflows', 'cashflow-forecast']) void qc.invalidateQueries({ queryKey: [k] });
     },
     onError: (err) => toast.error(splitErrorMessage(err, "Couldn't update Cash Activity")),
   });

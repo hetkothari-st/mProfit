@@ -14,5 +14,6 @@ export function renderWithProviders(ui: ReactElement, opts: { route?: string; pa
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
-  );  return { ...result, queryClient: qc };
+  );
+  return { ...result, queryClient: qc };
 }
