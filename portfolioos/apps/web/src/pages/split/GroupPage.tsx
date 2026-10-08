@@ -1,6 +1,7 @@
 // apps/web/src/pages/split/GroupPage.tsx
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Plus, HandCoins } from 'lucide-react';
@@ -31,23 +32,53 @@ function myLine(e: SplitExpenseDto, myId: string | undefined, currency: string):
   return diff.gt(0) ? `you lent ${formatSplitMoney(diff, currency)}` : `you borrowed ${formatSplitMoney(diff.abs(), currency)}`;
 }
 
-function ExpensesTab({ group, expenses }: { group: SplitGroupDto; expenses: SplitExpenseDto[] }) {
-  const me = group.members.find((m) => m.isMe);
-  if (expenses.length === 0) return <p className="text-sm text-muted-foreground py-6 text-center">No expenses yet.</p>;
+function isNotFound(err: unknown): boolean {
+  return axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 403);
+}
+
+function LoadError({ text, onRetry }: { text: string; onRetry: () => void }) {
   return (
-    <Card><CardContent className="p-0 divide-y">
-      {expenses.map((e) => (
-        <Link key={e.id} to={`/split/expenses/${e.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40">
-          <div className="min-w-0">
-            <p className="font-medium truncate">{e.description}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatDateIST(`${e.date}T00:00:00+05:30`)} · {e.payers.length === 1 ? `${memberName(group.members, e.payers[0]!.memberId)} paid` : `${e.payers.length} people paid`} {formatSplitMoney(e.amount, e.currency)}
-            </p>
-          </div>
-          <span className="text-sm text-muted-foreground whitespace-nowrap">{myLine(e, me?.id, group.baseCurrency)}</span>
-        </Link>
+    <p className="text-sm text-muted-foreground py-6 text-center">
+      {text} <Button variant="link" size="sm" onClick={onRetry}>Retry</Button>
+    </p>
+  );
+}
+
+function ExpensesTab({ group, expenses, status, onRetry }: {
+  group: SplitGroupDto; expenses: SplitExpenseDto[]; status: 'pending' | 'error' | 'success'; onRetry: () => void;
+}) {
+  const me = group.members.find((m) => m.isMe);
+  if (status === 'pending') return <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>;
+  if (status === 'error') return <LoadError text="Couldn't load expenses." onRetry={onRetry} />;
+  if (expenses.length === 0) return <p className="text-sm text-muted-foreground py-6 text-center">No expenses yet.</p>;
+  // Consecutive grouping: the API returns expenses ordered by date desc.
+  const days: { date: string; items: SplitExpenseDto[] }[] = [];
+  for (const e of expenses) {
+    const last = days[days.length - 1];
+    if (last && last.date === e.date) last.items.push(e);
+    else days.push({ date: e.date, items: [e] });
+  }
+  return (
+    <div className="space-y-3">
+      {days.map((d) => (
+        <section key={d.date}>
+          <h3 data-testid="expense-day" className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{formatDateIST(`${d.date}T00:00:00+05:30`)}</h3>
+          <Card><CardContent className="p-0 divide-y">
+            {d.items.map((e) => (
+              <Link key={e.id} to={`/split/expenses/${e.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40">
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{e.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {e.payers.length === 1 ? `${memberName(group.members, e.payers[0]!.memberId)} paid` : `${e.payers.length} people paid`} {formatSplitMoney(e.amount, e.currency)}
+                  </p>
+                </div>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">{myLine(e, me?.id, group.baseCurrency)}</span>
+              </Link>
+            ))}
+          </CardContent></Card>
+        </section>
       ))}
-    </CardContent></Card>
+    </div>
   );
 }
 
@@ -114,12 +145,17 @@ export function GroupPage() {
   const { id = '' } = useParams();
   const [adding, setAdding] = useState(false);
   const [settle, setSettle] = useState<{ from?: string; to?: string; amount?: string } | null>(null);
-  const group = useQuery({ queryKey: SPLIT_KEYS.group(id), queryFn: () => splitApi.getGroup(id) });
+  const group = useQuery({ queryKey: SPLIT_KEYS.group(id), queryFn: () => splitApi.getGroup(id),
+    retry: (count, err) => !isNotFound(err) && count < 2 });
   const expenses = useQuery({ queryKey: SPLIT_KEYS.expenses(id), queryFn: () => splitApi.listExpenses(id) });
   const balances = useQuery({ queryKey: SPLIT_KEYS.balances(id), queryFn: () => splitApi.balances(id) });
   const activity = useQuery({ queryKey: SPLIT_KEYS.activity(id), queryFn: () => splitApi.activity(id) });
 
-  if (group.isError) return <p className="text-sm text-muted-foreground">This group doesn’t exist or you’re no longer in it. <Link className="underline" to="/split">Back to Split Expenses</Link></p>;
+  if (group.isError) {
+    return isNotFound(group.error)
+      ? <p className="text-sm text-muted-foreground">This group doesn’t exist or you’re no longer in it. <Link className="underline" to="/split">Back to Split Expenses</Link></p>
+      : <LoadError text="Couldn't load this group." onRetry={() => void group.refetch()} />;
+  }
   if (!group.data) return <p className="text-sm text-muted-foreground">Loading…</p>;
   const g = group.data;
 
@@ -148,8 +184,11 @@ export function GroupPage() {
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
-        <TabsContent value="expenses" className="pt-3"><ExpensesTab group={g} expenses={expenses.data ?? []} /></TabsContent>
+        <TabsContent value="expenses" className="pt-3"><ExpensesTab group={g} expenses={expenses.data ?? []} status={expenses.status} onRetry={() => void expenses.refetch()} /></TabsContent>
         <TabsContent value="balances" className="pt-3 space-y-3">
+          {balances.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {balances.isError && <LoadError text="Couldn't load balances." onRetry={() => void balances.refetch()} />}
+          {balances.isSuccess && <>
           <Card><CardContent className="p-0 divide-y">
             {(balances.data?.nets ?? []).filter((n) => !toDecimal(n.net).isZero() || !g.members.find((m) => m.id === n.memberId)?.leftAt).map((n) => (
               <div key={n.memberId} className="flex items-center justify-between px-4 py-3">
@@ -159,7 +198,7 @@ export function GroupPage() {
             ))}
           </CardContent></Card>
           <h3 className="text-sm font-semibold">{balances.data?.simplified ? 'Suggested payments' : 'Who owes whom'}</h3>
-          {(balances.data?.transfers ?? []).length === 0 && <p className="text-sm text-muted-foreground">Everyone is settled up.</p>}
+          {balances.data.transfers.length === 0 && <p className="text-sm text-muted-foreground">Everyone is settled up.</p>}
           <Card><CardContent className="p-0 divide-y">
             {(balances.data?.transfers ?? []).map((t, i) => (
               <div key={i} className="flex items-center justify-between gap-3 px-4 py-3">
@@ -168,8 +207,10 @@ export function GroupPage() {
               </div>
             ))}
           </CardContent></Card>
+          </>}
         </TabsContent>
         <TabsContent value="activity" className="pt-3">
+          {activity.isError && <LoadError text="Couldn't load activity." onRetry={() => void activity.refetch()} />}
           <Card><CardContent className="p-0 divide-y">
             {(activity.data ?? []).map((a) => (
               <div key={a.id} className="px-4 py-3">

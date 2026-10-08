@@ -78,4 +78,52 @@ describe('GroupPage', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
     expect(screen.queryByRole('button', { name: 'Remove Bob' })).toBeNull();
   });
+
+  it('balances load failure is not shown as settled', async () => {
+    seed();
+    api.balances.mockRejectedValue(new Error('boom'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
+    expect(await screen.findByText(/Couldn't load balances\./)).toBeTruthy();
+    expect(screen.queryByText('Everyone is settled up.')).toBeNull();
+  });
+
+  it('expenses load failure shows an error', async () => {
+    seed();
+    api.listExpenses.mockRejectedValue(new Error('boom'));
+    renderPage();
+    expect(await screen.findByText(/Couldn't load expenses\./)).toBeTruthy();
+    expect(screen.queryByText('No expenses yet.')).toBeNull();
+  });
+
+  it('group 404 shows not-found text', async () => {
+    seed();
+    api.getGroup.mockRejectedValue({ isAxiosError: true, message: 'nf', response: { status: 404, data: {} } });
+    renderPage();
+    expect(await screen.findByText(/doesn’t exist or you’re no longer in it/)).toBeTruthy();
+  });
+
+  it('group 500 shows a retryable error', async () => {
+    seed();
+    api.getGroup.mockRejectedValue({ isAxiosError: true, message: 'x', response: { status: 500, data: {} } });
+    renderPage();
+    expect(await screen.findByText(/Couldn't load this group\./, undefined, { timeout: 4000 })).toBeTruthy();
+    expect(screen.queryByText(/doesn’t exist/)).toBeNull();
+  });
+
+  it('groups expenses under date headings in order', async () => {
+    seed();
+    const base = (await api.listExpenses())[0];
+    api.listExpenses.mockResolvedValue([
+      { ...base, id: 'e1', description: 'Hotel', date: '2026-10-02' },
+      { ...base, id: 'e2', description: 'Taxi', date: '2026-10-02' },
+      { ...base, id: 'e3', description: 'Lunch', date: '2026-10-01' },
+    ]);
+    renderPage();
+    await screen.findByText('Lunch');
+    const heads = screen.getAllByTestId('expense-day').map((h) => h.textContent ?? '');
+    expect(heads).toHaveLength(2);
+    expect(heads[0]).toContain('2 Oct');
+    expect(heads[1]).toContain('1 Oct');
+  });
 });
