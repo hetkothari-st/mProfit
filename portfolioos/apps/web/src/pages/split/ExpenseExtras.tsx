@@ -270,7 +270,15 @@ function CashActivityCard({ expense }: { expense: SplitExpenseDto }) {
   });
 
   const l = link.data;
-  if (!l) return <Card><CardContent className="p-4 text-sm text-muted-foreground">{link.isError ? "Couldn't load Cash Activity." : 'Loading…'}</CardContent></Card>;
+  if (!l) {
+    return (
+      <Card><CardContent className="p-4 text-sm text-muted-foreground">
+        {link.isError
+          ? <>Couldn't load Cash Activity. <Button type="button" variant="outline" size="sm" onClick={() => void link.refetch()}>Retry</Button></>
+          : 'Loading…'}
+      </CardContent></Card>
+    );
+  }
   const noShare = toDecimal(l.myShare).isZero();
   const enabled = l.enabled;
   const defaultPortfolio = l.portfolioId ?? settings.data?.defaultPortfolioId ?? null;

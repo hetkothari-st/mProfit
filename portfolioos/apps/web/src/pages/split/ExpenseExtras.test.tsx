@@ -169,6 +169,14 @@ describe('ExpenseExtras', () => {
     await waitFor(() => expect(api.setShareLink).toHaveBeenCalledWith('e1', { enabled: true, portfolioId: 'p1' }));
   });
 
+  it('Cash Activity: a load error offers Retry', async () => {
+    api.getShareLink.mockRejectedValueOnce({ isAxiosError: true, message: 'x', response: { status: 500, data: { error: 'boom' } } });
+    render();
+    expect(await screen.findByText(/Couldn't load Cash Activity\./)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Retry' }).at(-1)!);
+    expect(await screen.findByRole('switch', { name: 'Add my share (₹500.00) to Cash Activity' })).toBeTruthy();
+  });
+
   it('Cash Activity: not part of this split when my share is 0', async () => {
     api.getShareLink.mockResolvedValue({ expenseId: 'e1', enabled: false, portfolioId: null, cashFlowId: null, myShare: '0.0000', currency: 'INR' });
     render();
