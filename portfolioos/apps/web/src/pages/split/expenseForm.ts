@@ -30,15 +30,20 @@ const NUM = /^\d+(\.\d+)?$/;
 const ZERO = new Decimal(0);
 const PAISA = new Decimal('0.01');
 const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const active = (ms: SplitMemberDto[]) => ms.filter((m) => !m.leftAt);
 
 export function cleanAmount(raw: string): string {
   return raw.replace(/[,\s₹]/g, '');
 }
 
-const plain = (v: string) => new Decimal(v).toString();
+const plain = (v: string) => {
+  const fixed = new Decimal(v).toFixed();
+  return fixed.replace(/\.0+$|\.$/g, '');
+};
 
 export function emptyForm(members: SplitMemberDto[], baseCurrency: string, today: string): ExpenseFormState {
-  const me = members.find((m) => m.isMe) ?? members[0];
+  const actives = active(members);
+  const me = actives.find((m) => m.isMe) ?? actives[0];
   return {
     description: '',
     amount: '',
@@ -48,31 +53,70 @@ export function emptyForm(members: SplitMemberDto[], baseCurrency: string, today
     splitMode: 'EQUAL',
     payerMode: 'single',
     singlePayerId: me?.id ?? '',
-    payerAmounts: Object.fromEntries(members.map((m) => [m.id, ''])),
-    included: Object.fromEntries(members.map((m) => [m.id, true])),
-    values: Object.fromEntries(members.map((m) => [m.id, ''])),
+    payerAmounts: Object.fromEntries(actives.map((m) => [m.id, ''])),
+    included: Object.fromEntries(actives.map((m) => [m.id, true])),
+    values: Object.fromEntries(actives.map((m) => [m.id, ''])),
   };
 }
 
 export function formFromExpense(e: SplitExpenseDto, members: SplitMemberDto[]): ExpenseFormState {
+  const actives = active(members);
   const f = emptyForm(members, e.currency, e.date);
   f.description = e.description;
   f.amount = plain(e.amount);
   f.currency = e.currency;
   f.fxRate = new Decimal(e.fxRate).eq(1) ? '' : plain(e.fxRate);
   f.splitMode = e.splitMode;
-  if (e.payers.length === 1) {
+
+  // Payers: only set if active
+  const activePayers = e.payers.filter((p) => actives.some((m) => m.id === p.memberId));
+  if (activePayers.length === 0) {
     f.payerMode = 'single';
-    f.singlePayerId = e.payers[0]!.memberId;
+    f.singlePayerId = actives[0]?.id ?? '';
+  } else if (activePayers.length === 1) {
+    f.payerMode = 'single';
+    f.singlePayerId = activePayers[0]!.memberId;
   } else {
     f.payerMode = 'multiple';
-    for (const p of e.payers) f.payerAmounts[p.memberId] = plain(p.amount);
+    for (const p of activePayers) f.payerAmounts[p.memberId] = plain(p.amount);
   }
-  const sharedIds = new Set(e.shares.map((s) => s.memberId));
-  for (const m of members) f.included[m.id] = sharedIds.has(m.id);
-  for (const s of e.shares) {
-    f.values[s.memberId] = e.splitMode === 'EXACT' ? plain(s.amount) : s.rawInput ? plain(s.rawInput) : '';
+
+  // Shares: only set if active
+  const activeShares = e.shares.filter((s) => actives.some((m) => m.id === s.memberId));
+  const sharedIds = new Set(activeShares.map((s) => s.memberId));
+  for (const m of actives) f.included[m.id] = sharedIds.has(m.id);
+
+  for (const s of activeShares) {
+    if (e.splitMode === 'EXACT') {
+      f.values[s.memberId] = plain(s.amount);
+    } else if (s.rawInput) {
+      f.values[s.memberId] = plain(s.rawInput);
+    } else if (e.splitMode === 'SHARES') {
+      // Fallback for SHARES: use amount as weight
+      f.values[s.memberId] = plain(s.amount);
+    } else if (e.splitMode === 'PERCENT') {
+      // Fallback for PERCENT: calculate from amounts
+      const pct = new Decimal(s.amount).div(e.amount).mul(100).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN);
+      f.values[s.memberId] = pct.toString();
+    }
   }
+
+  // Adjust PERCENT if values don't sum to 100
+  if (e.splitMode === 'PERCENT') {
+    const sumPct = activeShares.reduce((a, s) => {
+      const v = cleanAmount(f.values[s.memberId] ?? '');
+      return a.plus(v ? new Decimal(v) : ZERO);
+    }, ZERO);
+    if (!sumPct.eq(100) && activeShares.length > 0) {
+      const diff = new Decimal(100).minus(sumPct);
+      const firstId = activeShares.sort((a, b) => byId({ id: a.memberId }, { id: b.memberId }))[0]?.memberId;
+      if (firstId) {
+        const current = cleanAmount(f.values[firstId] ?? '');
+        f.values[firstId] = new Decimal(current || 0).plus(diff).toString();
+      }
+    }
+  }
+
   return f;
 }
 
@@ -103,6 +147,7 @@ function weightedPreview(total: Decimal, weights: Array<{ id: string; w: Decimal
 const fail = (error: string, remaining: string | null = null, preview: ShareLine[] = []): FormCheck => ({ ok: false, error, remaining, preview });
 
 export function checkForm(f: ExpenseFormState, members: SplitMemberDto[], baseCurrency: string): FormCheck {
+  const actives = active(members);
   if (!f.description.trim()) return fail('Add a description');
   const amountRaw = cleanAmount(f.amount);
   if (!MONEY.test(amountRaw) || new Decimal(amountRaw).lte(0)) return fail('Enter an amount above 0 with at most 2 decimals');
@@ -114,10 +159,10 @@ export function checkForm(f: ExpenseFormState, members: SplitMemberDto[], baseCu
 
   // Payers
   if (f.payerMode === 'single') {
-    if (!members.some((m) => m.id === f.singlePayerId)) return fail('Pick who paid');
+    if (!actives.some((m) => m.id === f.singlePayerId)) return fail('Pick who paid');
   } else {
     let paid = ZERO;
-    for (const m of members) {
+    for (const m of actives) {
       const v = cleanAmount(f.payerAmounts[m.id] ?? '');
       if (!v) continue;
       if (!MONEY.test(v)) return fail(`Check the amount paid by ${m.isMe ? 'you' : m.displayName}`);
@@ -129,7 +174,7 @@ export function checkForm(f: ExpenseFormState, members: SplitMemberDto[], baseCu
   }
 
   // Shares
-  const ids = members.map((m) => m.id);
+  const ids = actives.map((m) => m.id);
   if (f.splitMode === 'EQUAL') {
     const chosen = ids.filter((id) => f.included[id]);
     if (chosen.length === 0) return fail('Pick at least one person to split with');
@@ -137,7 +182,7 @@ export function checkForm(f: ExpenseFormState, members: SplitMemberDto[], baseCu
   }
 
   const parsed: Array<{ id: string; w: Decimal }> = [];
-  for (const m of members) {
+  for (const m of actives) {
     const v = cleanAmount(f.values[m.id] ?? '');
     if (!v) continue;
     if (!NUM.test(v)) return fail(`Check the value for ${m.isMe ? 'you' : m.displayName}`);
@@ -160,15 +205,16 @@ export function checkForm(f: ExpenseFormState, members: SplitMemberDto[], baseCu
 }
 
 export function toPayload(f: ExpenseFormState, members: SplitMemberDto[], baseCurrency: string): Omit<ExpenseInput, 'groupId'> {
+  const actives = active(members);
   const amount = cleanAmount(f.amount);
   const payers = f.payerMode === 'single'
     ? [{ memberId: f.singlePayerId, amount }]
-    : members
+    : actives
         .map((m) => ({ memberId: m.id, amount: cleanAmount(f.payerAmounts[m.id] ?? '') }))
         .filter((p) => p.amount && new Decimal(p.amount).gt(0));
   const shares = f.splitMode === 'EQUAL'
-    ? members.filter((m) => f.included[m.id]).map((m) => ({ memberId: m.id }))
-    : members
+    ? actives.filter((m) => f.included[m.id]).map((m) => ({ memberId: m.id }))
+    : actives
         .map((m) => ({ memberId: m.id, value: cleanAmount(f.values[m.id] ?? '') }))
         .filter((s) => s.value && new Decimal(s.value).gt(0));
   return {
