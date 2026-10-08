@@ -33,5 +33,6 @@ describe('splitFormat', () => {
   });
   it('transferLabel', () => {
     expect(transferLabel(members, { fromMemberId: 'm2', toMemberId: 'm1', amount: '70.0000' }, 'INR')).toBe('Bob pays You ₹70.00');
+    expect(transferLabel(members, { fromMemberId: 'm1', toMemberId: 'm2', amount: '70.0000' }, 'INR')).toBe('You pay Bob ₹70.00');
   });
 });

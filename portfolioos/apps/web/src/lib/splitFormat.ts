@@ -38,5 +38,6 @@ export function transferLabel(
   t: { fromMemberId: string; toMemberId: string; amount: string },
   currency: string,
 ): string {
-  return `${memberName(members, t.fromMemberId)} pays ${memberName(members, t.toMemberId)} ${formatSplitMoney(t.amount, currency)}`;
+  const from = memberName(members, t.fromMemberId);
+  return `${from} ${from === 'You' ? 'pay' : 'pays'} ${memberName(members, t.toMemberId)} ${formatSplitMoney(t.amount, currency)}`;
 }
