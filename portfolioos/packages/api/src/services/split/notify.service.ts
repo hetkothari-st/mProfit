@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js';
 import { formatCurrency, formatINR } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { runAsSystem, runAsUser } from '../../lib/requestContext.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.js';
+import { BadRequestError, ConflictError, NotFoundError, TooManyRequestsError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
 import { openText } from '../piiAtRest.service.js';
@@ -16,6 +16,7 @@ import { renderReminderEmail, renderActivityDigestEmail, renderWeeklyDigestEmail
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 const MAX_LINES = 10;
+const DAILY_REMINDER_CAP = 30;
 
 /** UTC-midnight Date of the IST calendar day (IST is UTC+05:30, no DST). */
 export function istDay(d: Date): Date {
@@ -50,6 +51,10 @@ export async function remind(userId: string, groupId: string, memberId: string, 
   const me = await prisma.splitMember.findUnique({ where: { id: myId }, select: { displayName: true } });
   const senderName = me?.displayName?.trim() || 'A friend';
   if (!lookup.email) throw new BadRequestError(`SPLIT_NO_EMAIL: ${target.displayName} has no email on file`);
+
+  // Per-user cap protects the shared mail account from abuse; checked before the insert.
+  const today = await prisma.splitReminder.count({ where: { userId, createdAt: { gt: new Date(now.getTime() - DAY_MS) } } });
+  if (today >= DAILY_REMINDER_CAP) throw new TooManyRequestsError('Daily reminder limit reached - try again tomorrow');
 
   // Insert first: the unique index is the once-a-day guard, even across retries.
   try {

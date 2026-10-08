@@ -19,6 +19,7 @@ import { writeActivity } from './activity.js';
 
 const EMAIL_PURPOSE = 'split-contact-email';
 const DAY_MS = 86_400_000;
+const DAILY_INVITE_CAP = 20;
 
 /**
  * Link the placeholder members behind one contact. Callers run this inside a
@@ -92,9 +93,12 @@ export async function sendInvite(userId: string, contactId: string): Promise<{ s
   const to = openText(c.emailEnc, c.email);
   if (!to) throw new BadRequestError('Add their email address first');
   // Only invites that actually went out count against the daily limit.
-  const recent = await prisma.auditLog.findMany({ where: { userId, action: 'split_invite', resource: `SplitContact:${c.id}` }, orderBy: { createdAt: 'desc' }, take: 5 });
-  const last = recent.find((r) => (r.metadata as { sent?: boolean } | null)?.sent === true);
+  const sentWhere = { userId, action: 'split_invite', metadata: { path: ['sent'], equals: true } } satisfies Prisma.AuditLogWhereInput;
+  const last = await prisma.auditLog.findFirst({ where: { ...sentWhere, resource: `SplitContact:${c.id}` }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } });
   if (last && Date.now() - last.createdAt.getTime() < DAY_MS) throw new TooManyRequestsError('Already invited today');
+  // Per-user cap protects the shared mail account from abuse.
+  const today = await prisma.auditLog.count({ where: { ...sentWhere, createdAt: { gt: new Date(Date.now() - DAY_MS) } } });
+  if (today >= DAILY_INVITE_CAP) throw new TooManyRequestsError('Daily invite limit reached - try again tomorrow');
   const sender = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
   const senderName = sender?.name?.trim() || 'A friend';
   const url = `${env.FRONTEND_URL}/register?email=${encodeURIComponent(to)}`;

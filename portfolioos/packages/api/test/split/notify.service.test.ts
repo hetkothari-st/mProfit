@@ -84,6 +84,23 @@ describe('split reminders + digests', () => {
     }
   });
 
+  it('caps reminders at 30 a day per user', async () => {
+    const eve = await createTestScope('split-ntf-cap');
+    try {
+      await runAsSystem(() => prisma.splitReminder.createMany({ data: Array.from({ length: 30 }, (_, i) => ({ userId: eve.userId, groupId: 'g', memberId: `m${i}`, sentOn: new Date('2026-09-01') })) }));
+      const cb = await seedContact(eve.userId, 'Bob', bob.userId);
+      const g = await eve.runAs(() => createGroup(eve.userId, { name: 'Cap', myDisplayName: 'Eve', contactIds: [cb.id] }));
+      const e1 = g.members.find((m) => m.isMe)!.id; const b1 = g.members.find((m) => !m.isMe)!.id;
+      await eve.runAs(() => createExpense(eve.userId, { groupId: g.id, description: 'Y', date: '2026-10-01', amount: '100', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: e1, amount: '100' }], shares: [{ memberId: e1 }, { memberId: b1 }] }));
+      sent.mockClear();
+      await expect(eve.runAs(() => remind(eve.userId, g.id, b1))).rejects.toThrow(/Daily reminder limit reached/);
+      expect(sent).not.toHaveBeenCalled();
+    } finally {
+      await runAsSystem(() => prisma.splitReminder.deleteMany({ where: { userId: eve.userId } }));
+      await cleanupSplit([eve.userId]); await eve.cleanup();
+    }
+  });
+
   it('remind needs an email on file', async () => {
     const dave = await seedContact(alice.userId, 'Dave');
     const g3 = await alice.runAs(() => createGroup(alice.userId, { name: 'NoMail', myDisplayName: 'Alice', contactIds: [dave.id] }));

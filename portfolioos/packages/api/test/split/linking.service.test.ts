@@ -67,6 +67,28 @@ describe('split linking + invites', () => {
     await expect(alice.runAs(() => sendInvite(alice.userId, c.id))).rejects.toThrow(/Already invited today/);
   });
 
+  it('caps invite emails at 20 a day per user', async () => {
+    const dan = await createTestScope('split-link-cap');
+    try {
+      const c = await dan.runAs(() => createContact(dan.userId, { name: 'Capped', email: `cap-${randomUUID().slice(0, 6)}@test.local` }));
+      await runAsSystem(() => prisma.auditLog.createMany({ data: Array.from({ length: 20 }, (_, i) => ({ userId: dan.userId, action: 'split_invite', resource: `SplitContact:seed${i}`, metadata: { sent: true } })) }));
+      sent.mockClear();
+      await expect(dan.runAs(() => sendInvite(dan.userId, c.id))).rejects.toThrow(/Daily invite limit reached/);
+      expect(sent).not.toHaveBeenCalled();
+    } finally {
+      await cleanupSplit([dan.userId]);
+      await runAsSystem(() => prisma.auditLog.deleteMany({ where: { userId: dan.userId } }));
+      await dan.cleanup();
+    }
+  });
+
+  it('failed sends do not hide an earlier real send from the per-contact throttle', async () => {
+    const c = await alice.runAs(() => createContact(alice.userId, { name: 'Hidden', email: `hid-${randomUUID().slice(0, 6)}@test.local` }));
+    expect(await alice.runAs(() => sendInvite(alice.userId, c.id))).toEqual({ sent: true });
+    await runAsSystem(() => prisma.auditLog.createMany({ data: Array.from({ length: 6 }, () => ({ userId: alice.userId, action: 'split_invite', resource: `SplitContact:${c.id}`, metadata: { sent: false } })) }));
+    await expect(alice.runAs(() => sendInvite(alice.userId, c.id))).rejects.toThrow(/Already invited today/);
+  });
+
   it('a placeholder in a group the person already left stays unlinked without erroring', async () => {
     const bobEmail = `bob-${randomUUID().slice(0, 8)}@test.local`;
     const bob = await runAsSystem(() => prisma.user.create({ data: { email: bobEmail, passwordHash: 'x', name: 'Bob' } }));
