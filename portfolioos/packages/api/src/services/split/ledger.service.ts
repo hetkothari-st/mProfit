@@ -54,7 +54,7 @@ export async function listFriends(userId: string): Promise<SplitFriendDto[]> {
       }
       const key = other.userId ? `u:${other.userId}` : other.contactId && myContactIds.has(other.contactId) ? `c:${other.contactId}` : `m:${other.id}`;
       const f = friends.get(key) ?? { key, displayName: other.displayName, userId: other.userId, contactId: key.startsWith('c:') ? key.slice(2) : other.userId ? contactByLinkedUser.get(other.userId) ?? null : null, currency: home, net: serializeMoney(0), approx: false, groups: [], total: new Decimal(0) };
-      f.groups.push({ groupId: g.id, groupName: g.name, net: serializeMoney(net), currency: g.baseCurrency });
+      f.groups.push({ groupId: g.id, groupName: g.name, groupType: g.type, net: serializeMoney(net), currency: g.baseCurrency });
       if (rate) f.total = f.total.plus(net.mul(rate));
       if (g.baseCurrency !== home) f.approx = true;
       friends.set(key, f);
