@@ -5,7 +5,7 @@ import { runAsSystem } from '../../src/lib/requestContext.js';
 import { cleanupSplit } from '../helpers/splitFixtures.js';
 import { createContact } from '../../src/services/split/contacts.service.js';
 import { createGroup, getGroup } from '../../src/services/split/groups.service.js';
-import { linkContactsForUser, sendInvite } from '../../src/services/split/linking.service.js';
+import { linkContactsForUser, linkContactToExistingUser, sendInvite } from '../../src/services/split/linking.service.js';
 
 const sent = vi.hoisted(() => vi.fn());
 vi.mock('../../src/services/notifications/email.service.js', () => ({ sendEmail: sent }));
@@ -48,6 +48,64 @@ describe('split linking + invites', () => {
     await expect(alice.runAs(() => sendInvite(alice.userId, c.id))).rejects.toThrow(/Already invited today/);
     const linked = await alice.runAs(() => createContact(alice.userId, { name: 'N3', email }));
     await expect(alice.runAs(() => sendInvite(alice.userId, linked.id))).rejects.toThrow(/already on EveryPaisa/);
+  });
+
+  it('invite copy has no expiry sentence', async () => {
+    sent.mockClear();
+    const c = await alice.runAs(() => createContact(alice.userId, { name: 'Copy', email: `copy-${randomUUID().slice(0, 6)}@test.local` }));
+    await alice.runAs(() => sendInvite(alice.userId, c.id));
+    const mail = sent.mock.calls[0]![0];
+    expect(mail.html).not.toMatch(/expires on/i);
+    expect(mail.text).not.toMatch(/expires on/i);
+  });
+
+  it('a failed send does not count against the daily invite limit', async () => {
+    const c = await alice.runAs(() => createContact(alice.userId, { name: 'Retry', email: `retry-${randomUUID().slice(0, 6)}@test.local` }));
+    sent.mockResolvedValueOnce({ sent: false });
+    expect(await alice.runAs(() => sendInvite(alice.userId, c.id))).toEqual({ sent: false });
+    expect(await alice.runAs(() => sendInvite(alice.userId, c.id))).toEqual({ sent: true });
+    await expect(alice.runAs(() => sendInvite(alice.userId, c.id))).rejects.toThrow(/Already invited today/);
+  });
+
+  it('a placeholder in a group the person already left stays unlinked without erroring', async () => {
+    const bobEmail = `bob-${randomUUID().slice(0, 8)}@test.local`;
+    const bob = await runAsSystem(() => prisma.user.create({ data: { email: bobEmail, passwordHash: 'x', name: 'Bob' } }));
+    try {
+      const c1 = await alice.runAs(() => createContact(alice.userId, { name: 'Bob', email: bobEmail }));
+      const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Left', myDisplayName: 'Alice', contactIds: [c1.id] }));
+      await runAsSystem(() => prisma.splitMember.updateMany({ where: { groupId: g.id, userId: bob.id }, data: { leftAt: new Date() } }));
+      const c2 = await alice.runAs(() => createContact(alice.userId, { name: 'Bob 2', email: bobEmail }));
+      await runAsSystem(async () => {
+        await prisma.splitContact.update({ where: { id: c2.id }, data: { linkedUserId: null } });
+        await prisma.splitMember.create({ data: { groupId: g.id, contactId: c2.id, displayName: 'Bob 2' } });
+      });
+      await expect(linkContactToExistingUser(c2.id)).resolves.toBe(true);
+      const after = await runAsSystem(() => prisma.splitContact.findUnique({ where: { id: c2.id } }));
+      expect(after!.linkedUserId).toBe(bob.id);
+      const ph = await runAsSystem(() => prisma.splitMember.findFirst({ where: { groupId: g.id, contactId: c2.id } }));
+      expect(ph!.userId).toBeNull();
+    } finally {
+      await runAsSystem(async () => { await prisma.splitContact.deleteMany({ where: { ownerUserId: alice.userId, name: { startsWith: 'Bob' } } }); });
+      await cleanupSplit([alice.userId]);
+      await runAsSystem(() => prisma.user.delete({ where: { id: bob.id } }));
+    }
+  });
+
+  it('re-running on an already-linked contact links a previously missed placeholder', async () => {
+    const eml = `carl-${randomUUID().slice(0, 8)}@test.local`;
+    const carl = await runAsSystem(() => prisma.user.create({ data: { email: eml, passwordHash: 'x', name: 'Carl' } }));
+    try {
+      const c = await alice.runAs(() => createContact(alice.userId, { name: 'Carl', email: eml }));
+      expect(c.linkedUserId).toBe(carl.id);
+      const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Missed', myDisplayName: 'Alice' }));
+      await runAsSystem(() => prisma.splitMember.create({ data: { groupId: g.id, contactId: c.id, displayName: 'Carl' } }));
+      expect(await linkContactToExistingUser(c.id)).toBe(false);
+      const m = await runAsSystem(() => prisma.splitMember.findFirst({ where: { groupId: g.id, contactId: c.id } }));
+      expect(m!.userId).toBe(carl.id);
+    } finally {
+      await cleanupSplit([alice.userId]);
+      await runAsSystem(() => prisma.user.delete({ where: { id: carl.id } }));
+    }
   });
 });
 
