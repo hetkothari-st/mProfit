@@ -22,7 +22,7 @@ const policy = (premiumDue: NextPremiumDue, over: Partial<{ status: string; grac
 describe('premiumDueMeta', () => {
   it('is quiet about a premium more than a month away', () => {
     const m = premiumDueMeta(policy(due({ state: 'UPCOMING', dueDate: '2027-01-01', daysUntilDue: 112 })));
-    expect(m).toMatchObject({ tone: 'neutral', urgent: false, label: 'Next premium 1 Jan 2027' });
+    expect(m).toMatchObject({ tone: 'neutral', urgent: false, label: 'Next premium 01/01/2027' });
   });
 
   it('warns a month out and turns red in the last week', () => {
@@ -45,7 +45,7 @@ describe('premiumDueMeta', () => {
       policy(due({ state: 'IN_GRACE', dueDate: '2026-09-01', daysUntilDue: -10, graceEndsOn: '2026-10-01', daysLeftInGrace: 20 })),
     );
     expect(m.label).toBe('Overdue — 20 days of grace left');
-    expect(m.detail).toContain('Pay by 1 Oct 2026');
+    expect(m.detail).toContain('Pay by 01/10/2026');
   });
 
   it('flags a possible lapse after grace, and an ended cover with no grace', () => {

@@ -90,7 +90,7 @@ describe('SurrenderValueCard', () => {
 
   it('warns about the lock-in on a young ULIP', () => {
     renderCard(makePolicy({ type: 'ULIP' }));
-    expect(screen.getByText(/In its lock-in until 1 Aug 2029/)).toBeTruthy();
+    expect(screen.getByText(/In its lock-in until 01\/08\/2029/)).toBeTruthy();
   });
 
   it('is not shown for a term plan', () => {

@@ -80,7 +80,7 @@ describe('InsuranceListPage', () => {
 
     const panel = (await screen.findByRole('heading', { name: 'Coming up' })).closest('div')!.parentElement!;
     expect(within(panel).getByText('Overdue — 20 days of grace left')).toBeTruthy();
-    expect(within(panel).getByText(/Pay by 1 Oct 2026/)).toBeTruthy();
+    expect(within(panel).getByText(/Pay by 01\/10\/2026/)).toBeTruthy();
     expect(within(panel).getByRole('button', { name: 'Record payment' })).toBeTruthy();
     // The upcoming LIC premium isn't urgent, so it isn't listed.
     expect(within(panel).queryByText(/Tech Term/)).toBeNull();

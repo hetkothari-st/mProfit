@@ -43,14 +43,14 @@ describe('ImportedPremiumsCard', () => {
     renderCard();
     expect(await screen.findByText('From your imported statements')).toBeTruthy();
     expect(screen.getByText('HDFC Life · policy no. ending 2345')).toBeTruthy();
-    expect(screen.getByText(/Same policy number · for the premium due 1 Oct 2025/)).toBeTruthy();
+    expect(screen.getByText(/Same policy number · for the premium due 01\/10\/2025/)).toBeTruthy();
   });
 
   it('links a payment to the policy', async () => {
     api.importSuggestions.mockResolvedValue([suggestion]);
     api.linkImportedPremium.mockResolvedValue({});
     renderCard();
-    fireEvent.click(await screen.findByRole('button', { name: /^Link the ₹25,000 paid 3 Oct 2025$/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Link the ₹25,000 paid 03\/10\/2025$/ }));
     await waitFor(() => expect(api.linkImportedPremium).toHaveBeenCalledWith('pol1', 'tx1'));
   });
 

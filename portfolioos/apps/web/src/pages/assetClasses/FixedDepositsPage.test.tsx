@@ -132,7 +132,7 @@ describe('FD card', () => {
     expect(figure(card, 'Principal')).toMatch(/1,00,000\.00/);
     expect(figure(card, 'Tenure')).toBe('18 months');
     // Quarterly from 1 May 2026: 1 Aug has passed, 1 Nov is next.
-    expect(figure(card, 'Next payout')).toMatch(/01 Nov 2026/);
+    expect(figure(card, 'Next payout')).toMatch(/01\/11\/2026/);
     // 132 of 558 days elapsed.
     expect(figure(card, 'Completed')).toBe('24%');
   });
@@ -164,7 +164,7 @@ describe('RD card', () => {
     expect(figure(card, 'EMI')).toMatch(/5,000\.00/);
     expect(figure(card, 'Tenure')).toBe('24 months');
     // Installments 1–8 fell on the 5th of Jan–Aug; the 9th is due 5 Sep.
-    expect(figure(card, 'Next EMI')).toMatch(/05 Sept? 2026/);
+    expect(figure(card, 'Next EMI')).toMatch(/05\/09\/2026/);
     // Principal is the whole plan: ₹5,000 × 24.
     expect(figure(card, 'Principal')).toMatch(/1,20,000\.00/);
     expect(figure(card, 'Completed')).toBe('33%');
